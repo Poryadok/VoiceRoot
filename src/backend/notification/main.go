@@ -206,7 +206,7 @@ func main() {
 			Pusher:   pusher,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
-			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "notification"); err == nil {
 				notifySvc.Analytics = pub
 				logger.Info("analytics telemetry publisher enabled")
 			} else {

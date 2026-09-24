@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -209,5 +210,114 @@ func fixtureACL() aclDocument {
 		Version:   1,
 		Services:  services,
 		Bootstrap: serviceACL{Publish: []string{"$JS.API.STREAM.INFO.fixture"}, Subscribe: []string{"$JS.API.STREAM.INFO.fixture.response"}},
+	}
+}
+
+func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "..", "deploy", "nats", "acl-intent.yaml")
+	acl, err := loadACL(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for service, grant := range acl.Services {
+		if !grant.NoResponse {
+			t.Errorf("%s may use bounded response permission to bypass exact ACK grant", service)
+		}
+		for _, subject := range grant.Publish {
+			if strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.DURABLE.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE.") ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.UPDATE.") ||
+				strings.HasPrefix(subject, "$JS.API.STREAM.DELETE.") {
+				t.Errorf("%s has JetStream mutation grant %s", service, subject)
+			}
+		}
+		for _, subject := range grant.Subscribe {
+			if strings.HasPrefix(subject, "_INBOX.") && strings.HasSuffix(subject, ".>") {
+				if subject == "_INBOX.voice."+service+".>" {
+					continue
+				}
+				if service == "auth" && subject == "_INBOX.voice.auth.requests.>" {
+					continue
+				}
+				t.Errorf("%s has cross-service reply inbox %s", service, subject)
+			}
+		}
+	}
+	if !acl.Bootstrap.NoResponse {
+		t.Error("bootstrap must not inherit response publish permission")
+	}
+	if !slices.Contains(acl.Services["auth"].Subscribe, "_INBOX.voice.auth.requests.>") || slices.Contains(acl.Services["auth"].Subscribe, "_INBOX.voice.auth.>") {
+		t.Error("Auth reply inbox must be scoped to its JNATS requests prefix")
+	}
+	for service, grants := range map[string][]string{
+		"chat":        {"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.ACK.message_events.chat_message_activity.>"},
+		"messaging":   {"$JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack", "$JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy", "$JS.ACK.message_events.messaging_delivery_ack.>", "$JS.ACK.user_events.messaging_receipt_privacy.>"},
+		"bot":         {"$JS.API.CONSUMER.INFO.message_events.bot_message_events", "$JS.ACK.message_events.bot_message_events.>"},
+		"matchmaking": {"$JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2", "$JS.ACK.story_events.matchmaking_story_lfp_v2.>"},
+		"space":       {"$JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement", "$JS.ACK.subscription_events.space_subscription_entitlement.>"},
+		"user":        {"$JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1", "$JS.API.CONSUMER.MSG.NEXT.user_events.user-account-deletion-v1", "$JS.ACK.user_events.user-account-deletion-v1.>"},
+	} {
+		for _, subject := range grants {
+			if !slices.Contains(acl.Services[service].Publish, subject) {
+				t.Errorf("%s missing publish grant %s", service, subject)
+			}
+		}
+	}
+	for service, subjects := range map[string][]string{
+		"gateway":      {"analytics.gateway.request"},
+		"moderation":   {"analytics.moderation.report_created", "analytics.moderation.sanction_applied"},
+		"notification": {"analytics.notification.push_sent"},
+		"search":       {"analytics.search.query"},
+		"subscription": {"analytics.subscription.payment_success", "analytics.subscription.payment_failed"},
+	} {
+		for _, subject := range append(subjects, "$JS.API.STREAM.INFO.analytics_events") {
+			if !slices.Contains(acl.Services[service].Publish, subject) {
+				t.Errorf("%s missing analytics publisher grant %s", service, subject)
+			}
+		}
+	}
+	for _, subject := range []string{
+		"$JS.API.INFO",
+		"$JS.API.STREAM.CREATE.message_events",
+		"$JS.API.CONSUMER.INFO.message_events.chat_message_activity",
+		"$JS.API.CONSUMER.CREATE.message_events.chat_message_activity",
+	} {
+		if !slices.Contains(acl.Bootstrap.Publish, subject) {
+			t.Errorf("bootstrap missing grant %s", subject)
+		}
+	}
+}
+
+func TestCanonicalJWTDoesNotUseResponsePermission(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "..", "deploy", "nats", "acl-intent.yaml")
+	acl, err := loadACL(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "fixture")
+	if err := generate(dest, acl); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range append(append([]string{}, serviceNames...), "bootstrap") {
+		claims, err := jwt.DecodeUserClaims(credsJWT(t, mustRead(t, filepath.Join(dest, "creds", name+".creds"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if claims.Resp != nil {
+			t.Errorf("%s JWT grants response permission", name)
+		}
+	}
+}
+
+func TestGrantValidationRejectsBroadInboxAndManagementWildcard(t *testing.T) {
+	for _, subject := range []string{"_INBOX.>", "_INBOX.voice.>", "$JS.API.>", "$JS.API.CONSUMER.>"} {
+		if err := validateGrant(serviceACL{Subscribe: []string{subject}}); err == nil {
+			t.Errorf("unsafe subscription %s accepted", subject)
+		}
+	}
+	if err := validateGrant(serviceACL{Subscribe: []string{"_INBOX.voice.chat.>"}}); err != nil {
+		t.Fatalf("scoped reply inbox should be valid: %v", err)
 	}
 }

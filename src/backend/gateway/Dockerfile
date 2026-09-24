@@ -10,6 +10,7 @@ COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/go.mod ./messaging/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/

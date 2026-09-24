@@ -80,9 +80,45 @@ func validateACL(acl aclDocument) error {
 		if err := validateGrant(grant); err != nil {
 			return fmt.Errorf("ACL service %s: %w", name, err)
 		}
+		for _, subject := range grant.Publish {
+			if !strings.HasPrefix(subject, "$JS.API.") {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(subject, "$JS.API.STREAM.INFO."),
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO."),
+				strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT."):
+			default:
+				return fmt.Errorf("ACL service %s has unreviewed JetStream API grant: %s", name, subject)
+			}
+		}
+		for _, subject := range grant.Subscribe {
+			if !strings.HasPrefix(subject, "_INBOX.") || strings.HasPrefix(subject, "_INBOX.voice."+name+".") {
+				continue
+			}
+			if name == "realtime" && strings.HasPrefix(subject, "_INBOX.voice.realtime1.") {
+				continue
+			}
+			return fmt.Errorf("ACL service %s may not subscribe to another inbox: %s", name, subject)
+		}
 	}
 	if err := validateGrant(acl.Bootstrap); err != nil {
 		return fmt.Errorf("ACL bootstrap: %w", err)
+	}
+	for _, subject := range acl.Bootstrap.Publish {
+		if !strings.HasPrefix(subject, "$JS.API.") {
+			continue
+		}
+		switch {
+		case subject == "$JS.API.INFO",
+			strings.HasPrefix(subject, "$JS.API.STREAM.INFO."),
+			strings.HasPrefix(subject, "$JS.API.STREAM.CREATE."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE."),
+			strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE."):
+		default:
+			return fmt.Errorf("ACL bootstrap has unreviewed JetStream API grant: %s", subject)
+		}
 	}
 	return nil
 }
@@ -134,6 +170,11 @@ func safePublishSubject(subject string) bool {
 func safeSubscribeSubject(subject string) bool {
 	if strings.HasPrefix(subject, "_INBOX.voice.bootstrap.reply.") && strings.HasSuffix(subject, ".>") && strings.Count(subject, ">") == 1 {
 		return true
+	}
+	if strings.HasPrefix(subject, "_INBOX.voice.") && strings.HasSuffix(subject, ".>") && strings.Count(subject, ">") == 1 {
+		parts := strings.Split(subject, ".")
+		return (len(parts) == 4 && parts[2] != "" && parts[2] != "bootstrap") ||
+			(len(parts) == 5 && parts[2] == "auth" && parts[3] == "requests")
 	}
 	return subject != "" && !strings.ContainsAny(subject, " \t\r\n>*") && subject != "$JS.API.>"
 }

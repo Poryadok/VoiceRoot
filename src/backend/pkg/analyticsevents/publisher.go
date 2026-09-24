@@ -58,17 +58,15 @@ func (NoopPublisher) PublishWithAccount(context.Context, string, string, string,
 	return nil
 }
 
-func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
+func NewJetStreamPublisher(natsURL, service string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-analytics-publisher"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	opts, err := publisherNATSOptions(service)
+	if err != nil {
+		return nil, err
+	}
+	nc, err := nats.Connect(natsURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -87,6 +85,22 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		return nil, err
 	}
 	return &JetStreamPublisher{nc: nc, js: js}, nil
+}
+
+func publisherNATSOptions(service string) ([]nats.Option, error) {
+	switch service {
+	case "gateway", "moderation", "notification", "search", "subscription":
+	default:
+		return nil, fmt.Errorf("unsupported analytics publisher service %q", service)
+	}
+	return []nats.Option{
+		nats.Name("voice-analytics-publisher"),
+		nats.CustomInboxPrefix("_INBOX.voice." + service),
+		nats.Timeout(10 * time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	}, nil
 }
 
 func (p *JetStreamPublisher) Close() {

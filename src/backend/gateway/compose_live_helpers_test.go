@@ -54,6 +54,40 @@ func composeMailStubBaseURL() string {
 	return "http://127.0.0.1:" + port
 }
 
+// Compose signs object URLs with its internal MinIO name. The host-side live
+// runner dials the published port while the request URL and Host stay signed.
+func composeLiveObjectClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultProxy := transport.Proxy
+	transport.Proxy = func(req *http.Request) (*url.URL, error) {
+		if strings.EqualFold(req.URL.Hostname(), "minio") && req.URL.Port() == "9000" {
+			return nil, nil
+		}
+		return defaultProxy(req)
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, composeLiveObjectDialAddress(address))
+	}
+	return &http.Client{Timeout: timeout, Transport: transport}
+}
+
+func composeLiveObjectDialAddress(address string) string {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || !strings.EqualFold(host, "minio") || port != "9000" {
+		return address
+	}
+	publicPort := strings.TrimSpace(os.Getenv("MINIO_PORT"))
+	if publicPort == "" {
+		publicPort = "9000"
+	}
+	n, err := strconv.Atoi(publicPort)
+	if err != nil || n < 1 || n > 65535 {
+		return address
+	}
+	return net.JoinHostPort("127.0.0.1", publicPort)
+}
+
 func composeVerificationCodeFromMail(email string, raw []byte) (string, error) {
 	var message struct {
 		To   []string `json:"to"`
@@ -204,6 +238,10 @@ func completeComposeEmailVerification(
 		var envelope authSessionEnvelope
 		require.NoError(t, json.Unmarshal(verifyRaw, &envelope))
 		verified = envelope.Session
+	case http.StatusNoContent, http.StatusAccepted:
+		// Verification can complete without returning a replacement session, or
+		// report that durable guest promotion is still pending.
+		verified = waitComposeRegularSession(t, client, base, pending)
 	case http.StatusServiceUnavailable:
 		var failure struct {
 			Error string `json:"error"`
