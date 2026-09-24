@@ -79,7 +79,7 @@ for job in realtime notification search analytics-chat; do
   require 'voice-nats-bootstrap-credentials' "$template" 'Job-only bootstrap secret missing'
   require 'bootstrap.creds' "$template" 'bootstrap credential key missing'
   require 'NATS_CREDS' "$template" 'bootstrap credential use missing'
-  require 'command nats --creds "$NATS_CREDS" "$@"' "$template" 'bootstrap commands must pass quoted creds'
+  require 'command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"' "$template" 'bootstrap commands must use scoped reply inbox'
 done
 
 analytics_chat="$root/deploy/templates/nats-analytics-chat-bootstrap.yaml"

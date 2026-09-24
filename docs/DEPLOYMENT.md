@@ -577,12 +577,40 @@ credential hard expiry, then retain the retired public key for at least 35 s.
 
 ## NATS JWT and leaf activation
 
+The reviewed grants and issuer contract are in
+[`deploy/nats/README.md`](../deploy/nats/README.md) and
+[`deploy/nats/acl-intent.yaml`](../deploy/nats/acl-intent.yaml). Issue on a
+trusted Linux host from the exact release SHA; the issuer writes a protected
+four-Secret `secrets.json` restore List plus a separate operator/APP/SYS seed
+backup. The disposable fixture is not staging or production issuance material.
+Do not issue or store this material under the shared staging `pmd` UID;
+perform issuance on an isolated trusted Linux runner and transport the restore
+List by secret-manager stdin, with signing seeds backed up separately.
+
 Staging and production use an operator-signed APP account for JetStream and a
 distinct SYS account with no JetStream entitlement. The hub resolves both JWTs
 in MEMORY and accepts workload traffic only through TLS leaf port 7422. Each
 actual NATS workload receives one service credential and reaches only its local
 `127.0.0.1:4222` leaf; the bootstrap Jobs alone receive `bootstrap.creds`.
 Compose is not production evidence for this topology.
+
+Before enabling application leaves, restore the four Secrets, apply the hub,
+then run and wait for all four bootstrap Jobs. All 40 fixed durables must exist
+and match their filter, delivery subject, ACK and deliver policy; a mismatch is
+a stopped rollout requiring explicit durable migration, not an app-side
+repair. Run the Bot database receipt migration before starting the Bot fixed
+consumer. For Auth, drain the old randomly targeted
+`auth_subscription_tier` before moving to the new fixed no-group push durable;
+old and new Auth replicas cannot bind it concurrently. Start service leaves
+only after successful bootstrap, then verify allowed publish/consume/ACK and
+neighboring denial at the exact release SHA.
+
+Staging account migration is not yet approved: the existing anonymous `$G`
+account was observed with 566 consumers, exceeding the issued APP account's
+512-consumer limit. Inventory and classify legacy dynamic consumers and prove
+state-preserving migration of the eight existing stream messages before
+cutover. Do not silently increase the limit, discard consumer state, or start
+the JWT hub on empty storage.
 
 For each target namespace (`voice-staging` or `voice-prod`), the secret manager
 must create `voice-nats-operator` with UTF-8 `operator.jwt`, `account.jwt`,

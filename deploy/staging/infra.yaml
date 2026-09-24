@@ -263,6 +263,7 @@ metadata:
 data:
   nats.conf: |
     server_name: voice-nats-hub
+    max_control_line: 32768
     jetstream { store_dir: /data }
     http: 8222
     operator: /etc/nats/jwt/operator.jwt
