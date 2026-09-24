@@ -90,6 +90,79 @@ func TestHandleMessageSent_EnqueuesForPollingBot(t *testing.T) {
 	require.Len(t, ids, 1)
 }
 
+func TestPendingMessageDeliveryDoesNotReviveAfterChatDisable(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startBotStore(t)
+	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "ToggleBot", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://bot.invalid/hook' WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	messageID := uuid.New()
+	require.NoError(t, st.QueueMessageRecipients(ctx, chatID, messageID, uuid.NewString(), map[string]any{"message_id": messageID.String()}))
+	delivery, err := st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, delivery)
+
+	require.NoError(t, st.SetChatEnabled(ctx, bot.ID, chatID, spaceID, owner, false))
+	require.NoError(t, st.SetChatEnabled(ctx, bot.ID, chatID, spaceID, owner, true))
+	posted := false
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+		posted = true
+		return nil
+	}))
+	require.False(t, posted)
+
+	var status string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE bot_id = $1 AND message_id = $2`, bot.ID, messageID).Scan(&status))
+	require.Equal(t, "canceled", status)
+	delivery, err = st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.Nil(t, delivery)
+}
+
+func TestPendingMessageDeliveryDoesNotReviveAfterUninstallAndReinstall(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startBotStore(t)
+	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "UninstallBot", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://bot.invalid/hook' WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	messageID := uuid.New()
+	require.NoError(t, st.QueueMessageRecipients(ctx, chatID, messageID, uuid.NewString(), map[string]any{"message_id": messageID.String()}))
+	delivery, err := st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, delivery)
+
+	require.NoError(t, st.UninstallFromSpace(ctx, bot.ID, spaceID))
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	posted := false
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+		posted = true
+		return nil
+	}))
+	require.False(t, posted)
+
+	var status string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE bot_id = $1 AND message_id = $2`, bot.ID, messageID).Scan(&status))
+	require.Equal(t, "canceled", status)
+	delivery, err = st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.Nil(t, delivery)
+}
+
 func TestHandleMessageSent_PollingFailureDoesNotStarveWebhook(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

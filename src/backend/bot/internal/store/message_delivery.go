@@ -28,16 +28,45 @@ func (s *BotStore) QueueMessageRecipients(ctx context.Context, chatID, messageID
 	if err != nil {
 		return err
 	}
-	_, err = s.Pool.Exec(ctx, `
-INSERT INTO bot_message_deliveries
-    (id, bot_id, message_id, chat_id, payload)
-SELECT gen_random_uuid(), b.id, $2, $1, $4::jsonb
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `
+SELECT b.id
 FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled AND b.status = 'live'
-  AND b.actor_profile_id::text <> $3
+  AND b.actor_profile_id::text <> $2
   AND (b.is_polling_mode OR NULLIF(b.webhook_url, '') IS NOT NULL)
-ON CONFLICT (bot_id, message_id) DO NOTHING`, chatID, messageID, senderProfileID, string(raw))
-	return err
+ORDER BY b.id
+FOR SHARE OF w`, chatID, senderProfileID)
+	if err != nil {
+		return err
+	}
+	var botIDs []uuid.UUID
+	for rows.Next() {
+		var botID uuid.UUID
+		if err := rows.Scan(&botID); err != nil {
+			rows.Close()
+			return err
+		}
+		botIDs = append(botIDs, botID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, botID := range botIDs {
+		if _, err := tx.Exec(ctx, `
+INSERT INTO bot_message_deliveries (id, bot_id, message_id, chat_id, payload)
+VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb)
+ON CONFLICT (bot_id, message_id) DO NOTHING`, botID, messageID, chatID, string(raw)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // ClaimDueMessageDelivery leases one recipient; concurrent workers skip it.
@@ -90,6 +119,14 @@ FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret)
 		if err != nil {
 			return err
 		}
+		return tx.Commit(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE id = $1 FOR UPDATE`, d.ID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && status != "pending") {
 		return tx.Commit(ctx)
 	}
 	if err != nil {

@@ -31,21 +31,21 @@ type BotStore struct {
 }
 
 type BotRow struct {
-	ID              uuid.UUID
-	OwnerAccountID  uuid.UUID
-	Name            string
-	Description     string
-	AvatarURL       *string
-	TokenHash       string
-	WebhookURL      *string
-	WebhookSecret   string
-	IsPollingMode   bool
-	ScopesJSON      string
-	Status          string
-	ActorProfileID  uuid.UUID
-	Slug            string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID             uuid.UUID
+	OwnerAccountID uuid.UUID
+	Name           string
+	Description    string
+	AvatarURL      *string
+	TokenHash      string
+	WebhookURL     *string
+	WebhookSecret  string
+	IsPollingMode  bool
+	ScopesJSON     string
+	Status         string
+	ActorProfileID uuid.UUID
+	Slug           string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type CommandRow struct {
@@ -57,21 +57,21 @@ type CommandRow struct {
 }
 
 type PendingInteraction struct {
-	Token           string
-	BotID           uuid.UUID
-	ChatID          uuid.UUID
-	ChatType        string
-	InvokerProfile  uuid.UUID
-	CommandName     string
-	OptionsJSON     string
-	ResponseCh      chan InteractionReply
+	Token          string
+	BotID          uuid.UUID
+	ChatID         uuid.UUID
+	ChatType       string
+	InvokerProfile uuid.UUID
+	CommandName    string
+	OptionsJSON    string
+	ResponseCh     chan InteractionReply
 }
 
 type InteractionReply struct {
-	Content    string
-	Ephemeral  bool
-	Deferred   bool
-	Err        error
+	Content   string
+	Ephemeral bool
+	Deferred  bool
+	Err       error
 }
 
 func NewToken() (plain string, hash string, err error) {
@@ -368,18 +368,45 @@ func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2`, botID, spaceID); err != nil {
+	rows, err := tx.Query(ctx, `DELETE FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2 RETURNING chat_id`, botID, spaceID)
+	if err != nil {
 		return err
 	}
+	var chatIDs []uuid.UUID
+	for rows.Next() {
+		var chatID uuid.UUID
+		if err := rows.Scan(&chatID); err != nil {
+			rows.Close()
+			return err
+		}
+		chatIDs = append(chatIDs, chatID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
 	if _, err := tx.Exec(ctx, `DELETE FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2`, botID, spaceID); err != nil {
 		return err
+	}
+	if len(chatIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL
+WHERE bot_id = $1 AND chat_id = ANY($2) AND status = 'pending'`, botID, chatIDs); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
 
 func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, installer uuid.UUID, enabled bool) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	var exists bool
-	err := s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 SELECT EXISTS(SELECT 1 FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2)`,
 		botID, spaceID).Scan(&exists)
 	if err != nil {
@@ -389,26 +416,33 @@ SELECT EXISTS(SELECT 1 FROM bot_space_installations WHERE bot_id = $1 AND space_
 		return ErrNotFound
 	}
 	var whitelisted bool
-	err = s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 SELECT EXISTS(SELECT 1 FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3)`,
 		botID, chatID, spaceID).Scan(&whitelisted)
 	if err != nil {
 		return err
 	}
 	if whitelisted {
-		_, err = s.Pool.Exec(ctx, `
+		if _, err = tx.Exec(ctx, `
 UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AND space_id = $3`,
-			botID, chatID, spaceID, enabled)
-		return err
+			botID, chatID, spaceID, enabled); err != nil {
+			return err
+		}
+	} else if enabled {
+		if _, err = tx.Exec(ctx, `
+INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
+VALUES ($1, $2, $3, true, $4)`, botID, chatID, spaceID, installer); err != nil {
+			return err
+		}
 	}
 	if !enabled {
-		return nil
+		if _, err := tx.Exec(ctx, `
+UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL
+WHERE bot_id = $1 AND chat_id = $2 AND status = 'pending'`, botID, chatID); err != nil {
+			return err
+		}
 	}
-	_, err = s.Pool.Exec(ctx, `
-INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
-VALUES ($1, $2, $3, true, $4)`,
-		botID, chatID, spaceID, installer)
-	return err
+	return tx.Commit(ctx)
 }
 
 type ChatBotRow struct {
