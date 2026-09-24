@@ -221,9 +221,14 @@ func main() {
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			lfpCtx, lfpCancel := context.WithCancel(context.Background())
 			defer lfpCancel()
+			lfpConsumer, err := storyconsume.Start(lfpCtx, natsURL, "matchmaking_story_lfp_v2", &store.LfpStore{Pool: pool})
+			if err != nil {
+				log.Fatalf("story LFP consumer startup: %v", err)
+			}
+			defer lfpConsumer.Close()
 			go func() {
-				if err := storyconsume.Run(lfpCtx, natsURL, "matchmaking_story_lfp_v2", &store.LfpStore{Pool: pool}); err != nil && logger != nil {
-					logger.Warn("story LFP consumer stopped", slog.Any("error", err))
+				if err := lfpConsumer.Run(lfpCtx); err != nil && lfpCtx.Err() == nil {
+					log.Fatalf("story LFP consumer stopped: %v", err)
 				}
 			}()
 		}

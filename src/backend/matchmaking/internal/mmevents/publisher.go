@@ -103,13 +103,7 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-matchmaking-events"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, publisherNATSOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -119,6 +113,17 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
 	return &JetStreamPublisher{nc: nc, js: js}, nil
+}
+
+func publisherNATSOptions() []nats.Option {
+	return []nats.Option{
+		nats.Name("voice-matchmaking-events"),
+		nats.CustomInboxPrefix("_INBOX.voice.matchmaking"),
+		nats.Timeout(10 * time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	}
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.MatchmakingStreamEvent) error {
