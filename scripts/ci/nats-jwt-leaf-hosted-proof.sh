@@ -32,13 +32,21 @@ import (
 func main() {
   options := []nats.Option{}
   endpoint := "nats://127.0.0.1:4222"
-  if len(os.Args) >= 6 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive") {
+  if len(os.Args) >= 6 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive" || os.Args[1] == "direct-deny") {
     endpoint = os.Args[3]
     options = append(options, nats.UserCredentials(os.Args[4]), nats.RootCAs(os.Args[5]))
   }
+  asyncErr := make(chan error, 1)
+  options = append(options, nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { select { case asyncErr <- err: default: } }))
   nc, err := nats.Connect(endpoint, options...)
   if err != nil { panic(err) }
   defer nc.Close()
+  if len(os.Args) >= 7 && os.Args[1] == "direct-deny" {
+    if err := nc.Publish(os.Args[6], []byte("denied")); err != nil { panic(err) }
+    if err := nc.Flush(); err != nil { panic(err) }
+    select { case err := <-asyncErr: fmt.Printf("publish_denied=%v\n", err); case <-time.After(2*time.Second): panic("missing publish permission denial") }
+    return
+  }
   sub, err := nc.SubscribeSync("_INBOX.voice.chat.proof")
   if err != nil { panic(err) }
   if err := nc.Flush(); err != nil { panic(err) }
@@ -422,29 +430,12 @@ if [[ "$(jq -r '.state.messages' <<<"$stream_info")" != 2 || "$(jq -r '.state.fi
   exit 1
 fi
 
-# Core NATS publish permission failures are asynchronous, so `nats pub` can
-# exit successfully after the server has rejected the message. Snapshot the
-# leaf log before sending the real neighboring subject, then require its
-# permission violation in only the newly appended log output.
+# Direct authenticated client evidence avoids a leaf log-absence heuristic.
 denied_subject="user.account_deleted"
-leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 \
-  nats --server nats://127.0.0.1:4222 pub "$denied_subject" denied >/dev/null 2>&1 || true
-for attempt in {1..5}; do
-  leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-  leaf_log_delta="${leaf_logs#"$leaf_log_before"}"
-  hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-  hub_log_delta="${hub_logs#"$hub_log_before"}"
-  denial_log_delta="$leaf_log_delta"$'\n'"$hub_log_delta"
-  if grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" && grep -Fq "$denied_subject" <<<"$denial_log_delta"; then
-    break
-  fi
-  sleep 1
-done
-if ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" || ! grep -Fq "$denied_subject" <<<"$denial_log_delta"; then
-  echo 'FAIL: chat leaf or hub did not log denial for neighbouring subject' >&2
-  printf '%s\n' "$denial_log_delta" >&2
+denied_result="$(docker run --rm --network "$network" -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-deny ignored nats://hub:4222 "$work/fixture/creds/chat.creds" "$work/cert.pem" "$denied_subject")"
+if ! grep -Eqi 'publish_denied=.*permission' <<<"$denied_result"; then
+  echo 'FAIL: direct chat credential did not receive broker denial for neighbouring subject' >&2
+  printf '%s\n' "$denied_result" >&2
   exit 1
 fi
 
