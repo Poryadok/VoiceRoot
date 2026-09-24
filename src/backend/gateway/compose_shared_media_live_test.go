@@ -27,6 +27,9 @@ func TestComposeSharedMedia_live(t *testing.T) {
 		t.Skip("object storage not configured (MinIO/R2); set FILE_R2_* in .env for compose app profile")
 	}
 
+	// The recipient's default allow_files audience includes friends, not strangers.
+	sendComposeFriendInvitation(t, client, base, sessA.AccessToken, sessB.ProfileID)
+	acceptComposeFriendInvitation(t, client, base, sessB.AccessToken, sessA.ProfileID)
 	chatID := createComposeDM(t, client, base, sessA.AccessToken, sessB.ProfileID)
 	fileID, fileType := composeUploadSmallTextFile(t, client, base, sessA.AccessToken, chatID)
 
