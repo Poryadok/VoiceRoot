@@ -50,7 +50,14 @@ func (r *Runner) Start(ctx context.Context, natsURL, _ string) error {
 	if url == "" {
 		return fmt.Errorf("analytics consumer: missing NATS_URL")
 	}
-	nc, err := nats.Connect(url, nats.Name("voice-analytics"), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
+	nc, err := nats.Connect(url,
+		nats.Name("voice-analytics"),
+		nats.CustomInboxPrefix("_INBOX.voice.analytics"),
+		nats.Timeout(10*time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
