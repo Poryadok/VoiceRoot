@@ -7,7 +7,10 @@ metadata:
   namespace: __NAMESPACE__
 spec:
   podSelector:
-    matchLabels: {app: voice-nats}
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [voice-nats, voice-nats-pvc-candidate]
   policyTypes: [Ingress]
   ingress:
     - from:

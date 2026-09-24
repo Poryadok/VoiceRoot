@@ -109,6 +109,7 @@ if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
 fi
 
 NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
+NATS_SOURCE_CONTEXT="${NATS_SOURCE_CONTEXT:-}" \
 VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
 VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
   bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --prepare
@@ -118,20 +119,23 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
       -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
   kubectl apply -f -
 
-kubectl rollout status deployment/voice-nats -n "${NS}" --timeout=180s
-
-kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
-sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
-kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
-kubectl delete job voice-nats-notification-bootstrap -n "${NS}" --ignore-not-found
-sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-notification-bootstrap.yaml" | kubectl apply -f -
-kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "${NS}" --timeout=120s
-kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
-sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
-kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
-kubectl delete job voice-nats-analytics-chat-bootstrap -n "${NS}" --ignore-not-found
-sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml" | kubectl apply -f -
-kubectl wait --for=condition=complete job/voice-nats-analytics-chat-bootstrap -n "${NS}" --timeout=120s
+# Do not bootstrap or mutate NATS streams/consumers during candidate creation.
+# The old voice-nats Service continues to select the emptyDir source. The PVC
+# candidate is isolated behind voice-nats-pvc-candidate until a separate,
+# accepted migration command performs the fenced selector cutover.
+if [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
+  NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
+  VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
+  VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
+    bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
+  for item in realtime notification search analytics-chat; do
+    kubectl delete job "voice-nats-${item}-bootstrap" -n "${NS}" --ignore-not-found
+    sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-${item}-bootstrap.yaml" | kubectl apply -f -
+    kubectl wait --for=condition=complete "job/voice-nats-${item}-bootstrap" -n "${NS}" --timeout=120s
+  done
+else
+  echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
+fi
 
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \

@@ -21,16 +21,17 @@ Convert staging NATS JetStream storage from pod-local `emptyDir` to persistent s
 ## Milestones
 
 - [x] Add failing contract and migration-guard tests.
-- [x] Add persistent storage contract and fail-closed preflight/guard.
+- [x] Add an isolated PVC-backed candidate while preserving the current emptyDir source and stable Service.
+- [x] Add exact source census/state matching, candidate restore checks, and a selector-only accepted cutover/rollback gate.
 - [x] Document export, quiesce/fence, validation, rollback, and blockers.
 - [ ] Run final focused static checks and update graph.
 
 ## Detailed Steps
 
 1. Keep checkout on a task branch based on the current `origin/master` dependency commit.
-2. Test rendered manifest contract and guard rejection for missing or unsafe evidence, including 566 consumers above the 512 cap.
+2. Test source-preserving candidate topology, fabricated-consumer rejection, census drift detection, and rollback-before-mutation context checks.
 3. Add a read-only storage-class/PVC capability preflight; do not apply a PVC or workload.
-4. Gate NATS storage cutover on explicit evidence and document backup/restore and rollback with source retention.
+4. Keep candidate isolated until exact census/config/sequence/message-hash/replay/TLS acceptance; switch only the stable Service selector after acceptance.
 5. Run only focused shell/static contract checks; no cluster access or runtime suites.
 
 ## Validation
@@ -54,6 +55,6 @@ Convert staging NATS JetStream storage from pod-local `emptyDir` to persistent s
 
 ## Risks And Follow-Ups
 
-- Current `apply-infra.sh` applies the complete staging manifest and rolls out NATS; persistent storage activation must be gated to avoid an implicit cutover.
+- Candidate TLS identity and eight retained-message hash proofs require service-owner evidence. The guard does not treat archive hashes alone as proof of restored payload contents.
 - Staging capability and data inventory evidence must be gathered by an authorized operator before migration can proceed.
 - No runtime NATS restore or Kubernetes apply was performed; end-to-end copy and rollback remain unverified until the protected staging contexts and complete evidence bundle exist.
