@@ -32,7 +32,7 @@ import (
 func main() {
   options := []nats.Option{}
   endpoint := "nats://127.0.0.1:4222"
-  if len(os.Args) >= 6 && os.Args[1] == "direct-noack" {
+  if len(os.Args) >= 6 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive") {
     endpoint = os.Args[3]
     options = append(options, nats.UserCredentials(os.Args[4]), nats.RootCAs(os.Args[5]))
   }
@@ -508,8 +508,8 @@ if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -E
   printf '%s\n' "${noack_denial_log_delta:-}" >&2
   exit 1
 fi
-docker run -d --name voice-nats-proof-noack-receive-two --network container:voice-nats-proof-chat-noack \
-  -v "$work/receiver:/receiver" alpine:3.22 /receiver/leaf-receive receive /receiver/noack-receive-two.ready >/dev/null
+docker run -d --name voice-nats-proof-noack-receive-two --network "$network" \
+  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-receive /receiver/noack-receive-two.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" "$work/cert.pem" >/dev/null
 if ! wait_for_file "$work/receiver/noack-receive-two.ready" 'no-ACK redelivery receiver'; then
   docker logs voice-nats-proof-noack-receive-two >&2 || true
   exit 1
