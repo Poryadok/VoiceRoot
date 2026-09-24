@@ -38,13 +38,19 @@ notification_section="$(sed -n '/^  nats-notification-bootstrap:$/,/^  [^ ]/p' "
 printf '%s\n' "${notification_section}" | grep -Fqx '      nats-realtime-bootstrap:'
 printf '%s\n' "${notification_section}" | grep -Fqx '        condition: service_completed_successfully'
 grep -Fqx 'compose run --rm nats-realtime-bootstrap' "${SMOKE}"
-for apply in "${ROOT}/scripts/staging/apply-infra.sh" "${ROOT}/scripts/prod/apply-infra.sh"; do
-  awk '
-    /kubectl wait --for=condition=complete job\/voice-nats-realtime-bootstrap/ { central = NR }
-    /kubectl delete job voice-nats-notification-bootstrap/ { notification = NR }
-    END { exit !(central && notification && central < notification) }
-  ' "${apply}"
-done
+PROD_APPLY="${ROOT}/scripts/prod/apply-infra.sh"
+awk '
+  /kubectl wait --for=condition=complete job\/voice-nats-realtime-bootstrap/ { central = NR }
+  /kubectl delete job voice-nats-notification-bootstrap/ { notification = NR }
+  END { exit !(central && notification && central < notification) }
+' "${PROD_APPLY}"
+
+# Staging provisions realtime and notification durables in this explicit order
+# through the shared helper used by the fresh-install NATS bootstrap.
+STAGING_APPLY="${ROOT}/scripts/staging/apply-infra.sh"
+grep -Fq 'for bootstrap in realtime notification search analytics-chat; do' "${STAGING_APPLY}"
+grep -Fq 'kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap"' "${STAGING_APPLY}"
+grep -Fq 'run_nats_bootstrap_jobs' "${STAGING_APPLY}"
 for source in message_events_consumer.go matchmaking_events_consumer.go voice_events_consumer.go story_events_consumer.go social_events_consumer.go subscription_events_consumer.go moderation_events_consumer.go; do
   grep -Fq 'bindPreprovisionedConsumer(' "${ROOT}/src/backend/notification/${source}"
 done
