@@ -249,6 +249,10 @@ func generate(dest string, acl aclDocument) error {
 	}
 	proofNoAck := acl.Services["chat"]
 	proofNoAck.Publish = withoutExactAck(proofNoAck.Publish, "$JS.ACK.chat_events.proof_chat.>")
+	// This adversarial credential must not inherit bounded response permissions:
+	// an ACK is a response to a delivered message and would otherwise mask the
+	// intentionally omitted exact ACK publish grant.
+	proofNoAck.NoResponse = true
 	if err := writeCredential(filepath.Join(dest, "creds", "chat-noack.creds"), "voice-chat-noack", proofNoAck, account); err != nil {
 		return err
 	}
