@@ -20,8 +20,12 @@ func (unavailableJetStream) PublishMsg(*nats.Msg, ...nats.PubOpt) (*nats.PubAck,
 
 func TestValidateBootstrappedStream(t *testing.T) {
 	valid := &nats.StreamInfo{Config: nats.StreamConfig{Name: streamName, Subjects: subscriptionStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage}}
+	require.Contains(t, valid.Config.Subjects, "subscription.entitlement_changed")
 	require.NoError(t, validateBootstrappedStream(valid))
 	require.Error(t, validateBootstrappedStream(nil))
+	valid.Config.Subjects = valid.Config.Subjects[:len(valid.Config.Subjects)-1]
+	require.Error(t, validateBootstrappedStream(valid))
+	valid.Config.Subjects = subscriptionStreamSubjects()
 	valid.Config.Storage = nats.MemoryStorage
 	require.Error(t, validateBootstrappedStream(valid))
 }
