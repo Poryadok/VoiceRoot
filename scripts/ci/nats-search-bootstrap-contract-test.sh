@@ -24,10 +24,17 @@ grep -Fq '      nats-realtime-bootstrap:' "$COMPOSE" \
   || fail "Search bootstrap must wait for the canonical shared-stream bootstrap"
 grep -Fq '      nats-search-bootstrap:' "$COMPOSE" \
   || fail "Search must wait for its bootstrap service"
-for apply in "$STAGING_APPLY" "$PROD_APPLY"; do
-  grep -Fq 'voice-nats-search-bootstrap' "$apply" \
-    || fail "${apply#"${ROOT}/"} must apply the Search bootstrap Job"
-done
+grep -Fq 'voice-nats-search-bootstrap' "$PROD_APPLY" \
+  || fail "${PROD_APPLY#"${ROOT}/"} must apply the Search bootstrap Job"
+
+# Staging provisions Search with the other fixed-durable streams through its
+# shared helper, after promoting the fresh PVC-backed NATS candidate.
+grep -Fq 'for bootstrap in realtime notification search analytics-chat; do' "$STAGING_APPLY" \
+  || fail 'staging must include Search in the ordered NATS bootstrap set'
+grep -Fq 'deploy/templates/nats-${bootstrap}-bootstrap.yaml' "$STAGING_APPLY" \
+  || fail 'staging must apply Search through the canonical bootstrap template'
+grep -Fq 'kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap"' "$STAGING_APPLY" \
+  || fail 'staging must wait for the Search bootstrap job'
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \

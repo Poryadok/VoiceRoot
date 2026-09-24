@@ -108,11 +108,29 @@ if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
   exit 1
 fi
 
-NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
-NATS_SOURCE_CONTEXT="${NATS_SOURCE_CONTEXT:-}" \
-VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
-VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
-  bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --prepare
+clean_install_mode=false
+clean_install_bootstrap=false
+clean_install_mode_value="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.mode}' 2>/dev/null || true)"
+if [ "${clean_install_mode_value}" = clean-install ]; then
+  clean_install_storage_class="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.storageClass}')"
+  clean_install_storage_size="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.storageSize}')"
+  [ "${clean_install_storage_class}" = "${NATS_STORAGE_CLASS}" ] || { echo 'ERROR: clean-install NATS storage class differs from its reset preflight' >&2; exit 1; }
+  [ "${clean_install_storage_size}" = "${NATS_STORAGE_SIZE}" ] || { echo 'ERROR: clean-install NATS storage size differs from its reset preflight' >&2; exit 1; }
+  clean_install_mode=true
+  if [ "${VOICE_NATS_FRESH_INSTALL:-false}" = true ]; then
+    [ "${NS}" = voice-staging ] || { echo 'ERROR: clean install is restricted to voice-staging' >&2; exit 1; }
+    clean_install_bootstrap=true
+  fi
+elif [ "${VOICE_NATS_FRESH_INSTALL:-false}" = true ]; then
+  echo 'ERROR: clean-install opt-in requires the namespace reset marker' >&2
+  exit 1
+else
+  NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
+  NATS_SOURCE_CONTEXT="${NATS_SOURCE_CONTEXT:-}" \
+  VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
+  VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
+    bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --prepare
+fi
 
 render "${ROOT}/deploy/staging/infra.yaml" | \
   sed -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
@@ -120,29 +138,28 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
   bash "${ROOT}/scripts/staging/filter-staging-infra-source-nats.sh" | \
   kubectl apply -f -
 
-# Do not bootstrap or mutate NATS streams/consumers during candidate creation.
-# The old voice-nats Service continues to select the emptyDir source. The PVC
-# candidate is isolated behind voice-nats-pvc-candidate until a separate,
-# accepted migration command performs the fenced selector cutover.
-if [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
+run_nats_bootstrap_jobs() {
+  for bootstrap in realtime notification search analytics-chat; do
+    kubectl delete job "voice-nats-${bootstrap}-bootstrap" -n "${NS}" --ignore-not-found
+    sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-${bootstrap}-bootstrap.yaml" | kubectl apply -f -
+    kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap" -n "${NS}" --timeout=120s
+  done
+}
+
+# A user-approved clean install leaves the old Voice namespace and NATS state
+# deleted. Promote the new PVC-backed candidate before creating fixed durables.
+if [ "${clean_install_mode}" = true ]; then
+  kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
+  kubectl patch service voice-nats -n "${NS}" --type=merge -p '{"spec":{"selector":{"app":"voice-nats-pvc-candidate"}}}'
+  if [ "${clean_install_bootstrap}" = true ]; then
+    run_nats_bootstrap_jobs
+  fi
+elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
   NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
   VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
-  # Keep the central realtime stream bootstrap in the accepted activation
-  # path. It is intentionally not created while the candidate is unaccepted.
-  kubectl delete job voice-nats-realtime-bootstrap -n "${NS}" --ignore-not-found
-  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-realtime-bootstrap.yaml" | kubectl apply -f -
-  kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap -n "${NS}" --timeout=120s
-  kubectl delete job voice-nats-notification-bootstrap -n "${NS}" --ignore-not-found
-  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-notification-bootstrap.yaml" | kubectl apply -f -
-  kubectl wait --for=condition=complete job/voice-nats-notification-bootstrap -n "${NS}" --timeout=120s
-  kubectl delete job voice-nats-search-bootstrap -n "${NS}" --ignore-not-found
-  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-search-bootstrap.yaml" | kubectl apply -f -
-  kubectl wait --for=condition=complete job/voice-nats-search-bootstrap -n "${NS}" --timeout=120s
-  kubectl delete job voice-nats-analytics-chat-bootstrap -n "${NS}" --ignore-not-found
-  sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-analytics-chat-bootstrap.yaml" | kubectl apply -f -
-  kubectl wait --for=condition=complete job/voice-nats-analytics-chat-bootstrap -n "${NS}" --timeout=120s
+  run_nats_bootstrap_jobs
 else
   echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
 fi

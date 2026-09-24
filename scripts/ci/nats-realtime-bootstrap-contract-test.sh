@@ -101,10 +101,14 @@ for service in social user matchmaking role voice analytics; do
   printf '%s\n' "$section" | grep -Fqx '      nats-realtime-bootstrap:' || fail "${service} must wait for central NATS bootstrap"
   printf '%s\n' "$section" | grep -Fqx '        condition: service_completed_successfully' || fail "${service} bootstrap dependency must require success"
 done
-for infra in "$STAGING_INFRA" "$PROD_INFRA"; do
-  grep -Fq 'deploy/templates/nats-realtime-bootstrap.yaml' "$infra" || fail "${infra#"${ROOT}/"} must apply central bootstrap"
-  grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap' "$infra" || fail "${infra#"${ROOT}/"} must wait for central bootstrap"
-done
+grep -Fq 'deploy/templates/nats-realtime-bootstrap.yaml' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must apply central bootstrap"
+grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must wait for central bootstrap"
+
+# Staging runs the same central bootstrap through a helper because the clean
+# install also provisions the other fixed-durable NATS streams.
+grep -Fq 'deploy/templates/nats-${bootstrap}-bootstrap.yaml' "$STAGING_INFRA" || fail "staging must apply central bootstrap templates through its bootstrap helper"
+grep -Fq 'kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap"' "$STAGING_INFRA" || fail "staging must wait for central bootstrap jobs"
+grep -Fq 'run_nats_bootstrap_jobs' "$STAGING_INFRA" || fail "staging must invoke central bootstrap jobs after acceptance or clean-install promotion"
 for manifest in "${ROOT}/deploy/staging/services.yaml" "${ROOT}/deploy/prod/services.yaml"; do
   require '              value: realtime-1' "$manifest"
 done
