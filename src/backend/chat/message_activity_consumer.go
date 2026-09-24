@@ -16,18 +16,41 @@ import (
 )
 
 const messageEventsStreamName = "message_events"
+const messageActivityDurable = "chat_message_activity"
+const messageActivitySubject = "message.sent"
 
 type messageActivityStore interface {
 	TouchLastMessageAt(ctx context.Context, chatID uuid.UUID, at time.Time) error
 	PromoteDeclinedDMRecipients(ctx context.Context, chatID, senderProfileID uuid.UUID) error
 }
 
-func chatActivityDurableName(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
+func chatActivityDurableName(_ string) string { return messageActivityDurable }
+
+func messageActivityConsumerConfig() *nats.ConsumerConfig {
+	return &nats.ConsumerConfig{
+		Durable:        messageActivityDurable,
+		DeliverSubject: "_INBOX.voice.chat." + messageActivityDurable,
+		DeliverGroup:   messageActivityDurable,
+		DeliverPolicy:  nats.DeliverAllPolicy,
+		AckPolicy:      nats.AckExplicitPolicy,
+		FilterSubject:  messageActivitySubject,
 	}
-	return "chat_" + strings.ReplaceAll(id, "-", "") + "_msg_activity"
+}
+
+func validateMessageActivityDurable(js nats.JetStreamContext) error {
+	want := messageActivityConsumerConfig()
+	info, err := js.ConsumerInfo(messageEventsStreamName, want.Durable)
+	if err != nil {
+		return fmt.Errorf("inspect message activity durable: %w", err)
+	}
+	if info == nil || info.Stream != messageEventsStreamName || info.Name != want.Durable ||
+		info.Config.Durable != want.Durable || info.Config.DeliverSubject != want.DeliverSubject ||
+		info.Config.DeliverGroup != want.DeliverGroup || info.Config.DeliverPolicy != want.DeliverPolicy ||
+		info.Config.AckPolicy != want.AckPolicy || info.Config.FilterSubject != want.FilterSubject ||
+		len(info.Config.FilterSubjects) != 0 {
+		return fmt.Errorf("message activity durable %q has incompatible configuration", want.Durable)
+	}
+	return nil
 }
 
 func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, uuid.UUID, time.Time, bool) {
@@ -54,57 +77,59 @@ func messageActivityFromEvent(data []byte, now func() time.Time) (uuid.UUID, uui
 	return chatID, senderID, at, true
 }
 
-func handleMessageActivity(ctx context.Context, store messageActivityStore, msg *nats.Msg, logger *slog.Logger) {
+func handleMessageActivity(ctx context.Context, store messageActivityStore, msg *nats.Msg, logger *slog.Logger) error {
 	if msg == nil {
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
-		return
+		return nil
 	}
 	chatID, senderID, at, ok := messageActivityFromEvent(msg.Data, time.Now)
 	if !ok {
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown message activity payload")
-		return
+		return nil
 	}
 	attrs := []slog.Attr{slog.String("chat_id", chatID.String())}
 	if err := store.TouchLastMessageAt(ctx, chatID, at); err != nil {
 		attrs = append(attrs, slog.String("error", err.Error()))
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity touch failed", attrs...)
-		return
+		return err
 	}
 	if err := store.PromoteDeclinedDMRecipients(ctx, chatID, senderID); err != nil {
 		attrs = append(attrs, slog.String("error", err.Error()))
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "message activity recontact failed", attrs...)
-		return
+		return err
 	}
 	natslog.LogConsume(logger, msg, slog.LevelInfo, "message activity touched", attrs...)
+	return nil
 }
 
-func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
+func subscribeMessageActivity(ctx context.Context, js nats.JetStreamContext, store messageActivityStore, logger *slog.Logger) (*nats.Subscription, error) {
 	if store == nil {
 		return nil, fmt.Errorf("message activity store not configured")
 	}
-	handler := func(msg *nats.Msg) {
-		handleMessageActivity(ctx, store, msg, logger)
+	if err := validateMessageActivityDurable(js); err != nil {
+		return nil, err
 	}
-	sub, err := js.Subscribe("message.sent", handler,
-		nats.Durable(chatActivityDurableName(instanceID)),
-		nats.BindStream(messageEventsStreamName),
-		nats.DeliverAll(),
-	)
-	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(messageEventsStreamName, chatActivityDurableName(instanceID)))
-		if err != nil {
-			return nil, fmt.Errorf("jetstream subscribe message activity: %w", err)
+	handler := func(msg *nats.Msg) {
+		if err := handleMessageActivity(ctx, store, msg, logger); err != nil {
+			_ = msg.Nak()
+			return
 		}
+		_ = msg.Ack()
+	}
+	sub, err := js.QueueSubscribe(messageActivitySubject, messageActivityDurable, handler,
+		nats.Bind(messageEventsStreamName, messageActivityDurable), nats.ManualAck())
+	if err != nil {
+		return nil, fmt.Errorf("bind message activity durable: %w", err)
 	}
 	return sub, nil
 }
 
-func runMessageActivityConsumer(ctx context.Context, natsURL, instanceID string, store messageActivityStore, logger *slog.Logger) error {
+func runMessageActivityConsumer(ctx context.Context, natsURL string, store messageActivityStore, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message activity consumer: missing NATS URL")
 	}
 	for {
-		err := runMessageActivityConsumerOnce(ctx, natsURL, instanceID, store, logger)
+		err := runMessageActivityConsumerOnce(ctx, natsURL, store, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -119,9 +144,10 @@ func runMessageActivityConsumer(ctx context.Context, natsURL, instanceID string,
 	}
 }
 
-func runMessageActivityConsumerOnce(ctx context.Context, natsURL, instanceID string, store messageActivityStore, logger *slog.Logger) error {
+func runMessageActivityConsumerOnce(ctx context.Context, natsURL string, store messageActivityStore, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-chat-message-activity"),
+		nats.CustomInboxPrefix("_INBOX.voice.chat"),
 		nats.Timeout(10*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
@@ -136,7 +162,7 @@ func runMessageActivityConsumerOnce(ctx context.Context, natsURL, instanceID str
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeMessageActivity(ctx, js, store, instanceID, logger)
+	sub, err := subscribeMessageActivity(ctx, js, store, logger)
 	if err != nil {
 		return err
 	}
