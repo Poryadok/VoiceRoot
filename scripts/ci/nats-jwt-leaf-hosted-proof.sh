@@ -147,7 +147,7 @@ services:
   user: {publish: [proof.user], subscribe: [proof.user.delivery]}
   voice: {publish: [proof.voice], subscribe: [proof.voice.delivery]}
 bootstrap:
-  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat', '$JS.API.CONSUMER.DELETE.chat_events.proof_chat', '$JS.API.CONSUMER.INFO.chat_events.proof_chat']
+  publish: ['$JS.API.STREAM.CREATE.chat_events', '$JS.API.STREAM.INFO.chat_events', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat', '$JS.API.CONSUMER.DELETE.chat_events.proof_chat', '$JS.API.CONSUMER.INFO.chat_events.proof_chat', '$JS.API.CONSUMER.CREATE.chat_events.proof_chat_noack', '$JS.API.CONSUMER.INFO.chat_events.proof_chat_noack']
   subscribe: [_INBOX.voice.bootstrap.reply.>]
 EOF
 
