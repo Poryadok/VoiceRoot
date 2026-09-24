@@ -62,6 +62,9 @@ proof_require() { grep -Fq -- "$1" "$proof" || fail "hosted proof missing $2"; }
 proof_reject '$JS.API.>' 'broad JetStream API wildcard'
 proof_reject '_INBOX.>' 'broad inbox wildcard'
 proof_reject '--ack-wait' 'nats-box-version-dependent consumer flag'
+if grep -Eq 'docker logs .*\|[[:space:]]*grep -[^[:space:]]*q' "$proof"; then
+  fail 'docker logs readiness pipe is unsafe under pipefail when grep -q closes early'
+fi
 proof_require 'chat-noack.creds' 'no-ACK credential proof'
 proof_require 'msg.Ack()' 'asynchronous exact-ACK denial attempt'
 proof_require 'mode == "nak-then-ack"' 'single-subscription deterministic redelivery path'

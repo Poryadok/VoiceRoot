@@ -257,8 +257,12 @@ EOF
 
 docker network create "$network" >/dev/null
 docker run -d --name voice-nats-proof-hub --network "$network" --network-alias hub --network-alias wrong-sni -v "$work:$work" nats:2.12-alpine -c "$work/hub.conf" >/dev/null
-for _ in $(seq 1 30); do docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready' && break; sleep 1; done
-if ! docker logs voice-nats-proof-hub 2>&1 | grep -q 'Server is ready'; then
+for _ in $(seq 1 30); do
+  hub_ready_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
+  grep -q 'Server is ready' <<<"$hub_ready_logs" && break
+  sleep 1
+done
+if ! grep -q 'Server is ready' <<<"$hub_ready_logs"; then
   echo 'FAIL: JWT resolver hub did not become ready' >&2
   docker logs voice-nats-proof-hub >&2
   exit 1
@@ -338,7 +342,8 @@ fi
 docker run --rm --network "$network" -v "$work:$work:ro" natsio/nats-box:0.18.0 \
   nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" --inbox-prefix _INBOX.voice.bootstrap.reply pub --reply "$bootstrap_reply" '$JS.API.STREAM.CREATE.chat_events' '{"name":"chat_events","subjects":["chat.created"],"storage":"file","retention":"limits"}' >/dev/null
 docker wait voice-nats-proof-bootstrap-reply >/dev/null
-if ! docker logs voice-nats-proof-bootstrap-reply 2>&1 | grep -Fq 'chat_events'; then
+bootstrap_reply_logs="$(docker logs voice-nats-proof-bootstrap-reply 2>&1 || true)"
+if ! grep -Fq 'chat_events' <<<"$bootstrap_reply_logs"; then
   echo 'FAIL: bootstrap stream-create reply was not received on the scoped child inbox' >&2
   exit 1
 fi
@@ -371,7 +376,8 @@ fi
 
 docker run -d --name voice-nats-proof-chat --network "$network" -v "$work:$work:ro" nats:2.12-alpine -c "$work/leaf.conf" >/dev/null
 for attempt in {1..15}; do
-  if docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
+  chat_ready_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
+  if grep -Fq 'Server is ready' <<<"$chat_ready_logs"; then
     break
   fi
   if ! docker inspect --format '{{.State.Running}}' voice-nats-proof-chat 2>/dev/null | grep -qx true; then
@@ -381,7 +387,7 @@ for attempt in {1..15}; do
   fi
   sleep 1
 done
-if ! docker logs voice-nats-proof-chat 2>&1 | grep -Fq 'Server is ready'; then
+if ! grep -Fq 'Server is ready' <<<"$chat_ready_logs"; then
   echo 'FAIL: chat leaf did not become ready within 15 seconds' >&2
   docker logs voice-nats-proof-chat >&2 || true
   exit 1
