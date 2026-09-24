@@ -176,6 +176,14 @@ bot_event_log
 ├── interaction_token
 ├── created_at
 └── delivered_at
+
+bot_message_deliveries
+├── id (UUID; stable webhook delivery ID)
+├── bot_id (FK), message_id (UUID; unique pair)
+├── chat_id, payload (jsonb)
+├── is_polling_mode, webhook_url, webhook_secret (recipient snapshot)
+├── status (pending | delivered), attempts, next_attempt_at, claimed_until
+└── created_at, delivered_at
 ```
 
 ## Webhook доставка
@@ -191,6 +199,24 @@ Event (NATS: message in whitelisted chat) ──► Bot Service
   │
   └─► Polling mode: enqueue to bot's event stream (GET /api/v1/bots/me/interactions/poll)
 ```
+
+For `message.sent`, Bot binds only the centrally provisioned JetStream push
+consumer `message_events/bot_message_events`: filter `message.sent`, delivery
+subject `_INBOX.voice.bot.bot_message_events`, DeliverAll and AckExplicit.
+Startup fails if its configuration differs. Bot does not create a consumer.
+The application connects to the local NATS leaf without credentials by default;
+`BOT_NATS_CREDS_FILE` is optional. Bot producer JetStream replies use
+`_INBOX.voice.bot`.
+
+The consumer commits one durable intent per eligible `(bot_id, message_id)`
+before ACK. A database failure NAKs the source message. A worker leases and
+delivers recipients independently: polling inserts the visible event and marks
+the intent delivered in one transaction; webhook sends a signed POST, then
+marks the intent delivered. Failed recipients remain pending with retry
+backoff, so another bot's polling failure cannot block a healthy webhook.
+Replay after a completed delivery is inert. Webhook payload
+`options.delivery_id` is stable across retries; receivers should deduplicate
+that ID for an ambiguous HTTP response (remote success before local receipt).
 
 ## Публикуемые события (→ NATS)
 
