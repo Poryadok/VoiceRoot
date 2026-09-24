@@ -49,8 +49,13 @@ activation_line="$(grep -nF 'if [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-fals
 activation_else_line="$(awk -v start="${activation_line}" 'NR > start && /^else$/ { print NR; exit }' "${APPLY}")"
 [ -n "${activation_line}" ] && [ -n "${activation_else_line}" ] || fail 'migration-acceptance activation branch must be explicit'
 for bootstrap in realtime notification search analytics-chat; do
-  bootstrap_line="$(grep -nF "deploy/templates/nats-${bootstrap}-bootstrap.yaml" "${APPLY}" | cut -d: -f1)"
-  [ -n "${bootstrap_line}" ] && [ "${bootstrap_line}" -gt "${activation_line}" ] && [ "${bootstrap_line}" -lt "${activation_else_line}" ] || fail "${bootstrap} bootstrap must remain behind the migration-acceptance gate"
+  for command in \
+    "kubectl delete job voice-nats-${bootstrap}-bootstrap" \
+    "deploy/templates/nats-${bootstrap}-bootstrap.yaml" \
+    "kubectl wait --for=condition=complete job/voice-nats-${bootstrap}-bootstrap"; do
+    command_line="$(grep -nF "${command}" "${APPLY}" | cut -d: -f1)"
+    [ -n "${command_line}" ] && [ "${command_line}" -gt "${activation_line}" ] && [ "${command_line}" -lt "${activation_else_line}" ] || fail "${bootstrap} bootstrap ${command} must remain behind the migration-acceptance gate"
+  done
 done
 grep -Fq 'cutover' "${MIGRATE}" || fail 'migration tool must provide a separately gated cutover'
 grep -Fq 'source-census.tsv' "${GUARD}" || fail 'guard must validate source census identity, not only decision row count'
