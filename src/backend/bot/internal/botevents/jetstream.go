@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,13 +47,7 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	nc, err := nats.Connect(natsURL,
-		nats.Name("voice-bot-events"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(natsURL, botNatsOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -61,6 +57,21 @@ func NewJetStreamPublisher(natsURL string) (*JetStreamPublisher, error) {
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
 	return &JetStreamPublisher{nc: nc, js: js}, nil
+}
+
+func botNatsOptions() []nats.Option {
+	opts := []nats.Option{
+		nats.Name("voice-bot-events"),
+		nats.CustomInboxPrefix("_INBOX.voice.bot"),
+		nats.Timeout(10 * time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	}
+	if creds := strings.TrimSpace(os.Getenv("BOT_NATS_CREDS_FILE")); creds != "" {
+		opts = append(opts, nats.UserCredentials(creds))
+	}
+	return opts
 }
 
 func (p *JetStreamPublisher) Close() {
