@@ -448,20 +448,14 @@ if ! grep -Eqi 'publish_denied=.*permission' <<<"$denied_result"; then
   exit 1
 fi
 
-# Service-side mutation is also rejected by the chat identity.
+# Service-side mutation is rejected by the authenticated chat CLIENT. A
+# client-side broker error is authoritative; leaf and hub log absence is not.
 for denied_js_subject in '$JS.API.CONSUMER.CREATE.chat_events.denied' '$JS.API.CONSUMER.INFO.chat_events.neighbour' '$JS.ACK.chat_events.neighbour.1.1.1.1.1' '$JS.API.STREAM.CREATE.denied' '$JS.API.STREAM.UPDATE.chat_events' '$JS.API.STREAM.DELETE.chat_events' '$SYS.REQ.SERVER.PING'; do
-  leaf_log_before="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-  hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-  docker run --rm --network container:voice-nats-proof-chat natsio/nats-box:0.18.0 nats --server nats://127.0.0.1:4222 pub "$denied_js_subject" denied >/dev/null 2>&1 || true
-  for _ in $(seq 1 8); do
-    leaf_logs="$(docker logs voice-nats-proof-chat 2>&1 || true)"
-    hub_logs="$(docker logs voice-nats-proof-hub 2>&1 || true)"
-    denial_log_delta="${leaf_logs#"$leaf_log_before"}"$'\n'"${hub_logs#"$hub_log_before"}"
-    grep -Fq "$denied_js_subject" <<<"$denial_log_delta" && grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta" && break
-    sleep 1
-  done
-  if ! grep -Fq "$denied_js_subject" <<<"$denial_log_delta" || ! grep -Eqi 'permission.*(violation|denied)' <<<"$denial_log_delta"; then
-    echo "FAIL: chat leaf did not freshly deny $denied_js_subject" >&2; exit 1
+  denied_result="$(docker run --rm --network "$network" -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-deny ignored nats://hub:4222 "$work/fixture/creds/chat.creds" "$denied_js_subject")"
+  if ! grep -Eqi 'publish_denied=.*permission' <<<"$denied_result"; then
+    echo "FAIL: direct chat credential did not receive broker denial for $denied_js_subject" >&2
+    printf '%s\n' "$denied_result" >&2
+    exit 1
   fi
 done
 
