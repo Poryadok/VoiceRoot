@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -12,7 +13,58 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	eventsv1 "voice.app/voice/events/v1"
 )
+
+func TestDecodeGuestConversionEventForAccount(t *testing.T) {
+	const accountID = "620a7260-f990-4d68-9cb6-35d36067fb38"
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+		want    bool
+	}{
+		{name: "malformed protobuf", payload: []byte{0xff}},
+		{name: "legacy JSON", payload: []byte(`{"account_id":"` + accountID + `"}`)},
+		{name: "unrelated account", payload: guestConversionPayload(t, "aa98c1e0-cdcd-45b1-8ab1-96374d49f4c8", true)},
+		{name: "missing event identity", payload: guestConversionPayload(t, accountID, false)},
+		{name: "current account", payload: guestConversionPayload(t, accountID, true), want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			event := decodeGuestConversionEventForAccount(tc.payload, accountID)
+			require.Equal(t, tc.want, event != nil)
+		})
+	}
+}
+
+func guestConversionPayload(t *testing.T, accountID string, withEventID bool) []byte {
+	t.Helper()
+	event := &eventsv1.UserStreamEvent{
+		OccurredAt: timestamppb.Now(),
+		Payload: &eventsv1.UserStreamEvent_UserGuestConverted{
+			UserGuestConverted: &eventsv1.UserGuestConverted{AccountId: accountID},
+		},
+	}
+	if withEventID {
+		event.EventId = "a9d94c61-14b4-4b8b-aa18-6010b6931679"
+	}
+	payload, err := proto.Marshal(event)
+	require.NoError(t, err)
+	return payload
+}
+
+func decodeGuestConversionEventForAccount(data []byte, accountID string) *eventsv1.UserStreamEvent {
+	var event eventsv1.UserStreamEvent
+	if err := proto.Unmarshal(data, &event); err != nil ||
+		event.GetUserGuestConverted() == nil ||
+		event.GetUserGuestConverted().GetAccountId() != accountID ||
+		event.GetEventId() == "" ||
+		event.GetOccurredAt() == nil || !event.GetOccurredAt().IsValid() {
+		return nil
+	}
+	return &event
+}
 
 func liveNATSURL() string {
 	if u := strings.TrimSpace(os.Getenv("VOICE_NATS_URL")); u != "" {
@@ -22,7 +74,7 @@ func liveNATSURL() string {
 }
 
 // TestComposeConvertGuestNATS_live subscribes to core NATS subject user.guest_converted
-// and asserts Auth publishes after convert-guest (AU-14).
+// and asserts Auth durably publishes after email verification of a converted guest (AU-14).
 //
 // Opt-in: VOICE_RUN_LIVE_COMPOSE=true VOICE_API_BASE_URL=http://127.0.0.1:18080
 func TestComposeConvertGuestNATS_live(t *testing.T) {
@@ -38,6 +90,7 @@ func TestComposeConvertGuestNATS_live(t *testing.T) {
 	sub, err := nc.SubscribeSync("user.guest_converted")
 	require.NoError(t, err)
 	defer sub.Unsubscribe()
+	require.NoError(t, nc.FlushTimeout(5*time.Second))
 
 	client := &http.Client{Timeout: 45 * time.Second}
 	base := liveGatewayBaseURL()
@@ -62,9 +115,34 @@ func TestComposeConvertGuestNATS_live(t *testing.T) {
 	convertRaw, _ := io.ReadAll(convertResp.Body)
 	require.Equal(t, http.StatusOK, convertResp.StatusCode, "body=%s", string(convertRaw))
 
-	msg, err := sub.NextMsg(10 * time.Second)
-	require.NoError(t, err, "expected user.guest_converted on core NATS")
-	require.Contains(t, string(msg.Data), guestSess.AccountID)
+	var envelope authSessionEnvelope
+	require.NoError(t, json.Unmarshal(convertRaw, &envelope))
+	pending := envelope.Session
+	require.Equal(t, guestSess.AccountID, pending.AccountID)
+	require.Equal(t, "guest", pending.AccountType, "conversion remains pending until email verification")
+	verified := completeComposeEmailVerification(t, client, base, email, pending)
+	require.Equal(t, guestSess.AccountID, verified.AccountID)
+
+	// Recovery scans every 30 seconds; leave room for a delayed scan and broker delivery.
+	deadline := time.Now().Add(45 * time.Second)
+	matched := false
+	for time.Until(deadline) > 0 {
+		msg, err := sub.NextMsg(time.Until(deadline))
+		if errors.Is(err, nats.ErrTimeout) {
+			break
+		}
+		require.NoError(t, err, "read user.guest_converted from core NATS")
+		event := decodeGuestConversionEventForAccount(msg.Data, guestSess.AccountID)
+		if event == nil {
+			continue
+		}
+		require.Equal(t, event.GetEventId(), msg.Header.Get("Nats-Msg-Id"),
+			"guest conversion must use the durable JetStream operation identity")
+		require.False(t, matched, "duplicate guest conversion event for account %s", guestSess.AccountID)
+		matched = true
+		deadline = time.Now().Add(time.Second)
+	}
+	require.True(t, matched, "expected durable user.guest_converted for account %s on core NATS", guestSess.AccountID)
 }
 
 // TestComposeAuthSessions_live: list sessions → revoke other → refresh fails (AU-12).
