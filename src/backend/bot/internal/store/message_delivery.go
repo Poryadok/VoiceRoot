@@ -39,8 +39,7 @@ FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled AND b.status = 'live'
   AND b.actor_profile_id::text <> $2
   AND (b.is_polling_mode OR NULLIF(b.webhook_url, '') IS NOT NULL)
-ORDER BY b.id
-FOR SHARE OF w`, chatID, senderProfileID)
+ORDER BY b.id`, chatID, senderProfileID)
 	if err != nil {
 		return err
 	}
@@ -59,6 +58,34 @@ FOR SHARE OF w`, chatID, senderProfileID)
 	}
 	rows.Close()
 	for _, botID := range botIDs {
+		// Lifecycle changes lock the bot before whitelist and delivery rows. Match
+		// that order so recipient capture cannot deadlock with a reinstall/removal.
+		var actorProfileID uuid.UUID
+		var polling bool
+		var webhookURL *string
+		err := tx.QueryRow(ctx, `
+SELECT actor_profile_id, is_polling_mode, webhook_url
+FROM bots WHERE id = $1 AND status = 'live'
+FOR SHARE`, botID).Scan(&actorProfileID, &polling, &webhookURL)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if actorProfileID.String() == senderProfileID || (!polling && strings.TrimSpace(ptrValue(webhookURL)) == "") {
+			continue
+		}
+		var enabled bool
+		err = tx.QueryRow(ctx, `
+SELECT enabled FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2
+FOR SHARE`, botID, chatID).Scan(&enabled)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !enabled) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO bot_message_deliveries (id, bot_id, message_id, chat_id, payload)
 VALUES (gen_random_uuid(), $1, $2, $3, $4::jsonb)

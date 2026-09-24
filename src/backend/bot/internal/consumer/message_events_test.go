@@ -198,6 +198,69 @@ func TestPendingMessageDeliveryDoesNotReviveAfterInstallWhitelistReplacement(t *
 	require.Equal(t, "canceled", status)
 }
 
+func TestQueueMessageRecipientsAndInstallInSpaceDoNotDeadlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	st := startBotStore(t)
+	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "LockOrderBot", "", `[]`, uuid.New())
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = true WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+
+	whitelistLock, err := st.Pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = whitelistLock.Rollback(context.Background()) }()
+	var lockedChatID uuid.UUID
+	require.NoError(t, whitelistLock.QueryRow(ctx, `SELECT chat_id FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2 FOR SHARE`, bot.ID, chatID).Scan(&lockedChatID))
+
+	installDone := make(chan error, 1)
+	go func() {
+		_, installErr := st.InstallInSpace(ctx, bot.ID, spaceID, owner, nil)
+		installDone <- installErr
+	}()
+	require.Eventually(t, func() bool { return lockWaitCount(t, st) >= 1 }, 5*time.Second, 10*time.Millisecond)
+
+	queueStarted := make(chan struct{})
+	queueDone := make(chan error, 1)
+	go func() {
+		close(queueStarted)
+		queueDone <- st.QueueMessageRecipients(ctx, chatID, uuid.New(), uuid.NewString(), map[string]any{"message_id": "queued-before-install"})
+	}()
+	<-queueStarted
+	require.Eventually(t, func() bool { return lockWaitCount(t, st) >= 2 }, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, whitelistLock.Commit(ctx))
+
+	select {
+	case err := <-installDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("install did not finish after releasing the whitelist lock")
+	}
+	select {
+	case err := <-queueDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("recipient enqueue deadlocked with install")
+	}
+}
+
+func lockWaitCount(t *testing.T, st *store.BotStore) int {
+	t.Helper()
+	var waiting int
+	err := st.Pool.QueryRow(context.Background(), `
+SELECT count(*) FROM pg_stat_activity
+WHERE datname = current_database() AND pid <> pg_backend_pid()
+  AND wait_event_type = 'Lock' AND query NOT LIKE '%pg_stat_activity%'`).Scan(&waiting)
+	require.NoError(t, err)
+	return waiting
+}
+
 func TestHandleMessageSent_PollingFailureDoesNotStarveWebhook(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
