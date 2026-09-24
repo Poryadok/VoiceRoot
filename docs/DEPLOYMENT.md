@@ -605,6 +605,13 @@ old and new Auth replicas cannot bind it concurrently. Start service leaves
 only after successful bootstrap, then verify allowed publish/consume/ACK and
 neighboring denial at the exact release SHA.
 
+Staging account migration is not yet approved: the existing anonymous `$G`
+account was observed with 566 consumers, exceeding the issued APP account's
+512-consumer limit. Inventory and classify legacy dynamic consumers and prove
+state-preserving migration of the eight existing stream messages before
+cutover. Do not silently increase the limit, discard consumer state, or start
+the JWT hub on empty storage.
+
 For each target namespace (`voice-staging` or `voice-prod`), the secret manager
 must create `voice-nats-operator` with UTF-8 `operator.jwt`, `account.jwt`,
 `system-account.jwt`, `account.public`, and `system-account.public`; the hub

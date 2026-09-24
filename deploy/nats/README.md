@@ -90,6 +90,12 @@ four bootstrap Jobs own 40 durables. A preexisting durable with a different
 filter, delivery subject, policy, group, or push/pull mode fails bootstrap and
 requires an explicit migration before the application is started. Auth's old
 random-target `auth_subscription_tier` cannot overlap the new no-group push
-binding during a rolling start. Rotate a service credential by replacing its
-external Secret key and restarting only that service's sidecar; rotate
+binding during a rolling start. Staging migration is an additional hard gate:
+the existing anonymous `$G` account was observed with 566 consumers, while
+the issued APP account limit is 512. Inventory and classify the legacy
+dynamic consumers and prove a state-preserving migration of the existing
+eight stream messages before account cutover. Do not silently raise the cap,
+discard consumer state, or recreate the hub on empty storage. Rotate a service
+credential by replacing its external Secret key and restarting only that
+service's sidecar; rotate
 account/operator material through its separate rehearsed broker rollout.

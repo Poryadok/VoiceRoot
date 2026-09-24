@@ -109,6 +109,20 @@ func TestIssueWritesProtectedFourSecretRestoreList(t *testing.T) {
 		if !slices.Equal(claims.Pub.Allow, acl.Services[name].Publish) || !slices.Equal(claims.Sub.Allow, acl.Services[name].Subscribe) {
 			t.Errorf("%s JWT permissions differ from reviewed ACL", name)
 		}
+		if claims.Resp != nil {
+			t.Errorf("%s JWT grants response permission outside the exact publish ACL", name)
+		}
+	}
+	bootstrapCreds, err := base64.StdEncoding.DecodeString(secretData["voice-nats-bootstrap-credentials"]["bootstrap.creds"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootstrapClaims, err := jwt.DecodeUserClaims(credentialJWT(t, string(bootstrapCreds)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bootstrapClaims.Resp != nil {
+		t.Error("bootstrap JWT grants response permission outside the exact publish ACL")
 	}
 	for _, tc := range []struct{ seed, jwtKey string }{{"operator.seed", "operator.jwt"}, {"app-account.seed", "account.jwt"}, {"system-account.seed", "system-account.jwt"}} {
 		seed, err := os.ReadFile(filepath.Join(dest, "signing-seeds", tc.seed))
