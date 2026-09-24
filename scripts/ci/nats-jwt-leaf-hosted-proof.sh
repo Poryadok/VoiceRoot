@@ -32,17 +32,20 @@ import (
 func main() {
   options := []nats.Option{}
   endpoint := "nats://127.0.0.1:4222"
-  if len(os.Args) >= 6 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive" || os.Args[1] == "direct-deny") {
+  if len(os.Args) >= 5 && (os.Args[1] == "direct-noack" || os.Args[1] == "direct-receive" || os.Args[1] == "direct-deny") {
     endpoint = os.Args[3]
-    options = append(options, nats.UserCredentials(os.Args[4]), nats.RootCAs(os.Args[5]))
+    // The fixture exposes its authenticated hub CLIENT listener on plaintext
+    // 4222. TLS is deliberately restricted to the 7422 leaf listener, so a
+    // direct CLIENT probe must not add a TLS option to this endpoint.
+    options = append(options, nats.UserCredentials(os.Args[4]))
   }
   asyncErr := make(chan error, 1)
   options = append(options, nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) { select { case asyncErr <- err: default: } }))
   nc, err := nats.Connect(endpoint, options...)
   if err != nil { panic(err) }
   defer nc.Close()
-  if len(os.Args) >= 7 && os.Args[1] == "direct-deny" {
-    if err := nc.Publish(os.Args[6], []byte("denied")); err != nil { panic(err) }
+  if len(os.Args) >= 6 && os.Args[1] == "direct-deny" {
+    if err := nc.Publish(os.Args[5], []byte("denied")); err != nil { panic(err) }
     if err := nc.Flush(); err != nil { panic(err) }
     select { case err := <-asyncErr: fmt.Printf("publish_denied=%v\n", err); case <-time.After(2*time.Second): panic("missing publish permission denial") }
     return
@@ -93,6 +96,12 @@ func main() {
     fmt.Printf("ack_subject=%s\n", msg.Reply)
     if err := msg.Ack(); err != nil { panic(err) }
     if err := nc.Flush(); err != nil { panic(err) }
+    select {
+    case err := <-asyncErr:
+      fmt.Printf("ack_error=%v\n", err)
+    case <-time.After(2 * time.Second):
+      panic("missing ACK publish permission denial")
+    }
     fmt.Printf("stream=%s sequence=%d delivered=%d ack=false\n", meta.Stream, meta.Sequence.Stream, meta.NumDelivered)
   }
 }
@@ -432,7 +441,7 @@ fi
 
 # Direct authenticated client evidence avoids a leaf log-absence heuristic.
 denied_subject="user.account_deleted"
-denied_result="$(docker run --rm --network "$network" -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-deny ignored nats://hub:4222 "$work/fixture/creds/chat.creds" "$work/cert.pem" "$denied_subject")"
+denied_result="$(docker run --rm --network "$network" -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-deny ignored nats://hub:4222 "$work/fixture/creds/chat.creds" "$denied_subject")"
 if ! grep -Eqi 'publish_denied=.*permission' <<<"$denied_result"; then
   echo 'FAIL: direct chat credential did not receive broker denial for neighbouring subject' >&2
   printf '%s\n' "$denied_result" >&2
@@ -461,7 +470,7 @@ done
 # JWT permission boundary for an exact ACK publish denial.
 hub_log_before="$(docker logs voice-nats-proof-hub 2>&1 || true)"
 docker run -d --name voice-nats-proof-noack-receive-one --network "$network" \
-  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-noack /receiver/noack-receive-one.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" "$work/cert.pem" >/dev/null
+  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-noack /receiver/noack-receive-one.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" >/dev/null
 if ! wait_for_file "$work/receiver/noack-receive-one.ready" 'no-ACK chat leaf receiver'; then
   docker logs voice-nats-proof-noack-receive-one >&2 || true
   exit 1
@@ -501,7 +510,7 @@ if ! grep -Fq "$noack_ack_subject" <<<"${noack_denial_log_delta:-}" || ! grep -E
   exit 1
 fi
 docker run -d --name voice-nats-proof-noack-receive-two --network "$network" \
-  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-receive /receiver/noack-receive-two.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" "$work/cert.pem" >/dev/null
+  -v "$work/receiver:/receiver" -v "$work:$work:ro" alpine:3.22 /receiver/leaf-receive direct-receive /receiver/noack-receive-two.ready nats://hub:4222 "$work/fixture/creds/chat-noack.creds" >/dev/null
 if ! wait_for_file "$work/receiver/noack-receive-two.ready" 'no-ACK redelivery receiver'; then
   docker logs voice-nats-proof-noack-receive-two >&2 || true
   exit 1
