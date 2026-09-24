@@ -238,6 +238,10 @@ func completeComposeEmailVerification(
 		var envelope authSessionEnvelope
 		require.NoError(t, json.Unmarshal(verifyRaw, &envelope))
 		verified = envelope.Session
+	case http.StatusNoContent, http.StatusAccepted:
+		// Verification can complete without returning a replacement session, or
+		// report that durable guest promotion is still pending.
+		verified = waitComposeRegularSession(t, client, base, pending)
 	case http.StatusServiceUnavailable:
 		var failure struct {
 			Error string `json:"error"`
