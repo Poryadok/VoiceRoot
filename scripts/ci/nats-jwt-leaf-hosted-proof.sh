@@ -168,6 +168,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$work/wrong-ca-key.pe
 
 cat >"$work/hub.conf" <<EOF
 operator: $work/fixture/operator.jwt
+http: 8222
 resolver: MEMORY
 resolver_preload: { $account: "$account_jwt", $system_account: "$system_account_jwt" }
 system_account: $system_account
