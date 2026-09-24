@@ -10,7 +10,7 @@ data:
 
     nats_url="${NATS_URL:?NATS_URL is required}"
     nats() {
-      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+      if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"; else command nats "$@"; fi
     }
     stream() {
       name="$1"; shift
@@ -38,6 +38,7 @@ data:
     }
     consumer() {
       stream_name="$1"; durable="$2"; filter="$3"; target="$4"
+      echo "bootstrap consumer INFO $stream_name/$durable" >&2
       if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
         if printf '%s' "$info" | jq -e '.error' >/dev/null; then
           printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
@@ -50,7 +51,18 @@ data:
       else
         echo "$info" >&2; exit 1
       fi
-      nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
+      payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_policy: "new", ack_policy: "explicit"}}')"
+      echo "bootstrap consumer CREATE $stream_name/$durable" >&2
+      if result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)"; then
+        echo "bootstrap consumer CREATE response bytes ${#result} $stream_name/$durable" >&2
+      else
+        status=$?
+        echo "bootstrap consumer CREATE failed status=$status response_bytes=${#result} $stream_name/$durable" >&2
+        [ -z "$result" ] || echo "$result" >&2
+        exit "$status"
+      fi
+      printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
+      echo "bootstrap consumer ready $stream_name/$durable" >&2
     }
     stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
     stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted
@@ -66,6 +78,7 @@ data:
     stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
     stream analytics_events 'analytics.>'
     stream_with_max_age user_profile_projection 0 user.search_profile_projection
+    echo 'bootstrap realtime streams ready' >&2
     consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
     consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat
     consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user

@@ -4,7 +4,7 @@ set -eu
 nats_url="${NATS_URL:?NATS_URL is required}"
 
 nats() {
-  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" "$@"; else command nats "$@"; fi
+  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"; else command nats "$@"; fi
 }
 
 stream() {
@@ -54,7 +54,9 @@ consumer() {
   else
     echo "$info" >&2; exit 1
   fi
-  nats --server "$nats_url" consumer add "$stream_name" "$durable" --filter "$filter" --target "$target" --ack explicit --deliver new --defaults
+  payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_policy: "new", ack_policy: "explicit"}}')"
+  result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
+  printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
 }
 
 stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
