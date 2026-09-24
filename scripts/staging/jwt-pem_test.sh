@@ -19,6 +19,11 @@ valid_pem="$(cat "${JWT_FILE}")"
 
 jwt_pem_is_valid "${valid_pem}" || fail "repo test JWT should be valid"
 
+# grep -q must not close a pipe while a valid, longer PEM is still being
+# written: under pipefail that reports SIGPIPE as an invalid private key.
+printf -v padding '%*s' 131072 ''
+jwt_pem_is_valid "${valid_pem}${padding}" || fail "valid PEM with trailing whitespace should be valid under pipefail"
+
 placeholder_pem="$(cat <<'EOF'
 -----BEGIN PRIVATE KEY-----
 REPLACE_WITH_PKCS8_PEM
