@@ -17,17 +17,40 @@ import (
 )
 
 const deliveryAckStreamName = "message_events"
+const deliveryAckDurable = "messaging_delivery_ack"
+const deliveryAckSubject = "message.delivery_ack"
 
 type deliveryCursorStore interface {
 	UpsertDeliveredCursor(ctx context.Context, chatID, profileID, messageID uuid.UUID) error
 }
 
-func deliveryAckDurableName(instanceID string) string {
-	id := strings.TrimSpace(instanceID)
-	if id == "" {
-		id = "unknown"
+func deliveryAckDurableName(_ string) string { return deliveryAckDurable }
+
+func deliveryAckConsumerConfig() *nats.ConsumerConfig {
+	return &nats.ConsumerConfig{
+		Durable:        deliveryAckDurable,
+		DeliverSubject: "_INBOX.voice.messaging." + deliveryAckDurable,
+		DeliverGroup:   deliveryAckDurable,
+		DeliverPolicy:  nats.DeliverAllPolicy,
+		AckPolicy:      nats.AckExplicitPolicy,
+		FilterSubject:  deliveryAckSubject,
 	}
-	return "msg_" + strings.ReplaceAll(id, "-", "") + "_delivery_ack"
+}
+
+func validateDeliveryAckDurable(js nats.JetStreamContext) error {
+	want := deliveryAckConsumerConfig()
+	info, err := js.ConsumerInfo(deliveryAckStreamName, want.Durable)
+	if err != nil {
+		return fmt.Errorf("inspect delivery ack durable: %w", err)
+	}
+	if info == nil || info.Stream != deliveryAckStreamName || info.Name != want.Durable ||
+		info.Config.Durable != want.Durable || info.Config.DeliverSubject != want.DeliverSubject ||
+		info.Config.DeliverGroup != want.DeliverGroup || info.Config.DeliverPolicy != want.DeliverPolicy ||
+		info.Config.AckPolicy != want.AckPolicy || info.Config.FilterSubject != want.FilterSubject ||
+		len(info.Config.FilterSubjects) != 0 {
+		return fmt.Errorf("delivery ack durable %q has incompatible configuration", want.Durable)
+	}
+	return nil
 }
 
 func deliveryAckFromEvent(data []byte) (chatID, profileID, messageID uuid.UUID, ok bool) {
@@ -54,7 +77,7 @@ func deliveryAckFromEvent(data []byte) (chatID, profileID, messageID uuid.UUID, 
 	return chatID, profileID, messageID, true
 }
 
-func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store deliveryCursorStore, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
+func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store deliveryCursorStore, logger *slog.Logger) (*nats.Subscription, error) {
 	if store == nil {
 		return nil, fmt.Errorf("delivery ack store not configured")
 	}
@@ -79,27 +102,23 @@ func subscribeDeliveryAck(ctx context.Context, js nats.JetStreamContext, store d
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "delivery_ack cursor updated", attrs...)
 		_ = msg.Ack()
 	}
-	sub, err := js.Subscribe("message.delivery_ack", handler,
-		nats.Durable(deliveryAckDurableName(instanceID)),
-		nats.BindStream(deliveryAckStreamName),
-		nats.DeliverAll(),
-		nats.ManualAck(),
-	)
+	if err := validateDeliveryAckDurable(js); err != nil {
+		return nil, err
+	}
+	sub, err := js.QueueSubscribe(deliveryAckSubject, deliveryAckDurable, handler,
+		nats.Bind(deliveryAckStreamName, deliveryAckDurable), nats.ManualAck())
 	if err != nil {
-		sub, err = js.Subscribe("", handler, nats.Bind(deliveryAckStreamName, deliveryAckDurableName(instanceID)), nats.ManualAck())
-		if err != nil {
-			return nil, fmt.Errorf("jetstream subscribe message.delivery_ack: %w", err)
-		}
+		return nil, fmt.Errorf("bind delivery ack durable: %w", err)
 	}
 	return sub, nil
 }
 
-func runDeliveryAckConsumer(ctx context.Context, natsURL, instanceID string, store deliveryCursorStore, logger *slog.Logger) error {
+func runDeliveryAckConsumer(ctx context.Context, natsURL string, store deliveryCursorStore, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("delivery ack consumer: missing NATS URL")
 	}
 	for {
-		err := runDeliveryAckConsumerOnce(ctx, natsURL, instanceID, store, logger)
+		err := runDeliveryAckConsumerOnce(ctx, natsURL, store, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -114,9 +133,10 @@ func runDeliveryAckConsumer(ctx context.Context, natsURL, instanceID string, sto
 	}
 }
 
-func runDeliveryAckConsumerOnce(ctx context.Context, natsURL, instanceID string, store deliveryCursorStore, logger *slog.Logger) error {
+func runDeliveryAckConsumerOnce(ctx context.Context, natsURL string, store deliveryCursorStore, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-messaging-delivery-ack"),
+		nats.CustomInboxPrefix("_INBOX.voice.messaging"),
 		nats.Timeout(10*time.Second),
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
@@ -131,7 +151,7 @@ func runDeliveryAckConsumerOnce(ctx context.Context, natsURL, instanceID string,
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeDeliveryAck(ctx, js, store, instanceID, logger)
+	sub, err := subscribeDeliveryAck(ctx, js, store, logger)
 	if err != nil {
 		return err
 	}

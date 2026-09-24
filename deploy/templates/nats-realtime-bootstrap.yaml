@@ -69,9 +69,9 @@ data:
     stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded
     stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
     stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed
-    stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder
+    stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder subscription.entitlement_changed
     stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
-    stream user_events user.account_deleted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
+    stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
     stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
     stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
     stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined

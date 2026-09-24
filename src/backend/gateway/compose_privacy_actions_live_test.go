@@ -18,7 +18,8 @@ func TestComposePrivacyActions_live(t *testing.T) {
 	}
 	clearLiveComposeAuthRateLimit(t)
 
-	client := &http.Client{Timeout: 90 * time.Second}
+	client := composeLiveObjectClient(90 * time.Second)
+	t.Cleanup(client.CloseIdleConnections)
 	base := liveGatewayBaseURL()
 	n := time.Now().UnixNano()
 
@@ -103,7 +104,11 @@ func TestComposePrivacyActions_live(t *testing.T) {
 
 func patchComposePrivacy(t *testing.T, client *http.Client, base, accessToken string, settings map[string]any) {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{"settings": settings})
+	completeSettings := composeGamingOpenPrivacySettings()
+	for key, value := range settings {
+		completeSettings[key] = value
+	}
+	body, err := json.Marshal(map[string]any{"settings": completeSettings})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPatch, base+"/api/v1/users/me/privacy", bytes.NewReader(body))
 	require.NoError(t, err)

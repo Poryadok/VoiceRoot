@@ -9,7 +9,9 @@ jwt_pem_is_valid() {
   case "${pem}" in
     *REPLACE_WITH*|*CHANGE_ME*|*change-me*|*YOUR_* ) return 1 ;;
   esac
-  if ! printf '%s' "${pem}" | grep -Eq 'BEGIN (RSA )?PRIVATE KEY'; then
+  # An early-exiting grep -q can SIGPIPE printf under the caller's pipefail,
+  # incorrectly rejecting a valid PEM. Match the header without a pipeline.
+  if [[ "${pem}" != *"BEGIN PRIVATE KEY"* && "${pem}" != *"BEGIN RSA PRIVATE KEY"* ]]; then
     return 1
   fi
   local b64

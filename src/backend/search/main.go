@@ -176,7 +176,7 @@ func main() {
 				})
 				requireSearchConsumerReady("user projection JetStream consumer", projectionConsumerReady)
 			}
-			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL); err == nil {
+			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "search"); err == nil {
 				svc.Analytics = pub
 				defer pub.Close()
 			} else {

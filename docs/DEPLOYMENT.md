@@ -625,6 +625,35 @@ input only. Operator/account/user NKey seeds are never committed, logged, put
 into ConfigMaps, or mounted into app pods. Production values are operator
 supplied, never copied from fixtures or placeholders.
 
+The exact Secret contract is the same in `voice-staging` and `voice-prod`;
+values and signing authorities must be independent across namespaces:
+
+| Secret (`type: Opaque`) | Exact `data` keys | Holder |
+|---|---|---|
+| `voice-nats-operator` | `operator.jwt`, `account.jwt`, `system-account.jwt`, `account.public`, `system-account.public` | NATS hub renderer; only `operator.jwt` reaches the hub container |
+| `voice-nats-hub-tls` | `tls.crt`, `tls.key`, `ca.crt` | NATS hub TLS listener; each leaf reads only `ca.crt` |
+| `voice-nats-bootstrap-credentials` | `bootstrap.creds` | Four central provisioning Jobs only |
+| `voice-nats-service-credentials` | `analytics.creds`, `auth.creds`, `bot.creds`, `chat.creds`, `file.creds`, `gateway.creds`, `matchmaking.creds`, `messaging.creds`, `moderation.creds`, `notification.creds`, `realtime.creds`, `role.creds`, `search.creds`, `social.creds`, `space.creds`, `story.creds`, `subscription.creds`, `user.creds`, `voice.creds` | Each workload mounts only its own key |
+
+The TLS leaf certificate must verify against `ca.crt` and include DNS SAN
+`voice-nats`; its key must match the certificate. `operator.jwt` must name the
+distinct SYS account; `account.jwt` is the APP account with JetStream enabled,
+and `system-account.jwt` is SYS without JetStream. Each `.creds` file contains
+one signed APP user JWT and its user NKey seed, with exact reviewed publish,
+subscribe, JetStream INFO and ACK permissions. The Job credential alone may
+create the fixed streams and durables. Keep the operator and APP/SYS account
+signing seeds in the external secret manager for rotation; they are never
+members of these four Kubernetes Secrets.
+
+Staging GitHub Environment secret `STAGING_NATS_SECRETS_B64` holds a base64
+encoding of a gzip-compressed JSON Kubernetes `List` containing exactly these
+four namespace-bound Secrets, using `data` rather than `stringData`. The
+`restore-nats-secrets.sh` step validates names, namespace and key inventory
+before creating any Secret. It leaves a complete existing set alone and stops
+on a partial set for operator recovery. The separate production secret manager
+must supply the same names and keys in `voice-prod`; no staging bundle or
+fixture value may be copied to production.
+
 Rotation runbook:
 
 1. Generate a replacement service user in the external secret manager with the

@@ -57,6 +57,7 @@ func TestJetStreamPublisher_FileUploadedRoundTrip(t *testing.T) {
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.Regexp(t, `^_INBOX\.voice\.file\.`, pub.nc.NewRespInbox())
 
 	const fileID, profileID = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
 	require.NoError(t, pub.PublishFileUploaded(ctx, fileID, profileID))
