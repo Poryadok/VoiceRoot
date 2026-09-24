@@ -2,6 +2,7 @@ package subscriptionconsume
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 type captureEntitlements struct {
 	upserts  []upsertCall
 	finalize []uuid.UUID
+	err      error
 }
 
 type upsertCall struct {
@@ -23,26 +25,26 @@ type upsertCall struct {
 
 func (c *captureEntitlements) UpsertSpaceSubscription(_ context.Context, spaceID, purchaserAccountID uuid.UUID, status string) error {
 	c.upserts = append(c.upserts, upsertCall{SpaceID: spaceID, PurchaserID: purchaserAccountID, Status: status})
-	return nil
+	return c.err
 }
 
 func (c *captureEntitlements) FinalizeSpacePro(_ context.Context, spaceID uuid.UUID) error {
 	c.finalize = append(c.finalize, spaceID)
-	return nil
+	return c.err
 }
 
 func TestApplySpaceProStarted_UpsertsActive(t *testing.T) {
 	ents := &captureEntitlements{}
 	spaceID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	purchaser := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-	ApplySubscriptionEvent(ents, &eventsv1.SubscriptionStreamEvent{
+	require.NoError(t, ApplySubscriptionEvent(ents, &eventsv1.SubscriptionStreamEvent{
 		Payload: &eventsv1.SubscriptionStreamEvent_SpaceProStarted{
 			SpaceProStarted: &eventsv1.SpaceProStarted{
 				SpaceId:            spaceID.String(),
 				PurchaserAccountId: purchaser.String(),
 			},
 		},
-	})
+	}))
 	require.Len(t, ents.upserts, 1)
 	require.Equal(t, spaceID, ents.upserts[0].SpaceID)
 	require.Equal(t, purchaser, ents.upserts[0].PurchaserID)
@@ -52,10 +54,20 @@ func TestApplySpaceProStarted_UpsertsActive(t *testing.T) {
 func TestApplySpaceProExpired_Finalizes(t *testing.T) {
 	ents := &captureEntitlements{}
 	spaceID := uuid.MustParse("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
-	ApplySubscriptionEvent(ents, &eventsv1.SubscriptionStreamEvent{
+	require.NoError(t, ApplySubscriptionEvent(ents, &eventsv1.SubscriptionStreamEvent{
 		Payload: &eventsv1.SubscriptionStreamEvent_SpaceProExpired{
 			SpaceProExpired: &eventsv1.SpaceProExpired{SpaceId: spaceID.String()},
 		},
-	})
+	}))
 	require.Equal(t, []uuid.UUID{spaceID}, ents.finalize)
+}
+
+func TestApplySubscriptionEvent_ReturnsStoreFailureForRedelivery(t *testing.T) {
+	want := errors.New("database unavailable")
+	ents := &captureEntitlements{err: want}
+	spaceID := uuid.New()
+	err := ApplySubscriptionEvent(ents, &eventsv1.SubscriptionStreamEvent{
+		Payload: &eventsv1.SubscriptionStreamEvent_SpaceProExpired{SpaceProExpired: &eventsv1.SpaceProExpired{SpaceId: spaceID.String()}},
+	})
+	require.ErrorIs(t, err, want)
 }

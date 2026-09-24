@@ -47,7 +47,7 @@ func NewOutboxDispatcher(profiles *store.ProfileStore, natsURL, owner string) (*
 	if profiles == nil || natsURL == "" || owner == "" {
 		return nil, nil, errors.New("projection outbox dispatcher requires store, NATS URL, and owner")
 	}
-	nc, err := nats.Connect(natsURL, nats.Name("voice-user-search-projection"), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1))
+	nc, err := nats.Connect(natsURL, projectionNATSOptions()...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -66,6 +66,15 @@ func NewOutboxDispatcher(profiles *store.ProfileStore, natsURL, owner string) (*
 		return nil, nil, err
 	}
 	return &OutboxDispatcher{store: profiles, js: js, owner: owner}, nc, nil
+}
+
+func projectionNATSOptions() []nats.Option {
+	return []nats.Option{
+		nats.Name("voice-user-search-projection"),
+		nats.CustomInboxPrefix("_INBOX.voice.user"),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+	}
 }
 
 func validateProjectionStream(info *nats.StreamInfo) error {

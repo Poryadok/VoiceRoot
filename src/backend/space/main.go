@@ -241,9 +241,14 @@ func main() {
 		}
 		if natsURL != "" {
 			entitlements := &subscriptionconsume.SpaceStoreEntitlement{Store: spaceStore}
+			entitlementConsumer, err := subscriptionconsume.Start(runCtx, natsURL, "space_subscription_entitlement", entitlements)
+			if err != nil {
+				log.Fatalf("space subscription consumer startup: %v", err)
+			}
+			defer entitlementConsumer.Close()
 			go func() {
-				if err := subscriptionconsume.Run(runCtx, natsURL, "space_subscription_entitlement", entitlements); err != nil && runCtx.Err() == nil {
-					logger.Error("space subscription consumer stopped", slog.String("error", err.Error()))
+				if err := entitlementConsumer.Run(runCtx); err != nil && runCtx.Err() == nil {
+					log.Fatalf("space subscription consumer stopped: %v", err)
 				}
 			}()
 			logger.Info("space subscription entitlement consumer enabled")
