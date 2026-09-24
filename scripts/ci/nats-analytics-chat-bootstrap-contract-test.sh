@@ -29,6 +29,12 @@ for spec in \
   require "$spec"
 done
 
+require "consumer subscription_events auth_subscription_tier 'subscription.>' _INBOX.voice.auth.subscription_tier new '' 5 '[1000000000,5000000000,30000000000,120000000000,300000000000]'"
+grep -Fq 'max_deliver: $max_deliver, backoff: $backoff' "$BOOTSTRAP" || fail 'consumer retry policy must be provisioned from the canonical bootstrap'
+grep -Fq '(.config.max_deliver // -1), (.config.backoff // [])' "$BOOTSTRAP" || fail 'existing consumer retry policy must be validated'
+grep -Fq 'stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined' "$BOOTSTRAP" || fail 'Auth poison quarantine must be provisioned with P400D retention'
+grep -Fq 'subscription.auth_quarantined' "$ROOT/deploy/nats/acl-intent.yaml" || fail 'Auth workload must be allowed to publish quarantine records'
+
 grep -Fq 'CONSUMER.INFO.$stream_name.$durable' "$BOOTSTRAP" || fail 'bootstrap must inspect existing consumers'
 grep -Fq '[.stream_name, .name, .config.durable_name,' "$BOOTSTRAP" || fail 'bootstrap must reject consumer identity drift'
 grep -Fq 'incompatible consumer $stream_name/$durable' "$BOOTSTRAP" || fail 'bootstrap must reject durable drift'

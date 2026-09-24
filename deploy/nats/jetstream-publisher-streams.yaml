@@ -31,6 +31,11 @@ streams:
     retention: limits
     max_age: 168h
     storage: file
+  - name: subscription_auth_quarantine
+    subjects: [subscription.auth_quarantined]
+    retention: limits
+    max_age: 9600h
+    storage: file
   - name: story_events
     subjects: [story.created, story.viewed, story.reacted, story.expired, story.highlight_created, story.lfp_created, story.lfp_response]
     retention: limits

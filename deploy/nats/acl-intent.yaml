@@ -48,7 +48,7 @@ services:
       - _INBOX.voice.analytics.analytics_v2_telemetry
   auth:
     no_response: true
-    publish: [user.guest_converted, user.account_deleted, user.account_restored, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
+    publish: [user.guest_converted, user.account_deleted, user.account_restored, subscription.auth_quarantined, $JS.API.CONSUMER.INFO.subscription_events.auth_subscription_tier, $JS.ACK.subscription_events.auth_subscription_tier.>]
     subscribe: [_INBOX.voice.auth.requests.>, _INBOX.voice.auth.subscription_tier]
   bot:
     no_response: true
@@ -273,6 +273,7 @@ bootstrap:
     - $JS.API.STREAM.INFO.moderation_events
     - $JS.API.STREAM.INFO.bot_events
     - $JS.API.STREAM.INFO.subscription_events
+    - $JS.API.STREAM.INFO.subscription_auth_quarantine
     - $JS.API.STREAM.INFO.story_events
     - $JS.API.STREAM.INFO.user_events
     - $JS.API.STREAM.INFO.social_events
@@ -287,6 +288,7 @@ bootstrap:
     - $JS.API.STREAM.CREATE.moderation_events
     - $JS.API.STREAM.CREATE.bot_events
     - $JS.API.STREAM.CREATE.subscription_events
+    - $JS.API.STREAM.CREATE.subscription_auth_quarantine
     - $JS.API.STREAM.CREATE.story_events
     - $JS.API.STREAM.CREATE.user_events
     - $JS.API.STREAM.CREATE.social_events

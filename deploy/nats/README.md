@@ -101,3 +101,12 @@ discard consumer state, or recreate the hub on empty storage. Rotate a service
 credential by replacing its external Secret key and restarting only that
 service's sidecar; rotate
 account/operator material through its separate rehearsed broker rollout.
+
+Auth's fixed subscription-tier durable uses a five-delivery budget with an
+increasing server backoff. Persistent processing or unsupported-payload errors
+are copied with their original bytes, SHA-256, source sequence, and reason to
+the centrally provisioned `subscription_auth_quarantine` stream (P400D) before
+the source delivery is ACKed. If quarantine publication fails, Auth NAKs the
+source and logs an operator-visible error; the source remains retained for
+recovery and JetStream emits its max-deliver advisory when the retry budget is
+exhausted.
