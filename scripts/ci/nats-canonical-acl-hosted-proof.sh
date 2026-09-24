@@ -12,7 +12,7 @@ work="$(mktemp -d)"
 umask 077
 network="voice-nats-canonical-${RANDOM}"
 cleanup() {
-  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat >/dev/null 2>&1 || true
+  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat voice-nats-canonical-bad-leaf >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -86,7 +86,6 @@ leafnodes {
     credentials: "$work/fixture/creds/chat.creds"
     tls {
       ca_file: "$work/cert.pem"
-      server_name: "hub"
       handshake_first: true
     }
   }]
@@ -163,6 +162,25 @@ docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.
   nats --server nats://127.0.0.1:4222 pub chat.created canonical-leaf-proof >/dev/null
 bootstrap_info '$JS.API.STREAM.INFO.chat_events' |
   jq -e '.state.messages == 1 and .state.last_seq == 1' >/dev/null
+
+# The same CA must reject a leaf URL whose hostname is absent from the hub SAN.
+sed 's@nats-leaf://hub:7422@nats-leaf://voice-nats-canonical-hub:7422@' \
+  "$work/chat-leaf.conf" >"$work/bad-leaf.conf"
+docker run -d --name voice-nats-canonical-bad-leaf --network "$network" -v "$work:$work:ro" \
+  nats:2.12-alpine -c "$work/bad-leaf.conf" >/dev/null
+san_rejected=false
+for _ in $(seq 1 10); do
+  if docker logs voice-nats-canonical-bad-leaf 2>&1 | grep -q 'x509: certificate is valid for'; then
+    san_rejected=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$san_rejected" != true ]]; then
+  docker logs voice-nats-canonical-bad-leaf >&2
+  echo 'FAIL: leaf accepted a hub hostname outside the TLS SAN' >&2
+  exit 1
+fi
 
 # Auth and Chat use their own JWTs for a real fixed-delivery/ACK exchange.
 # The same direct authenticated probe tests broker denial for neighboring
