@@ -108,7 +108,7 @@ docker logs voice-nats-canonical-hub 2>&1 | grep -q 'Server is ready' || {
 for job in realtime notification search analytics-chat; do
   docker run --rm --network "$network" -v "$work:$work" \
     -e NATS_URL=nats://hub:4222 -e NATS_CREDS="$work/fixture/creds/bootstrap.creds" \
-    natsio/nats-box:0.18.0 sh -x "$work/${job}.sh" </dev/null
+    natsio/nats-box:0.18.0 sh "$work/${job}.sh" </dev/null
 done
 
 bootstrap_info() {

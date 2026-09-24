@@ -31,6 +31,7 @@ stream_with_max_age() {
 }
 consumer() {
   stream_name="$1"; durable="$2"; filter="$3"; target="$4"
+  echo "bootstrap consumer INFO $stream_name/$durable" >&2
   if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
     if printf '%s' "$info" | jq -e '.error' >/dev/null; then
       printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
@@ -44,6 +45,7 @@ consumer() {
     echo "$info" >&2; exit 1
   fi
   payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_policy: "new", ack_policy: "explicit"}}')"
+  echo "bootstrap consumer CREATE $stream_name/$durable" >&2
   result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
   printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
 }
@@ -61,6 +63,7 @@ stream voice_events voice.call_incoming voice.call_accepted voice.call_declined 
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
 stream analytics_events 'analytics.>'
 stream_with_max_age user_profile_projection 0 user.search_profile_projection
+echo 'bootstrap realtime streams ready' >&2
 consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
 consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat
 consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user
