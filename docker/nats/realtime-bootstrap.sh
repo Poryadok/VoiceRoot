@@ -9,6 +9,15 @@ stream() {
   name="$1"; shift
   stream_with_max_age "$name" 604800000000000 "$@"
 }
+max_age_to_cli() {
+  max_age="$1"
+  case "$max_age" in
+    0) printf '0s' ;;
+    ''|*[!0-9]*) return 1 ;;
+    *) printf '%ss' "$((max_age / 1000000000))" ;;
+  esac
+}
+
 stream_with_max_age() {
   name="$1"; max_age="$2"; shift 2
   subjects="$(IFS=,; echo "$*")"
@@ -25,8 +34,7 @@ stream_with_max_age() {
   else
     echo "$info" >&2; exit 1
   fi
-  max_age_cli="$((max_age / 1000000000))s"
-  [ "$max_age" = 0 ] && max_age_cli=0s
+  max_age_cli="$(max_age_to_cli "$max_age")"
   nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age "$max_age_cli" --defaults
 }
 consumer() {
