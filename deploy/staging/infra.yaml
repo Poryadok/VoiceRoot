@@ -117,6 +117,18 @@ spec:
       port: 8222
       targetPort: 8222
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: voice-nats-jsdata
+  namespace: voice-staging
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: __NATS_STORAGE_CLASS__
+  resources:
+    requests:
+      storage: __NATS_STORAGE_SIZE__
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -196,6 +208,117 @@ spec:
       volumes:
         - name: jsdata
           emptyDir: {}
+        - name: nats-rendered-config
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: nats-config-template
+          configMap: {name: voice-nats-hub-config}
+        - name: nats-resolver-input
+          secret:
+            secretName: voice-nats-operator
+            defaultMode: 0440
+            items:
+              - {key: operator.jwt, path: operator.jwt}
+              - {key: account.jwt, path: account.jwt}
+              - {key: system-account.jwt, path: system-account.jwt}
+              - {key: account.public, path: account.public}
+              - {key: system-account.public, path: system-account.public}
+        - name: nats-operator-jwt
+          secret:
+            secretName: voice-nats-operator
+            defaultMode: 0440
+            items:
+              - {key: operator.jwt, path: operator.jwt}
+        - name: nats-hub-tls
+          secret:
+            secretName: voice-nats-hub-tls
+            defaultMode: 0440
+            items:
+              - {key: tls.crt, path: tls.crt}
+              - {key: tls.key, path: tls.key}
+              - {key: ca.crt, path: ca.crt}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-nats-pvc-candidate
+  namespace: voice-staging
+spec:
+  type: ClusterIP
+  selector:
+    app: voice-nats-pvc-candidate
+  ports:
+    - {name: client, port: 4222, targetPort: 4222}
+    - {name: leaf-tls, port: 7422, targetPort: 7422}
+    - {name: monitor, port: 8222, targetPort: 8222}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-nats-pvc-candidate
+  namespace: voice-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: voice-nats-pvc-candidate}
+  template:
+    metadata:
+      labels: {app: voice-nats-pvc-candidate}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: nats-config-renderer
+          image: __IMAGE_REGISTRY__/nats-hub-config-renderer:__IMAGE_TAG__
+          args: [/run/nats/input/operator.jwt, /run/nats/input/account.jwt, /run/nats/input/system-account.jwt, /run/nats/input/account.public, /run/nats/input/system-account.public, /run/nats/template/nats.conf, /run/nats-rendered/config/nats.conf]
+          volumeMounts:
+            - {name: nats-resolver-input, mountPath: /run/nats/input, readOnly: true}
+            - {name: nats-config-template, mountPath: /run/nats/template, readOnly: true}
+            - {name: nats-rendered-config, mountPath: /run/nats-rendered}
+            - {name: nats-operator-jwt, mountPath: /etc/nats/jwt, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls, readOnly: true}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            capabilities: {drop: ["ALL"]}
+            seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: nats
+          image: nats:2.12-alpine
+          args: ["-c", "/etc/nats/nats.conf"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            capabilities: {drop: ["ALL"]}
+            seccompProfile: {type: RuntimeDefault}
+          ports:
+            - {containerPort: 4222}
+            - {name: leaf-tls, containerPort: 7422}
+            - {containerPort: 8222}
+          volumeMounts:
+            - {name: jsdata, mountPath: /data}
+            - {name: nats-rendered-config, mountPath: /etc/nats/nats.conf, subPath: config/nats.conf, readOnly: true}
+            - {name: nats-operator-jwt, mountPath: /etc/nats/jwt, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls, readOnly: true}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8222}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: "/healthz?js-enabled-only=true", port: 8222}
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: jsdata
+          persistentVolumeClaim: {claimName: voice-nats-jsdata}
         - name: nats-rendered-config
           emptyDir: {medium: Memory, sizeLimit: 1Mi}
         - name: nats-config-template
