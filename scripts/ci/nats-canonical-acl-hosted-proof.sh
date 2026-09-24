@@ -135,7 +135,7 @@ space_info="$(bootstrap_info '$JS.API.CONSUMER.INFO.subscription_events.space_su
   echo 'FAIL: space fixed consumer INFO request' >&2; exit 1;
 }
 printf '%s' "$space_info" |
-  jq -e '.config.filter_subjects == ["subscription.space_pro_started","subscription.space_pro_expired"] and .config.deliver_policy == "new"' >/dev/null || {
+  jq -e '(.config.filter_subjects | sort) == ["subscription.space_pro_expired","subscription.space_pro_started"] and .config.deliver_policy == "new"' >/dev/null || {
     printf '%s' "$space_info" | jq -c '{filters: .config.filter_subjects, delivery: .config.deliver_policy, error: .error}' >&2
     echo 'FAIL: space fixed consumer shape' >&2; exit 1;
   }
