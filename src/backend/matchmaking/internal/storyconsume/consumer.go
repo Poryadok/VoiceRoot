@@ -120,13 +120,7 @@ func Start(ctx context.Context, natsURL, durable string, lfp LfpStore) (*Consume
 	if durable != defaultDurable {
 		return nil, fmt.Errorf("unsupported story LFP durable %q", durable)
 	}
-	nc, err := nats.Connect(url,
-		nats.Name("voice-matchmaking-story-lfp"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(url, storyNATSOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -169,6 +163,17 @@ func Start(ctx context.Context, natsURL, durable string, lfp LfpStore) (*Consume
 		return nil, fmt.Errorf("bind story LFP durable: %w", err)
 	}
 	return &Consumer{nc: nc, sub: sub}, nil
+}
+
+func storyNATSOptions() []nats.Option {
+	return []nats.Option{
+		nats.Name("voice-matchmaking-story-lfp"),
+		nats.CustomInboxPrefix("_INBOX.voice.matchmaking"),
+		nats.Timeout(10 * time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	}
 }
 
 func (c *Consumer) Close() {

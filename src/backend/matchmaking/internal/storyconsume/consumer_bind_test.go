@@ -25,3 +25,11 @@ func TestStoryDurableConfig(t *testing.T) {
 	require.Error(t, validateStoryDurable(&invalid))
 	require.Error(t, validateStoryDurable(nil))
 }
+
+func TestStoryConsumerUsesScopedNATSInbox(t *testing.T) {
+	var opts nats.Options
+	for _, option := range storyNATSOptions() {
+		require.NoError(t, option(&opts))
+	}
+	require.Equal(t, "_INBOX.voice.matchmaking", opts.InboxPrefix)
+}

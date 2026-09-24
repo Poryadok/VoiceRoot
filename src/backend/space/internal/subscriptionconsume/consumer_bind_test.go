@@ -25,3 +25,11 @@ func TestSpaceEntitlementDurableConfig(t *testing.T) {
 	require.Error(t, validateSpaceDurable(&invalid))
 	require.Error(t, validateSpaceDurable(nil))
 }
+
+func TestSpaceEntitlementUsesScopedNATSInbox(t *testing.T) {
+	var opts nats.Options
+	for _, option := range entitlementNATSOptions() {
+		require.NoError(t, option(&opts))
+	}
+	require.Equal(t, "_INBOX.voice.space", opts.InboxPrefix)
+}

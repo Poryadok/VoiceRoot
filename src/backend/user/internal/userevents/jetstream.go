@@ -185,13 +185,7 @@ func newJetStreamPublisher(natsURL string, options ...nats.Option) (*JetStreamPu
 	if natsURL == "" {
 		return nil, fmt.Errorf("empty NATS URL")
 	}
-	options = append(options,
-		nats.Name("voice-user-user-events"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	options = userNATSOptions(options...)
 	nc, err := nats.Connect(natsURL, options...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
@@ -202,6 +196,17 @@ func newJetStreamPublisher(natsURL string, options ...nats.Option) (*JetStreamPu
 		return nil, fmt.Errorf("jetstream: %w", err)
 	}
 	return &JetStreamPublisher{nc: nc, js: js}, nil
+}
+
+func userNATSOptions(options ...nats.Option) []nats.Option {
+	return append(options,
+		nats.Name("voice-user-user-events"),
+		nats.CustomInboxPrefix("_INBOX.voice.user"),
+		nats.Timeout(10*time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	)
 }
 
 func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, env *eventsv1.UserStreamEvent) error {

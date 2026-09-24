@@ -120,13 +120,7 @@ func Start(ctx context.Context, natsURL, durable string, entitlements SpaceEntit
 	if durable != defaultDurable {
 		return nil, fmt.Errorf("unsupported space entitlement durable %q", durable)
 	}
-	nc, err := nats.Connect(url,
-		nats.Name("voice-space-subscription-consumer"),
-		nats.Timeout(10*time.Second),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.ReconnectWait(time.Second),
-	)
+	nc, err := nats.Connect(url, entitlementNATSOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
 	}
@@ -169,6 +163,17 @@ func Start(ctx context.Context, natsURL, durable string, entitlements SpaceEntit
 		return nil, fmt.Errorf("bind space subscription events: %w", err)
 	}
 	return &Consumer{nc: nc, sub: sub}, nil
+}
+
+func entitlementNATSOptions() []nats.Option {
+	return []nats.Option{
+		nats.Name("voice-space-subscription-consumer"),
+		nats.CustomInboxPrefix("_INBOX.voice.space"),
+		nats.Timeout(10 * time.Second),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+		nats.ReconnectWait(time.Second),
+	}
 }
 
 func (c *Consumer) Close() {
