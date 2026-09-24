@@ -48,7 +48,7 @@ data:
         echo "$info" >&2; exit 1
       fi
       payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" --arg group "$group" --arg deliver "$deliver" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_group: $group, deliver_policy: $deliver, ack_policy: "explicit"}}')"
-      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
+      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
       printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
     }
 
@@ -70,7 +70,7 @@ data:
         echo "$info" >&2; exit 1
       fi
       payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg target "$target" --arg deliver "$deliver" --argjson filters "$filters" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subjects: $filters, deliver_subject: $target, deliver_policy: $deliver, ack_policy: "explicit"}}')"
-      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
+      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
       printf '%s' "$result" | jq -e '(.error | not) and .config.durable_name != null' >/dev/null || { echo "$result" >&2; exit 1; }
     }
 
@@ -89,7 +89,7 @@ data:
         echo "$info" >&2; exit 1
       fi
       payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg deliver "$deliver" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_policy: $deliver, ack_policy: "explicit"}}')"
-      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload")"
+      result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)" || { echo "$result" >&2; exit 1; }
       printf '%s' "$result" | jq -e '(.error | not) and .config.durable_name != null' >/dev/null || { echo "$result" >&2; exit 1; }
     }
 
