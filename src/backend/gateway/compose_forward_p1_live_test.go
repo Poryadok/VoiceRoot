@@ -67,12 +67,11 @@ func TestComposeForwardPrivacyDeny_live(t *testing.T) {
 	forwarder := registerComposeUser(t, client, base, formatComposeEmail("fwd-priv-a", n), "VoiceQaTest1!")
 	author := registerComposeUser(t, client, base, formatComposeEmail("fwd-priv-b", n), "VoiceQaTest1!")
 
+	dmID := createComposeDMBetween(t, client, base, forwarder, author)
+	srcID := sendComposeMessage(t, client, base, author.AccessToken, dmID, "do-not-forward")
 	patchComposePrivacy(t, client, base, author.AccessToken, map[string]any{
 		"allow_forward": false,
 	})
-
-	dmID := createComposeDMBetween(t, client, base, forwarder, author)
-	srcID := sendComposeMessage(t, client, base, author.AccessToken, dmID, "do-not-forward")
 
 	groupID := createComposeGroup(t, client, base, forwarder.AccessToken, "Fwd deny target")
 	status, raw := forwardComposeMessageStatus(t, client, base, forwarder.AccessToken, srcID, groupID, "")
