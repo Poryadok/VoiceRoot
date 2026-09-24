@@ -27,6 +27,9 @@ jobs:
       - name: Verify Flutter SDK
         run: flutter --version
 
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+
       - name: Compose app up
         run: make compose-app-up
 
