@@ -119,7 +119,10 @@ case "$phase" in
     [ -n "$target_context_env" ] && [ "$target_context_env" = "$target_context" ] || fail 'set NATS_TARGET_CONTEXT to the exact reviewed candidate context for live restore validation'
     target_census="$(mktemp)"
     target_expected="$(mktemp)"
-    trap 'rm -f "$fresh_census" "$target_census" "$target_expected"' EXIT
+    target_streams="$(mktemp)"
+    trap 'rm -f "$fresh_census" "$target_census" "$target_expected" "$target_streams"' EXIT
+    "${NATS_CLI:-nats}" --context "$target_context_env" stream ls --json | jq -r '.streams[]?.config.name' > "$target_streams"
+    bash "$(dirname "$0")/verify-nats-stream-inventory.sh" "$streams" "$target_streams" exact
     "$(dirname "$0")/nats-source-census.sh" "$target_context_env" "$target_census" >/dev/null || fail 'candidate census failed'
     awk -F '\t' '$5 == "RESTORE" {print $1 "\t" $2 "\t" $4}' "$consumers" | LC_ALL=C sort -u > "$target_expected"
     LC_ALL=C sort -u "$target_census" > "${target_expected}.actual"

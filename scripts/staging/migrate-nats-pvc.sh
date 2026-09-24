@@ -84,6 +84,10 @@ EOF
     expected_context="${NATS_EXPECTED_CONTEXT:-$(awk -F= '$1 == "TARGET_CONTEXT" {sub(/^[^=]*=/, ""); print; found=1; exit} END {if (!found) exit 1}' "${evidence}/evidence.env")}" || fail 'missing expected target context in evidence'
     [ "$NATS_TARGET_CONTEXT" = "$expected_context" ] || fail 'NATS_TARGET_CONTEXT does not match the reviewed target context'
     [ "${NATS_TARGET_QUIESCED:-false}" = true ] || fail 'keep the target fenced from publishers/consumers during restore'
+    target_streams="$(mktemp)"
+    trap 'rm -f "$target_streams"' EXIT
+    "$nats_bin" --context "$NATS_TARGET_CONTEXT" stream ls --json | jq -r '.streams[]?.config.name' > "$target_streams"
+    bash "$(dirname "$0")/verify-nats-stream-inventory.sh" "${evidence}/streams.tsv" "$target_streams" empty
     while IFS="$(printf '\t')" read -r stream last_sequence archive expected_hash config_hash rest; do
       [ -n "$stream" ] || continue
       "$nats_bin" --context "$NATS_TARGET_CONTEXT" stream restore "$stream" "${evidence}/${archive}"

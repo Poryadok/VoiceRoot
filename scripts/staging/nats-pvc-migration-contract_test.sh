@@ -7,6 +7,8 @@ APPLY="${ROOT}/scripts/staging/apply-infra.sh"
 GUARD="${ROOT}/scripts/staging/guard-nats-pvc-migration.sh"
 PREFLIGHT="${ROOT}/scripts/staging/preflight-nats-pvc.sh"
 MIGRATE="${ROOT}/scripts/staging/migrate-nats-pvc.sh"
+FILTER_INFRA="${ROOT}/scripts/staging/filter-staging-infra-source-nats.sh"
+VERIFY_STREAMS="${ROOT}/scripts/staging/verify-nats-stream-inventory.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 grep -Fq 'name: voice-nats-pvc-candidate' "${INFRA}" || fail 'staging must define an isolated PVC-backed NATS candidate'
@@ -19,7 +21,7 @@ apply_line="$(grep -n 'render "${ROOT}/deploy/staging/infra.yaml"' "${APPLY}" | 
 [ "$guard_line" -lt "$apply_line" ] || fail 'migration guard must run before staging infra apply'
 grep -Fq 'VOICE_NATS_STORAGE_CLASS' "${APPLY}" || fail 'storage class must be explicit'
 grep -Fq 'VOICE_NATS_STORAGE_SIZE' "${APPLY}" || fail 'storage size must be explicit'
-for executable in "$GUARD" "$PREFLIGHT" "$MIGRATE" "${ROOT}/scripts/staging/nats-source-census.sh"; do test -x "$executable" || fail "expected executable $executable"; done
+for executable in "$GUARD" "$PREFLIGHT" "$MIGRATE" "${ROOT}/scripts/staging/nats-source-census.sh" "$FILTER_INFRA" "$VERIFY_STREAMS"; do test -x "$executable" || fail "expected executable $executable"; done
 ! grep -Eq 'kubectl (apply|create|delete|patch|rollout)' "$PREFLIGHT" || fail 'storage preflight must remain read-only'
 grep -Fq 'stream backup' "${MIGRATE}" || fail 'migration tool must export stream data'
 grep -Fq 'stream restore' "${MIGRATE}" || fail 'migration tool must restore stream data'
@@ -33,7 +35,10 @@ sed -e 's|__NATS_STORAGE_CLASS__|confirmed-class|g' -e 's|__NATS_STORAGE_SIZE__|
 grep -Fq 'storageClassName: confirmed-class' "${tmp}/infra-rendered.yaml" || fail 'rendered PVC must use the confirmed storage class'
 grep -Fq 'storage: 20Gi' "${tmp}/infra-rendered.yaml" || fail 'rendered PVC must use the confirmed requested capacity'
 grep -Fq 'claimName: voice-nats-jsdata' "${tmp}/infra-rendered.yaml" || fail 'candidate Deployment must mount the PVC claim'
-grep -Fq 'voice-nats-pvc-candidate' "${APPLY}" || fail 'apply must prepare candidate without replacing source'
+"${BASH:-C:/Program Files/Git/bin/bash.exe}" "$FILTER_INFRA" <"${tmp}/infra-rendered.yaml" >"${tmp}/infra-safe.yaml"
+awk '/^kind: Deployment$/{deployment=1} deployment && /^  name: voice-nats$/{source=1} /^---$/{deployment=0} END{exit source}' "${tmp}/infra-safe.yaml" || fail 'infra apply input must omit the original emptyDir source Deployment'
+grep -Fq 'name: voice-nats-pvc-candidate' "${tmp}/infra-safe.yaml" || fail 'infra apply input must retain candidate resources'
+grep -Fq 'filter-staging-infra-source-nats.sh' "${APPLY}" || fail 'apply must filter the source Deployment to preserve its live emptyDir'
 grep -Fq 'cutover' "${MIGRATE}" || fail 'migration tool must provide a separately gated cutover'
 grep -Fq 'source-census.tsv' "${GUARD}" || fail 'guard must validate source census identity, not only decision row count'
 awk '/kubectl (apply|create|delete|patch|rollout)/{if (!mutation) mutation=NR} /source_context=/{context=NR} /NATS_TARGET_CONTEXT.*source_context/{matchline=NR} END{exit !(context && matchline && mutation && context < mutation && matchline < mutation)}' "${MIGRATE}" || fail 'rollback context validation must precede every kubectl mutation'
@@ -43,12 +48,19 @@ grep -Fq 'cutover' "${APPLY}" && grep -Fq 'bootstrap jobs deferred' "${APPLY}" |
 ! grep -Eq 'kubectl patch service voice-nats' "${APPLY}" || fail 'ordinary infra apply must never switch the NATS service selector'
 grep -Fq 'candidate consumer identities do not exactly match' "${GUARD}" || fail 'acceptance must verify restored consumer identities against decisions'
 grep -Fq 'message-hashes.tsv' "${GUARD}" || fail 'acceptance must require explicit retained-message hashes'
+grep -Fq 'verify-nats-stream-inventory.sh' "${GUARD}" || fail 'acceptance must reject extra candidate streams'
+grep -Fq 'verify-nats-stream-inventory.sh' "${MIGRATE}" || fail 'restore must reject a stale candidate PVC'
 mkdir "${tmp}/evidence"
 for index in 1 2 3 4 5 6 7; do
   printf 'archive-%s\n' "$index" > "${tmp}/evidence/STREAM_${index}.tgz"
   hash="$(sha256sum "${tmp}/evidence/STREAM_${index}.tgz" | awk '{print $1}')"
   printf 'STREAM_%s\t10\tSTREAM_%s.tgz\t%s\t%064d\n' "$index" "$index" "$hash" "$index" >> "${tmp}/evidence/streams.tsv"
 done
+for index in 1 2 3 4 5 6 7; do printf 'STREAM_%s\n' "$index"; done >"${tmp}/actual-streams.txt"
+bash "$VERIFY_STREAMS" "${tmp}/evidence/streams.tsv" "${tmp}/actual-streams.txt" exact || fail 'exact candidate stream inventory should pass'
+printf 'EXTRA_STREAM\n' >>"${tmp}/actual-streams.txt"
+if bash "$VERIFY_STREAMS" "${tmp}/evidence/streams.tsv" "${tmp}/actual-streams.txt" exact >/dev/null 2>&1; then fail 'an extra candidate stream must block acceptance'; fi
+if bash "$VERIFY_STREAMS" "${tmp}/evidence/streams.tsv" "${tmp}/actual-streams.txt" empty >/dev/null 2>&1; then fail 'stale candidate streams must block restore'; fi
 cat >"${tmp}/evidence/evidence.env" <<'EOF'
 SOURCE_STREAM_COUNT=7
 SOURCE_CONSUMER_COUNT=566

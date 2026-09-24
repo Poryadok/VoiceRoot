@@ -22,7 +22,9 @@ Convert staging NATS JetStream storage from pod-local `emptyDir` to persistent s
 
 - [x] Add failing contract and migration-guard tests.
 - [x] Add an isolated PVC-backed candidate while preserving the current emptyDir source and stable Service.
+- [x] Exclude the live source Deployment from ordinary infra apply so image-tag changes cannot restart its emptyDir pod.
 - [x] Add exact source census/state matching, candidate restore checks, and a selector-only accepted cutover/rollback gate.
+- [x] Require an empty candidate before restore and an exact seven-stream set at acceptance.
 - [x] Document export, quiesce/fence, validation, rollback, and blockers.
 - [ ] Run final focused static checks and update graph.
 

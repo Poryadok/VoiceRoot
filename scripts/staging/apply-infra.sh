@@ -117,6 +117,7 @@ VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
 render "${ROOT}/deploy/staging/infra.yaml" | \
   sed -e "s|__LIVEKIT_API_KEY__|${LIVEKIT_API_KEY}|g" \
       -e "s|__LIVEKIT_API_SECRET__|${LIVEKIT_API_SECRET}|g" | \
+  bash "${ROOT}/scripts/staging/filter-staging-infra-source-nats.sh" | \
   kubectl apply -f -
 
 # Do not bootstrap or mutate NATS streams/consumers during candidate creation.
