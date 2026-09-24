@@ -187,6 +187,9 @@ func deliverAutocompleteOnce(ctx context.Context, client *http.Client, url, secr
 		return nil, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
+			return nil, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
 		return nil, &PermanentDeliveryError{Err: fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))}
 	}
 	var out AutocompleteResponse
@@ -220,6 +223,9 @@ func deliverOnce(ctx context.Context, client *http.Client, url, secret string, t
 		return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
+			return InteractionResponse{}, fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
 		return InteractionResponse{}, &PermanentDeliveryError{Err: fmt.Errorf("webhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))}
 	}
 	var out InteractionResponse

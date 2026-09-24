@@ -219,7 +219,7 @@ whitelist rows through the POST or polling write. A disable/uninstall/URL or
 secret rotation therefore commits either before delivery authorization is read
 or after the in-progress delivery completes; pending revoked recipients are
 canceled, and retries use the current URL and secret. Non-retryable webhook
-responses (4xx, malformed response, invalid URL) leave a durable `failed` row
+responses (4xx except 408/429, malformed response, invalid URL) leave a durable `failed` row
 for diagnosis rather than looping forever. Transient failures remain pending.
 Replay after a completed delivery is inert. Webhook payload
 `options.delivery_id` is stable across retries; receivers should deduplicate
