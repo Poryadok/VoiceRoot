@@ -2,6 +2,7 @@ package chatevents
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,36 @@ import (
 
 	eventsv1 "voice.app/voice/events/v1"
 )
+
+func TestJetStreamPublisherWorksWithChatScopedReplyInbox(t *testing.T) {
+	s, err := server.NewServer(&server.Options{
+		Host: "127.0.0.1", Port: -1, NoLog: true, NoSigs: true, JetStream: true, StoreDir: t.TempDir(),
+		Users: []*server.User{
+			{Username: "admin", Password: "admin"},
+			{Username: "chat", Password: "chat", Permissions: &server.Permissions{
+				Publish:   &server.SubjectPermission{Allow: []string{"$JS.API.STREAM.INFO.chat_events", subjectChatCreated}},
+				Subscribe: &server.SubjectPermission{Allow: []string{"_INBOX.voice.chat.>"}},
+			}},
+		},
+	})
+	require.NoError(t, err)
+	go s.Start()
+	require.True(t, s.ReadyForConnections(5*time.Second))
+	t.Cleanup(s.Shutdown)
+	admin, err := nats.Connect(s.ClientURL(), nats.UserInfo("admin", "admin"))
+	require.NoError(t, err)
+	t.Cleanup(admin.Close)
+	js, err := admin.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: chatEventStreamSubjects(), Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+	url := "nats://chat:chat@" + strings.TrimPrefix(s.ClientURL(), "nats://")
+	pub, err := NewJetStreamPublisher(url)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	require.Equal(t, "_INBOX.voice.chat", pub.nc.Opts.InboxPrefix)
+	require.NoError(t, pub.PublishChatCreated(context.Background(), "11111111-1111-1111-1111-111111111111", "dm"))
+}
 
 func startJSTestServer(t *testing.T) *server.Server {
 	t.Helper()
