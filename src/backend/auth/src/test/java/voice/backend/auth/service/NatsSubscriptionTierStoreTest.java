@@ -114,6 +114,54 @@ class NatsSubscriptionTierStoreTest {
       store.onMessage(malformed);
       verify(malformed).term();
       verify(malformed, never()).ack();
+
+      Message empty = mock(Message.class);
+      when(empty.getData()).thenReturn(new byte[0]);
+      store.onMessage(empty);
+      verify(empty).term();
+      verify(empty, never()).ack();
+
+      Message invalidAccountId = mock(Message.class);
+      when(invalidAccountId.getData())
+          .thenReturn(
+              JetstreamEvents.SubscriptionStreamEvent.newBuilder()
+                  .setPlanStarted(
+                      JetstreamEvents.PlanStarted.newBuilder()
+                          .setAccountId("not-a-uuid")
+                          .setPlan("premium"))
+                  .build()
+                  .toByteArray());
+      store.onMessage(invalidAccountId);
+      verify(invalidAccountId).term();
+      verify(invalidAccountId, never()).ack();
+    }
+  }
+
+  @Test
+  void naksWhenApplyingTierUpdateFails() throws Exception {
+    Fixture fixture = new Fixture();
+    fixture.consumer(config("subscription.>", DELIVER, AckPolicy.Explicit, DeliverPolicy.New));
+    NatsSubscriptionTierStore store =
+        new NatsSubscriptionTierStore(fixture.connection, update -> {
+          throw new IllegalStateException("injected update failure");
+        });
+    try (store) {
+      Message message = mock(Message.class);
+      when(message.getData())
+          .thenReturn(
+              JetstreamEvents.SubscriptionStreamEvent.newBuilder()
+                  .setPlanStarted(
+                      JetstreamEvents.PlanStarted.newBuilder()
+                          .setAccountId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+                          .setPlan("premium"))
+                  .build()
+                  .toByteArray());
+
+      store.onMessage(message);
+
+      verify(message).nak();
+      verify(message, never()).ack();
+      verify(message, never()).term();
     }
   }
 

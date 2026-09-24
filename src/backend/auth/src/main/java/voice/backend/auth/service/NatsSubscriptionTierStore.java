@@ -14,6 +14,7 @@ import io.nats.client.api.ConsumerInfo;
 import io.nats.client.api.DeliverPolicy;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +34,7 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
   private final InMemorySubscriptionTierStore delegate = new InMemorySubscriptionTierStore();
   private final Connection connection;
   private final JetStreamSubscription subscription;
+  private final Consumer<SubscriptionEventParser.TierUpdate> tierUpdater;
 
   public NatsSubscriptionTierStore(String natsUrl, String credentialsFile) {
     this(connect(natsUrl, credentialsFile));
@@ -56,7 +58,16 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
   }
 
   NatsSubscriptionTierStore(Connection connection) {
+    this(connection, null);
+  }
+
+  NatsSubscriptionTierStore(
+      Connection connection, Consumer<SubscriptionEventParser.TierUpdate> tierUpdater) {
     this.connection = connection;
+    this.tierUpdater =
+        tierUpdater != null
+            ? tierUpdater
+            : update -> delegate.setTier(update.accountId(), update.tier());
     try {
       JetStreamManagement jsm = connection.jetStreamManagement();
       validateConsumer(jsm.getConsumerInfo(STREAM, DURABLE));
@@ -124,7 +135,7 @@ public final class NatsSubscriptionTierStore implements SubscriptionTierResolver
     try {
       update.ifPresent(
           tierUpdate -> {
-            delegate.setTier(tierUpdate.accountId(), tierUpdate.tier());
+            tierUpdater.accept(tierUpdate);
             log.debug(
                 "subscription tier updated account={} tier={}",
                 tierUpdate.accountId(),
