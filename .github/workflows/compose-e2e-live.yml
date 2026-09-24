@@ -23,8 +23,24 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-          cache-key: flutter-${{ runner.os }}-${{ hashFiles('src/frontend/pubspec.lock') }}
-          cache-path: ~/.pub-cache
+
+      - name: Verify Flutter SDK
+        run: flutter --version
+
+      - name: Prefetch sqlite3mc native assets
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+
+      - name: Prepare compose avatar store
+        run: |
+          cp .env.example .env
+          cat >> .env <<'EOF'
+          USER_R2_ENDPOINT=http://host.docker.internal:9000
+          USER_R2_REGION=us-east-1
+          USER_R2_ACCESS_KEY_ID=voice-minio
+          USER_R2_SECRET_ACCESS_KEY=voice-minio-dev
+          USER_R2_BUCKET=voice-dev-avatars
+          USER_R2_PUBLIC_BASE_URL=http://127.0.0.1:9000/voice-dev-avatars
+          EOF
 
       - name: Compose app up
         run: make compose-app-up

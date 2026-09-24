@@ -53,6 +53,7 @@ func TestJetStreamPublisher_FriendRequestRoundTrip(t *testing.T) {
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
+	require.Regexp(t, `^_INBOX\.voice\.social\.`, pub.nc.NewRespInbox())
 
 	const (
 		requestID = "req-1"

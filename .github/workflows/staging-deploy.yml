@@ -107,6 +107,12 @@ jobs:
           STAGING_PRINCIPAL_SECRETS_B64: ${{ secrets.STAGING_PRINCIPAL_SECRETS_B64 }}
         run: bash scripts/staging/restore-principal-secrets.sh
 
+      - name: Restore NATS activation secrets
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_NATS_SECRETS_B64: ${{ secrets.STAGING_NATS_SECRETS_B64 }}
+        run: bash scripts/staging/restore-nats-secrets.sh
+
       - name: Ensure User search cursor key
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}

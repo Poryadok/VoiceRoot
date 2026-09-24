@@ -19,19 +19,41 @@ GATEWAY_RUN="$(awk -F"'" '/^full_gateway_run:/ {print $2}' "${MANIFEST}")"
 GATEWAY_RUN="${GATEWAY_RUN:-TestCompose.*_live}"
 
 cd "${ROOT}/src/backend/gateway"
-go test -count=1 -parallel 1 -timeout 20m -tags live -run "${GATEWAY_RUN}" ./...
+gateway_status=0
+if go test -count=1 -parallel 1 -timeout 20m -tags live -run "${GATEWAY_RUN}" ./...; then
+  echo "Gateway live phase: PASSED"
+else
+  gateway_status=$?
+  echo "Gateway live phase: FAILED (exit code ${gateway_status})" >&2
+fi
 
-mapfile -t FLUTTER_TESTS < <(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" full_flutter)
+if flutter_test_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" full_flutter)"; then
+  mapfile -t FLUTTER_TESTS <<<"${flutter_test_list}"
+else
+  echo "Flutter live phase: FAILED (could not read full_flutter manifest)" >&2
+  exit 1
+fi
 
 cd "${ROOT}/src/frontend"
 ARGS=()
 for f in "${FLUTTER_TESTS[@]}"; do
   ARGS+=("${f}")
 done
-if [ "${#ARGS[@]}" -eq 0 ]; then
+if [ "${#ARGS[@]}" -eq 0 ] || [ -z "${ARGS[0]}" ]; then
   echo "no full_flutter tests in ${MANIFEST}" >&2
+  echo "Flutter live phase: FAILED (empty full_flutter manifest)" >&2
   exit 1
 fi
-flutter test --concurrency=1 "${ARGS[@]}" \
-  --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
-  --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"
+flutter_status=0
+if flutter test --concurrency=1 "${ARGS[@]}" \
+    --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
+    --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}"; then
+  echo "Flutter live phase: PASSED"
+else
+  flutter_status=$?
+  echo "Flutter live phase: FAILED (exit code ${flutter_status})" >&2
+fi
+
+if (( gateway_status != 0 || flutter_status != 0 )); then
+  exit 1
+fi
