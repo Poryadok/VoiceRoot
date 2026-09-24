@@ -39,6 +39,11 @@ for setting in \
     fail "full-live workflow is missing avatar store setting ${setting%%=*}"
 done
 
+# Serial CI execution makes a failing Flutter test identifiable in hosted logs.
+grep -F -- 'flutter test --reporter expanded --concurrency=1' \
+  "${ROOT}/.github/workflows/ci.yml" >/dev/null ||
+  fail 'Flutter CI suite must run serially with the expanded reporter'
+
 for go_status in 0 17; do
   for flutter_status in 0 23; do
     case_dir="${scratch}/${go_status}-${flutter_status}"
