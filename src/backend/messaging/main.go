@@ -242,12 +242,8 @@ func main() {
 			}
 			jsPub.Logger = logger
 			msgEvents = jsPub
-			instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
-			if instanceID == "" {
-				instanceID = "messaging"
-			}
 			go func() {
-				if err := runDeliveryAckConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, logger); err != nil {
+				if err := runDeliveryAckConsumer(context.Background(), natsURL, &store.MessagesStore{Pool: pool}, logger); err != nil {
 					logger.Error("delivery ack consumer exited", slog.String("error", err.Error()))
 				}
 			}()
@@ -261,7 +257,7 @@ func main() {
 					log.Fatalf("chat receipt visibility targets not configured")
 				}
 				go func() {
-					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, instanceID, &store.MessagesStore{Pool: pool}, targets, revoker, logger); err != nil {
+					if err := runReceiptPrivacyConsumer(context.Background(), natsURL, &store.MessagesStore{Pool: pool}, targets, revoker, logger); err != nil {
 						logger.Error("receipt privacy consumer exited", slog.String("error", err.Error()))
 					}
 				}()
