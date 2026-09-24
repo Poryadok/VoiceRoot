@@ -123,12 +123,30 @@ bootstrap_info() {
     nats --server nats://hub:4222 --creds "$work/fixture/creds/bootstrap.creds" \
     --inbox-prefix _INBOX.voice.bootstrap.reply req --raw "$1" ''
 }
-bootstrap_info '$JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2' |
-  jq -e '.config.filter_subjects == ["story.lfp_created","story.lfp_response"] and .config.deliver_policy == "all"' >/dev/null
-bootstrap_info '$JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement' |
-  jq -e '.config.filter_subjects == ["subscription.space_pro_started","subscription.space_pro_expired"] and .config.deliver_policy == "new"' >/dev/null
-bootstrap_info '$JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1' |
-  jq -e '(.config.deliver_subject // "") == "" and .config.filter_subject == "user.account_deleted" and .config.deliver_policy == "all"' >/dev/null
+matchmaking_info="$(bootstrap_info '$JS.API.CONSUMER.INFO.story_events.matchmaking_story_lfp_v2')" || {
+  echo 'FAIL: matchmaking fixed consumer INFO request' >&2; exit 1;
+}
+printf '%s' "$matchmaking_info" |
+  jq -e '.config.filter_subjects == ["story.lfp_created","story.lfp_response"] and .config.deliver_policy == "all"' >/dev/null || {
+    printf '%s' "$matchmaking_info" | jq -c '{filters: .config.filter_subjects, delivery: .config.deliver_policy, error: .error}' >&2
+    echo 'FAIL: matchmaking fixed consumer shape' >&2; exit 1;
+  }
+space_info="$(bootstrap_info '$JS.API.CONSUMER.INFO.subscription_events.space_subscription_entitlement')" || {
+  echo 'FAIL: space fixed consumer INFO request' >&2; exit 1;
+}
+printf '%s' "$space_info" |
+  jq -e '.config.filter_subjects == ["subscription.space_pro_started","subscription.space_pro_expired"] and .config.deliver_policy == "new"' >/dev/null || {
+    printf '%s' "$space_info" | jq -c '{filters: .config.filter_subjects, delivery: .config.deliver_policy, error: .error}' >&2
+    echo 'FAIL: space fixed consumer shape' >&2; exit 1;
+  }
+user_info="$(bootstrap_info '$JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1')" || {
+  echo 'FAIL: user fixed consumer INFO request' >&2; exit 1;
+}
+printf '%s' "$user_info" |
+  jq -e '(.config.deliver_subject // "") == "" and .config.filter_subject == "user.account_deleted" and .config.deliver_policy == "all"' >/dev/null || {
+    printf '%s' "$user_info" | jq -c '{filter: .config.filter_subject, subject: .config.deliver_subject, delivery: .config.deliver_policy, error: .error}' >&2
+    echo 'FAIL: user fixed consumer shape' >&2; exit 1;
+  }
 
 docker run -d --name voice-nats-canonical-chat --network "$network" -v "$work:$work:ro" \
   nats:2.12-alpine -c "$work/chat-leaf.conf" >/dev/null
