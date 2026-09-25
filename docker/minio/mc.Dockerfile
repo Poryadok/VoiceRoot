@@ -13,7 +13,7 @@ RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0 minisig
     && curl --fail --show-error --silent --location "${base}/${asset}" --output "/tmp/${asset}" \
     && curl --fail --show-error --silent --location "${base}/${asset}.sha256sum" --output "/tmp/${asset}.sha256sum" \
     && curl --fail --show-error --silent --location "${base}/${asset}.minisig" --output "/tmp/${asset}.minisig" \
-    && printf '%s  %s\n' "${MC_SHA256}" "/tmp/${asset}" | sha256sum --check --status \
+    && printf '%s  %s\n' "${MC_SHA256}" "/tmp/${asset}" | sha256sum -cs \
     && grep -Fq "${MC_SHA256}" "/tmp/${asset}.sha256sum" \
     && minisign -Vqm "/tmp/${asset}" -x "/tmp/${asset}.minisig" -P "${MINISIGN_PUBLIC_KEY}" \
     && install -D -m 0755 "/tmp/${asset}" /out/mc

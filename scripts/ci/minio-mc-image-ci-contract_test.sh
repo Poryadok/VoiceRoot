@@ -34,7 +34,7 @@ grep -Fq 'steps.build.outputs.digest' <<<"$PUBLISH_JOB" || fail 'mc publication 
 
 [[ -f "$DOCKERFILE" ]] || fail 'verified mc Dockerfile must exist'
 grep -Fq 'FROM alpine:3.24.2@sha256:' "$DOCKERFILE" || fail 'mc runtime must use the pinned Alpine base'
-grep -Fq 'sha256sum --check --status' "$DOCKERFILE" || fail 'mc release checksum must be verified during build'
+grep -Fq 'sha256sum -cs' "$DOCKERFILE" || fail 'mc release checksum must be verified during build'
 grep -Fq 'minisign -Vqm' "$DOCKERFILE" || fail 'mc release signature must be verified during build'
 grep -Fq 'ENTRYPOINT ["mc"]' "$DOCKERFILE" || fail 'mc default entrypoint must be preserved'
 
