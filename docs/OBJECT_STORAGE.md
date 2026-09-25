@@ -6,7 +6,7 @@ runtime requirement and does not change the File API.
 
 ## Image policy and registry bootstrap
 
-The checked-in MinIO server default is a multi-platform upstream reference
+The local Compose MinIO server default is a multi-platform upstream reference
 pinned as `tag@sha256`:
 `RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3`.
 CI builds both runtime images from the exact official releases: the mc client
@@ -20,16 +20,22 @@ attachment restart proof checks each binary and its required shell utilities,
 then selects the local images with `VOICE_MINIO_MC_IMAGE` and
 `VOICE_MINIO_IMAGE` while leaving explicit caller overrides intact.
 
-The CI build does not change staging or production image defaults. On a master
-push, `minio-mc-image-publish` and `minio-server-image-publish` publish the
+On a master push, `minio-mc-image-publish` and `minio-server-image-publish` publish the
 verified images to
 `ghcr.io/<owner>/<repository>/minio-mc:<commit-sha>` and
 `ghcr.io/<owner>/<repository>/minio:<commit-sha>`, respectively, and record the
 registry-reported digests in the workflow summary. The repackaged server image
-is Linux amd64 for the current hosted proof and staging runtime. After both
-publication jobs succeed, a separate reviewed change can pin the actual
-digests in staging. Do not infer digests from tags or use mutable tags as
-substitutes. Production defaults are unchanged.
+is Linux amd64 for the current hosted proof and staging runtime. Staging now
+defaults to the reviewed immutable references published from master commit
+`86b2017f06d0d471e8b43abc78031e86756defe3`:
+
+- Server: `ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0`
+- mc: `ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2`
+
+The staging defaults are in `scripts/staging/apply-infra.sh`; explicit
+`VOICE_MINIO_IMAGE` and `VOICE_MINIO_MC_IMAGE` overrides remain available.
+Local Compose and production defaults are unchanged. Do not infer digests from
+tags or use mutable tags as substitutes.
 
 For an internal mirror, a package administrator with `packages:write` performs
 the following once for each exact digest, then grants the CI repository pull
