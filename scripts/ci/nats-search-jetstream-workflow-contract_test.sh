@@ -17,6 +17,9 @@ probe="$(sed -n '/^  nats-search-jetstream-probe:$/,$p' "$WORKFLOW")"
 [ -n "$probe" ] || fail "diagnostic job missing"
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
+printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 5' || fail "job timeout missing"
+printf '%s\n' "$probe" | grep -Fq 'kctl() { kubectl --request-timeout=8s "$@"; }' || fail "kubectl timeout wrapper missing"
+if printf '%s\n' "$probe" | grep -Eq 'kubectl (get|create|delete|logs) '; then fail "unbounded direct Kubernetes request"; fi
 for required in \
   'environment: staging' \
   'voice-nats-service-credentials' \

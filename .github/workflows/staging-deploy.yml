@@ -280,6 +280,7 @@ jobs:
   nats-search-jetstream-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
+    timeout-minutes: 5
     environment: staging
     steps:
       - uses: actions/checkout@v4
@@ -303,6 +304,7 @@ jobs:
         run: |
           set +x
           set -euo pipefail
+          kctl() { kubectl --request-timeout=8s "$@"; }
           fail_probe() {
             printf '%s\n' 'NATS_SEARCH_JS_INFO=FAIL OTHER'
             exit 1
@@ -311,13 +313,13 @@ jobs:
           [ "$namespace" = voice-staging ] || fail_probe
           [[ "$PROBE_JOB_NAME" =~ ^voice-nats-search-probe-[0-9]+-[0-9]+$ ]] || fail_probe
 
-          kubectl get namespace voice-staging >/dev/null 2>&1 || fail_probe
-          kubectl get secret voice-nats-service-credentials -n voice-staging --output=name >/dev/null 2>&1 || fail_probe
-          kubectl get service voice-nats -n voice-staging -o json 2>/dev/null | \
+          kctl get namespace voice-staging >/dev/null 2>&1 || fail_probe
+          kctl get secret voice-nats-service-credentials -n voice-staging --output=name >/dev/null 2>&1 || fail_probe
+          kctl get service voice-nats -n voice-staging -o json 2>/dev/null | \
             jq -e 'any(.spec.ports[]?; .name == "client" and .port == 4222 and .targetPort == 4222)' >/dev/null 2>&1 || fail_probe
-          kubectl get networkpolicy voice-nats-hub-ingress -n voice-staging -o json 2>/dev/null | \
+          kctl get networkpolicy voice-nats-hub-ingress -n voice-staging -o json 2>/dev/null | \
             jq -e 'any(.spec.ingress[]?; any(.from[]?.podSelector.matchExpressions[]?; .key == "app" and .operator == "In" and any(.values[]?; . == "voice-nats-search-bootstrap")) and any(.ports[]?; .protocol == "TCP" and .port == 4222))' >/dev/null 2>&1 || fail_probe
-          kubectl get deployment voice-search -n voice-staging -o json 2>/dev/null | \
+          kctl get deployment voice-search -n voice-staging -o json 2>/dev/null | \
             jq -e '
               .spec.template.spec as $pod |
               any($pod.containers[]?;
@@ -334,11 +336,11 @@ jobs:
             ' >/dev/null 2>&1 || fail_probe
 
           cleanup() {
-            kubectl delete job "$PROBE_JOB_NAME" -n voice-staging --ignore-not-found=true --wait=true --timeout=30s >/dev/null 2>&1 || true
+            kctl delete job "$PROBE_JOB_NAME" -n voice-staging --ignore-not-found=true --wait=true --timeout=30s >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
-          kubectl create -f - >/dev/null 2>&1 <<EOF
+          kctl create -f - >/dev/null 2>&1 <<EOF
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -403,13 +405,13 @@ jobs:
 
           conditions=""
           for attempt in $(seq 1 60); do
-            conditions="$(kubectl get job "$PROBE_JOB_NAME" -n voice-staging -o json 2>/dev/null | jq -r '[.status.conditions[]? | select((.type == "Complete" or .type == "Failed") and .status == "True") | .type] | first // empty' 2>/dev/null || true)"
+            conditions="$(kctl get job "$PROBE_JOB_NAME" -n voice-staging -o json 2>/dev/null | jq -r '[.status.conditions[]? | select((.type == "Complete" or .type == "Failed") and .status == "True") | .type] | first // empty' 2>/dev/null || true)"
             if [ "$conditions" = Complete ] || [ "$conditions" = Failed ]; then
               break
             fi
             sleep 2
           done
-          result="$(kubectl logs "job/$PROBE_JOB_NAME" -n voice-staging -c probe --tail=1 2>/dev/null || true)"
+          result="$(kctl logs "job/$PROBE_JOB_NAME" -n voice-staging -c probe --tail=1 2>/dev/null || true)"
           case "$result" in
             NATS_SEARCH_JS_INFO=PASS)
               printf '%s\n' "$result"
