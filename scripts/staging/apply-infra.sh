@@ -15,6 +15,57 @@ MINIO_MC_IMAGE="${VOICE_MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-08-13T08-3
 MINIO_STORAGE_CLASS="${VOICE_MINIO_STORAGE_CLASS:-local-path}"
 MINIO_STORAGE_SIZE="${VOICE_MINIO_STORAGE_SIZE:-20Gi}"
 
+clean_install_mode=false
+clean_install_bootstrap=false
+clean_install_mode_value=""
+fresh_install="${VOICE_NATS_FRESH_INSTALL:-false}"
+VOICE_NATS_PRESERVE_SERVICE_SELECTOR=false
+case "${fresh_install}" in
+  true|false) ;;
+  *) echo 'ERROR: VOICE_NATS_FRESH_INSTALL must be true or false' >&2; exit 1 ;;
+esac
+
+if ! clean_install_state_json="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" --ignore-not-found=true -o json 2>/dev/null)"; then
+  echo 'ERROR: unable to inspect NATS clean-install state; refusing staging infra apply' >&2
+  exit 1
+fi
+if [ -n "${clean_install_state_json}" ] && [ "${clean_install_state_json}" != null ]; then
+  if ! clean_install_mode_value="$(printf '%s' "${clean_install_state_json}" | jq -er '.data.mode // empty')" || [ "${clean_install_mode_value}" != clean-install ]; then
+    echo 'ERROR: NATS clean-install marker is invalid; refusing staging infra apply' >&2
+    exit 1
+  fi
+  clean_install_storage_class="$(printf '%s' "${clean_install_state_json}" | jq -er '.data.storageClass')" || {
+    echo 'ERROR: NATS clean-install marker is missing its storage class' >&2
+    exit 1
+  }
+  clean_install_storage_size="$(printf '%s' "${clean_install_state_json}" | jq -er '.data.storageSize')" || {
+    echo 'ERROR: NATS clean-install marker is missing its storage size' >&2
+    exit 1
+  }
+  [ "${clean_install_storage_class}" = "${NATS_STORAGE_CLASS}" ] || { echo 'ERROR: clean-install NATS storage class differs from its reset preflight' >&2; exit 1; }
+  [ "${clean_install_storage_size}" = "${NATS_STORAGE_SIZE}" ] || { echo 'ERROR: clean-install NATS storage size differs from its reset preflight' >&2; exit 1; }
+  if [ "${fresh_install}" = true ]; then
+    [ "${NS}" = voice-staging ] || { echo 'ERROR: clean install is restricted to voice-staging' >&2; exit 1; }
+    clean_install_mode=true
+    clean_install_bootstrap=true
+  else
+    if ! kubectl get service voice-nats -n "${NS}" -o json 2>/dev/null | jq -e '
+      .spec.selector as $selector |
+      ($selector | type) == "object" and
+      ($selector | keys == ["app"]) and
+      ($selector.app == "voice-nats" or $selector.app == "voice-nats-pvc-candidate")
+    ' >/dev/null 2>&1; then
+      echo 'ERROR: cannot safely preserve the live voice-nats Service selector; refusing staging infra apply' >&2
+      exit 1
+    fi
+    VOICE_NATS_PRESERVE_SERVICE_SELECTOR=true
+  fi
+elif [ "${fresh_install}" = true ]; then
+  echo 'ERROR: clean-install opt-in requires the namespace reset marker' >&2
+  exit 1
+fi
+export VOICE_NATS_PRESERVE_SERVICE_SELECTOR
+
 render() {
   sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
@@ -108,23 +159,7 @@ if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
   exit 1
 fi
 
-clean_install_mode=false
-clean_install_bootstrap=false
-clean_install_mode_value="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.mode}' 2>/dev/null || true)"
-if [ "${clean_install_mode_value}" = clean-install ]; then
-  clean_install_storage_class="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.storageClass}')"
-  clean_install_storage_size="$(kubectl get configmap voice-nats-clean-install-state -n "${NS}" -o jsonpath='{.data.storageSize}')"
-  [ "${clean_install_storage_class}" = "${NATS_STORAGE_CLASS}" ] || { echo 'ERROR: clean-install NATS storage class differs from its reset preflight' >&2; exit 1; }
-  [ "${clean_install_storage_size}" = "${NATS_STORAGE_SIZE}" ] || { echo 'ERROR: clean-install NATS storage size differs from its reset preflight' >&2; exit 1; }
-  clean_install_mode=true
-  if [ "${VOICE_NATS_FRESH_INSTALL:-false}" = true ]; then
-    [ "${NS}" = voice-staging ] || { echo 'ERROR: clean install is restricted to voice-staging' >&2; exit 1; }
-    clean_install_bootstrap=true
-  fi
-elif [ "${VOICE_NATS_FRESH_INSTALL:-false}" = true ]; then
-  echo 'ERROR: clean-install opt-in requires the namespace reset marker' >&2
-  exit 1
-else
+if [ -z "${clean_install_mode_value}" ]; then
   NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
   NATS_SOURCE_CONTEXT="${NATS_SOURCE_CONTEXT:-}" \
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
@@ -146,8 +181,8 @@ run_nats_bootstrap_jobs() {
   done
 }
 
-# A user-approved clean install leaves the old Voice namespace and NATS state
-# deleted. Promote the new PVC-backed candidate before creating fixed durables.
+# Promote only when both the manual reset marker and explicit clean-install
+# opt-in are present; stale-marker fallback omits the Service from infra apply.
 if [ "${clean_install_mode}" = true ]; then
   kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
   kubectl patch service voice-nats -n "${NS}" --type=merge -p '{"spec":{"selector":{"app":"voice-nats-pvc-candidate"}}}'
