@@ -6,11 +6,24 @@ runtime requirement and does not change the File API.
 
 ## Image policy and registry bootstrap
 
-The checked-in defaults are multi-platform upstream references pinned as
-`tag@sha256`: MinIO `RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3`
-and mc `RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727`.
-The digests are recorded from `docker buildx imagetools inspect` against Quay;
-the dated tag is included for operator auditability, not as the integrity lock.
+The checked-in MinIO server default is a multi-platform upstream reference
+pinned as `tag@sha256`:
+`RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3`.
+CI builds the mc runtime from the official
+`RELEASE.2025-08-13T08-35-41Z` Linux amd64 release binary and verifies both its
+published SHA-256 and MinIO minisign signature; see
+[`docker/minio/mc.Dockerfile`](../docker/minio/mc.Dockerfile). The attachment
+restart proof checks `mc`, `/bin/sh`, and `sleep` in that image, then selects
+it with `VOICE_MINIO_MC_IMAGE` while leaving callers' explicit overrides
+intact.
+
+The CI build does not change staging or production image defaults. On a master
+push, `minio-mc-image-publish` publishes the same verified Dockerfile to
+`ghcr.io/<owner>/<repository>/minio-mc:<commit-sha>` and records the registry's
+resulting digest in the workflow summary. After that job succeeds, a separate
+reviewed change can pin the actual digest in the staging image setting. Do not
+infer a digest from the tag or use a mutable tag as a substitute. Production
+defaults are unchanged.
 
 For an internal mirror, a package administrator with `packages:write` performs
 the following once for each exact digest, then grants the CI repository pull
