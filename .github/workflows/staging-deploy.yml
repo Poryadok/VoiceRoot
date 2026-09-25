@@ -95,12 +95,19 @@ on:
         type: boolean
         default: false
 
+      nats_probe_only:
+        description: "Run only a read-only Search NATS JetStream diagnostic"
+        required: false
+        type: boolean
+        default: false
+
 permissions:
   contents: read
   packages: read
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_dispatch' || inputs.nats_probe_only != true
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
@@ -269,3 +276,151 @@ jobs:
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: bash scripts/staging/smoke-observability.sh
+
+  nats-search-jetstream-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true
+    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v5
+
+      - name: Configure kubectl (direct or SSH tunnel)
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+
+      - name: Probe Search JetStream INFO permission (read-only)
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          PROBE_JOB_NAME: voice-nats-search-probe-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set +x
+          set -euo pipefail
+          fail_probe() {
+            printf '%s\n' 'NATS_SEARCH_JS_INFO=FAIL OTHER'
+            exit 1
+          }
+          namespace="${VOICE_K8S_NAMESPACE:-voice-staging}"
+          [ "$namespace" = voice-staging ] || fail_probe
+          [[ "$PROBE_JOB_NAME" =~ ^voice-nats-search-probe-[0-9]+-[0-9]+$ ]] || fail_probe
+
+          kubectl get namespace voice-staging >/dev/null 2>&1 || fail_probe
+          kubectl get secret voice-nats-service-credentials -n voice-staging --output=name >/dev/null 2>&1 || fail_probe
+          kubectl get service voice-nats -n voice-staging -o json 2>/dev/null | \
+            jq -e 'any(.spec.ports[]?; .name == "client" and .port == 4222 and .targetPort == 4222)' >/dev/null 2>&1 || fail_probe
+          kubectl get networkpolicy voice-nats-hub-ingress -n voice-staging -o json 2>/dev/null | \
+            jq -e 'any(.spec.ingress[]?; any(.from[]?.podSelector.matchExpressions[]?; .key == "app" and .operator == "In" and any(.values[]?; . == "voice-nats-search-bootstrap")) and any(.ports[]?; .protocol == "TCP" and .port == 4222))' >/dev/null 2>&1 || fail_probe
+          kubectl get deployment voice-search -n voice-staging -o json 2>/dev/null | \
+            jq -e '
+              .spec.template.spec as $pod |
+              any($pod.containers[]?;
+                .name == "nats-leaf" and .image == "nats:2.12-alpine" and
+                .args == ["-c", "/etc/nats/leaf.conf"] and
+                any(.env[]?; .name == "NATS_CREDS" and .value == "/var/run/nats/creds/search.creds") and
+                any(.volumeMounts[]?; .mountPath == "/var/run/nats/creds/search.creds" and .subPath == "search.creds" and .readOnly == true) and
+                any(.volumeMounts[]?; .mountPath == "/etc/nats/leaf.conf" and .subPath == "leaf.conf" and .readOnly == true) and
+                any(.volumeMounts[]?; .mountPath == "/etc/nats/tls/ca.crt" and .subPath == "ca.crt" and .readOnly == true)
+              ) and
+              any($pod.volumes[]?; .name == "nats-service-creds" and .secret.secretName == "voice-nats-service-credentials" and any(.secret.items[]?; .key == "search.creds" and .path == "search.creds")) and
+              any($pod.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == "voice-nats-hub-tls" and any(.secret.items[]?; .key == "ca.crt" and .path == "ca.crt")) and
+              any($pod.volumes[]?; .name == "nats-leaf-config" and .configMap.name == "voice-nats-leaf-config")
+            ' >/dev/null 2>&1 || fail_probe
+
+          cleanup() {
+            kubectl delete job "$PROBE_JOB_NAME" -n voice-staging --ignore-not-found=true --wait=true --timeout=30s >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          kubectl create -f - >/dev/null 2>&1 <<EOF
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: $PROBE_JOB_NAME
+            namespace: voice-staging
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 90
+            ttlSecondsAfterFinished: 600
+            template:
+              metadata:
+                labels:
+                  app: voice-nats-search-bootstrap
+                  voice.nats/probe: search-jetstream-info
+              spec:
+                automountServiceAccountToken: false
+                restartPolicy: Never
+                containers:
+                  - name: probe
+                    image: natsio/nats-box:0.18.0
+                    command: ["/bin/sh", "-ceu"]
+                    args:
+                      - |
+                        set +x
+                        umask 077
+                        tmp="$(mktemp -d)"
+                        trap 'rm -rf "$tmp"' EXIT
+                        response="$tmp/response.json"
+                        stderr="$tmp/stderr.txt"
+                        if nats --server nats://voice-nats:4222 --creds /var/run/nats/creds/search.creds --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
+                          if jq -e '(.error | not) and .config.durable_name == "search-indexer-message-v1"' "$response" >/dev/null 2>&1; then
+                            echo "NATS_SEARCH_JS_INFO=PASS"
+                            exit 0
+                          fi
+                        fi
+                        details="$(jq -r '.error.description // empty' "$response" 2>/dev/null || true) $(<"$stderr")"
+                        if printf '%s' "$details" | grep -Eqi 'jetstream[^[:cntrl:]]*(not enabled|disabled)|not enabled[^[:cntrl:]]*jetstream'; then
+                          category=JETSTREAM_DISABLED
+                        elif printf '%s' "$details" | grep -Eqi 'permission|authorization|not authorized|unauthorized|forbidden'; then
+                          category=PERMISSION_DENIED
+                        elif printf '%s' "$details" | grep -Eqi 'timed out|timeout|no responders'; then
+                          category=TIMEOUT
+                        else
+                          category=OTHER
+                        fi
+                        printf 'NATS_SEARCH_JS_INFO=FAIL %s\n' "$category"
+                        exit 1
+                    volumeMounts:
+                      - name: search-service-creds
+                        mountPath: /var/run/nats/creds/search.creds
+                        subPath: search.creds
+                        readOnly: true
+                volumes:
+                  - name: search-service-creds
+                    secret:
+                      secretName: voice-nats-service-credentials
+                      defaultMode: 0400
+                      items:
+                        - key: search.creds
+                          path: search.creds
+          EOF
+
+          conditions=""
+          for attempt in $(seq 1 60); do
+            conditions="$(kubectl get job "$PROBE_JOB_NAME" -n voice-staging -o json 2>/dev/null | jq -r '[.status.conditions[]? | select((.type == "Complete" or .type == "Failed") and .status == "True") | .type] | first // empty' 2>/dev/null || true)"
+            if [ "$conditions" = Complete ] || [ "$conditions" = Failed ]; then
+              break
+            fi
+            sleep 2
+          done
+          result="$(kubectl logs "job/$PROBE_JOB_NAME" -n voice-staging -c probe --tail=1 2>/dev/null || true)"
+          case "$result" in
+            NATS_SEARCH_JS_INFO=PASS)
+              printf '%s\n' "$result"
+              [ "$conditions" = Complete ] || exit 1
+              ;;
+            "NATS_SEARCH_JS_INFO=FAIL JETSTREAM_DISABLED"|"NATS_SEARCH_JS_INFO=FAIL PERMISSION_DENIED"|"NATS_SEARCH_JS_INFO=FAIL TIMEOUT"|"NATS_SEARCH_JS_INFO=FAIL OTHER")
+              printf '%s\n' "$result"
+              exit 1
+              ;;
+            *)
+              printf '%s\n' 'NATS_SEARCH_JS_INFO=FAIL OTHER'
+              exit 1
+              ;;
+          esac

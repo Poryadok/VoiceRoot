@@ -305,6 +305,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/a1-attachment-restart-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/nats-search-jetstream-workflow-contract_test.sh"
 
 e2e-manifest-helper-test:
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_helper_test.sh"
