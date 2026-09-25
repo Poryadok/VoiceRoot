@@ -254,7 +254,7 @@ jobs:
           echo "STAGING_RUNNER_GITHUB_ROUTE=${route}"
           error_file="$(mktemp)"
           trap 'rm -f "$error_file"' EXIT
-          failed=0
+          required_failed=0
           check_endpoint() {
             local label="$1"
             shift
@@ -276,14 +276,18 @@ jobs:
               failure=TLS_OR_CURL
             fi
             echo "STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}"
-            failed=1
+            if [[ "$label" == GITHUB_DEFAULT ]]; then
+              required_failed=1
+            fi
           }
+          # Only the default route is required by actions/checkout. The other
+          # endpoint results are informational and cannot block checkout.
           check_endpoint GITHUB_DEFAULT https://github.com/
           check_endpoint GITHUB_IPV4 --ipv4 https://github.com/
           check_endpoint API https://api.github.com/repos/Poryadok/VoiceRoot
           check_endpoint RAW "https://raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore"
           check_endpoint CODELOAD --head "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}"
-          if [[ "$failed" == 0 ]]; then
+          if [[ "$required_failed" == 0 ]]; then
             echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS"
           else
             echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL"

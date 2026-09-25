@@ -17,34 +17,70 @@ printf '%s\n' "$deploy" | grep -Fq "if: github.event_name != 'workflow_dispatch'
   || fail "deploy must skip diagnostics-only dispatches and preserve workflow_call"
 probe="$(sed -n '/^  nats-search-jetstream-probe:$/,$p' "$WORKFLOW")"
 [ -n "$probe" ] || fail "diagnostic job missing"
-connectivity_line="$(printf '%s\n' "$probe" | grep -nF 'https://github.com/' | head -n 1 | cut -d: -f1)"
+test_bin="$(mktemp -d)"
+trap 'rm -rf "$test_bin"' EXIT
+CONNECTIVITY="$test_bin/check-github-connectivity.sh"
+awk '
+  /^      - name: Check staging runner can reach GitHub before checkout$/ { step = 1; next }
+  step && /^      - / { exit }
+  step && /run: \|/ { run = 1; next }
+  run { sub(/^          /, ""); print }
+' "$WORKFLOW" >"$CONNECTIVITY"
+[ -s "$CONNECTIVITY" ] || fail "inline pre-checkout connectivity script missing"
+connectivity_line="$(printf '%s\n' "$probe" | grep -nF 'https://github.com/' | head -n 1 | cut -d: -f1 || true)"
+if [ -z "$connectivity_line" ]; then
+  connectivity_line="$(printf '%s\n' "$probe" | grep -nF 'check-github-connectivity.sh' | head -n 1 | cut -d: -f1)"
+fi
 checkout_line="$(printf '%s\n' "$probe" | grep -nF 'uses: actions/checkout@v4' | head -n 1 | cut -d: -f1)"
 [[ -n "$connectivity_line" && -n "$checkout_line" && "$connectivity_line" -lt "$checkout_line" ]] \
   || fail "GitHub connectivity must be checked before checkout on the staging runner"
-printf '%s\n' "$probe" | grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS' \
+grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS' "$CONNECTIVITY" \
   || fail "connectivity success must be visible"
 for failure in PROXY_DNS GITHUB_DNS TCP_CONNECT TIMEOUT TLS_OR_CURL; do
-  printf '%s\n' "$probe" | grep -Fq "failure=${failure}" \
+  grep -Fq "failure=${failure}" "$CONNECTIVITY" \
     || fail "connectivity failure class ${failure} must be classified"
 done
-printf '%s\n' "$probe" | grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL' \
+grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL' "$CONNECTIVITY" \
   || fail "connectivity failure class must be emitted"
 for endpoint in GITHUB_DEFAULT GITHUB_IPV4 API RAW CODELOAD; do
-  printf '%s\n' "$probe" | grep -Fq "check_endpoint ${endpoint}" \
+  grep -Fq "check_endpoint ${endpoint}" "$CONNECTIVITY" \
     || fail "endpoint ${endpoint} must be checked"
 done
-printf '%s\n' "$probe" | grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=HTTP_${status}' \
+grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=HTTP_${status}' "$CONNECTIVITY" \
   || fail "endpoint HTTP statuses must be emitted without response bodies"
-printf '%s\n' "$probe" | grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}' \
+grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}' "$CONNECTIVITY" \
   || fail "endpoint-specific network failures must have sanitized status"
-printf '%s\n' "$probe" | grep -Fq 'api.github.com/repos/Poryadok/VoiceRoot' \
+grep -Fq 'api.github.com/repos/Poryadok/VoiceRoot' "$CONNECTIVITY" \
   || fail "preflight must test the GitHub API used by checkout"
-printf '%s\n' "$probe" | grep -Fq 'raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore' \
+grep -Fq 'raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore' "$CONNECTIVITY" \
   || fail "preflight must test pinned raw content availability"
-printf '%s\n' "$probe" | grep -Fq 'codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}' \
+grep -Fq 'codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}' "$CONNECTIVITY" \
   || fail "preflight must test pinned archive availability"
-if printf '%s\n' "$probe" | grep -Eq 'printenv|env \|'; then
+if grep -Eq 'printenv|env \|' "$CONNECTIVITY"; then
   fail "connectivity step must not dump environment or credential values"
+fi
+cat >"$test_bin/curl" <<'CURL_STUB'
+#!/usr/bin/env bash
+args=" $* "
+if [[ "${CURL_TEST_MODE:-}" == optional-fails && "$args" == *" --ipv4 "* ]]; then
+  echo 'curl: (7) Failed to connect: optional IPv4 route unavailable' >&2
+  exit 7
+fi
+if [[ "${CURL_TEST_MODE:-}" == required-fails && "$args" == *"https://github.com/ "* ]]; then
+  echo 'curl: (7) Failed to connect: github.com required route unavailable' >&2
+  exit 7
+fi
+printf '200'
+CURL_STUB
+chmod +x "$test_bin/curl"
+optional_output="$(PATH="$test_bin:$PATH" CURL_TEST_MODE=optional-fails GITHUB_SHA=deadbeef bash "$CONNECTIVITY")" \
+  || fail "optional endpoint failure must not block a healthy required route"
+printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_ENDPOINT_GITHUB_IPV4=FAIL_TCP_CONNECT' \
+  || fail "optional IPv4 failure must remain visible"
+printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS' \
+  || fail "healthy required route must pass despite optional endpoint failure"
+if PATH="$test_bin:$PATH" CURL_TEST_MODE=required-fails GITHUB_SHA=deadbeef bash "$CONNECTIVITY" >/dev/null 2>&1; then
+  fail "required default route failure must block checkout"
 fi
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
