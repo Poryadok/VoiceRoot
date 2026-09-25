@@ -16,11 +16,15 @@ RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0 minisig
     && printf '%s  %s\n' "${MC_SHA256}" "/tmp/${asset}" | sha256sum -cs \
     && grep -Fq "${MC_SHA256}" "/tmp/${asset}.sha256sum" \
     && minisign -Vqm "/tmp/${asset}" -x "/tmp/${asset}.minisig" -P "${MINISIGN_PUBLIC_KEY}" \
-    && install -D -m 0755 "/tmp/${asset}" /out/mc
+    && install -D -m 0755 "/tmp/${asset}" /out/mc \
+    && mkdir -p /out/licenses \
+    && curl --fail --show-error --silent --location https://raw.githubusercontent.com/minio/mc/7394ce0dd2a80935aded936b09fa12cbb3cb8096/LICENSE --output /out/licenses/LICENSE \
+    && curl --fail --show-error --silent --location https://raw.githubusercontent.com/minio/mc/7394ce0dd2a80935aded936b09fa12cbb3cb8096/CREDITS --output /out/licenses/CREDITS
 
 FROM alpine:3.24.2@sha256:d56c381f961d307a21b3ca004cf1e3910f106644aefb1f43e654c8a56c4fd395
 
 ENV HOME=/root
 COPY --from=verify /out/mc /usr/local/bin/mc
+COPY --from=verify /out/licenses/ /licenses/
 ENTRYPOINT ["mc"]
 CMD ["--help"]

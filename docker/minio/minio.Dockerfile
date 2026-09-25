@@ -16,7 +16,10 @@ RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0 minisig
     && grep -Fq "${MINIO_SHA256}" "/tmp/${asset}.sha256sum" \
     && printf '%s  %s\n' "${MINIO_SHA256}" "/tmp/${asset}" | sha256sum -cs \
     && minisign -Vqm "/tmp/${asset}" -x "/tmp/${asset}.minisig" -P "${MINISIGN_PUBLIC_KEY}" \
-    && install -D -m 0755 "/tmp/${asset}" /out/minio
+    && install -D -m 0755 "/tmp/${asset}" /out/minio \
+    && mkdir -p /out/licenses \
+    && curl --fail --show-error --silent --location https://raw.githubusercontent.com/minio/minio/16f8cf1c52f0a77eeb8f7565aaf7f7df12454583/LICENSE --output /out/licenses/LICENSE \
+    && curl --fail --show-error --silent --location https://raw.githubusercontent.com/minio/minio/16f8cf1c52f0a77eeb8f7565aaf7f7df12454583/CREDITS --output /out/licenses/CREDITS
 
 FROM alpine:3.24.2@sha256:d56c381f961d307a21b3ca004cf1e3910f106644aefb1f43e654c8a56c4fd395
 
@@ -30,6 +33,7 @@ ENV MINIO_UPDATE_MINISIGN_PUBKEY=RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWG
 
 RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0
 COPY --from=verify /out/minio /usr/local/bin/minio
+COPY --from=verify /out/licenses/ /licenses/
 
 EXPOSE 9000 9001
 VOLUME ["/data"]

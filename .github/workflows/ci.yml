@@ -373,7 +373,7 @@ jobs:
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.global == 'true'
+      (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_e2e == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1326,7 +1326,7 @@ jobs:
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      needs.changes.outputs.global == 'true'
+      (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_e2e == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
