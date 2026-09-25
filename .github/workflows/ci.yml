@@ -366,6 +366,44 @@ jobs:
           cache-from: type=gha,scope=nats-hub-config-renderer
           cache-to: type=gha,scope=nats-hub-config-renderer,mode=max,ignore-error=true
 
+  minio-server-image-publish:
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.changes.outputs.global == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - name: Image base (lowercase)
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish verified MinIO server image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/minio/minio.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.base }}/minio:${{ github.sha }}
+          cache-from: type=gha,scope=minio-server
+          cache-to: type=gha,scope=minio-server,mode=max,ignore-error=true
+      - name: Record immutable image digest
+        run: echo "Published ${{ steps.image.outputs.base }}/minio:${{ github.sha }} at digest \`${{ steps.build.outputs.digest }}\`." >> "$GITHUB_STEP_SUMMARY"
+
   backend-go:
     needs: [changes, backend-go-pkg]
     if: >-
@@ -1344,9 +1382,12 @@ jobs:
         run: |
           docker build -f docker/minio/mc.Dockerfile -t voice-minio-mc:ci .
           docker run --rm --entrypoint /bin/sh voice-minio-mc:ci -c 'command -v mc && command -v sleep && mc --version'
+          docker build -f docker/minio/minio.Dockerfile -t voice-minio:ci .
+          docker run --rm --entrypoint /bin/sh voice-minio:ci -c 'command -v minio && command -v curl && command -v sleep && minio --version'
       - name: File attachment restart proof
         env:
           VOICE_FILE_ATTACHMENT_RESTART_CLEANUP: "true"
+          VOICE_MINIO_IMAGE: voice-minio:ci
           VOICE_MINIO_MC_IMAGE: voice-minio-mc:ci
         run: make compose-file-attachment-restart-proof
 
