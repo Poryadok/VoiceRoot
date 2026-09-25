@@ -6,11 +6,30 @@ runtime requirement and does not change the File API.
 
 ## Image policy and registry bootstrap
 
-The checked-in defaults are multi-platform upstream references pinned as
-`tag@sha256`: MinIO `RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3`
-and mc `RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727`.
-The digests are recorded from `docker buildx imagetools inspect` against Quay;
-the dated tag is included for operator auditability, not as the integrity lock.
+The checked-in MinIO server default is a multi-platform upstream reference
+pinned as `tag@sha256`:
+`RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3`.
+CI builds both runtime images from the exact official releases: the mc client
+`RELEASE.2025-08-13T08-35-41Z` and MinIO server
+`RELEASE.2024-12-18T13-15-44Z`, for Linux amd64. Each build checks the
+published SHA-256 and MinIO minisign signature. The server image also records
+its upstream GitHub source, verified release commit, and AGPL-3.0-only license
+in OCI labels. See [`docker/minio/mc.Dockerfile`](../docker/minio/mc.Dockerfile)
+and [`docker/minio/minio.Dockerfile`](../docker/minio/minio.Dockerfile). The
+attachment restart proof checks each binary and its required shell utilities,
+then selects the local images with `VOICE_MINIO_MC_IMAGE` and
+`VOICE_MINIO_IMAGE` while leaving explicit caller overrides intact.
+
+The CI build does not change staging or production image defaults. On a master
+push, `minio-mc-image-publish` and `minio-server-image-publish` publish the
+verified images to
+`ghcr.io/<owner>/<repository>/minio-mc:<commit-sha>` and
+`ghcr.io/<owner>/<repository>/minio:<commit-sha>`, respectively, and record the
+registry-reported digests in the workflow summary. The repackaged server image
+is Linux amd64 for the current hosted proof and staging runtime. After both
+publication jobs succeed, a separate reviewed change can pin the actual
+digests in staging. Do not infer digests from tags or use mutable tags as
+substitutes. Production defaults are unchanged.
 
 For an internal mirror, a package administrator with `packages:write` performs
 the following once for each exact digest, then grants the CI repository pull
