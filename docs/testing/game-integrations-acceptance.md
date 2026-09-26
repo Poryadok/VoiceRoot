@@ -30,7 +30,7 @@ Windows x64 для обоих движков — согласуемая плат
 | GI4: Unity и Unreal SDK | GI0 contracts; GI1/GI7 для интеграции | Оба package/plugin, native media, identity/conversion UI, samples и docs | Оба packaged builds проходят conformance и real-media suite |
 | GI5: MMO communities | GI7 identity + managed grants, G02/G03/G09 | Corporation → Space; rank changes affect in/out-game access | Полная roster/role lifecycle vertical |
 | GI6: game node | GI5 + federation wire/lifecycle/ops, G08/G10 | Один game node, два Space, SDK + messenger | Partition/revoke/restore/security/operability proof |
-| GI8: developer operations | GI0 contracts; GI1–GI7 для интеграции | App/env registry, keys/rotation, quotas, diagnostics, deployment, backup/restore, support docs | Разработчик проходит onboarding без ручного доступа к чужим БД; оператор восстанавливает ноду |
+| GI8: developer operations | GI0 contracts; GI1–GI7 для интеграции | App/env registry, keys/rotation, quotas, diagnostics, единый Voice Node bundle с одним экземпляром сервисов, backup/restore, support docs | Установка на чистом хосте, общие config/version/upgrade, оператор восстанавливает ноду без ручной сборки микросервисов |
 | GI9: общая приёмка | GI0–GI8 | HerdTrip-, MMO- и Dejavu-like reference flows на общем продукте | Вся acceptance matrix, packaged artifacts и единый evidence package |
 
 GI0 закрывает контракты по мере потребности, не отдельным спринтом. После нужных
@@ -88,6 +88,8 @@ Gateway/SDK и старые credentials. Все game IDs и secrets — syntheti
 | ID15 | Подмена actor/chat/body/env подписанного сообщения, replay, отозванный device key | Receiver rejects tampering/revoked key; retry одного сообщения не создаёт дубль |
 | ID16 | SDK-клиент подписывает сообщение по вызову кода игры | Гарантия ограничена авторизованным клиентом; продукт не заявляет proof человеческого намерения против разработчика executable |
 | FED-AUTH | Нода A вызывает чужой Space/RPC, выбирает внутренний NATS subject или использует истёкший/отозванный grant | Reject; нет доступа к master NATS, нет подделки user authorship; active stream revoke проверен |
+| FED-BUNDLE | Чистый хост, единый node config, установка/регистрация bundle | По одному экземпляру нужных компонентов; два Space, SDK/messenger content и media работают; внутренние порты/credentials изолированы |
+| FED-UPGRADE | Restart, upgrade, component failure и backup/restore единого bundle | Проверенные migrations/recovery/readiness, сохранённые service boundaries и lifecycle fences; maintenance явно виден, нет обещания HA/zero downtime |
 | SE01 | Повтор CreateSession, потеря ответа, restart orchestrator | Одна session/группа/комната и прежний operation result |
 | SE02 | Crash после Chat create до Voice ready | Reconcile достраивает либо безопасно убирает owned resources |
 | SE03 | Три матча одной party | Общая разрешённая party-группа, независимые match lifecycles |

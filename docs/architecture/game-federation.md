@@ -298,6 +298,59 @@ RPO/RTO и пользовательское уведомление (G10).
 
 ## 12. Эксплуатационный gate
 
+### Единый дистрибутив Voice Node
+
+Решение владельца: федерационная нода поставляется как единый устанавливаемый
+и обновляемый продукт, с одним экземпляром каждого необходимого сервиса.
+Это монолит с точки зрения эксплуатации, но не обязательный единый executable.
+Существующие сервисы сохраняют процессы, внутренние API и ownership данных;
+им не требуется знать, что они запущены внутри общего дистрибутива. Переписывать
+их в один процесс, дублировать экземпляры и вводить Kubernetes для базового
+развёртывания не требуется. Один хост — базовая deployment topology.
+
+Предлагаемый механизм поставки — versioned bundle с контейнерным manifest,
+bootstrap/management CLI и совместимыми закреплёнными версиями компонентов.
+Конкретный runtime/формат утверждается в GI6/GI8. Оператор задаёт единый node
+config: адрес/DNS, регистрацию, storage paths, media/network параметры и лимиты.
+Bootstrap формирует внутренние настройки и отдельные service credentials;
+единый конфиг не означает общий привилегированный пароль всех процессов.
+
+| Слой bundle | Состав и границы |
+|---|---|
+| Внешний вход и связь | Node edge/S2S, TLS, registry, authority projection |
+| Контент | Messaging, File, Search и необходимые metadata projections |
+| Голос | Voice control, LiveKit, TURN при необходимости, media enforcement |
+| Локальная инфраструктура | Требуемые БД, object storage, cache/bus; один экземпляр каждого необходимого компонента |
+| Управление | Install/register/start/stop/status, upgrade, backup/restore, diagnostics |
+
+Auth/User authority, Game Integration Service, глобальный matchmaking, billing
+и master Notification не копируются на ноду. Один физический database instance
+может обслуживать несколько отдельных service databases/users при совместимости
+движка; общие таблицы, cross-service SQL и master credentials запрещены.
+Внутренние API, БД и NATS не публикуются наружу; public endpoints и media ports
+перечислены явно. Разные processes сохраняют свои ACL и минимальные credentials.
+
+Оператор работает с версией всего Voice Node. Release manifest фиксирует полный
+набор совместимых images/binaries, migrations и protocol versions. Обновление
+выполняет preflight, backup, при необходимости drain/maintenance, миграции и
+readiness; не обещает zero downtime на одном экземпляре. После несовместимой
+миграции нельзя просто запустить старые binaries: требуется проверенный путь
+restore/recovery с учётом уже подтверждённых writes. Lifecycle fences и
+master reconciliation обязательны и после восстановления всего bundle.
+
+Один хост/экземпляр не даёт HA: его отказ делает соответствующие Space временно
+недоступными. Это принятый базовый topology tradeoff, а не обещание достаточной
+производительности для любой игры. Capacity проверяется до допуска нагрузки;
+исчерпание ресурсов приводит к backpressure/лимитам, а не обходу admission.
+Раздельное масштабирование не является обязательной подзадачей этого спринта.
+
+Приёмка: чистый хост → установка из bundle → регистрация → два Space → чат,
+файлы, поиск и голос из SDK/мессенджера; затем перезапуск, обновление, отказ
+внутреннего компонента и backup/restore. Проверить отсутствие публичных внутренних
+портов и отсутствие необходимости вручную настраивать каждый микросервис.
+
+### Проверки эксплуатации
+
 Нужны versioned deployment profile, TLS/DNS/egress requirements, storage/SFU
 capacity, backups с restore proof, upgrade/rollback, health/capability negotiation,
 queue lag и lease-expiry metrics, rate limits и tenant isolation. Global readiness

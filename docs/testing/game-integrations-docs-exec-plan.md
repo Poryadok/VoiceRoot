@@ -132,5 +132,10 @@ deferrals with dependent subtasks GI0–GI9 and one acceptance result, including
 sdk-account conversions, both engines, bots, communities and federation. Existing
 platform exclusions stay explicit; sprint scheduling and runtime readiness are
 not asserted by documentation. Synced the branch with origin/master via merge.
+Owner node packaging decision: one versioned Voice Node distribution, one instance
+of each required service/infrastructure component on a baseline single host.
+Preserve internal APIs, stores and credentials; unified install/config/upgrade/
+backup does not require rewriting services into one process. Added bundle and
+upgrade acceptance with explicit downtime/recovery and no baseline HA promise.
 Scoped local Markdown link checks and diff whitespace checks passed; runtime
 remains unchanged and untested by this documentation-only follow-up.
