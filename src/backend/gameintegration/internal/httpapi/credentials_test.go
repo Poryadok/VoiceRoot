@@ -14,7 +14,8 @@ import (
 )
 
 type testCredentialStore struct {
-	issued registry.IssueCredentialInput
+	issued  registry.IssueCredentialInput
+	revoked [4]uuid.UUID
 }
 
 func (s *testCredentialStore) CreateApplication(context.Context, registry.CreateApplicationInput) (registry.Application, error) {
@@ -24,6 +25,11 @@ func (s *testCredentialStore) CreateApplication(context.Context, registry.Create
 func (s *testCredentialStore) IssueCredential(_ context.Context, in registry.IssueCredentialInput) (registry.Credential, error) {
 	s.issued = in
 	return registry.Credential{ID: uuid.New(), EnvironmentID: in.EnvironmentID, Scopes: in.Scopes, Secret: "secret", Generation: 1}, nil
+}
+
+func (s *testCredentialStore) RevokeCredential(_ context.Context, owner, app, env, credential uuid.UUID) error {
+	s.revoked = [4]uuid.UUID{owner, app, env, credential}
+	return nil
 }
 
 func TestCredentialIssueDerivesOwnerAndRequiresDeploymentKey(t *testing.T) {
@@ -49,4 +55,17 @@ func TestCredentialIssueDerivesOwnerAndRequiresDeploymentKey(t *testing.T) {
 	require.Equal(t, envID, store.issued.EnvironmentID)
 	require.Equal(t, []string{"game.events.write"}, store.issued.Scopes)
 	require.NotContains(t, w.Body.String(), owner.String())
+}
+
+func TestCredentialRevokeRequiresVerifiedOwner(t *testing.T) {
+	owner, appID, envID, credentialID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	store := &testCredentialStore{}
+	h := NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "regular"}}, store)
+	r := httptest.NewRequest(http.MethodDelete, "/api/v1/game-integrations/applications/"+appID.String()+
+		"/environments/"+envID.String()+"/credentials/"+credentialID.String(), nil)
+	r.Header.Set("Authorization", "Bearer player-token")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, [4]uuid.UUID{owner, appID, envID, credentialID}, store.revoked)
 }

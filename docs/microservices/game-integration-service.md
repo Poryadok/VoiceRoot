@@ -63,8 +63,12 @@ endpoint is unavailable until `GAME_INTEGRATION_CREDENTIAL_KEY_B64` contains
 one base64-encoded 32-byte deployment secret. It must be supplied via the
 deployment secret manager; it is not a development default. The key must be
 retained while issued credentials remain valid; replacing it invalidates
-their HMAC verification and requires reissue. Credential authentication,
-revoke and production admission remain separate dependent steps.
+their HMAC verification and requires reissue. Service credential verification
+checks the digest, required scope, app/env state, expiry and revocation from
+the registry database on each call. `DELETE /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/credentials/{credential_id}`
+revokes an owned credential immediately and is idempotent. Production
+admission and a live game-service operation consuming the verifier remain
+dependent steps.
 
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint

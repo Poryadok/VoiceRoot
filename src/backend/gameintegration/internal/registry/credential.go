@@ -20,6 +20,7 @@ import (
 var (
 	ErrInvalidCredentialRequest = errors.New("invalid credential request")
 	ErrCredentialRevealExpired  = errors.New("credential retry reveal expired")
+	ErrInvalidServiceCredential = errors.New("invalid service credential")
 )
 
 var allowedServiceScopes = []string{
