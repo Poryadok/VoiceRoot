@@ -1,5 +1,9 @@
 # Bot Service
 
+Игровые сценарии и source audit baseline: [game-bot-interactions.md](../features/game-bot-interactions.md).
+Новые card/command/opt-in contracts там помечены **proposed**; существующие RPC
+и scopes этого документа не получают новые гарантии доставки автоматически.
+
 ## Обзор
 
 Платформа для ботов: реестр приложений, slash-команды, webhook-доставка, install в спейс, presence.

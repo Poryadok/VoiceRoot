@@ -342,6 +342,12 @@ Space↔Voice bearer; его нельзя расширять или исполь
 
 ## Федерация (S2S API)
 
+Уточнение для игрового сценария — [Game federation (proposed)](architecture/game-federation.md).
+Оно явно описывает замену legacy fallback/sync semantics ниже для будущих game
+nodes; не является утверждением о текущем runtime. SDK и Bot contracts собраны
+в [game integrations](features/game-integrations.md); их активация требует
+отдельного milestone и не меняет deferred status федерации.
+
 - **Real-time синхронизация**: gRPC bidirectional stream — нода открывает persistent stream на master, подписывается на события своих спейсов (`RoleChanged`, `UserBanned`, `Defederated`)
 - **Fallback**: auth-токен с TTL 5-10 мин; если стрим упал — кэш действует до TTL, затем форс ре-авторизация
 - **Маршрутизация уведомлений**: нода → `POST /s2s/notify { user_id, type, space_id, preview }` → master доставляет через FCM/APNs; при недоступности master — in-memory retry ~5 мин, затем дроп

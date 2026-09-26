@@ -231,6 +231,23 @@ Server **не** синхронизирует per-profile GIF recents cross-devic
 
 ---
 
+## Игровые интеграции (proposed target)
+
+Эти термины относятся к [проекту игровых интеграций](features/game-integrations.md),
+а не к уже реализованному SDK:
+
+| Термин | Определение |
+|---|---|
+| Game application | Зарегистрированное приложение разработчика; не запись game_id каталога ММ |
+| Environment | Sandbox/production контур приложения с изолированными credentials и данными |
+| Player binding | Подтверждённая связь игровой identity с выбранным профилем Voice |
+| Character binding | Привязка персонажа игры; не отдельный профиль Voice и не новый аккаунт |
+| Communication session | Управляемая игрой связка party/match/fleet с chat_id и voice_room_id |
+| Managed grant | Разрешение, полученное из конкретной причины membership/rank игры |
+| Game node | Зарегистрированная нода хранения контента игровых Space в общей сети Voice |
+| Authority lease | Ограниченное по времени право применять конкретную актуальную authorization projection |
+| Game action / command | Предложенное действие / принятый приказ серверу игры с отдельным результатом |
+
 ## Связанные документы
 
 | Документ                                | Зачем                                                                   |

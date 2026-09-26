@@ -2,7 +2,7 @@
 
 Краткий индекс всех фич проекта. Детальное описание — в файлах по ссылкам.
 
-**Scope** (канон — [PLAN.md](PLAN.md)): **`current`** — в спеке, реализовать сейчас; **`partial`** — спека есть, код неполный; **`deferred`** — только федерация и её подфичи.
+**Scope** (канон — [PLAN.md](PLAN.md)): **`current`** — в спеке, реализовать сейчас; **`partial`** — спека есть, код неполный; **`deferred`** — федерация и её подфичи; **`proposed`** — проектирование по запросу владельца, без включения в очередь реализации.
 
 ## Коммуникация
 
@@ -39,6 +39,8 @@
 |-------------|---------------------------------------------|-------|------------------------------------------------------------------|
 | Матчмейкинг | [matchmaking.md](features/matchmaking.md)   | partial | Поиск тиммейтов по игре/рангу/ролям — глобальный и внутри спейса |
 | Каталог игр | [game-catalog.md](features/game-catalog.md) | current | Справочник игр для ММ: страница игры, режимы, роли, UX каталога  |
+| Интеграции игр | [game-integrations.md](features/game-integrations.md) | proposed | Game API, Unity/Unreal SDK, party и MMO communities; отдельные identity и activation gates |
+| Игровые события и команды | [game-bot-interactions.md](features/game-bot-interactions.md) | proposed | Bot source audit, durable команды, интерактивные карточки и opt-in уведомления |
 
 ## Безопасность и доверие
 
@@ -76,4 +78,3 @@
 | Наблюдаемость        | [observability.md](features/observability.md) | partial | Логи (Loki), метрики (Prometheus), Grafana, алерты                                    |
 | Продуктовая аналитика | [analytics.md](features/analytics.md)     | partial | ClickHouse, NATS ingest, staff dashboards, воронки/retention, export с audit log      |
 | Федерация            | [federation.md](features/federation.md)       | deferred | Self-hosted ноды — **deferred** (по запросу рынка); спека и scaffold в репозитории |
-

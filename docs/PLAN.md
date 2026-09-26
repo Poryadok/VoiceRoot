@@ -35,6 +35,16 @@ Scope разделён явно:
 - `post-alpha committed scope` — остаток `A5`, `A6–A7`, затем отдельные milestones для mobile, verification, bots и stories по данным `G1`; эти фичи не deferred, но не получают WIP до entry review после alpha;
 - `deferred` — только federation и её производные, пока владелец отдельно не изменит scope.
 
+## Проектирование игровых интеграций
+
+По запросу владельца подготовлен [proposed target игровых интеграций](features/game-integrations.md):
+Game API, Unity/Unreal SDK, MMO communities, [игровые боты](features/game-bot-interactions.md)
+и [game federation](architecture/game-federation.md). Это документация, не новый
+активный milestone и не изменение A1/WIP или G0–G4. Федерация остаётся deferred.
+Будущие dependency stages, открытые решения и acceptance —
+[game-integrations-acceptance.md](testing/game-integrations-acceptance.md).
+Статус `proposed` в FEATURES не означает обещание релиза или готовность runtime.
+
 ## PLAN и TODO
 
 | Источник | Назначение |

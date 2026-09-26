@@ -1,5 +1,11 @@
 # Federation Service
 
+Для будущих game nodes подготовлен [proposed design](../architecture/game-federation.md).
+Он разрешает известные неоднозначности старого текста: snapshot против replay,
+master/node ownership и permission-cache против media revoke SLA. До принятия
+контрактов этот документ/proto остаётся scaffold/deferred; наличие таблиц ниже
+не означает разрешение provisioning или реализованную семантику game federation.
+
 ## Обзор
 
 S2S-федерация: подключение внешних нод, синхронизация событий, маршрутизация уведомлений. Master ↔ Node архитектура.
@@ -160,5 +166,4 @@ Events (Node → Master):
 - **Notification Service** — relay push-уведомлений от нод
 - **Role Service** — (через NATS) синхронизация ролей
 - **Moderation Service** — (через NATS) обработка жалоб с нод
-
 
