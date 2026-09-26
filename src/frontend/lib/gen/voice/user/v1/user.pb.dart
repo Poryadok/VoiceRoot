@@ -5039,6 +5039,594 @@ class MarkAccountRegularResponse extends $pb.GeneratedMessage {
   static MarkAccountRegularResponse? _defaultInstance;
 }
 
+class GetSdkProfileEligibilityRequest extends $pb.GeneratedMessage {
+  factory GetSdkProfileEligibilityRequest({
+    $core.String? accountId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  GetSdkProfileEligibilityRequest._();
+
+  factory GetSdkProfileEligibilityRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSdkProfileEligibilityRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSdkProfileEligibilityRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSdkProfileEligibilityRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSdkProfileEligibilityRequest copyWith(
+          void Function(GetSdkProfileEligibilityRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetSdkProfileEligibilityRequest))
+          as GetSdkProfileEligibilityRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSdkProfileEligibilityRequest create() =>
+      GetSdkProfileEligibilityRequest._();
+  @$core.override
+  GetSdkProfileEligibilityRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSdkProfileEligibilityRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSdkProfileEligibilityRequest>(
+          create);
+  static GetSdkProfileEligibilityRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class GetSdkProfileEligibilityResponse extends $pb.GeneratedMessage {
+  factory GetSdkProfileEligibilityResponse({
+    $core.String? accountId,
+    $core.String? profileId,
+    $fixnum.Int64? profileRevision,
+    $core.bool? deleted,
+    $core.bool? frozen,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (profileId != null) result.profileId = profileId;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (deleted != null) result.deleted = deleted;
+    if (frozen != null) result.frozen = frozen;
+    return result;
+  }
+
+  GetSdkProfileEligibilityResponse._();
+
+  factory GetSdkProfileEligibilityResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSdkProfileEligibilityResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSdkProfileEligibilityResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOB(4, _omitFieldNames ? '' : 'deleted')
+    ..aOB(5, _omitFieldNames ? '' : 'frozen')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSdkProfileEligibilityResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSdkProfileEligibilityResponse copyWith(
+          void Function(GetSdkProfileEligibilityResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetSdkProfileEligibilityResponse))
+          as GetSdkProfileEligibilityResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSdkProfileEligibilityResponse create() =>
+      GetSdkProfileEligibilityResponse._();
+  @$core.override
+  GetSdkProfileEligibilityResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSdkProfileEligibilityResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSdkProfileEligibilityResponse>(
+          create);
+  static GetSdkProfileEligibilityResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get profileRevision => $_getI64(2);
+  @$pb.TagNumber(3)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileRevision() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileRevision() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.bool get deleted => $_getBF(3);
+  @$pb.TagNumber(4)
+  set deleted($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDeleted() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDeleted() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.bool get frozen => $_getBF(4);
+  @$pb.TagNumber(5)
+  set frozen($core.bool value) => $_setBool(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasFrozen() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearFrozen() => $_clearField(5);
+}
+
+class RecordSdkAuthorTombstoneRequest extends $pb.GeneratedMessage {
+  factory RecordSdkAuthorTombstoneRequest({
+    $core.int? version,
+    $core.String? operationId,
+    $core.String? sourceAccountId,
+    $core.String? sourceActorId,
+    $core.String? targetAccountId,
+    $core.String? targetProfileId,
+    $fixnum.Int64? expectedProfileRevision,
+    $core.String? frozenBindingId,
+    $fixnum.Int64? frozenAuthorityEpoch,
+    $core.String? freezeReceiptId,
+    $core.String? requestHash,
+  }) {
+    final result = create();
+    if (version != null) result.version = version;
+    if (operationId != null) result.operationId = operationId;
+    if (sourceAccountId != null) result.sourceAccountId = sourceAccountId;
+    if (sourceActorId != null) result.sourceActorId = sourceActorId;
+    if (targetAccountId != null) result.targetAccountId = targetAccountId;
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    if (expectedProfileRevision != null)
+      result.expectedProfileRevision = expectedProfileRevision;
+    if (frozenBindingId != null) result.frozenBindingId = frozenBindingId;
+    if (frozenAuthorityEpoch != null)
+      result.frozenAuthorityEpoch = frozenAuthorityEpoch;
+    if (freezeReceiptId != null) result.freezeReceiptId = freezeReceiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    return result;
+  }
+
+  RecordSdkAuthorTombstoneRequest._();
+
+  factory RecordSdkAuthorTombstoneRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecordSdkAuthorTombstoneRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecordSdkAuthorTombstoneRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'version', fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'sourceAccountId')
+    ..aOS(4, _omitFieldNames ? '' : 'sourceActorId')
+    ..aOS(5, _omitFieldNames ? '' : 'targetAccountId')
+    ..aOS(6, _omitFieldNames ? '' : 'targetProfileId')
+    ..a<$fixnum.Int64>(7, _omitFieldNames ? '' : 'expectedProfileRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(8, _omitFieldNames ? '' : 'frozenBindingId')
+    ..a<$fixnum.Int64>(
+        9, _omitFieldNames ? '' : 'frozenAuthorityEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(10, _omitFieldNames ? '' : 'freezeReceiptId')
+    ..aOS(11, _omitFieldNames ? '' : 'requestHash')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordSdkAuthorTombstoneRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordSdkAuthorTombstoneRequest copyWith(
+          void Function(RecordSdkAuthorTombstoneRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RecordSdkAuthorTombstoneRequest))
+          as RecordSdkAuthorTombstoneRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecordSdkAuthorTombstoneRequest create() =>
+      RecordSdkAuthorTombstoneRequest._();
+  @$core.override
+  RecordSdkAuthorTombstoneRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecordSdkAuthorTombstoneRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecordSdkAuthorTombstoneRequest>(
+          create);
+  static RecordSdkAuthorTombstoneRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get version => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set version($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sourceAccountId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sourceAccountId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSourceAccountId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSourceAccountId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get sourceActorId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set sourceActorId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSourceActorId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSourceActorId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get targetAccountId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set targetAccountId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasTargetAccountId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearTargetAccountId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get targetProfileId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set targetProfileId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTargetProfileId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTargetProfileId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get expectedProfileRevision => $_getI64(6);
+  @$pb.TagNumber(7)
+  set expectedProfileRevision($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasExpectedProfileRevision() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearExpectedProfileRevision() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get frozenBindingId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set frozenBindingId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasFrozenBindingId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearFrozenBindingId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $fixnum.Int64 get frozenAuthorityEpoch => $_getI64(8);
+  @$pb.TagNumber(9)
+  set frozenAuthorityEpoch($fixnum.Int64 value) => $_setInt64(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasFrozenAuthorityEpoch() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearFrozenAuthorityEpoch() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.String get freezeReceiptId => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set freezeReceiptId($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasFreezeReceiptId() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearFreezeReceiptId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get requestHash => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set requestHash($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasRequestHash() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearRequestHash() => $_clearField(11);
+}
+
+class RecordSdkAuthorTombstoneResponse extends $pb.GeneratedMessage {
+  factory RecordSdkAuthorTombstoneResponse({
+    $core.int? version,
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.String? sourceAccountId,
+    $core.String? sourceActorId,
+    $core.String? targetAccountId,
+    $core.String? targetProfileId,
+    $fixnum.Int64? profileRevision,
+    $fixnum.Int64? tombstoneRevision,
+    $core.String? frozenBindingId,
+    $fixnum.Int64? frozenAuthorityEpoch,
+    $core.String? freezeReceiptId,
+    $core.String? requestHash,
+    $1.Timestamp? committedAt,
+  }) {
+    final result = create();
+    if (version != null) result.version = version;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (sourceAccountId != null) result.sourceAccountId = sourceAccountId;
+    if (sourceActorId != null) result.sourceActorId = sourceActorId;
+    if (targetAccountId != null) result.targetAccountId = targetAccountId;
+    if (targetProfileId != null) result.targetProfileId = targetProfileId;
+    if (profileRevision != null) result.profileRevision = profileRevision;
+    if (tombstoneRevision != null) result.tombstoneRevision = tombstoneRevision;
+    if (frozenBindingId != null) result.frozenBindingId = frozenBindingId;
+    if (frozenAuthorityEpoch != null)
+      result.frozenAuthorityEpoch = frozenAuthorityEpoch;
+    if (freezeReceiptId != null) result.freezeReceiptId = freezeReceiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    if (committedAt != null) result.committedAt = committedAt;
+    return result;
+  }
+
+  RecordSdkAuthorTombstoneResponse._();
+
+  factory RecordSdkAuthorTombstoneResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecordSdkAuthorTombstoneResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecordSdkAuthorTombstoneResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'version', fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'sourceAccountId')
+    ..aOS(5, _omitFieldNames ? '' : 'sourceActorId')
+    ..aOS(6, _omitFieldNames ? '' : 'targetAccountId')
+    ..aOS(7, _omitFieldNames ? '' : 'targetProfileId')
+    ..a<$fixnum.Int64>(
+        8, _omitFieldNames ? '' : 'profileRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        9, _omitFieldNames ? '' : 'tombstoneRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(10, _omitFieldNames ? '' : 'frozenBindingId')
+    ..a<$fixnum.Int64>(
+        11, _omitFieldNames ? '' : 'frozenAuthorityEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(12, _omitFieldNames ? '' : 'freezeReceiptId')
+    ..aOS(13, _omitFieldNames ? '' : 'requestHash')
+    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'committedAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordSdkAuthorTombstoneResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordSdkAuthorTombstoneResponse copyWith(
+          void Function(RecordSdkAuthorTombstoneResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RecordSdkAuthorTombstoneResponse))
+          as RecordSdkAuthorTombstoneResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecordSdkAuthorTombstoneResponse create() =>
+      RecordSdkAuthorTombstoneResponse._();
+  @$core.override
+  RecordSdkAuthorTombstoneResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecordSdkAuthorTombstoneResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecordSdkAuthorTombstoneResponse>(
+          create);
+  static RecordSdkAuthorTombstoneResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get version => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set version($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get sourceAccountId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set sourceAccountId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSourceAccountId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSourceAccountId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get sourceActorId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set sourceActorId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSourceActorId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSourceActorId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get targetAccountId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set targetAccountId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTargetAccountId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTargetAccountId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get targetProfileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set targetProfileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasTargetProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearTargetProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get profileRevision => $_getI64(7);
+  @$pb.TagNumber(8)
+  set profileRevision($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasProfileRevision() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearProfileRevision() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $fixnum.Int64 get tombstoneRevision => $_getI64(8);
+  @$pb.TagNumber(9)
+  set tombstoneRevision($fixnum.Int64 value) => $_setInt64(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasTombstoneRevision() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearTombstoneRevision() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.String get frozenBindingId => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set frozenBindingId($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasFrozenBindingId() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearFrozenBindingId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $fixnum.Int64 get frozenAuthorityEpoch => $_getI64(10);
+  @$pb.TagNumber(11)
+  set frozenAuthorityEpoch($fixnum.Int64 value) => $_setInt64(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasFrozenAuthorityEpoch() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearFrozenAuthorityEpoch() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.String get freezeReceiptId => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set freezeReceiptId($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasFreezeReceiptId() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearFreezeReceiptId() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.String get requestHash => $_getSZ(12);
+  @$pb.TagNumber(13)
+  set requestHash($core.String value) => $_setString(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasRequestHash() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearRequestHash() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $1.Timestamp get committedAt => $_getN(13);
+  @$pb.TagNumber(14)
+  set committedAt($1.Timestamp value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasCommittedAt() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearCommittedAt() => $_clearField(14);
+  @$pb.TagNumber(14)
+  $1.Timestamp ensureCommittedAt() => $_ensure(13);
+}
+
 enum SearchProfileProjectionEvent_Payload { upsert, delete, notSet }
 
 class SearchProfileProjectionEvent extends $pb.GeneratedMessage {

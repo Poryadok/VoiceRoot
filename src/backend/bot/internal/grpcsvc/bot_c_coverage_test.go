@@ -192,7 +192,6 @@ commands:
 	require.True(t, resp.GetPending(), "polling bot autocomplete must return pending=true until CompleteAutocomplete")
 }
 
-
 func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -434,13 +433,15 @@ func TestDeferResponse_marksEventDeferred(t *testing.T) {
 	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
 	defer cleanup()
 
-	ctx, botID, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"x": 1}, token)
+	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
+	}, token)
 	require.NoError(t, err)
 	hub.Register(token)
 
@@ -656,6 +657,36 @@ func TestCompleteInteraction_recoveryWithoutHubWaiter(t *testing.T) {
 	require.Equal(t, "recovered", msg.lastContent)
 }
 
+func TestCompleteInteraction_afterPollDelivery(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	token := "poll-" + uuid.NewString()
+	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		"chat_id":            chatID.String(),
+		"chat_type":          "CHAT_TYPE_CHANNEL",
+		"invoker_profile_id": uuid.NewString(),
+	}, token)
+	require.NoError(t, err)
+	waiter := hub.Register(token)
+	require.NoError(t, st.MarkEventDelivered(ctx, eventID))
+
+	_, err = client.CompleteInteraction(withBotToken(context.Background(), botToken), &botv1.CompleteInteractionRequest{
+		InteractionToken: token,
+		Content:          "polled",
+	})
+	require.NoError(t, err)
+	reply := <-waiter
+	require.Equal(t, "polled", reply.Content)
+}
+
 func TestUninstallBotFromSpace_removesSpaceMember(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -701,13 +732,17 @@ func TestSendBotMessage_completesPendingHubInteraction(t *testing.T) {
 	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
 	defer cleanup()
 
-	_, _, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "hub-" + uuid.NewString()
+	_, err := st.EnqueueEvent(ctx, uuid.MustParse(botID), "interaction", map[string]any{
+		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
+	}, token)
+	require.NoError(t, err)
 	hub.Register(token)
 
-	_, err := client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
+	_, err = client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
 		InteractionToken: &token,
 		Content:          "via hub",
 	})
@@ -848,13 +883,15 @@ func TestCompleteInteraction_defersViaHub(t *testing.T) {
 	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
 	defer cleanup()
 
-	ctx, botID, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-hub-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"x": 1}, token)
+	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
+	}, token)
 	require.NoError(t, err)
 	hub.Register(token)
 
@@ -1279,7 +1316,7 @@ func TestCreateBotChat_failedPreconditionWithoutChatClient(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, st, cleanup := startBotGRPC(t)
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{noChatClient: true})
 	defer cleanup()
 
 	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
@@ -1309,7 +1346,7 @@ func TestSendBotMessage_deferredRequiresContent(t *testing.T) {
 
 	token := "defer-empty-" + uuid.NewString()
 	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
-		"chat_id": chatID.String(),
+		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
 	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))

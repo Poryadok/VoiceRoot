@@ -72,6 +72,11 @@ func main() {
 		wireDownstream(svc, logger)
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
+		slashWorkerCtx, stopSlashWorker := context.WithCancel(context.Background())
+		defer stopSlashWorker()
+		for i := 0; i < 4; i++ {
+			go svc.RunSlashOutbox(slashWorkerCtx)
+		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := botevents.NewJetStreamPublisher(natsURL)
 			if err != nil {

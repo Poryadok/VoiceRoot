@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -30,7 +28,7 @@ func TestRegisterAndGetCommands(t *testing.T) {
 	botID := reg.GetBot().GetId()
 
 	_, err = client.RegisterCommands(ctx, &botv1.RegisterCommandsRequest{
-		BotId: botID,
+		BotId:        botID,
 		CommandsJson: `[{"name":"ping","description":"ping","options":[]}]`,
 	})
 	require.NoError(t, err)
@@ -75,7 +73,7 @@ func TestChatWhitelist_roundTrip(t *testing.T) {
 	require.Len(t, whitelist.GetAllowedChats(), 1)
 }
 
-func TestExecuteSlashInteraction_webhookFailureMarksEventLog(t *testing.T) {
+func TestExecuteSlashInteraction_webhookFailureRetainsEventForRetry(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -115,14 +113,13 @@ commands:
 	_, err = client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{
 		Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &chatType}, BotId: botID, CommandName: "ping",
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.NoError(t, err)
 
 	var deliveryStatus string
 	err = st.Pool.QueryRow(ctx, `
 SELECT delivery_status FROM bot_event_log WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 1`, botUUID).Scan(&deliveryStatus)
 	require.NoError(t, err)
-	require.Equal(t, "failed", deliveryStatus)
+	require.Equal(t, "pending", deliveryStatus)
 }
 
 func TestRegenerateToken(t *testing.T) {

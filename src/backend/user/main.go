@@ -62,6 +62,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user search projection principal config: %v", err)
 	}
+	authPrincipalConfig, authPrincipalEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "auth", "USER_AUTH_PRINCIPAL_", ":9094")
+	if err != nil {
+		log.Fatalf("user SDK conversion principal config: %v", err)
+	}
 	searchProjectionCursorKey, err := searchprojection.CursorKeyFromEnv(searchPrincipalEnabled, os.Getenv)
 	if err != nil {
 		log.Fatalf("user search projection cursor config: %v", err)
@@ -102,6 +106,17 @@ func main() {
 			log.Fatalf("user search projection principal: %v", err)
 		}
 		defer func() { _ = searchProjectionRuntime.Close() }()
+	}
+	var authSdkRuntime *socialprincipal.Runtime
+	if authPrincipalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user SDK conversion principal requires DATABASE_URL")
+		}
+		authSdkRuntime, err = socialprincipal.New(context.Background(), authPrincipalConfig)
+		if err != nil {
+			log.Fatalf("user SDK conversion principal: %v", err)
+		}
+		defer func() { _ = authSdkRuntime.Close() }()
 	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
@@ -353,6 +368,22 @@ func main() {
 			go func() {
 				if err := searchProjectionServer.Serve(searchProjectionListener); err != nil {
 					log.Fatalf("user search projection principal serve: %v", err)
+				}
+			}()
+		}
+		if authSdkRuntime != nil {
+			authSDKListener, err := net.Listen("tcp", authPrincipalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user SDK conversion principal listen: %v", err)
+			}
+			authSDKOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			authSDKOptions = append(authSDKOptions, authSdkRuntime.ServerOptions()...)
+			authSDKServer := grpc.NewServer(authSDKOptions...)
+			grpcsvc.RegisterSdkConversionServer(authSDKServer, userSvc.Profiles)
+			defer authSDKServer.Stop()
+			go func() {
+				if err := authSDKServer.Serve(authSDKListener); err != nil {
+					log.Fatalf("user SDK conversion principal serve: %v", err)
 				}
 			}()
 		}

@@ -250,7 +250,7 @@ commands:
 	require.Equal(t, "CS2", resp.GetChoices()[0].GetName())
 }
 
-func TestExecuteSlashInteraction_timeoutWritesEventLog(t *testing.T) {
+func TestExecuteSlashInteraction_timeoutRetainsPendingEvent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -290,7 +290,7 @@ commands:
 	err = st.Pool.QueryRow(ctx, `
 SELECT delivery_status FROM bot_event_log WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 1`, botUUID).Scan(&status)
 	require.NoError(t, err)
-	require.Equal(t, "timeout", status)
+	require.Equal(t, "pending", status)
 }
 
 func TestUninstallAndListInstalledBots(t *testing.T) {
