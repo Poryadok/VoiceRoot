@@ -171,6 +171,11 @@ public class SdkIdentityService {
     return authenticated(token, proof, "authorize", "\n" + requestHash);
   }
 
+  Session prepareConversion(String token, String proof, UUID key, UUID binding) {
+    SdkConversionProofs.preparePayload("new", token, key, binding);
+    return authenticated(token, proof, "conversion-new", "\n" + key + "\n" + binding);
+  }
+
   void requireAdmitted(UUID applicationId, UUID environmentId) {
     admitted(applicationId, environmentId);
   }

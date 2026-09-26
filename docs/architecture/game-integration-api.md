@@ -127,6 +127,60 @@ Claim/upgrade требует proof обеих identity, описанного con
 
 ### Конвертация sdk-account
 
+#### Auth durable conversion preparation GAME-AUTH-03
+
+Auth создаёт durable operation до внешних owner effects. Новый target начинается
+с current SDK credential и device proof; существующий — с linked-bootstrap
+credential GAME-AUTH-02 и тем же device key. Обычный Voice Bearer остаётся в Voice
+browser UI. Prepare фиксирует mode (`new` / `existing`), binding ID, source
+app/env/device/generation и client UUID idempotency key. Повтор key с тем же
+target/binding возвращает прежнюю operation без продления intent; другая нагрузка
+даёт 409. Source account допускает несколько подготовленных intents, но только
+одну подтверждённую conversion; confirmation остаётся отдельным preview/CAS шагом.
+
+Prepare device payload:
+`voice-sdk-conversion-new-v1\n<SHA-256 SDK token>\n<idempotency UUID>\n<binding UUID>`
+или `voice-sdk-conversion-existing-v1\n<SHA-256 linked token>\n<idempotency UUID>\n<binding UUID>`.
+Auth request hash — SHA-256 UTF-8
+`<mode>\n<idempotency UUID>\n<binding UUID>\n<target account UUID or ->\n<target profile UUID or ->`.
+
+New mode выдаёт Auth-owned `registration_intent_id` с TTL 15 минут. Обычный
+Voice registration endpoint принимает optional `registrationIntentId`. В одной
+локальной транзакции создаётся новый account, consumes одноразовый intent и
+записывается его account ID в operation. Неверный/истёкший/использованный intent
+откатывает создание account. Legacy guest registration с intent запрещена.
+Pending email сохраняет обычный registration/OTP lifecycle. Attach target
+требует current Voice proof **ровно записанного** account после перехода в
+regular; существующий раньше account допустим только в existing mode.
+New attach вызывает идемпотентный User EnsurePrimaryProfile, затем read-only
+eligibility именно primary. Existing mode не вызывает provisioning или switch.
+
+Recovery status доступен с сохранённым public device key operation даже после
+отзыва source credential. Это только чтение, не player authority. Payload:
+`voice-sdk-conversion-status-v1\n<operation UUID>\n<issued-at Unix seconds>`;
+Auth принимает timestamp не старше 60 секунд и не дальше 30 секунд в будущем.
+Ни provider credential, ни ordinary Voice token для status не сохраняются.
+Prepare/status/attach ещё не freeze, не transfer и не завершённая conversion.
+Последующие preview, explicit confirmation и owner receipts обязаны следовать
+[conversion authority](game-conversion-authority.md); unavailable adapter
+оставляет durable state без продвижения и никогда не создаёт no-op receipt.
+
+Prepare/status/attach routes отдельно opt-in через `auth.sdk-conversion.enabled`
+и доступны только при JDBC persistence:
+
+| Route | Proof / request | Result |
+|---|---|---|
+| `POST /api/v1/auth/sdk/conversions/new` | SDK Bearer; `idempotencyKey`, `bindingId`, `deviceProof` | prepared operation и registration intent |
+| `POST /api/v1/auth/sdk/conversions/existing` | Linked Bearer; те же поля | prepared operation с ранее выбранным permanent profile |
+| `POST /api/v1/auth/sdk/conversions/{operationId}/status` | `issuedAt` Unix seconds и `deviceProof`; без source Bearer | durable operation state/revision и target/intent IDs |
+| `POST /api/v1/auth/sdk/conversions/{operationId}/attach-new-target` | Current Voice Bearer; без authority fields в body | только зарегистрированный через intent новый target/primary |
+
+Intent consume проверяет current source generation/device и lifecycle, но не
+требует ещё живой пятиминутный bootstrap session. Отзыв устройства запрещает
+consume, сохраняя только purpose-limited status. Unknown fields и malformed
+requests дают безопасный `400`, invalid proof — `401`, изменённая idempotent
+нагрузка — `409`. Registration intent не попадает в parser/validation logs.
+
 #### Auth browser consent GAME-AUTH-02
 
 Этот следующий Auth slice реализует подготовку связи из уже независимо

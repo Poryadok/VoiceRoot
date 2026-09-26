@@ -182,6 +182,14 @@ public class SdkAuthorizationService {
 
   public LinkedSession linkedSession(String token, String proof) {
     token(token);
+    return linkedSession(token, proof, "voice-sdk-linked-v1\n" + SdkIdentityService.hash(token));
+  }
+
+  LinkedSession prepareConversion(String token, String proof, UUID key, UUID binding) {
+    return linkedSession(token, proof, SdkConversionProofs.preparePayload("existing", token, key, binding));
+  }
+
+  private LinkedSession linkedSession(String token, String proof, String payload) {
     return transactions.execute(transaction -> {
       var sessions = jdbc.queryForList("SELECT * FROM sdk_linked_sessions WHERE token_hash=:hash",
           Map.of("hash", SdkIdentityService.hash(token)));
@@ -189,7 +197,7 @@ public class SdkAuthorizationService {
       Row session = new Row(sessions.getFirst());
       Row row = locked(session.id("request_id"));
       String key = source(row, false);
-      SdkIdentityService.possession(key, proof, "voice-sdk-linked-v1\n" + SdkIdentityService.hash(token));
+      SdkIdentityService.possession(key, proof, payload);
       approved(row);
       fresh(session.time("expires_at"));
       return linked(row, session.number("consent_revision"), null, session.time("expires_at"));

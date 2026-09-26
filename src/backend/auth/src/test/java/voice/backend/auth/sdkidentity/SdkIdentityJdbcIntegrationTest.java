@@ -83,7 +83,8 @@ class SdkIdentityJdbcIntegrationTest {
   @BeforeEach
   void initialize() throws Exception {
     jdbc = new NamedParameterJdbcTemplate(source());
-    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_sessions,sdk_devices,sdk_challenges,sdk_identities");
+    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_registration_intents,sdk_conversion_operations,"
+        + "sdk_linked_sessions,sdk_authorizations,sdk_sessions,sdk_devices,sdk_challenges,sdk_identities");
     applications = new HashMap<>();
     admit(app, env, client);
     device = new ECKeyGenerator(Curve.P_256).generate();

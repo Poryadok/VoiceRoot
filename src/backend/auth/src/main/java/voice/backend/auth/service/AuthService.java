@@ -169,6 +169,10 @@ public class AuthService {
   }
 
   public AuthSession register(RegisterCommand command) {
+    if (command.registrationIntentId() != null) {
+      if (command.guest()) throw new AuthException("validation_failed");
+      if (registrationSessionEpochPreparer == null) throw new AuthException("auth_unavailable");
+    }
     String email = normalize(command.email());
     String phone = normalize(command.phone());
     if (command.guest() && (email != null || phone != null)) {
@@ -188,8 +192,12 @@ public class AuthService {
     try {
       if (registrationSessionEpochPreparer != null) {
         RegistrationSessionEpochPreparer.PreparedRegistration registration =
-            registrationSessionEpochPreparer.prepare(
-                email, phone, passwordHash, type, regularEmailVerificationPending);
+            command.registrationIntentId() == null
+                ? registrationSessionEpochPreparer.prepare(
+                    email, phone, passwordHash, type, regularEmailVerificationPending)
+                : registrationSessionEpochPreparer.prepare(
+                    email, phone, passwordHash, type, regularEmailVerificationPending,
+                    command.registrationIntentId());
         account = registration.account();
         prepared = registration.preparedEpoch();
       } else {

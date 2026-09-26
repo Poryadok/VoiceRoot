@@ -149,3 +149,31 @@ Full Auth verification on 2026-09-26: `rtk mvn -B test`, 125 suites / 671
 reported tests, 528 executed/pass, zero failures/errors, 143 skipped due to
 unavailable Docker. This remains a partial local verification result. No live
 Google acceptance, cross-service receipt acceptance or staging deployment ran.
+
+## GAME-AUTH-03 execution plan (in progress)
+
+Sources: GAME-AUTH-03 owning API section and conversion authority v1 contract;
+captain explicitly approved one-use registration intent bound atomically to a
+newly created account, new primary provisioning, device-bound recovery status,
+and existing target proof through GAME-AUTH-02 linked bootstrap.
+
+First bounded cycle: durable prepared operations, idempotent source/device-bound
+new/existing preparation, registration intent expiry/atomic consumption, normal
+registration optional correlation, verified-new-target attach and status after
+source revocation. No owner effects in this cycle. Follow with preview/CAS,
+confirmation/source fence and strict owner receipts against v1 canonical hashes.
+
+Tests first: delegate real PostgreSQL operation/intents tests and registration
+service/REST regression tests independently; review before implementation. Add
+pure device status proof/time boundaries and signed-body tampering cases. Capture
+compile/behavior RED, implement minimum Auth service/repository/normal registration
+integration, then focused Maven and full Auth regressions. Docker skips remain an
+open gate; never replace PostgreSQL with a mock to claim atomicity.
+
+Files: sdkidentity package/tests; RegisterCommand, AuthService registration path,
+RegistrationSessionEpochPreparer, JDBC transaction configuration and register REST
+DTO only; Flyway V17 + mirrored auth_db migration 000018. Preserve existing
+five-argument registration callers and ordinary registration without an intent.
+Separate intent binder has no AuthService dependency, avoiding configuration
+cycles. Independent code review, graphify update and focused commit/push precede
+receipt-orchestration work. PR490 remains draft and staging remains untouched.
