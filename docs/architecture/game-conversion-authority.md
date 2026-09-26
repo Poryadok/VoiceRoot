@@ -53,6 +53,40 @@ developer credentials. Each endpoint stores `(operation_id, stage, hash)` and
 its receipt in one transaction; retries return the identical receipt; a
 different hash returns `409`. No generic service token can invoke them.
 
+Wire version is `v1`. Auth first reads
+`GET /internal/v1/conversions/preview?binding_id={uuid}&target_account_id={uuid}&target_profile_id={uuid}`;
+the response contains `binding_id`, `source_account_id`,
+`binding_revision`, `authority_epoch`, `policy_revision`, `target_occupied`,
+`active_grant_digest` and `preview_revision`. `preview_revision` is the
+SHA-256 hex digest of canonical JSON containing those fields in that order.
+It is computed by Game Integration from current committed state. If the
+binding, roster policy, lifecycle or target occupancy changes, it changes.
+Auth stores the exact preview response and requires the same revision at
+confirm; a mismatch returns `409 PREVIEW_STALE` before freezing anything.
+
+Mutation endpoints are `POST /internal/v1/conversions/{operation_id}/freeze`,
+`/transfer` and `/activate`. Every request has a JSON `version: 1`,
+`binding_id`, `source_account_id`, `target_account_id`,
+`target_profile_id`, `expected_binding_revision`, `expected_authority_epoch`,
+`preview_revision`, and `idempotency_key` equal to `operation_id:stage`.
+`request_hash` is the lower-case SHA-256 hex of canonical JSON excluding
+`request_hash`; both sides verify it. `transfer` also carries
+`freeze_receipt_id`; `activate` carries `transfer_receipt_id`,
+`user_receipt_id`, `user_profile_revision`, `voice_receipt_id` and
+`voice_media_generation`. Fields not relevant to a stage are omitted, not
+silently ignored; unknown fields and versions fail closed.
+
+Each `200` receipt contains `version`, `receipt_id`, `operation_id`, `stage`,
+`request_hash`, `binding_id`, `source_account_id`, `target_account_id`,
+`target_profile_id`, `binding_revision`, `authority_epoch`,
+`policy_revision`, `grant_digest`, `state`, and `committed_at`. Auth checks
+all identity fields, stage, request hash, monotonic revisions/epoch, and
+receipt linkage before advancing its operation. A `202` response has an
+`operation_id`, `stage`, `state: pending`, `retry_after_ms` (100–1000) and no
+receipt ID. A retry never extends authority or command execution leases.
+`409` denotes stale revision, occupied binding or different idempotent body;
+`503` means authority unavailable and is retryable with the same operation.
+
 | Stage | Atomic Game Integration effect | Receipt |
 |---|---|---|
 | `freeze` | Lock binding, check source owner/revision, set `frozen`, increment revision and authority epoch, fence app grants and node authority | `binding_id`, new revision/epoch, source owner, `frozen_at`, receipt ID |
