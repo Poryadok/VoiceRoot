@@ -847,6 +847,7 @@ services:
       GAME_INTEGRATION_JWT_ISSUER: voice-auth
       GAME_INTEGRATION_JWT_AUDIENCE: voice-client
       GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS: ${GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS:-}
+      GAME_INTEGRATION_CREDENTIAL_KEY_B64: ${GAME_INTEGRATION_CREDENTIAL_KEY_B64:-}
     depends_on:
       postgres:
         condition: service_healthy

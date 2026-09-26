@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/google/uuid"
@@ -34,4 +35,12 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	values["GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"] = "not-a-uuid"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS")
+	values["GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"] = ""
+	values["GAME_INTEGRATION_CREDENTIAL_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	config, err = loadConfig(func(name string) string { return values[name] })
+	require.NoError(t, err)
+	require.Len(t, config.CredentialKey, 32)
+	values["GAME_INTEGRATION_CREDENTIAL_KEY_B64"] = "short"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "GAME_INTEGRATION_CREDENTIAL_KEY_B64")
 }
