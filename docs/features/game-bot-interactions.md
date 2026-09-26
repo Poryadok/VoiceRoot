@@ -80,13 +80,42 @@ webhook-бота, чтобы streaming path не забирал его pending o
 имеет стабильного idempotency key. BOT01–13 и новый game action endpoint этим
 slice не закрыты.
 
-Из семи baseline gaps остаются: (2) polling без explicit ACK, поэтому только
-dev; (4) token validation до Hub completion; (5) read-scope фильтр для
-`message.sent`; (6) `thread_parent_id` при обычном post; (7) единая send-scope
-проверка всех send/deferred/recovery путей. Gap (3) закрыт для admission
-`ExecuteSlashInteraction` и повторной webhook доставки, но другие публичные
-Bot routes требуют собственной end-to-end проверки membership. Gap (1)
-закрыт только в пределах описанного slash webhook slice.
+Дополнение T50: production polling отключён без явного
+`BOT_ENABLE_DEV_POLLING=true`; это не leased polling с ACK. Получателей
+`message.sent` выбирают и повторно проверяют с текущим
+`TEXT_CHAT_READ_HISTORY`; отправка обычного и deferred сообщения требует
+`TEXT_CHAT_SEND_MESSAGES`, а `thread_parent_id` передаётся в Messaging.
+Completion, defer и send с interaction token сначала проверяют привязку к
+credential bot, исходному чату, текущему whitelist/scopes и effective
+membership вызывавшего профиля, затем меняют Hub или отправляют сообщение.
+Slash discovery и autocomplete также требуют effective membership; completion
+autocomplete привязан к credential bot. Таким образом семь baseline gaps
+закрыты в Bot-owned путях, кроме production polling: оно остаётся отключённым.
+Полный T50 требует интеграционного прогона с PostgreSQL/Chat/Messaging и проверки
+внешних Gateway маршрутов; здесь есть лишь source и локальные тесты без Docker.
+
+### Граница Bot для T51/T52
+
+Game Integration Service владеет проверкой service principal, app/environment,
+installation, recipient/binding/character, expiry и hash события, а также
+durable inbox/outbox и ответом 202/409. На границу публикации он передаёт
+только проверенный immutable intent: `(app_id, environment_id,
+installation_id, event_id, payload_hash, recipient, character_binding_id,
+expires_at, schema_version, fallback_text, card_revision)`. Повтор с тем же
+`event_id` и hash обязан обращаться к тому же intent и тому же
+`client_message_id`; изменение hash отклоняется до Bot/Messaging send. Bot
+не принимает raw game credential или произвольный account/chat recipient через
+существующий `SendBotMessage`: этот API не содержит нужной authority и
+идемпотентности. Каноническое представление intent и точный межсервисный
+transport нужно зафиксировать с владельцем Game Integration Service перед
+реализацией adapter.
+
+Для T52 сохранение versioned card, canonical actions, app/character attribution,
+forwarding/copy-as-new и history/search ACL принадлежит Messaging contract.
+Bot может переслать лишь проверенную ссылку/структуру карточки через будущий
+типизированный Messaging API; нынешний текстовый `SendBotMessage` не является
+card transport. До согласования схемы и проверяемого потребителя Bot не создаёт
+отдельный card store или обходной JSON в content.
 
 ## 1. Модель приложения и персонажа
 

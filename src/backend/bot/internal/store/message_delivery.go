@@ -38,8 +38,9 @@ SELECT b.id
 FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled AND b.status = 'live'
   AND b.actor_profile_id::text <> $2
-  AND (b.is_polling_mode OR NULLIF(b.webhook_url, '') IS NOT NULL)
-ORDER BY b.id`, chatID, senderProfileID)
+  AND b.scopes @> '["TEXT_CHAT_READ_HISTORY"]'::jsonb
+  AND ((b.is_polling_mode AND $3::bool) OR (NOT b.is_polling_mode AND NULLIF(b.webhook_url, '') IS NOT NULL))
+ORDER BY b.id`, chatID, senderProfileID, DevPollingEnabled())
 	if err != nil {
 		return err
 	}
@@ -63,17 +64,18 @@ ORDER BY b.id`, chatID, senderProfileID)
 		var actorProfileID uuid.UUID
 		var polling bool
 		var webhookURL *string
+		var scopes string
 		err := tx.QueryRow(ctx, `
-SELECT actor_profile_id, is_polling_mode, webhook_url
+SELECT actor_profile_id, is_polling_mode, webhook_url, scopes::text
 FROM bots WHERE id = $1 AND status = 'live'
-FOR SHARE`, botID).Scan(&actorProfileID, &polling, &webhookURL)
+FOR SHARE`, botID).Scan(&actorProfileID, &polling, &webhookURL, &scopes)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		if actorProfileID.String() == senderProfileID || (!polling && strings.TrimSpace(ptrValue(webhookURL)) == "") {
+		if actorProfileID.String() == senderProfileID || !ScopeAllows(scopes, PrivilegedScopeReadHistory) || (polling && !DevPollingEnabled()) || (!polling && strings.TrimSpace(ptrValue(webhookURL)) == "") {
 			continue
 		}
 		var enabled bool
@@ -136,12 +138,13 @@ func (s *BotStore) DeliverMessage(ctx context.Context, d *MessageDelivery, post 
 	var polling bool
 	var url *string
 	var secret string
+	var scopes string
 	err = tx.QueryRow(ctx, `
-SELECT b.is_polling_mode, b.webhook_url, b.webhook_secret
+SELECT b.is_polling_mode, b.webhook_url, b.webhook_secret, b.scopes::text
 FROM bots b JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE b.id = $1 AND w.chat_id = $2 AND w.enabled AND b.status = 'live'
-FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !polling && strings.TrimSpace(ptrValue(url)) == "") {
+FOR SHARE OF b, w`, d.BotID, d.ChatID).Scan(&polling, &url, &secret, &scopes)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (!ScopeAllows(scopes, PrivilegedScopeReadHistory) || (polling && !DevPollingEnabled()) || (!polling && strings.TrimSpace(ptrValue(url)) == ""))) {
 		_, err = tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'canceled', claimed_until = NULL WHERE id = $1`, d.ID)
 		if err != nil {
 			return err

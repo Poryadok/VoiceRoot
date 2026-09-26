@@ -46,6 +46,7 @@ func migrationSQL(t *testing.T) string {
 
 func startBotGRPC(t *testing.T) (botv1.BotServiceClient, *store.BotStore, func()) {
 	t.Helper()
+	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "botgrpc", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
