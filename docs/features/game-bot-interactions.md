@@ -65,7 +65,12 @@ activation gates, а не обходятся повышенными правам
 `bot_event_log` не сохранилась, и до этого не вызывает webhook. Webhook delivery
 берётся по lease из PostgreSQL outbox; отдельный worker после рестарта повторяет
 pending interaction с тем же `interaction_token`. Временная HTTP-ошибка оставляет
-запись pending с backoff; постоянная ошибка оставляет failed. Timeout ожидания
+запись pending с backoff до восьми lease attempts или 24 часов с момента
+acceptance, после чего запись становится terminal `failed`; постоянная ошибка
+сразу оставляет `failed`. Переходы `pending → deferred/delivered/failed` и
+retry требуют номер актуального claim и незавершённый lease, поэтому worker,
+продолживший работу после lease expiry, не переписывает результат нового worker.
+Timeout ожидания
 синхронного ответа больше не удаляет pending intent. Перед acceptance и перед
 повторной доставкой Bot запрашивает у Chat effective membership профиля и
 проверяет текущие whitelist и send scopes. `PollEvents` отклоняет вызовы

@@ -52,53 +52,70 @@ func (s *BotGRPC) processSlashInteraction(ctx context.Context, id uuid.UUID) (bo
 	}
 	var payload webhook.InteractionPayload
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		return true, errors.Join(err, s.Store.FailSlashDelivery(ctx, event.ID))
+		_, markErr := s.Store.FailSlashDelivery(ctx, event.ID, event.Attempts)
+		return true, errors.Join(err, markErr)
 	}
 	payload.Type = "slash_command"
 	payload.InteractionToken = event.Token
 	chatID, chatErr := uuid.Parse(payload.ChatID)
 	invoker, invokerErr := uuid.Parse(payload.InvokerProfileID)
 	if chatErr != nil || invokerErr != nil || strings.TrimSpace(payload.CommandName) == "" {
-		return true, errors.Join(fmt.Errorf("invalid persisted slash interaction"), s.Store.FailSlashDelivery(ctx, event.ID))
+		_, markErr := s.Store.FailSlashDelivery(ctx, event.ID, event.Attempts)
+		return true, errors.Join(fmt.Errorf("invalid persisted slash interaction"), markErr)
 	}
 	bot, err := s.Store.GetBotByID(ctx, event.BotID)
 	if err != nil {
-		return true, errors.Join(err, s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts))
+		_, retryErr := s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		return true, errors.Join(err, retryErr)
 	}
 	allowed, err := s.Store.IsChatWhitelisted(ctx, event.BotID, chatID)
 	if err != nil {
-		return true, errors.Join(err, s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts))
+		_, retryErr := s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		return true, errors.Join(err, retryErr)
 	}
 	if !allowed || bot.Status != "live" || !store.ScopeAllows(bot.ScopesJSON, "TEXT_CHAT_SEND_MESSAGES") ||
 		(payload.ChatType == "CHAT_TYPE_DM" && !store.ScopeAllows(bot.ScopesJSON, "DM_SEND")) {
-		return true, s.Store.FailSlashDelivery(ctx, event.ID)
+		_, markErr := s.Store.FailSlashDelivery(ctx, event.ID, event.Attempts)
+		return true, markErr
 	}
 	if err := s.requireInvokerMembership(ctx, chatID, invoker); err != nil {
 		if status.Code(err) == codes.PermissionDenied {
-			return true, s.Store.FailSlashDelivery(ctx, event.ID)
+			_, markErr := s.Store.FailSlashDelivery(ctx, event.ID, event.Attempts)
+			return true, markErr
 		}
-		return true, errors.Join(err, s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts))
+		_, retryErr := s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		return true, errors.Join(err, retryErr)
 	}
 	if bot.WebhookURL == nil || strings.TrimSpace(*bot.WebhookURL) == "" || bot.IsPollingMode {
-		return true, s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		_, retryErr := s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		return true, retryErr
 	}
 	attemptCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	resp, err := webhook.DeliverPOST(attemptCtx, s.HTTPClient, strings.TrimSpace(*bot.WebhookURL), bot.WebhookSecret, payload, dispatch.DefaultTimeout())
 	cancel()
 	if err != nil {
-		if s.Events != nil {
+		var applied bool
+		var markErr error
+		if webhook.IsPermanentDeliveryError(err) {
+			applied, markErr = s.Store.FailSlashDelivery(ctx, event.ID, event.Attempts)
+			if applied {
+				s.Hub.Complete(event.Token, store.InteractionReply{Err: err})
+			}
+		} else {
+			applied, markErr = s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts)
+		}
+		if applied && s.Events != nil {
 			_ = s.Events.PublishWebhookDelivered(ctx, event.BotID.String(), event.Token, false)
 			_ = s.Events.PublishWebhookFailed(ctx, event.BotID.String(), "interaction", err.Error())
 		}
-		if webhook.IsPermanentDeliveryError(err) {
-			markErr := s.Store.FailSlashDelivery(ctx, event.ID)
-			s.Hub.Complete(event.Token, store.InteractionReply{Err: err})
-			return true, errors.Join(err, markErr)
-		}
-		return true, errors.Join(err, s.Store.RetrySlashDelivery(ctx, event.ID, event.Attempts))
+		return true, errors.Join(err, markErr)
 	}
-	if err := s.Store.CompleteSlashDelivery(ctx, event.ID, resp.Deferred); err != nil {
+	applied, err := s.Store.CompleteSlashDelivery(ctx, event.ID, event.Attempts, resp.Deferred)
+	if err != nil {
 		return true, err
+	}
+	if !applied {
+		return true, nil
 	}
 	if s.Events != nil {
 		_ = s.Events.PublishWebhookDelivered(ctx, event.BotID.String(), event.Token, true)
