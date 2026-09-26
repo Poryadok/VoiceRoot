@@ -160,7 +160,7 @@ docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' || {
 # Confirm the Chat leaf can reach the hub's JetStream API before publishing.
 # The request also establishes the approved Chat reply inbox through the leaf.
 chat_leaf_stream_info() {
-  docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
+  timeout 3s docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
     nats --server nats://127.0.0.1:4222 --inbox-prefix _INBOX.voice.chat \
     req --raw '$JS.API.STREAM.INFO.chat_events' ''
 }
