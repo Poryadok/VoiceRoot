@@ -59,6 +59,9 @@ func main() {
 	api.OperatorAccounts = cfg.OperatorAccounts
 	api.CredentialKey = cfg.CredentialKey
 	mux.Handle("/api/v1/game-integrations/", api)
+	mux.Handle("/internal/v1/authorizations/environments/", httpapi.NewInternalPolicyHandler(
+		httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "gameintegration", "status": "ok"})

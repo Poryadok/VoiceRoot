@@ -81,6 +81,22 @@ fragment is refused. Auth receives only active, nonempty policy with its
 monotonic revision. A suspended app or empty policy returns unavailable, so
 no browser or SDK code may substitute a local allowlist.
 
+Auth resolves a policy at
+`GET /internal/v1/authorizations/environments/{environment_id}`. It uses a
+dedicated shared 32-byte workload key, supplied as base64 in
+`GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64` to Game Integration and Auth through
+their deployment secret managers. Missing keys disable this route. Auth sends
+one each of `X-Voice-Workload: auth`, `X-Voice-Timestamp` (canonical Unix
+seconds), `X-Voice-Nonce` (lowercase UUID) and `X-Voice-Signature` (unpadded
+base64url HMAC-SHA256). The signed UTF-8 message is
+`v1\nGET\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_empty_body}`.
+The server rejects query/body, a timestamp outside ±30 seconds, duplicate
+headers, invalid signature and reused nonce; Redis `SETNX` stores each nonce
+for 60 seconds. Redis failure is `503`, never an authentication fallback.
+The response is `no-store` and includes app/env IDs, current policy revision,
+display name, exact redirects/origins, providers and player scopes. Auth
+re-resolves and compares revision at request, approval and code exchange.
+
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
 exists, no production credential is issued. This gate is an implementation
