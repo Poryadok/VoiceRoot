@@ -87,6 +87,14 @@ type fakeChatClient struct {
 	addMembersCalls int
 	createChatCalls int
 	createErr       error
+	listErr         error
+}
+
+func (f *fakeChatClient) ListMembers(context.Context, *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return &chatv1.ListMembersResponse{}, nil
 }
 
 func (f *fakeChatClient) AddMembers(_ context.Context, req *chatv1.AddMembersRequest) (*chatv1.AddMembersResponse, error) {
@@ -118,6 +126,7 @@ type botCDeps struct {
 
 func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceClient, *store.BotStore, *dispatch.Hub, func()) {
 	t.Helper()
+	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "botc", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
@@ -126,6 +135,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.Chat = allowMembershipClient{}
 	if deps != nil {
 		if deps.user != nil {
 			ul := bufconn.Listen(1024)
@@ -481,4 +491,44 @@ SELECT delivery_status FROM bot_event_log WHERE id = $1`, eventID).Scan(&deliver
 	require.NoError(t, err)
 	require.Equal(t, "delivered", deliveryStatus,
 		"PollEvents must mark streamed events delivered (BOT-C)")
+}
+
+func TestPollEvents_rejectsWebhookModeWithoutConsumingSlashOutbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx, botID, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID := uuid.MustParse(botID)
+	_, err := st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = false, webhook_url = 'https://example.com/interactions' WHERE id = $1`, botUUID)
+	require.NoError(t, err)
+	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"command_name": "ping"}, uuid.NewString())
+	require.NoError(t, err)
+	stream, err := client.PollEvents(withBotToken(context.Background(), botToken), &botv1.PollEventsRequest{BotId: botID})
+	require.NoError(t, err)
+	_, err = stream.Recv()
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	var deliveryStatus string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT delivery_status FROM bot_event_log WHERE id = $1`, eventID).Scan(&deliveryStatus))
+	require.Equal(t, "pending", deliveryStatus)
+}
+
+func TestPollingDisabledWithoutExplicitDevOptIn(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	t.Setenv("BOT_ENABLE_DEV_POLLING", "false")
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	_, err := client.ExecuteSlashInteraction(ctx, &botv1.ExecuteSlashInteractionRequest{
+		BotId: botID, Chat: &chatv1.ChatRef{Id: chatID.String(), Type: &chatType}, CommandName: "ping",
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	stream, err := client.PollEvents(withBotToken(context.Background(), botToken), &botv1.PollEventsRequest{BotId: botID})
+	require.NoError(t, err)
+	_, err = stream.Recv()
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }

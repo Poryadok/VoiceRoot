@@ -24,6 +24,7 @@ import (
 
 func startBotStore(t *testing.T) *store.BotStore {
 	t.Helper()
+	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000001_init.up.sql")
 	b, err := os.ReadFile(root)
@@ -47,7 +48,7 @@ func TestHandleMessageSent_EnqueuesForPollingBot(t *testing.T) {
 	st := startBotStore(t)
 
 	owner := uuid.New()
-	botRow, _, err := st.CreateBot(ctx, owner, "MsgBot", "desc", `["TEXT_CHAT_SEND_MESSAGES"]`, uuid.New())
+	botRow, _, err := st.CreateBot(ctx, owner, "MsgBot", "desc", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = true WHERE id = $1`, botRow.ID)
 	require.NoError(t, err)
@@ -90,6 +91,57 @@ func TestHandleMessageSent_EnqueuesForPollingBot(t *testing.T) {
 	require.Len(t, ids, 1)
 }
 
+func TestQueueMessageRecipientsRequiresReadHistoryScope(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startBotStore(t)
+	chatID, spaceID, owner := uuid.New(), uuid.New(), uuid.New()
+	sendOnly, _, err := st.CreateBot(ctx, owner, "SendOnly", "", `["TEXT_CHAT_SEND_MESSAGES"]`, uuid.New())
+	require.NoError(t, err)
+	reader, _, err := st.CreateBot(ctx, owner, "Reader", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
+	require.NoError(t, err)
+	for _, bot := range []store.BotRow{sendOnly, reader} {
+		_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://bot.invalid/hook' WHERE id = $1`, bot.ID)
+		require.NoError(t, err)
+		_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+		require.NoError(t, err)
+	}
+	messageID := uuid.New()
+	require.NoError(t, st.QueueMessageRecipients(ctx, chatID, messageID, uuid.NewString(), map[string]any{"message_id": messageID.String()}))
+	var count int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_message_deliveries WHERE bot_id = $1`, sendOnly.ID).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM bot_message_deliveries WHERE bot_id = $1`, reader.ID).Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+func TestPendingMessageDeliveryStopsAfterReadScopeRevoked(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st := startBotStore(t)
+	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "Reader", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://bot.invalid/hook' WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
+	require.NoError(t, err)
+	messageID := uuid.New()
+	require.NoError(t, st.QueueMessageRecipients(ctx, chatID, messageID, uuid.NewString(), map[string]any{"message_id": messageID.String()}))
+	delivery, err := st.ClaimDueMessageDelivery(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, delivery)
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET scopes = '[]'::jsonb WHERE id = $1`, bot.ID)
+	require.NoError(t, err)
+	posted := false
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error { posted = true; return nil }))
+	require.False(t, posted)
+}
+
 func TestPendingMessageDeliveryDoesNotReviveAfterChatDisable(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -97,7 +149,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterChatDisable(t *testing.T) {
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "ToggleBot", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "ToggleBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
 	require.NoError(t, err)
@@ -133,7 +185,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterUninstallAndReinstall(t *testin
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "UninstallBot", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "UninstallBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
 	require.NoError(t, err)
@@ -170,7 +222,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterInstallWhitelistReplacement(t *
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "WhitelistBot", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "WhitelistBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
 	require.NoError(t, err)
@@ -206,7 +258,7 @@ func TestQueueMessageRecipientsAndInstallInSpaceDoNotDeadlock(t *testing.T) {
 	defer cancel()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "LockOrderBot", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "LockOrderBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = true WHERE id = $1`, bot.ID)
 	require.NoError(t, err)
@@ -268,9 +320,9 @@ func TestHandleMessageSent_PollingFailureDoesNotStarveWebhook(t *testing.T) {
 	ctx := context.Background()
 	st := startBotStore(t)
 	chatID, spaceID, owner := uuid.New(), uuid.New(), uuid.New()
-	poll, _, err := st.CreateBot(ctx, owner, "Poll", "", `[]`, uuid.New())
+	poll, _, err := st.CreateBot(ctx, owner, "Poll", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
-	web, _, err := st.CreateBot(ctx, owner, "Web", "", `[]`, uuid.New())
+	web, _, err := st.CreateBot(ctx, owner, "Web", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { calls.Add(1); w.WriteHeader(http.StatusOK) }))
@@ -307,7 +359,7 @@ func TestHandleMessageSent_DatabaseFailureLeavesSourceForReplay(t *testing.T) {
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "RetryBot", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "RetryBot", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = true WHERE id = $1`, bot.ID)
 	require.NoError(t, err)
@@ -342,7 +394,7 @@ func TestQueuedMessageRechecksCurrentBotAccessAndWebhook(t *testing.T) {
 	defer oldServer.Close()
 	newServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { newCalls.Add(1); w.WriteHeader(http.StatusOK) }))
 	defer newServer.Close()
-	web, _, err := st.CreateBot(ctx, owner, "AccessWeb", "", `[]`, uuid.New())
+	web, _, err := st.CreateBot(ctx, owner, "AccessWeb", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = $2 WHERE id = $1`, web.ID, oldServer.URL)
 	require.NoError(t, err)
@@ -387,9 +439,9 @@ func TestSlowWebhookDoesNotBlockOtherRecipientOrRaceRevocation(t *testing.T) {
 	var healthyCalls atomic.Int32
 	healthyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { healthyCalls.Add(1); w.WriteHeader(http.StatusOK) }))
 	defer healthyServer.Close()
-	slow, _, err := st.CreateBot(ctx, owner, "Slow", "", `[]`, uuid.New())
+	slow, _, err := st.CreateBot(ctx, owner, "Slow", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
-	healthy, _, err := st.CreateBot(ctx, owner, "Healthy", "", `[]`, uuid.New())
+	healthy, _, err := st.CreateBot(ctx, owner, "Healthy", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	for _, entry := range []struct {
 		id  uuid.UUID
@@ -438,7 +490,7 @@ func TestPermanentWebhookFailureIsDurablyFailed(t *testing.T) {
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadRequest) }))
 	defer server.Close()
-	bot, _, err := st.CreateBot(ctx, owner, "BadWebhook", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "BadWebhook", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = $2 WHERE id = $1`, bot.ID, server.URL)
 	require.NoError(t, err)
@@ -466,7 +518,7 @@ func TestQueuedPollingMessageIsCanceledAfterChatDisable(t *testing.T) {
 	ctx := context.Background()
 	st := startBotStore(t)
 	owner, chatID, spaceID := uuid.New(), uuid.New(), uuid.New()
-	bot, _, err := st.CreateBot(ctx, owner, "AccessPoll", "", `[]`, uuid.New())
+	bot, _, err := st.CreateBot(ctx, owner, "AccessPoll", "", `["TEXT_CHAT_READ_HISTORY"]`, uuid.New())
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = true WHERE id = $1`, bot.ID)
 	require.NoError(t, err)

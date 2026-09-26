@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,12 +125,18 @@ func (h *Hub) RegisterAutocomplete(requestID, cacheKey string) {
 	h.mu.Unlock()
 }
 
-// CompleteAutocomplete stores choices for a polling autocomplete request.
-func (h *Hub) CompleteAutocomplete(requestID string, choices []AutocompleteChoice) bool {
+func (h *Hub) CancelAutocomplete(requestID string) {
+	h.mu.Lock()
+	delete(h.autocompletePending, requestID)
+	h.mu.Unlock()
+}
+
+// CompleteAutocomplete stores choices only for the bot that owns the request.
+func (h *Hub) CompleteAutocomplete(requestID, botID string, choices []AutocompleteChoice) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	cacheKey, ok := h.autocompletePending[requestID]
-	if !ok {
+	if !ok || !strings.HasPrefix(cacheKey, botID+"|") {
 		return false
 	}
 	delete(h.autocompletePending, requestID)
