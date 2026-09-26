@@ -70,6 +70,17 @@ revokes an owned credential immediately and is idempotent. Production
 admission and a live game-service operation consuming the verifier remain
 dependent steps.
 
+The future command contract is frozen separately in
+[`game-integration-api.md`](../architecture/game-integration-api.md) and
+[`game-bot-interactions.md`](../features/game-bot-interactions.md): callback
+delivery is installation-scoped, and proposed GIS invoke/admission/result/status
+routes use the documented v1 envelope. These routes are not implemented by this
+registry slice. The current credential allowlist above remains authoritative for
+deployed code; `game.commands.execute` is a future explicit scope and must not be
+accepted until its API, verifier, migration, and negative tests are implemented.
+The controlled T07a receiver is test infrastructure in an independent module
+and database, never a production GIS registry or `game_integration_db` table.
+
 The approved sandbox owner configures Auth admission with
 `PUT /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/policy`.
 The body carries `expected_revision`, exact redirect URIs, browser origins,

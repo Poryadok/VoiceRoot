@@ -601,7 +601,7 @@ Account/Space deletion, freeze и purge используют существую�
 
 Перед расходованием игровых ресурсов service проверяет binding authority и
 запрашивает execution admission. Предлагаемый контракт:
-`POST /commands/{command_id}/admission` для owning app/env/installation возвращает
+`POST /api/v1/game-integrations/commands/{command_id}/admission` для owning app/env/installation возвращает
 одноразовый permit с command/action/binding revision, `start_before` и
 `complete_before`. Voice сериализует revoke и admission по одной authority epoch
 в своей транзакции. Revoke первым → reject; admission первым → команда in-flight
@@ -614,13 +614,172 @@ Account/Space deletion, freeze и purge используют существую�
 требует новой проверки; expired permit не оживает при повторе webhook. При
 потере ответа Voice admission status восстанавливается по command ID; нельзя
 выполнить эффект по догадке. Между БД Voice и игры нет distributed atomic commit.
-Простой GET или offline token check эту семантику не заменяют. Числовые bounds и
-правило для длительных игровых задач (команда назначает задачу, не ждёт её часы)
-фиксируются G13 до GI2. Admission unavailable → новое исполнение не начинается.
+Простой GET или offline token check эту семантику не заменяют. G13 defaults для
+первого controlled backend: admission permit сохраняет отдельный
+`permit_issued_at`, а `start_before = permit_issued_at + 10s`,
+`complete_before = permit_issued_at + 60s`; обе границы exclusive (`now < bound`).
+10 секунд ограничивают задержку между admission и началом побочного эффекта;
+60 секунд — верхняя граница короткой атомарной мутации и commit, чтобы оставить
+сеть/транзакции ограниченный jitter без долгоживущего permit. Это proposed
+defaults, не измеренная производительность и не срок игровой задачи: команда,
+создавшая длительную задачу, завершается после атомарного принятия задачи.
+Одна команда получает один permit. Повтор admission возвращает тот же permit и
+исходные сроки; повтор не продлевает их. Admission unavailable → новое исполнение
+не начинается. Проверки на границах `bound-1`, `bound` и `bound+1` обязательны.
 Receipt о ранее committed результате принимается отдельным узким completion
 правом, без возможности создать новую команду. Полностью отозванный/скомпрометированный
 service credential не оживляется ради receipt: status требует доверенного
 reconciliation с оператором игры и остаётся unknown до доказательства.
+
+### T03/T06 command contract freeze (proposed v1)
+
+Эта секция задаёт будущий wire contract; перечисленные command routes ещё не
+реализованы и не входят в текущие GIS credentials. Внешняя команда доставляется
+POST на HTTPS callback URL конкретной installation. GIS-owned player routes:
+`POST /api/v1/game-integrations/actions/{action_id}/invoke`;
+`POST /api/v1/game-integrations/commands/{command_id}/admission`;
+`POST /api/v1/game-integrations/commands/{command_id}/result`;
+`GET /api/v1/game-integrations/commands/{command_id}`. Admission/result требуют
+будущего отдельного `game.commands.execute` scope; status GET использует
+`game.commands.read`; outbound command дополнительно требует installation
+capability `game.commands.receive`. Это не добавляет endpoint к существующему
+Bot API и не даёт command handler доступа к production GIS registry/DB.
+
+Wire format — `application/vnd.voice.game-command+json;version=1`, UTF-8 JSON
+по RFC 8785 JCS, без BOM. Receiver rejects body bytes unless they exactly equal
+UTF-8 JCS serialization; duplicate JSON keys, non-integer numeric values,
+alternate escapes/whitespace and trailing bytes are invalid. UUID — lowercase
+hyphenated canonical form, version is integer `1`, times are integer Unix
+seconds UTC. Unknown security/action enums are rejected. HMAC-SHA256 uses the
+exact 32 secret bytes of the installation key. Headers: exactly one
+`Content-Type` above, `X-Voice-Key-Id` (canonical UUID), `X-Voice-Timestamp`
+(unsigned decimal Unix seconds without leading zeroes), and
+`X-Voice-Signature: v1=<64 lowercase hex>`. The timestamp is unsigned canonical
+decimal Unix seconds and must be within ±300 seconds of receiver clock. The
+request MAC input bytes are exactly UTF-8 encoding (LF=`0x0a`, no terminal LF) of
+`v1\n{UPPERCASE_METHOD}\n{canonical_path}\n{timestamp_seconds}\n{key_id}\n{lowercase_sha256_hex(canonical_body_bytes)}`;
+`canonical_body_bytes` are the exact request bytes that passed JCS equality.
+`canonical_path` is the exact raw path component of the HTTP origin-form
+request-target before route parsing or decoding. It is ASCII only, contains
+nonempty segments of literal RFC 3986 unreserved bytes (`A-Z`, `a-z`, `0-9`,
+`-._~`) separated by single `/` bytes, and has no query or fragment. Reject all
+percent signs/percent-escapes, non-ASCII and other reserved path bytes, empty
+segments, and `.`/`..` segments; never normalize or decode the path before
+signing. Current route paths use literal static segments and canonical UUID
+segments, so require no escaping.
+Duplicate auth/content-type headers and redirects are rejected. Replays and
+result outbox delivery use the originally stored canonical body bytes; only
+timestamp and MAC are regenerated. The result idempotency hash is computed over
+canonical body bytes and is not embedded in that body. Принимается только key id, привязанный к точным app/env/installation
+и явно provisioned current/overlap key; overlap максимум 10 минут, explicit
+revoke действует сразу. Timestamp skew максимум ±300 секунд; подпись сравнивается
+constant-time. Secret bytes, Authorization, подпись и command arguments не
+попадают в логи.
+
+Command envelope содержит version, `command_id`, `operation_id`, `invocation_id`,
+`action_id`, source `message_id`/`card_revision`, exact app/env/installation,
+profile/binding revision, actor proof, game state version, canonical typed
+arguments, `issued_at`, `expires_at`. Result envelope содержит version, original
+IDs, `result_id`, terminal status, resulting state version и safe summary.
+Изменение результата с тем же ID — 409. Ниже request/result body записаны
+точными JCS UTF-8 bytes: object keys отсортированы по правилу RFC 8785,
+без пробелов и завершающего newline.
+
+```json
+{"action_id":"00000000-0000-4000-8000-000000000004","actor_proof":{"profile_id":"00000000-0000-4000-8000-000000000008","proof_id":"opaque"},"app_id":"00000000-0000-4000-8000-000000000005","arguments":{"encounter_id":"encounter-42"},"binding_revision":8,"card_revision":2,"command_id":"00000000-0000-4000-8000-000000000001","environment_id":"00000000-0000-4000-8000-000000000006","expires_at":1790500120,"installation_id":"00000000-0000-4000-8000-000000000007","invocation_id":"00000000-0000-4000-8000-000000000003","issued_at":1790500000,"message_id":"00000000-0000-4000-8000-00000000000b","operation_id":"00000000-0000-4000-8000-000000000002","schema_version":1,"state_version":"encounter-42:v3"}
+```
+
+```json
+{"command_id":"00000000-0000-4000-8000-000000000001","operation_id":"00000000-0000-4000-8000-000000000002","result_id":"00000000-0000-4000-8000-000000000009","schema_version":1,"state_version":"encounter-42:v4","status":"succeeded","summary":"Олень приручён"}
+```
+
+Детерминированный test-only signature vector (не deployment credential): fake
+HMAC key — ровно 32 bytes
+`000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f`; key ID
+`00000000-0000-4000-8000-00000000000a`; timestamp `1790500000`; method `POST`;
+canonical path `/callbacks/game-commands/v1`. SHA-256 canonical command body:
+`dcdee56ea87770fd52707199e0f2f29fa7cbfb17e806b6c248308728c607e0a1`. Exact MAC
+input is UTF-8, LF-separated, with no terminal LF:
+
+```text
+v1
+POST
+/callbacks/game-commands/v1
+1790500000
+00000000-0000-4000-8000-00000000000a
+dcdee56ea87770fd52707199e0f2f29fa7cbfb17e806b6c248308728c607e0a1
+```
+
+HMAC-SHA256 output is
+`db75a725f07e9eedadb3a511f2ee871f640bfe395fac27168c0302ee8f6982e9`, encoded
+as `X-Voice-Signature: v1=<lowercase hex>`. Body hash is lowercase SHA-256 hex;
+signature is lowercase HMAC-SHA256 hex; key ID is canonical lowercase UUID;
+timestamp is canonical decimal; MAC input is UTF-8. All key/IDs are synthetic.
+
+`command.issued_at` records command creation and does not start a permit window.
+On first successful admission, GIS serializes with revoke, samples its DB clock
+after taking the authority-epoch lock as canonical integer Unix seconds UTC
+`permit_issued_at`, and persists that timestamp, a stable `permit_id`, and
+the exclusive +10s/+60s bounds in one transaction. A usable permit is returned
+only after commit; rollback creates no permit. A first command delivery delayed
+to retry slot t=15 or t=31 can therefore obtain a fresh permit epoch at its
+successful admission, if command expiry and authority still allow it. After a
+permit row exists, every admission retry or lost-response recovery returns the
+same stored ID, epoch and bounds; it never mints a new epoch or extends time.
+If start-before is missed, that command expires without effect; user must invoke
+again and repeat authorization/confirmation to create a new command. Revoke and
+first permit insert lock the same authority epoch: revoke commit first denies
+admission; permit commit first allows only that admitted operation to start
+before its stored +10s bound and commit before its stored +60s bound. This grace
+cannot be renewed by redelivery, admission retry, or a later command. Contract
+tests must cover first delivery at t=0/15/31, admission retry before/after both
+bounds, lost response, rollback, and both revoke/insert lock orderings using DB
+time. The receiver contract suite must assert the exact canonical body SHA-256,
+MAC input bytes, and HMAC output in the synthetic vector above, plus malformed
+JCS/body bytes, duplicate headers/JSON keys, timestamp skew at ±300s, key overlap
+through 10 minutes and rejection immediately after explicit revoke. These are
+contract proofs required of implementation, not evidence that runtime support
+already exists.
+
+Voice commits accepted command + outbox before returning 202. Delivery attempts
+are scheduled at elapsed `0, 1, 3, 7, 15, 31` seconds (six total), each with a
+3-second response deadline; every retry carries identical canonical body and
+IDs, with a fresh timestamp/signature. `202` means durable inbox acceptance and
+stops command delivery retries. 429 `Retry-After` is honored only if another
+attempt's fixed slot has not passed and it can finish before terminal deadline;
+it never creates a new slot or extends the deadline. There is no seventh attempt: after
+attempt six fails, keep command `reconciling` and its durable record until
+`min(command.expires_at, accepted_at + 120s)`, then move it to DLQ/operator
+reconciliation. An earlier command expiry prevents later sends. Result delivery
+uses the same six-attempt schedule, 3-second bound and 120-second terminal
+deadline; the immutable receipt remains in result DLQ until reconciliation.
+Restart restores attempts, original deadline and immutable body from durable
+outbox; it does not reset the schedule or bootstrap over existing rows.
+
+| Response/failure | Sender action |
+|---|---|
+| 202 durable acceptance | Stop delivery; poll status/reconcile by same command ID |
+| 401/403 signature, key, scope or authority | Stop automatic retries; operator-visible configuration/security error |
+| 409 ID/body/revision/state conflict | Stop retries; reconcile immutable inbox/result records |
+| 410 expired/revoked | Terminal for new admission; retain status/receipt evidence |
+| 422 unknown schema/action/security enum | Stop retries; require compatible sender/receiver |
+| 429, timeout, network failure, 5xx | Retry only on fixed schedule and before deadline |
+
+At the game receiver, a single DB transaction inserts unique command/permit
+receipt, checks actor/binding/character/state and one-shot consumption key,
+applies effect, and inserts immutable result outbox. Unique command ID returns
+the previous receipt/result; a different command ID colliding on the same
+one-shot action is rejected without a second effect. Crash before commit leaves
+no effect and permits same-ID redelivery; crash after commit recovers and resends
+the saved receipt only. This is at-least-once transport plus transactional
+idempotency, never transport exactly-once. Revoke and permit issue serialize on
+the same authority row: revoke commit first denies issue; issue commit first
+allows only that operation to start before its stored +10s bound and commit
+before its stored +60s bound. Delivery tests must exercise both lock orderings,
+both bounds, duplicate races, crashes before and after commit, exact retry
+timestamps, 3-second stalled body, and 120-second DLQ boundary with a
+controllable clock. These are contract proofs required of implementation, not
+evidence that runtime support already exists.
 
 Portal показывает capabilities, app/env keys, allowed origins/redirects,
 webhook status, quotas, billing status (если появится), SDK version support и
