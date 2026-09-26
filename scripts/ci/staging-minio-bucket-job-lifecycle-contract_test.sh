@@ -16,11 +16,19 @@ set -euo pipefail
 action="$1"
 resource="$2"
 name="$3"
-printf '%s:%s\n' "$action" "$name" >>"${CALLS}"
+precondition=""
+for arg in "$@"; do
+  if [[ "$arg" == --preconditions=* ]]; then precondition="${arg#--preconditions=}"; fi
+done
+printf '%s:%s:%s\n' "$action" "$name" "$precondition" >>"${CALLS}"
 if [[ "$action" == get ]]; then
   fixture="${FIXTURES}/${name}.json"
   if [[ -f "$fixture" ]]; then cat "$fixture"; fi
 elif [[ "$action" == delete ]]; then
+  if [[ -n "${CURRENT_UID:-}" && "${precondition#uid=}" != "$CURRENT_UID" ]]; then
+    echo 'delete UID precondition conflict' >&2
+    exit 1
+  fi
   exit 0
 else
   echo "unexpected kubectl action" >&2
@@ -62,28 +70,41 @@ EXPECTED_IMAGE="ghcr.io/poryadok/voiceroot/minio-mc:reviewed@sha256:aaaaaaaaaaaa
 LEGACY_IMAGE="quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
 
 # A same-image completed job remains untouched, and absent jobs are harmless.
+: >"$CALLS"
+if bash "$HELPER" voice-prod "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'non-staging namespace must be rejected'; fi
+[[ ! -s "$CALLS" ]] || fail 'namespace rejection must precede kubectl access'
+
 make_job voice-minio-create-avatars-bucket "$EXPECTED_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 rm -f "${FIXTURES}/voice-minio-create-files-bucket.json"
 bash "$HELPER" voice-staging "$EXPECTED_IMAGE"
-[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket\nget:voice-minio-create-files-bucket' ]] || fail 'same-image/absent Jobs must not be deleted'
+[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket:\nget:voice-minio-create-files-bucket:' ]] || fail 'same-image/absent Jobs must not be deleted'
 
 # Only the known previous immutable mc image on a completed expected Job is replaced.
 : >"$CALLS"
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 make_job voice-minio-create-files-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-files-bucket.json"
 bash "$HELPER" voice-staging "$EXPECTED_IMAGE"
-[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket\ndelete:voice-minio-create-avatars-bucket\nget:voice-minio-create-files-bucket\ndelete:voice-minio-create-files-bucket' ]] || fail 'completed image-drift Jobs must be replaced one by one'
+[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket:\ndelete:voice-minio-create-avatars-bucket:uid=fixture-uid\nget:voice-minio-create-files-bucket:\ndelete:voice-minio-create-files-bucket:uid=fixture-uid' ]] || fail 'completed image-drift Jobs must use their inspected UID preconditions'
+
+# If a same-name replacement appears after inspection, the UID precondition rejects deletion.
+: >"$CALLS"
+make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
+CURRENT_UID=replacement-uid
+export CURRENT_UID
+if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'replacement Job UID must not be deleted'; fi
+unset CURRENT_UID
+[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket:\ndelete:voice-minio-create-avatars-bucket:uid=fixture-uid' ]] || fail 'replacement UID conflict must be enforced at deletion'
 
 # Never delete an active job or a job with an unexpected action, even if its image is old.
 : >"$CALLS"
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" active >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'active stale Job must fail closed'; fi
-[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket' ]] || fail 'active Job must not be deleted'
+[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'active Job must not be deleted'
 
 : >"$CALLS"
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete true >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'unexpected Job spec must fail closed'; fi
-[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket' ]] || fail 'unexpected Job spec must not be deleted'
+[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'unexpected Job spec must not be deleted'
 
 # The guard must run before the immutable Job manifest is applied.
 guard_line="$(awk '/replace-minio-bucket-jobs\.sh/ { print NR; exit }' "$APPLY")"

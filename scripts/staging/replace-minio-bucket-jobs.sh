@@ -5,6 +5,10 @@ NS="${1:?namespace required}"
 MINIO_MC_IMAGE="${2:?expected MinIO client image required}"
 LEGACY_MINIO_MC_IMAGE='quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727'
 
+if [ "${NS}" != voice-staging ]; then
+  echo 'ERROR: MinIO bucket Job replacement is restricted to voice-staging' >&2
+  exit 1
+fi
 if ! command -v jq >/dev/null 2>&1; then
   echo 'ERROR: jq is required to validate existing MinIO bucket Jobs' >&2
   exit 1
@@ -62,6 +66,7 @@ for bucket in avatars files; do
   fi
 
   current_image="$(printf '%s' "${existing}" | jq -er '.spec.template.spec.containers[0].image')"
+  uid="$(printf '%s' "${existing}" | jq -er '.metadata.uid')"
   if [ "${current_image}" = "${MINIO_MC_IMAGE}" ]; then
     continue
   fi
@@ -73,5 +78,5 @@ for bucket in avatars files; do
     exit 1
   fi
 
-  kubectl delete job "${job}" -n "${NS}" --wait=true --timeout=60s >/dev/null
+  kubectl delete job "${job}" -n "${NS}" --preconditions="uid=${uid}" --wait=true --timeout=60s >/dev/null
 done
