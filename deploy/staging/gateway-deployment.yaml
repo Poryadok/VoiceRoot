@@ -49,6 +49,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: voice-app-config
+          # Gateway waits for required User gRPC before binding HTTP; staging's
+          # 120s dial deadline must fit before liveness probing begins.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health

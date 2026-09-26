@@ -59,6 +59,19 @@ prepare_notification_recreate_transition() {
     -p '{"spec":{"strategy":{"$retainKeys":["type"],"type":"Recreate"}}}'
 }
 
+prepare_singleton_nats_recreate_transitions() {
+  local deployment
+  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do
+    if ! kubectl get deployment "${deployment}" -n "${NS}" >/dev/null 2>&1; then
+      continue
+    fi
+    # These fixed push durables have no queue group; stop the old subscriber
+    # before the new one starts, and remove server-defaulted rollingUpdate.
+    kubectl patch deployment "${deployment}" -n "${NS}" --type=strategic \
+      -p '{"spec":{"strategy":{"$retainKeys":["type"],"type":"Recreate"}}}'
+  done
+}
+
 require_nats_bootstrap() {
   for job in voice-nats-realtime-bootstrap voice-nats-notification-bootstrap voice-nats-search-bootstrap voice-nats-analytics-chat-bootstrap; do
     if ! kubectl wait --for=condition=complete "job/${job}" -n "${NS}" --timeout=5s; then
@@ -73,6 +86,7 @@ require_nats_bootstrap
 scale_auth_down_if_needed
 
 prepare_notification_recreate_transition
+prepare_singleton_nats_recreate_transitions
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -

@@ -307,6 +307,8 @@ metadata:
   labels: {app: voice-space}
 spec:
   replicas: 1
+  # Space owns one fixed push durable; avoid overlapping old/new subscribers.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-space}
   template:
@@ -376,6 +378,8 @@ metadata:
   labels: {app: voice-chat}
 spec:
   replicas: 1
+  # Chat's account-deleted durable is fixed and has no queue group.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-chat}
   template:
@@ -628,6 +632,8 @@ metadata:
   labels: {app: voice-matchmaking}
 spec:
   replicas: 1
+  # Matchmaking binds one centrally provisioned fixed push durable.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-matchmaking}
   template:
@@ -878,6 +884,8 @@ metadata:
   labels: {app: voice-bot}
 spec:
   replicas: 1
+  # Bot binds one centrally provisioned fixed push durable.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-bot}
   template:
