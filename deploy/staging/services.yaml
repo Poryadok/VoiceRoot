@@ -53,7 +53,7 @@ spec:
           startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 10, failureThreshold: 60}
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 6}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/auth.creds"}]
           volumeMounts:
@@ -123,7 +123,7 @@ spec:
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
             - {name: principal-signing, mountPath: /etc/voice/principal/keys, readOnly: true}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/social.creds"}]
           volumeMounts:
@@ -216,7 +216,7 @@ spec:
             - {name: file-principal-tls, mountPath: /etc/voice/file-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/user.creds"}]
           volumeMounts:
@@ -275,7 +275,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/role.creds"}]
           volumeMounts:
@@ -340,7 +340,7 @@ spec:
             - {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/principal/ca, readOnly: true}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/space.creds"}]
           volumeMounts:
@@ -398,7 +398,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/chat.creds"}]
           volumeMounts:
@@ -468,7 +468,7 @@ spec:
             - {name: file-principal-tls, mountPath: /etc/voice/file-principal/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/file-principal/ca, readOnly: true}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/file.creds"}]
           volumeMounts:
@@ -531,7 +531,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/messaging.creds"}]
           volumeMounts:
@@ -596,7 +596,7 @@ spec:
               port: 8080
             periodSeconds: 5
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/voice.creds"}]
           volumeMounts:
@@ -650,7 +650,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/matchmaking.creds"}]
           volumeMounts:
@@ -716,7 +716,7 @@ spec:
             - {name: search-principal-tls, mountPath: /etc/voice/search-projection/tls, readOnly: true}
             - {name: principal-ca, mountPath: /etc/voice/search-projection/ca, readOnly: true}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/search.creds"}]
           volumeMounts:
@@ -788,7 +788,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/notification.creds"}]
           volumeMounts:
@@ -844,7 +844,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
           volumeMounts:
@@ -904,7 +904,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/bot.creds"}]
           volumeMounts:
@@ -957,7 +957,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/subscription.creds"}]
           volumeMounts:
@@ -1010,7 +1010,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/moderation.creds"}]
           volumeMounts:
@@ -1063,7 +1063,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/story.creds"}]
           volumeMounts:
@@ -1119,7 +1119,7 @@ spec:
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           env: [{name: NATS_CREDS, value: "/var/run/nats/creds/analytics.creds"}]
           volumeMounts:

@@ -213,6 +213,12 @@ jobs:
           echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
       - name: CI script regression tests
         run: make ci-script-tests
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: NATS non-JetStream leaf routing regression
+        working-directory: scripts/staging/nats-leaf-routing-test
+        run: go test -count=1 -timeout=90s ./...
 
   flutter:
     needs: changes

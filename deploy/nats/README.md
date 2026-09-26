@@ -102,6 +102,27 @@ credential by replacing its external Secret key and restarting only that
 service's sidecar; rotate
 account/operator material through its separate rehearsed broker rollout.
 
+### NATS 2.12.12 non-JetStream leaf compatibility
+
+The staging per-service `$G` leaf config sets an empty `default_js_domain`
+mapping as a temporary NATS 2.12.12 compatibility bridge. This prevents that
+version's automatic `$JS.API.>` deny from blocking ordinary JetStream API
+request/reply traffic across a non-JetStream leaf. The isolated NATS 2.12.12
+two-server regression test verifies the map is required on the leaf; adding it
+to the APP hub alone does not restore the route. This does not enable JetStream
+or storage on the leaf and does not widen the Search user JWT permissions; the
+exact API publish and scoped inbox subscribe ACL remains the authorization
+boundary. Staging hub and leaf images pin the official multi-platform
+`nats:2.12.12-alpine` manifest digest
+`sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb`.
+
+NATS marks `default_js_domain` as temporary backwards-compatibility behavior.
+Before upgrading the NATS server, migrate to a named JetStream domain and the
+matching `$JS.<domain>.API` request subjects, with ACLs and consumer clients
+updated and tested together. Do not remove the leaf mapping or enable leaf
+JetStream as a workaround. This bridge is limited to staging's
+currently verified NATS 2.12.12 runtime; production configuration is unchanged.
+
 Auth's fixed subscription-tier durable uses a five-delivery budget with an
 increasing server backoff. Persistent processing or unsupported-payload errors
 are copied with their original bytes, SHA-256, source sequence, and reason to
