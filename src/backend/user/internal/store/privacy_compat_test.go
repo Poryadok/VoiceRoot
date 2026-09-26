@@ -49,3 +49,25 @@ func TestMigration000013_ShowLastSeenRemainsExpandCompatible(t *testing.T) {
 	require.NotContains(t, normalizedUp, "show_last_seen_audience default", "preset-specific defaults belong to the reader, not a universal SQL default")
 	require.Contains(t, strings.ToLower(string(down)), "drop column if exists show_last_seen_audience")
 }
+
+func TestMigration000018_TombstoneRollbackSerializesAgainstReceipts(t *testing.T) {
+	root := userStoreRepoRoot(t)
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "user_db", "000018_sdk_author_authority.down.sql"))
+	require.NoError(t, err)
+	sql := strings.ToLower(string(down))
+
+	begin := strings.Index(sql, "begin;")
+	lock := strings.Index(sql, "lock table sdk_author_tombstones in access exclusive mode;")
+	guard := strings.Index(sql, "if exists (select 1 from sdk_author_tombstones")
+	drop := strings.Index(sql, "drop table if exists sdk_author_tombstones")
+	commit := strings.LastIndex(sql, "commit;")
+	require.NotEqual(t, -1, begin)
+	require.NotEqual(t, -1, lock)
+	require.NotEqual(t, -1, guard)
+	require.NotEqual(t, -1, drop)
+	require.NotEqual(t, -1, commit)
+	require.Less(t, begin, lock)
+	require.Less(t, lock, guard)
+	require.Less(t, guard, drop)
+	require.Less(t, drop, commit)
+}
