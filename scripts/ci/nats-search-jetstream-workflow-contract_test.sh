@@ -19,69 +19,102 @@ probe="$(sed -n '/^  nats-search-jetstream-probe:$/,$p' "$WORKFLOW")"
 [ -n "$probe" ] || fail "diagnostic job missing"
 test_bin="$(mktemp -d)"
 trap 'rm -rf "$test_bin"' EXIT
-CONNECTIVITY="$test_bin/check-github-connectivity.sh"
+SOURCE_STEP="$test_bin/download-source.sh"
+awk '
+  /^      - name: Download exact staging source archive$/ { step = 1; next }
+  step && /^      - / { exit }
+  step && /run: .*\|/ { run = 1; next }
+  run { sub(/^          /, ""); print }
+' "$WORKFLOW" >"$SOURCE_STEP"
+[[ -s "$SOURCE_STEP" ]] || fail "inline pre-checkout source acquisition missing"
+deploy_source_line="$(printf '%s\n' "$deploy" | grep -nF 'Download exact staging source archive' | cut -d: -f1)"
+deploy_checkout_line="$(printf '%s\n' "$deploy" | grep -nF 'uses: actions/checkout@' | head -n 1 | cut -d: -f1 || true)"
+[[ -n "$deploy_source_line" && -z "$deploy_checkout_line" ]] || fail "deploy must acquire its source archive without git checkout"
+source_line="$(printf '%s\n' "$probe" | grep -nF 'Download exact staging source archive' | cut -d: -f1)"
+probe_checkout_line="$(printf '%s\n' "$probe" | grep -nF 'uses: actions/checkout@' | head -n 1 | cut -d: -f1 || true)"
+[[ -n "$source_line" && -z "$probe_checkout_line" ]] || fail "probe must acquire its source archive without git checkout"
+printf '%s\n' "$probe" | grep -Fq 'STAGING_SOURCE_SHA: ${{ github.sha }}' || fail "probe must use its immutable workflow commit"
+printf '%s\n' "$deploy" | grep -Fq 'STAGING_SOURCE_SHA: ${{ inputs.image_tag }}' || fail "deploy must use the selected source image tag"
+for requirement in \
+  'source_sha" =~ ^[[:xdigit:]]{40}$' \
+  'api="https://api.github.com/repos/Poryadok/VoiceRoot"' \
+  '"$api/commits/$source_sha"' \
+  'https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha' \
+  'curl --fail --silent --show-error --proto' \
+  'tar -tzf' \
+  'git hash-object -w --no-filters' \
+  'update-index -z --index-info' \
+  'write-tree' \
+  'STAGING_SOURCE_ARCHIVE=FAIL_TREE_MISMATCH' \
+  'GITHUB_WORKSPACE'; do
+  grep -Fq "$requirement" "$SOURCE_STEP" || fail "source acquisition missing $requirement"
+done
+if grep -Fq 'git add' "$SOURCE_STEP"; then fail "tree verification must not run source-configured Git clean filters"; fi
+if grep -Eq -- '--location|--proto-redir' "$SOURCE_STEP"; then fail "archive acquisition must remain on its fixed HTTPS host"; fi
+if grep -Eqi 'secrets\.GITHUB_TOKEN|Authorization:|github_pat_|gh[pousr]_' "$SOURCE_STEP"; then
+  fail "source acquisition must not attach credentials to API/archive redirects"
+fi
+if printf '%s\n%s\n' "$deploy" "$probe" | grep -Eq 'uses: actions/checkout@' || grep -Fq 'https://github.com/' "$SOURCE_STEP"; then
+  fail "staging jobs must not require blocked github.com git transport"
+fi
+CONNECTIVITY="$test_bin/check-source-connectivity.sh"
 awk '
   /^      - name: Check staging runner can reach GitHub before checkout$/ { step = 1; next }
   step && /^      - / { exit }
   step && /run: \|/ { run = 1; next }
   run { sub(/^          /, ""); print }
 ' "$WORKFLOW" >"$CONNECTIVITY"
-[ -s "$CONNECTIVITY" ] || fail "inline pre-checkout connectivity script missing"
-connectivity_line="$(printf '%s\n' "$probe" | grep -nF 'https://github.com/' | head -n 1 | cut -d: -f1 || true)"
-if [ -z "$connectivity_line" ]; then
-  connectivity_line="$(printf '%s\n' "$probe" | grep -nF 'check-github-connectivity.sh' | head -n 1 | cut -d: -f1)"
-fi
-checkout_line="$(printf '%s\n' "$probe" | grep -nF 'uses: actions/checkout@v4' | head -n 1 | cut -d: -f1)"
-[[ -n "$connectivity_line" && -n "$checkout_line" && "$connectivity_line" -lt "$checkout_line" ]] \
-  || fail "GitHub connectivity must be checked before checkout on the staging runner"
-grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS' "$CONNECTIVITY" \
-  || fail "connectivity success must be visible"
-for failure in PROXY_DNS GITHUB_DNS TCP_CONNECT TIMEOUT TLS_OR_CURL; do
-  grep -Fq "failure=${failure}" "$CONNECTIVITY" \
-    || fail "connectivity failure class ${failure} must be classified"
-done
-grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL' "$CONNECTIVITY" \
-  || fail "connectivity failure class must be emitted"
-for endpoint in GITHUB_DEFAULT GITHUB_IPV4 API RAW CODELOAD; do
+[ -s "$CONNECTIVITY" ] || fail "inline pre-acquisition connectivity script missing"
+grep -Fq 'if [[ "$label" == API || "$label" == SOURCE_ARCHIVE ]]' "$CONNECTIVITY" \
+  || fail "only the required API and archive routes may gate acquisition"
+for endpoint in GITHUB_DEFAULT GITHUB_IPV4 API RAW SOURCE_ARCHIVE; do
   grep -Fq "check_endpoint ${endpoint}" "$CONNECTIVITY" \
     || fail "endpoint ${endpoint} must be checked"
 done
-grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=HTTP_${status}' "$CONNECTIVITY" \
-  || fail "endpoint HTTP statuses must be emitted without response bodies"
-grep -Fq 'STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}' "$CONNECTIVITY" \
-  || fail "endpoint-specific network failures must have sanitized status"
-grep -Fq 'api.github.com/repos/Poryadok/VoiceRoot' "$CONNECTIVITY" \
-  || fail "preflight must test the GitHub API used by checkout"
-grep -Fq 'raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore' "$CONNECTIVITY" \
-  || fail "preflight must test pinned raw content availability"
+grep -Fq 'api.github.com/repos/Poryadok/VoiceRoot/commits/${GITHUB_SHA}' "$CONNECTIVITY" \
+  || fail "preflight must test the immutable commit API URL used by acquisition"
 grep -Fq 'codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}' "$CONNECTIVITY" \
-  || fail "preflight must test pinned archive availability"
+  || fail "preflight must test the fixed-host immutable archive URL used by acquisition"
+grep -Fq 'STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=PASS' "$CONNECTIVITY" \
+  || fail "archive connectivity success must be visible"
+grep -Fq 'STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=FAIL' "$CONNECTIVITY" \
+  || fail "archive connectivity failure must be visible"
 if grep -Eq 'printenv|env \|' "$CONNECTIVITY"; then
   fail "connectivity step must not dump environment or credential values"
 fi
 cat >"$test_bin/curl" <<'CURL_STUB'
 #!/usr/bin/env bash
 args=" $* "
-if [[ "${CURL_TEST_MODE:-}" == optional-fails && "$args" == *" --ipv4 "* ]]; then
-  echo 'curl: (7) Failed to connect: optional IPv4 route unavailable' >&2
+if [[ "${CURL_TEST_MODE:-}" == optional-fails && "$args" == *"https://github.com/ "* ]]; then
+  echo 'curl: (7) Failed to connect: optional github.com route unavailable' >&2
   exit 7
 fi
-if [[ "${CURL_TEST_MODE:-}" == required-fails && "$args" == *"https://github.com/ "* ]]; then
-  echo 'curl: (7) Failed to connect: github.com required route unavailable' >&2
-  exit 7
+if [[ "${CURL_TEST_MODE:-}" == required-fails && "$args" == *"codeload.github.com"* ]]; then
+  echo 'curl: (28) Operation timed out' >&2
+  exit 28
+fi
+if [[ "${CURL_TEST_MODE:-}" == api-fails && "$args" == *"api.github.com/repos/Poryadok/VoiceRoot/commits/"* ]]; then
+  echo 'curl: (28) Operation timed out' >&2
+  exit 28
 fi
 printf '200'
 CURL_STUB
 chmod +x "$test_bin/curl"
-optional_output="$(PATH="$test_bin:$PATH" CURL_TEST_MODE=optional-fails GITHUB_SHA=deadbeef bash "$CONNECTIVITY")" \
-  || fail "optional endpoint failure must not block a healthy required route"
-printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_ENDPOINT_GITHUB_IPV4=FAIL_TCP_CONNECT' \
-  || fail "optional IPv4 failure must remain visible"
-printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS' \
-  || fail "healthy required route must pass despite optional endpoint failure"
-if PATH="$test_bin:$PATH" CURL_TEST_MODE=required-fails GITHUB_SHA=deadbeef bash "$CONNECTIVITY" >/dev/null 2>&1; then
-  fail "required default route failure must block checkout"
+optional_output="$(PATH="$test_bin:$PATH" CURL_TEST_MODE=optional-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY")" \
+  || fail "blocked github.com must remain informational when the archive endpoint works"
+printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_ENDPOINT_GITHUB_DEFAULT=FAIL_TCP_CONNECT' \
+  || fail "blocked github.com route failure must remain visible"
+printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=PASS' \
+  || fail "reachable immutable archive route must pass"
+if PATH="$test_bin:$PATH" CURL_TEST_MODE=required-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY" >/dev/null 2>&1; then
+  fail "required source archive route failure must block acquisition"
 fi
+if PATH="$test_bin:$PATH" CURL_TEST_MODE=api-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY" >/dev/null 2>&1; then
+  fail "required source API route failure must block acquisition"
+fi
+ci_target="$(sed -n '/^ci-script-tests:/,/^[[:alnum:]_.-]*:/p' "$MAKEFILE")"
+printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow-test' \
+  || fail "CI script test target does not run source acquisition fixtures"
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
 printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 8' || fail "job timeout missing"

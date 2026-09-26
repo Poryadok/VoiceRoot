@@ -93,9 +93,117 @@ jobs:
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     environment: staging
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.image_tag }}
+      - name: Download exact staging source archive
+        env:
+          STAGING_SOURCE_SHA: ${{ inputs.image_tag }}
+        shell: bash
+        run: &download_staging_source |
+          set +x
+          set -euo pipefail
+          source_sha="${STAGING_SOURCE_SHA:-}"
+          if [[ ! "$source_sha" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_INVALID_SHA'
+            exit 1
+          fi
+          source_sha="${source_sha,,}"
+          workspace="${GITHUB_WORKSPACE:-}"
+          runner_workspace="${RUNNER_WORKSPACE:-}"
+          if [[ -z "$workspace" || -z "$runner_workspace" || ! -d "$workspace" || "$workspace" == "/" || "$runner_workspace" == "/" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_WORKSPACE'
+            exit 1
+          fi
+          workspace="$(cd -- "$workspace" && pwd -P)"
+          runner_workspace="$(cd -- "$runner_workspace" && pwd -P)"
+          home="$(cd -- "${HOME:-/}" && pwd -P)"
+          if [[ "$workspace" == "$runner_workspace" || "$workspace" == "$home" || \
+            "$workspace" != "$runner_workspace/"* || "$runner_workspace" == "$home" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_WORKSPACE'
+            exit 1
+          fi
+          tmp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-staging-source.XXXXXX")"
+          trap 'rm -rf -- "$tmp"' EXIT
+          tmp="$(cd -- "$tmp" && pwd -P)"
+          if [[ "$tmp" == "$workspace" || "$tmp" == "$workspace/"* ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TEMP_PATH'
+            exit 1
+          fi
+          api="https://api.github.com/repos/Poryadok/VoiceRoot"
+          if ! curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 30 --output "$tmp/commit.json" "$api/commits/$source_sha"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_API'
+            exit 1
+          fi
+          commit_sha="$(jq -er '.sha | select(type == "string")' "$tmp/commit.json" 2>/dev/null || true)"
+          tree_sha="$(jq -er '.commit.tree.sha | select(type == "string")' "$tmp/commit.json" 2>/dev/null || true)"
+          if [[ "$commit_sha" != "$source_sha" || ! "$tree_sha" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_IDENTITY'
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 120 --max-filesize 104857600 \
+            --output "$tmp/source.tar.gz" "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_DOWNLOAD'
+            exit 1
+          fi
+          expected_root="VoiceRoot-${source_sha}/"
+          if ! tar -tzf "$tmp/source.tar.gz" >"$tmp/archive-paths"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE'
+            exit 1
+          fi
+          while IFS= read -r archive_path; do
+            if [[ "$archive_path" != "$expected_root"* ]]; then
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+            fi
+            relative_path="${archive_path#"$expected_root"}"
+            if [[ "$relative_path" == *\\* || "$relative_path" == .. || "$relative_path" == ../* || \
+              "$relative_path" == */.. || "$relative_path" == */../* ]]; then
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+            fi
+            case "/$relative_path/" in */.git/*)
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+              ;;
+            esac
+          done <"$tmp/archive-paths"
+          if ! tar -tvzf "$tmp/source.tar.gz" >"$tmp/archive-types" || \
+            awk 'substr($0, 1, 1) != "-" && substr($0, 1, 1) != "d" { invalid = 1 } END { exit !invalid }' "$tmp/archive-types"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_TYPE'
+            exit 1
+          fi
+          mkdir "$tmp/source"
+          if ! tar -xzf "$tmp/source.tar.gz" -C "$tmp/source" --strip-components=1 --no-same-owner --no-same-permissions; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_EXTRACT'
+            exit 1
+          fi
+          if ! git init -q "$tmp/source"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_CHECK'
+            exit 1
+          fi
+          preserve_exec_mode="$(git -C "$tmp/source" config --bool core.filemode)"
+          if ! (
+            cd "$tmp/source"
+            while IFS= read -r -d '' file; do
+              relative_path="${file#./}"
+              blob_sha="$(git hash-object -w --no-filters -- "$file")" || exit 1
+              file_mode=100644
+              if [[ "$preserve_exec_mode" == true && -x "$file" ]]; then file_mode=100755; fi
+              printf '%s %s\t%s\0' "$file_mode" "$blob_sha" "$relative_path"
+            done < <(find . -path './.git' -prune -o -type f -print0)
+          ) | git -C "$tmp/source" update-index -z --index-info; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_CHECK'
+            exit 1
+          fi
+          actual_tree="$(git -C "$tmp/source" write-tree 2>/dev/null || true)"
+          if [[ "$actual_tree" != "$tree_sha" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_MISMATCH'
+            exit 1
+          fi
+          rm -rf -- "$tmp/source/.git"
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          cp -a -- "$tmp/source/." "$workspace/"
+          echo 'STAGING_SOURCE_ARCHIVE=PASS'
 
       - name: Download stack lock artifact
         if: github.event_name == 'workflow_call'
@@ -276,25 +384,29 @@ jobs:
               failure=TLS_OR_CURL
             fi
             echo "STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}"
-            if [[ "$label" == GITHUB_DEFAULT ]]; then
+            if [[ "$label" == API || "$label" == SOURCE_ARCHIVE ]]; then
               required_failed=1
             fi
           }
-          # Only the default route is required by actions/checkout. The other
-          # endpoint results are informational and cannot block checkout.
+          # github.com git transport is informational; source acquisition uses
+          # the fixed-host immutable codeload archive directly.
           check_endpoint GITHUB_DEFAULT https://github.com/
           check_endpoint GITHUB_IPV4 --ipv4 https://github.com/
-          check_endpoint API https://api.github.com/repos/Poryadok/VoiceRoot
+          check_endpoint API "https://api.github.com/repos/Poryadok/VoiceRoot/commits/${GITHUB_SHA}"
           check_endpoint RAW "https://raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore"
-          check_endpoint CODELOAD --head "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}"
+          check_endpoint SOURCE_ARCHIVE --head "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}"
           if [[ "$required_failed" == 0 ]]; then
-            echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS"
+            echo "STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=PASS"
           else
-            echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL"
+            echo "STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=FAIL"
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - name: Download exact staging source archive
+        env:
+          STAGING_SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: *download_staging_source
 
       - uses: azure/setup-kubectl@v5
 
