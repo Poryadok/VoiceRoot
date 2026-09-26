@@ -117,11 +117,12 @@ func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatReq
 }
 
 type botCDeps struct {
-	user  *fakeUserClient
-	msg   messagingv1.MessagingServiceServer
-	chat  *fakeChatClient
-	role  rolev1.RoleServiceServer
-	space *fakeSpaceClient
+	user              *fakeUserClient
+	msg               messagingv1.MessagingServiceServer
+	chat              *fakeChatClient
+	role              rolev1.RoleServiceServer
+	space             *fakeSpaceClient
+	noChatClient       bool
 }
 
 func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceClient, *store.BotStore, *dispatch.Hub, func()) {
@@ -135,7 +136,9 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
-	svc.Chat = allowMembershipClient{}
+	if deps == nil || !deps.noChatClient {
+		svc.Chat = allowMembershipClient{}
+	}
 	if deps != nil {
 		if deps.user != nil {
 			ul := bufconn.Listen(1024)

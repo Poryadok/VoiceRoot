@@ -1286,7 +1286,7 @@ func TestCreateBotChat_failedPreconditionWithoutChatClient(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	client, st, cleanup := startBotGRPC(t)
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{noChatClient: true})
 	defer cleanup()
 
 	_, _, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)

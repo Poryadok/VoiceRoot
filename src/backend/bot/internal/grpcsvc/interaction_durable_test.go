@@ -28,6 +28,10 @@ func (allowMembershipClient) ListMembers(context.Context, *chatv1.ListMembersReq
 	return &chatv1.ListMembersResponse{}, nil
 }
 
+func (allowMembershipClient) AddMembers(context.Context, *chatv1.AddMembersRequest, ...grpc.CallOption) (*chatv1.AddMembersResponse, error) {
+	return &chatv1.AddMembersResponse{}, nil
+}
+
 func TestSlashInteractionRejectsFailedDurableEnqueueBeforeWebhook(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

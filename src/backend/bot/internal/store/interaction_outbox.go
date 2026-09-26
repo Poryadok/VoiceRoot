@@ -80,6 +80,7 @@ WHERE id = $1 RETURNING id, bot_id, interaction_token, payload, attempts`, event
 	return &out, nil
 }
 
+// CompleteSlashDelivery records the delivery result for the active claim.
 // The claim generation is the attempts counter. A transition needs both that
 // generation and its unexpired lease, so a paused worker cannot overwrite a
 // newer claim after its lease lapses.
