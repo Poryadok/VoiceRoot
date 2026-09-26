@@ -69,7 +69,8 @@ Mutation endpoints are `POST /internal/v1/conversions/{operation_id}/freeze`,
 `/transfer` and `/activate`. Every request has a JSON `version: 1`,
 `binding_id`, `source_account_id`, `target_account_id`,
 `target_profile_id`, `expected_binding_revision`, `expected_authority_epoch`,
-`preview_revision`, and `idempotency_key` equal to `operation_id:stage`.
+`preview_revision`, and `idempotency_key` equal to `operation_id:stage`
+for freeze/activate or `operation_id:transfer:transfer_generation` for transfer.
 `request_hash` is the lower-case SHA-256 hex of canonical JSON excluding
 `request_hash`; both sides verify it. Canonical JSON for preview and mutation
 uses UTF-8, compact object encoding, keys sorted lexicographically by ASCII
@@ -93,6 +94,20 @@ receipt linkage before advancing its operation. A `202` response has an
 receipt ID. A retry never extends authority or command execution leases.
 `409` denotes stale revision, occupied binding or different idempotent body;
 `503` means authority unavailable and is retryable with the same operation.
+
+Every committed stage increases `binding_revision` by exactly one. `freeze`
+and `activate` each increase `authority_epoch` by exactly one; `transfer`
+leaves the epoch unchanged while both owners remain fenced. Freeze requires
+the policy revision and grant digest from the confirmed preview. Transfer
+recomputes current roster grants; its policy revision must be at least the
+frozen revision and its digest may differ. Activate rechecks that the current
+policy revision and grant digest equal the latest transfer receipt. A change
+returns `409 POLICY_STALE` and leaves the binding frozen. Auth may request a
+new transfer with `transfer_generation` incremented and idempotency key
+`{operation_id}:transfer:{generation}`; each refresh has its own immutable
+receipt and increments binding revision. After ten automated refreshes the
+operation stays frozen for operator recovery. Activate names the latest
+transfer receipt and cannot accept an earlier generation.
 
 | Stage | Atomic Game Integration effect | Receipt |
 |---|---|---|

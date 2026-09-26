@@ -70,6 +70,17 @@ revokes an owned credential immediately and is idempotent. Production
 admission and a live game-service operation consuming the verifier remain
 dependent steps.
 
+The approved sandbox owner configures Auth admission with
+`PUT /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/policy`.
+The body carries `expected_revision`, exact redirect URIs, browser origins,
+provider `google`, and a subset of the six `game.*` player scopes frozen with
+Auth. The mutation is owner-scoped, audited and CAS-protected. A sandbox may
+use HTTPS redirects, HTTP loopback callbacks and the exact
+`voicegame://auth/...` callback; an arbitrary HTTP host, URI userinfo or
+fragment is refused. Auth receives only active, nonempty policy with its
+monotonic revision. A suspended app or empty policy returns unavailable, so
+no browser or SDK code may substitute a local allowlist.
+
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
 exists, no production credential is issued. This gate is an implementation

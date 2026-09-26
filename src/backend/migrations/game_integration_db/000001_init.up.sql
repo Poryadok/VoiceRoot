@@ -48,6 +48,7 @@ CREATE TABLE registry_operations (
     idempotency_key TEXT NOT NULL CHECK (char_length(idempotency_key) BETWEEN 1 AND 128),
     request_hash BYTEA NOT NULL CHECK (length(request_hash) = 32),
     result_id UUID,
+    result_revision BIGINT,
     status TEXT NOT NULL CHECK (status IN ('pending', 'succeeded', 'failed')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
