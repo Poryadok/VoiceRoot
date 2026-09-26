@@ -19,6 +19,8 @@ data:
     server_name: voice-leaf-__VOICE_SERVICE__
     listen: 127.0.0.1:4222
     # No JetStream is enabled here. Fixed, centrally pre-provisioned consumers belong to the authenticated hub; this leaf creates none.
+    # NATS 2.12.12 compatibility bridge; this does not enable leaf JetStream.
+    default_js_domain: { "$G": "" }
     leafnodes {
       remotes = [{
         urls: ["nats-leaf://__VOICE_NATS_HUB_HOST__:7422"]
@@ -54,7 +56,7 @@ spec:
             - name: NATS_URL
               value: "nats://127.0.0.1:4222"
         - name: nats-leaf
-          image: nats:2.12-alpine
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           args: ["-c", "/etc/nats/leaf.conf"]
           volumeMounts:
             - name: nats-leaf-config
