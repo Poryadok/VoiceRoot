@@ -304,6 +304,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/compose-file-attachment-restart-proof_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/minio-mc-image-ci-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-attachment-restart-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"
