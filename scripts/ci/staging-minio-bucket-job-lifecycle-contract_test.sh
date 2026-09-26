@@ -71,9 +71,10 @@ if unexpected == "true":
 job = {
     "apiVersion": "batch/v1", "kind": "Job",
     "metadata": {"name": name, "namespace": "voice-staging", "uid": "fixture-uid"},
-    "spec": {"backoffLimit": 10, "selector": {"matchLabels": {"batch.kubernetes.io/job-name": name, "batch.kubernetes.io/controller-uid": "fixture-uid"}}, "template": {"metadata": {"labels": {"batch.kubernetes.io/job-name": name, "batch.kubernetes.io/controller-uid": "fixture-uid"}}, "spec": {"restartPolicy": "OnFailure", "containers": [container]}}},
+    "spec": {"backoffLimit": 10, "manualSelector": False, "podReplacementPolicy": "TerminatingOrFailed", "selector": {"matchLabels": {"controller-uid": "fixture-uid"}}, "template": {"metadata": {"labels": {"batch.kubernetes.io/job-name": name, "batch.kubernetes.io/controller-uid": "fixture-uid", "job-name": name, "controller-uid": "fixture-uid"}}, "spec": {"restartPolicy": "OnFailure", "containers": [container]}}},
     "status": {"succeeded": 1, "failed": 0, "conditions": [{"type": "Complete", "status": "True"}]} if status == "complete" else ({"active": 1} if status == "active" else {}),
 }
+container["resources"] = {}
 print(json.dumps(job))
 PY
 }
@@ -112,6 +113,43 @@ unset CURRENT_UID
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" active >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'active stale Job must fail closed'; fi
 [[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'active Job must not be deleted'
+
+# Defaulted fields are accepted only at their known harmless values.
+: >"$CALLS"
+make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
+python - "${FIXTURES}/voice-minio-create-avatars-bucket.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+job = json.loads(path.read_text())
+job["spec"]["manualSelector"] = True
+path.write_text(json.dumps(job))
+PY
+if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'manual selector must not be accepted as a defaulted Job'; fi
+[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'non-default Job selector must not be deleted'
+
+: >"$CALLS"
+make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
+python - "${FIXTURES}/voice-minio-create-avatars-bucket.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+job = json.loads(path.read_text())
+job["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"] = {"cpu": "1"}
+path.write_text(json.dumps(job))
+PY
+if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'non-empty container resources must remain unexpected'; fi
+[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'unexpected resource requests must not be deleted'
+
+: >"$CALLS"
+make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
+python - "${FIXTURES}/voice-minio-create-avatars-bucket.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+job = json.loads(path.read_text())
+job["spec"]["template"]["metadata"]["labels"]["attacker/controller-uid"] = "fixture-uid"
+path.write_text(json.dumps(job))
+PY
+if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'arbitrary label with a controller-uid suffix must remain unexpected'; fi
+[[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'unexpected selector labels must not be deleted'
 
 : >"$CALLS"
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete true >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
