@@ -13,7 +13,7 @@ flowchart LR
   Game[Game backend] --> Edge
   Messenger[Voice messenger] --> Edge
   Edge --> Auth[Java Auth + User]
-  Edge --> Integration[Integration domain]
+  Edge --> Integration[Game Integration Service]
   Integration --> Domains[Chat / Space / Role / Voice]
   Edge --> Messaging[Messaging / Realtime]
   Edge --> Bot[Bot interactions]
@@ -21,16 +21,18 @@ flowchart LR
   Domains --> Media[LiveKit]
 ```
 
-Integration domain — предлагаемая ответственность за developer applications,
-bindings, внешние resource mappings, communication sessions и orchestration
-operations. Это не существующий сервис. Решение о выделении Go-сервиса/хранилища
-принимается отдельно (G06); ни Gateway, ни бот не становятся универсальной БД.
+Решение владельца: выделить **Game Integration Service**, отдельный Go-микросервис
+со своим хранилищем для developer applications, bindings, внешних resource mappings,
+communication sessions и orchestration operations. Сервис ещё не реализован.
+G06 остаётся открытым для схемы хранилища, контрактов и deployment, но не для
+выбора между отдельным сервисом и встраиванием в существующий. Ни Gateway,
+ни бот не становятся универсальной БД; Auth сохраняет владение аккаунтами.
 
 | Владелец | Ответственность |
 |---|---|
 | Auth, Java/Spring | Identity proof, consent grants, delegated tokens, revocation/session epochs |
 | User | Профиль, privacy, публичные атрибуты и допустимая presence |
-| Integration domain | App/env, game bindings, external mappings, session orchestration, quotas |
+| Game Integration Service | App/env, game bindings, external mappings, session orchestration, quotas |
 | Chat / Space / Role | Членство, дерево, lifecycle, policy и effective permissions |
 | Messaging / File | Сообщения/история/attachments и их access/retention |
 | Realtime | WS delivery; per-connection `s` / `resume` |

@@ -174,7 +174,7 @@ implementation slice; каждый выбор фиксируется в feature/
 | G03 | Владение corporation Space | Named human Owner по текущему защищённому flow; game leader не получает Owner автоматически |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
 | G05 | Engines/platform versions, shared core, support window | Unity и Unreal на Windows x64 в одном спринте; точные версии после media spike внутри GI4 |
-| G06 | Владелец Integration domain/store и app registry | Явный доменный owner, не Gateway DB; выбрать сервис и миграции до GI0 schema freeze |
+| G06 | Отдельный Go Game Integration Service принят владельцем; открыты storage schema, contracts и deployment | Собственное хранилище, не Gateway DB; спроектировать миграции до GI0 schema freeze |
 | G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
 | G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |
 | G09 | Roster freshness и доступ при падении game backend | Bounded source lease, fail closed для managed доступа; конкретный срок перед GI5 |
