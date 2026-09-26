@@ -1,3 +1,7 @@
+BEGIN;
+
+LOCK TABLE sdk_author_tombstones IN ACCESS EXCLUSIVE MODE;
+
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM sdk_author_tombstones LIMIT 1) THEN
@@ -13,3 +17,5 @@ DROP TABLE IF EXISTS sdk_author_tombstones;
 DROP TRIGGER IF EXISTS profiles_sdk_eligibility_revision ON profiles;
 DROP FUNCTION IF EXISTS bump_sdk_eligibility_revision();
 ALTER TABLE profiles DROP COLUMN IF EXISTS sdk_eligibility_revision;
+
+COMMIT;
