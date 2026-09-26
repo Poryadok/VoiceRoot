@@ -1194,6 +1194,11 @@ jobs:
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
         (
+          github.event_name == 'pull_request' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.global == 'true'
+        ) ||
+        (
           github.event_name == 'push' &&
           github.ref == 'refs/heads/master' &&
           needs.changes.result == 'success' &&
@@ -1209,6 +1214,12 @@ jobs:
       ) &&
       (needs.changes.result == 'success' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
+      VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
       - uses: actions/checkout@v5
       - name: Prepare compose env
@@ -1227,6 +1238,14 @@ jobs:
           FILE_R2_SECRET_ACCESS_KEY=voice-minio-dev
           FILE_R2_BUCKET=voice-dev-files
           EOF
+      - name: Log in to GHCR for pinned MinIO images
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify effective Compose MinIO images
+        run: bash scripts/ci/verify-compose-minio-images.sh
       - name: Start compose infra
         run: docker compose up -d --wait postgres redis nats
       - name: Wait for postgres
@@ -1269,6 +1288,11 @@ jobs:
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
         (
+          github.event_name == 'pull_request' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.global == 'true'
+        ) ||
+        (
           github.event_name == 'push' &&
           github.ref == 'refs/heads/master' &&
           needs.changes.result == 'success' &&
@@ -1278,8 +1302,22 @@ jobs:
       (needs.changes.result == 'success' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
+      VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
       - uses: actions/checkout@v5
+      - name: Log in to GHCR for pinned MinIO images
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify effective Compose MinIO images
+        run: bash scripts/ci/verify-compose-minio-images.sh
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -1296,6 +1334,11 @@ jobs:
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
         (
+          github.event_name == 'pull_request' &&
+          needs.changes.result == 'success' &&
+          needs.changes.outputs.global == 'true'
+        ) ||
+        (
           github.event_name == 'push' &&
           github.ref == 'refs/heads/master' &&
           needs.changes.result == 'success' &&
@@ -1305,8 +1348,22 @@ jobs:
       (needs.changes.result == 'success' || needs.changes.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
+      VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
       - uses: actions/checkout@v5
+      - name: Log in to GHCR for pinned MinIO images
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify effective Compose MinIO images
+        run: bash scripts/ci/verify-compose-minio-images.sh
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
