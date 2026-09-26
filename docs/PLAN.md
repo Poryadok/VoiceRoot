@@ -23,11 +23,12 @@ Default admission для внешнего alpha — server-signed однораз
 
 | Состояние | Milestone | Правило |
 |---|---|---|
-| Active | `A1` | Единственный активный продуктовый milestone. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
+| Active | `A1` | Единственный активный milestone последовательности `A`. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
+| Parallel active | Game integrations | Отдельно согласованный единый спринт в `codex/game-sdk-federation-docs`; собственные worktree/integration queue, без merge в `master` и staging rollout до приёмки `A1`. |
 | Next | `A2` | Входит в WIP только после интеграции и полного vertical DoD `A1`. |
 | Queued | `A3–A7` | Не получают code WIP до закрытия предыдущего milestone; разрешены лишь чтение канона и подготовка, непосредственно разблокирующая Active. |
 
-`H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence, но это не открывает второй продуктовый milestone.
+`H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence. По отдельному решению владельца игровой спринт ниже выполняется параллельно `A1` в собственной ветке и integration queue. Это не меняет порядок `A2–A7`.
 
 Scope разделён явно:
 
@@ -39,18 +40,29 @@ Scope разделён явно:
 
 По запросу владельца подготовлен [proposed target игровых интеграций](features/game-integrations.md):
 Game API, Unity/Unreal SDK, MMO communities, [игровые боты](features/game-bot-interactions.md)
-и [game federation](architecture/game-federation.md). Это документация, не новый
-активный milestone и не изменение A1/WIP или G0–G4. По уточнению владельца
+и [game federation](architecture/game-federation.md). Документация изначально
+готовилась без запуска runtime; позднее владелец отдельно запустил параллельный
+спринт, не изменяя A1 и G0–G4. По уточнению владельца
 план разработки — **один спринт целиком**, включая sdk-account с обеими
 конвертациями, внешние API/контракты, мессенджер, ботов, MMO communities и игровую федерацию.
 Assets/SDK для Unity, Unreal и других движков, developer CLI/portal и публикуемые
 инструменты интеграции — отдельная задача вне этого спринта. Приёмка Voice
 использует внутренние test clients и controlled game adapter, а не готовые assets.
 Внутри него — подзадачи с зависимостями и общей приёмкой, а не релизные этапы.
-Текущий deferred runtime-статус федерации не исключает её из scope этого спринта;
-место спринта в очереди и запуск реализации здесь пока не назначены.
+Прежний deferred runtime-статус федерации не исключает её из scope этого спринта.
+Владелец запустил реализацию этого спринта параллельно `A1` на ветке
+`codex/game-sdk-federation-docs`. Эта ветка и перечисленные выше game docs —
+канон для новой реализации; прежнее описание федерации в `master` устарело.
+Все недостающие Game Integration Service, federation runtime, хранилища и
+Voice Node bundle входят в эту работу. G01–G13 и Q01–Q12 команда закрывает
+конкретными техническими решениями в owning docs до зависимого кода.
+Коммиты и проверка могут идти в отдельных worktree от указанной ветки, но
+вливание игрового спринта в `master` и развёртывание на staging ждут завершения
+приёмки `A1`. Состояние `A1` и его собственный rollout не меняются.
 Подзадачи, открытые решения и acceptance —
 [game-integrations-acceptance.md](testing/game-integrations-acceptance.md).
+Исполняемая декомпозиция —
+[game-integrations-exec-plan.md](testing/game-integrations-exec-plan.md).
 Статус `proposed` в FEATURES не означает обещание релиза или готовность runtime.
 
 ## PLAN и TODO
@@ -309,7 +321,7 @@ Milestone — законченный пользовательский резул
 
 ## Как агенты исполняют план
 
-- Одновременно активен ровно один `A` milestone. Это один общий outcome и один integration queue, а не один последовательный агент: captain заранее дробит milestone на независимые `T-*` задачи по контрактам, сервисам, Flutter и verification.
+- В последовательности `A` одновременно активен ровно один milestone. Отдельно согласованный игровой спринт идёт параллельно `A1` в собственной integration queue, без merge в `master` и staging deployment до приёмки `A1`. Каждый outcome дробится на независимые `T-*` задачи по контрактам, сервисам, Flutter и verification.
 - Все готовые независимые задачи активного milestone запускаются максимально параллельно в изолированных treehouse worktree: один crew — один worktree и непересекающиеся write scopes. Профили/контракты, backend-сервисы, Flutter и verify идут параллельно, когда их входы уже определены; зависимые slices ждут contract seam, а не создают второй milestone.
 - Fleet state ведётся локально в `tmp/fleet/`: у каждой `T-*` есть outcome, scope, канон, worktree, owner profile, verification и integration status. Результаты интегрируются через git/PR, worktree возвращается после merge или отмены.
 - Первый приоритет — закрыть пользовательский вертикальный путь и его failure states. Массовая чистка Low/Common не получает fleet раньше milestone DoD.
