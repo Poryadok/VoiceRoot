@@ -171,7 +171,9 @@ mapping сохраняет audit и не раскрывает другим лю�
 воскрешает retired identity. Правила последующего нового игрового входа,
 потери provider account, retention mapping и восстановления — открытая часть G01.
 
-До включения capability нужны схемы Auth/store, отдельная trust/permissions
+The concrete owner revisions, receipts, state machine and recovery floor for
+both conversion paths are fixed in
+[game-conversion-authority](game-conversion-authority.md). До включения capability нужны схемы Auth/store, отдельная trust/permissions
 матрица, conversion endpoints и согласованные conflict/history/recovery UX.
 Этот раздел задаёт требования и предлагаемый протокол, а не доступный API.
 
