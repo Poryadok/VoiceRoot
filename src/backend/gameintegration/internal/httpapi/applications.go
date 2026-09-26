@@ -25,10 +25,16 @@ type ApprovalStore interface {
 	ApproveSandbox(context.Context, registry.ApproveSandboxInput) (registry.Environment, error)
 }
 
+type CredentialStore interface {
+	IssueCredential(context.Context, registry.IssueCredentialInput) (registry.Credential, error)
+}
+
 type Handler struct {
 	Tokens           TokenValidator
 	Applications     ApplicationStore
 	Approvals        ApprovalStore
+	Credentials      CredentialStore
+	CredentialKey    []byte
 	OperatorAccounts map[uuid.UUID]struct{}
 }
 
@@ -37,11 +43,18 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 	if approvals, ok := applications.(ApprovalStore); ok {
 		h.Approvals = approvals
 	}
+	if credentials, ok := applications.(CredentialStore); ok {
+		h.Credentials = credentials
+	}
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
+		if strings.HasSuffix(r.URL.Path, "/credentials") {
+			h.serveCredentialIssue(w, r)
+			return
+		}
 		h.serveSandboxApproval(w, r)
 		return
 	}

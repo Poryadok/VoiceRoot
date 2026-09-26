@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,7 @@ type config struct {
 	JWTIssuer        string
 	JWTAudience      string
 	OperatorAccounts map[uuid.UUID]struct{}
+	CredentialKey    []byte
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -57,6 +59,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS")
 		}
 		c.OperatorAccounts[id] = struct{}{}
+	}
+	if raw := strings.TrimSpace(getenv("GAME_INTEGRATION_CREDENTIAL_KEY_B64")); raw != "" {
+		key, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(key) != 32 {
+			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_CREDENTIAL_KEY_B64")
+		}
+		c.CredentialKey = key
 	}
 	return c, nil
 }

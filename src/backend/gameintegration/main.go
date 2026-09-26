@@ -57,6 +57,7 @@ func main() {
 	mux := http.NewServeMux()
 	api := httpapi.NewHandler(authorizer, applications)
 	api.OperatorAccounts = cfg.OperatorAccounts
+	api.CredentialKey = cfg.CredentialKey
 	mux.Handle("/api/v1/game-integrations/", api)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

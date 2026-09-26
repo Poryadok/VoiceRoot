@@ -33,10 +33,15 @@ does not enable a public game communication capability.
    each with its own ID, provider allowlist, redirect/origin allowlist,
    installation and credential namespace. Production environment activation
    requires the production application admission transition.
-4. Game service credentials are 256-bit random opaque secrets shown once,
-   stored only as keyed digests, scoped to one application/environment and
-   explicit service scopes. Rotation creates a new credential ID and short
-   overlap; revoke ends admission immediately. A credential cannot authenticate
+4. Game service credentials are 256-bit HMAC-derived opaque secrets from a
+   random credential ID and deployment-held 256-bit key; the database stores
+   only keyed digests. The issue response returns the secret and an identical
+   idempotent retry can recover it for ten minutes after creation. After that
+   the API refuses redisplay and the owner must rotate. This resolves the
+   original one-time-display versus lost-response retry conflict. Credentials
+   are scoped to one application/environment and explicit service scopes.
+   Issuing a replacement bounds every previous active credential to at most
+   ten more minutes; explicit revoke ends admission immediately. A credential cannot authenticate
    as a player, register a player device key, choose an Auth provider, or
    approve its own application.
 5. The operator enrollment API uses an independent operator principal and is
@@ -48,6 +53,18 @@ does not enable a public game communication capability.
    returns its original resource/operation; reusing its key with different
    content returns a conflict. A crash after commit cannot issue a second app
    or credential.
+
+`POST /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/credentials`
+accepts an owner bearer, `Idempotency-Key` and an exact `scopes` array from
+`game.events.write`, `game.sessions.write`, `game.roster.write` and
+`game.commands.read`. It returns `vgi1_{credential_id}_{secret}` with
+`Cache-Control: no-store`; no owner account ID is accepted in the body. The
+endpoint is unavailable until `GAME_INTEGRATION_CREDENTIAL_KEY_B64` contains
+one base64-encoded 32-byte deployment secret. It must be supplied via the
+deployment secret manager; it is not a development default. The key must be
+retained while issued credentials remain valid; replacing it invalidates
+their HMAC verification and requires reissue. Credential authentication,
+revoke and production admission remain separate dependent steps.
 
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
