@@ -5,7 +5,13 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HELPER="${ROOT}/scripts/staging/replace-minio-bucket-jobs.sh"
 APPLY="${ROOT}/scripts/staging/apply-infra.sh"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+REAL_KUBECTL="$(command -v kubectl || true)"
+API_PID=""
+cleanup() {
+  if [[ -n "$API_PID" ]]; then kill "$API_PID" 2>/dev/null || true; wait "$API_PID" 2>/dev/null || true; fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 mkdir -p "${TMP}/bin" "${TMP}/fixtures"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -15,20 +21,25 @@ cat >"${TMP}/bin/kubectl" <<'SH'
 set -euo pipefail
 action="$1"
 resource="$2"
-name="$3"
-precondition=""
-for arg in "$@"; do
-  if [[ "$arg" == --preconditions=* ]]; then precondition="${arg#--preconditions=}"; fi
-done
-printf '%s:%s:%s\n' "$action" "$name" "$precondition" >>"${CALLS}"
 if [[ "$action" == get ]]; then
+  name="$3"
+  printf '%s:%s:\n' "$action" "$name" >>"${CALLS}"
   fixture="${FIXTURES}/${name}.json"
   if [[ -f "$fixture" ]]; then cat "$fixture"; fi
 elif [[ "$action" == delete ]]; then
-  if [[ -n "${CURRENT_UID:-}" && "${precondition#uid=}" != "$CURRENT_UID" ]]; then
+  name="${resource##*/}"
+  if [[ "${USE_REAL_KUBECTL:-false}" == true ]]; then exec "${REAL_KUBECTL}" "$@"; fi
+  body="$(cat)"
+  uid="$(printf '%s' "$body" | jq -er '.preconditions.uid')"
+  printf '%s:%s:uid=%s\n' "$action" "$name" "$uid" >>"${CALLS}"
+  if [[ -n "${CURRENT_UID:-}" && "$uid" != "$CURRENT_UID" ]]; then
     echo 'delete UID precondition conflict' >&2
     exit 1
   fi
+  exit 0
+elif [[ "$action" == wait ]]; then
+  name="${3#job/}"
+  printf '%s:%s:\n' "$action" "$name" >>"${CALLS}"
   exit 0
 else
   echo "unexpected kubectl action" >&2
@@ -37,6 +48,7 @@ fi
 SH
 chmod +x "${TMP}/bin/kubectl"
 export PATH="${TMP}/bin:${PATH}" CALLS="${TMP}/calls" FIXTURES="${TMP}/fixtures"
+export REAL_KUBECTL
 touch "$CALLS"
 
 make_job() {
@@ -84,7 +96,7 @@ bash "$HELPER" voice-staging "$EXPECTED_IMAGE"
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 make_job voice-minio-create-files-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-files-bucket.json"
 bash "$HELPER" voice-staging "$EXPECTED_IMAGE"
-[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket:\ndelete:voice-minio-create-avatars-bucket:uid=fixture-uid\nget:voice-minio-create-files-bucket:\ndelete:voice-minio-create-files-bucket:uid=fixture-uid' ]] || fail 'completed image-drift Jobs must use their inspected UID preconditions'
+[[ "$(cat "$CALLS")" == $'get:voice-minio-create-avatars-bucket:\ndelete:voice-minio-create-avatars-bucket:uid=fixture-uid\nwait:voice-minio-create-avatars-bucket:\nget:voice-minio-create-files-bucket:\ndelete:voice-minio-create-files-bucket:uid=fixture-uid\nwait:voice-minio-create-files-bucket:' ]] || fail 'completed image-drift Jobs must use their inspected UID preconditions'
 
 # If a same-name replacement appears after inspection, the UID precondition rejects deletion.
 : >"$CALLS"
@@ -105,6 +117,95 @@ if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'ac
 make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete true >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
 if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'unexpected Job spec must fail closed'; fi
 [[ "$(cat "$CALLS")" == 'get:voice-minio-create-avatars-bucket:' ]] || fail 'unexpected Job spec must not be deleted'
+
+# When kubectl is installed, exercise its real raw-delete parser and HTTP body against a loopback API.
+if [[ -n "$REAL_KUBECTL" ]]; then
+  cat >"${TMP}/fake_kube_api.py" <<'PY'
+import http.server, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_DELETE(self):
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            chunks = []
+            while True:
+                size = int(self.rfile.readline().split(b";", 1)[0], 16)
+                if size == 0:
+                    while self.rfile.readline().strip():
+                        pass
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.read(2)
+            raw_body = b"".join(chunks)
+        else:
+            raw_body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        if not raw_body:
+            raise ValueError(f"kubectl sent an empty DELETE body; headers={dict(self.headers)}")
+        body = json.loads(raw_body)
+        expected = (root / "expected-uid").read_text()
+        valid_path = self.path == "/apis/batch/v1/namespaces/voice-staging/jobs/voice-minio-create-avatars-bucket"
+        valid_body = body.get("apiVersion") == "meta.k8s.io/v1" and body.get("kind") == "DeleteOptions"
+        valid_uid = body.get("preconditions", {}).get("uid") == expected
+        status = 200 if valid_path and valid_body and valid_uid else 409
+        with (root / "requests.jsonl").open("a", encoding="utf-8") as out:
+            out.write(json.dumps({"path": self.path, "body": body, "status": status}) + "\n")
+        data = json.dumps({"apiVersion":"v1", "kind":"Status", "status":"Success" if status == 200 else "Failure", "reason":"Conflict" if status == 409 else "Success", "code":status}).encode()
+        self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+    def log_message(self, *args): pass
+server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+(root / "api-port").write_text(str(server.server_port))
+server.serve_forever()
+PY
+  python "${TMP}/fake_kube_api.py" "${TMP}" &
+  API_PID=$!
+  for _ in $(seq 1 50); do [[ -s "${TMP}/api-port" ]] && break; sleep 0.1; done
+  [[ -s "${TMP}/api-port" ]] || fail 'loopback Kubernetes API did not start'
+  python - "${TMP}" <<'PY'
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+port = (root / "api-port").read_text()
+(root / "kubeconfig").write_text(f'''apiVersion: v1
+kind: Config
+clusters:
+- name: fixture
+  cluster:
+    server: http://127.0.0.1:{port}
+contexts:
+- name: fixture
+  context:
+    cluster: fixture
+    user: fixture
+    namespace: voice-staging
+current-context: fixture
+users:
+- name: fixture
+  user: {{}}
+''')
+PY
+  KUBECONFIG="${TMP}/kubeconfig"
+  if command -v cygpath >/dev/null 2>&1; then KUBECONFIG="$(cygpath -w "$KUBECONFIG")"; fi
+  export KUBECONFIG USE_REAL_KUBECTL=true
+  printf '%s' fixture-uid >"${TMP}/expected-uid"
+  make_job voice-minio-create-avatars-bucket "$LEGACY_IMAGE" complete >"${FIXTURES}/voice-minio-create-avatars-bucket.json"
+  make_job voice-minio-create-files-bucket "$EXPECTED_IMAGE" complete >"${FIXTURES}/voice-minio-create-files-bucket.json"
+  bash "$HELPER" voice-staging "$EXPECTED_IMAGE"
+  : >"$CALLS"
+  printf '%s' replacement-uid >"${TMP}/expected-uid"
+  if bash "$HELPER" voice-staging "$EXPECTED_IMAGE" >/dev/null 2>&1; then fail 'real kubectl must propagate API UID precondition conflicts'; fi
+  python - "${TMP}/requests.jsonl" <<'PY'
+import json, pathlib, sys
+records = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert len(records) == 2, f"expected successful and conflicting DELETE requests, got {records!r}"
+for record in records:
+    assert record["path"] == "/apis/batch/v1/namespaces/voice-staging/jobs/voice-minio-create-avatars-bucket"
+    assert record["body"]["apiVersion"] == "meta.k8s.io/v1"
+    assert record["body"]["kind"] == "DeleteOptions"
+    assert record["body"]["preconditions"]["uid"] == "fixture-uid"
+assert records[0]["status"] == 200 and records[1]["status"] == 409, f"unexpected API statuses: {records!r}"
+PY
+  unset USE_REAL_KUBECTL KUBECONFIG
+else
+  echo 'SKIP: kubectl CLI transport check unavailable; fake-kubectl lifecycle cases ran.'
+fi
 
 # The guard must run before the immutable Job manifest is applied.
 guard_line="$(awk '/replace-minio-bucket-jobs\.sh/ { print NR; exit }' "$APPLY")"

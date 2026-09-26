@@ -78,5 +78,7 @@ for bucket in avatars files; do
     exit 1
   fi
 
-  kubectl delete job "${job}" -n "${NS}" --preconditions="uid=${uid}" --wait=true --timeout=60s >/dev/null
+  delete_options="$(jq -cn --arg uid "${uid}" '{apiVersion:"meta.k8s.io/v1",kind:"DeleteOptions",preconditions:{uid:$uid}}')"
+  printf '%s' "${delete_options}" | MSYS_NO_PATHCONV=1 kubectl delete --raw="/apis/batch/v1/namespaces/${NS}/jobs/${job}" -f - >/dev/null
+  kubectl wait --for=delete "job/${job}" -n "${NS}" --timeout=60s >/dev/null
 done
