@@ -17,3 +17,4 @@ story
 subscription
 analytics
 federation
+gameintegration

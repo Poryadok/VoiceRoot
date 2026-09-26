@@ -325,6 +325,16 @@ test assertion, not just prose.
 - [x] Read pasted scope, repository instructions, PLAN, target docs, acceptance
   and design audit; fetch and compare specification branch with origin/master.
 - [x] Record initial source inventory and plan/architecture contradictions.
+- [x] Begin T10 with a separate Go module, service-owned migration and
+  database, fail-closed token/session-epoch checks, owner-derived draft app
+  creation, Gateway/Compose/CI wiring and a first registry contract. The
+  registry and public game capability remain incomplete.
+- [x] Bot T50 durable slash admission/lease slice committed on
+  `codex/game-bot-durable`; remaining Bot work continues on that branch.
+- [ ] Run required PostgreSQL integration assertions once Docker Desktop's
+  Windows engine is available. `go test -short ./...` passes for the new
+  module; the full registry test currently fails before assertions because
+  testcontainers reports `rootless Docker is not supported on Windows`.
 - [ ] T00–T94 implementation and acceptance remain open. Update each check as
   work lands; do not infer completion from this planning pass.
 

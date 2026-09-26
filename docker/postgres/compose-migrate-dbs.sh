@@ -189,7 +189,7 @@ GO_OWNED_DBS="
   chat_db messaging_db bot_db story_db
   user_db social_db file_db space_db role_db notification_db
   matchmaking_db search_db moderation_db gateway_db subscription_db
-  voice_db
+  voice_db game_integration_db
 "
 
 for db in $GO_OWNED_DBS; do

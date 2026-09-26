@@ -27,6 +27,7 @@
 | Moderation Service   | `moderation_db`   | —                         | —                                |
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
+| Game Integration Service | `game_integration_db` | — | App/env registry, bindings, operations, managed grants |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
 | Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
@@ -145,7 +146,12 @@ or profile IDs. This is storage evidence, not an activated party snapshot source
 
 ## Подсчёт логических PostgreSQL БД
 
-**17** planned PostgreSQL databases (see table above). **16** are provisioned by current deployment tooling, including the Voice Service `voice_db`. **`federation_db`** is documented for the deferred Federation Service but is **not** created in `docker/postgres/initdb.d/`, `deploy/templates/`, or migrate jobs until federation implementation starts ([PLAN.md](PLAN.md)).
+**18** PostgreSQL databases are listed above. Compose provisions **17**,
+including the new `game_integration_db`; its staging/production manifests still
+require the matching deployment changes before activation. The existing
+`federation_db` row describes the old scaffold and is not yet provisioned.
+The game sprint in [PLAN](PLAN.md) includes implementing its new authority
+store and deployment; the old deferred-runtime description is superseded.
 
 ---
 
