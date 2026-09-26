@@ -58,7 +58,8 @@ Wire version is `v1`. Auth first reads
 the response contains `binding_id`, `source_account_id`,
 `binding_revision`, `authority_epoch`, `policy_revision`, `target_occupied`,
 `active_grant_digest` and `preview_revision`. `preview_revision` is the
-SHA-256 hex digest of canonical JSON containing those fields in that order.
+SHA-256 hex digest of the canonical JSON object containing the preceding
+fields except `preview_revision`.
 It is computed by Game Integration from current committed state. If the
 binding, roster policy, lifecycle or target occupancy changes, it changes.
 Auth stores the exact preview response and requires the same revision at
@@ -70,7 +71,13 @@ Mutation endpoints are `POST /internal/v1/conversions/{operation_id}/freeze`,
 `target_profile_id`, `expected_binding_revision`, `expected_authority_epoch`,
 `preview_revision`, and `idempotency_key` equal to `operation_id:stage`.
 `request_hash` is the lower-case SHA-256 hex of canonical JSON excluding
-`request_hash`; both sides verify it. `transfer` also carries
+`request_hash`; both sides verify it. Canonical JSON for preview and mutation
+uses UTF-8, compact object encoding, keys sorted lexicographically by ASCII
+bytes, lower-case RFC 4122 UUID strings, lower-case hex hashes, decimal
+integer revisions without leading zero, JSON booleans, no nulls and no
+free-text fields. Unknown or duplicate keys fail before hashing. This narrow
+value grammar makes Jackson and Go encoders produce identical bytes without
+depending on object insertion order. `transfer` also carries
 `freeze_receipt_id`; `activate` carries `transfer_receipt_id`,
 `user_receipt_id`, `user_profile_revision`, `voice_receipt_id` and
 `voice_media_generation`. Fields not relevant to a stage are omitted, not
