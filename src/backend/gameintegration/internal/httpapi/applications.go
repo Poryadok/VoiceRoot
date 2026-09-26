@@ -21,16 +21,30 @@ type ApplicationStore interface {
 	CreateApplication(context.Context, registry.CreateApplicationInput) (registry.Application, error)
 }
 
+type ApprovalStore interface {
+	ApproveSandbox(context.Context, registry.ApproveSandboxInput) (registry.Environment, error)
+}
+
 type Handler struct {
-	Tokens       TokenValidator
-	Applications ApplicationStore
+	Tokens           TokenValidator
+	Applications     ApplicationStore
+	Approvals        ApprovalStore
+	OperatorAccounts map[uuid.UUID]struct{}
 }
 
 func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
-	return &Handler{Tokens: tokens, Applications: applications}
+	h := &Handler{Tokens: tokens, Applications: applications}
+	if approvals, ok := applications.(ApprovalStore); ok {
+		h.Approvals = approvals
+	}
+	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
+		h.serveSandboxApproval(w, r)
+		return
+	}
 	if r.URL.Path != "/api/v1/game-integrations/applications" || r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return

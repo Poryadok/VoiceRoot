@@ -55,7 +55,9 @@ func main() {
 	}
 	applications := &registry.Store{Pool: pool}
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/game-integrations/", httpapi.NewHandler(authorizer, applications))
+	api := httpapi.NewHandler(authorizer, applications)
+	api.OperatorAccounts = cfg.OperatorAccounts
+	mux.Handle("/api/v1/game-integrations/", api)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "gameintegration", "status": "ok"})

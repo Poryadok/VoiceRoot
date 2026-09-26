@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,4 +25,13 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ":8080", config.ListenAddr)
 	require.Equal(t, values["DATABASE_URL"], config.DatabaseURL)
+	require.Empty(t, config.OperatorAccounts)
+	operatorID := uuid.New()
+	values["GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"] = operatorID.String()
+	config, err = loadConfig(func(name string) string { return values[name] })
+	require.NoError(t, err)
+	require.Contains(t, config.OperatorAccounts, operatorID)
+	values["GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"] = "not-a-uuid"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS")
 }

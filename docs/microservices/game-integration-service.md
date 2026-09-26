@@ -20,8 +20,13 @@ does not enable a public game communication capability.
    stable `application_id`, name, optional catalog `game_id`, and its own
    `owner_account_id`. The caller's authenticated `user_id` supplies ownership;
    neither request JSON nor a game service credential may select another owner.
-2. A separate Voice operator authority approves the application for `sandbox`.
-   Approval is an audited transition; the applicant cannot self-approve.
+2. A separate regular Voice operator account, listed in the deployment's
+   `GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS`, approves the application for
+   `sandbox` via `POST /api/v1/game-integrations/applications/{id}/admissions/sandbox`.
+   Its bearer token undergoes the same signature, audience, expiry,
+   session-epoch and blacklist checks as a developer token. An empty allowlist
+   disables approval. The transition is audited and transactional; the
+   applicant cannot approve their own application even if on the allowlist.
    Production admission is a separate reviewed transition and cannot inherit
    sandbox credentials, bindings, subjects or data.
 3. An approved application may create `sandbox` and `production` environments,
