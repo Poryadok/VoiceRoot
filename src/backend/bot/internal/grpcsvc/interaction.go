@@ -14,7 +14,6 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/s2s"
 	"voice/backend/bot/internal/store"
-	"voice/backend/bot/internal/webhook"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -374,6 +373,9 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "bot not enabled in chat")
 	}
+	if err := s.requireInvokerMembership(ctx, chatID, invoker); err != nil {
+		return nil, err
+	}
 	botRow, err := s.Store.GetBotByID(ctx, botID)
 	if err != nil {
 		return nil, mapStoreErr(err)
@@ -410,22 +412,9 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		return nil, status.Error(codes.NotFound, "unknown command")
 	}
 
-	if s.Events != nil {
-		_ = s.Events.PublishCommandExecuted(ctx, botID.String(), cmdName, chatID.String())
-	}
-
 	token := uuid.NewString()
 	var options map[string]any
 	_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)
-	payload := webhook.InteractionPayload{
-		Type:             "slash_command",
-		InteractionToken: token,
-		CommandName:      cmdName,
-		Options:          options,
-		ChatID:           chatID.String(),
-		ChatType:         req.GetChat().GetType().String(),
-		InvokerProfileID: invoker.String(),
-	}
 	ch := s.Hub.Register(token)
 
 	eventPayload := map[string]any{
@@ -436,41 +425,28 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		"chat_type":          req.GetChat().GetType().String(),
 		"invoker_profile_id": invoker.String(),
 	}
-	_, _ = s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
+	eventID, err := s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
+	if err != nil {
+		s.Hub.Cancel(token)
+		return nil, status.Error(codes.Unavailable, "interaction could not be accepted")
+	}
+	if s.Events != nil {
+		_ = s.Events.PublishCommandExecuted(ctx, botID.String(), cmdName, chatID.String())
+	}
 
 	if botRow.IsPollingMode || botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "" {
 		// polling delivery via event queue
 	} else {
-		url := strings.TrimSpace(*botRow.WebhookURL)
 		go func() {
-			resp, err := webhook.DeliverPOST(context.Background(), s.HTTPClient, url, botRow.WebhookSecret, payload, dispatch.DefaultTimeout())
-			if err != nil {
-				_ = s.Store.MarkEventFailed(context.Background(), botID, token)
-				if s.Events != nil {
-					_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, false)
-					_ = s.Events.PublishWebhookFailed(context.Background(), botID.String(), "interaction", err.Error())
-				}
-				s.Hub.Complete(token, store.InteractionReply{Err: err})
-				return
-			}
-			if s.Events != nil {
-				_ = s.Events.PublishWebhookDelivered(context.Background(), botID.String(), token, true)
-			}
-			s.touchPresence(context.Background(), botID)
-			s.Hub.Complete(token, store.InteractionReply{
-				Content:   resp.Content,
-				Ephemeral: resp.Ephemeral,
-				Deferred:  resp.Deferred,
-			})
+			_, _ = s.processSlashInteraction(context.Background(), eventID)
 		}()
 	}
 
 	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout())
 	if !ok || reply.Err == dispatch.ErrTimeout {
 		s.Hub.Cancel(token)
-		_ = s.Store.MarkEventTimeout(ctx, botID, token)
 		code := "bot_timeout"
-		msg := "Bot did not respond in time. Try again later."
+		msg := "Bot did not respond in time. The accepted command is still being delivered."
 		return &botv1.ExecuteSlashInteractionResponse{
 			InteractionToken: token,
 			ErrorCode:        &code,
@@ -479,7 +455,6 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	}
 	if reply.Err != nil {
 		s.Hub.Cancel(token)
-		_ = s.Store.MarkEventFailed(ctx, botID, token)
 		return nil, status.Error(codes.Unavailable, reply.Err.Error())
 	}
 	if reply.Deferred {

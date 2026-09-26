@@ -89,6 +89,10 @@ type fakeChatClient struct {
 	createErr       error
 }
 
+func (f *fakeChatClient) ListMembers(context.Context, *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+	return &chatv1.ListMembersResponse{}, nil
+}
+
 func (f *fakeChatClient) AddMembers(_ context.Context, req *chatv1.AddMembersRequest) (*chatv1.AddMembersResponse, error) {
 	f.addMembersCalls++
 	return &chatv1.AddMembersResponse{}, nil
@@ -126,6 +130,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.Chat = allowMembershipClient{}
 	if deps != nil {
 		if deps.user != nil {
 			ul := bufconn.Listen(1024)

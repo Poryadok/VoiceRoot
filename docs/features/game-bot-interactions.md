@@ -55,8 +55,37 @@ interaction backend игры; бот отвечает. Игровая логик
    не проверяет `TEXT_CHAT_SEND_MESSAGES`. До production game notifications нужен
    одинаковый send-scope enforcement на обычном, deferred и recovery путях.
 
-Исправления не входят в этот docs-only change. Они перечислены как activation
-gates, а не обходятся повышенными правами бота.
+В baseline docs-only change исправления не входили. Они перечислены как
+activation gates, а не обходятся повышенными правами бота.
+
+### Реализованный Bot slice после baseline audit
+
+`GAME-BOT-01` добавляет для существующего slash RPC fail-closed acceptance:
+`ExecuteSlashInteraction` возвращает ошибку, если запись interaction в
+`bot_event_log` не сохранилась, и до этого не вызывает webhook. Webhook delivery
+берётся по lease из PostgreSQL outbox; отдельный worker после рестарта повторяет
+pending interaction с тем же `interaction_token`. Временная HTTP-ошибка оставляет
+запись pending с backoff; постоянная ошибка оставляет failed. Timeout ожидания
+синхронного ответа больше не удаляет pending intent. Перед acceptance и перед
+повторной доставкой Bot запрашивает у Chat effective membership профиля и
+проверяет текущие whitelist и send scopes.
+
+Это только надёжная постановка и доставка **slash webhook**. Повторный webhook
+возможен после crash между выполнением HTTP на стороне игры и записью receipt;
+игра должна дедуплицировать стабильный `interaction_token`. Текущий slash RPC
+не содержит client-supplied invocation ID, поэтому повтор *самого* RPC создаёт
+новую команду. Ответ webhook после client timeout не восстанавливает
+синхронный ephemeral/content result в клиенте, а обычный message reply ещё не
+имеет стабильного idempotency key. BOT01–13 и новый game action endpoint этим
+slice не закрыты.
+
+Из семи baseline gaps остаются: (2) polling без explicit ACK, поэтому только
+dev; (4) token validation до Hub completion; (5) read-scope фильтр для
+`message.sent`; (6) `thread_parent_id` при обычном post; (7) единая send-scope
+проверка всех send/deferred/recovery путей. Gap (3) закрыт для admission
+`ExecuteSlashInteraction` и повторной webhook доставки, но другие публичные
+Bot routes требуют собственной end-to-end проверки membership. Gap (1)
+закрыт только в пределах описанного slash webhook slice.
 
 ## 1. Модель приложения и персонажа
 

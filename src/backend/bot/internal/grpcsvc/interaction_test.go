@@ -83,6 +83,7 @@ func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.Me
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.Chat = allowMembershipClient{}
 	if user != nil {
 		ul := bufconn.Listen(1024)
 		us := grpc.NewServer()
