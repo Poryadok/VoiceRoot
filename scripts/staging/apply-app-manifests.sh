@@ -50,6 +50,15 @@ scale_auth_down_if_needed() {
   kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
 }
 
+prepare_notification_recreate_transition() {
+  if ! kubectl get deployment voice-notification -n "${NS}" >/dev/null 2>&1; then
+    return 0
+  fi
+  # Remove server-defaulted rollingUpdate before applying the canonical Recreate manifest.
+  kubectl patch deployment voice-notification -n "${NS}" --type=strategic \
+    -p '{"spec":{"strategy":{"$retainKeys":["type"],"type":"Recreate"}}}'
+}
+
 require_nats_bootstrap() {
   for job in voice-nats-realtime-bootstrap voice-nats-notification-bootstrap voice-nats-search-bootstrap voice-nats-analytics-chat-bootstrap; do
     if ! kubectl wait --for=condition=complete "job/${job}" -n "${NS}" --timeout=5s; then
@@ -63,6 +72,7 @@ bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
 require_nats_bootstrap
 scale_auth_down_if_needed
 
+prepare_notification_recreate_transition
 render "${ROOT}/deploy/staging/services.yaml" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -

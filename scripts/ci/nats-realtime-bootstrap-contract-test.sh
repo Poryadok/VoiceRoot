@@ -122,4 +122,13 @@ for source in \
   ! grep -Fq 'nats.BindStream(' "$file" || fail "${source} must not create or update stream state"
 done
 
+notification_deployment="$(awk '$0 == "  name: voice-notification" {found=1} found {print} found && /^---$/ {exit}' \
+  "${ROOT}/deploy/staging/services.yaml")"
+printf '%s\n' "$notification_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+  || fail "staging Notification must not overlap subscriptions to its fixed push durables"
+grep -Fq 'kubectl patch deployment voice-notification' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
+  || fail "staging app apply must transition existing Notification deployments before applying Recreate"
+grep -Fq '$retainKeys' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
+  || fail "Notification transition patch must clear the server-defaulted rollingUpdate strategy"
+
 echo 'NATS Realtime bootstrap contract OK'
