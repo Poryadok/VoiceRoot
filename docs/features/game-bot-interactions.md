@@ -352,8 +352,10 @@ stalled-body test проверяет 3s end-to-end read bound, restart test пр
 сохранение original deadline и DLQ outcome.
 
 Webhook URL проверяется при регистрации и доставке: HTTPS, разрешённые порты,
-защита от SSRF/private/metadata destinations и DNS rebinding, без auth-bearing
-redirects. Dev использует polling; webhook — staging/production по канону.
+ASCII callback path в canonical form из Game API contract (literal unreserved
+segments, `/` separators, без percent escapes/query/fragment), защита от
+SSRF/private/metadata destinations и DNS rebinding, без auth-bearing redirects.
+Dev использует polling; webhook — staging/production по канону.
 
 Новая durable polling capability, если будет выбрана, требует delivery lease,
 opaque cursor и отдельного ACK после записи game inbox. Текущий v1 PollEvents

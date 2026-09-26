@@ -659,9 +659,14 @@ decimal Unix seconds and must be within ±300 seconds of receiver clock. The
 request MAC input bytes are exactly UTF-8 encoding (LF=`0x0a`, no terminal LF) of
 `v1\n{UPPERCASE_METHOD}\n{canonical_path}\n{timestamp_seconds}\n{key_id}\n{lowercase_sha256_hex(canonical_body_bytes)}`;
 `canonical_body_bytes` are the exact request bytes that passed JCS equality.
-`canonical_path` is the ASCII origin-form path: each path segment is UTF-8 then
-percent-encoded with uppercase hex, only RFC 3986 unreserved bytes remain
-unescaped, and dot segments are rejected; query and fragment are forbidden.
+`canonical_path` is the exact raw path component of the HTTP origin-form
+request-target before route parsing or decoding. It is ASCII only, contains
+nonempty segments of literal RFC 3986 unreserved bytes (`A-Z`, `a-z`, `0-9`,
+`-._~`) separated by single `/` bytes, and has no query or fragment. Reject all
+percent signs/percent-escapes, non-ASCII and other reserved path bytes, empty
+segments, and `.`/`..` segments; never normalize or decode the path before
+signing. Current route paths use literal static segments and canonical UUID
+segments, so require no escaping.
 Duplicate auth/content-type headers and redirects are rejected. Replays and
 result outbox delivery use the originally stored canonical body bytes; only
 timestamp and MAC are regenerated. The result idempotency hash is computed over
