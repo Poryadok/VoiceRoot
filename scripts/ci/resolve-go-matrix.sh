@@ -9,8 +9,9 @@
 set -euo pipefail
 
 GO_SERVICES=(
-  analytics bot chat federation file gateway matchmaking messaging moderation
-  notification realtime role search social space story subscription user voice
+  analytics bot chat controlledgame federation file gameintegration gateway
+  matchmaking messaging moderation notification realtime role search social
+  space story subscription user voice
 )
 
 filter_val() {
@@ -39,10 +40,10 @@ add_unique() {
 expand_s2s_deps() {
   local seed=("$@")
   local svc
-  local had_seed=false
+  local had_deployable_seed=false
   for svc in "${seed[@]}"; do
-    had_seed=true
     add_unique "$svc"
+    [[ "$svc" == "controlledgame" ]] || had_deployable_seed=true
     case "$svc" in
       messaging) add_unique chat; add_unique file; add_unique realtime ;;
       chat) add_unique messaging; add_unique file ;;
@@ -56,7 +57,7 @@ expand_s2s_deps() {
       role) add_unique space ;;
     esac
   done
-  if [[ "${had_seed}" == true ]]; then
+  if [[ "${had_deployable_seed}" == true ]]; then
     add_unique gateway
   fi
 }

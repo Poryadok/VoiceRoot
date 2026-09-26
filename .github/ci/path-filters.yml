@@ -106,6 +106,12 @@ svc_federation:
 svc_file:
   - src/backend/file/**
 
+svc_gameintegration:
+  - src/backend/gameintegration/**
+
+svc_controlledgame:
+  - src/backend/controlledgame/**
+
 svc_gateway:
   - src/backend/gateway/**
 

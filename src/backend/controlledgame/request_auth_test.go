@@ -85,6 +85,22 @@ func TestAuthenticateRequestRejectsTamperedBodyAndSignature(t *testing.T) {
 	}
 }
 
+func TestAuthenticateRequestRejectsNonIntegerNumbersInArguments(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	now := time.Unix(1790500000, 0).UTC()
+	body := strings.Replace(canonicalCommand, `"encounter_id":"encounter-42"`, `"encounter_id":1.5`, 1)
+	if body == canonicalCommand {
+		t.Fatal("test fixture did not replace the typed argument")
+	}
+	signature := testSignature(key, "POST", vectorPath, vectorTimestamp, vectorKeyID, []byte(body))
+	if err := authenticateRequest("POST", vectorPath, vectorTimestamp, vectorKeyID, []byte(body), signature, key, now); err == nil {
+		t.Fatal("accepted a non-integer numeric value in arguments")
+	}
+}
+
 func testSignature(key []byte, method, path, timestamp, keyID string, body []byte) string {
 	bodyHash := sha256.Sum256(body)
 	input := strings.Join([]string{"v1", method, path, timestamp, keyID, hex.EncodeToString(bodyHash[:])}, "\n")

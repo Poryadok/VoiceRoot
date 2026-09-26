@@ -146,6 +146,21 @@ if [[ -n "${GO_SERVICES_JSON:-}" && "${GO_SERVICES_JSON}" != "[]" ]]; then
   mapfile -t go_services < <(echo "${GO_SERVICES_JSON}" | jq -r '.[]')
 fi
 
+# controlledgame is a test-only receiver harness. A change confined to that
+# module must never build, promote, or roll out deployment images.
+test_only_controlledgame=false
+if ! truthy "${FORCE_FULL:-}" && filter_val svc_controlledgame &&
+  ((${#go_services[@]} == 1)) && [[ "${go_services[0]}" == "controlledgame" ]]; then
+  other_change=false
+  for selector in global protos pkg compose staging_infra auth frontend admin developer-portal; do
+    if filter_val "${selector}"; then other_change=true; fi
+  done
+  for svc in analytics bot chat federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+    if filter_val "svc_${svc}"; then other_change=true; fi
+  done
+  if [[ "${other_change}" == false ]]; then test_only_controlledgame=true; fi
+fi
+
 build=()
 run_auth=false
 run_web=false
@@ -221,12 +236,17 @@ for name in "${ALL_NAMES[@]}"; do
   fi
 done
 
+if [[ "${test_only_controlledgame}" == true ]]; then
+  build=()
+  promote=()
+fi
+
 base_sha="${BASE_SHA:-}"
 if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]]; then
   base_sha="$(git -C "${ROOT}" rev-parse HEAD^ 2>/dev/null || true)"
 fi
 
-if truthy "${MANIFEST_CHECK:-}" && [[ -n "${VOICE_IMAGE_REGISTRY:-}" && -n "${base_sha}" ]]; then
+if [[ "${test_only_controlledgame}" != true ]] && truthy "${MANIFEST_CHECK:-}" && [[ -n "${VOICE_IMAGE_REGISTRY:-}" && -n "${base_sha}" ]]; then
   if ((${#promote[@]} > 0)); then
     base_sha="$(find_promote_base_sha "${base_sha}")"
   fi
@@ -240,7 +260,7 @@ if ! truthy "${FORCE_FULL:-}" && [[ "${FILTER_CODE:-true}" == "false" ]]; then
 fi
 
 # apply-app-manifests rewrites every deployment image tag on each code deploy.
-if [[ "${FILTER_CODE:-true}" == "true" ]]; then
+if [[ "${FILTER_CODE:-true}" == "true" && "${test_only_controlledgame}" != true ]]; then
   needs_user_space_rollout=true
 fi
 

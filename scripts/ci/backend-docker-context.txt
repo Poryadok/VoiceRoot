@@ -18,3 +18,4 @@ subscription
 analytics
 federation
 gameintegration
+controlledgame

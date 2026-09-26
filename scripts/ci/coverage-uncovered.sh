@@ -12,7 +12,7 @@ OUT="${ROOT}/.local/coverage"
 mkdir -p "${OUT}"
 
 GO_SERVICES=(
-  pkg analytics bot chat federation file gateway matchmaking messaging moderation
+  pkg analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation
   notification realtime role search social space story subscription user voice
 )
 

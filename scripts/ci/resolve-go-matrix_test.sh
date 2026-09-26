@@ -69,7 +69,7 @@ assert_not_contains "${go_services}" story
 
 echo "== controlledgame change selects its test-only module =="
 FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' run_matrix
-assert_exact_services "${go_services}" '["controlledgame","gateway"]'
+assert_exact_services "${go_services}" '["controlledgame"]'
 [[ "${run_go}" == "true" ]] || fail "expected run_go=true for controlledgame"
 
 echo "== gameintegration change selects the existing GIS module =="

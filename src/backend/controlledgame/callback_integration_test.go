@@ -21,6 +21,8 @@ import (
 	"voice/backend/pkg/integrationtest"
 )
 
+const canonicalResult = `{"command_id":"00000000-0000-4000-8000-000000000001","operation_id":"00000000-0000-4000-8000-000000000002","result_id":"00000000-0000-4000-8000-000000000009","schema_version":1,"state_version":"encounter-42:v4","status":"succeeded","summary":"Олень приручён"}`
+
 // This black-box callback contract expects exported OpenPostgresStore and
 // NewHandler seams. The configured effect writes only test state, through the
 // transaction the receiver uses for inbox admission and its receipt.
@@ -52,7 +54,7 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 			return nil, err
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO controlled_game_test_effects(command_id) VALUES ($1)`, command.CommandID)
-		return []byte(`{"status":"succeeded"}`), err
+		return []byte(canonicalResult), err
 	}
 	open := func() http.Handler {
 		store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
@@ -68,7 +70,7 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 	server := httptest.NewServer(open())
 	first := postCanonicalCommand(t, server.Client(), server.URL, []byte(canonicalCommand), key)
 	require.Equal(t, http.StatusAccepted, first.status, "202 means inbox transaction committed")
-	require.NotEmpty(t, first.body, "accepted callback returns its durable receipt")
+	assertCanonicalResult(t, first.body)
 	server.Close()
 
 	// A newly constructed handler over the same PostgreSQL database must return
@@ -81,6 +83,11 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 	var effects int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM controlled_game_test_effects`).Scan(&effects))
 	require.Equal(t, 1, effects, "same command retry must not repeat the effect")
+	var storedResult, outboxResult string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT result_body FROM command_results`).Scan(&storedResult))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT result_body FROM result_outbox`).Scan(&outboxResult))
+	require.Equal(t, canonicalResult, storedResult)
+	require.Equal(t, canonicalResult, outboxResult)
 	var appliedCommandID string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT command_id FROM controlled_game_test_effects`).Scan(&appliedCommandID))
 	require.Equal(t, expected.CommandID, appliedCommandID, "effect must use the command ID from the signed envelope")
@@ -99,7 +106,7 @@ func TestCallbackRejectsDifferentCommandIDsForSameOneShotEffect(t *testing.T) {
 	createInvocationTable(t, ctx, pool)
 	key := testKey()
 	now := time.Unix(1790500000, 0).UTC()
-	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, recordInvocation([]byte(`{"status":"succeeded","effect":"canonical"}`), nil)))
+	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, recordInvocation([]byte(canonicalResult), nil)))
 	defer server.Close()
 
 	firstBody := []byte(canonicalCommand)
@@ -107,6 +114,7 @@ func TestCallbackRejectsDifferentCommandIDsForSameOneShotEffect(t *testing.T) {
 	first := postCanonicalCommand(t, server.Client(), server.URL, firstBody, key)
 	second := postCanonicalCommand(t, server.Client(), server.URL, secondBody, key)
 	require.Equal(t, http.StatusAccepted, first.status)
+	assertCanonicalResult(t, first.body)
 	require.Equal(t, http.StatusConflict, second.status, "one operation cannot be rebound to a new command ID")
 	assertRecordedInvocations(t, ctx, pool, 1)
 }
@@ -120,7 +128,7 @@ func TestCallbackRollbackAndLostAckRecoverAcrossHandlerRestart(t *testing.T) {
 	now := time.Unix(1790500000, 0).UTC()
 	var failOnce atomic.Bool
 	failOnce.Store(true)
-	effect := recordInvocation([]byte(`{"status":"succeeded"}`), &failOnce)
+	effect := recordInvocation([]byte(canonicalResult), &failOnce)
 	body := []byte(canonicalCommand)
 
 	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, effect))
@@ -155,6 +163,7 @@ func TestCallbackRollbackAndLostAckRecoverAcrossHandlerRestart(t *testing.T) {
 	defer server.Close()
 	recovered := postCanonicalCommand(t, server.Client(), server.URL, body, key)
 	require.Equal(t, http.StatusAccepted, recovered.status)
+	assertCanonicalResult(t, recovered.body)
 	require.Equal(t, lostAckBody, recovered.body, "restart returns the exact receipt whose ACK was lost")
 	assertRecordedInvocations(t, ctx, pool, 1)
 }
@@ -166,7 +175,7 @@ func TestCallbackConcurrentDuplicateDeliveryAppliesEffectOnce(t *testing.T) {
 	createInvocationTable(t, ctx, pool)
 	key := testKey()
 	now := time.Unix(1790500000, 0).UTC()
-	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, recordInvocation([]byte(`{"status":"succeeded"}`), nil)))
+	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, recordInvocation([]byte(canonicalResult), nil)))
 	defer server.Close()
 
 	const deliveries = 8
@@ -203,6 +212,7 @@ func TestCallbackConcurrentDuplicateDeliveryAppliesEffectOnce(t *testing.T) {
 	for i, response := range responses {
 		require.NoError(t, errs[i])
 		require.Equal(t, http.StatusAccepted, response.status)
+		assertCanonicalResult(t, response.body)
 		require.Equal(t, responses[0].body, response.body, "serialized duplicates return one receipt")
 	}
 	assertRecordedInvocations(t, ctx, pool, 1)
@@ -303,6 +313,28 @@ func assertRecordedInvocations(t *testing.T, ctx context.Context, pool *pgxpool.
 	var got int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM controlled_game_test_effects`).Scan(&got))
 	require.Equal(t, expected, got, "each effect application must leave an append-only invocation row")
+}
+
+func assertCanonicalResult(t *testing.T, body string) {
+	t.Helper()
+	var result struct {
+		CommandID     string `json:"command_id"`
+		OperationID   string `json:"operation_id"`
+		ResultID      string `json:"result_id"`
+		SchemaVersion int    `json:"schema_version"`
+		StateVersion  string `json:"state_version"`
+		Status        string `json:"status"`
+		Summary       string `json:"summary"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &result))
+	require.Equal(t, 1, result.SchemaVersion)
+	require.Equal(t, "00000000-0000-4000-8000-000000000001", result.CommandID)
+	require.Equal(t, "00000000-0000-4000-8000-000000000002", result.OperationID)
+	require.Equal(t, "00000000-0000-4000-8000-000000000009", result.ResultID)
+	require.Equal(t, "encounter-42:v4", result.StateVersion)
+	require.Equal(t, "succeeded", result.Status)
+	require.Equal(t, "Олень приручён", result.Summary)
+	require.Equal(t, canonicalResult, body, "result is the exact canonical result envelope")
 }
 
 func assertNoDurableCommandRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

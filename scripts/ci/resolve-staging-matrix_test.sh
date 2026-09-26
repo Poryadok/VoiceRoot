@@ -69,6 +69,12 @@ FILTER_JSON='{"code":"true","auth":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" auth
 assert_not_contains "${build_services}" gateway
 
+echo "== controlledgame test-only change never builds/promotes/rolls out images =="
+FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' GO_SERVICES_JSON='["controlledgame"]' run_matrix
+[[ "${build_services}" == "[]" ]] || fail "controlledgame test-only change must not build images"
+[[ "${promote_services}" == "[]" ]] || fail "controlledgame test-only change must not promote images"
+[[ "${needs_user_space_rollout}" == "false" ]] || fail "controlledgame test-only change must not roll out application images"
+
 echo "== admin path sets run_admin =="
 FILTER_JSON='{"code":"true","admin":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" admin
