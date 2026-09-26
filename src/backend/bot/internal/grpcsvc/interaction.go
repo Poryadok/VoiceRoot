@@ -544,7 +544,7 @@ func (s *BotGRPC) authorizeInteraction(ctx context.Context, botRow *store.BotRow
 	err := s.Store.Pool.QueryRow(ctx, `
 SELECT payload::text, delivery_status FROM bot_event_log
 WHERE bot_id = $1 AND interaction_token = $2 AND event_type = 'interaction'
-  AND delivery_status IN ('pending', 'deferred')
+  AND delivery_status IN ('pending', 'deferred', 'delivered')
 ORDER BY created_at DESC LIMIT 1`,
 		botRow.ID, token).Scan(&payload, &state)
 	if err != nil {

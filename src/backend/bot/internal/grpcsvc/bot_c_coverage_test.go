@@ -657,6 +657,36 @@ func TestCompleteInteraction_recoveryWithoutHubWaiter(t *testing.T) {
 	require.Equal(t, "recovered", msg.lastContent)
 }
 
+func TestCompleteInteraction_afterPollDelivery(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, hub, cleanup := startBotGRPCWithBotCDeps(t, nil)
+	defer cleanup()
+
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID, err := uuid.Parse(botID)
+	require.NoError(t, err)
+
+	token := "poll-" + uuid.NewString()
+	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		"chat_id":            chatID.String(),
+		"chat_type":          "CHAT_TYPE_CHANNEL",
+		"invoker_profile_id": uuid.NewString(),
+	}, token)
+	require.NoError(t, err)
+	waiter := hub.Register(token)
+	require.NoError(t, st.MarkEventDelivered(ctx, eventID))
+
+	_, err = client.CompleteInteraction(withBotToken(context.Background(), botToken), &botv1.CompleteInteractionRequest{
+		InteractionToken: token,
+		Content:          "polled",
+	})
+	require.NoError(t, err)
+	reply := <-waiter
+	require.Equal(t, "polled", reply.Content)
+}
+
 func TestUninstallBotFromSpace_removesSpaceMember(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
