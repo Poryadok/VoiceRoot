@@ -1,6 +1,7 @@
 package voice.backend.auth.config;
 
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -19,6 +20,7 @@ import voice.backend.auth.service.TransactionalAccountDeletionOperationStarter;
 import voice.backend.auth.service.TransactionalGuestConversionLocalPromotion;
 import voice.backend.auth.service.TransactionalGuestConversionOtpAcceptance;
 import voice.backend.auth.service.RegistrationSessionEpochPreparer;
+import voice.backend.auth.service.RegistrationIntentBinder;
 import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
@@ -36,9 +38,10 @@ public class JdbcTransactionConfiguration {
   RegistrationSessionEpochPreparer registrationSessionEpochPreparer(
       @Qualifier("guestConversionTransactionTemplate") TransactionTemplate transactions,
       AccountRepository accounts,
-      SessionEpochFloorStore floors) {
+      SessionEpochFloorStore floors,
+      ObjectProvider<RegistrationIntentBinder> intentBinder) {
     return new RegistrationSessionEpochPreparer(
-        transactions, accounts, new SessionEpochIssuanceGate(accounts, floors));
+        transactions, accounts, new SessionEpochIssuanceGate(accounts, floors), intentBinder.getIfAvailable());
   }
 
   @Bean
