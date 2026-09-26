@@ -32,9 +32,9 @@ for bucket in avatars files; do
     ((.spec.completionMode // "NonIndexed") == "NonIndexed") and ((.spec.suspend // false) == false) and
     ((.spec.manualSelector // false) == false) and ((.spec.podReplacementPolicy // "TerminatingOrFailed") == "TerminatingOrFailed") and
     (.metadata.uid as $uid | .spec.selector.matchLabels as $labels | .spec.template.metadata.labels as $templateLabels |
-      ($labels | type == "object" and keys == ["controller-uid"]) and
+      ($labels | type == "object" and ((keys == ["controller-uid"]) or (keys == ["batch.kubernetes.io/controller-uid"]))) and
       ((.spec.selector | keys) == ["matchLabels"]) and
-      $labels["controller-uid"] == $uid and
+      (($labels["controller-uid"] // $labels["batch.kubernetes.io/controller-uid"]) == $uid) and
       ($templateLabels | type == "object" and keys == ["batch.kubernetes.io/controller-uid", "batch.kubernetes.io/job-name", "controller-uid", "job-name"]) and
       $templateLabels["controller-uid"] == $uid and
       $templateLabels["batch.kubernetes.io/controller-uid"] == $uid and
