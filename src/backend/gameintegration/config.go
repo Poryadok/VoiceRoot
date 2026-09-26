@@ -17,6 +17,7 @@ type config struct {
 	JWTAudience      string
 	OperatorAccounts map[uuid.UUID]struct{}
 	CredentialKey    []byte
+	AuthWorkloadKey  []byte
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -66,6 +67,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_CREDENTIAL_KEY_B64")
 		}
 		c.CredentialKey = key
+	}
+	if raw := strings.TrimSpace(getenv("GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")); raw != "" {
+		key, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(key) != 32 {
+			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
+		}
+		c.AuthWorkloadKey = key
 	}
 	return c, nil
 }

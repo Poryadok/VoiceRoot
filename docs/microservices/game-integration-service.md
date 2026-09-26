@@ -70,6 +70,42 @@ revokes an owned credential immediately and is idempotent. Production
 admission and a live game-service operation consuming the verifier remain
 dependent steps.
 
+The approved sandbox owner configures Auth admission with
+`PUT /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/policy`.
+The body carries `expected_revision`, exact redirect URIs, browser origins,
+provider `google`, and a subset of the six `game.*` player scopes frozen with
+Auth. The mutation is owner-scoped, audited and CAS-protected. A sandbox may
+use HTTPS redirects, HTTP loopback callbacks and the exact
+`voicegame://auth/...` callback; an arbitrary HTTP host, URI userinfo or
+fragment is refused. Auth receives only active, nonempty policy with its
+monotonic revision. A suspended app or empty policy returns unavailable, so
+no browser or SDK code may substitute a local allowlist.
+
+Auth resolves a policy at
+`GET /internal/v1/authorizations/environments/{environment_id}`. It uses a
+dedicated shared 32-byte workload key, supplied as base64 in
+`GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64` to Game Integration and Auth through
+their deployment secret managers. Missing keys disable this route. Auth sends
+one each of `X-Voice-Workload: auth`, `X-Voice-Timestamp` (canonical Unix
+seconds), `X-Voice-Nonce` (lowercase UUID) and `X-Voice-Signature` (unpadded
+base64url HMAC-SHA256). The signed UTF-8 message is
+`v1\nGET\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_empty_body}`.
+The server rejects query/body, a timestamp outside ±30 seconds, duplicate
+headers, invalid signature and reused nonce; Redis `SETNX` stores each nonce
+for 60 seconds. Redis failure is `503`, never an authentication fallback.
+The response is `no-store` and includes app/env IDs, current policy revision,
+display name, exact redirects/origins, providers and player scopes. Auth
+re-resolves and compares revision at request, approval and code exchange.
+For a successful `200` response Game Integration also echoes the request's
+timestamp and nonce in `X-Voice-Response-Timestamp` and
+`X-Voice-Response-Nonce`, and sends `X-Voice-Response-Signature` as unpadded
+base64url HMAC-SHA256 under the same workload key. The signed UTF-8 message is
+`v1\n200\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_exact_response_body}`.
+Auth checks the response status, echoed request fields and MAC over the exact
+received bytes before parsing or using the policy. Missing or invalid response
+proof fails closed. This authenticates the response over the Compose internal
+HTTP hop; externally configured endpoints still require HTTPS.
+
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
 exists, no production credential is issued. This gate is an implementation

@@ -43,4 +43,12 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	values["GAME_INTEGRATION_CREDENTIAL_KEY_B64"] = "short"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "GAME_INTEGRATION_CREDENTIAL_KEY_B64")
+	values["GAME_INTEGRATION_CREDENTIAL_KEY_B64"] = ""
+	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte("abcdef0123456789abcdef0123456789"))
+	config, err = loadConfig(func(name string) string { return values[name] })
+	require.NoError(t, err)
+	require.Len(t, config.AuthWorkloadKey, 32)
+	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = "short"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
 }

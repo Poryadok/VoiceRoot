@@ -30,11 +30,16 @@ type CredentialStore interface {
 	RevokeCredential(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error
 }
 
+type PolicyStore interface {
+	UpdateSandboxPolicy(context.Context, registry.UpdateSandboxPolicyInput) (registry.Environment, error)
+}
+
 type Handler struct {
 	Tokens           TokenValidator
 	Applications     ApplicationStore
 	Approvals        ApprovalStore
 	Credentials      CredentialStore
+	Policies         PolicyStore
 	CredentialKey    []byte
 	OperatorAccounts map[uuid.UUID]struct{}
 }
@@ -47,11 +52,18 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 	if credentials, ok := applications.(CredentialStore); ok {
 		h.Credentials = credentials
 	}
+	if policies, ok := applications.(PolicyStore); ok {
+		h.Policies = policies
+	}
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
+		if strings.HasSuffix(r.URL.Path, "/policy") {
+			h.serveSandboxPolicyUpdate(w, r)
+			return
+		}
 		if strings.Contains(r.URL.Path, "/credentials/") {
 			h.serveCredentialRevoke(w, r)
 			return
