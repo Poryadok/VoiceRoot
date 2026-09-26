@@ -86,9 +86,14 @@ inbox, друзьям, другим играм и другим профилям.
 
 ### Вход и связывание
 
-1. SDK получает краткоживущий доказуемый game login ticket. Issuer/audience,
+1. SDK получает краткоживущий независимо проверяемый login proof. Для авторства
+   пользователя заверения backend разработчика недостаточно: нужен вход Voice
+   либо внешний provider flow, который Voice проверяет независимо от игры и
+   связывает с ключом устройства. Game ticket может подтверждать roster/context,
+   но не выдавать developer право получить user credential. Issuer/audience,
    signature, nonce, expiry и replay проверяются сервером; поддержанные providers
-   настраиваются в portal, ключи берутся из доверенного registry.
+   настраиваются в portal, ключи берутся из доверенного registry; developer
+   не может назначить свой issuer независимым удостоверением игрока.
 2. Voice создаёт binding challenge с `state` и одноразовым nonce. Пользователь
    проходит системный browser/device flow, выбирает профиль и scopes.
 3. Authorization code + PKCE связывают callback с инициатором. Redirect URI
@@ -109,6 +114,10 @@ Claim/upgrade требует proof обеих identity, описанного con
 истории. Автоматического merge друзей/профилей/истории нет.
 
 ### Конвертация sdk-account
+
+Подтверждение исходного sdk-account включает proof-of-possession его device key
+и независимую пользовательскую авторизацию; одного server-issued game ticket
+недостаточно для конвертации или замены device key.
 
 Требование владельца: `sdk-account` — отдельный от текущего `guest` тип с доказанным game
 subject и ограниченным app/env доверием, с конвертацией как в новый, так и в
@@ -155,6 +164,32 @@ mapping сохраняет audit и не раскрывает другим лю�
 До включения capability нужны схемы Auth/store, отдельная trust/permissions
 матрица, conversion endpoints и согласованные conflict/history/recovery UX.
 Этот раздел задаёт требования и предлагаемый протокол, а не доступный API.
+
+### Авторство сообщений пользователя
+
+Принятая владельцем гарантия: серверный credential студии не позволяет отправить
+сообщение от лица игрока; запрос приходит от авторизованного игрового клиента.
+Это не гарантия намерения человека против злонамеренного игрового executable,
+который контролирует SDK process и может сам вызвать отправку. Для такой более
+сильной гарантии потребовался бы независимый доверенный UI подтверждения.
+
+SDK создаёт отдельный device key для app/env, хранит private key в доступном
+OS secure storage и регистрирует public key после независимого user proof.
+Game backend, bot и node не получают этот private key, permanent credentials
+или возможность выпускать player tokens. Сообщение подписывает канонический
+envelope с actor/binding/device, app/env, chat, message ID, content digest,
+authority revision, audience и freshness/replay fields. Receiver проверяет
+подпись, актуальное admission и dedupe; та же message ID с иным содержимым
+отвергается. Подпись не заменяет membership, scope или rate limit.
+
+Нода проверяет user signature по master-authorized device binding, а не по
+ключу оператора ноды; происхождение должно оставаться проверяемым получателем
+через доверенные master keys. Wire format, алгоритм, canonicalization, key
+rotation/recovery и receiver verification фиксируются в GI0/G01 до реализации.
+Игра без независимого способа подтвердить пользователя не получает capability
+создания sdk-account на основании одного собственного service credential.
+Конвертация сохраняет app-scoped полномочия и не экспортирует ключи постоянного
+аккаунта. Подпись удостоверяет происхождение, но не скрывает текст сообщения.
 
 ### Предлагаемые scopes
 

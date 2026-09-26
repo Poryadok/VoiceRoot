@@ -101,6 +101,35 @@ session и блокирует новые grants до повторного admiss
 центральные аккаунты, подделывать user commands, DM/MM events или роли Owner.
 Game-server, bot и node credentials различны и имеют разные audiences.
 
+### Авторизация узла и граница внутреннего NATS
+
+Аналогия с NATS ACL — отдельная identity вызывающей стороны и минимальный набор
+разрешённых операций. Внешняя нода не подключается к внутренней шине master
+с credentials микросервисов. Федерационный S2S gateway проверяет mTLS peer,
+node registry/status и краткоживущий grant с issuer/audience/node/env/scopes,
+разрешёнными Space, placement generation и authority epoch. Сертификат
+удостоверяет узел, но сам по себе не разрешает читать все Space или выполнять
+произвольный RPC. Конкретный token schema — часть GI0/GI6.
+
+Например, узел A может получить membership snapshot и отправить lifecycle
+receipt для размещённого на нём Space X; тот же credential не позволяет читать
+Space Y на узле B, назначать роли на master или публиковать user-auth events.
+Если принятому запросу нужно внутреннее событие, его создаёт owning master
+service со своим NATS credential после проверки S2S admission. Входящий payload
+не выбирает произвольные внутренние NATS subjects. У ноды может быть собственный
+внутренний NATS с собственными service ACL; trust domains не объединяются.
+
+Ротация сохраняет node ID, а отзыв доверия запрещает новые вызовы и закрывает
+действующие streams в принятом revocation budget. При недоступной authority
+привилегированные вызовы fail closed; действуют отдельные quotas, аудит и
+replay protection. Старый сертификат, истёкший grant, неверный audience/Space
+и replay проверяются негативными acceptance tests.
+
+Node authorization и user authorship независимы: право ноды передавать событие
+не даёт права подписать сообщение за игрока. Для пользовательских сообщений
+сохраняется device signature и master-authorized binding из
+[Game API](game-integration-api.md#авторство-сообщений-пользователя).
+
 ## 5. Routing и resource identity
 
 UUID ресурса не меняется при размещении на ноде. Master registry содержит

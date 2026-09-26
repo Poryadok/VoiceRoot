@@ -84,6 +84,10 @@ Gateway/SDK и старые credentials. Все game IDs и secrets — syntheti
 | ID11 | Занятый binding, бан, удалённый target или конкурентная конвертация | Контролируемый конфликт; нет перезаписи, обхода санкций или двух активных владельцев |
 | ID12 | Crash/timeout/retry на каждой стадии конвертации | Та же durable operation, доступный status, recovery; нет дублей, потери audit или оживления старых tokens/actions |
 | ID13 | Unlink после конвертации, старый provider ticket/token | Retired identity не восстанавливается автоматически; последующий вход следует утверждённой G01 policy |
+| ID14 | Developer service/node credential пытается выпустить player token, заменить device key или отправить за игрока | Reject; independent user proof и device signature обязательны, произвольный developer issuer не принимается |
+| ID15 | Подмена actor/chat/body/env подписанного сообщения, replay, отозванный device key | Receiver rejects tampering/revoked key; retry одного сообщения не создаёт дубль |
+| ID16 | SDK-клиент подписывает сообщение по вызову кода игры | Гарантия ограничена авторизованным клиентом; продукт не заявляет proof человеческого намерения против разработчика executable |
+| FED-AUTH | Нода A вызывает чужой Space/RPC, выбирает внутренний NATS subject или использует истёкший/отозванный grant | Reject; нет доступа к master NATS, нет подделки user authorship; active stream revoke проверен |
 | SE01 | Повтор CreateSession, потеря ответа, restart orchestrator | Одна session/группа/комната и прежний operation result |
 | SE02 | Crash после Chat create до Voice ready | Reconcile достраивает либо безопасно убирает owned resources |
 | SE03 | Три матча одной party | Общая разрешённая party-группа, независимые match lifecycles |
