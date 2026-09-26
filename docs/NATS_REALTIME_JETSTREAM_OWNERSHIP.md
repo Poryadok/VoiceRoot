@@ -19,6 +19,11 @@ The sole deployed slot is `realtime-1`. Its Deployment has `replicas: 1` and
 new explicitly pre-provisioned consumer and a matching authorization review.
 Missing consumers are a startup error; Realtime must not create one.
 
+Staging Notification also uses `Recreate`: its fixed push durables have no
+queue group, so old and new replicas cannot bind concurrently. The staging
+manifest apply first removes Kubernetes' defaulted `rollingUpdate` field with a
+strategic retain-keys patch before applying the canonical strategy.
+
 The bootstrap entry points are `docker/nats/realtime-bootstrap.sh` for Compose
 and the `voice-nats-realtime-bootstrap` Job in
 `deploy/templates/nats-realtime-bootstrap.yaml` for staging and production.
