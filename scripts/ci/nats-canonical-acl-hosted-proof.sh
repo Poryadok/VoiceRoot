@@ -150,18 +150,113 @@ printf '%s' "$user_info" |
 docker run -d --name voice-nats-canonical-chat --network "$network" -v "$work:$work:ro" \
   nats:2.12-alpine -c "$work/chat-leaf.conf" >/dev/null
 for _ in $(seq 1 20); do
-  docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' && break
+  chat_leaf_logs="$(docker logs voice-nats-canonical-chat 2>&1 || true)"
+  if grep -Fq 'Server is ready' <<<"$chat_leaf_logs" && \
+    grep -Fq 'Leafnode connection created for account: $G' <<<"$chat_leaf_logs"; then
+    break
+  fi
   sleep 1
 done
-docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' || {
-  docker logs voice-nats-canonical-chat >&2; exit 1;
+chat_leaf_logs="$(docker logs voice-nats-canonical-chat 2>&1 || true)"
+if ! grep -Fq 'Server is ready' <<<"$chat_leaf_logs"; then
+  echo 'FAIL: chat leaf did not become locally ready within 20 seconds' >&2
+  exit 1
+fi
+if ! grep -Fq 'Leafnode connection created for account: $G' <<<"$chat_leaf_logs"; then
+  echo 'FAIL: chat leaf did not announce its remote leaf attach within 20 seconds' >&2
+  exit 1
+fi
+
+# Use a synchronous JetStream publish so the assertion follows the hub's
+# PubAck, rather than racing a fire-and-forget Core NATS publish against leaf
+# interest propagation. The bounded remote-attach log is only a startup
+# diagnostic; the PubAck below is the proof that the leaf route persisted the
+# message. This app client has no credentials and can only reach NATS through
+# the Chat leaf.
+cat >"$work/chat-leaf-publish.go" <<'EOF'
+package main
+
+import (
+  "errors"
+  "fmt"
+  "os"
+  "strings"
+  "time"
+
+  "github.com/nats-io/nats.go"
+)
+
+func errorCategory(err error) string {
+  message := strings.ToLower(err.Error())
+  switch {
+  case errors.Is(err, nats.ErrTimeout), strings.Contains(message, "timeout"):
+    return "timeout"
+  case strings.Contains(message, "no responders"):
+    return "no_responders"
+  case strings.Contains(message, "permission"):
+    return "permission"
+  case strings.Contains(message, "connection refused"):
+    return "connection_refused"
+  case strings.Contains(message, "stream not found"):
+    return "stream_not_found"
+  default:
+    return "other"
+  }
 }
 
-# The app client has no credential. It can only publish through its Chat leaf.
-docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
-  nats --server nats://127.0.0.1:4222 pub chat.created canonical-leaf-proof >/dev/null
-bootstrap_info '$JS.API.STREAM.INFO.chat_events' |
-  jq -e '.state.messages == 1 and .state.last_seq == 1' >/dev/null
+func main() {
+  nc, err := nats.Connect("nats://127.0.0.1:4222",
+    nats.Name("canonical-chat-leaf-proof"),
+    nats.CustomInboxPrefix("_INBOX.voice.chat"),
+    nats.Timeout(3*time.Second))
+  if err != nil {
+    fmt.Fprintf(os.Stderr, "FAIL: local Chat leaf connect error_category=%s\n", errorCategory(err))
+    os.Exit(1)
+  }
+  defer nc.Close()
+
+  js, err := nc.JetStream()
+  if err != nil {
+    fmt.Fprintf(os.Stderr, "FAIL: create Chat leaf JetStream publisher error_category=%s\n", errorCategory(err))
+    os.Exit(1)
+  }
+  ack, err := js.Publish("chat.created", []byte("canonical-leaf-proof"), nats.AckWait(3*time.Second))
+  if err != nil {
+    fmt.Fprintf(os.Stderr, "FAIL: Chat leaf JetStream publish puback_error_category=%s\n", errorCategory(err))
+    os.Exit(1)
+  }
+  if ack.Stream != "chat_events" || ack.Sequence != 1 {
+    fmt.Fprintf(os.Stderr, "FAIL: Chat leaf PubAck mismatch stream=%s sequence=%d\n", ack.Stream, ack.Sequence)
+    os.Exit(1)
+  }
+  fmt.Printf("stream=%s sequence=%d\n", ack.Stream, ack.Sequence)
+}
+EOF
+if ! (cd "$root/src/backend/pkg" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$work/chat-leaf-publish" "$work/chat-leaf-publish.go"); then
+  echo 'FAIL: build Chat leaf PubAck probe' >&2
+  exit 1
+fi
+chat_leaf_puback="$(docker run --rm --network container:voice-nats-canonical-chat \
+  -v "$work/chat-leaf-publish:/chat-leaf-publish:ro" alpine:3.22 /chat-leaf-publish)" || {
+  echo 'FAIL: Chat leaf JetStream publish did not complete' >&2
+  exit 1
+}
+if [[ "$chat_leaf_puback" != 'stream=chat_events sequence=1' ]]; then
+  echo 'FAIL: Chat leaf JetStream publish returned an unexpected PubAck' >&2
+  printf 'observed=%s\n' "$chat_leaf_puback" >&2
+  exit 1
+fi
+chat_leaf_after="$(bootstrap_info '$JS.API.STREAM.INFO.chat_events')" || {
+  echo 'FAIL: hub stream INFO after Chat leaf PubAck' >&2
+  exit 1
+}
+if ! jq -e '.config.name == "chat_events" and .state.messages == 1 and .state.last_seq == 1' \
+  <<<"$chat_leaf_after" >/dev/null; then
+  echo 'FAIL: hub did not retain the exact Chat leaf PubAck message' >&2
+  jq -c '{stream: .config.name, messages: .state.messages, last_seq: .state.last_seq, error: .error}' \
+    <<<"$chat_leaf_after" >&2 || true
+  exit 1
+fi
 
 # The same CA must reject a leaf URL whose hostname is absent from the hub SAN.
 sed 's@nats-leaf://hub:7422@nats-leaf://voice-nats-canonical-hub:7422@' \
