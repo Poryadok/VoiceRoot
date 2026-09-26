@@ -34,8 +34,13 @@ defaults to the reviewed immutable references published from master commit
 
 The staging defaults are in `scripts/staging/apply-infra.sh`; explicit
 `VOICE_MINIO_IMAGE` and `VOICE_MINIO_MC_IMAGE` overrides remain available.
-Local Compose and production defaults are unchanged. Do not infer digests from
-tags or use mutable tags as substitutes.
+On GitHub Actions, `compose-e2e`, `a1-e2e`, and
+`a1-flutter-profile-handoff` use those same immutable server and mc references.
+Each job authenticates to GHCR with its read-only `GITHUB_TOKEN` permission and
+checks the rendered Compose image references before starting containers. The
+attachment restart proof builds and verifies the same official binaries locally
+in its isolated job. Local Compose and production defaults remain unchanged.
+Do not infer digests from tags or use mutable tags as substitutes.
 
 For an internal mirror, a package administrator with `packages:write` performs
 the following once for each exact digest, then grants the CI repository pull
@@ -49,8 +54,9 @@ docker push ghcr.io/OWNER/voice-minio:RELEASE.2024-12-18T13-15-44Z
 
 Resolve and record the mirror digest after the push, then set both
 `VOICE_MINIO_IMAGE` and `VOICE_MINIO_MC_IMAGE` to mirror `tag@sha256` values in
-the deployment/CI environment. Until a mirror is pre-seeded, the non-Docker-Hub
-Quay defaults keep the A1 proof runnable without anonymous Docker Hub access.
+the deployment/CI environment. Grant the CI repository pull access to the
+packages; the GitHub Actions jobs use only `packages:read` and do not expose
+registry credentials to Compose or the application services.
 
 ## k3s deployment
 

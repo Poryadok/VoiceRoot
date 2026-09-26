@@ -50,6 +50,8 @@ trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.chan
 expected_trigger_terms="$(printf '%s\n' \
   "github.event_name == 'schedule' ||" \
   "(github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||" \
+  "github.event_name == 'pull_request' &&" \
+  "needs.changes.outputs.a1_e2e == 'true'" \
   "github.event_name == 'push' &&" \
   "github.ref == 'refs/heads/master' &&" \
   "needs.changes.outputs.a1_e2e == 'true'")"
