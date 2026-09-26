@@ -26,6 +26,8 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/ResolveAccountIDForProfile"
 	case "search":
 		return "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
+	case "auth":
+		return "/voice.user.v1.UserService/GetSdkProfileEligibility"
 	}
 	return ""
 }
@@ -52,6 +54,12 @@ func AllowsMethod(target, method string) bool {
 			"/voice.user.v1.UserService/ListSearchProfileSnapshot",
 			"/voice.user.v1.UserService/ListSearchProfileJournal",
 			"/voice.user.v1.UserService/GetSearchProfileCheckpoint":
+			return true
+		}
+	case "auth":
+		switch method {
+		case "/voice.user.v1.UserService/GetSdkProfileEligibility",
+			"/voice.user.v1.UserService/RecordSdkAuthorTombstone":
 			return true
 		}
 	}
@@ -240,6 +248,9 @@ func expectedIssuer(target string) string {
 	}
 	if target == "search" {
 		return "search"
+	}
+	if target == "auth" {
+		return "auth"
 	}
 	return "social"
 }

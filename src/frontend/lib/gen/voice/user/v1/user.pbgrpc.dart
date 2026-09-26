@@ -83,6 +83,26 @@ class UserServiceClient extends $grpc.Client {
     return $createUnaryCall(_$markAccountRegular, request, options: options);
   }
 
+  /// Auth-only protected listener: exact read-only SDK target profile snapshot.
+  $grpc.ResponseFuture<$0.GetSdkProfileEligibilityResponse>
+      getSdkProfileEligibility(
+    $0.GetSdkProfileEligibilityRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSdkProfileEligibility, request,
+        options: options);
+  }
+
+  /// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
+  $grpc.ResponseFuture<$0.RecordSdkAuthorTombstoneResponse>
+      recordSdkAuthorTombstone(
+    $0.RecordSdkAuthorTombstoneRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$recordSdkAuthorTombstone, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetProfileResponse> getProfile(
     $0.GetProfileRequest request, {
     $grpc.CallOptions? options,
@@ -344,6 +364,18 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/MarkAccountRegular',
       ($0.MarkAccountRegularRequest value) => value.writeToBuffer(),
       $0.MarkAccountRegularResponse.fromBuffer);
+  static final _$getSdkProfileEligibility = $grpc.ClientMethod<
+          $0.GetSdkProfileEligibilityRequest,
+          $0.GetSdkProfileEligibilityResponse>(
+      '/voice.user.v1.UserService/GetSdkProfileEligibility',
+      ($0.GetSdkProfileEligibilityRequest value) => value.writeToBuffer(),
+      $0.GetSdkProfileEligibilityResponse.fromBuffer);
+  static final _$recordSdkAuthorTombstone = $grpc.ClientMethod<
+          $0.RecordSdkAuthorTombstoneRequest,
+          $0.RecordSdkAuthorTombstoneResponse>(
+      '/voice.user.v1.UserService/RecordSdkAuthorTombstone',
+      ($0.RecordSdkAuthorTombstoneRequest value) => value.writeToBuffer(),
+      $0.RecordSdkAuthorTombstoneResponse.fromBuffer);
   static final _$getProfile =
       $grpc.ClientMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
           '/voice.user.v1.UserService/GetProfile',
@@ -550,6 +582,24 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.MarkAccountRegularRequest.fromBuffer(value),
         ($0.MarkAccountRegularResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSdkProfileEligibilityRequest,
+            $0.GetSdkProfileEligibilityResponse>(
+        'GetSdkProfileEligibility',
+        getSdkProfileEligibility_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSdkProfileEligibilityRequest.fromBuffer(value),
+        ($0.GetSdkProfileEligibilityResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RecordSdkAuthorTombstoneRequest,
+            $0.RecordSdkAuthorTombstoneResponse>(
+        'RecordSdkAuthorTombstone',
+        recordSdkAuthorTombstone_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RecordSdkAuthorTombstoneRequest.fromBuffer(value),
+        ($0.RecordSdkAuthorTombstoneResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
         'GetProfile',
         getProfile_Pre,
@@ -862,6 +912,24 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.MarkAccountRegularResponse> markAccountRegular(
       $grpc.ServiceCall call, $0.MarkAccountRegularRequest request);
+
+  $async.Future<$0.GetSdkProfileEligibilityResponse>
+      getSdkProfileEligibility_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetSdkProfileEligibilityRequest> $request) async {
+    return getSdkProfileEligibility($call, await $request);
+  }
+
+  $async.Future<$0.GetSdkProfileEligibilityResponse> getSdkProfileEligibility(
+      $grpc.ServiceCall call, $0.GetSdkProfileEligibilityRequest request);
+
+  $async.Future<$0.RecordSdkAuthorTombstoneResponse>
+      recordSdkAuthorTombstone_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.RecordSdkAuthorTombstoneRequest> $request) async {
+    return recordSdkAuthorTombstone($call, await $request);
+  }
+
+  $async.Future<$0.RecordSdkAuthorTombstoneResponse> recordSdkAuthorTombstone(
+      $grpc.ServiceCall call, $0.RecordSdkAuthorTombstoneRequest request);
 
   $async.Future<$0.GetProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetProfileRequest> $request) async {
