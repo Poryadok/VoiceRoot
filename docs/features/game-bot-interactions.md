@@ -233,7 +233,15 @@ operation, node, space и binding revision; node identity не позволяе�
 [Game API](../architecture/game-integration-api.md). Voice сериализует его с
 revoke в собственной БД. Отзыв, committed до admission, блокирует команду;
 ранее допущенная in-flight команда может завершиться после unlink в пределах
-permit window: start строго до issued_at+10s; commit строго до issued_at+60s.
+permit window: start строго до `permit_issued_at+10s`; commit строго до
+`permit_issued_at+60s`. `permit_issued_at` выдаёт GIS при первом успешном
+admission commit, не при создании command. Поэтому первое получение command на
+delivery retry t=15/t=31 получает свежий permit epoch, если command ещё не
+истёк и authority не отозвана. Admission retry после сохранённого permit возвращает тот же
+timestamp/ID/bounds и не продлевает окно; пропущенный start не допускает нового
+permit для того же command. Новый запуск требует новой user invocation. Revoke
+первым в authority transaction → admission denied; permit commit первым → только
+эта операция получает ограниченную +10s/+60s completion grace.
 Distributed atomic commit Voice↔game не предполагается. Игра
 в своей транзакции связывает dedupe permit/command с эффектом. Назначение долгой
 задачи — короткая mutation; её последующие часы симуляции не являются in-flight

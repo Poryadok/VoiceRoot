@@ -91,8 +91,12 @@ contracts land before consumers; activation lands after all consumers.
   test and consumer. The owner has delegated these choices; escalate only a
   genuine product contradiction or unavailable external dependency. See the
   decision checklist below.
-  - [x] T03 command delivery, v1 envelope/HMAC, permit bounds, retry/deadline,
-    restart and Q05 risk-class defaults frozen in the linked API/feature docs.
+  - [x] T03 command delivery, v1 envelope/HMAC, retry/deadline, restart and
+    Q05 risk-class defaults frozen in the linked API/feature docs.
+  - [x] T03 permit epoch frozen: first committed admission mints
+    `permit_issued_at`; t=15/t=31 first delivery may obtain a fresh epoch while
+    authorized/unexpired; permit retries preserve one epoch; revoke shares its
+    serialization point. Runtime proof remains in T55/T07a.
   - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
