@@ -5,6 +5,10 @@
 [матрица](../testing/game-integrations-acceptance.md). API имена фиксируют
 предлагаемую семантику; до реализации нужны reviewed OpenAPI/proto и error schema.
 
+Этот контракт и его реализация в Voice входят в спринт. Unity/Unreal assets,
+SDK wrappers, developer CLI/portal — отдельная задача; слово SDK обозначает
+внешнего потребителя протокола, в тестах Voice заменяемого test client.
+
 ## 1. Границы и владельцы
 
 ```mermaid
@@ -67,6 +71,12 @@ delivery ACK не переводит operation в succeeded. Terminal mapping и
 subject для одной активной player binding; installation/event ID; actor-scoped
 idempotency key. Несколько игровых аккаунтов у человека допустимы только по
 явной политике приложения; ни nickname, ни email не используются для dedupe.
+Принято: sdk-account уникален в app/env/provider subject, между приложениями
+нет автоматического объединения людей. Независимая identity authority не
+раскрывает другим приложениям эти сопоставления. Новый device key регистрируется
+через независимый user proof и отзывается отдельно; provider login не даёт
+восстановить permanent Voice credentials. Конкретная recovery схема и защита
+от смены владельца subject требуют G01 и Q03 из design audit.
 Профиль может получать grants от нескольких персонажей; причины хранятся
 раздельно. Перенос персонажа другому аккаунту отзывает прежний binding/grants
 до выдачи новых; старые карточки не переадресуются новому владельцу.
@@ -362,6 +372,8 @@ reconciliation с оператором игры и остаётся unknown до
 Portal показывает capabilities, app/env keys, allowed origins/redirects,
 webhook status, quotas, billing status (если появится), SDK version support и
 review requirements. Sandbox не имеет production bindings, tokens или данных.
+Portal — будущий инструмент вне спринта; соответствующие registry/provisioning/
+status API и серверная авторизация входят в Voice и проверяются test harness.
 Production admission проверяет identity/revoke, mute/report, limits и корректное
 поведение сбоев; конкретные коммерческие условия — G07.
 

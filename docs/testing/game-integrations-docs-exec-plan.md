@@ -137,5 +137,21 @@ of each required service/infrastructure component on a baseline single host.
 Preserve internal APIs, stores and credentials; unified install/config/upgrade/
 backup does not require rewriting services into one process. Added bundle and
 upgrade acceptance with explicit downtime/recovery and no baseline HA promise.
+
+Latest owner clarification supersedes the earlier both-engines-in-sprint scope:
+the single sprint delivers Voice backend, messenger, protocols, federation and
+Voice Node distribution. Engine assets/SDK wrappers and developer tools are a
+separate task. GI4 now owns protocol conformance using internal clients; engine
+acceptance is recorded separately and does not gate Voice completion.
+Recorded all 15 approved product directions, distinguishing remaining concrete
+policies from accepted principles. Re-audited documents locally and with one
+read-only auditor (role auditor, inherited model/effort, focused docs-only brief;
+checkpoint final evidence). Consolidated 12 residual questions with owners-by-GI
+and acceptance scenarios in game-integrations-design-audit.md. No runtime audit
+or production implementation was performed in this follow-up.
+Validation: all ten changed/new Markdown documents passed local link checks;
+added anchor targets were inspected and a wrong resource-section anchor corrected.
+Diff whitespace check passed. The audit preserves unresolved policy questions
+explicitly instead of treating accepted high-level directions as finished specs.
 Scoped local Markdown link checks and diff whitespace checks passed; runtime
 remains unchanged and untested by this documentation-only follow-up.

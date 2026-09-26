@@ -110,7 +110,13 @@ intent отправки атомарны. Voice не может восстано
 произвольный HTML/JS, URL callbacks из сообщения и исполняемые payload.
 
 Action хранит `action_id`, allowlisted `action_type`, label, immutable typed args,
-game state version, expiry, allowed actor policy и optional confirmation summary.
+game state version, expiry, allowed actor policy и confirmation policy/summary.
+Принято владельцем: для опасных действий дополнительное подтверждение обязательно;
+опциональность допустима только для действий вне этого класса. Список классов,
+server-side proof подтверждения и его связь с actor/action/ценой/state revision
+нужно определить до реализации (Q05 в
+[design audit](../testing/game-integrations-design-audit.md)); один экран без
+проверки прямого API вызова не обеспечивает требование.
 Сервер хранит canonical action отдельно от отображаемой подписи. Клиент отправляет
 ID, а не цену, recipient или выполняемую команду из редактируемого UI.
 Update карточки создаёт новую revision; старые action IDs не получают новое

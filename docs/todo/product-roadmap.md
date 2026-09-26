@@ -19,10 +19,21 @@ _Нет открытых пунктов._
 
 ## Common
 
+- [ ] **Game developer tools — отдельная задача вне спринта Voice.** Unity/Unreal
+  и другие assets/SDK wrappers, engine media/UI adapters, developer CLI/portal,
+  публикуемые examples и engine compatibility acceptance. Используют готовые
+  Voice API/conformance fixtures; целевой дизайн — [game-sdk.md](../sdk/game-sdk.md).
+  Не блокируют приёмку Voice, но не объявляются готовыми по server-side тестам.
+
 - [ ] **Game integrations — один спринт целиком, не текущий WIP.** Закрыть решения
   G01–G13 и выполнить все подзадачи с общей приёмкой из
   [game-integrations-acceptance.md](../testing/game-integrations-acceptance.md).
   Спецификация: [game-integrations.md](../features/game-integrations.md).
+  Assets/SDK для движков и developer tools — отдельная задача вне спринта Voice;
+  API, messenger, Game Integration Service и Voice Node bundle входят в него.
+  Закрыть применимые вопросы Q01–Q12 из
+  [повторного design audit](../testing/game-integrations-design-audit.md)
+  до зависимых implementation slices; принятые направления не открывать заново.
   Bot source gaps и необходимые расширения перечислены в
   [game-bot-interactions.md](../features/game-bot-interactions.md); federation
   пока имеет deferred runtime-статус, но входит в общий scope спринта.

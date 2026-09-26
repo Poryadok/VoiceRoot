@@ -5,6 +5,9 @@
 Этот документ предлагает уточнение старого [federation design](../features/federation.md)
 для игр. До принятия решений и implementation gate он не включает deployment,
 `federation_db`, migrations, readiness или alerts в G0–G4.
+Voice Node bundle входит в спринт Voice. Распространяемые SDK/assets — отдельная
+задача; все SDK-сценарии приёмки ноды здесь выполняются внутренним protocol/media
+test client и мессенджером, не требуют Unity/Unreal packages.
 
 ## 1. Что такое нода игры
 

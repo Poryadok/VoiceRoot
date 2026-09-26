@@ -7,39 +7,45 @@ Documentation-only work не требует запуска всех сервис
 
 ## 1. Один спринт с единым результатом
 
-Решение владельца: весь описанный игровой продукт реализуется за один спринт,
+Решение владельца: возможности Voice для игрового продукта реализуются за один спринт,
 от входа игрока до общения и игровых команд через мессенджер и game node.
 GI-коды ниже обозначают подзадачи одного спринта, а не последовательные релизы,
 MVP или перенос части функций в будущие спринты. Длительность и состав команды
 ещё не определены; это требование к плану поставки, а не подтверждённая оценка.
 
-В общий scope входят `sdk-account` и обе конвертации, linked account, SDK для
-Unity и Unreal, hosted party, MMO communities, боты с командами и карточками,
-opt-in уведомления, game federation, эксплуатация и end-to-end проверка.
-Windows x64 для обоих движков — согласуемая платформа этой поставки; остальные
-платформы, online migration и иные явно исключённые возможности не превращаются
-в скрытые этапы этого плана и не заявляются реализованными.
+В scope Voice входят `sdk-account` и обе конвертации, linked account, внешние
+API/контракты авторства, hosted party, MMO communities, боты с командами и
+карточками, поддержка этих сценариев мессенджером, opt-in уведомления,
+game federation, Voice Node bundle и эксплуатационная/end-to-end проверка.
+
+**Вне спринта:** Unity/Unreal/другие assets, распространяемые SDK wrappers,
+engine-specific UI/media adapters, developer CLI/portal, образцы интеграции
+для публикации и сертификация движков. Это отдельная задача инструментов,
+а не незавершённая подзадача Voice. Backend app registry, выдача credentials,
+scopes и provisioning API остаются в Voice. Install/update/backup средства
+самого Voice Node остаются частью поставки сервера, не developer SDK tooling.
+Online migration и ранее исключённые платформенные расширения не добавляются.
 
 | Подзадача | Вход / зависимости | Наблюдаемый результат | Критерий готовности |
 |---|---|---|---|
-| GI0: contracts | G01–G13, владельцы доменов | Согласованные schemas/scopes/identity/retention, versions и storage ownership | Решения закрыты перед зависимым кодом; документация и контракты согласованы |
+| GI0: contracts | G01–G13 и design audit, владельцы доменов | Согласованные schemas/scopes/identity/retention, versions и storage ownership | Решения закрыты перед зависимым кодом; документация и контракты согласованы |
 | GI7: sdk-account и Auth | GI0 identity contracts, Auth/User | Вход без permanent account, linking, конвертация в новый и существующий аккаунт | ID01–ID13, revoke, conflict и crash recovery |
 | GI1: party и Game API | GI0, GI7, Chat/Voice core | 2–4 игрока в одном hosted party chat/voice, keep-group | Реальное media, roster/revoke/reconnect/consent для обоих типов аккаунта |
 | GI2: bot commands | Bot hardening, binding, game adapter | Event → slash → один реальный игровой эффект → result | Crash/retry/stale/revoke matrix, durable command semantics |
 | GI3: rich companion | GI2 + Messaging/Flutter components + opt-in | Cards/buttons, event history, player notification settings, opt-in доставка в поддержанном messenger | Multi-device, forwarding, expiry, unsubscribe; mobile не заявляется без support proof |
-| GI4: Unity и Unreal SDK | GI0 contracts; GI1/GI7 для интеграции | Оба package/plugin, native media, identity/conversion UI, samples и docs | Оба packaged builds проходят conformance и real-media suite |
+| GI4: внешний протокол Voice | GI0 contracts; GI1/GI7 для интеграции | Versioned API, signed envelopes, errors/capabilities, conformance fixtures и внутренний test client | Независимый test client выполняет user/device flows через public API; no engine dependencies |
 | GI5: MMO communities | GI7 identity + managed grants, G02/G03/G09 | Corporation → Space; rank changes affect in/out-game access | Полная roster/role lifecycle vertical |
-| GI6: game node | GI5 + federation wire/lifecycle/ops, G08/G10 | Один game node, два Space, SDK + messenger | Partition/revoke/restore/security/operability proof |
-| GI8: developer operations | GI0 contracts; GI1–GI7 для интеграции | App/env registry, keys/rotation, quotas, diagnostics, единый Voice Node bundle с одним экземпляром сервисов, backup/restore, support docs | Установка на чистом хосте, общие config/version/upgrade, оператор восстанавливает ноду без ручной сборки микросервисов |
-| GI9: общая приёмка | GI0–GI8 | HerdTrip-, MMO- и Dejavu-like reference flows на общем продукте | Вся acceptance matrix, packaged artifacts и единый evidence package |
+| GI6: game node | GI5 + federation wire/lifecycle/ops, G08/G10 | Один game node, два Space, test client + messenger | Partition/revoke/restore/security/operability proof |
+| GI8: эксплуатация Voice | GI0 contracts; GI1–GI7 для интеграции | App/env backend API, keys/rotation, quotas, diagnostics, единый Voice Node bundle, backup/restore, support docs | Установка на чистом хосте, общие config/version/upgrade; developer portal не требуется |
+| GI9: общая приёмка | GI0–GI8 | HerdTrip-, MMO- и Dejavu-like reference flows через test clients, controlled game adapter и messenger | Вся Voice acceptance matrix, node artifacts и единый evidence package; engine SDK не gate |
 
 GI0 закрывает контракты по мере потребности, не отдельным спринтом. После нужных
-контрактов Auth, Bot, оба engine wrappers и federation transport можно выполнять
+контрактов Auth, Bot, внешний протокол и federation transport можно выполнять
 параллельно; итоговая интеграция учитывает зависимости таблицы. Несколько PR
 допустимы, но готовность отдельной подзадачи не означает завершение спринта.
 Feature flags служат безопасной интеграции и откату, а не исключению незавершённых
 функций из общего результата. Спринт завершён только после GI9; `sdk-account`,
-второй движок и федерация не переносятся молча за его границы. Запуск реализации
+обе конвертации и федерация не переносятся молча за его границы. Запуск реализации
 и место в общей очереди фиксируются в PLAN; текущая задача меняет документацию.
 
 ## 2. Работы по доменам
@@ -55,9 +61,9 @@ Feature flags служат безопасной интеграции и отка
 | Bot | Durable commands/results, token binding, signatures, DM consent | Failures from source audit closed with regression tests |
 | Notification | Categories, consent revision, quiet hours/grouping, device policy | Opt-out queued events, DND, no push-triggered mutation |
 | Flutter | Connected games, cards, result states, revoke/settings | Widget + live actions, accessibility, multi-profile isolation |
-| Unity/Unreal | Native packages, media adapter, samples/UI, diagnostics | Packaged binaries, main-thread callbacks, cleanup, hotplug |
+| Внешний протокол | API/signed envelopes, capability negotiation, conformance fixtures | Внутренний test client и messenger; Unity/Unreal вынесены в отдельную задачу |
 | Federation | Registry, projection leases, S2S snapshots, remote lifecycle | Two-node isolation, partition, certificates, restore/purge |
-| Portal/Operations | Environment onboarding, keys, quotas, status, docs | Rotation/revoke, production admission, support diagnostics |
+| Registry/Operations | Backend environment onboarding, keys, quotas, status, node distribution | Rotation/revoke, production admission, support diagnostics; без developer portal |
 
 Store changes идут в migrations владельцев и DATA_STORES/CONTRACT_MATRIX в
 соответствующем implementation PR. Документирование не создаёт пустые сервисы,
@@ -68,6 +74,12 @@ Store changes идут в migrations владельцев и DATA_STORES/CONTRAC
 Каждый сценарий проверяется через публичный вход и фактический effect/read model,
 а не только happy-path mock. Где применимы tokens, проверить также прямой обход
 Gateway/SDK и старые credentials. Все game IDs и secrets — synthetic fixtures.
+Упоминание SDK ниже в Voice-owned сценарии означает вызов внешнего протокола
+внутренним test client; наличие распространяемого SDK не требуется. SDK01,
+SDK02 и SDK04 — только отдельная задача инструментов, не gate этого спринта.
+SDK03/SDK05/SDK06 проверяют серверную и messenger часть здесь; engine-specific
+варианты тех же проверок выполняются при поставке инструментов. OS-specific
+SDK cache/cleanup/UI не принимаются по результату server-only теста.
 
 | ID | Given / When | Then / свидетельство |
 |---|---|---|
@@ -142,9 +154,11 @@ Gateway/SDK и старые credentials. Все game IDs и secrets — syntheti
   testcontainers и isolated Compose по канону, не production/game worlds.
 - Auth: Maven/JUnit/Testcontainers согласно TESTING; не заменять Java mock'ом
   при проверке делегированных grants и отзыва.
-- Flutter: `rtk make flutter-ci`, targeted widget и live SDK↔messenger тесты.
-- Engines: CI batch build + packaged sample на выбранной матрице; фактический
-  capture/playback и OS permissions требуют device acceptance с записью версий.
+- Flutter: `rtk make flutter-ci`, targeted widget и live test-client↔messenger тесты.
+- Voice-owned test harness: public API, independent device keys, real media
+  clients, controlled game adapter с durable effect store; не готовый engine SDK.
+- Engines (отдельная задача инструментов): CI batch build + packaged sample,
+  capture/playback, OS permissions и device acceptance с записью версий.
 - Federation: isolated master+node+SFU harness с fault injection для S2S, game
   roster и media control. Проверяется actual access/track delivery, не только
   лог «revoked» или handler status.
@@ -169,35 +183,47 @@ messenger DAU; чужие SDK case-study uplift не используется к
 
 ## Решения перед активацией
 
-Это открытые решения дизайна, а не обязательный запрос подтверждения текущей
-документации. Рекомендуемые варианты позволяют подготовить конкретный следующий
-implementation slice; каждый выбор фиксируется в feature/service canon до кода.
+Принятые направления отделены от открытых деталей. Владелец согласовал правила
+из [feature canon](../features/game-integrations.md#принятые-владельцем-продуктовые-правила);
+повторное согласование этих направлений не требуется. Остаточные сценарии и
+acceptance Q01–Q12 перечислены в [design audit](game-integrations-design-audit.md).
+Каждый оставшийся выбор фиксируется в owning canon до зависимого кода.
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
 | G01 | sdk-account отдельно от guest и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI7 в этом же спринте; обязательны новый и существующий permanent target, ID07–ID13 |
-| G02 | Несколько персонажей/аккаунтов в одной корпорации | Reasons/grants раздельно; policy per game, запрет implicit privilege union без решения |
-| G03 | Владение corporation Space | Named human Owner по текущему защищённому flow; game leader не получает Owner автоматически |
+| G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
+| G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery и bootstrap Q11; roster не обходит Voice ban |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
-| G05 | Engines/platform versions, shared core, support window | Unity и Unreal на Windows x64 в одном спринте; точные версии после media spike внутри GI4 |
+| G05 | Voice API/node protocol versions и support window; версии движков вынесены | GI4 принимает wire compatibility и conformance; engine versions/assets — отдельная задача |
 | G06 | Отдельный Go Game Integration Service принят владельцем; открыты storage schema, contracts и deployment | Собственное хранилище, не Gateway DB; спроектировать миграции до GI0 schema freeze |
 | G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
 | G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |
 | G09 | Roster freshness и доступ при падении game backend | Bounded source lease, fail closed для managed доступа; конкретный срок перед GI5 |
 | G10 | Node data loss/export/migration/backup и erasure terms | Один immutable home в GI6; отдельный migration protocol и operator responsibility |
-| G11 | Proactive DM categories и device/push policy | Отдельный consent, digest/quiet hours; mobile delivery только после mobile gate |
-| G12 | Character display и контекст rank/history | Выбранный профиль + app/character label; без раскрытия скрытых альтов |
+| G11 | Приняты отдельный consent по категориям, quiet hours и отсутствие дублей; открыты routing/coalescing details | Mobile delivery только после mobile gate; смена получателя consent Q02 |
+| G12 | Приняты выбранное игровое имя/app attribution и приватность скрытых профилей | Определить app-visible alias/profile serialization и лимиты Q07, rank/history Q01/G02 |
 | G13 | Admission/revoke и completion после unlink | Online admission сериализован с revoke; зафиксировать start/completion bounds, in-flight UX и reconciliation до GI2 |
 
 ## 6. Release evidence и rollout
+
+Дополнительная приёмка design audit: Q01 history rejoin matrix; Q02 consent
+change; Q03 ownership transfer; Q04 signed revisions/files; Q05 confirmation
+bypass; Q06 flood+revoke; Q07 profile/alias isolation; Q08 conversion+voice race;
+Q09 moderation path; Q10 deletion+restore; Q11 clean enrollment/provider proof;
+Q12 measured capacity/compatibility. Детальные Then фиксируются после решения
+соответствующего вопроса. Открытый вопрос на активном пути не заменяется skipped
+тестом при объявлении спринта готовым.
 
 Каждая capability включается отдельно: linked identity, sessions, native voice,
 managed communities, cards, proactive DM, node hosting. Default off до собственного
 gate. Legacy clients получают fallback; feature flag не заменяет authorization.
 
-Evidence package: exact commit SHA, schema/SDK/dependency versions, enabled
-capabilities, fixtures, non-skipped test results, packaged build IDs, real-media
+Evidence package: exact commit SHA, API/schema/node/messenger/test-client/dependency
+versions, enabled capabilities, fixtures, non-skipped test results, build IDs
+поставляемых Voice-артефактов (не engine SDK), real-media
 acceptance, failure/revoke timings, data recovery proof, limits и support owner.
+SDK versions и packaged engine builds относятся к evidence отдельной задачи tools.
 Откат прекращает новые операции и сохраняет reconciliation уже принятых commands;
 отключение флага не должно терять committed результаты или заново исполнять игру.
 

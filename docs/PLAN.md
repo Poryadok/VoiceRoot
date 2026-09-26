@@ -42,7 +42,10 @@ Game API, Unity/Unreal SDK, MMO communities, [игровые боты](features/
 и [game federation](architecture/game-federation.md). Это документация, не новый
 активный milestone и не изменение A1/WIP или G0–G4. По уточнению владельца
 план разработки — **один спринт целиком**, включая sdk-account с обеими
-конвертациями, Unity и Unreal, ботов, MMO communities и игровую федерацию.
+конвертациями, внешние API/контракты, мессенджер, ботов, MMO communities и игровую федерацию.
+Assets/SDK для Unity, Unreal и других движков, developer CLI/portal и публикуемые
+инструменты интеграции — отдельная задача вне этого спринта. Приёмка Voice
+использует внутренние test clients и controlled game adapter, а не готовые assets.
 Внутри него — подзадачи с зависимостями и общей приёмкой, а не релизные этапы.
 Текущий deferred runtime-статус федерации не исключает её из scope этого спринта;
 место спринта в очереди и запуск реализации здесь пока не назначены.

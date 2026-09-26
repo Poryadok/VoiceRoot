@@ -2,6 +2,11 @@
 
 **Proposed target, SDK ещё не поставляется.** [Продукт](../features/game-integrations.md),
 [Game API](../architecture/game-integration-api.md), [acceptance](../testing/game-integrations-acceptance.md).
+**Отдельная задача инструментов, вне спринта Voice по решению владельца.**
+Этот документ сохраняет целевой developer experience для будущих assets/SDK.
+В текущем спринте реализуются только Voice-owned API/контракты и их проверка
+внутренними test clients; engine wrappers, UI/media adapters и packaged samples
+не являются release gate Voice. Проверка Voice не доказывает готовность SDK.
 Сигнатуры ниже — псевдо-API для согласования developer experience, не компилируемый
 пример готового пакета. SDK не зависит от установленного приложения Voice.
 
@@ -27,12 +32,12 @@
 
 | Scope | Платформы | Доказательство |
 |---|---|---|
-| Единый спринт | Windows x64; Unity и Unreal | Оба packaged builds на двух компьютерах, общий conformance suite, real audio, reconnect/revoke |
+| Отдельная задача SDK, целевая матрица | Windows x64; Unity и Unreal | Оба packaged builds на двух компьютерах, общий conformance suite, real audio, reconnect/revoke |
 | Не включено в текущую platform matrix | Linux/macOS | Для заявления поддержки нужны native build, devices, packaging/signing, network fault suite |
 | Не включено в текущую platform matrix | Android/iOS | Для заявления поддержки нужны background/foreground, interruptions, permissions, push/link handoff |
 | Consoles / WebGL | Не обещаны; отдельная capability/review | Platform requirements и media support proof |
 
-В рамках подзадачи GI4 фиксируются точные engine versions, native dependency versions и
+В отдельной задаче SDK фиксируются точные engine versions, native dependency versions и
 поддержанные scripting/backend modes. Unity IL2CPP/AOT, stripping/link.xml и
 архитектуры native libraries проверяются в player build, не только Editor.
 Для Unreal проверяются Development/Shipping, packaging, plugin version,
@@ -213,7 +218,8 @@ Refresh credentials хранятся в OS storage; в логах и Unity Playe
 
 Feature negotiation отделена от semantic SDK version. Unsupported feature
 возвращает typed error/fallback, а не partially functioning widget. Security
-update policy, поддержка старых major versions и срок deprecation — G05; без них
+update policy, поддержка старых major versions и срок deprecation определяются
+в отдельной задаче инструментов с учётом server compatibility G05; без них
 пакет не объявляется стабильным публичным SDK.
 
 ## 10. Готовность SDK
