@@ -1,6 +1,7 @@
 package voice.backend.auth.sdkidentity;
 
 import java.time.Clock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -16,9 +17,12 @@ import voice.backend.auth.service.AuthService;
 public class SdkAuthorizationConfiguration {
   @Bean
   @ConditionalOnMissingBean(SdkAuthorizationPolicy.class)
-  SdkAuthorizationPolicy unavailableSdkAuthorizationPolicy() {
-    // Replace only with the registry adapter authenticating dedicated workload identity.
-    return (application, environment) -> { throw new SdkIdentityDeniedException(); };
+  SdkAuthorizationPolicy gameIntegrationSdkAuthorizationPolicy(
+      @Value("${auth.sdk-authorization.game-integration-base-url:}") String baseUrl,
+      @Value("${GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64:}") String keyBase64,
+      @Value("${auth.sdk-authorization.allow-internal-http:false}") boolean allowInternalHttp,
+      Clock clock) {
+    return new SdkGameIntegrationPolicyClient(baseUrl, keyBase64, allowInternalHttp, clock);
   }
 
   @Bean

@@ -128,13 +128,35 @@ The linked credential preserves the selected profile and has no regular JWT,
 refresh, active game binding or media authority.
 
 Authorization is separately opt-in: `auth.sdk-authorization.enabled=true`
-requires SDK identity and JDBC. Without the verified registry and read-only User
-adapters, default beans deny every lookup. The interfaces are tested with explicit
-fixtures only; no production workload adapter has been substituted with a fake.
-The existing Voice browser/Flutter UI consumes the REST consent view and approval
-routes documented in the owning API. UI integration, direct Voice-only first
-login, binding activation, public Gateway limits and device-code consumer remain
+requires SDK identity and JDBC. The Game Integration policy adapter reads only
+from the configured `auth.sdk-authorization.game-integration-base-url`; callers
+cannot select its host, path or query. HTTPS is required, except that
+`auth.sdk-authorization.allow-internal-http=true` permits HTTP only for
+`gameintegration`, `localhost` and loopback addresses. Configure the shared
+32-byte `GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64` secret in both services.
+
+For each lookup Auth sends a GET to
+`/internal/v1/authorizations/environments/{environment_id}` with a fresh UUID
+nonce and Unix timestamp. Its HMAC-SHA256 signature binds the exact escaped
+path, method, timestamp, nonce and SHA-256 of the empty request body. Redirects
+are disabled and the request has a two-second timeout. Auth accepts only HTTP
+200 with unique `Cache-Control: no-store`, JSON content type, echoed timestamp
+and nonce, and one response signature. It checks the unpadded base64url HMAC
+over the exact response body bytes before parsing JSON, then validates the
+complete policy shape and app/environment binding. Missing, repeated, stale or
+invalid proof, malformed policy, oversize body and transport errors deny the
+authorization. The adapter has no fallback policy.
+
+The read-only User eligibility adapter remains fail-closed until its signed
+service integration is configured. Binding freeze/transfer/activation and their
+receipt consumers remain later work; no mutation route is implied by this policy
+read contract. The existing Voice browser/Flutter UI consumes the REST consent
+view and approval routes documented in the owning API. UI integration, direct
+Voice-only first login, public Gateway limits and device-code consumer remain
 subsequent work.
+The existing Voice browser/Flutter UI consumes the REST consent view and approval
+routes documented in the owning API. Direct Voice-only first login, public
+Gateway limits and device-code consumer remain subsequent work.
 
 Independent tests preceded implementation; Maven captured missing protocol/service,
 consent view/conflict, controller and configuration RED phases. Protocol31,
