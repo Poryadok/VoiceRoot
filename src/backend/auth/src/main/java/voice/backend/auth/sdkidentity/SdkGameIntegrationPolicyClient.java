@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -19,6 +21,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -36,51 +41,52 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
   private final boolean allowInternalHttp;
   private final Clock clock;
   private final HttpClient http;
+  private final Duration requestTimeout;
 
   public SdkGameIntegrationPolicyClient(String baseUrl, String keyBase64, boolean allowInternalHttp, Clock clock) {
     this(baseUrl, keyBase64, allowInternalHttp, clock,
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2))
-            .followRedirects(HttpClient.Redirect.NEVER).build());
+            .followRedirects(HttpClient.Redirect.NEVER).build(), Duration.ofSeconds(2));
   }
 
   SdkGameIntegrationPolicyClient(String baseUrl, String keyBase64, boolean allowInternalHttp,
-      Clock clock, HttpClient http) {
+      Clock clock, HttpClient http, Duration requestTimeout) {
     this.configuredBaseUrl = baseUrl;
     this.configuredKey = keyBase64;
     this.allowInternalHttp = allowInternalHttp;
     this.clock = clock;
     this.http = http;
+    this.requestTimeout = requestTimeout;
   }
 
   @Override
   public Policy resolve(UUID applicationId, UUID environmentId) {
     try {
-      if (applicationId == null || environmentId == null || clock == null || http == null) throw denied();
+      if (applicationId == null || environmentId == null || clock == null || http == null
+          || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
       URI endpoint = endpoint(configuredBaseUrl, environmentId, allowInternalHttp);
       byte[] key = key(configuredKey);
       String path = endpoint.getRawPath();
       String timestamp = Long.toString(clock.instant().getEpochSecond());
       String nonce = UUID.randomUUID().toString();
       HttpRequest request = HttpRequest.newBuilder(endpoint)
-          .timeout(Duration.ofSeconds(2))
+          .timeout(requestTimeout)
           .header("X-Voice-Workload", "auth")
           .header("X-Voice-Timestamp", timestamp)
           .header("X-Voice-Nonce", nonce)
           .header("X-Voice-Signature", requestSignature(key, path, timestamp, nonce))
           .GET().build();
-      HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
-      try (InputStream body = response.body()) {
-        if (response.statusCode() != 200) throw denied();
-        requireHeader(response, "Cache-Control", "no-store");
-        requireHeader(response, "Content-Type", "application/json");
-        requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
-        requireHeader(response, "X-Voice-Response-Nonce", nonce);
-        String signature = uniqueHeader(response, "X-Voice-Response-Signature");
-        byte[] raw = body.readNBytes(MAX_RESPONSE_BYTES + 1);
-        if (raw.length > MAX_RESPONSE_BYTES) throw denied();
-        verifyResponse(key, path, timestamp, nonce, signature, raw);
-        return parsePolicy(raw, applicationId, environmentId);
-      }
+      HttpResponse<byte[]> response = http.send(request,
+          responseInfo -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      requireHeader(response, "Cache-Control", "no-store");
+      requireHeader(response, "Content-Type", "application/json");
+      requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
+      requireHeader(response, "X-Voice-Response-Nonce", nonce);
+      String signature = uniqueHeader(response, "X-Voice-Response-Signature");
+      byte[] raw = response.body();
+      verifyResponse(key, path, timestamp, nonce, signature, raw);
+      return parsePolicy(raw, applicationId, environmentId);
     } catch (InterruptedException interrupted) {
       Thread.currentThread().interrupt();
       throw denied();
@@ -115,6 +121,50 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
   private static boolean isInternalHost(String host) {
     return "gameintegration".equalsIgnoreCase(host) || "localhost".equalsIgnoreCase(host)
         || "127.0.0.1".equals(host) || "::1".equals(host);
+  }
+
+  private static final class BoundedBodySubscriber implements HttpResponse.BodySubscriber<byte[]> {
+    private final int maxBytes;
+    private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+    private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    private Flow.Subscription subscription;
+
+    private BoundedBodySubscriber(int maxBytes) { this.maxBytes = maxBytes; }
+
+    @Override
+    public CompletionStage<byte[]> getBody() { return body; }
+
+    @Override
+    public void onSubscribe(Flow.Subscription received) {
+      subscription = received;
+      received.request(Long.MAX_VALUE);
+    }
+
+    @Override
+    public void onNext(List<ByteBuffer> chunks) {
+      try {
+        for (ByteBuffer chunk : chunks) {
+          int length = chunk.remaining();
+          if (bytes.size() + length > maxBytes) {
+            subscription.cancel();
+            body.completeExceptionally(new IOException("response body exceeds limit"));
+            return;
+          }
+          byte[] buffer = new byte[length];
+          chunk.get(buffer);
+          bytes.writeBytes(buffer);
+        }
+      } catch (RuntimeException failure) {
+        subscription.cancel();
+        body.completeExceptionally(failure);
+      }
+    }
+
+    @Override
+    public void onError(Throwable failure) { body.completeExceptionally(failure); }
+
+    @Override
+    public void onComplete() { body.complete(bytes.toByteArray()); }
   }
 
   private static byte[] key(String raw) {

@@ -7,9 +7,11 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
@@ -87,6 +89,40 @@ class SdkGameIntegrationPolicyClientTest {
   }
 
   @Test
+  void requestTimeoutCoversBodyThatStallsAfterHeaders() throws Exception {
+    start(exchange -> {
+      byte[] bytes = BODY.getBytes(StandardCharsets.UTF_8);
+      String path = exchange.getRequestURI().getRawPath();
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      exchange.getResponseHeaders().add("Cache-Control", "no-store");
+      exchange.getResponseHeaders().add("Content-Type", "application/json");
+      exchange.getResponseHeaders().add("X-Voice-Response-Timestamp", timestamp);
+      exchange.getResponseHeaders().add("X-Voice-Response-Nonce", nonce);
+      exchange.getResponseHeaders().add("X-Voice-Response-Signature", responseSignature(path, timestamp, nonce, BODY));
+      exchange.sendResponseHeaders(200, bytes.length);
+      try {
+        Thread.sleep(1_500);
+        exchange.getResponseBody().write(bytes);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+      } catch (IOException disconnected) {
+        // Expected when the client enforces its response-body deadline.
+      } finally {
+        exchange.close();
+      }
+    });
+
+    SdkGameIntegrationPolicyClient timedClient = new SdkGameIntegrationPolicyClient(baseUrl(), KEY_B64,
+        true, CLOCK, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
+        Duration.ofMillis(250));
+    long startedAt = System.nanoTime();
+    assertDenied(timedClient::resolve);
+    long elapsedMillis = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
+    assertThat(elapsedMillis).isLessThan(1_000);
+  }
+
+  @Test
   void rejectsDuplicateResponseProofHeaders() throws Exception {
     start(exchange -> {
       String path = exchange.getRequestURI().getRawPath();
@@ -141,7 +177,9 @@ class SdkGameIntegrationPolicyClientTest {
   }
 
   private SdkGameIntegrationPolicyClient client(String baseUrl) {
-    return new SdkGameIntegrationPolicyClient(baseUrl, KEY_B64, true, CLOCK);
+    return new SdkGameIntegrationPolicyClient(baseUrl, KEY_B64, true, CLOCK,
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2))
+            .followRedirects(HttpClient.Redirect.NEVER).build(), Duration.ofSeconds(2));
   }
 
   private String baseUrl() {
