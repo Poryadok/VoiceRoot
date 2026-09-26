@@ -2,7 +2,9 @@
 
 ## Статус и границы документа
 
-**Proposed target, документация для проектирования; runtime не реализован.**
+**Proposed target.** Первый ограниченный Auth bootstrap описан в GAME-AUTH-01;
+это не готовая игровая интеграция, обе конвертации и остальные runtime gates
+ещё не завершены.
 Владелец запросил описание игрового SDK, федерации для игр и взаимодействия
 игры с людьми через ботов. Это разрешение на проектирование, а не включение
 федерации в релиз. Очередь и release gates остаются в [PLAN](../PLAN.md).
@@ -189,6 +191,14 @@ Backend игры передаёт версионированные снимки 
   бот и federated node так же, как на обычный клиент.
 
 ### sdk-account и переход в постоянный аккаунт
+
+Технические решения G01/Q03/Q07/Q08/Q10/Q11 первого Auth-среза закреплены в
+[GAME-AUTH-01](../architecture/game-integration-api.md#замороженный-auth-identity-slice-game-auth-01).
+Первый provider — Google OIDC через Voice-owned audience, отдельный ключ каждого
+устройства и одноразовый server nonce. Developer credential не подтверждает
+игрока. Bootstrap credential не даёт доступа к чатам/голосу; оба conversion
+пути, User profile и public Gateway activation остаются следующими slices.
+Google identity сама по себе не подтверждает принадлежность персонажа игре.
 
 **Принято владельцем:** `sdk-account` — отдельный тип аккаунта Voice для SDK-интеграции,
 не текущий гостевой аккаунт
