@@ -91,6 +91,9 @@ contracts land before consumers; activation lands after all consumers.
   test and consumer. The owner has delegated these choices; escalate only a
   genuine product contradiction or unavailable external dependency. See the
   decision checklist below.
+  - [x] T03 command delivery, v1 envelope/HMAC, permit bounds, retry/deadline,
+    restart and Q05 risk-class defaults frozen in the linked API/feature docs.
+  - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
@@ -102,10 +105,20 @@ contracts land before consumers; activation lands after all consumers.
   version negotiation, errors, canonical IDs, idempotency, pagination,
   capability fallback, signed envelope/revision, required security fields.
   Add contract tests and generated-code compatibility checks.
-- [ ] **T07** `D: T03,T06` Build internal controlled game backend with durable
-  outbox, command inbox and transactional effect store; build independent
-  protocol client with per-device keys plus real media clients. Version and
-  retain fixtures. These are test infrastructure, not a public SDK.
+  - [x] Command/result JSON v1 routes, envelope canonicalization, status/error,
+    idempotency and receipt contract frozen in `game-integration-api.md`.
+  - [ ] Other OpenAPI/proto/resource contracts and executable compatibility
+    tests remain open; this docs decision does not claim routes are implemented.
+- [ ] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
+  module and dedicated test DB: durable command inbox/outbox and transactional
+  effect/result receipt as specified in the v1 contract. Never register it in
+  production GIS or use `game_integration_db` for game effects. Version and
+  retain deterministic fixtures.
+- [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
+  keys only after T15 key proof/registration semantics are implemented.
+- [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
+  LiveKit/media and public-client acceptance paths exist. These are test
+  infrastructure, not a public SDK.
 - [ ] **T08** `D: T03` Define measured targets and harness: revocation clocks,
   game→Voice roster latency, lease/skew/eject budget, retry/retention windows,
   RPO/RTO, host/runtime/version matrix, concurrency and capacity. Separate
@@ -214,7 +227,7 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T55** `D: T54` Implement online execution admission serialized with
   revoke, one permit per command with fixed start/complete bounds, retry without
   extending window and narrow completion right for prior game commit.
-- [ ] **T56** `D: T55,T07` Controlled game backend verifies actor, binding,
+- [ ] **T56** `D: T55,T07a` Controlled game backend verifies actor, binding,
   character, game state and permit, commits dedupe+effect+result outbox in one
   transaction. Different command IDs for same one-shot event cannot double
   effect. Reconcile lost ACK without inventing a new command.
@@ -297,7 +310,7 @@ contracts land before consumers; activation lands after all consumers.
 | G04, G09 | retention and retry windows, roster source freshness and fail-closed policy | T30–T39 |
 | G05, G06, G07, Q11, Q12 | API/node versions, store schema, bootstrap approver/provider, quotas, host support/capacity/RPO/RTO | T06,T10–T12,T76 |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
-| G13, Q05 | dangerous action classes/challenge, execution start/complete bounds and in-flight UX | T53–T57 |
+| G13, Q05 | read-only no-confirm allowlist; all risky/unknown classes require single-use challenge (fail closed if unavailable); permit +10s start/+60s commit and revoke race UX | T53–T57 |
 | G08, G10, Q04, Q06 | signed revisions/files, control-plane capacity, media lease/eject budget, export/loss/defederation terms | T70–T78 |
 
 No numerical default in the right column is inferred from a proposed target.
