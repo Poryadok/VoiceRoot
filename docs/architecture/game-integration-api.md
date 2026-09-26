@@ -1,6 +1,8 @@
 # Game Integration API — целевой внешний контракт
 
-**Proposed target; все новые API ниже не реализованы.** Продуктовые требования —
+**Proposed target.** Ограниченный Auth bootstrap GAME-AUTH-01 реализован в
+opt-in режиме; PostgreSQL/live-provider acceptance остаётся обязательным gate.
+Остальные новые API ниже ещё не реализованы. Продуктовые требования —
 [интеграции игр](../features/game-integrations.md); acceptance и решения —
 [матрица](../testing/game-integrations-acceptance.md). API имена фиксируют
 предлагаемую семантику; до реализации нужны reviewed OpenAPI/proto и error schema.
@@ -124,6 +126,117 @@ Claim/upgrade требует proof обеих identity, описанного con
 истории. Автоматического merge друзей/профилей/истории нет.
 
 ### Конвертация sdk-account
+
+#### Замороженный Auth identity slice GAME-AUTH-01
+
+G01/Q11: первый независимый provider — Google OpenID Connect, issuer строго
+`https://accounts.google.com`, RS256 и ключи только из Google JWKS. Для каждого
+app/env оператор Voice регистрирует отдельный **Voice-owned** Google client ID;
+developer не управляет issuer, JWKS или client ID. Google subject удостоверяет
+пользователя, а не владение персонажем: соответствие игровому subject отдельно
+подтверждает Game Integration Service. Email, имя и avatar не импортируются.
+Обязательны единственный ожидаемый `aud`, совпадающий `azp` при наличии, непустой
+`sub` длиной не более 255 символов,
+`nonce`, `iat` не старше 5 минут и не более 30 секунд в будущем, неистёкший `exp`.
+Источник protocol semantics: [Google OIDC](https://developers.google.com/identity/openid-connect/openid-connect).
+
+Google — первый поддержанный provider, не исключительное продуктовое обещание.
+Помимо него exchange **обязательно** проверяет отдельный RS256 game ticket
+ключом backend из operator app/env registry: `iss=game:<application UUID>:<environment UUID>`,
+`aud=voice:sdk-enroll`, `sub=<game subject>`, тот же `nonce`, `iat`/`exp`
+с теми же freshness bounds, `independent_subject_hash=SHA-256(issuer + LF + sub)`
+проверенного Google proof. Это связывает два доказательства и device challenge.
+Скомпрометированный backend может лгать о game subject/roster, но не выпускать
+Google proof, менять device key или получать permanent Voice credentials.
+Game subject является контекстом session; назначение binding и его uniqueness
+остаются Game Integration Service, а не доказательством со стороны Google.
+
+Auth HTTP surface первого среза: `POST /api/v1/auth/sdk/challenges`
+принимает `applicationId`, `environmentId`, публичный ES256/P-256 JWK;
+возвращает `challengeId`, `nonce`, `clientId`, `expiresAt`. Challenge живёт
+5 минут и неизменно связывает app/env/provider audience/device key.
+`POST /api/v1/auth/sdk/exchange` принимает `challengeId`, `providerToken`, `gameTicket`,
+`deviceProof`: compact ES256 JWS с payload **в точности** UTF-8
+`voice-sdk-enroll-v1\n<challenge UUID>\n<nonce>` и зарегистрированным ключом.
+Auth атомарно consumes challenge, создаёт/находит sdk identity, регистрирует
+устройство и возвращает `accountId`, `actorId`, `deviceId`, `accessToken`,
+`expiresAt`, `accountType=sdk-account`. Повтор exchange, включая потерянный
+ответ, отвергается; новый независимый login восстанавливает ту же identity.
+Новый device требует нового independent login; отозванный ключ нельзя оживить.
+
+Первый credential — случайный opaque 256-bit token, в БД только SHA-256,
+TTL 5 минут, purpose `sdk-identity-bootstrap`. Он не JWT обычного Voice,
+не refresh token и не даёт chat/voice access. `POST /api/v1/auth/sdk/session`
+проверяет Bearer token **и** ES256 proof с точным UTF-8 payload
+`voice-sdk-session-v1\n<SHA-256 lowercase hex token>`; возвращает только
+собственные app/env/account/actor/device IDs. Это read-only проверка владения
+bootstrap credential; replay не создаёт эффект. `POST /api/v1/auth/sdk/revoke`
+с token и proof `voice-sdk-revoke-v1\n<token hash>` отзывает текущее устройство
+и все его sessions. Повтор после revoke отвергается. Обычные Voice endpoints
+не принимают этот opaque credential. Все identity denial ошибки одинаковы.
+
+Хранилище Auth: отдельные `sdk_identities`, `sdk_devices`, `sdk_challenges`,
+`sdk_sessions`; это отдельный тип principal, без строки legacy guest, пароля,
+refresh или автоматического User profile. Уникальность app/env/issuer/sub;
+случайный `actorId` стабилен только внутри identity и не является `profile_id`.
+В этом срезе admitted app/env задаются operator configuration, с cap 1000
+identities на app/env и не более 10 активных устройств на identity; issuance
+проверяет admission повторно. Registry consumer заменит конфигурационный список
+доверенным контрактом; конфигурация неизменяема в процессе, исключение app/env
+из списка после restart прекращает challenge/exchange/session. Online
+suspension registry и propagation требуют следующего slice до production.
+Не публиковать маршруты в Gateway до его rate limits и registry activation gate.
+
+Q03: ownership generation начинается с 1. Не угадываем transfer по IP/email/
+новому устройству; Google `sub` не передаётся по обычному flow. При заявленном
+compromise/transfer identity блокируется; отдельная reviewed recovery operation
+закроет прежние grants и создаст новое generation без private history/consent.
+Автоматическое обнаружение смены человека за provider account не обещается.
+
+Q07: до conversion один private app-scoped actor, без дополнительного User
+profile. Existing-target conversion выбирает уже существующий разрешённый
+profile, поэтому заполненный лимит 2/5 не создаёт обхода или extra profile.
+New-target conversion создаёт один primary profile через User API. Public
+payload будущих roster/cards/presence не должен сериализовать account ID,
+provider subject или скрытые permanent profiles.
+
+Q08: до доказанного linking account-wide voice применяется отдельно к каждому
+sdk-account. Conversion блокирует новые source admission, требует Voice receipt
+о завершении source session; занятый target возвращает `VOICE_CONFLICT` до
+commit, либо получает отдельное явное handoff consent. Reconnect и lease renewal
+проверяют новую generation; mute/deafen не снимаются переносом.
+
+Q10: revoked device public key/thumbprint, retired/deleted identity UUID,
+app/env/issuer/sub fence и ownership generation сохраняются без TTL как
+минимальный security tombstone; это pseudonymous anti-resurrection data, не
+public profile. Provider login не снимает suspension/deletion/retirement.
+Raw provider token никогда не сохраняется. Истёкшие challenges/sessions можно
+удалять после expiry; текущий срез не делает erasure/restore. Backup restore
+перед serving обязан сверить tombstone generation с внешним durable lifecycle
+journal; пока такой journal не подключён, восстановленная Auth DB не включается
+для этой capability. Raw provider subject pseudonymization и key-retention
+механизм должны пройти отдельный deletion slice до production admission.
+
+План следующих executable slices (не реализовано GAME-AUTH-01):
+
+1. GAME-AUTH-02: registry admission + Gateway limits, Voice-owned browser
+   redirect/code+PKCE/consent и User actor contract; реальная Google acceptance
+   с отдельными sandbox/prod client IDs, allowed redirect/origin, двумя device
+   keys и nonce replay. Без credentials остаётся только crypto fixture evidence.
+2. GAME-AUTH-03: durable conversion operation/status/hash/expected revision;
+   source independent proof + device possession; новый permanent target через
+   существующую email registration/verification и User primary-profile RPC;
+   preview/consent, source fence, Voice receipt, owner receipts, target activation.
+   Tests: crash/retry каждого перехода, email pending, account bans, old token.
+3. GAME-AUTH-04: existing permanent proof через browser+PKCE, explicit existing
+   profile, conflict preview; occupied binding → 409, no replacement/union;
+   тот же журнал и owner receipts. Tests: full profile limit, concurrent targets,
+   hidden profiles, target already in voice, source reconnect.
+4. GAME-AUTH-05: unlink/delete/restore/recovery, HMAC subject tombstones и
+   external monotonic journal, anti-resurrection на старом backup; identity
+   lookup после conversion следует target binding только после permanent
+   proof, а unlink никогда не воскрешает retired source. ID09–ID13/Q08/Q10
+   закрываются только этими executable тестами.
 
 Подтверждение исходного sdk-account включает proof-of-possession его device key
 и независимую пользовательскую авторизацию; одного server-issued game ticket
