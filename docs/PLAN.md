@@ -40,8 +40,13 @@ Scope разделён явно:
 По запросу владельца подготовлен [proposed target игровых интеграций](features/game-integrations.md):
 Game API, Unity/Unreal SDK, MMO communities, [игровые боты](features/game-bot-interactions.md)
 и [game federation](architecture/game-federation.md). Это документация, не новый
-активный milestone и не изменение A1/WIP или G0–G4. Федерация остаётся deferred.
-Будущие dependency stages, открытые решения и acceptance —
+активный milestone и не изменение A1/WIP или G0–G4. По уточнению владельца
+план разработки — **один спринт целиком**, включая sdk-account с обеими
+конвертациями, Unity и Unreal, ботов, MMO communities и игровую федерацию.
+Внутри него — подзадачи с зависимостями и общей приёмкой, а не релизные этапы.
+Текущий deferred runtime-статус федерации не исключает её из scope этого спринта;
+место спринта в очереди и запуск реализации здесь пока не назначены.
+Подзадачи, открытые решения и acceptance —
 [game-integrations-acceptance.md](testing/game-integrations-acceptance.md).
 Статус `proposed` в FEATURES не означает обещание релиза или готовность runtime.
 

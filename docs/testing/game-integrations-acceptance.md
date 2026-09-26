@@ -1,26 +1,46 @@
-# Game integrations — этапы, решения и acceptance
+# Game integrations — единый спринт, подзадачи и acceptance
 
 **Proposed target; не новый активный milestone.** [PLAN](../PLAN.md) определяет
 очередь. Этот документ определяет доказательства перед будущим включением
 [игрового продукта](../features/game-integrations.md), а не объявляет его готовым.
 Documentation-only work не требует запуска всех сервисов/движков.
 
-## 1. Вертикальные этапы
+## 1. Один спринт с единым результатом
 
-| Этап | Вход / зависимости | Наблюдаемый результат | Gate |
+Решение владельца: весь описанный игровой продукт реализуется за один спринт,
+от входа игрока до общения и игровых команд через мессенджер и game node.
+GI-коды ниже обозначают подзадачи одного спринта, а не последовательные релизы,
+MVP или перенос части функций в будущие спринты. Длительность и состав команды
+ещё не определены; это требование к плану поставки, а не подтверждённая оценка.
+
+В общий scope входят `sdk-account` и обе конвертации, linked account, SDK для
+Unity и Unreal, hosted party, MMO communities, боты с командами и карточками,
+opt-in уведомления, game federation, эксплуатация и end-to-end проверка.
+Windows x64 для обоих движков — согласуемая платформа этой поставки; остальные
+платформы, online migration и иные явно исключённые возможности не превращаются
+в скрытые этапы этого плана и не заявляются реализованными.
+
+| Подзадача | Вход / зависимости | Наблюдаемый результат | Критерий готовности |
 |---|---|---|---|
-| GI0: contract decisions | G01–G06 для выбранного scope | Reviewed schemas/scopes/identity policy и backend ownership | Нет unresolved authority/retention decisions на активном пути |
-| GI1: linked party | Auth consent, Chat/Voice core, один движок | 2–4 игрока в одном hosted party chat/voice | Реальное media, revoke, reconnect, consent; без federation |
+| GI0: contracts | G01–G13, владельцы доменов | Согласованные schemas/scopes/identity/retention, versions и storage ownership | Решения закрыты перед зависимым кодом; документация и контракты согласованы |
+| GI7: sdk-account и Auth | GI0 identity contracts, Auth/User | Вход без permanent account, linking, конвертация в новый и существующий аккаунт | ID01–ID13, revoke, conflict и crash recovery |
+| GI1: party и Game API | GI0, GI7, Chat/Voice core | 2–4 игрока в одном hosted party chat/voice, keep-group | Реальное media, roster/revoke/reconnect/consent для обоих типов аккаунта |
 | GI2: bot commands | Bot hardening, binding, game adapter | Event → slash → один реальный игровой эффект → result | Crash/retry/stale/revoke matrix, durable command semantics |
-| GI3: rich companion | GI2 + Messaging/Flutter components + opt-in | Cards/buttons, event history, player notification settings | Multi-device, forwarding, expiry, unsubscribe; mobile gate отдельно |
-| GI4: developer SDK | GI1, stable contracts, exact engine matrix | Документированный SDK обоих движков и samples | Другой разработчик интегрирует без автора SDK |
-| GI5: MMO communities | GI1 identity + managed grants, G02/G03/G09 | Corporation → Space; rank changes affect in/out-game access | Полная roster/role lifecycle vertical |
+| GI3: rich companion | GI2 + Messaging/Flutter components + opt-in | Cards/buttons, event history, player notification settings, opt-in доставка в поддержанном messenger | Multi-device, forwarding, expiry, unsubscribe; mobile не заявляется без support proof |
+| GI4: Unity и Unreal SDK | GI0 contracts; GI1/GI7 для интеграции | Оба package/plugin, native media, identity/conversion UI, samples и docs | Оба packaged builds проходят conformance и real-media suite |
+| GI5: MMO communities | GI7 identity + managed grants, G02/G03/G09 | Corporation → Space; rank changes affect in/out-game access | Полная roster/role lifecycle vertical |
 | GI6: game node | GI5 + federation wire/lifecycle/ops, G08/G10 | Один game node, два Space, SDK + messenger | Partition/revoke/restore/security/operability proof |
+| GI8: developer operations | GI0 contracts; GI1–GI7 для интеграции | App/env registry, keys/rotation, quotas, diagnostics, deployment, backup/restore, support docs | Разработчик проходит onboarding без ручного доступа к чужим БД; оператор восстанавливает ноду |
+| GI9: общая приёмка | GI0–GI8 | HerdTrip-, MMO- и Dejavu-like reference flows на общем продукте | Вся acceptance matrix, packaged artifacts и единый evidence package |
 
-GI2 можно готовить независимо от движка после identity contract; GI5 не требует
-rich cards; GI6 не нужен для GI1–GI4. Этапы здесь — dependency map, не разрешение
-обойти текущую WIP политику. Не выделять infrastructure-only PR без названного
-потребителя и отключённой capability до полной вертикали.
+GI0 закрывает контракты по мере потребности, не отдельным спринтом. После нужных
+контрактов Auth, Bot, оба engine wrappers и federation transport можно выполнять
+параллельно; итоговая интеграция учитывает зависимости таблицы. Несколько PR
+допустимы, но готовность отдельной подзадачи не означает завершение спринта.
+Feature flags служат безопасной интеграции и откату, а не исключению незавершённых
+функций из общего результата. Спринт завершён только после GI9; `sdk-account`,
+второй движок и федерация не переносятся молча за его границы. Запуск реализации
+и место в общей очереди фиксируются в PLAN; текущая задача меняет документацию.
 
 ## 2. Работы по доменам
 
@@ -149,11 +169,11 @@ implementation slice; каждый выбор фиксируется в feature/
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
-| G01 | sdk-account отдельно от guest и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI1 только linked profiles; sdk-account отдельным этапом, до enabling обязательны новый и существующий permanent target, ID07–ID13 |
+| G01 | sdk-account отдельно от guest и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI7 в этом же спринте; обязательны новый и существующий permanent target, ID07–ID13 |
 | G02 | Несколько персонажей/аккаунтов в одной корпорации | Reasons/grants раздельно; policy per game, запрет implicit privilege union без решения |
 | G03 | Владение corporation Space | Named human Owner по текущему защищённому flow; game leader не получает Owner автоматически |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
-| G05 | Engines/platform versions, shared core, support window | Один Windows engine pilot, второй после conformance; точные версии после media spike |
+| G05 | Engines/platform versions, shared core, support window | Unity и Unreal на Windows x64 в одном спринте; точные версии после media spike внутри GI4 |
 | G06 | Владелец Integration domain/store и app registry | Явный доменный owner, не Gateway DB; выбрать сервис и миграции до GI0 schema freeze |
 | G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
 | G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |

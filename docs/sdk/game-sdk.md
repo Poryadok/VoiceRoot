@@ -25,15 +25,14 @@
 
 ## 2. Платформы и release matrix
 
-| Этап | Платформы | Доказательство |
+| Scope | Платформы | Доказательство |
 |---|---|---|
-| Pilot | Windows x64; один выбранный движок | Packaged build на двух компьютерах, real audio, reconnect/revoke |
-| Second engine | Второй движок на Windows x64 | Тот же conformance suite и sample |
-| Desktop expansion | Linux/macOS после dependency spike | Native build, devices, packaging/signing, network fault suite |
-| Mobile | Android/iOS после отдельного milestone | Background/foreground, interruptions, permissions, push/link handoff |
+| Единый спринт | Windows x64; Unity и Unreal | Оба packaged builds на двух компьютерах, общий conformance suite, real audio, reconnect/revoke |
+| Не включено в текущую platform matrix | Linux/macOS | Для заявления поддержки нужны native build, devices, packaging/signing, network fault suite |
+| Не включено в текущую platform matrix | Android/iOS | Для заявления поддержки нужны background/foreground, interruptions, permissions, push/link handoff |
 | Consoles / WebGL | Не обещаны; отдельная capability/review | Platform requirements и media support proof |
 
-Перед pilot фиксируются точные engine versions, native dependency versions и
+В рамках подзадачи GI4 фиксируются точные engine versions, native dependency versions и
 поддержанные scripting/backend modes. Unity IL2CPP/AOT, stripping/link.xml и
 архитектуры native libraries проверяются в player build, не только Editor.
 Для Unreal проверяются Development/Shipping, packaging, plugin version,

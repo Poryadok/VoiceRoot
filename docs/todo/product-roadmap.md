@@ -19,14 +19,15 @@ _Нет открытых пунктов._
 
 ## Common
 
-- [ ] **Game integrations — proposed design, не текущий WIP.** Согласовать решения
-  G01–G13 и выбрать один вертикальный pilot из
+- [ ] **Game integrations — один спринт целиком, не текущий WIP.** Закрыть решения
+  G01–G13 и выполнить все подзадачи с общей приёмкой из
   [game-integrations-acceptance.md](../testing/game-integrations-acceptance.md).
   Спецификация: [game-integrations.md](../features/game-integrations.md).
   Bot source gaps и необходимые расширения перечислены в
   [game-bot-interactions.md](../features/game-bot-interactions.md); federation
-  остаётся deferred. DoD следующего planning review: named consumer, принятый
-  identity/authority/retention контракт, проверяемый pilot и место в PLAN;
+  пока имеет deferred runtime-статус, но входит в общий scope спринта.
+  DoD следующего planning review: named consumer, принятый
+  identity/authority/retention контракт, единый sprint backlog и место в PLAN;
   документация сама по себе не открывает code WIP.
 
 - [ ] **П.5 — Verified rank для Space MM (post-v1, документированный gate)** — глобальный MM V1 остаётся self-reported; `verified_rank_only` допустим только для будущего Space MM. Steam не является одобренным verifier; FACEIT — лишь будущий кандидат. До реализации владелец должен зафиксировать provider и игры, provider identity/rank criterion, версионированное external→per-game integer|enum mapping, freshness/re-check/revoke attestations, Space config, fail-closed verifier и отдельную доступную UI-semantics. Rank attestation не заменяет personal/org profile badge. DoD: решение и контракт записаны в [matchmaking.md](../features/matchmaking.md) и [verification.md](../features/verification.md), затем deterministic provider suite; live-provider acceptance отдельно. → пересекается [User] verification gaps (Batch 14).

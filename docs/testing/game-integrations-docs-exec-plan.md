@@ -126,5 +126,11 @@ accounts. Added a proposed durable conversion flow, trust boundaries, conflict a
 recovery requirements, SDK behavior, glossary, and acceptance cases ID07–ID13.
 G01 now tracks implementation policy details, not whether these paths are needed.
 Owner naming clarification: the canonical account type name is `sdk-account`.
+Owner delivery clarification: one implementation sprint for the entire documented
+game integration scope. Replaced staged releases and linked-only/second-engine
+deferrals with dependent subtasks GI0–GI9 and one acceptance result, including
+sdk-account conversions, both engines, bots, communities and federation. Existing
+platform exclusions stay explicit; sprint scheduling and runtime readiness are
+not asserted by documentation. Synced the branch with origin/master via merge.
 Scoped local Markdown link checks and diff whitespace checks passed; runtime
 remains unchanged and untested by this documentation-only follow-up.

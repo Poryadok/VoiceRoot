@@ -19,8 +19,8 @@ Voice. Пользователь продолжает использовать ц
 корпорацию не требуется. Нода и game simulation server — разные trust domains,
 даже если ими управляет одна студия.
 
-Hosted и federated deployments используют один внешний контракт. Первые пилоты
-SDK и бота работают на master. Переключение на ноду не должно менять игровые
+Hosted и federated deployments используют один внешний контракт и входят в
+общую приёмку одного спринта. Переключение на ноду не должно менять игровые
 сценарии или заставлять разработчика реализовывать новый чат-протокол.
 
 ## 2. Явные уточнения прежнего дизайна
@@ -67,7 +67,7 @@ flowchart TB
 | Сообщения и история hosted Space | Routing/metadata минимум | Messaging authority и durable storage |
 | Files hosted Space | Resource placement registry | File service и собственное object storage |
 | Voice | Central policy + node placement | Voice service, LiveKit, TURN и active media enforcement |
-| DM / standalone party вне Space | На master | Не хостит в первом этапе |
+| DM / standalone party вне Space | На master | Не хостит в scope этой поставки |
 | Push tokens и уведомления | Notification authority | Передаёт проверяемую заявку на уведомление |
 | Поиск | Разрешённый fan-out/aggregation | ACL-aware local index; partial result при недоступности |
 | Боты | Registry/consent/actor delegation | Только explicit installation/hosted scopes |
@@ -241,7 +241,7 @@ Deletion receipts — аттестация оператора/сервиса, н
 
 ## 10. Миграция между нодами
 
-Online migration не входит в первый pilot. Пока нет проверенного migration
+Online migration не входит в scope этой поставки. Пока нет проверенного migration
 protocol, `home_node_id` immutable для активного Space. Недоступность не запускает
 автоматическое перемещение и не меняет storage region без решения оператора.
 
@@ -277,5 +277,5 @@ master не падает из-за одной сторонней ноды; её 
 Нагрузка проверяется по active memberships, chats fan-out, concurrent media и
 reconciliation size. Metrics не содержат raw messages/character secrets.
 Support boundary разделяет отказ игры, Voice master и operator node. SLA и
-цены не объявляются до G07/G08/G10. Первый пилот включает одну ноду, два Space,
+цены не объявляются до G07/G08/G10. Общая приёмка спринта включает одну ноду, два Space,
 разные роли, игрока в SDK и игрока в мессенджере, partition/revoke и backup restore.

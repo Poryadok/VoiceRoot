@@ -26,7 +26,7 @@
 | [Game SDK](../sdk/game-sdk.md) | Unity/Unreal, lifecycle, audio, packaging, onboarding |
 | [Игровые боты](game-bot-interactions.md) | Source audit, команды, карточки, доставка и безопасность |
 | [Федерация для игр](../architecture/game-federation.md) | Нода игры, master, authority, routing, recovery |
-| [Acceptance и этапы](../testing/game-integrations-acceptance.md) | Пилоты, зависимости, тесты и открытые решения |
+| [Единый спринт и acceptance](../testing/game-integrations-acceptance.md) | Подзадачи, зависимости, общий результат, тесты и открытые решения |
 
 ## Обещание продукта
 
@@ -73,8 +73,9 @@ application. Одна игра может иметь несколько прил
 не заменяются сообщением о том, что общение обслуживает Voice.
 
 Для входа без связи применяется отдельный `sdk-account`, описанный
-ниже. До реализации этой capability linked-only пилот явно сообщает, что
-для общения нужно подключить Voice; он не имитирует этот путь через `guest`.
+ниже. Эта capability и оба пути конвертации обязательны для общего результата
+спринта; linked-only сборка не считается завершённой поставкой и не имитирует
+этот путь через `guest`.
 
 ### Партия и общение
 
