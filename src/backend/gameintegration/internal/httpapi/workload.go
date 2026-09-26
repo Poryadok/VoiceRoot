@@ -41,6 +41,16 @@ func workloadSignature(key []byte, method, path, timestamp, nonce string) string
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
+// responseSignature binds a successful policy body to the authenticated request.
+// Auth verifies the exact received bytes before parsing or trusting the policy.
+func responseSignature(key []byte, status int, path, timestamp, nonce string, body []byte) string {
+	digest := sha256.Sum256(body)
+	message := "v1\n" + strconv.Itoa(status) + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex.EncodeToString(digest[:])
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(message))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
 // SignWorkloadRequest is the test/controlled-client counterpart of the Auth
 // workload wire; production Auth implements the same canonical input in Java.
 func SignWorkloadRequest(r *http.Request, key []byte, now time.Time, nonce string) {

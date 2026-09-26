@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -58,6 +59,12 @@ func TestInternalPolicyRequiresFreshAuthWorkloadProof(t *testing.T) {
 	h.ServeHTTP(w, r)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), "game.chat.read")
+	require.Equal(t, r.Header.Get("X-Voice-Timestamp"), w.Header().Get("X-Voice-Response-Timestamp"))
+	require.Equal(t, r.Header.Get("X-Voice-Nonce"), w.Header().Get("X-Voice-Response-Nonce"))
+	require.Equal(t, responseSignature(key, http.StatusOK, r.URL.EscapedPath(), r.Header.Get("X-Voice-Timestamp"), r.Header.Get("X-Voice-Nonce"), w.Body.Bytes()), w.Header().Get("X-Voice-Response-Signature"))
+	var decoded registry.AuthorizationPolicy
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &decoded))
+	require.Equal(t, envID, decoded.EnvironmentID)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	require.Equal(t, http.StatusUnauthorized, w.Code)

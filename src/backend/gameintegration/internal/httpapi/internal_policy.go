@@ -52,7 +52,18 @@ func (h *InternalPolicyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusServiceUnavailable, "POLICY_UNAVAILABLE")
 		return
 	}
+	body, err := json.Marshal(policy)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "POLICY_UNAVAILABLE")
+		return
+	}
+	body = append(body, '\n')
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(policy)
+	w.Header().Set("X-Voice-Response-Timestamp", r.Header.Get("X-Voice-Timestamp"))
+	w.Header().Set("X-Voice-Response-Nonce", r.Header.Get("X-Voice-Nonce"))
+	w.Header().Set("X-Voice-Response-Signature", responseSignature(h.Verifier.Key, http.StatusOK,
+		r.URL.EscapedPath(), r.Header.Get("X-Voice-Timestamp"), r.Header.Get("X-Voice-Nonce"), body))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }

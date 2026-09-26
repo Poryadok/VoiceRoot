@@ -96,6 +96,15 @@ for 60 seconds. Redis failure is `503`, never an authentication fallback.
 The response is `no-store` and includes app/env IDs, current policy revision,
 display name, exact redirects/origins, providers and player scopes. Auth
 re-resolves and compares revision at request, approval and code exchange.
+For a successful `200` response Game Integration also echoes the request's
+timestamp and nonce in `X-Voice-Response-Timestamp` and
+`X-Voice-Response-Nonce`, and sends `X-Voice-Response-Signature` as unpadded
+base64url HMAC-SHA256 under the same workload key. The signed UTF-8 message is
+`v1\n200\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_exact_response_body}`.
+Auth checks the response status, echoed request fields and MAC over the exact
+received bytes before parsing or using the policy. Missing or invalid response
+proof fails closed. This authenticates the response over the Compose internal
+HTTP hop; externally configured endpoints still require HTTPS.
 
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
