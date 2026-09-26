@@ -1470,6 +1470,7 @@ jobs:
           - chat
           - federation
           - file
+          - gameintegration
           - gateway
           - matchmaking
           - messaging
@@ -1601,7 +1602,7 @@ jobs:
       - name: Go mod tidy (all Go modules)
         run: |
           set -e
-          for m in pkg analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+          for m in pkg analytics bot chat federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
             (cd "src/backend/$m" && go mod tidy)
           done
       - name: Prefetch sqlite3mc native assets

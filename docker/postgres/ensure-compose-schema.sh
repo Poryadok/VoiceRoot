@@ -40,7 +40,7 @@ apply_if_exists() {
 }
 
 for db in auth_db user_db social_db chat_db messaging_db file_db space_db role_db \
-  notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db voice_db; do
+  notification_db matchmaking_db gateway_db search_db subscription_db moderation_db bot_db story_db voice_db game_integration_db; do
   ensure_database "$db"
 done
 

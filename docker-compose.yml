@@ -834,7 +834,35 @@ services:
       retries: 10
       start_period: 15s
 
-  # Federation is S2S-only (not in GATEWAY_GRPC_UPSTREAMS_JSON); health/metrics scaffold for CI parity.
+  gameintegration:
+    profiles: ["app"]
+    build:
+      context: ./src/backend
+      dockerfile: gameintegration/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/game_integration_db?sslmode=disable
+      GAME_INTEGRATION_REDIS_ADDR: redis:6379
+      GAME_INTEGRATION_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
+      GAME_INTEGRATION_JWT_ISSUER: voice-auth
+      GAME_INTEGRATION_JWT_AUDIENCE: voice-client
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Legacy Federation scaffold; game-node runtime is implemented by this sprint.
   federation:
     profiles: ["app"]
     build:
@@ -1109,7 +1137,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_SESSION_EPOCH_STRICT: "true"
-      GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
+      GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080","game-integrations":"http://gameintegration:8080"}'
       GATEWAY_GRPC_UPSTREAMS_JSON: '{"auth":"auth:9090","users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090","stories":"story:9090","analytics":"analytics:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
@@ -1133,6 +1161,8 @@ services:
       nats:
         condition: service_healthy
       auth:
+        condition: service_healthy
+      gameintegration:
         condition: service_healthy
       social:
         condition: service_healthy

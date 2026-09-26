@@ -18,4 +18,5 @@ psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" 
 	CREATE DATABASE bot_db;
 	CREATE DATABASE story_db;
 	CREATE DATABASE voice_db;
+	CREATE DATABASE game_integration_db;
 EOSQL
