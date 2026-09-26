@@ -355,6 +355,15 @@ default `voice-prod` namespace. The application reads `VOICE_DATABASE_URL` from
 `voice-app-secrets`; its readiness probe uses `/ready` and checks the lifecycle
 schema. Migration completion therefore precedes application readiness.
 
+The same runner applies every Go-owned schema before application manifests:
+`bot_db`, `chat_db`, `file_db`, `matchmaking_db`, `messaging_db`,
+`moderation_db`, `notification_db`, `role_db`, `search_db`, `social_db`,
+`space_db`, `story_db`, `subscription_db`, `user_db`, and `voice_db`. Each
+service migration Job reads its database URL through a `voice-app-secrets`
+Secret reference. The runner reuses a completed Job only when the stored hash
+matches the current SQL files; otherwise it applies the service's migration
+ConfigMap and waits for the replacement Job before continuing.
+
 Before a lifecycle schema release, backup `voice_db` together with the other service-owned PostgreSQL databases.
 For recovery, restore `voice_db` into an isolated database,
 validate migrations through `000002_redis_divergence`, all seven lifecycle tables,
