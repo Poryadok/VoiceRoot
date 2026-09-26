@@ -162,8 +162,10 @@ printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 3
 # race leaf interest propagation and hide the failing proof stage.
 grep -Fq "req --raw '\$JS.API.STREAM.INFO.chat_events' ''" "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must verify chat_events through the local Chat leaf before publishing"
-grep -Fq 'timeout 3s docker run --rm --network container:voice-nats-canonical-chat' "$CANONICAL_HOSTED_PROOF" \
+grep -Fq 'timeout 3s docker run --rm --name voice-nats-canonical-chat-info' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must bound each local leaf readiness request"
+grep -Fq 'docker rm -f voice-nats-canonical-chat-info' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must remove a timed-out local leaf readiness container"
 grep -Fq 'nats.CustomInboxPrefix("_INBOX.voice.chat")' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must use the approved Chat reply inbox prefix"
 grep -Fq 'js.Publish("chat.created"' "$CANONICAL_HOSTED_PROOF" \

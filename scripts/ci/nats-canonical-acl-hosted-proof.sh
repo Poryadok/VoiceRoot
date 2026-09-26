@@ -12,7 +12,7 @@ work="$(mktemp -d)"
 umask 077
 network="voice-nats-canonical-${RANDOM}"
 cleanup() {
-  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat voice-nats-canonical-bad-leaf >/dev/null 2>&1 || true
+  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat voice-nats-canonical-chat-info voice-nats-canonical-bad-leaf >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -160,9 +160,13 @@ docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' || {
 # Confirm the Chat leaf can reach the hub's JetStream API before publishing.
 # The request also establishes the approved Chat reply inbox through the leaf.
 chat_leaf_stream_info() {
-  timeout 3s docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
+  local status=0
+  timeout 3s docker run --rm --name voice-nats-canonical-chat-info \
+    --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
     nats --server nats://127.0.0.1:4222 --inbox-prefix _INBOX.voice.chat \
-    req --raw '$JS.API.STREAM.INFO.chat_events' ''
+    req --raw '$JS.API.STREAM.INFO.chat_events' '' || status=$?
+  docker rm -f voice-nats-canonical-chat-info >/dev/null 2>&1 || true
+  return "$status"
 }
 chat_leaf_before=''
 for _ in $(seq 1 15); do
