@@ -118,3 +118,12 @@ engine/live tests were run, no claim of SDK/federation production readiness.
 Worktree: `C:/Users/Sergey/.codex/worktrees/game-sdk-federation-docs/Voice`.
 Branch: `codex/game-sdk-federation-docs`. Main checkout remains on master;
 the user's untracked local concept directory was not copied or modified.
+
+Follow-up owner clarification (2026-09-26): recommend first-entry Voice service
+disclosure with the same account-connect option for everyone. Accepted a distinct
+game identity (not legacy guest) and conversion to both new and existing permanent
+accounts. Added a proposed durable conversion flow, trust boundaries, conflict and
+recovery requirements, SDK behavior, glossary, and acceptance cases ID07–ID13.
+G01 now tracks implementation policy details, not whether these paths are needed.
+Scoped local Markdown link checks and diff whitespace checks passed; runtime
+remains unchanged and untested by this documentation-only follow-up.

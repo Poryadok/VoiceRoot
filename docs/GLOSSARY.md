@@ -241,6 +241,7 @@ Server **не** синхронизирует per-profile GIF recents cross-devic
 | Game application | Зарегистрированное приложение разработчика; не запись game_id каталога ММ |
 | Environment | Sandbox/production контур приложения с изолированными credentials и данными |
 | Player binding | Подтверждённая связь игровой identity с выбранным профилем Voice |
+| Game identity | Отдельная от текущего guest ограниченная игровая учётная запись с проверенным game subject; повторно используется между входами, конвертируется в новый или существующий постоянный аккаунт |
 | Character binding | Привязка персонажа игры; не отдельный профиль Voice и не новый аккаунт |
 | Communication session | Управляемая игрой связка party/match/fleet с chat_id и voice_room_id |
 | Managed grant | Разрешение, полученное из конкретной причины membership/rank игры |
