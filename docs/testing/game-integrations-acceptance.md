@@ -26,7 +26,7 @@ rich cards; GI6 не нужен для GI1–GI4. Этапы здесь — depe
 
 | Домен | Будущие изменения | Проверка до enabling PR |
 |---|---|---|
-| Auth/User | Delegation, provider proof, selected profile, revocation, app-limited identity | Proof replay, PKCE, wrong issuer/audience, unlink/delete, privacy |
+| Auth/User | Delegation, provider proof, selected profile, revocation, sdk-account | Proof replay, PKCE, wrong issuer/audience, unlink/delete, privacy |
 | Integration | App/env, sessions, external mappings, operations, managed grants | Unique keys, crash stages, roster CAS/snapshot, cleanup ownership |
 | Gateway/proto | Versioned surface, principals/scopes, limits, error enums | OpenAPI/proto compatibility, forged IDs, direct-call negative tests |
 | Chat/Space/Role | Managed membership, history scope, template provisioning | Removal/ban/Owner boundaries, race/freeze/deletion |
@@ -58,8 +58,8 @@ Gateway/SDK и старые credentials. Все game IDs и secrets — syntheti
 | ID05 | Unlink/delete/suspension во время SDK connection | Новые requests и active governed доступ закрываются; cache scoped |
 | ID06 | Смена профиля мессенджера при игре | Игра не переключает actor молча; второй voice не возникает |
 | ID07 | Первый вход без binding, аккаунт Voice существует или отсутствует | Одинаковые возможности подключения; рекомендованный UI сообщает о Voice сразу, без account enumeration |
-| ID08 | Повторный вход с проверенным game subject | Та же app/env игровая identity; отдельный тип от guest, нет прав за пределами scopes/roster |
-| ID09 | Конвертация игровой identity в новый постоянный аккаунт | Явная регистрация; continuity и допустимый контекст сохранены; старые credentials отозваны |
+| ID08 | Повторный вход с проверенным game subject | Тот же sdk-account в app/env; отдельный тип от guest, нет прав за пределами scopes/roster |
+| ID09 | Конвертация sdk-account в новый постоянный аккаунт | Явная регистрация; continuity и допустимый контекст сохранены; старые credentials отозваны |
 | ID10 | Конвертация в существующий аккаунт | Proof обеих сторон, выбор профиля, preview/consent; связи перенесены, исходная identity retired; нет implicit role/history union |
 | ID11 | Занятый binding, бан, удалённый target или конкурентная конвертация | Контролируемый конфликт; нет перезаписи, обхода санкций или двух активных владельцев |
 | ID12 | Crash/timeout/retry на каждой стадии конвертации | Та же durable operation, доступный status, recovery; нет дублей, потери audit или оживления старых tokens/actions |
@@ -149,7 +149,7 @@ implementation slice; каждый выбор фиксируется в feature/
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
-| G01 | Отдельный от guest игровой тип и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI1 только linked profiles; limited identity отдельным этапом, до enabling обязательны новый и существующий permanent target, ID07–ID13 |
+| G01 | sdk-account отдельно от guest и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI1 только linked profiles; sdk-account отдельным этапом, до enabling обязательны новый и существующий permanent target, ID07–ID13 |
 | G02 | Несколько персонажей/аккаунтов в одной корпорации | Reasons/grants раздельно; policy per game, запрет implicit privilege union без решения |
 | G03 | Владение corporation Space | Named human Owner по текущему защищённому flow; game leader не получает Owner автоматически |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |

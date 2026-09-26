@@ -100,15 +100,15 @@ inbox, друзьям, другим играм и другим профилям.
 нужен device code с expiry, ограниченным polling и явным подтверждением.
 Alpha admission/invite/cohort cap не обходится через игровой endpoint.
 
-Ограниченная игровая identity — отдельный Auth-supported principal с
+`sdk-account` — отдельный Auth-supported principal с
 централизованным владением. До его реализации SDK возвращает
 `CAPABILITY_UNAVAILABLE`, а не создаёт скрытый regular/guest аккаунт.
 Claim/upgrade требует proof обеих identity, описанного conflict flow и политики
 истории. Автоматического merge друзей/профилей/истории нет.
 
-### Конвертация игровой identity
+### Конвертация sdk-account
 
-Требование владельца: отдельный от текущего `guest` тип с доказанным game
+Требование владельца: `sdk-account` — отдельный от текущего `guest` тип с доказанным game
 subject и ограниченным app/env доверием, с конвертацией как в новый, так и в
 существующий постоянный аккаунт. `ConvertGuest` не является готовым контрактом
 для этой операции. Наличие identity не означает подтверждённый email или

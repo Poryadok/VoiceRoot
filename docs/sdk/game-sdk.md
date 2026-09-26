@@ -81,13 +81,13 @@ Blueprint-only проект и dedicated-server target без audio initializati
 Для первого входа SDK/sample рекомендует сразу сообщать «Общение через Voice»
 и предлагать подключение аккаунта независимо от того, есть ли он у игрока.
 Форма экрана остаётся за игрой. SDK знает только состояние binding; регистрация
-или вход происходят в Voice flow. Игровая identity — отдельный от `guest` тип.
-Её capability должна поддерживать переход в новый и существующий постоянный
+или вход происходят в Voice flow. `sdk-account` — отдельный от `guest` тип.
+Его capability должна поддерживать переход в новый и существующий постоянный
 аккаунт, preview конфликтов, operation status и recovery; конкретные методы
 конвертации утверждаются в G01. Pending conversion приостанавливает затронутые
 сессии; после завершения SDK очищает старый scoped cache и получает новые grants.
 См. [пользовательский сценарий](../features/game-integrations.md#рекомендуемый-первый-вход-для-любой-игры)
-и [протокол конвертации](../architecture/game-integration-api.md#конвертация-игровой-identity).
+и [протокол конвертации](../architecture/game-integration-api.md#конвертация-sdk-account).
 
 Серверные `CreateSession`, `SyncRoster`, `PublishGameEvent` не экспортируются как
 привилегированные методы player SDK. При игре без backend вызывается отдельный

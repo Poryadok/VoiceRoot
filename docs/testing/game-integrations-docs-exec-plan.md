@@ -121,9 +121,10 @@ the user's untracked local concept directory was not copied or modified.
 
 Follow-up owner clarification (2026-09-26): recommend first-entry Voice service
 disclosure with the same account-connect option for everyone. Accepted a distinct
-game identity (not legacy guest) and conversion to both new and existing permanent
+sdk-account (not legacy guest) and conversion to both new and existing permanent
 accounts. Added a proposed durable conversion flow, trust boundaries, conflict and
 recovery requirements, SDK behavior, glossary, and acceptance cases ID07–ID13.
 G01 now tracks implementation policy details, not whether these paths are needed.
+Owner naming clarification: the canonical account type name is `sdk-account`.
 Scoped local Markdown link checks and diff whitespace checks passed; runtime
 remains unchanged and untested by this documentation-only follow-up.
