@@ -199,6 +199,10 @@ else
   echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
 fi
 
+# Bucket Jobs have immutable pod templates. Replace only the known previous
+# client image after a completed, semantically exact bucket-creation Job.
+bash "${ROOT}/scripts/staging/replace-minio-bucket-jobs.sh" "${NS}" "${MINIO_MC_IMAGE}"
+
 sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \
     -e "s|__VOICE_MINIO_STORAGE_CLASS__|${MINIO_STORAGE_CLASS}|g" \

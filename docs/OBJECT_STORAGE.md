@@ -66,7 +66,14 @@ a one-replica StatefulSet with readiness/liveness probes, and a
 ReadWriteOnce PVC. Configure `VOICE_MINIO_STORAGE_CLASS` and
 `VOICE_MINIO_STORAGE_SIZE` (staging defaults: `local-path`/`20Gi`; production:
 `local-path`/`100Gi`) for the cluster. The two bucket Jobs use `mc mb
---ignore-existing`, so retries are idempotent.
+--ignore-existing`, so retries are idempotent. Kubernetes Job pod templates
+are immutable: staging replaces an existing bucket Job only when it matches the
+expected bucket action and credential references, uses the previous pinned mc
+image, and has completed successfully. Active Jobs and unexpected specs stop
+infra apply without deletion; a Job already using the selected image is kept.
+The replacement guard is restricted to `voice-staging` and deletes with the
+observed Job UID as a precondition, so a same-name replacement after inspection
+is left untouched.
 
 For staging, store `STAGING_MINIO_ROOT_USER` and `STAGING_MINIO_ROOT_PASSWORD`
 in GitHub repository **Settings → Environments → staging → Environment secrets**.
