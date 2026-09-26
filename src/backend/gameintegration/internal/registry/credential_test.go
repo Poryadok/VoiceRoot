@@ -27,6 +27,13 @@ func TestIssueCredentialIsScopedAndRetryStable(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, first.Secret)
 	require.Equal(t, int64(1), first.Generation)
+	principal, err := store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_"+first.Secret, "game.events.write", key)
+	require.NoError(t, err)
+	require.Equal(t, env.ID, principal.EnvironmentID)
+	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_"+first.Secret, "game.roster.write", key)
+	require.ErrorIs(t, err, ErrInvalidServiceCredential)
+	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_wrong", "game.events.write", key)
+	require.ErrorIs(t, err, ErrInvalidServiceCredential)
 	retry, err := store.IssueCredential(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, retry.ID)
@@ -41,6 +48,9 @@ func TestIssueCredentialIsScopedAndRetryStable(t *testing.T) {
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM service_credentials WHERE environment_id=$1`, env.ID).Scan(&count))
 	require.Equal(t, 1, count)
+	require.NoError(t, store.RevokeCredential(ctx, owner, app.ID, env.ID, first.ID))
+	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_"+first.Secret, "game.events.write", key)
+	require.ErrorIs(t, err, ErrInvalidServiceCredential)
 }
 
 func TestCredentialKeyValidation(t *testing.T) {
