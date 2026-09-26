@@ -46,12 +46,12 @@ assert_job() {
 }
 
 assert_job compose-e2e 'make compose-app-up' "needs.changes.outputs.global == 'true'"
-assert_job a1-e2e 'make compose-a1-multi-account-proof' "needs.changes.outputs.a1_e2e == 'true'"
-assert_job a1-flutter-profile-handoff 'make compose-a1-flutter-profile-handoff' "needs.changes.outputs.a1_e2e == 'true'"
+assert_job a1-e2e 'make compose-a1-multi-account-proof' "needs.changes.outputs.global == 'true'"
+assert_job a1-flutter-profile-handoff 'make compose-a1-flutter-profile-handoff' "needs.changes.outputs.global == 'true'"
 grep -Fq '.github/workflows/**' "$FILTERS" \
   || fail 'global path filter must exercise the Compose E2E PR gate for workflow changes'
 grep -Fq '.github/workflows/ci.yml' "$FILTERS" \
-  || fail 'A1 path filter must exercise both A1 PR gates for CI workflow changes'
+  || fail 'global path filter must exercise both A1 PR gates for CI workflow changes'
 
 grep -Fq 'quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3' "$COMPOSE" \
   || fail 'ordinary local Compose server default must remain unchanged'

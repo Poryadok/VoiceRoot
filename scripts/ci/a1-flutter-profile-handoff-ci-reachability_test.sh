@@ -46,12 +46,12 @@ target_count="$(grep -Ec 'make[[:space:]]+compose-a1-flutter-profile-handoff([^[
 [[ "$target_count" -eq 1 ]] || fail "${JOB} must contain exactly one profile-handoff target occurrence, got ${target_count}"
 grep -Eq "VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:[[:space:]]*[\"']?true[\"']?[[:space:]]*$" "$job_file" || fail "${JOB} must set cleanup=true"
 
-trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.a1_e2e" "$job_file" | sed -E 's/^[[:space:]]*//')"
+trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|global)" "$job_file" | sed -E 's/^[[:space:]]*//')"
 expected_trigger_terms="$(printf '%s\n' \
   "github.event_name == 'schedule' ||" \
   "(github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||" \
   "github.event_name == 'pull_request' &&" \
-  "needs.changes.outputs.a1_e2e == 'true'" \
+  "needs.changes.outputs.global == 'true'" \
   "github.event_name == 'push' &&" \
   "github.ref == 'refs/heads/master' &&" \
   "needs.changes.outputs.a1_e2e == 'true'")"

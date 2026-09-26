@@ -1290,7 +1290,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.a1_e2e == 'true'
+          needs.changes.outputs.global == 'true'
         ) ||
         (
           github.event_name == 'push' &&
@@ -1336,7 +1336,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.a1_e2e == 'true'
+          needs.changes.outputs.global == 'true'
         ) ||
         (
           github.event_name == 'push' &&
