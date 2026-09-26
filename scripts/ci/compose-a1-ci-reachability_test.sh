@@ -94,9 +94,8 @@ grep -Fq "inputs.profile == 'full'" "$a1_job_file" || fail "isolated A1 job must
 grep -Fq "github.event_name == 'push'" "$a1_job_file" || fail "isolated A1 job must support master push"
 grep -Fq "github.ref == 'refs/heads/master'" "$a1_job_file" || fail "isolated A1 job push path must be gated to master"
 grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$a1_job_file" || fail "isolated A1 job push path must be gated by changes.outputs.a1_e2e"
-if grep -Fq "pull_request" "$a1_job_file"; then
-  fail "isolated A1 job must never run on pull_request"
-fi
+grep -Fq "github.event_name == 'pull_request'" "$a1_job_file" || fail "isolated A1 job must run for CI workflow pull requests"
+grep -Fq "needs.changes.outputs.global == 'true'" "$a1_job_file" || fail "isolated A1 job PR path must be limited to global workflow changes"
 if grep -Fq "inputs.profile != 'auto'" "$a1_job_file"; then
   fail "isolated A1 job must not broaden manual dispatch beyond profile full"
 fi
