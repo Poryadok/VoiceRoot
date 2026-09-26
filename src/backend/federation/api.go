@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -159,10 +160,14 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 		return nil, errForbidden
 	}
 	authorization := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authorization, "Bearer ") || len(authorization) != 50 {
+	if !strings.HasPrefix(authorization, "Bearer ") {
 		return nil, errForbidden
 	}
 	secret := strings.TrimPrefix(authorization, "Bearer ")
+	decodedSecret, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil || len(decodedSecret) != nodeCredentialEntropyBytes || base64.RawURLEncoding.EncodeToString(decodedSecret) != secret {
+		return nil, errForbidden
+	}
 	if parts[5] == "snapshot" && r.Method == http.MethodGet {
 		return a.Store.issue(r.Context(), node, space, pin, secret, nil)
 	}

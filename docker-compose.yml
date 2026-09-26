@@ -865,12 +865,30 @@ services:
       retries: 10
       start_period: 10s
 
-  # Legacy Federation scaffold; game-node runtime is implemented by this sprint.
+  # Federation is opt-in until a Voice Node verifier is ready. The mounted
+  # local credentials and operator settings are required when this profile is selected.
   federation:
-    profiles: ["app"]
+    profiles: ["federation"]
     build:
       context: ./src/backend
       dockerfile: federation/Dockerfile
+    environment:
+      FEDERATION_DATABASE_URL: ${FEDERATION_DATABASE_URL:-}
+      FEDERATION_TLS_CERT: /run/voice/federation/tls.crt
+      FEDERATION_TLS_KEY: /run/voice/federation/tls.key
+      FEDERATION_CLIENT_CA: /run/voice/federation/client-ca.crt
+      FEDERATION_SIGNING_SEED_FILE: /run/voice/federation/signing-seed
+      FEDERATION_KEY_ID: ${FEDERATION_KEY_ID:-}
+      FEDERATION_ISSUER: ${FEDERATION_ISSUER:-}
+      FEDERATION_ENVIRONMENT: ${FEDERATION_ENVIRONMENT:-}
+      FEDERATION_OPERATOR_CERT_SHA256: ${FEDERATION_OPERATOR_CERT_SHA256:-}
+    volumes:
+      - ${FEDERATION_LOCAL_SECRET_DIR:-./tmp/federation-local}:/run/voice/federation:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s

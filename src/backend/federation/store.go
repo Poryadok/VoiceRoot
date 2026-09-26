@@ -51,6 +51,9 @@ type authorityStore struct {
 	Key                        ed25519.PrivateKey
 	KeyID, Issuer, Environment string
 }
+
+const nodeCredentialEntropyBytes = 32
+
 type nodeState struct {
 	Status, Pin, Hash string
 	Epoch             int64
@@ -117,7 +120,7 @@ func (s *authorityStore) changeNode(ctx context.Context, id, action, pin, actor 
 		if pin == "" {
 			pin = n.Pin
 		}
-		secret := make([]byte, 32)
+		secret := make([]byte, nodeCredentialEntropyBytes)
 		if _, err = rand.Read(secret); err != nil {
 			return err
 		}

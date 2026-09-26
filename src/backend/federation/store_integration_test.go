@@ -46,6 +46,25 @@ func TestPostgresAuthorityLifecycle(t *testing.T) {
 	snap := Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: 1, ValidUntil: time.Now().Add(4 * time.Second).UnixMilli(), Permissions: []Permission{}}
 	require.NoError(t, s.publish(ctx, node, space, snap))
 	require.NoError(t, s.publish(ctx, node, space, snap))
+	// Exercise the actual API authorization path with the credential issued by
+	// changeNode, including the node's verified client certificate.
+	nodeCert := &x509.Certificate{Raw: []byte("node-cert"), NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
+	api := &authorityAPI{Store: s, Operators: map[string]bool{}}
+	apiRequest := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "https://master"+path, strings.NewReader(body))
+		r.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{nodeCert}, VerifiedChains: [][]*x509.Certificate{{nodeCert}}}
+		r.Header.Set("Authorization", "Bearer "+cred.Secret)
+		w := httptest.NewRecorder()
+		api.ServeHTTP(w, r)
+		return w
+	}
+	basePath := "/v1/nodes/" + node + "/spaces/" + space
+	apiSnapshot := apiRequest("GET", basePath+"/snapshot", "")
+	require.Equal(t, 200, apiSnapshot.Code, apiSnapshot.Body.String())
+	apiAckRaw, err := json.Marshal(leaseRequest{Revision: 1, Hash: digest(mustJSON(t, snap)), Nonce: uuid.NewString()})
+	require.NoError(t, err)
+	apiLease := apiRequest("POST", basePath+"/lease", string(apiAckRaw))
+	require.Equal(t, 200, apiLease.Code, apiLease.Body.String())
 	changed := snap
 	changed.ValidUntil++
 	require.ErrorIs(t, s.publish(ctx, node, space, changed), errConflict)
@@ -151,6 +170,13 @@ func TestPostgresAuthorityLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.changeNode(ctx, node, "rotate", pin, "operator")
 	require.ErrorIs(t, err, errConflict)
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }
 
 func TestAPIBoundariesBeforeDatabase(t *testing.T) {

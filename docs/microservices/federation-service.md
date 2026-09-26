@@ -49,7 +49,11 @@ The runtime requires `FEDERATION_DATABASE_URL`, `FEDERATION_TLS_CERT`,
 `FEDERATION_OPERATOR_CERT_SHA256`. `/ready` is database/schema readiness.
 Deployment must provision `federation_db` and a service-specific login with
 access limited to that database before starting the Deployment. The migration
-creates only Federation-owned tables. Compose does not start this service.
+creates only Federation-owned tables. The standard Compose `app` profile leaves
+the service stopped. A separate opt-in `federation` profile passes the required
+runtime settings and mounts local TLS/signing material from
+`FEDERATION_LOCAL_SECRET_DIR`; unset settings or missing files make startup fail
+closed. Keep all production values in the deployment secret manager.
 Both Kubernetes manifests keep the Deployment at `replicas: 0`; the
 `voice-federation` ClusterIP exposes `:9443` internally and `:8080` for health
 and metrics only. There is no Gateway route. Keep it dormant until a Voice Node

@@ -19,4 +19,8 @@ Kubernetes expects the `voice-federation-authority` Secret described in the
 staging and production deployment docs. Create the database and dedicated
 database role before enabling the Deployment. The process migrates tables at
 startup. Do not put private signing seeds or TLS keys in ConfigMaps or source
-control. Compose does not start Federation.
+control. The standard Compose `app` profile does not start Federation. An
+operator may start the separate `federation` profile after setting all runtime
+values and mounting local certificates plus the signing seed from
+`FEDERATION_LOCAL_SECRET_DIR`; startup fails closed when required settings or
+files are absent. Do not use local Compose credentials in staging or production.
