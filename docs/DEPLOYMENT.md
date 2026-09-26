@@ -606,6 +606,15 @@ old and new Auth replicas cannot bind it concurrently. Start service leaves
 only after successful bootstrap, then verify allowed publish/consume/ACK and
 neighboring denial at the exact release SHA.
 
+Staging Bot, Chat, Matchmaking, Space, Notification, and Realtime bind fixed
+push durables without a queue group. Keep each deployment singleton during an
+image rollout: the staging manifests use `Recreate`, and the apply script
+clears Kubernetes' defaulted `rollingUpdate` strategy before applying that
+declaration. Do not delete or recreate the durable to work around a subscriber
+overlap. Gateway waits for required User gRPC before opening HTTP, so its
+staging startup probe allows up to 150 seconds for the configured 120-second
+gRPC readiness deadline before liveness checks begin.
+
 Staging account migration is not yet approved: the existing anonymous `$G`
 account was observed with 566 consumers, exceeding the issued APP account's
 512-consumer limit. Inventory and classify legacy dynamic consumers and prove
