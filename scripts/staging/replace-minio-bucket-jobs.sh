@@ -27,13 +27,19 @@ for bucket in avatars files; do
   if ! printf '%s' "${existing}" | jq -e --arg name "${job}" --arg namespace "${NS}" --arg bucket "${bucket}" --arg image "${MINIO_MC_IMAGE}" --arg legacy "${LEGACY_MINIO_MC_IMAGE}" '
     .metadata.name == $name and .metadata.namespace == $namespace and
     .spec.backoffLimit == 10 and
-    ((.spec | keys - ["backoffLimit", "template", "parallelism", "completions", "completionMode", "suspend", "selector"]) | length) == 0 and
+    ((.spec | keys - ["backoffLimit", "template", "parallelism", "completions", "completionMode", "suspend", "selector", "manualSelector", "podReplacementPolicy"]) | length) == 0 and
     ((.spec.parallelism // 1) == 1) and ((.spec.completions // 1) == 1) and
     ((.spec.completionMode // "NonIndexed") == "NonIndexed") and ((.spec.suspend // false) == false) and
+    ((.spec.manualSelector // false) == false) and ((.spec.podReplacementPolicy // "TerminatingOrFailed") == "TerminatingOrFailed") and
     (.metadata.uid as $uid | .spec.selector.matchLabels as $labels | .spec.template.metadata.labels as $templateLabels |
-      ($labels | type == "object" and length > 0) and
-      ([ $labels | to_entries[] | select((.key | endswith("job-name")) and .value == $name) ] | length) == 1 and
-      ([ $labels | to_entries[] | select((.key | endswith("controller-uid")) and .value == $uid) ] | length) == 1 and
+      ($labels | type == "object" and keys == ["controller-uid"]) and
+      ((.spec.selector | keys) == ["matchLabels"]) and
+      $labels["controller-uid"] == $uid and
+      ($templateLabels | type == "object" and keys == ["batch.kubernetes.io/controller-uid", "batch.kubernetes.io/job-name", "controller-uid", "job-name"]) and
+      $templateLabels["controller-uid"] == $uid and
+      $templateLabels["batch.kubernetes.io/controller-uid"] == $uid and
+      $templateLabels["job-name"] == $name and
+      $templateLabels["batch.kubernetes.io/job-name"] == $name and
       all($labels | to_entries[]; . as $entry | $templateLabels[$entry.key] == $entry.value) and
       ((.spec.template.metadata | keys - ["labels"]) | length) == 0
     ) and
@@ -49,10 +55,11 @@ for bucket in avatars files; do
       $container.name == "mc" and
       ($container.image == $image or $container.image == $legacy) and
       $container.args == ["mb", "--ignore-existing", ("local/voice-staging-" + $bucket)] and
-      (($container | keys - ["name", "image", "args", "env", "imagePullPolicy", "terminationMessagePath", "terminationMessagePolicy"]) | length) == 0 and
+      (($container | keys - ["name", "image", "args", "env", "imagePullPolicy", "terminationMessagePath", "terminationMessagePolicy", "resources"]) | length) == 0 and
       (($container.imagePullPolicy // "IfNotPresent") == "IfNotPresent") and
       (($container.terminationMessagePath // "/dev/termination-log") == "/dev/termination-log") and
       (($container.terminationMessagePolicy // "File") == "File") and
+      (($container.resources // {}) == {}) and
       ($container.env | length) == 3 and
       ([ $container.env[] | select(.name == "MINIO_ROOT_USER" and .valueFrom.secretKeyRef.name == "voice-minio-credentials" and .valueFrom.secretKeyRef.key == "MINIO_ROOT_USER" and ((.valueFrom.secretKeyRef.optional // false) == false)) ] | length) == 1 and
       ([ $container.env[] | select(.name == "MINIO_ROOT_PASSWORD" and .valueFrom.secretKeyRef.name == "voice-minio-credentials" and .valueFrom.secretKeyRef.key == "MINIO_ROOT_PASSWORD" and ((.valueFrom.secretKeyRef.optional // false) == false)) ] | length) == 1 and
