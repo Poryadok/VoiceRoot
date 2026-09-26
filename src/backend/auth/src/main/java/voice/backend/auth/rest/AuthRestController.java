@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -76,7 +77,8 @@ public class AuthRestController {
   @PostMapping("/register")
   public SessionEnvelope register(@Valid @RequestBody RegisterRequest request) {
     AuthSession session = authService.register(new RegisterCommand(
-        request.email(), request.phone(), request.password(), request.guest(), request.deviceInfoJson()));
+        request.email(), request.phone(), request.password(), request.guest(), request.deviceInfoJson(),
+        request.registrationIntentId()));
     sendInitialEmailVerificationIfPending(session, request.email());
     return SessionEnvelope.from(session);
   }
@@ -341,6 +343,13 @@ public class AuthRestController {
     return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
   }
 
+  @ExceptionHandler({org.springframework.web.bind.MethodArgumentNotValidException.class,
+      org.springframework.http.converter.HttpMessageNotReadableException.class})
+  public ResponseEntity<Map<String, String>> invalidRequest() {
+    // Registration intent is a capability; never log rejected JSON or credential values.
+    return ResponseEntity.badRequest().body(Map.of("error", "validation_failed"));
+  }
+
   @ExceptionHandler(AuthException.class)
   public ResponseEntity<Map<String, String>> authError(AuthException ex) {
     HttpStatus status = switch (ex.getMessage()) {
@@ -371,7 +380,12 @@ public class AuthRestController {
       String phone,
       @NotBlank String password,
       boolean guest,
-      @JsonProperty("device_info_json") String deviceInfoJson) {}
+      @JsonProperty("device_info_json") String deviceInfoJson,
+      UUID registrationIntentId) {
+    public RegisterRequest(String email, String phone, String password, boolean guest, String deviceInfoJson) {
+      this(email, phone, password, guest, deviceInfoJson, null);
+    }
+  }
 
   public record LoginRequest(
       String email,

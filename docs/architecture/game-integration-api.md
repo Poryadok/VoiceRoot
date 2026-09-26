@@ -1,6 +1,8 @@
 # Game Integration API — целевой внешний контракт
 
-**Proposed target; все новые API ниже не реализованы.** Продуктовые требования —
+**Proposed target.** Ограниченный Auth bootstrap GAME-AUTH-01 реализован в
+opt-in режиме; PostgreSQL/live-provider acceptance остаётся обязательным gate.
+Остальные новые API ниже ещё не реализованы. Продуктовые требования —
 [интеграции игр](../features/game-integrations.md); acceptance и решения —
 [матрица](../testing/game-integrations-acceptance.md). API имена фиксируют
 предлагаемую семантику; до реализации нужны reviewed OpenAPI/proto и error schema.
@@ -124,6 +126,255 @@ Claim/upgrade требует proof обеих identity, описанного con
 истории. Автоматического merge друзей/профилей/истории нет.
 
 ### Конвертация sdk-account
+
+#### Auth durable conversion preparation GAME-AUTH-03
+
+Auth создаёт durable operation до внешних owner effects. Новый target начинается
+с current SDK credential и device proof; существующий — с linked-bootstrap
+credential GAME-AUTH-02 и тем же device key. Обычный Voice Bearer остаётся в Voice
+browser UI. Prepare фиксирует mode (`new` / `existing`), binding ID, source
+app/env/device/generation и client UUID idempotency key. Повтор key с тем же
+target/binding возвращает прежнюю operation без продления intent; другая нагрузка
+даёт 409. Source account допускает несколько подготовленных intents, но только
+одну подтверждённую conversion; confirmation остаётся отдельным preview/CAS шагом.
+
+Prepare device payload:
+`voice-sdk-conversion-new-v1\n<SHA-256 SDK token>\n<idempotency UUID>\n<binding UUID>`
+или `voice-sdk-conversion-existing-v1\n<SHA-256 linked token>\n<idempotency UUID>\n<binding UUID>`.
+Auth request hash — SHA-256 UTF-8
+`<mode>\n<idempotency UUID>\n<binding UUID>\n<target account UUID or ->\n<target profile UUID or ->`.
+
+New mode выдаёт Auth-owned `registration_intent_id` с TTL 15 минут. Обычный
+Voice registration endpoint принимает optional `registrationIntentId`. В одной
+локальной транзакции создаётся новый account, consumes одноразовый intent и
+записывается его account ID в operation. Неверный/истёкший/использованный intent
+откатывает создание account. Legacy guest registration с intent запрещена.
+Pending email сохраняет обычный registration/OTP lifecycle. Attach target
+требует current Voice proof **ровно записанного** account после перехода в
+regular; существующий раньше account допустим только в existing mode.
+New attach вызывает идемпотентный User EnsurePrimaryProfile, затем read-only
+eligibility именно primary. Existing mode не вызывает provisioning или switch.
+
+Recovery status доступен с сохранённым public device key operation даже после
+отзыва source credential. Это только чтение, не player authority. Payload:
+`voice-sdk-conversion-status-v1\n<operation UUID>\n<issued-at Unix seconds>`;
+Auth принимает timestamp не старше 60 секунд и не дальше 30 секунд в будущем.
+Ни provider credential, ни ordinary Voice token для status не сохраняются.
+Prepare/status/attach ещё не freeze, не transfer и не завершённая conversion.
+Последующие preview, explicit confirmation и owner receipts обязаны следовать
+[conversion authority](game-conversion-authority.md); unavailable adapter
+оставляет durable state без продвижения и никогда не создаёт no-op receipt.
+
+Prepare/status/attach routes отдельно opt-in через `auth.sdk-conversion.enabled`
+и доступны только при JDBC persistence:
+
+| Route | Proof / request | Result |
+|---|---|---|
+| `POST /api/v1/auth/sdk/conversions/new` | SDK Bearer; `idempotencyKey`, `bindingId`, `deviceProof` | prepared operation и registration intent |
+| `POST /api/v1/auth/sdk/conversions/existing` | Linked Bearer; те же поля | prepared operation с ранее выбранным permanent profile |
+| `POST /api/v1/auth/sdk/conversions/{operationId}/status` | `issuedAt` Unix seconds и `deviceProof`; без source Bearer | durable operation state/revision и target/intent IDs |
+| `POST /api/v1/auth/sdk/conversions/{operationId}/attach-new-target` | Current Voice Bearer; без authority fields в body | только зарегистрированный через intent новый target/primary |
+
+Intent consume проверяет current source generation/device и lifecycle, но не
+требует ещё живой пятиминутный bootstrap session. Отзыв устройства запрещает
+consume, сохраняя только purpose-limited status. Unknown fields и malformed
+requests дают безопасный `400`, invalid proof — `401`, изменённая idempotent
+нагрузка — `409`. Registration intent не попадает в parser/validation logs.
+
+#### Auth browser consent GAME-AUTH-02
+
+Этот следующий Auth slice реализует подготовку связи из уже независимо
+подтверждённого sdk-account. Consumer — существующий Voice browser/Flutter UI
+и внутренний protocol client. Auth не принимает пароль Voice в игровом UI;
+обычный Voice sign-in/registration остаётся существующим потоком. Device-code
+вариант не включается без конкретного browserless consumer.
+
+Registry policy читается через `SdkAuthorizationPolicy.resolve(app, env)`:
+`applicationId`, `environmentId`, положительная immutable `revision`,
+`displayName`, точные `redirectUris`, разрешённые `playerScopes`. Registry
+владеет allowlist. Endpoint владельца —
+`GET /internal/v1/authorizations/environments/{environment_id}`; только
+выделенная Auth↔Game Integration workload identity. Недоступный policy adapter,
+неактивное приложение, неверные IDs, неизвестный scope, смена revision закрывают
+request/approval/exchange. Локальный developer allowlist не заменяет lookup.
+Production adapter выключен до реализации проверяемого workload contract.
+
+1. SDK создаёт authorization request с UUID idempotency key, точным redirect,
+   S256 challenge (43 base64url chars), случайным state (43–128 base64url chars)
+   и отсортированным набором scopes. Набор непустой, максимум 16 элементов;
+   player subset — `game.identity.read`, `game.chat.read`, `game.chat.send`,
+   `game.voice.join`, `game.presence.write`, `game.invites.create`; service-only
+   scopes запрещены. Redirect — absolute URI без fragment/userinfo/CRLF;
+   допустимые schemes задаёт registry, совпадение allowlist всегда exact.
+   Source credential и device possession
+   проверяются в той же транзакции. Повтор того же ключа/полезной нагрузки
+   возвращает прежний request ID/expiry; другая нагрузка даёт conflict.
+2. Canonical request digest — SHA-256 UTF-8
+   `voice-sdk-authorization-request-v1\n<idempotency UUID>\n<redirect>\n<S256 challenge>\n<state>\n<sorted scopes joined by comma>`.
+   Device JWS payload —
+   `voice-sdk-authorize-v1\n<SHA-256 source token>\n<request digest>`.
+   Lifetime ограничен меньшим из source-session expiry и now+5 минут.
+3. Voice UI показывает app/окружение, scopes, исходный game context, выбранный
+   профиль и явное согласие. UI читает эти данные из Auth consent-view с current
+   regular Voice Bearer; переданные игрой display/scopes не являются источником
+   consent UI. View повторно проверяет policy/source и ничего не утверждает.
+   Approval требует обычный current Voice Bearer,
+   **актуальный** `accounts.type=regular` в Auth DB, exact policy revision и
+   read-only User eligibility выбранного profile (owner/nondeleted/nonfrozen
+   и revision). `SwitchProfile` не вызывается; primary не подставляется молча.
+   Pending email registration не является постоянным target до verification.
+4. Approval выдаёт одноразовый random code (в store только SHA-256), TTL до
+   60 секунд и не дольше request. Redirect совпадает с registry byte-for-byte;
+   state возвращается неизменным. Повтор approval после успешного выпуска
+   отвергается; потерянный ответ требует нового request, не восстанавливает code.
+5. Exchange требует code, exact redirect, PKCE verifier (43–128 unreserved
+   ASCII chars) и прежний device key. Payload:
+   `voice-sdk-code-v1\n<request UUID>\n<SHA-256 code>\n<SHA-256 verifier>`.
+   Перед consume заново проверяются current source/device generation,
+   target regular/status/epoch/approval-session blacklist, registry revision
+   и exact User eligibility revision. Expiry проверяется после ожидания locks.
+6. Результат — отдельный opaque linked-bootstrap credential на 5 минут с
+   app/env, исходной identity/device, **выбранным** target account/profile,
+   scopes и consent/policy revision. Он не обычный Voice JWT/refresh и не
+   активирует player binding или media. Binding activation и conversion
+   требуют receipts по [conversion authority](game-conversion-authority.md).
+
+Auth HTTP routes этого slice:
+
+| Route | Proof / request | Result |
+|---|---|---|
+| `POST /api/v1/auth/sdk/authorizations` | SDK Bearer; `idempotencyKey`, `redirectUri`, `codeChallenge`, `state`, `scopes`, `deviceProof` | request ID, policy revision, display/scopes/expiry |
+| `GET /api/v1/auth/sdk/authorizations/{requestId}` | Current regular Voice Bearer | authoritative consent view, game context, no mutation |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/approve` | Current regular Voice Bearer; `profileId`, `policyRevision` | one-use code, redirect with original state, expiry |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/exchange` | `code`, `redirectUri`, `codeVerifier`, `deviceProof` | linked-bootstrap credential |
+| `POST /api/v1/auth/sdk/authorizations/linked-session` | Linked Bearer; `deviceProof` | current scoped claims, no returned raw token |
+
+Linked-session possession payload:
+`voice-sdk-linked-v1\n<SHA-256 linked token>`. This read checks source/device
+lifecycle and generation, target epoch/logout, policy and profile revisions;
+source bootstrap session expiry alone does not extend or revoke a linked grant.
+Linked expiry is capped by the approval Voice token expiry. Unknown authority
+fields are rejected; malformed requests return coarse `400`, invalid proof or
+authority `401`, changed idempotency payload `409`.
+
+Auth хранит authorization request/code/consent/grant отдельно от guest conversion.
+Владелец User предоставляет отдельный read-only eligibility contract; до его
+production adapter approval/exchange закрыты. Fake policy/eligibility допустимы
+только в тестах. Scoped token не считается production-ready до binding
+authority consumer и публичных Gateway limits. Direct Voice-only first login
+без предварительного sdk-account остаётся последующим вариантом того же
+authorization contract; этот slice не объявляет весь T14 завершённым.
+
+#### Замороженный Auth identity slice GAME-AUTH-01
+
+G01/Q11: первый независимый provider — Google OpenID Connect, issuer строго
+`https://accounts.google.com`, RS256 и ключи только из Google JWKS. Для каждого
+app/env оператор Voice регистрирует отдельный **Voice-owned** Google client ID;
+developer не управляет issuer, JWKS или client ID. Google subject удостоверяет
+пользователя, а не владение персонажем: соответствие игровому subject отдельно
+подтверждает Game Integration Service. Email, имя и avatar не импортируются.
+Обязательны единственный ожидаемый `aud`, совпадающий `azp` при наличии, непустой
+`sub` длиной не более 255 символов,
+`nonce`, `iat` не старше 5 минут и не более 30 секунд в будущем, неистёкший `exp`.
+Источник protocol semantics: [Google OIDC](https://developers.google.com/identity/openid-connect/openid-connect).
+
+Google — первый поддержанный provider, не исключительное продуктовое обещание.
+Помимо него exchange **обязательно** проверяет отдельный RS256 game ticket
+ключом backend из operator app/env registry: `iss=game:<application UUID>:<environment UUID>`,
+`aud=voice:sdk-enroll`, `sub=<game subject>`, тот же `nonce`, `iat`/`exp`
+с теми же freshness bounds, `independent_subject_hash=SHA-256(issuer + LF + sub)`
+проверенного Google proof. Это связывает два доказательства и device challenge.
+Скомпрометированный backend может лгать о game subject/roster, но не выпускать
+Google proof, менять device key или получать permanent Voice credentials.
+Game subject является контекстом session; назначение binding и его uniqueness
+остаются Game Integration Service, а не доказательством со стороны Google.
+
+Auth HTTP surface первого среза: `POST /api/v1/auth/sdk/challenges`
+принимает `applicationId`, `environmentId`, публичный ES256/P-256 JWK;
+возвращает `challengeId`, `nonce`, `clientId`, `expiresAt`. Challenge живёт
+5 минут и неизменно связывает app/env/provider audience/device key.
+`POST /api/v1/auth/sdk/exchange` принимает `challengeId`, `providerToken`, `gameTicket`,
+`deviceProof`: compact ES256 JWS с payload **в точности** UTF-8
+`voice-sdk-enroll-v1\n<challenge UUID>\n<nonce>` и зарегистрированным ключом.
+Auth атомарно consumes challenge, создаёт/находит sdk identity, регистрирует
+устройство и возвращает `accountId`, `actorId`, `deviceId`, `accessToken`,
+`expiresAt`, `accountType=sdk-account`. Повтор exchange, включая потерянный
+ответ, отвергается; новый независимый login восстанавливает ту же identity.
+Новый device требует нового independent login; отозванный ключ нельзя оживить.
+
+Первый credential — случайный opaque 256-bit token, в БД только SHA-256,
+TTL 5 минут, purpose `sdk-identity-bootstrap`. Он не JWT обычного Voice,
+не refresh token и не даёт chat/voice access. `POST /api/v1/auth/sdk/session`
+проверяет Bearer token **и** ES256 proof с точным UTF-8 payload
+`voice-sdk-session-v1\n<SHA-256 lowercase hex token>`; возвращает только
+собственные app/env/account/actor/device IDs. Это read-only проверка владения
+bootstrap credential; replay не создаёт эффект. `POST /api/v1/auth/sdk/revoke`
+с token и proof `voice-sdk-revoke-v1\n<token hash>` отзывает текущее устройство
+и все его sessions. Повтор после revoke отвергается. Обычные Voice endpoints
+не принимают этот opaque credential. Все identity denial ошибки одинаковы.
+
+Хранилище Auth: отдельные `sdk_identities`, `sdk_devices`, `sdk_challenges`,
+`sdk_sessions`; это отдельный тип principal, без строки legacy guest, пароля,
+refresh или автоматического User profile. Уникальность app/env/issuer/sub;
+случайный `actorId` стабилен только внутри identity и не является `profile_id`.
+В этом срезе admitted app/env задаются operator configuration, с cap 1000
+identities на app/env и не более 10 активных устройств на identity; issuance
+проверяет admission повторно. Registry consumer заменит конфигурационный список
+доверенным контрактом; конфигурация неизменяема в процессе, исключение app/env
+из списка после restart прекращает challenge/exchange/session. Online
+suspension registry и propagation требуют следующего slice до production.
+Не публиковать маршруты в Gateway до его rate limits и registry activation gate.
+
+Q03: ownership generation начинается с 1. Не угадываем transfer по IP/email/
+новому устройству; Google `sub` не передаётся по обычному flow. При заявленном
+compromise/transfer identity блокируется; отдельная reviewed recovery operation
+закроет прежние grants и создаст новое generation без private history/consent.
+Автоматическое обнаружение смены человека за provider account не обещается.
+
+Q07: до conversion один private app-scoped actor, без дополнительного User
+profile. Existing-target conversion выбирает уже существующий разрешённый
+profile, поэтому заполненный лимит 2/5 не создаёт обхода или extra profile.
+New-target conversion создаёт один primary profile через User API. Public
+payload будущих roster/cards/presence не должен сериализовать account ID,
+provider subject или скрытые permanent profiles.
+
+Q08: до доказанного linking account-wide voice применяется отдельно к каждому
+sdk-account. Conversion блокирует новые source admission, требует Voice receipt
+о завершении source session; занятый target возвращает `VOICE_CONFLICT` до
+commit, либо получает отдельное явное handoff consent. Reconnect и lease renewal
+проверяют новую generation; mute/deafen не снимаются переносом.
+
+Q10: revoked device public key/thumbprint, retired/deleted identity UUID,
+app/env/issuer/sub fence и ownership generation сохраняются без TTL как
+минимальный security tombstone; это pseudonymous anti-resurrection data, не
+public profile. Provider login не снимает suspension/deletion/retirement.
+Raw provider token никогда не сохраняется. Истёкшие challenges/sessions можно
+удалять после expiry; текущий срез не делает erasure/restore. Backup restore
+перед serving обязан сверить tombstone generation с внешним durable lifecycle
+journal; пока такой journal не подключён, восстановленная Auth DB не включается
+для этой capability. Raw provider subject pseudonymization и key-retention
+механизм должны пройти отдельный deletion slice до production admission.
+
+План следующих executable slices (не реализовано GAME-AUTH-01):
+
+1. GAME-AUTH-02: registry admission + Gateway limits, Voice-owned browser
+   redirect/code+PKCE/consent и User actor contract; реальная Google acceptance
+   с отдельными sandbox/prod client IDs, allowed redirect/origin, двумя device
+   keys и nonce replay. Без credentials остаётся только crypto fixture evidence.
+2. GAME-AUTH-03: durable conversion operation/status/hash/expected revision;
+   source independent proof + device possession; новый permanent target через
+   существующую email registration/verification и User primary-profile RPC;
+   preview/consent, source fence, Voice receipt, owner receipts, target activation.
+   Tests: crash/retry каждого перехода, email pending, account bans, old token.
+3. GAME-AUTH-04: existing permanent proof через browser+PKCE, explicit existing
+   profile, conflict preview; occupied binding → 409, no replacement/union;
+   тот же журнал и owner receipts. Tests: full profile limit, concurrent targets,
+   hidden profiles, target already in voice, source reconnect.
+4. GAME-AUTH-05: unlink/delete/restore/recovery, HMAC subject tombstones и
+   external monotonic journal, anti-resurrection на старом backup; identity
+   lookup после conversion следует target binding только после permanent
+   proof, а unlink никогда не воскрешает retired source. ID09–ID13/Q08/Q10
+   закрываются только этими executable тестами.
 
 Подтверждение исходного sdk-account включает proof-of-possession его device key
 и независимую пользовательскую авторизацию; одного server-issued game ticket
