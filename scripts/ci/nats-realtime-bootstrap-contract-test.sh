@@ -157,21 +157,19 @@ printf '%s\n' "$gateway_deployment" | grep -Fqx '          startupProbe:' \
 printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 30' \
   || fail "Gateway startup probe must cover the 120s staging gRPC dial deadline"
 
-# The hosted proof must establish the JetStream route and wait for a PubAck;
+# The hosted proof must wait for the Chat leaf's hub connection and a PubAck;
 # a Core NATS fire-and-forget publish followed by an immediate stream read can
 # race leaf interest propagation and hide the failing proof stage.
-grep -Fq "req --raw '\$JS.API.STREAM.INFO.chat_events' ''" "$CANONICAL_HOSTED_PROOF" \
-  || fail "canonical hosted proof must verify chat_events through the local Chat leaf before publishing"
-grep -Fq 'timeout 3s docker run --rm --name voice-nats-canonical-chat-info' "$CANONICAL_HOSTED_PROOF" \
-  || fail "canonical hosted proof must bound each local leaf readiness request"
-grep -Fq 'docker rm -f voice-nats-canonical-chat-info' "$CANONICAL_HOSTED_PROOF" \
-  || fail "canonical hosted proof must remove a timed-out local leaf readiness container"
+grep -Fq "Leafnode connection created for account: \$G" "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must wait for the Chat leaf hub connection"
 grep -Fq 'nats.CustomInboxPrefix("_INBOX.voice.chat")' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must use the approved Chat reply inbox prefix"
 grep -Fq 'js.Publish("chat.created"' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must await the JetStream publish acknowledgment"
 grep -Fq 'ack.Stream != "chat_events" || ack.Sequence != 1' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must preserve the exact one-message stream expectation"
+grep -Fq 'puback_error_category=' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must expose a safe PubAck error category"
 ! grep -Fq 'pub chat.created canonical-leaf-proof' "$CANONICAL_HOSTED_PROOF" \
   || fail "canonical hosted proof must not use an unacknowledged Core NATS publish"
 

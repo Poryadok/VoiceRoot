@@ -12,7 +12,7 @@ work="$(mktemp -d)"
 umask 077
 network="voice-nats-canonical-${RANDOM}"
 cleanup() {
-  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat voice-nats-canonical-chat-info voice-nats-canonical-bad-leaf >/dev/null 2>&1 || true
+  docker rm -f voice-nats-canonical-hub voice-nats-canonical-chat voice-nats-canonical-bad-leaf >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -150,54 +150,59 @@ printf '%s' "$user_info" |
 docker run -d --name voice-nats-canonical-chat --network "$network" -v "$work:$work:ro" \
   nats:2.12-alpine -c "$work/chat-leaf.conf" >/dev/null
 for _ in $(seq 1 20); do
-  docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' && break
-  sleep 1
-done
-docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' || {
-  docker logs voice-nats-canonical-chat >&2; exit 1;
-}
-
-# Confirm the Chat leaf can reach the hub's JetStream API before publishing.
-# The request also establishes the approved Chat reply inbox through the leaf.
-chat_leaf_stream_info() {
-  local status=0
-  timeout 3s docker run --rm --name voice-nats-canonical-chat-info \
-    --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
-    nats --server nats://127.0.0.1:4222 --inbox-prefix _INBOX.voice.chat \
-    req --raw '$JS.API.STREAM.INFO.chat_events' '' || status=$?
-  docker rm -f voice-nats-canonical-chat-info >/dev/null 2>&1 || true
-  return "$status"
-}
-chat_leaf_before=''
-for _ in $(seq 1 15); do
-  if chat_leaf_before="$(chat_leaf_stream_info 2>/dev/null)" && \
-    jq -e '.config.name == "chat_events" and .state.messages == 0 and .state.last_seq == 0' \
-      <<<"$chat_leaf_before" >/dev/null; then
+  chat_leaf_logs="$(docker logs voice-nats-canonical-chat 2>&1 || true)"
+  if grep -Fq 'Server is ready' <<<"$chat_leaf_logs" && \
+    grep -Fq 'Leafnode connection created for account: $G' <<<"$chat_leaf_logs"; then
     break
   fi
   sleep 1
 done
-if ! jq -e '.config.name == "chat_events" and .state.messages == 0 and .state.last_seq == 0' \
-  <<<"$chat_leaf_before" >/dev/null 2>&1; then
-  echo 'FAIL: chat leaf did not confirm the empty chat_events stream through its approved route' >&2
-  jq -c '{stream: .config.name, messages: .state.messages, last_seq: .state.last_seq, error: .error}' \
-    <<<"$chat_leaf_before" >&2 || true
+chat_leaf_logs="$(docker logs voice-nats-canonical-chat 2>&1 || true)"
+if ! grep -Fq 'Server is ready' <<<"$chat_leaf_logs"; then
+  echo 'FAIL: chat leaf did not become locally ready within 20 seconds' >&2
+  exit 1
+fi
+if ! grep -Fq 'Leafnode connection created for account: $G' <<<"$chat_leaf_logs"; then
+  echo 'FAIL: chat leaf did not announce its remote leaf attach within 20 seconds' >&2
   exit 1
 fi
 
 # Use a synchronous JetStream publish so the assertion follows the hub's
 # PubAck, rather than racing a fire-and-forget Core NATS publish against leaf
-# interest propagation. This app client has no credentials and can only reach
-# NATS through the Chat leaf.
+# interest propagation. The bounded remote-attach log is only a startup
+# diagnostic; the PubAck below is the proof that the leaf route persisted the
+# message. This app client has no credentials and can only reach NATS through
+# the Chat leaf.
 cat >"$work/chat-leaf-publish.go" <<'EOF'
 package main
 
 import (
+  "errors"
   "fmt"
+  "os"
+  "strings"
   "time"
 
   "github.com/nats-io/nats.go"
 )
+
+func errorCategory(err error) string {
+  message := strings.ToLower(err.Error())
+  switch {
+  case errors.Is(err, nats.ErrTimeout), strings.Contains(message, "timeout"):
+    return "timeout"
+  case strings.Contains(message, "no responders"):
+    return "no_responders"
+  case strings.Contains(message, "permission"):
+    return "permission"
+  case strings.Contains(message, "connection refused"):
+    return "connection_refused"
+  case strings.Contains(message, "stream not found"):
+    return "stream_not_found"
+  default:
+    return "other"
+  }
+}
 
 func main() {
   nc, err := nats.Connect("nats://127.0.0.1:4222",
@@ -205,20 +210,24 @@ func main() {
     nats.CustomInboxPrefix("_INBOX.voice.chat"),
     nats.Timeout(3*time.Second))
   if err != nil {
-    panic("connect to local Chat leaf")
+    fmt.Fprintf(os.Stderr, "FAIL: local Chat leaf connect error_category=%s\n", errorCategory(err))
+    os.Exit(1)
   }
   defer nc.Close()
 
   js, err := nc.JetStream()
   if err != nil {
-    panic("create JetStream publisher through Chat leaf")
+    fmt.Fprintf(os.Stderr, "FAIL: create Chat leaf JetStream publisher error_category=%s\n", errorCategory(err))
+    os.Exit(1)
   }
   ack, err := js.Publish("chat.created", []byte("canonical-leaf-proof"), nats.AckWait(3*time.Second))
   if err != nil {
-    panic("publish through Chat leaf did not receive JetStream PubAck")
+    fmt.Fprintf(os.Stderr, "FAIL: Chat leaf JetStream publish puback_error_category=%s\n", errorCategory(err))
+    os.Exit(1)
   }
   if ack.Stream != "chat_events" || ack.Sequence != 1 {
-    panic("Chat leaf PubAck did not identify chat_events sequence 1")
+    fmt.Fprintf(os.Stderr, "FAIL: Chat leaf PubAck mismatch stream=%s sequence=%d\n", ack.Stream, ack.Sequence)
+    os.Exit(1)
   }
   fmt.Printf("stream=%s sequence=%d\n", ack.Stream, ack.Sequence)
 }
