@@ -10,6 +10,7 @@ COMPOSE="${ROOT}/docker-compose.yml"
 MANIFEST="${ROOT}/deploy/nats/jetstream-publisher-streams.yaml"
 STAGING_INFRA="${ROOT}/scripts/staging/apply-infra.sh"
 PROD_INFRA="${ROOT}/scripts/prod/apply-infra.sh"
+CANONICAL_HOSTED_PROOF="${ROOT}/scripts/ci/nats-canonical-acl-hosted-proof.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -155,5 +156,19 @@ printf '%s\n' "$gateway_deployment" | grep -Fqx '          startupProbe:' \
   || fail "Gateway startup must be protected while it waits for required User gRPC"
 printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 30' \
   || fail "Gateway startup probe must cover the 120s staging gRPC dial deadline"
+
+# The hosted proof must establish the JetStream route and wait for a PubAck;
+# a Core NATS fire-and-forget publish followed by an immediate stream read can
+# race leaf interest propagation and hide the failing proof stage.
+grep -Fq "req --raw '\$JS.API.STREAM.INFO.chat_events' ''" "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must verify chat_events through the local Chat leaf before publishing"
+grep -Fq 'nats.CustomInboxPrefix("_INBOX.voice.chat")' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must use the approved Chat reply inbox prefix"
+grep -Fq 'js.Publish("chat.created"' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must await the JetStream publish acknowledgment"
+grep -Fq 'ack.Stream != "chat_events" || ack.Sequence != 1' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must preserve the exact one-message stream expectation"
+! grep -Fq 'pub chat.created canonical-leaf-proof' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must not use an unacknowledged Core NATS publish"
 
 echo 'NATS Realtime bootstrap contract OK'

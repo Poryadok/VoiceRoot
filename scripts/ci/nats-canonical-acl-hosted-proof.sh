@@ -157,11 +157,93 @@ docker logs voice-nats-canonical-chat 2>&1 | grep -q 'Server is ready' || {
   docker logs voice-nats-canonical-chat >&2; exit 1;
 }
 
-# The app client has no credential. It can only publish through its Chat leaf.
-docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
-  nats --server nats://127.0.0.1:4222 pub chat.created canonical-leaf-proof >/dev/null
-bootstrap_info '$JS.API.STREAM.INFO.chat_events' |
-  jq -e '.state.messages == 1 and .state.last_seq == 1' >/dev/null
+# Confirm the Chat leaf can reach the hub's JetStream API before publishing.
+# The request also establishes the approved Chat reply inbox through the leaf.
+chat_leaf_stream_info() {
+  docker run --rm --network container:voice-nats-canonical-chat natsio/nats-box:0.18.0 \
+    nats --server nats://127.0.0.1:4222 --inbox-prefix _INBOX.voice.chat \
+    req --raw '$JS.API.STREAM.INFO.chat_events' ''
+}
+chat_leaf_before=''
+for _ in $(seq 1 15); do
+  if chat_leaf_before="$(chat_leaf_stream_info 2>/dev/null)" && \
+    jq -e '.config.name == "chat_events" and .state.messages == 0 and .state.last_seq == 0' \
+      <<<"$chat_leaf_before" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! jq -e '.config.name == "chat_events" and .state.messages == 0 and .state.last_seq == 0' \
+  <<<"$chat_leaf_before" >/dev/null 2>&1; then
+  echo 'FAIL: chat leaf did not confirm the empty chat_events stream through its approved route' >&2
+  jq -c '{stream: .config.name, messages: .state.messages, last_seq: .state.last_seq, error: .error}' \
+    <<<"$chat_leaf_before" >&2 || true
+  exit 1
+fi
+
+# Use a synchronous JetStream publish so the assertion follows the hub's
+# PubAck, rather than racing a fire-and-forget Core NATS publish against leaf
+# interest propagation. This app client has no credentials and can only reach
+# NATS through the Chat leaf.
+cat >"$work/chat-leaf-publish.go" <<'EOF'
+package main
+
+import (
+  "fmt"
+  "time"
+
+  "github.com/nats-io/nats.go"
+)
+
+func main() {
+  nc, err := nats.Connect("nats://127.0.0.1:4222",
+    nats.Name("canonical-chat-leaf-proof"),
+    nats.CustomInboxPrefix("_INBOX.voice.chat"),
+    nats.Timeout(3*time.Second))
+  if err != nil {
+    panic("connect to local Chat leaf")
+  }
+  defer nc.Close()
+
+  js, err := nc.JetStream()
+  if err != nil {
+    panic("create JetStream publisher through Chat leaf")
+  }
+  ack, err := js.Publish("chat.created", []byte("canonical-leaf-proof"), nats.AckWait(3*time.Second))
+  if err != nil {
+    panic("publish through Chat leaf did not receive JetStream PubAck")
+  }
+  if ack.Stream != "chat_events" || ack.Sequence != 1 {
+    panic("Chat leaf PubAck did not identify chat_events sequence 1")
+  }
+  fmt.Printf("stream=%s sequence=%d\n", ack.Stream, ack.Sequence)
+}
+EOF
+if ! (cd "$root/src/backend/pkg" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "$work/chat-leaf-publish" "$work/chat-leaf-publish.go"); then
+  echo 'FAIL: build Chat leaf PubAck probe' >&2
+  exit 1
+fi
+chat_leaf_puback="$(docker run --rm --network container:voice-nats-canonical-chat \
+  -v "$work/chat-leaf-publish:/chat-leaf-publish:ro" alpine:3.22 /chat-leaf-publish)" || {
+  echo 'FAIL: Chat leaf JetStream publish did not complete' >&2
+  exit 1
+}
+if [[ "$chat_leaf_puback" != 'stream=chat_events sequence=1' ]]; then
+  echo 'FAIL: Chat leaf JetStream publish returned an unexpected PubAck' >&2
+  printf 'observed=%s\n' "$chat_leaf_puback" >&2
+  exit 1
+fi
+chat_leaf_after="$(bootstrap_info '$JS.API.STREAM.INFO.chat_events')" || {
+  echo 'FAIL: hub stream INFO after Chat leaf PubAck' >&2
+  exit 1
+}
+if ! jq -e '.config.name == "chat_events" and .state.messages == 1 and .state.last_seq == 1' \
+  <<<"$chat_leaf_after" >/dev/null; then
+  echo 'FAIL: hub did not retain the exact Chat leaf PubAck message' >&2
+  jq -c '{stream: .config.name, messages: .state.messages, last_seq: .state.last_seq, error: .error}' \
+    <<<"$chat_leaf_after" >&2 || true
+  exit 1
+fi
 
 # The same CA must reject a leaf URL whose hostname is absent from the hub SAN.
 sed 's@nats-leaf://hub:7422@nats-leaf://voice-nats-canonical-hub:7422@' \
