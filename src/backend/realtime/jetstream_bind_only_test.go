@@ -27,7 +27,7 @@ func preprovisionRealtimeConsumer(t *testing.T, js nats.JetStreamContext, stream
 	}
 	suffix := map[string]string{
 		"message": "_msg", "chat": "_chat", "user": "_user", "social": "_social",
-		"role": "_role", "voice": "_voice", "matchmaking": "_mm",
+		"role": "_role", "voice": "_voice", "matchmaking": "_matchmaking",
 	}[consumer]
 	instanceID := strings.TrimSuffix(strings.TrimPrefix(durable, "rt_"), suffix)
 	_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
@@ -134,6 +134,30 @@ func TestRealtimeSubscribersBindOnlyExactConsumers(t *testing.T) {
 				t.Fatalf("bind exact consumer: %v", err)
 			}
 			t.Cleanup(func() { _ = sub.Unsubscribe() })
+		})
+	}
+}
+
+func TestRealtimeConsumerDurableNamesMatchBootstrapContract(t *testing.T) {
+	const instanceID = "realtime-1"
+	cases := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"message", consumerDurableName(instanceID), "rt_realtime1_msg"},
+		{"chat", chatConsumerDurableName(instanceID), "rt_realtime1_chat"},
+		{"user", userConsumerDurableName(instanceID), "rt_realtime1_user"},
+		{"social", socialConsumerDurableName(instanceID), "rt_realtime1_social"},
+		{"role", roleConsumerDurableName(instanceID), "rt_realtime1_role"},
+		{"voice", voiceConsumerDurableName(instanceID), "rt_realtime1_voice"},
+		{"matchmaking", matchmakingConsumerDurableName(instanceID), "rt_realtime1_matchmaking"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Fatalf("durable name = %q, want bootstrap durable %q", tc.got, tc.want)
+			}
 		})
 	}
 }

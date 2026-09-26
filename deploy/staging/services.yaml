@@ -754,6 +754,8 @@ metadata:
   labels: {app: voice-notification}
 spec:
   replicas: 1
+  # Notification binds fixed push durables without a queue group; replicas must not overlap.
+  strategy: {type: Recreate}
   selector:
     matchLabels: {app: voice-notification}
   template:

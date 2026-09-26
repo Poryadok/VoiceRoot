@@ -18,7 +18,7 @@ func matchmakingConsumerDurableName(instanceID string) string {
 	if id == "" {
 		id = "unknown"
 	}
-	return "rt_" + strings.ReplaceAll(id, "-", "") + "_mm"
+	return "rt_" + strings.ReplaceAll(id, "-", "") + "_matchmaking"
 }
 
 func subscribeMatchmakingEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
