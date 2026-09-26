@@ -68,7 +68,8 @@ pending interaction с тем же `interaction_token`. Временная HTTP-
 запись pending с backoff; постоянная ошибка оставляет failed. Timeout ожидания
 синхронного ответа больше не удаляет pending intent. Перед acceptance и перед
 повторной доставкой Bot запрашивает у Chat effective membership профиля и
-проверяет текущие whitelist и send scopes.
+проверяет текущие whitelist и send scopes. `PollEvents` отклоняет вызовы
+webhook-бота, чтобы streaming path не забирал его pending outbox intent.
 
 Это только надёжная постановка и доставка **slash webhook**. Повторный webhook
 возможен после crash между выполнением HTTP на стороне игры и записью receipt;

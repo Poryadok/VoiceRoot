@@ -487,3 +487,24 @@ SELECT delivery_status FROM bot_event_log WHERE id = $1`, eventID).Scan(&deliver
 	require.Equal(t, "delivered", deliveryStatus,
 		"PollEvents must mark streamed events delivered (BOT-C)")
 }
+
+func TestPollEvents_rejectsWebhookModeWithoutConsumingSlashOutbox(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startBotGRPC(t)
+	defer cleanup()
+	ctx, botID, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	botUUID := uuid.MustParse(botID)
+	_, err := st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = false, webhook_url = 'https://example.com/interactions' WHERE id = $1`, botUUID)
+	require.NoError(t, err)
+	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"command_name": "ping"}, uuid.NewString())
+	require.NoError(t, err)
+	stream, err := client.PollEvents(withBotToken(context.Background(), botToken), &botv1.PollEventsRequest{BotId: botID})
+	require.NoError(t, err)
+	_, err = stream.Recv()
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	var deliveryStatus string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT delivery_status FROM bot_event_log WHERE id = $1`, eventID).Scan(&deliveryStatus))
+	require.Equal(t, "pending", deliveryStatus)
+}

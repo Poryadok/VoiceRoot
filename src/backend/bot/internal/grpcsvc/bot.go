@@ -474,6 +474,9 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 	if err != nil {
 		return err
 	}
+	if !botRow.IsPollingMode {
+		return status.Error(codes.FailedPrecondition, "bot is not in polling mode")
+	}
 	s.touchPresence(ctx, botRow.ID)
 	ids, types, payloads, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
 	if err != nil {
@@ -502,7 +505,7 @@ func botToProto(row store.BotRow) *botv1.Bot {
 		Description:     row.Description,
 		IsPollingMode:   row.IsPollingMode,
 		ScopesJson:      row.ScopesJSON,
-		Status:          row.Status,
+		Status:         row.Status,
 		CreatedAt:       timestamppb.New(row.CreatedAt),
 		StatusEnum:      botv1.BotLifecycleStatus_BOT_LIFECYCLE_STATUS_LIVE.Enum(),
 	}
