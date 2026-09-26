@@ -127,6 +127,90 @@ Claim/upgrade требует proof обеих identity, описанного con
 
 ### Конвертация sdk-account
 
+#### Auth browser consent GAME-AUTH-02
+
+Этот следующий Auth slice реализует подготовку связи из уже независимо
+подтверждённого sdk-account. Consumer — существующий Voice browser/Flutter UI
+и внутренний protocol client. Auth не принимает пароль Voice в игровом UI;
+обычный Voice sign-in/registration остаётся существующим потоком. Device-code
+вариант не включается без конкретного browserless consumer.
+
+Registry policy читается через `SdkAuthorizationPolicy.resolve(app, env)`:
+`applicationId`, `environmentId`, положительная immutable `revision`,
+`displayName`, точные `redirectUris`, разрешённые `playerScopes`. Registry
+владеет allowlist. Endpoint владельца —
+`GET /internal/v1/authorizations/environments/{environment_id}`; только
+выделенная Auth↔Game Integration workload identity. Недоступный policy adapter,
+неактивное приложение, неверные IDs, неизвестный scope, смена revision закрывают
+request/approval/exchange. Локальный developer allowlist не заменяет lookup.
+Production adapter выключен до реализации проверяемого workload contract.
+
+1. SDK создаёт authorization request с UUID idempotency key, точным redirect,
+   S256 challenge (43 base64url chars), случайным state (43–128 base64url chars)
+   и отсортированным набором scopes. Набор непустой, максимум 16 элементов;
+   player subset — `game.identity.read`, `game.chat.read`, `game.chat.send`,
+   `game.voice.join`, `game.presence.write`, `game.invites.create`; service-only
+   scopes запрещены. Redirect — absolute URI без fragment/userinfo/CRLF;
+   допустимые schemes задаёт registry, совпадение allowlist всегда exact.
+   Source credential и device possession
+   проверяются в той же транзакции. Повтор того же ключа/полезной нагрузки
+   возвращает прежний request ID/expiry; другая нагрузка даёт conflict.
+2. Canonical request digest — SHA-256 UTF-8
+   `voice-sdk-authorization-request-v1\n<idempotency UUID>\n<redirect>\n<S256 challenge>\n<state>\n<sorted scopes joined by comma>`.
+   Device JWS payload —
+   `voice-sdk-authorize-v1\n<SHA-256 source token>\n<request digest>`.
+   Lifetime ограничен меньшим из source-session expiry и now+5 минут.
+3. Voice UI показывает app/окружение, scopes, исходный game context, выбранный
+   профиль и явное согласие. UI читает эти данные из Auth consent-view с current
+   regular Voice Bearer; переданные игрой display/scopes не являются источником
+   consent UI. View повторно проверяет policy/source и ничего не утверждает.
+   Approval требует обычный current Voice Bearer,
+   **актуальный** `accounts.type=regular` в Auth DB, exact policy revision и
+   read-only User eligibility выбранного profile (owner/nondeleted/nonfrozen
+   и revision). `SwitchProfile` не вызывается; primary не подставляется молча.
+   Pending email registration не является постоянным target до verification.
+4. Approval выдаёт одноразовый random code (в store только SHA-256), TTL до
+   60 секунд и не дольше request. Redirect совпадает с registry byte-for-byte;
+   state возвращается неизменным. Повтор approval после успешного выпуска
+   отвергается; потерянный ответ требует нового request, не восстанавливает code.
+5. Exchange требует code, exact redirect, PKCE verifier (43–128 unreserved
+   ASCII chars) и прежний device key. Payload:
+   `voice-sdk-code-v1\n<request UUID>\n<SHA-256 code>\n<SHA-256 verifier>`.
+   Перед consume заново проверяются current source/device generation,
+   target regular/status/epoch/approval-session blacklist, registry revision
+   и exact User eligibility revision. Expiry проверяется после ожидания locks.
+6. Результат — отдельный opaque linked-bootstrap credential на 5 минут с
+   app/env, исходной identity/device, **выбранным** target account/profile,
+   scopes и consent/policy revision. Он не обычный Voice JWT/refresh и не
+   активирует player binding или media. Binding activation и conversion
+   требуют receipts по [conversion authority](game-conversion-authority.md).
+
+Auth HTTP routes этого slice:
+
+| Route | Proof / request | Result |
+|---|---|---|
+| `POST /api/v1/auth/sdk/authorizations` | SDK Bearer; `idempotencyKey`, `redirectUri`, `codeChallenge`, `state`, `scopes`, `deviceProof` | request ID, policy revision, display/scopes/expiry |
+| `GET /api/v1/auth/sdk/authorizations/{requestId}` | Current regular Voice Bearer | authoritative consent view, game context, no mutation |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/approve` | Current regular Voice Bearer; `profileId`, `policyRevision` | one-use code, redirect with original state, expiry |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/exchange` | `code`, `redirectUri`, `codeVerifier`, `deviceProof` | linked-bootstrap credential |
+| `POST /api/v1/auth/sdk/authorizations/linked-session` | Linked Bearer; `deviceProof` | current scoped claims, no returned raw token |
+
+Linked-session possession payload:
+`voice-sdk-linked-v1\n<SHA-256 linked token>`. This read checks source/device
+lifecycle and generation, target epoch/logout, policy and profile revisions;
+source bootstrap session expiry alone does not extend or revoke a linked grant.
+Linked expiry is capped by the approval Voice token expiry. Unknown authority
+fields are rejected; malformed requests return coarse `400`, invalid proof or
+authority `401`, changed idempotency payload `409`.
+
+Auth хранит authorization request/code/consent/grant отдельно от guest conversion.
+Владелец User предоставляет отдельный read-only eligibility contract; до его
+production adapter approval/exchange закрыты. Fake policy/eligibility допустимы
+только в тестах. Scoped token не считается production-ready до binding
+authority consumer и публичных Gateway limits. Direct Voice-only first login
+без предварительного sdk-account остаётся последующим вариантом того же
+authorization contract; этот slice не объявляет весь T14 завершённым.
+
 #### Замороженный Auth identity slice GAME-AUTH-01
 
 G01/Q11: первый независимый provider — Google OpenID Connect, issuer строго

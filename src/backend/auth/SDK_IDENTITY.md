@@ -97,3 +97,55 @@ key rotation. No provider credentials or live-user token are committed.
 Do not enable on public Gateway until app registry/admission, HTTP rate limits,
 browser code+PKCE and downstream delegation gates are complete. Deployment and
 restore remain held; conversion and tombstone reconciliation are next slices.
+
+## GAME-AUTH-02 execution plan
+
+Canonical next-seam sources: game-integration-api GAME-AUTH-02 and
+docs/architecture/game-conversion-authority.md (integration commit 287d766b).
+Captain owns registry policy/workload verification, User read-only eligibility,
+Game Integration freeze/transfer/activate and Voice receipts. Auth owns browser
+authorization, consent revisions, code exchange and durable conversion state.
+
+Next red/green order: independently authored authorization policy/PKCE/device
+tests, reviewed JDBC replay/lifecycle tests, minimal Auth implementation and
+controller wiring; then conversion operation/status and strict owner receipt
+consumption after the captain supplies concrete receipt contracts. No no-op
+receipt provider and no permissive policy/profile fallback. Reuse ordinary Voice
+registration/email verification for a new permanent target and current regular
+proof for an existing target; never mutate sdk-account into legacy guest.
+
+Files: sdkidentity package/tests; next Auth Flyway and mirrored auth_db migration;
+owning identity API docs. Verification: focused Maven tests then scoped full Auth
+suite; required PostgreSQL suites remain a gate. Keep PR490 draft, push focused
+commits promptly, and update evidence without claiming skipped tests passed.
+
+Implemented: public-client S256 authorization from an independently proven SDK
+identity; current Voice-authenticated consent view and explicit selected-profile
+approval; one-use hashed code and scoped linked bootstrap credential. Every
+exchange rechecks source/device generation, policy revision, target regular
+state/email verification/session epoch/logout, and User profile eligibility.
+The linked credential preserves the selected profile and has no regular JWT,
+refresh, active game binding or media authority.
+
+Authorization is separately opt-in: `auth.sdk-authorization.enabled=true`
+requires SDK identity and JDBC. Without the verified registry and read-only User
+adapters, default beans deny every lookup. The interfaces are tested with explicit
+fixtures only; no production workload adapter has been substituted with a fake.
+The existing Voice browser/Flutter UI consumes the REST consent view and approval
+routes documented in the owning API. UI integration, direct Voice-only first
+login, binding activation, public Gateway limits and device-code consumer remain
+subsequent work.
+
+Independent tests preceded implementation; Maven captured missing protocol/service,
+consent view/conflict, controller and configuration RED phases. Protocol31,
+REST16 and configuration5 tests pass: 52 new non-container cases. All nine SDK
+suites report 142 tests: 108 executed/pass, 34 PostgreSQL method entries skipped
+without Docker. Parameterized database cases expand only during an actual run.
+SQL replay, lifecycle and lock-wait acceptance remains open; skips are not green.
+Independent test/implementation review corrected scope and clock fixtures,
+pending-email authority rejection and the idempotency conflict status.
+
+Full Auth verification on 2026-09-26: `rtk mvn -B test`, 125 suites / 671
+reported tests, 528 executed/pass, zero failures/errors, 143 skipped due to
+unavailable Docker. This remains a partial local verification result. No live
+Google acceptance, cross-service receipt acceptance or staging deployment ran.

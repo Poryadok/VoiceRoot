@@ -163,6 +163,19 @@ public class SdkIdentityService {
   }
 
   private Session authenticated(String token, String proof, String purpose) {
+    return authenticated(token, proof, purpose, "");
+  }
+
+  /** Package-scoped consent admission participates in the caller's JDBC transaction. */
+  Session authorize(String token, String proof, String requestHash) {
+    return authenticated(token, proof, "authorize", "\n" + requestHash);
+  }
+
+  void requireAdmitted(UUID applicationId, UUID environmentId) {
+    admitted(applicationId, environmentId);
+  }
+
+  private Session authenticated(String token, String proof, String purpose, String suffix) {
     if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) throw new SdkIdentityDeniedException();
     String digest = hash(token);
     // Lock identity then device in the same order as enrollment; lifecycle changes cannot race admission.
@@ -190,7 +203,7 @@ public class SdkIdentityService {
     Authenticated found = rows.getFirst();
     if (!found.session().expiresAt().isAfter(clock.instant())) throw new SdkIdentityDeniedException();
     admitted(found.session().applicationId(), found.session().environmentId());
-    possession(found.publicJwk(), proof, "voice-sdk-" + purpose + "-v1\n" + digest);
+    possession(found.publicJwk(), proof, "voice-sdk-" + purpose + "-v1\n" + digest + suffix);
     return found.session();
   }
 
@@ -262,7 +275,7 @@ public class SdkIdentityService {
     } catch (Exception invalid) { throw new SdkIdentityDeniedException(); }
   }
 
-  private static void possession(String encodedKey, String proof, String payload) {
+  static void possession(String encodedKey, String proof, String payload) {
     try {
       if (proof == null || proof.length() > 4096) throw new SdkIdentityDeniedException();
       JWSObject jws = JWSObject.parse(proof);
