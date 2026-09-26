@@ -11,6 +11,7 @@ Per-database folders for the first migration wave ([docs/DATA_SCOPE_V1.md](../..
 | `messaging_db/` | `messaging_db` | Messaging Service |
 | `file_db/` | `file_db` | File Service |
 | `bot_db/` | `bot_db` | Bot Service |
+| `game_integration_db/` | `game_integration_db` | Game Integration Service |
 | `voice_db/` | `voice_db` | Voice Service — `000001_room_lifecycle`, затем `000002_redis_divergence` |
 
 Apply against the matching database only; do not run one folder against another DB ([docs/OPERATIONS.md](../../../docs/OPERATIONS.md)).

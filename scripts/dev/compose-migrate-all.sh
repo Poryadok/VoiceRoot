@@ -84,7 +84,7 @@ run_voice() {
 run_other_go_owned() {
   local dbs=(
     user_db social_db file_db space_db role_db notification_db
-    matchmaking_db search_db moderation_db gateway_db subscription_db
+    matchmaking_db search_db moderation_db gateway_db subscription_db game_integration_db
   )
   local db
   for db in "${dbs[@]}"; do

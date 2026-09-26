@@ -27,6 +27,7 @@ func TestRESTNamespaceRouting(t *testing.T) {
 		"bots",
 		"stories",
 		"analytics",
+		"game-integrations",
 	}
 
 	upstreams := make(map[string]http.Handler, len(namespaces))
