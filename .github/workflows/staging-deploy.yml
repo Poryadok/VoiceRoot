@@ -239,9 +239,61 @@ jobs:
   nats-search-jetstream-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
-    timeout-minutes: 5
+    timeout-minutes: 8
     environment: staging
     steps:
+      - name: Check staging runner can reach GitHub before checkout
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          route=direct
+          if [[ -n "${HTTPS_PROXY:-}${https_proxy:-}${ALL_PROXY:-}${all_proxy:-}${HTTP_PROXY:-}${http_proxy:-}" ]]; then
+            route=proxy
+          fi
+          echo "STAGING_RUNNER_GITHUB_ROUTE=${route}"
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          required_failed=0
+          check_endpoint() {
+            local label="$1"
+            shift
+            local status
+            if status="$(curl --silent --show-error --connect-timeout 5 --max-time 12 --output /dev/null --write-out '%{http_code}' "$@" 2>"$error_file")"; then
+              echo "STAGING_RUNNER_ENDPOINT_${label}=HTTP_${status}"
+              return
+            fi
+            local failure
+            if grep -qiE 'could not resolve proxy|failed to resolve proxy' "$error_file"; then
+              failure=PROXY_DNS
+            elif grep -qiE 'could not resolve host|failed to resolve host' "$error_file"; then
+              failure=GITHUB_DNS
+            elif grep -qiE 'timed out|timeout' "$error_file"; then
+              failure=TIMEOUT
+            elif grep -qi 'failed to connect' "$error_file"; then
+              failure=TCP_CONNECT
+            else
+              failure=TLS_OR_CURL
+            fi
+            echo "STAGING_RUNNER_ENDPOINT_${label}=FAIL_${failure}"
+            if [[ "$label" == GITHUB_DEFAULT ]]; then
+              required_failed=1
+            fi
+          }
+          # Only the default route is required by actions/checkout. The other
+          # endpoint results are informational and cannot block checkout.
+          check_endpoint GITHUB_DEFAULT https://github.com/
+          check_endpoint GITHUB_IPV4 --ipv4 https://github.com/
+          check_endpoint API https://api.github.com/repos/Poryadok/VoiceRoot
+          check_endpoint RAW "https://raw.githubusercontent.com/Poryadok/VoiceRoot/${GITHUB_SHA}/.gitignore"
+          check_endpoint CODELOAD --head "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/${GITHUB_SHA}"
+          if [[ "$required_failed" == 0 ]]; then
+            echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=PASS"
+          else
+            echo "STAGING_RUNNER_GITHUB_CONNECTIVITY=FAIL"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: azure/setup-kubectl@v5

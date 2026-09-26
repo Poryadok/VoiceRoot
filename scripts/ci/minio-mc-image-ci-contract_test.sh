@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORKFLOW="${ROOT}/.github/workflows/ci.yml"
 DOCKERFILE="${ROOT}/docker/minio/mc.Dockerfile"
 SERVER_DOCKERFILE="${ROOT}/docker/minio/minio.Dockerfile"
+STAGING_APPLY="${ROOT}/scripts/staging/apply-infra.sh"
+PROD_APPLY="${ROOT}/scripts/prod/apply-infra.sh"
 JOB_FILE="$(mktemp)"
 trap 'rm -f "$JOB_FILE"' EXIT
 
@@ -70,5 +72,11 @@ grep -Fq 'packages: write' <<<"$SERVER_PUBLISH_JOB" || fail 'server publication 
 grep -Fq 'platforms: linux/amd64' <<<"$SERVER_PUBLISH_JOB" || fail 'server publication must declare its verified platform scope'
 grep -Fq 'tags: ${{ steps.image.outputs.base }}/minio:${{ github.sha }}' <<<"$SERVER_PUBLISH_JOB" || fail 'server publication must use an immutable source-SHA tag'
 grep -Fq 'steps.build.outputs.digest' <<<"$SERVER_PUBLISH_JOB" || fail 'server publication must expose its actual resulting digest'
+
+[[ -f "$STAGING_APPLY" ]] || fail 'staging infra apply script must exist'
+grep -Fq 'MINIO_IMAGE="${VOICE_MINIO_IMAGE:-ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0}"' "$STAGING_APPLY" || fail 'staging MinIO server must use the verified immutable GHCR reference by default'
+grep -Fq 'MINIO_MC_IMAGE="${VOICE_MINIO_MC_IMAGE:-ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2}"' "$STAGING_APPLY" || fail 'staging mc must use the verified immutable GHCR reference by default'
+grep -Fq 'MINIO_IMAGE="${VOICE_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3}"' "$PROD_APPLY" || fail 'production MinIO default must remain unchanged'
+grep -Fq 'MINIO_MC_IMAGE="${VOICE_MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727}"' "$PROD_APPLY" || fail 'production mc default must remain unchanged'
 
 echo 'PASS: A1 proof builds and validates the pinned official mc runtime before Compose.'
