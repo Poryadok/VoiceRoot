@@ -146,11 +146,31 @@ if [[ -n "${GO_SERVICES_JSON:-}" && "${GO_SERVICES_JSON}" != "[]" ]]; then
   mapfile -t go_services < <(echo "${GO_SERVICES_JSON}" | jq -r '.[]')
 fi
 
+# CI wiring widens verification to every Go module, but only direct service
+# path filters represent deployable code changes.
+if filter_val ci_global; then
+  go_services=()
+  for candidate in "${GO_NAMES[@]}"; do
+    if filter_val "svc_${candidate}"; then go_services+=("${candidate}"); fi
+  done
+fi
+
+ci_only_change=false
+if ! truthy "${FORCE_FULL:-}" && filter_val ci_global; then
+  other_change=false
+  for selector in global protos pkg compose staging_infra auth frontend admin developer-portal; do
+    if filter_val "${selector}"; then other_change=true; fi
+  done
+  for svc in analytics bot chat federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+    if filter_val "svc_${svc}"; then other_change=true; fi
+  done
+  if [[ "${other_change}" == false ]]; then ci_only_change=true; fi
+fi
+
 # controlledgame is a test-only receiver harness. A change confined to that
 # module must never build, promote, or roll out deployment images.
 test_only_controlledgame=false
-if ! truthy "${FORCE_FULL:-}" && filter_val svc_controlledgame &&
-  ((${#go_services[@]} == 1)) && [[ "${go_services[0]}" == "controlledgame" ]]; then
+if ! truthy "${FORCE_FULL:-}" && filter_val svc_controlledgame; then
   other_change=false
   for selector in global protos pkg compose staging_infra auth frontend admin developer-portal; do
     if filter_val "${selector}"; then other_change=true; fi
@@ -241,6 +261,11 @@ if [[ "${test_only_controlledgame}" == true ]]; then
   promote=()
 fi
 
+if [[ "${ci_only_change}" == true ]]; then
+  build=()
+  promote=()
+fi
+
 base_sha="${BASE_SHA:-}"
 if [[ -z "${base_sha}" || "${base_sha}" == "0000000000000000000000000000000000000000" ]]; then
   base_sha="$(git -C "${ROOT}" rev-parse HEAD^ 2>/dev/null || true)"
@@ -260,7 +285,7 @@ if ! truthy "${FORCE_FULL:-}" && [[ "${FILTER_CODE:-true}" == "false" ]]; then
 fi
 
 # apply-app-manifests rewrites every deployment image tag on each code deploy.
-if [[ "${FILTER_CODE:-true}" == "true" && "${test_only_controlledgame}" != true ]]; then
+if [[ "${FILTER_CODE:-true}" == "true" && "${test_only_controlledgame}" != true && "${ci_only_change}" != true ]]; then
   needs_user_space_rollout=true
 fi
 

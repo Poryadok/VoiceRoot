@@ -3,6 +3,7 @@ package controlledgame
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,14 +14,37 @@ import (
 )
 
 const callbackContentType = "application/vnd.voice.game-command+json;version=1"
+const maxCallbackBodyBytes = 64 * 1024
+
+type CredentialStatus string
+
+const (
+	CredentialCurrent CredentialStatus = "current"
+	CredentialOverlap CredentialStatus = "overlap"
+	CredentialRevoked CredentialStatus = "revoked"
+)
+
+type SigningCredential struct {
+	KeyID          string
+	AppID          string
+	EnvironmentID  string
+	InstallationID string
+	Secret         []byte
+	Status         CredentialStatus
+	NotAfter       time.Time
+}
 
 type EffectApplier func(context.Context, pgx.Tx, []byte) ([]byte, error)
 
+type commandAcceptor interface {
+	accept(context.Context, string, string, []byte, []byte, EffectApplier) ([]byte, bool, error)
+}
+
 type HandlerConfig struct {
-	Store *PostgresStore
-	Keys  map[string][]byte
-	Clock func() time.Time
-	Apply EffectApplier
+	Store       commandAcceptor
+	Credentials map[string]SigningCredential
+	Clock       func() time.Time
+	Apply       EffectApplier
 }
 
 type callbackCommand struct {
@@ -80,22 +104,18 @@ func NewHandler(config HandlerConfig) http.Handler {
 			http.Error(response, "receiver unavailable", http.StatusInternalServerError)
 			return
 		}
-		key, knownKey := config.Keys[keyID]
-		if !knownKey {
-			http.Error(response, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		body, err := io.ReadAll(request.Body)
+		body, err := io.ReadAll(http.MaxBytesReader(response, request.Body, maxCallbackBodyBytes+1))
 		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) || tooLarge == nil && len(body) > maxCallbackBodyBytes {
+				http.Error(response, "callback body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(response, "invalid callback body", http.StatusBadRequest)
 			return
 		}
-		if err := authenticateRequest(request.Method, request.URL.EscapedPath(), timestamp, keyID, body, signature, key, config.Clock()); err != nil {
-			http.Error(response, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		if config.Store == nil || config.Apply == nil {
-			http.Error(response, "receiver unavailable", http.StatusInternalServerError)
+		if len(body) > maxCallbackBodyBytes {
+			http.Error(response, "callback body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
 		command, err := parseCallbackCommand(body)
@@ -103,7 +123,25 @@ func NewHandler(config HandlerConfig) http.Handler {
 			http.Error(response, "invalid command envelope", http.StatusUnprocessableEntity)
 			return
 		}
-		result, replay, err := config.Store.accept(request.Context(), command.CommandID, command.OperationID, body,
+		credential, knownKey := config.Credentials[keyID]
+		now := config.Clock()
+		if !knownKey || !credentialUsable(credential, keyID, command, now) {
+			http.Error(response, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if err := authenticateRequest(request.Method, request.URL.EscapedPath(), timestamp, keyID, body, signature, credential.Secret, now); err != nil {
+			http.Error(response, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if now.Unix() >= command.ExpiresAt {
+			http.Error(response, "command expired", http.StatusGone)
+			return
+		}
+		if config.Store == nil || config.Apply == nil {
+			http.Error(response, "receiver unavailable", http.StatusInternalServerError)
+			return
+		}
+		result, replay, err := config.Store.accept(request.Context(), command.CommandID, command.OperationID, oneShotEffectKey(command), body,
 			func(ctx context.Context, tx pgx.Tx, commandBody []byte) ([]byte, error) {
 				resultBody, applyErr := config.Apply(ctx, tx, commandBody)
 				if applyErr != nil {
@@ -128,6 +166,27 @@ func NewHandler(config HandlerConfig) http.Handler {
 		response.WriteHeader(http.StatusAccepted)
 		_, _ = response.Write(result)
 	})
+}
+
+func credentialUsable(credential SigningCredential, keyID string, command callbackCommand, now time.Time) bool {
+	if credential.KeyID != keyID || credential.AppID != command.AppID || credential.EnvironmentID != command.EnvironmentID ||
+		credential.InstallationID != command.InstallationID || len(credential.Secret) < 32 {
+		return false
+	}
+	switch credential.Status {
+	case CredentialCurrent:
+		return true
+	case CredentialOverlap:
+		return !credential.NotAfter.IsZero() && now.Before(credential.NotAfter)
+	default:
+		return false
+	}
+}
+
+func oneShotEffectKey(command callbackCommand) []byte {
+	canonicalTuple := "voice-controlled-game-effect-v1\n" + command.InstallationID + "\n" + command.MessageID + "\n" + command.ActionID + "\n" + command.ActorProof.ProfileID
+	digest := sha256.Sum256([]byte(canonicalTuple))
+	return digest[:]
 }
 
 func singleHeader(headers http.Header, name string) (string, bool) {

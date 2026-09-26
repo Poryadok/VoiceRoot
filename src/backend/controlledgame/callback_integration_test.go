@@ -60,10 +60,10 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 		store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
 		require.NoError(t, err)
 		return NewHandler(HandlerConfig{
-			Store: store,
-			Keys:  map[string][]byte{vectorKeyID: key},
-			Clock: func() time.Time { return now },
-			Apply: effect,
+			Store:       store,
+			Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
+			Clock:       func() time.Time { return now },
+			Apply:       effect,
 		})
 	}
 
@@ -116,6 +116,25 @@ func TestCallbackRejectsDifferentCommandIDsForSameOneShotEffect(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, first.status)
 	assertCanonicalResult(t, first.body)
 	require.Equal(t, http.StatusConflict, second.status, "one operation cannot be rebound to a new command ID")
+	assertRecordedInvocations(t, ctx, pool, 1)
+}
+
+func TestCallbackRejectsDistinctOperationAndCommandForConsumedOneShotEffect(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	pool := integrationtest.StartPostgres(t, ctx, "controlled_game_effect_identity_test_db", "")
+	createInvocationTable(t, ctx, pool)
+	key := testKey()
+	now := time.Unix(1790500000, 0).UTC()
+	server := httptest.NewServer(openCallbackHandler(t, ctx, pool, key, now, recordInvocation([]byte(canonicalResult), nil)))
+	defer server.Close()
+	first := postCanonicalCommand(t, server.Client(), server.URL, []byte(canonicalCommand), key)
+	secondCommand := strings.Replace(canonicalCommand, "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-00000000000c", 1)
+	secondCommand = strings.Replace(secondCommand, "00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-00000000000d", 1)
+	second := postCanonicalCommand(t, server.Client(), server.URL, []byte(secondCommand), key)
+	require.Equal(t, http.StatusAccepted, first.status)
+	require.Equal(t, http.StatusConflict, second.status, "one-shot action identity cannot yield a second command receipt")
+	require.NotEqual(t, first.body, second.body)
 	assertRecordedInvocations(t, ctx, pool, 1)
 }
 
@@ -266,10 +285,10 @@ func openCallbackHandler(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
 	require.NoError(t, err)
 	return NewHandler(HandlerConfig{
-		Store: store,
-		Keys:  map[string][]byte{vectorKeyID: key},
-		Clock: func() time.Time { return now },
-		Apply: apply,
+		Store:       store,
+		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:       func() time.Time { return now },
+		Apply:       apply,
 	})
 }
 

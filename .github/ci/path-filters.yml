@@ -2,11 +2,6 @@
 # Global / shared paths widen blast radius (run all Go services, full flutter, etc.).
 
 global:
-  - Makefile
-  - .golangci.yml
-  - .github/workflows/**
-  - .github/ci/**
-  - scripts/ci/**
   - scripts/dev/generate-phase0-fixture.py
   - docker/phase0/**
   - src/backend/scripts/docker-go-mod-download.sh
@@ -18,6 +13,14 @@ global:
   - buf.yaml
   - buf.lock
   - buf.gen*.yaml
+
+# Changes to CI wiring run broad checks but are not deployment inputs.
+ci_global:
+  - Makefile
+  - .golangci.yml
+  - .github/workflows/**
+  - .github/ci/**
+  - scripts/ci/**
 
 a1_e2e:
   - Makefile

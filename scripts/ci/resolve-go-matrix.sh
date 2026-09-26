@@ -65,7 +65,7 @@ expand_s2s_deps() {
 services=()
 run_pkg=false
 
-if truthy "${FORCE_FULL:-}" || filter_val global || filter_val protos || filter_val pkg; then
+if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg; then
   services=("${GO_SERVICES[@]}")
   run_pkg=true
 else

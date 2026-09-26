@@ -47,6 +47,7 @@ jobs:
       packages: read
     outputs:
       global: ${{ steps.filter.outputs.global }}
+      ci_global: ${{ steps.filter.outputs.ci_global }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
@@ -126,6 +127,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -168,6 +170,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.compose == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -196,6 +199,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (
         needs.changes.outputs.global == 'true' ||
+        needs.changes.outputs.ci_global == 'true' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
       )
     runs-on: ubuntu-latest
@@ -229,6 +233,7 @@ jobs:
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -269,6 +274,7 @@ jobs:
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -313,6 +319,7 @@ jobs:
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_pkg == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -333,7 +340,7 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
-        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.compose == 'true')) ||
+        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) ||
        (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
     runs-on: ubuntu-latest
     permissions:
@@ -379,7 +386,7 @@ jobs:
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_e2e == 'true')
+      (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_e2e == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -419,6 +426,7 @@ jobs:
       needs.backend-go-pkg.result != 'cancelled' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -478,6 +486,7 @@ jobs:
       needs.backend-go-pkg.result != 'cancelled' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -642,6 +651,7 @@ jobs:
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -717,6 +727,7 @@ jobs:
       (needs.changes.outputs.run_developer_portal == 'true' ||
        needs.changes.outputs.developer-portal == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -815,6 +826,7 @@ jobs:
       (needs.changes.outputs.run_web == 'true' ||
        needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -903,6 +915,7 @@ jobs:
       (needs.changes.outputs.run_admin == 'true' ||
        needs.changes.outputs.admin == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -1060,6 +1073,7 @@ jobs:
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -1175,7 +1189,7 @@ jobs:
           FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
-          GLOBAL: ${{ needs.changes.outputs.global }}
+          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
@@ -1202,7 +1216,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -1213,6 +1227,7 @@ jobs:
             needs.changes.outputs.compose == 'true' ||
             needs.changes.outputs.frontend == 'true' ||
             needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.ci_global == 'true' ||
             needs.changes.outputs.admin == 'true' ||
             needs.changes.outputs.developer-portal == 'true'
           )
@@ -1296,7 +1311,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -1342,7 +1357,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -1389,7 +1404,7 @@ jobs:
       needs.changes.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
-      (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_e2e == 'true')
+      (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_e2e == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read

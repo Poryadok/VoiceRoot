@@ -36,6 +36,18 @@ terminal result, and result outbox in the isolated game database.
 - Out: permit authority or expiry semantics, GIS/Voice service integration,
   outbound result delivery/retries, production configuration, and unrelated
   game behavior.
+- Receiver callback bodies are bounded at 64 KiB. The receiver checks the cap
+  before authentication and returns 413 when the body exceeds it; a body of
+  exactly 65,536 bytes proceeds through normal authenticated handling.
+- Signing credentials are provisioned per exact app, environment, and
+  installation. Current credentials are accepted; overlap credentials are
+  accepted only before their configured not-after timestamp; revoked and
+  unknown credentials fail closed. GIS owns provisioning and its ten-minute
+  overlap limit.
+- A consumed one-shot action key is SHA-256 of UTF-8
+  `voice-controlled-game-effect-v1\n{installation_id}\n{message_id}\n{action_id}\n{actor_proof.profile_id}`
+  from the signed envelope. A distinct command or operation colliding on this
+  key returns 409 without returning another command's receipt.
 - Documentation gap: none for this receiver slice; the wire and durable
   receiver semantics are frozen in the API document.
 
@@ -55,7 +67,7 @@ terminal result, and result outbox in the isolated game database.
   path filters, resolver, Makefile targets and CI tidy/integration lists.
 - [x] Add a test-only, non-deployable controlledgame Dockerfile and exclude
   test-only changes from staging build, image promotion and rollout matrices.
-- [ ] Verify final focused unit checks locally; use hosted Linux CI for the
+- [x] Verify final focused non-container checks locally; use hosted Linux CI for the
   Docker-backed integration suite.
 - [ ] Update T07a owning docs with implementation and exact verification
   evidence; independent implementation review clear.
@@ -94,6 +106,8 @@ terminal result, and result outbox in the isolated game database.
   restart, and concurrent duplicate delivery.
 - [x] `git diff --check`.
 - [x] `golangci-lint run ./...`.
+- [x] `go mod tidy -diff`, Git Bash `-n` for resolver/test scripts, YAML parse,
+  and `git diff --check`.
 
 ## Progress
 
@@ -111,6 +125,9 @@ terminal result, and result outbox in the isolated game database.
   integration matrices, and generic test-runner image build support.
 - [x] Verify `controlledgame` is excluded from the staging image catalog and
   test-only changes produce empty build/promotion matrices by code inspection.
+- [x] Address review findings with expiry-at-boundary, scoped credentials,
+  one-shot cross-operation effect key, 64 KiB request bound, and `ci_global`
+  selector separation from deployment-global inputs.
 - [ ] Run selector shell tests; local execution is blocked because WSL has no
   `/bin/bash` and Git Bash lacks `jq`. CI runner has both dependencies.
 
@@ -120,6 +137,13 @@ terminal result, and result outbox in the isolated game database.
   request bytes before checking that they equal the frozen JCS representation.
 - One command per operation is enforced by a unique operation key, returning
   conflict for a second command ID even when its body is otherwise valid.
+- One-shot action consumption also has a distinct durable effect key derived
+  from installation, message, action, and actor profile. This prevents a
+  different operation and command from consuming the same action twice.
+- `.github/ci/**`, `.github/workflows/**`, `scripts/ci/**`, Makefile, and
+  golangci configuration use the `ci_global` selector. It widens CI without
+  marking changes as deployment-global. CI-only and controlledgame-only
+  changes yield empty staging build/promotion matrices and no rollout.
 - The game effect is supplied through a transaction-aware callback. It returns
   the complete canonical result envelope (not opaque status bytes); the receiver
   validates its IDs/shape and persists that exact body with the inbox and
@@ -133,6 +157,14 @@ terminal result, and result outbox in the isolated game database.
   fractional-number rejection explicitly.
 - Local full integration execution is withheld because the dispatcher forbids
   Windows Docker/Firewall tests; hosted Linux is the acceptance environment.
+- Focused non-container tests cover `now == expires_at` => 410, exactly 65,536
+  bytes reaching a fake acceptor, and 65,537 bytes => 413 before signature
+  verification. Credential tests cover current, active/expired overlap,
+  revoked, unknown key ID, and app/environment/installation mismatch.
+- Current local checks: `go test -short ./...` (34 passed), `go vet ./...`,
+  `golangci-lint run ./...`, `go mod tidy -diff`, script syntax checks, YAML
+  parse and `git diff --check` pass. The Testcontainers cross-operation
+  collision test remains hosted-Linux evidence.
 
 ## Risks And Follow-Ups
 

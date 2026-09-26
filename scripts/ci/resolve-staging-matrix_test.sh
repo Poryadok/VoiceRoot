@@ -75,6 +75,20 @@ FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' GO_SERVICES_JSON='["co
 [[ "${promote_services}" == "[]" ]] || fail "controlledgame test-only change must not promote images"
 [[ "${needs_user_space_rollout}" == "false" ]] || fail "controlledgame test-only change must not roll out application images"
 
+echo "== CI config plus controlledgame remains test-only for staging =="
+FILTER_JSON='{"code":"true","ci_global":"true","svc_controlledgame":"true"}' GO_SERVICES_JSON='["controlledgame"]' run_matrix
+[[ "${build_services}" == "[]" ]] || fail "CI config plus controlledgame must not build deployment images"
+[[ "${promote_services}" == "[]" ]] || fail "CI config plus controlledgame must not promote deployment images"
+[[ "${needs_full_rollout}" == "false" ]] || fail "CI config plus controlledgame must not set full rollout"
+[[ "${needs_user_space_rollout}" == "false" ]] || fail "CI config plus controlledgame must not set application rollout"
+
+echo "== CI-only config has no deployment matrix or rollout =="
+FILTER_JSON='{"code":"true","ci_global":"true"}' GO_SERVICES_JSON='["analytics","chat","controlledgame"]' run_matrix
+[[ "${build_services}" == "[]" ]] || fail "CI-only change must not build deployment images"
+[[ "${promote_services}" == "[]" ]] || fail "CI-only change must not promote deployment images"
+[[ "${needs_full_rollout}" == "false" ]] || fail "CI-only change must not set full rollout"
+[[ "${needs_user_space_rollout}" == "false" ]] || fail "CI-only change must not set application rollout"
+
 echo "== admin path sets run_admin =="
 FILTER_JSON='{"code":"true","admin":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" admin
@@ -114,6 +128,11 @@ echo "${global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+scripts/staging/
   || fail "path-filters.yml global missing scripts/staging/**"
 echo "${global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+scripts/prod/\*\*' \
   || fail "path-filters.yml global missing scripts/prod/**"
+
+ci_global_block="$(sed -n '/^ci_global:/,/^[^[:space:]#]/p' "${filters}" | sed '$d')"
+echo "${ci_global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+\.github/ci/\*\*' \
+  || fail "path-filters.yml ci_global missing .github/ci/**"
+if echo "${global_block}" | grep -Eqx -- '[[:space:]]+-[[:space:]]+\.github/ci/\*\*'; then fail "CI paths must not activate deployment global"; fi
 
 echo "== BASE_SHA zero uses HEAD^ not HEAD_SHA =="
 if git -C "${ROOT}" rev-parse --verify HEAD^ >/dev/null 2>&1; then

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS command_inbox (
 );
 CREATE TABLE IF NOT EXISTS effect_ledger (
 	operation_id UUID PRIMARY KEY,
+	effect_key BYTEA NOT NULL UNIQUE CHECK (octet_length(effect_key) = 32),
 	command_id UUID NOT NULL UNIQUE REFERENCES command_inbox(command_id),
 	consumed_at TIMESTAMPTZ NOT NULL
 );
@@ -68,6 +69,7 @@ func OpenPostgresStore(ctx context.Context, pool *pgxpool.Pool, clock func() tim
 func (store *PostgresStore) accept(
 	ctx context.Context,
 	commandID, operationID string,
+	effectKey []byte,
 	body []byte,
 	apply EffectApplier,
 ) (receipt []byte, replay bool, err error) {
@@ -103,8 +105,8 @@ func (store *PostgresStore) accept(
 		return storedReceipt, true, nil
 	}
 
-	_, err = tx.Exec(ctx, `INSERT INTO effect_ledger(operation_id, command_id, consumed_at) VALUES ($1, $2, $3)`,
-		operationID, commandID, store.clock().UTC())
+	_, err = tx.Exec(ctx, `INSERT INTO effect_ledger(operation_id, effect_key, command_id, consumed_at) VALUES ($1, $2, $3, $4)`,
+		operationID, effectKey, commandID, store.clock().UTC())
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, false, errCommandConflict
