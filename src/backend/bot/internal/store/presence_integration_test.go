@@ -62,3 +62,31 @@ func TestIncrementDailyChatCreates_concurrent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, workers+1, count, "atomic upsert must count every increment")
 }
+
+func TestLookupGameIntegrationBotAuthorityReturnsOnlyStoredOwnerAndLifecycle(t *testing.T) {
+	ctx := context.Background()
+	st := startBotStoreWithPresence(t)
+	owner := uuid.New()
+	bot, _, err := st.CreateBot(ctx, owner, "AuthorityBot", "", `[]`, uuid.Nil)
+	require.NoError(t, err)
+
+	gotOwner, status, found, err := st.LookupGameIntegrationBotAuthority(ctx, bot.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, owner, gotOwner)
+	require.Equal(t, "live", status)
+
+	missingOwner, missingStatus, missing, err := st.LookupGameIntegrationBotAuthority(ctx, uuid.New())
+	require.NoError(t, err)
+	require.False(t, missing)
+	require.Equal(t, uuid.Nil, missingOwner)
+	require.Empty(t, missingStatus)
+
+	_, err = st.Pool.Exec(ctx, `UPDATE bots SET status='disabled' WHERE id=$1`, bot.ID)
+	require.NoError(t, err)
+	gotOwner, status, found, err = st.LookupGameIntegrationBotAuthority(ctx, bot.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, owner, gotOwner)
+	require.Equal(t, "disabled", status, "GIS proof handler must reject a non-live Bot")
+}

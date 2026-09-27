@@ -11,9 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
+	"voice/backend/gameintegration/internal/botproof"
 	"voice/backend/gameintegration/internal/httpapi"
 	"voice/backend/gameintegration/internal/registry"
 	"voice/backend/pkg/httpserver"
@@ -53,7 +55,12 @@ func main() {
 		Tokens: jwtValidator,
 		State:  httpapi.RedisAuthorityState{Client: redisClient},
 	}
-	applications := &registry.Store{Pool: pool}
+	var botAuthority registry.BotAuthorityVerifier
+	if cfg.BotAuthorityURL != "" && len(cfg.BotWorkloadKey) == 32 {
+		botAuthority = &botproof.Client{BaseURL: cfg.BotAuthorityURL, Key: cfg.BotWorkloadKey,
+			Now: time.Now, NewNonce: func() string { return uuid.NewString() }}
+	}
+	applications := &registry.Store{Pool: pool, BotAuthority: botAuthority}
 	mux := http.NewServeMux()
 	api := httpapi.NewHandler(authorizer, applications)
 	api.OperatorAccounts = cfg.OperatorAccounts

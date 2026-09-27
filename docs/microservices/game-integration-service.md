@@ -185,8 +185,11 @@ the service before enabling any route.
 ## T12: registry security, callback admission and diagnostics
 
 `POST /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/installations`
-is an owner route. It takes only `callback_url`, an `Idempotency-Key`, and the
-application/environment IDs from the path and trusted bearer. Registration
+is an owner route. It takes `callback_url` and a canonical `bot_id` in the
+body, an `Idempotency-Key`, and the application/environment IDs from the path
+and trusted bearer. The owner ID is never accepted from the body: GIS reads it
+from `applications.owner_account_id`. Before persistence, GIS obtains an
+authenticated Bot authority proof for that exact Bot and owner. Registration
 requires an active environment and a canonical HTTPS callback on port 443. The
 URL cannot contain userinfo, a query, or a fragment; each path segment must be
 literal ASCII unreserved text. Registration resolves DNS and rejects the URL if
@@ -194,8 +197,26 @@ any answer is non-public or special-use. The shared callback transport resolves
 again when dialing, validates every answer, pins the socket to an approved IP,
 and keeps TLS verification bound to the original hostname. Redirects are
 terminal responses. T12 stores the callback with its app, environment, and
-installation; it does not dispatch commands. T15 must use this transport for
-every command callback.
+installation and the proven Bot ID; it does not dispatch commands. T15 must use
+this transport for every command callback.
+
+The GIS→Bot authority proof uses a dedicated shared 32-byte
+`GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64` and the signed request/response
+protocol frozen in [game-integration-api.md](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+This key is distinct from the GIS↔Auth workload key. It authenticates the
+`gameintegration` workload to the narrow Bot audience, binds the exact request
+path/body, rejects replayed 61-second nonces through Bot Redis, and signs the
+exact successful response. GIS sets `BOT_INTERNAL_URL` and the key together;
+Bot receives the same key plus `BOT_REDIS_ADDR` and optional
+`BOT_REDIS_PASSWORD`. Generate a dedicated local-only value with
+`openssl rand -base64 32`; do not reuse the GIS↔Auth key or commit the value.
+Missing/malformed configuration, failed verification, unavailable Bot/Redis,
+owner mismatch, or non-live Bot denies installation creation without an
+installation row or successful idempotency result; a sanitized denial audit
+may be recorded. The authenticated account is checked against the GIS
+application registry; an asserted owner in the body is rejected. The clean
+bootstrap acceptance uses a fake Bot authority verifier and does not prove a
+live Bot deployment or provider admission.
 
 Installation registration is limited to 120 attempts per application per UTC
 minute across all of that application's environments. The 121st request returns
@@ -203,9 +224,15 @@ minute across all of that application's environments. The 121st request returns
 boundary. Repeated quota denials update one sanitized audit event per app and
 minute. Reads, current application/environment/policy/credential routes,
 operator actions, and future T15 delivery are outside this selected bucket.
-An authenticated owner denied after quota admission consumes the attempt; a
-foreign owner is denied before quota admission. Invalid bearer requests create
-no registry, quota, or audit writes.
+An authenticated owner's quota is admitted durably before the Bot authority
+proof call, so a denied or unavailable Bot proof consumes an attempt and cannot
+be used to amplify internal proof traffic. The 121st attempt is rejected before
+the Bot call. A pending idempotency claim expires after 30 seconds based on its
+UTC `updated_at`; GIS atomically refreshes the lease under a row lock before
+retrying the read-only proof, without consuming another quota slot. A fresh
+pending duplicate returns unavailable without calling Bot. A foreign owner is
+denied before quota admission. Invalid bearer requests create no registry,
+quota, or audit writes.
 
 `PUT /api/v1/game-integrations/applications/{app_id}/suspension` is restricted
 to configured regular operator accounts and takes `{"suspended": boolean}`

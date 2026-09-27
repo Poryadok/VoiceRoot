@@ -29,3 +29,11 @@ Go service for the Voice bot platform: registry, slash commands, webhooks, space
 ## Local development
 
 From repo root, see [docs/DEPLOYMENT.md](../../../docs/DEPLOYMENT.md) and `docker compose --profile app`. Bot migrations: `make compose-migrate-bot`.
+
+For sandbox Game Integration Bot binding, configure the same dedicated 32-byte
+base64 key as GIS in `GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64` and configure
+`BOT_REDIS_ADDR` (plus `BOT_REDIS_PASSWORD` when Redis requires authentication).
+Generate a local-only key with `openssl rand -base64 32`; do not commit it or
+reuse the GIS↔Auth key. Without the key, Redis replay store, or Bot database,
+the internal authority proof endpoint fails closed. There is no development-key
+fallback.
