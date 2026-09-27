@@ -25,16 +25,19 @@ type ServicePrincipal struct {
 // VerifyCredential checks current database state on every request. A Voice
 // player token cannot authenticate as a game service credential.
 func (s *Store) VerifyCredential(ctx context.Context, bearer, scope string, key []byte) (ServicePrincipal, error) {
-	parts := strings.Split(bearer, "_")
-	if len(parts) != 3 || parts[0] != "vgi1" || len(key) != 32 || !slices.Contains(allowedServiceScopes, scope) {
+	if !strings.HasPrefix(bearer, "vgi1_") || len(key) != 32 || !slices.Contains(allowedServiceScopes, scope) {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
-	id, err := uuid.Parse(parts[1])
+	credentialID, secret, ok := strings.Cut(strings.TrimPrefix(bearer, "vgi1_"), "_")
+	if !ok {
+		return ServicePrincipal{}, ErrInvalidServiceCredential
+	}
+	id, err := uuid.Parse(credentialID)
 	if err != nil || id == uuid.Nil {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
-	secretBytes, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || len(secretBytes) != 32 || base64.RawURLEncoding.EncodeToString(secretBytes) != parts[2] {
+	secretBytes, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil || len(secretBytes) != 32 || base64.RawURLEncoding.EncodeToString(secretBytes) != secret {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
 	if s == nil || s.Pool == nil {
@@ -57,7 +60,7 @@ func (s *Store) VerifyCredential(ctx context.Context, bearer, scope string, key 
 	if err != nil {
 		return ServicePrincipal{}, fmt.Errorf("read service credential: %w", err)
 	}
-	if !hmac.Equal(digest, credentialDigest(key, parts[2])) || !slices.Contains(principal.Scopes, scope) ||
+	if !hmac.Equal(digest, credentialDigest(key, secret)) || !slices.Contains(principal.Scopes, scope) ||
 		!time.Now().Before(expiresAt) || revokedAt.Valid || envStatus != "active" ||
 		(appStatus != "sandbox" && appStatus != "active") {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
