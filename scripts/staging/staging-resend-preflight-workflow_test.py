@@ -38,4 +38,15 @@ assert "echo" not in step
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in named_steps[
     "Apply staging manifests"
 ], "preflight and apply must receive the same secure YAML artifact"
+
+assert "validate_app_secret_only:" in source, "read-only dispatch input missing"
+assert "inputs.validate_app_secret_only != true" in source, "validation dispatch must skip deploy job"
+assert "\n  validate-app-secret:\n" in source, "read-only validation job missing"
+validation = source.split("\n  validate-app-secret:\n", 1)[1]
+assert "runs-on: ubuntu-latest" in validation, "validation must use an isolated hosted runner"
+assert "environment: staging" in validation, "validation must read the staging Environment secret"
+assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in validation
+assert "bash scripts/staging/preflight-resend-key.sh" in validation
+assert "configure-kubectl-ci.sh" not in validation, "validation must not load cluster credentials"
+assert not re.search(r"kubectl (apply|patch|delete|rollout|create secret)", validation)
 print("Staging mail preflight workflow ordering passed.")

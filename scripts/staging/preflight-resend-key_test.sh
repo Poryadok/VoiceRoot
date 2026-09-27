@@ -45,6 +45,8 @@ chmod +x "${TMP}/bin/kubectl"
 key="$(openssl rand -hex 24)"
 trap 'rm -rf "${TMP}"; unset key' EXIT
 encoded_key="$(printf '%s' "$key" | base64 | tr -d '\r\n')"
+fixture_keys="$(awk '/^---/{exit} /^  [A-Z][A-Z0-9_]*:/{sub(":", "", $1); if ($1 != "AUTH_RESEND_API_KEY") print $1}' "${ROOT}/deploy/staging/secret.example.yaml")"
+fixture_encoded="$(printf fixture | base64 | tr -d '\r\n')"
 printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{"AUTH_RESEND_API_KEY":"%s"}}\n' \
   "$encoded_key" >"${TMP}/existing.json"
 
@@ -52,11 +54,18 @@ manifest() {
   printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: voice-app-secrets\n'
   if [ "$1" != missing_namespace ]; then printf '  namespace: voice-staging\n'; fi
   if [ "$1" = encoded ] || [ "$1" = invalid_data ]; then printf 'data:\n'; else printf 'stringData:\n'; fi
+  local fixture_value=fixture
+  if [ "$1" = encoded ] || [ "$1" = invalid_data ]; then fixture_value="$fixture_encoded"; fi
+  local fixture_key
+  for fixture_key in $fixture_keys; do
+    [ "$1" = missing_required ] && [ "$fixture_key" = BOT_DATABASE_URL ] && continue
+    printf '  %s: "%s"\n' "$fixture_key" "$fixture_value"
+  done
   case "$1" in
     missing) ;;
     blank) printf '  AUTH_RESEND_API_KEY: ""\n' ;;
     spaces) printf '  AUTH_RESEND_API_KEY: "   "\n' ;;
-    populated) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$key" ;;
+    populated|missing_required) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$key" ;;
     encoded) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$encoded_key" ;;
     invalid_data) printf '  AUTH_RESEND_API_KEY: "!"\n' ;;
     missing_namespace) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$key" ;;
@@ -89,6 +98,7 @@ run_manifest_case missing no
 run_manifest_case blank no
 run_manifest_case spaces no
 run_manifest_case populated yes
+run_manifest_case missing_required no
 run_manifest_case encoded yes
 run_manifest_case invalid_data no
 run_manifest_case missing_namespace no
@@ -96,11 +106,20 @@ run_manifest_case missing_namespace no
 run_existing_case() {
   local kind="$1" expected_mutations="$2" status
   rm -f "${TMP}/mutations"
-  case "$kind" in
-    missing) printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{}}\n' >"${TMP}/existing.json" ;;
-    blank) printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{"AUTH_RESEND_API_KEY":""}}\n' >"${TMP}/existing.json" ;;
-    populated) printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{"AUTH_RESEND_API_KEY":"%s"}}\n' "$encoded_key" >"${TMP}/existing.json" ;;
-  esac
+  {
+    printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{'
+    local fixture_key
+    for fixture_key in $fixture_keys; do
+      [ "$kind" = missing_required ] && [ "$fixture_key" = BOT_DATABASE_URL ] && continue
+      printf '"%s":"%s",' "$fixture_key" "$fixture_encoded"
+    done
+    case "$kind" in
+      missing) printf '"AUTH_RESEND_API_KEY":null' ;;
+      blank) printf '"AUTH_RESEND_API_KEY":""' ;;
+      populated|missing_required) printf '"AUTH_RESEND_API_KEY":"%s"' "$encoded_key" ;;
+    esac
+    printf '}}\n'
+  } >"${TMP}/existing.json"
   set +e
   PATH="${TMP}/bin:${PATH}" VOICE_IMAGE_TAG=contract-test DEPLOY_MODE=full \
     VOICE_NATS_STORAGE_CLASS=local-path VOICE_NATS_STORAGE_SIZE=1Gi \
@@ -121,4 +140,5 @@ run_existing_case() {
 run_existing_case missing no
 run_existing_case blank no
 run_existing_case populated yes
+run_existing_case missing_required no
 echo 'Staging Resend preflight contract passed.'

@@ -81,13 +81,19 @@ on:
         type: boolean
         default: false
 
+      validate_app_secret_only:
+        description: "Validate the uploaded staging app Secret without cluster access"
+        required: false
+        type: boolean
+        default: false
+
 permissions:
   contents: read
   packages: read
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_dispatch' || inputs.nats_probe_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true)
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
@@ -351,7 +357,7 @@ jobs:
         run: bash scripts/staging/smoke-observability.sh
 
   nats-search-jetstream-probe:
-    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 8
     environment: staging
@@ -564,3 +570,22 @@ jobs:
               fail_probe JOB_RESULT
               ;;
           esac
+
+  validate-app-secret:
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_app_secret_only == true
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v5
+      - name: Validate uploaded staging app Secret
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STAGING_APP_SECRETS_YAML_B64}" ]; then
+            echo 'ERROR: staging app Secret upload is missing' >&2
+            exit 1
+          fi
+          bash scripts/staging/preflight-resend-key.sh
