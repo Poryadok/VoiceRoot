@@ -479,9 +479,16 @@ mutation. Public Auth proof confirmation remains a separate activation gate.
 
 ## Auth-to-User SDK profile principal
 
-This is the accepted T14 transport target; it is not yet implemented or
-deployed. It is intentionally separate from Auth's client JWT signer and from
-Auth's inbound Gateway/Space proof listener on `:9091`.
+Auth's T14 RS256 signer and request-bound `GetSdkProfileEligibility` client are
+implemented and merged in [PR #513](https://github.com/Poryadok/VoiceRoot/pull/513).
+That PR reports passing focused Auth contract tests, the Auth Maven suite, and
+User gRPC service tests. This is implementation and test evidence only;
+deployment and runtime acceptance remain unverified, and no staging or
+production deployment is claimed. The game-integration plan still holds
+staging rollout until A1 acceptance completes. This section records the
+deployment contract and readiness gates. The transport is separate from Auth's
+client JWT signer and from Auth's inbound Gateway/Space proof listener on
+`:9091`.
 
 | Holder | Setting or Secret | Contract |
 |---|---|---|
