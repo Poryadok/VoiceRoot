@@ -209,6 +209,8 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 		secondOwnerToken, "", "")
 	require.Equal(t, http.StatusForbidden, otherOwnerRevoke.Code)
 
+	rotationAt := storeNow.Add(30 * time.Second)
+	storeNow = rotationAt
 	rotated := call(http.MethodPost,
 		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
 		applicantToken, "t11-credential-2", `{"scopes":["game.events.write"]}`)
@@ -229,7 +231,7 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 	_, err = store.VerifyCredential(ctx, rotatedSecret, "game.events.write", handler.CredentialKey)
 	require.NoError(t, err)
 	var priorCredentialWithinOverlap bool
-	require.NoError(t, pool.QueryRow(ctx, `SELECT expires_at <= now() + interval '10 minutes' FROM service_credentials WHERE id=$1`, credentialID).Scan(&priorCredentialWithinOverlap))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT expires_at <= ($2::timestamptz + interval '10 minutes') FROM service_credentials WHERE id=$1`, credentialID, rotationAt).Scan(&priorCredentialWithinOverlap))
 	require.True(t, priorCredentialWithinOverlap, "rotation must bound prior credential overlap to ten minutes")
 
 	revoked := call(http.MethodDelete,
