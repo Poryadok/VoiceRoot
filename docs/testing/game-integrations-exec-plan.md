@@ -97,6 +97,13 @@ contracts land before consumers; activation lands after all consumers.
     `permit_issued_at`; t=15/t=31 first delivery may obtain a fresh epoch while
     authorized/unexpired; permit retries preserve one epoch; revoke shares its
     serialization point. Runtime proof remains in T55/T07a.
+  - [x] T03 G05/G06/Q11 decisions link to the existing `/api/v1`, Federation
+    `/v1`, Google OIDC, GIS owner/operator bootstrap, and Federation mTLS
+    contracts. Q11 clean-start, cross-scope negatives, fake-vs-real provider
+    evidence are specified in acceptance; runtime evidence remains open.
+  - [x] T03 Q12 provisional one-host capacity/RPO/RTO qualification targets and
+    restore/load measurement method recorded in the design audit. These values
+    are proposals only; T08/T93 must replace them with measured evidence.
   - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
@@ -312,7 +319,8 @@ contracts land before consumers; activation lands after all consumers.
 | G01, Q03, Q07, Q08, Q10 | provider and subject ownership, recovery/retirement, sdk profile/alias and limits, conversion conflicts/history, voice handoff, tombstones | T13–T19 |
 | G02, G03, Q01, Q09 | alt-rank merge rule, protected Owner recovery, entitlement intervals/rejoin, block/report in shared chat | T33,T37–T39 |
 | G04, G09 | retention and retry windows, roster source freshness and fail-closed policy | T30–T39 |
-| G05, G06, G07, Q11, Q12 | API/node versions, store schema, bootstrap approver/provider, quotas, host support/capacity/RPO/RTO | T06,T10–T12,T76 |
+| G05, G06, Q11 | `/api/v1` and Federation `/v1`; proposed 12-month v1 support after successor-major GA; GIS-owned store; distinct Voice app owner/operator; Google OIDC; clean DB/host bootstrap and negative cases | T06,T10–T14,T70,T76; acceptance Q11 |
+| G07, Q12 | Quotas and supported host/runtime; provisional capacity/RPO/RTO plus restore/load harness | T08,T11–T12,T76,T93; proposals remain unmeasured |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
 | G13, Q05 | read-only no-confirm allowlist; all risky/unknown classes require single-use challenge (fail closed if unavailable); permit +10s start/+60s commit and revoke race UX | T53–T57 |
 | G08, G10, Q04, Q06 | signed revisions/files, control-plane capacity, media lease/eject budget, export/loss/defederation terms | T70–T78 |
@@ -381,12 +389,15 @@ test assertion, not just prose.
   budget and durable event/command semantics.
 - Bot audit was source-only at `77ec7240a`, not a current-code or live proof.
   T02 rechecks all gaps; T50 closes those that remain.
-- The current Federation service is a scaffold and `federation_db` is not
-  provisioned. `FED10` cannot be passed by issuing a shorter LiveKit JWT alone;
-  enforce active media-path fencing and measure it.
-- Independent provider proof, Q11 bootstrap and operational Q12 values are
-  design-and-build tasks owned by this sprint. A fake provider proves the
-  contract; a real selected provider must pass the acceptance path before
-  production admission.
+- The current Federation service has a bounded HTTPS authority foundation and
+  service-owned schema, but `federation_db` is not provisioned and there is no
+  Voice Node consumer, owning-service snapshot publisher, or media enforcement.
+  `FED10` cannot be passed by issuing a shorter LiveKit JWT alone; enforce
+  active media-path fencing and measure it.
+- Google OIDC and operator/bootstrap contracts are already frozen in the API,
+  GIS and Federation docs. Fake JWKS tests prove verifier behavior only; a real
+  Voice-owned Google client must pass acceptance on the release SHA before
+  production admission. Q12 targets in the design audit are proposed and
+  unmeasured until T08/T93 produce restore/load results.
 - This plan contains no calendar estimate: no team size, compatible host target
   or measured capacity exists yet. Those are T08/T93 outputs.

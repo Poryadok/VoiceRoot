@@ -63,6 +63,10 @@ Voice Node bundle входят в эту работу. G01–G13 и Q01–Q12 к
 [game-integrations-acceptance.md](testing/game-integrations-acceptance.md).
 Исполняемая декомпозиция —
 [game-integrations-exec-plan.md](testing/game-integrations-exec-plan.md).
+Q11 owner/operator/provider and clean bootstrap contracts are frozen in those
+documents; empty-DB/host and real-Google runtime evidence remains a prerequisite
+before production admission. Q12 capacity/RPO/RTO figures are provisional
+qualification targets only, pending T08/T93 measurement.
 Статус `proposed` в FEATURES не означает обещание релиза или готовность runtime.
 
 ## PLAN и TODO
