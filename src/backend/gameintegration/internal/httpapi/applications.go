@@ -34,12 +34,27 @@ type PolicyStore interface {
 	UpdateSandboxPolicy(context.Context, registry.UpdateSandboxPolicyInput) (registry.Environment, error)
 }
 
+type InstallationStore interface {
+	CreateInstallation(context.Context, registry.CreateInstallationInput) (registry.Installation, error)
+}
+
+type SuspensionStore interface {
+	SetApplicationSuspension(context.Context, registry.SetApplicationSuspensionInput) (registry.Application, error)
+}
+
+type DiagnosticsStore interface {
+	LoadOwnerDiagnostics(context.Context, uuid.UUID, uuid.UUID) (registry.OwnerDiagnostics, error)
+}
+
 type Handler struct {
 	Tokens           TokenValidator
 	Applications     ApplicationStore
 	Approvals        ApprovalStore
 	Credentials      CredentialStore
 	Policies         PolicyStore
+	Installations    InstallationStore
+	Suspensions      SuspensionStore
+	Diagnostics      DiagnosticsStore
 	CredentialKey    []byte
 	OperatorAccounts map[uuid.UUID]struct{}
 }
@@ -54,6 +69,15 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 	}
 	if policies, ok := applications.(PolicyStore); ok {
 		h.Policies = policies
+	}
+	if installations, ok := applications.(InstallationStore); ok {
+		h.Installations = installations
+	}
+	if suspensions, ok := applications.(SuspensionStore); ok {
+		h.Suspensions = suspensions
+	}
+	if diagnostics, ok := applications.(DiagnosticsStore); ok {
+		h.Diagnostics = diagnostics
 	}
 	return h
 }
@@ -70,6 +94,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.HasSuffix(r.URL.Path, "/credentials") {
 			h.serveCredentialIssue(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/installations") {
+			h.serveInstallationRegistration(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/suspension") {
+			h.serveApplicationSuspension(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/diagnostics") {
+			h.serveOwnerDiagnostics(w, r)
 			return
 		}
 		h.serveSandboxApproval(w, r)
@@ -161,6 +197,6 @@ func writeError(w http.ResponseWriter, status int, code string) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"error_code": code,
-		"retryable":  status >= 500,
+		"retryable":  status >= 500 || status == http.StatusTooManyRequests,
 	})
 }

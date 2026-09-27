@@ -4,18 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"voice/backend/pkg/integrationtest"
 )
 
 func TestIssueCredentialIsScopedAndRetryStable(t *testing.T) {
 	ctx := context.Background()
-	migration := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000001_init.up.sql")
-	pool := integrationtest.StartPostgres(t, ctx, "game_integration_test", migration)
+	pool := startT12Postgres(t, ctx)
 	store := &Store{Pool: pool}
 	owner, operator := uuid.New(), uuid.New()
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{OwnerAccountID: owner, Name: "Game", IdempotencyKey: "app"})

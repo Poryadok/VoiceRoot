@@ -114,8 +114,10 @@ func (s *Store) ApproveSandbox(ctx context.Context, in ApproveSandboxInput) (Env
 		return Environment{}, fmt.Errorf("complete sandbox approval: %w", err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO registry_audit
-		(id, actor_kind, actor_id, application_id, environment_id, action, previous_status, new_status, operation_key)
-		VALUES ($1, 'operator', $2, $3, $4, 'approve_sandbox', 'draft', 'sandbox', $5)`,
+		(id, actor_kind, actor_id, application_id, environment_id, action, previous_status, new_status,
+		 operation_key, source, result, reason_code)
+		VALUES ($1, 'operator', $2, $3, $4, 'approve_sandbox', 'draft', 'sandbox', $5,
+		 'operator_approved', 'success', 'sandbox_admission_approved')`,
 		uuid.New(), in.OperatorAccountID, in.ApplicationID, envID, in.IdempotencyKey)
 	if err != nil {
 		return Environment{}, fmt.Errorf("audit sandbox approval: %w", err)

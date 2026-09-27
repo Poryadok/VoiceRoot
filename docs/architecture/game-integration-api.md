@@ -789,6 +789,48 @@ status API и серверная авторизация входят в Voice и
 Production admission проверяет identity/revoke, mute/report, limits и корректное
 поведение сбоев; конкретные коммерческие условия — G07.
 
+### T12 registry endpoints and security defaults
+
+The current registry exposes three owner/operator routes:
+
+| Route | Access and behavior |
+|---|---|
+| `POST /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/installations` | Regular app owner; exact body `{"callback_url":"..."}` plus `Idempotency-Key`. The IDs come from the path and bearer, and the target environment must be active. |
+| `PUT /api/v1/game-integrations/applications/{app_id}/suspension` | Configured regular operator only; exact body `{"suspended":true|false}` plus `Idempotency-Key`. App state and audit update atomically; replays return the saved status/revision snapshot. |
+| `GET /api/v1/game-integrations/applications/{app_id}/diagnostics` | Regular owner only; returns safe app/env/install state, quota state, provenance, and at most 20 newest sanitized audit events. |
+
+The selected T12 registration quota is 120 attempts per application per UTC
+minute, shared by sandbox and production environments. The 121st request gets
+`429 RATE_LIMITED` and integer `Retry-After` to the next UTC-minute boundary;
+quota-denial audit rows coalesce by application and minute. This bucket covers
+only installation registration. Diagnostics and other current registry routes,
+operator operations, and future T15 delivery do not consume it. Invalid bearer
+requests do not write registry, quota, or audit state. An authenticated
+cross-scope or unsafe-destination denial is audited without partial installation
+or credential writes; foreign-owner denials do not consume quota.
+
+Callback admission accepts canonical HTTPS on port 443, with no userinfo,
+query, or fragment and only literal ASCII unreserved path segments. It resolves
+DNS at registration, rejects any private/special-use answer, and repeats
+validation while pinning the actual connection to an approved resolved IP.
+TLS verifies the original hostname. Redirect responses are terminal and cause
+no second request. T12 stores this installation-scoped callback and provides
+the safe transport primitive; command dispatch remains T15 work and must use
+that primitive.
+
+Suspended application credentials and Auth policy lookups fail closed with
+`503 APP_SUSPENDED`; a lifecycle transition blocked by the current state returns
+`409 APPLICATION_STATE_CONFLICT`. A successful restore returns the stored
+pre-suspension state and does not reactivate revoked credentials or separately
+suspended/retired environments. Diagnostics never returns callback URLs,
+credential material/digests, OAuth subjects/assertions, provider proof,
+request payloads, or secrets. `developer_asserted`, `operator_approved`, and
+`provider_verified`/`provider_admitted` are distinct provenance values. T12
+records the first two only and reports provider admission as `not_verified`
+without independent provider evidence. Audit `result` values are `success` and
+`denied`; legacy operator `approve_sandbox` rows are backfilled as
+`operator_approved`, while other old rows remain `system` / `success`.
+
 API major version не меняется молча; optional additive поля игнорируются только
 если не влияют на authority. Неизвестный security/permission enum запрещает
 операцию. Deprecated SDK получает migration guide и срок поддержки, который

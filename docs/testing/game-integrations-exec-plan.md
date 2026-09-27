@@ -145,7 +145,7 @@ contracts land before consumers; activation lands after all consumers.
   sandbox/prod isolation, credential issue/rotation/revoke, allowed provider,
   redirect, origin and webhook configuration. Clean bootstrap works through
   API/operator process, without direct SQL or portal.
-- [ ] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
+- [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.
 - [ ] **T13** `D: T04,T06` Implement Java Auth `sdk-account` type and schema,

@@ -112,8 +112,11 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 		return Credential{}, fmt.Errorf("lock credential environment: %w", err)
 	}
 	if ownerID != in.OwnerAccountID || envStatus != "active" || environmentKind != "sandbox" ||
-		(appStatus != "sandbox" && appStatus != "active") {
+		(appStatus != "sandbox" && appStatus != "active" && appStatus != "suspended") {
 		return Credential{}, ErrAdmissionConflict
+	}
+	if appStatus == "suspended" {
+		return Credential{}, ErrApplicationSuspended
 	}
 	const route = "credentials.issue"
 	command, err := tx.Exec(ctx, `INSERT INTO registry_operations
@@ -181,8 +184,9 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 		return Credential{}, fmt.Errorf("complete credential operation: %w", err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO registry_audit
-		(id, actor_kind, actor_id, application_id, environment_id, action, new_status, operation_key)
-		VALUES ($1,'account',$2,$3,$4,'issue_credential','active',$5)`,
+		(id, actor_kind, actor_id, application_id, environment_id, action, new_status, operation_key,
+		 source, result, reason_code)
+		VALUES ($1,'account',$2,$3,$4,'issue_credential','active',$5,'authenticated_account','success','credential_issued')`,
 		uuid.New(), in.OwnerAccountID, in.ApplicationID, in.EnvironmentID, in.IdempotencyKey)
 	if err != nil {
 		return Credential{}, fmt.Errorf("audit credential issue: %w", err)

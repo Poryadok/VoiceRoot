@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/gameintegration/internal/callbacksecurity"
 )
 
 var (
@@ -24,7 +25,9 @@ var (
 const createApplicationRoute = "applications.create"
 
 type Store struct {
-	Pool *pgxpool.Pool
+	Pool             *pgxpool.Pool
+	CallbackResolver callbacksecurity.Resolver
+	Now              func() time.Time
 }
 
 type CreateApplicationInput struct {
@@ -141,8 +144,8 @@ func (s *Store) CreateApplication(ctx context.Context, input CreateApplicationIn
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO registry_audit
-		(id, actor_kind, actor_id, application_id, action, new_status, operation_key)
-		VALUES ($1, 'account', $2, $3, 'create_application', 'draft', $4)`,
+		(id, actor_kind, actor_id, application_id, action, new_status, operation_key, source, result, reason_code)
+		VALUES ($1, 'account', $2, $3, 'create_application', 'draft', $4, 'authenticated_account', 'success', 'application_created')`,
 		uuid.New(), in.OwnerAccountID, id, in.IdempotencyKey)
 	if err != nil {
 		return Application{}, fmt.Errorf("audit registry operation: %w", err)

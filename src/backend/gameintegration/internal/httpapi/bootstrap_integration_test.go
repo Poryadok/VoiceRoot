@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,6 +50,10 @@ func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testin
 	ctx := context.Background()
 	migration := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "game_integration_bootstrap", migration)
+	t12Migration, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000002_t12_registry_security.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(t12Migration))
+	require.NoError(t, err)
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
