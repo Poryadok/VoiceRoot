@@ -227,8 +227,12 @@ operator actions, and future T15 delivery are outside this selected bucket.
 An authenticated owner's quota is admitted durably before the Bot authority
 proof call, so a denied or unavailable Bot proof consumes an attempt and cannot
 be used to amplify internal proof traffic. The 121st attempt is rejected before
-the Bot call. A foreign owner is denied before quota admission. Invalid bearer
-requests create no registry, quota, or audit writes.
+the Bot call. A pending idempotency claim expires after 30 seconds based on its
+UTC `updated_at`; GIS atomically refreshes the lease under a row lock before
+retrying the read-only proof, without consuming another quota slot. A fresh
+pending duplicate returns unavailable without calling Bot. A foreign owner is
+denied before quota admission. Invalid bearer requests create no registry,
+quota, or audit writes.
 
 `PUT /api/v1/game-integrations/applications/{app_id}/suspension` is restricted
 to configured regular operator accounts and takes `{"suspended": boolean}`

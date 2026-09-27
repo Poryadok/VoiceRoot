@@ -446,6 +446,84 @@ func TestInstallationIdempotencyClaimCoalescesConcurrentBotProof(t *testing.T) {
 	require.EqualValues(t, 1, proofCalls.Load())
 }
 
+func TestInstallationPendingClaimReclaimsAfterRepeatedProcessCrash(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	now := time.Now().UTC()
+	ownerID := uuid.New()
+	var proofCalls atomic.Int32
+	proofStarted := make(chan struct{})
+	releaseProof := make(chan struct{})
+	defer func() {
+		select {
+		case <-releaseProof:
+		default:
+			close(releaseProof)
+		}
+	}()
+	store := &Store{Pool: pool, Now: func() time.Time { return now },
+		CallbackResolver: installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		}),
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			call := proofCalls.Add(1)
+			if call < 3 {
+				panic("simulated GIS crash after committed installation claim")
+			}
+			close(proofStarted)
+			<-releaseProof
+			return nil
+		}),
+	}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Crash recovery", IdempotencyKey: "crash-recovery-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "crash-recovery-env",
+	})
+	require.NoError(t, err)
+	input := CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "crash-recovery-key",
+	}
+	require.Panics(t, func() { _, _ = store.CreateInstallation(ctx, input) },
+		"a crash after claim commit must leave a reclaimable operation, not an open SQL transaction")
+	var quotaCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount)
+
+	now = now.Add(installationOperationLease + time.Second)
+	require.Panics(t, func() { _, _ = store.CreateInstallation(ctx, input) },
+		"a second crashed proof attempt is reclaimable after its refreshed lease expires")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount, "reclaiming the same key/hash must not double-charge quota")
+
+	now = now.Add(installationOperationLease + time.Second)
+	firstResult := make(chan error, 1)
+	go func() {
+		_, createErr := store.CreateInstallation(ctx, input)
+		firstResult <- createErr
+	}()
+	select {
+	case <-proofStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("stale claim was not reclaimed for a new proof attempt")
+	}
+	_, duplicateErr := store.CreateInstallation(ctx, input)
+	require.ErrorIs(t, duplicateErr, ErrRegistryUnavailable,
+		"a concurrent duplicate after recovery sees the refreshed lease and cannot issue another proof")
+	require.EqualValues(t, 3, proofCalls.Load())
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount)
+	close(releaseProof)
+	require.NoError(t, <-firstResult)
+	installation, err := store.CreateInstallation(ctx, input)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, installation.ID)
+	require.EqualValues(t, 3, proofCalls.Load(), "terminal success must remain immutable on retry")
+}
+
 func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testing.T) {
 	ctx := context.Background()
 	pool := startT12Postgres(t, ctx)

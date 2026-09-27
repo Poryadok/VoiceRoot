@@ -26,6 +26,7 @@ var (
 )
 
 const createInstallationRoute = "installations.create"
+const installationOperationLease = 30 * time.Second
 
 type RateLimitError struct {
 	RetryAfter time.Duration
@@ -120,7 +121,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 		return Installation{}, fmt.Errorf("resolve installation application: %w", err)
 	}
 	if ownerID != in.OwnerAccountID {
-		if err := markInstallationOperationFailed(ctx, tx, in); err != nil {
+		if err := markInstallationOperationFailed(ctx, tx, in, s.now()); err != nil {
 			return Installation{}, err
 		}
 		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "owner_mismatch", nil, nil); err != nil {
@@ -132,7 +133,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 		return Installation{}, ErrInstallationConflict
 	}
 	if appStatus == "suspended" {
-		if err := markInstallationOperationFailed(ctx, tx, in); err != nil {
+		if err := markInstallationOperationFailed(ctx, tx, in, s.now()); err != nil {
 			return Installation{}, err
 		}
 		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "app_suspended", nil, nil); err != nil {
@@ -144,7 +145,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 		return Installation{}, ErrApplicationSuspended
 	}
 	if appStatus != "sandbox" && appStatus != "active" {
-		if err := markInstallationOperationFailed(ctx, tx, in); err != nil {
+		if err := markInstallationOperationFailed(ctx, tx, in, s.now()); err != nil {
 			return Installation{}, err
 		}
 		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "application_state_denied", nil, nil); err != nil {
@@ -161,7 +162,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 	err = tx.QueryRow(ctx, `SELECT application_id, status FROM environments WHERE id=$1 FOR SHARE`, in.EnvironmentID).
 		Scan(&environmentApp, &environmentStatus)
 	if err != nil || environmentApp != in.ApplicationID || environmentStatus != "active" {
-		if err := markInstallationOperationFailed(ctx, tx, in); err != nil {
+		if err := markInstallationOperationFailed(ctx, tx, in, s.now()); err != nil {
 			return Installation{}, err
 		}
 		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "environment_scope_denied", nil, nil); err != nil {
@@ -174,7 +175,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 	}
 
 	if err := callbacksecurity.ValidateURL(ctx, in.CallbackURL, s.CallbackResolver); err != nil {
-		if failErr := markInstallationOperationFailed(ctx, tx, in); failErr != nil {
+		if failErr := markInstallationOperationFailed(ctx, tx, in, s.now()); failErr != nil {
 			return Installation{}, failErr
 		}
 		if auditErr := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "developer_asserted", "callback_destination_rejected", nil, nil); auditErr != nil {
@@ -192,9 +193,9 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 	if err != nil {
 		return Installation{}, fmt.Errorf("persist installation callback: %w", err)
 	}
-	_, err = tx.Exec(ctx, `UPDATE registry_operations SET result_id=$1, status='succeeded', updated_at=now()
+	_, err = tx.Exec(ctx, `UPDATE registry_operations SET result_id=$1, status='succeeded', updated_at=$5
 		WHERE actor_kind='account' AND actor_id=$2 AND route=$3 AND idempotency_key=$4`,
-		installationID, in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey)
+		installationID, in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey, s.now())
 	if err != nil {
 		return Installation{}, fmt.Errorf("complete installation operation: %w", err)
 	}
@@ -261,9 +262,10 @@ func (s *Store) preflightInstallation(ctx context.Context, in CreateInstallation
 	var savedHash []byte
 	var savedID pgtype.UUID
 	var operationStatus string
-	err = tx.QueryRow(ctx, `SELECT request_hash, result_id, status FROM registry_operations
+	var operationUpdatedAt time.Time
+	err = tx.QueryRow(ctx, `SELECT request_hash, result_id, status, updated_at FROM registry_operations
 		WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3`, in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey).
-		Scan(&savedHash, &savedID, &operationStatus)
+		Scan(&savedHash, &savedID, &operationStatus, &operationUpdatedAt)
 	if err == nil {
 		if !bytes.Equal(savedHash, requestHash) {
 			return uuid.Nil, Installation{}, false, ErrIdempotencyConflict
@@ -274,6 +276,15 @@ func (s *Store) preflightInstallation(ctx context.Context, in CreateInstallation
 				return uuid.Nil, Installation{}, false, fmt.Errorf("commit failed installation retry: %w", err)
 			}
 			return uuid.Nil, Installation{}, false, failure
+		}
+		if operationStatus == "pending" {
+			if s.now().Sub(operationUpdatedAt) < installationOperationLease {
+				return uuid.Nil, Installation{}, false, ErrRegistryUnavailable
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return uuid.Nil, Installation{}, false, fmt.Errorf("commit stale installation preflight: %w", err)
+			}
+			return ownerID, Installation{}, false, nil
 		}
 		if operationStatus != "succeeded" || !savedID.Valid {
 			return uuid.Nil, Installation{}, false, ErrRegistryUnavailable
@@ -302,7 +313,7 @@ func (s *Store) recordBotAuthorityFailure(ctx context.Context, in CreateInstalla
 		return
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := markInstallationOperationFailed(ctx, tx, in); err != nil {
+	if err := markInstallationOperationFailed(ctx, tx, in, s.now()); err != nil {
 		return
 	}
 	if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", reason, nil, nil); err != nil {
@@ -315,15 +326,16 @@ func (s *Store) recordBotAuthorityFailure(ctx context.Context, in CreateInstalla
 // before the external Bot proof call. Failed Bot proofs therefore cannot be
 // used to bypass the per-application request bound or amplify proof traffic.
 func (s *Store) admitInstallationAttempt(ctx context.Context, in CreateInstallationInput, requestHash []byte) (Installation, bool, error) {
+	now := s.now()
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Installation{}, false, fmt.Errorf("begin installation quota admission: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	claimed, err := tx.Exec(ctx, `INSERT INTO registry_operations
-		(actor_kind, actor_id, route, idempotency_key, request_hash, status)
-		VALUES ('account', $1, $2, $3, $4, 'pending') ON CONFLICT DO NOTHING`,
-		in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey, requestHash)
+		(actor_kind, actor_id, route, idempotency_key, request_hash, status, created_at, updated_at)
+		VALUES ('account', $1, $2, $3, $4, 'pending', $5, $5) ON CONFLICT DO NOTHING`,
+		in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey, requestHash, now)
 	if err != nil {
 		return Installation{}, false, fmt.Errorf("claim installation operation: %w", err)
 	}
@@ -331,9 +343,10 @@ func (s *Store) admitInstallationAttempt(ctx context.Context, in CreateInstallat
 		var savedHash []byte
 		var savedID pgtype.UUID
 		var status string
-		if err := tx.QueryRow(ctx, `SELECT request_hash, result_id, status FROM registry_operations
-			WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3`,
-			in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey).Scan(&savedHash, &savedID, &status); err != nil {
+		var updatedAt time.Time
+		if err := tx.QueryRow(ctx, `SELECT request_hash, result_id, status, updated_at FROM registry_operations
+			WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3 FOR UPDATE`,
+			in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey).Scan(&savedHash, &savedID, &status, &updatedAt); err != nil {
 			return Installation{}, false, fmt.Errorf("read claimed installation operation: %w", err)
 		}
 		if !bytes.Equal(savedHash, requestHash) {
@@ -356,9 +369,28 @@ func (s *Store) admitInstallationAttempt(ctx context.Context, in CreateInstallat
 			}
 			return Installation{}, false, failure
 		}
+		if status == "pending" {
+			if now.Sub(updatedAt) < installationOperationLease {
+				return Installation{}, false, ErrRegistryUnavailable
+			}
+			command, err := tx.Exec(ctx, `UPDATE registry_operations SET updated_at=$6
+				WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3
+				AND status='pending' AND updated_at=$4 AND updated_at <= $5`,
+				in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey, updatedAt,
+				now.Add(-installationOperationLease), now)
+			if err != nil {
+				return Installation{}, false, fmt.Errorf("reclaim stale installation operation: %w", err)
+			}
+			if command.RowsAffected() != 1 {
+				return Installation{}, false, ErrRegistryUnavailable
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return Installation{}, false, fmt.Errorf("commit stale installation claim: %w", err)
+			}
+			return Installation{}, false, nil
+		}
 		return Installation{}, false, ErrRegistryUnavailable
 	}
-	now := s.now()
 	windowStart := now.UTC().Truncate(time.Minute)
 	if err := admitInstallationQuota(ctx, tx, in.ApplicationID, windowStart); err != nil {
 		if errors.Is(err, ErrRateLimited) {
@@ -409,10 +441,10 @@ func installationOperationFailure(ctx context.Context, tx pgx.Tx, in CreateInsta
 	return ErrRegistryUnavailable
 }
 
-func markInstallationOperationFailed(ctx context.Context, tx pgx.Tx, in CreateInstallationInput) error {
-	command, err := tx.Exec(ctx, `UPDATE registry_operations SET status='failed', updated_at=now()
+func markInstallationOperationFailed(ctx context.Context, tx pgx.Tx, in CreateInstallationInput, now time.Time) error {
+	command, err := tx.Exec(ctx, `UPDATE registry_operations SET status='failed', updated_at=$4
 		WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3 AND status='pending'`,
-		in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey)
+		in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey, now.UTC())
 	if err != nil {
 		return fmt.Errorf("mark installation operation failed: %w", err)
 	}
