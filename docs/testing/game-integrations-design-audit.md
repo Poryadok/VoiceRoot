@@ -87,12 +87,26 @@ bindings без наследования private контекста. Требу�
 и показ старой подписанной версии вместо актуальной. Подпись не доказывает
 полноту истории и сама не предотвращает сокрытие сообщений нодой.
 
-Нужно выбрать точную гарантию: проверка происхождения каждого payload либо ещё
-обнаружение rollback/equivocation. Предложение: подписанные revisions и content
-digests, отдельное происхождение moderator deletion, правила invalid/unverifiable
-UI; старые device public keys сохраняются для проверки авторства, но не дают
-новый admission после revoke. До GI4/GI6; acceptance: modified attachment, edit
-rollback, forged delete, revoked key и противоречащие версии на двух клиентах.
+Решение принято в [замороженном T15 контракте](../architecture/game-integration-api.md#frozen-t15-device-signature-and-message-revision-contract):
+каждый create/edit/user-delete подписан device key как JCS/ES256 JWS; для
+create/edit signature покрывает base64url исходных UTF-8 bytes и их digest.
+Edits образуют hash chain. Moderator/system delete — отдельный EdDSA JWS,
+подписанный Messaging после owning authorization, с фиксированными issuer,
+audience, chat/message/revision/action/reason fields и ключом из master-pinned
+Messaging JWKS over node mTLS. Attachment provenance связывает immutable File
+revision, length и SHA-256 через подписанный manifest; без верифицируемого
+manifest вложение fail-closed. Auth выпускает четырёхсекундное RS256 device-
+status assertion через pinned Auth JWKS over node mTLS; node refresh и monotonic expiry с combined
+clock uncertainty ≤250ms закрывают новые writes в ≤4.25s после revoke commit,
+а истечение/partition fail closed. Точный сохранённый receipt читается до
+expiry/current-authority checks только при byte-identical JWS и не создаёт
+эффект; иные bytes конфликтуют. Receiver отвергает rollback после наблюдённой
+более высокой revision и помечает равную revision с другим hash как
+equivocation. Clients label stale/unverified content and suppress it if no
+verified revision exists. Это не обещает полноту истории или обнаружение
+неувиденного rollback. Acceptance: ID14–ID16, включая attachment mutation,
+rollback, forged tombstone, revoked key и две расходящиеся реплики. Decision
+gate Q04 закрыт; runtime и measured evidence остаются в T15/GI4/GI6.
 
 ### Q05. Обязательное подтверждение команды на сервере
 
