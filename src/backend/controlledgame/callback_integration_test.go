@@ -60,10 +60,12 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 		store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
 		require.NoError(t, err)
 		return NewHandler(HandlerConfig{
-			Store:       store,
-			Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
-			Clock:       func() time.Time { return now },
-			Apply:       effect,
+			Store:           store,
+			PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }),
+			Authorize:       allowT07aTestBinding,
+			Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(key)},
+			Clock:           func() time.Time { return now },
+			Apply:           effect,
 		})
 	}
 
@@ -111,9 +113,11 @@ func TestCallbackExpiredFirstAdmissionRollsBackInboxAndEffect(t *testing.T) {
 	require.NoError(t, err)
 	var effectCalls atomic.Int32
 	handler := NewHandler(HandlerConfig{
-		Store:       store,
-		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
-		Clock:       func() time.Time { return now },
+		Store:           store,
+		PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }),
+		Authorize:       allowT07aTestBinding,
+		Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:           func() time.Time { return now },
 		Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) {
 			effectCalls.Add(1)
 			return []byte(canonicalResult), nil
@@ -124,7 +128,7 @@ func TestCallbackExpiredFirstAdmissionRollsBackInboxAndEffect(t *testing.T) {
 	response := postCanonicalCommand(t, server.Client(), server.URL, []byte(canonicalCommand), key)
 	require.Equal(t, http.StatusGone, response.status, "expiry prevents a first admission")
 	require.Zero(t, effectCalls.Load(), "expired command must not call the effect")
-	for _, table := range []string{"command_inbox", "effect_ledger", "command_results", "result_outbox"} {
+	for _, table := range []string{"command_inbox", "execution_permits", "effect_ledger", "command_results", "result_outbox"} {
 		var rows int
 		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&rows))
 		require.Zero(t, rows, "expired first admission must roll back "+table)
@@ -317,10 +321,12 @@ func openCallbackHandler(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
 	require.NoError(t, err)
 	return NewHandler(HandlerConfig{
-		Store:       store,
-		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
-		Clock:       func() time.Time { return now },
-		Apply:       apply,
+		Store:           store,
+		PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }),
+		Authorize:       allowT07aTestBinding,
+		Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:           func() time.Time { return now },
+		Apply:           apply,
 	})
 }
 
@@ -391,7 +397,7 @@ func assertCanonicalResult(t *testing.T, body string) {
 func assertNoDurableCommandRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	// These receiver-owned tables are the atomic HTTP acceptance transaction.
-	for _, table := range []string{"command_inbox", "effect_ledger", "command_results", "result_outbox"} {
+	for _, table := range []string{"command_inbox", "execution_permits", "effect_ledger", "command_results", "result_outbox"} {
 		var count int
 		require.NoError(t, pool.QueryRow(ctx, fmt.Sprintf(`SELECT count(*) FROM %s`, table)).Scan(&count))
 		require.Zero(t, count, "%s must roll back with the failed callback", table)

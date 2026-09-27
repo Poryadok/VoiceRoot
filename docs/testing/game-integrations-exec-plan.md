@@ -138,7 +138,40 @@ contracts land before consumers; activation lands after all consumers.
   module and dedicated test DB: durable command inbox/outbox and transactional
   effect/result receipt as specified in the v1 contract. Never register it in
   production GIS or use `game_integration_db` for game effects. Version and
-  retain deterministic fixtures.
+  retain deterministic fixtures. Its internal test adapter is not a GIS HTTP
+  contract: `PermitAuthority.Admit` receives command/operation IDs, exact
+  app/environment/installation IDs, opaque actor-proof profile/proof IDs, and
+  binding revision; it returns a stable permit ID and integer Unix-second
+  `permit_issued_at`, or distinct denied/unavailable errors. A fake authority
+  returns one permit per command ID, serializes new issuance against revoke
+  (revoke-first denies; permit-first preserves only that permit's fixed window),
+  and returns the same permit on retry/lost-response without extending it or
+  reminting after the start bound. Start and completion bounds are exclusive at
+  `permit_issued_at+10s` and `permit_issued_at+60s`; a missed start, denied or
+  unavailable admission produces no game effect. The receiver persists the
+  permit receipt with the command, runs a transaction-scoped local authorization
+  check before the game mutation, and commits effect plus immutable result/outbox
+  only before the completion bound. The local check binds the signed
+  app/environment/installation and opaque actor proof to the game-owned profile,
+  character and current binding revision, and requires the command's state
+  version to match. Test fixtures model this mapping without defining a proof
+  format or making a live GIS call. Testcontainers PostgreSQL is per-test and
+  isolated; its receiver-owned schema is initialized only inside that database.
+  This vertical is the durable receiver foundation consumed by T56; T56 remains
+  responsible for integrating actual GIS authority and game-specific state.
+  - [x] T07a local proof: `TestT07aPermitAuthoritySerializesIssueAndRevoke`,
+    `TestT07aCallbackPersistsPermitAndImmutableReceiptThenReplays`,
+    `TestT07aAuthorizationDenialAndAdmissionFailuresHaveNoEffect`, and
+    `TestT07aPermitStartAndCompletionBoundsAreExclusive`, plus
+    `TestT07aCompletionDeadlineCheckedAtTransactionCommit` pass; the four
+    callback integration tests use isolated PostgreSQL 16 containers. The
+    receipt test rejects UPDATE, DELETE and TRUNCATE while preserving committed
+    rows; the final pre-commit check rejects a deadline crossed during receipt
+    persistence. Run from `src/backend/controlledgame/`:
+    `rtk go test ./... -run '^TestT07a' -count=1`, then
+    `rtk go test ./... -count=1`, `rtk go vet ./...`, and
+    `rtk golangci-lint run ./...`. Exact-head review and hosted PR checks remain
+    required before closing T07a; T03/T04/T06 parents remain open.
 - [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
   keys only after T15 key proof/registration semantics are implemented.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2

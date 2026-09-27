@@ -62,7 +62,7 @@ func TestCallbackHandlerRejectsDuplicateAuthenticationAndContentTypeHeaders(t *t
 func TestCallbackHandlerRejectsBodyOver64KiBAndAcceptsExactLimit(t *testing.T) {
 	key := testKey()
 	now := time.Unix(1790500000, 0).UTC()
-	handler := NewHandler(HandlerConfig{Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)}, Clock: func() time.Time { return now }, Store: acceptingStore{clock: func() time.Time { return now }}, Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil }})
+	handler := NewHandler(HandlerConfig{Store: acceptingStore{clock: func() time.Time { return now }}, PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }), Authorize: allowT07aTestBinding, Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)}, Clock: func() time.Time { return now }, Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil }})
 	for _, test := range []struct {
 		name   string
 		body   []byte
@@ -96,8 +96,8 @@ type acceptingStore struct {
 	clock func() time.Time
 }
 
-func (store acceptingStore) accept(ctx context.Context, _, _ string, _, _ []byte, expiresAt int64, apply EffectApplier) ([]byte, bool, error) {
-	if store.clock != nil && store.clock().UTC().Unix() >= expiresAt {
+func (store acceptingStore) accept(ctx context.Context, command callbackCommand, _ []byte, _ PermitAuthority, _ BindingAuthorizer, apply EffectApplier) ([]byte, bool, error) {
+	if store.clock != nil && store.clock().UTC().Unix() >= command.ExpiresAt {
 		return nil, false, errCommandExpired
 	}
 	receipt, err := apply(ctx, nil, []byte(canonicalCommand))
@@ -109,7 +109,7 @@ type replayingStore struct {
 	receipt []byte
 }
 
-func (store *replayingStore) accept(context.Context, string, string, []byte, []byte, int64, EffectApplier) ([]byte, bool, error) {
+func (store *replayingStore) accept(context.Context, callbackCommand, []byte, PermitAuthority, BindingAuthorizer, EffectApplier) ([]byte, bool, error) {
 	store.calls++
 	return append([]byte(nil), store.receipt...), true, nil
 }
@@ -120,9 +120,11 @@ func TestCallbackHandlerReturnsSavedReceiptForExpiredReplay(t *testing.T) {
 	store := &replayingStore{receipt: []byte(canonicalResult)}
 	applyCalls := 0
 	handler := NewHandler(HandlerConfig{
-		Store:       store,
-		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
-		Clock:       func() time.Time { return now },
+		Store:           store,
+		PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }),
+		Authorize:       allowT07aTestBinding,
+		Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:           func() time.Time { return now },
 		Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) {
 			applyCalls++
 			return nil, nil
@@ -146,10 +148,12 @@ func TestCallbackHandlerRejectsCommandAtExpiryBoundary(t *testing.T) {
 	now := time.Unix(1790500120, 0).UTC()
 	command := []byte(canonicalCommand)
 	handler := NewHandler(HandlerConfig{
-		Store:       acceptingStore{clock: func() time.Time { return now }},
-		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
-		Clock:       func() time.Time { return now },
-		Apply:       func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil },
+		Store:           acceptingStore{clock: func() time.Time { return now }},
+		PermitAuthority: newT07aPermitAuthority(func() time.Time { return now }),
+		Authorize:       allowT07aTestBinding,
+		Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:           func() time.Time { return now },
+		Apply:           func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil },
 	})
 	request := httptest.NewRequest(http.MethodPost, vectorPath, bytes.NewReader(command))
 	request.Header.Set("Content-Type", callbackContentType)
