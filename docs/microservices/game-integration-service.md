@@ -157,6 +157,14 @@ the service before enabling any route.
 - Clean bootstrap creates owner/app/sandbox and an independently approved
   environment without direct SQL or developer portal access.
 
+The T11 HTTP bootstrap acceptance is
+`rtk make game-integration-bootstrap-acceptance`. It starts a disposable empty
+registry, uses synthetic Voice access tokens verified through a fake JWKS, and
+exercises the applicant/operator API boundary, sandbox policy ownership,
+credential issuance and audit. This verifies the GIS path only; it is not a
+real Google OIDC run and does not close the broader Q11 GIS-plus-node clean-start
+gate.
+
 This contract is subordinate to the game integration feature and API canon;
 later sections will add sessions, managed grants, bot and node-facing operations
 with their own tests and migration revisions.

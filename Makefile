@@ -39,6 +39,16 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
 	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
 
+ifeq ($(OS),Windows_NT)
+GAME_INTEGRATION_BOOTSTRAP_RUN = set CGO_ENABLED=0&& go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+else
+GAME_INTEGRATION_BOOTSTRAP_RUN = go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+endif
+
+.PHONY: game-integration-bootstrap-acceptance
+game-integration-bootstrap-acceptance:
+	cd "$(ROOT)/src/backend/gameintegration" && $(GAME_INTEGRATION_BOOTSTRAP_RUN)
+
 buf-lint:
 	buf lint
 
