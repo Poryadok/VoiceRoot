@@ -355,6 +355,15 @@ default `voice-prod` namespace. The application reads `VOICE_DATABASE_URL` from
 `voice-app-secrets`; its readiness probe uses `/ready` and checks the lifecycle
 schema. Migration completion therefore precedes application readiness.
 
+The same runner applies every Go-owned schema before application manifests:
+`bot_db`, `chat_db`, `file_db`, `matchmaking_db`, `messaging_db`,
+`moderation_db`, `notification_db`, `role_db`, `search_db`, `social_db`,
+`space_db`, `story_db`, `subscription_db`, `user_db`, and `voice_db`. Each
+service migration Job reads its database URL through a `voice-app-secrets`
+Secret reference. The runner reuses a completed Job only when the stored hash
+matches the current SQL files; otherwise it applies the service's migration
+ConfigMap and waits for the replacement Job before continuing.
+
 Before a lifecycle schema release, backup `voice_db` together with the other service-owned PostgreSQL databases.
 For recovery, restore `voice_db` into an isolated database,
 validate migrations through `000002_redis_divergence`, all seven lifecycle tables,
@@ -605,6 +614,15 @@ consumer. For Auth, drain the old randomly targeted
 old and new Auth replicas cannot bind it concurrently. Start service leaves
 only after successful bootstrap, then verify allowed publish/consume/ACK and
 neighboring denial at the exact release SHA.
+
+Staging Bot, Chat, Matchmaking, Space, Notification, and Realtime bind fixed
+push durables without a queue group. Keep each deployment singleton during an
+image rollout: the staging manifests use `Recreate`, and the apply script
+clears Kubernetes' defaulted `rollingUpdate` strategy before applying that
+declaration. Do not delete or recreate the durable to work around a subscriber
+overlap. Gateway waits for required User gRPC before opening HTTP, so its
+staging startup probe allows up to 150 seconds for the configured 120-second
+gRPC readiness deadline before liveness checks begin.
 
 Staging account migration is not yet approved: the existing anonymous `$G`
 account was observed with 566 consumers, exceeding the issued APP account's

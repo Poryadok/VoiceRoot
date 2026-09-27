@@ -10,6 +10,7 @@ COMPOSE="${ROOT}/docker-compose.yml"
 MANIFEST="${ROOT}/deploy/nats/jetstream-publisher-streams.yaml"
 STAGING_INFRA="${ROOT}/scripts/staging/apply-infra.sh"
 PROD_INFRA="${ROOT}/scripts/prod/apply-infra.sh"
+CANONICAL_HOSTED_PROOF="${ROOT}/scripts/ci/nats-canonical-acl-hosted-proof.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "$1" "$2" || fail "missing exact contract line in ${2#"${ROOT}/"}: $1"; }
@@ -130,5 +131,46 @@ grep -Fq 'kubectl patch deployment voice-notification' "${ROOT}/scripts/staging/
   || fail "staging app apply must transition existing Notification deployments before applying Recreate"
 grep -Fq '$retainKeys' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
   || fail "Notification transition patch must clear the server-defaulted rollingUpdate strategy"
+
+for deployment in voice-bot voice-chat voice-matchmaking voice-space; do
+  singleton_deployment="$(awk -v name="$deployment" '$0 == "  name: " name {found=1} found {print} found && /^---$/ {exit}' \
+    "${ROOT}/deploy/staging/services.yaml")"
+  printf '%s\n' "$singleton_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+    || fail "staging ${deployment} must not overlap its fixed push durable subscription"
+done
+singleton_transition="$(awk '/^prepare_singleton_nats_recreate_transitions\(\)/,/^}/' \
+  "${ROOT}/scripts/staging/apply-app-manifests.sh")"
+[[ -n "$singleton_transition" ]] \
+  || fail "staging apply must define singleton NATS consumer transitions"
+printf '%s\n' "$singleton_transition" | grep -Fqx '  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do' \
+  || fail "staging transition must be limited to the fixed push durable deployments"
+printf '%s\n' "$singleton_transition" | grep -Fq -- '"$retainKeys":["type"],"type":"Recreate"' \
+  || fail "singleton transition must atomically clear rollingUpdate and select Recreate"
+transition_call_line="$(grep -n '^prepare_singleton_nats_recreate_transitions$' "${ROOT}/scripts/staging/apply-app-manifests.sh" | tail -n1 | cut -d: -f1)"
+services_apply_line="$(grep -n '^render .*deploy/staging/services.yaml.*kubectl apply -f -' "${ROOT}/scripts/staging/apply-app-manifests.sh" | cut -d: -f1)"
+[[ -n "$transition_call_line" && -n "$services_apply_line" && "$transition_call_line" -lt "$services_apply_line" ]] \
+  || fail "singleton transition must run before the staging services manifest apply"
+gateway_deployment="$(awk '$0 == "  name: voice-gateway" {found=1} found {print} found && /^---$/ {exit}' \
+  "${ROOT}/deploy/staging/gateway-deployment.yaml")"
+printf '%s\n' "$gateway_deployment" | grep -Fqx '          startupProbe:' \
+  || fail "Gateway startup must be protected while it waits for required User gRPC"
+printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 30' \
+  || fail "Gateway startup probe must cover the 120s staging gRPC dial deadline"
+
+# The hosted proof must wait for the Chat leaf's hub connection and a PubAck;
+# a Core NATS fire-and-forget publish followed by an immediate stream read can
+# race leaf interest propagation and hide the failing proof stage.
+grep -Fq "Leafnode connection created for account: \$G" "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must wait for the Chat leaf hub connection"
+grep -Fq 'nats.CustomInboxPrefix("_INBOX.voice.chat")' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must use the approved Chat reply inbox prefix"
+grep -Fq 'js.Publish("chat.created"' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must await the JetStream publish acknowledgment"
+grep -Fq 'ack.Stream != "chat_events" || ack.Sequence != 1' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must preserve the exact one-message stream expectation"
+grep -Fq 'puback_error_category=' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must expose a safe PubAck error category"
+! grep -Fq 'pub chat.created canonical-leaf-proof' "$CANONICAL_HOSTED_PROOF" \
+  || fail "canonical hosted proof must not use an unacknowledged Core NATS publish"
 
 echo 'NATS Realtime bootstrap contract OK'
