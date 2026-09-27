@@ -241,6 +241,17 @@ contracts land before consumers; activation lands after all consumers.
   T13a module and
   full Auth Maven checks passed on feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`;
   see the exact counts and scope in [Q11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
+- [x] **T13b** `D: T10,T13a` Gate Auth SDK identity challenge, exchange, and
+  session admission on a fresh signed GIS environment policy with exact
+  application/environment IDs, positive revision, and Google provider. Share
+  the existing signed GIS policy client across the opt-in Auth identity and
+  authorization configurations; retain Auth-owned operator client ID and game
+  key configuration. Missing, mismatched, malformed, empty-provider, or
+  unavailable policy fails closed. Full Auth Maven passes 848 tests with 0
+  skipped (including PostgreSQL/Testcontainers); focused T13b/Auth integration
+  suite passes 154 tests with 0 skipped; Q11 API-only clean-start acceptance
+  passes. This closes only the T13b admission slice: parent T13 remains open for
+  its broader identity vertical and real-provider acceptance gate.
 - [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a

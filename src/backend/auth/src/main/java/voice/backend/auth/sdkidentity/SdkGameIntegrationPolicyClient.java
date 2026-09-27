@@ -215,7 +215,8 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       List<String> scopes = strings(root, "player_scopes", false);
       if (!expectedApp.equals(app) || !expectedEnv.equals(env) || !providers.equals(List.of("google"))) throw denied();
       for (String origin : origins) requireHttpsOrigin(origin);
-      return new Policy(app, env, revision, displayName, Set.copyOf(redirects), Set.copyOf(scopes));
+      return new Policy(app, env, revision, displayName, Set.copyOf(redirects), Set.copyOf(scopes),
+          Set.copyOf(providers));
     } catch (SdkIdentityDeniedException denied) {
       throw denied;
     } catch (Exception malformed) {

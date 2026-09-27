@@ -34,6 +34,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -70,6 +71,7 @@ class SdkIdentityJdbcIntegrationTest {
   private final String client = "voice-owned-client.apps.googleusercontent.com";
   private NamedParameterJdbcTemplate jdbc;
   private Map<String, SdkApplication> applications;
+  private SdkAuthorizationPolicy policies;
   private ECKey device;
 
   @BeforeAll
@@ -87,6 +89,7 @@ class SdkIdentityJdbcIntegrationTest {
         + "sdk_linked_sessions,sdk_authorizations,sdk_sessions,sdk_devices,sdk_challenges,sdk_identities");
     applications = new HashMap<>();
     admit(app, env, client);
+    policies = (application, environment) -> activePolicy(application, environment);
     device = new ECKeyGenerator(Curve.P_256).generate();
   }
 
@@ -362,6 +365,77 @@ class SdkIdentityJdbcIntegrationTest {
   }
 
   @Test
+  void registryAppOrEnvironmentMismatchDeniesChallengeExchangeAndSession() throws Exception {
+    var pending = challenge(service(NOW), app, env, device);
+    var session = exchange(service(NOW), app, env, client, device);
+    policies = (application, environment) -> activePolicy(UUID.randomUUID(), environment);
+
+    assertThatThrownBy(() -> challenge(service(NOW), app, env, device))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThatThrownBy(() -> service(NOW).exchange(pending.challengeId(), provider(pending, client),
+        gameTicket(pending, app, env, subjectHash()), enroll(device, pending)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThatThrownBy(() -> service(NOW).session(session.accessToken(), sessionProof(device, session)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(count("sdk_sessions")).isEqualTo(1);
+    assertThat(count("sdk_identities")).isEqualTo(1);
+
+    policies = (application, environment) -> activePolicy(application, UUID.randomUUID());
+    assertThatThrownBy(() -> challenge(service(NOW), app, env, device))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+  }
+
+  @Test
+  void exchangeReResolvesRegistryPolicyAfterProofVerificationAndBeforeWrites() throws Exception {
+    var pending = challenge(service(NOW), app, env, device);
+    var resolutions = new java.util.concurrent.atomic.AtomicInteger();
+    policies = (application, environment) -> {
+      if (resolutions.incrementAndGet() > 1) throw new SdkIdentityDeniedException();
+      return activePolicy(application, environment);
+    };
+
+    assertThatThrownBy(() -> service(NOW).exchange(pending.challengeId(), provider(pending, client),
+        gameTicket(pending, app, env, subjectHash()), enroll(device, pending)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(resolutions).hasValue(2);
+    assertThat(count("sdk_identities")).isZero();
+    assertThat(count("sdk_devices")).isZero();
+    assertThat(count("sdk_sessions")).isZero();
+    assertThat(jdbc.queryForObject("SELECT consumed_at IS NULL FROM sdk_challenges WHERE challenge_id=:id",
+        Map.of("id", pending.challengeId()), Boolean.class)).isTrue();
+  }
+
+  @Test
+  void challengeExchangeAndSessionResolveTheCurrentPolicyRevisionEachTime() throws Exception {
+    var revisions = new java.util.concurrent.CopyOnWriteArrayList<Long>();
+    var googleEnabled = new java.util.concurrent.atomic.AtomicBoolean(true);
+    policies = (application, environment) -> {
+      long revision = revisions.size() + 1L;
+      revisions.add(revision);
+      return new SdkAuthorizationPolicy.Policy(application, environment, revision, "Example Game",
+          java.util.Set.of("voicegame://auth/callback"), java.util.Set.of("game.identity.read"),
+          googleEnabled.get() ? java.util.Set.of("google") : java.util.Set.of("apple"));
+    };
+
+    var service = service(NOW);
+    var challenge = challenge(service, app, env, device);
+    googleEnabled.set(false);
+    assertThatThrownBy(() -> service.exchange(challenge.challengeId(), provider(challenge, client),
+        gameTicket(challenge, app, env, subjectHash()), enroll(device, challenge)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(count("sdk_identities")).isZero();
+    assertThat(count("sdk_sessions")).isZero();
+
+    googleEnabled.set(true);
+    var session = service.exchange(challenge.challengeId(), provider(challenge, client),
+        gameTicket(challenge, app, env, subjectHash()), enroll(device, challenge));
+    googleEnabled.set(false);
+    assertThatThrownBy(() -> service.session(session.accessToken(), sessionProof(device, session)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(revisions).containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
+  }
+
+  @Test
   void possessionOfAnotherDeviceKeyOrTokenCannotReadSession() throws Exception {
     var first = exchange(service(NOW), app, env, client, device);
     var attacker = new ECKeyGenerator(Curve.P_256).generate();
@@ -479,6 +553,63 @@ class SdkIdentityJdbcIntegrationTest {
     }
   }
 
+  @Test
+  void exchangeRechecksGoogleAdmissionAfterWaitingForApplicationAdmissionLock() throws Exception {
+    var googleEnabled = new AtomicBoolean(true);
+    policies = (application, environment) -> new SdkAuthorizationPolicy.Policy(
+        application, environment, 1, "Example Game", java.util.Set.of("voicegame://auth/callback"),
+        java.util.Set.of("game.identity.read"),
+        googleEnabled.get() ? java.util.Set.of("google") : java.util.Set.of("apple"));
+    var service = service(NOW);
+    var challenge = challenge(service, app, env, device);
+    String provider = provider(challenge, client);
+    String ticket = gameTicket(challenge, app, env, subjectHash());
+    String proof = enroll(device, challenge);
+    var worker = Executors.newSingleThreadExecutor();
+    try (var blocker = source().getConnection()) {
+      blocker.setAutoCommit(false);
+      int blockerPid;
+      try (var statement = blocker.createStatement();
+           var result = statement.executeQuery("SELECT pg_backend_pid()")) {
+        assertThat(result.next()).isTrue();
+        blockerPid = result.getInt(1);
+      }
+      try (var lock = blocker.prepareStatement(
+          "SELECT pg_advisory_xact_lock(hashtextextended(?,0))")) {
+        lock.setString(1, "voice-sdk:" + app + "/" + env);
+        lock.execute();
+      }
+      var exchange = worker.submit(() -> service.exchange(challenge.challengeId(), provider, ticket, proof));
+      try {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        boolean waiting = false;
+        while (System.nanoTime() < deadline && !exchange.isDone()) {
+          waiting = Boolean.TRUE.equals(jdbc.queryForObject("""
+              SELECT EXISTS(SELECT 1 FROM pg_stat_activity a
+                WHERE a.datname=current_database() AND a.wait_event_type='Lock'
+                  AND a.wait_event='advisory' AND :blocker=ANY(pg_blocking_pids(a.pid)))
+              """, Map.of("blocker", blockerPid), Boolean.class));
+          if (waiting) break;
+          Thread.sleep(20);
+        }
+        assertThat(waiting).as("exchange reached the app/env lock").isTrue();
+        googleEnabled.set(false);
+      } finally {
+        blocker.rollback();
+      }
+      assertThatThrownBy(() -> exchange.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(SdkIdentityDeniedException.class);
+      assertThat(count("sdk_identities")).isZero();
+      assertThat(count("sdk_devices")).isZero();
+      assertThat(count("sdk_sessions")).isZero();
+      assertThat(jdbc.queryForObject("SELECT consumed_at IS NULL FROM sdk_challenges WHERE challenge_id=:id",
+          Map.of("id", challenge.challengeId()), Boolean.class)).isTrue();
+    } finally {
+      worker.shutdownNow();
+      assertThat(worker.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
+  }
+
   private static final class MutableClock extends Clock {
     private final AtomicReference<Instant> now;
     private final ZoneId zone;
@@ -507,7 +638,17 @@ class SdkIdentityJdbcIntegrationTest {
         new TransactionTemplate(new DataSourceTransactionManager(source)),
         new GoogleOidcProofVerifier(clock,
             kid -> googleKey.getKeyID().equals(kid) ? googleKey.toPublicJWK() : null),
-        applications, clock);
+        applications, policies, clock);
+  }
+
+  private static SdkAuthorizationPolicy.Policy activePolicy(UUID application, UUID environment) {
+    return activePolicy(application, environment, 1);
+  }
+
+  private static SdkAuthorizationPolicy.Policy activePolicy(UUID application, UUID environment, long revision) {
+    return new SdkAuthorizationPolicy.Policy(application, environment, revision, "Example Game",
+        java.util.Set.of("voicegame://auth/callback"), java.util.Set.of("game.identity.read"),
+        java.util.Set.of("google"));
   }
 
   private void admit(UUID application, UUID environment, String audience) {

@@ -11,11 +11,12 @@ public interface SdkAuthorizationPolicy {
   Policy resolve(UUID applicationId, UUID environmentId);
 
   record Policy(UUID applicationId, UUID environmentId, long revision, String displayName,
-                Set<String> redirectUris, Set<String> playerScopes) {
+                Set<String> redirectUris, Set<String> playerScopes, Set<String> providers) {
     public Policy {
       // Keep malformed values representable so the protocol validator denies them uniformly.
       redirectUris = immutable(redirectUris);
       playerScopes = immutable(playerScopes);
+      providers = immutable(providers);
     }
 
     private static Set<String> immutable(Set<String> values) {

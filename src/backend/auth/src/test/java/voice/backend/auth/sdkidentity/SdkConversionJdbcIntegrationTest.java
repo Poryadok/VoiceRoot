@@ -126,8 +126,13 @@ class SdkConversionJdbcIntegrationTest {
     device = new ECKeyGenerator(Curve.P_256).generate();
     identity = new SdkIdentityService(jdbc, transactions(), new GoogleOidcProofVerifier(clock,
         kid -> googleKey.getKeyID().equals(kid) ? googleKey.toPublicJWK() : null),
-        Map.of(app + "/" + env, new SdkApplication(app, env, "operator-client", gameKey.toPublicJWK())), clock);
-    var policy = new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES);
+        Map.of(app + "/" + env, new SdkApplication(app, env, "operator-client", gameKey.toPublicJWK())),
+        (requestedApp, requestedEnv) -> app.equals(requestedApp) && env.equals(requestedEnv)
+            ? new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES,
+                Set.of("google")) : null,
+        clock);
+    var policy = new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES,
+        Set.of("google"));
     authorization = new SdkAuthorizationService(jdbc, transactions(), identity, auth,
         (requestedApp, requestedEnv) -> app.equals(requestedApp) && env.equals(requestedEnv) ? policy : null,
         this::profile, blacklist, clock);
