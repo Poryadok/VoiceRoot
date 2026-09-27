@@ -27,6 +27,7 @@ const createApplicationRoute = "applications.create"
 type Store struct {
 	Pool             *pgxpool.Pool
 	CallbackResolver callbacksecurity.Resolver
+	BotAuthority     BotAuthorityVerifier
 	Now              func() time.Time
 }
 

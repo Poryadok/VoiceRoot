@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -17,6 +18,8 @@ import (
 var (
 	ErrUnsafeCallbackURL        = callbacksecurity.ErrUnsafeURL
 	ErrInstallationConflict     = errors.New("installation scope conflict")
+	ErrBotAuthorityDenied       = errors.New("Bot authority denied")
+	ErrBotAuthorityUnavailable  = errors.New("Bot authority unavailable")
 	ErrRateLimited              = errors.New("application quota exceeded")
 	ErrApplicationSuspended     = errors.New("application suspended")
 	ErrApplicationStateConflict = errors.New("application state transition conflict")
@@ -36,14 +39,20 @@ type CreateInstallationInput struct {
 	OwnerAccountID uuid.UUID
 	ApplicationID  uuid.UUID
 	EnvironmentID  uuid.UUID
+	BotID          uuid.UUID
 	CallbackURL    string
 	IdempotencyKey string
+}
+
+type BotAuthorityVerifier interface {
+	VerifyGameIntegrationBot(context.Context, uuid.UUID, uuid.UUID) error
 }
 
 type Installation struct {
 	ID            uuid.UUID `json:"installation_id"`
 	ApplicationID uuid.UUID `json:"application_id"`
 	EnvironmentID uuid.UUID `json:"environment_id"`
+	BotID         uuid.UUID `json:"bot_id"`
 	CallbackURL   string    `json:"callback_url"`
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -52,7 +61,7 @@ type Installation struct {
 func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallationInput) (Installation, error) {
 	in := input
 	in.IdempotencyKey = trimASCIIWhitespace(in.IdempotencyKey)
-	if in.OwnerAccountID == uuid.Nil || in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil ||
+	if in.OwnerAccountID == uuid.Nil || in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.BotID == uuid.Nil ||
 		in.IdempotencyKey == "" || len(in.IdempotencyKey) > 128 || len(in.CallbackURL) == 0 || len(in.CallbackURL) > 2048 {
 		return Installation{}, ErrInvalidApplication
 	}
@@ -62,19 +71,38 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 	request, err := json.Marshal(struct {
 		ApplicationID uuid.UUID `json:"application_id"`
 		EnvironmentID uuid.UUID `json:"environment_id"`
+		BotID         uuid.UUID `json:"bot_id"`
 		CallbackURL   string    `json:"callback_url"`
-	}{in.ApplicationID, in.EnvironmentID, in.CallbackURL})
+	}{in.ApplicationID, in.EnvironmentID, in.BotID, in.CallbackURL})
 	if err != nil {
 		return Installation{}, fmt.Errorf("hash installation request: %w", err)
 	}
 	requestHash := sha256.Sum256(request)
+	ownerID, existing, found, err := s.preflightInstallation(ctx, in, requestHash[:])
+	if err != nil {
+		return Installation{}, err
+	}
+	if found {
+		return existing, nil
+	}
+	if s.BotAuthority == nil {
+		s.recordBotAuthorityFailure(ctx, in, "bot_authority_unavailable")
+		return Installation{}, ErrBotAuthorityUnavailable
+	}
+	if err := s.BotAuthority.VerifyGameIntegrationBot(ctx, in.BotID, ownerID); err != nil {
+		if errors.Is(err, ErrBotAuthorityDenied) {
+			s.recordBotAuthorityFailure(ctx, in, "bot_authority_denied")
+			return Installation{}, ErrBotAuthorityDenied
+		}
+		s.recordBotAuthorityFailure(ctx, in, "bot_authority_unavailable")
+		return Installation{}, ErrBotAuthorityUnavailable
+	}
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Installation{}, fmt.Errorf("begin installation registration: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var ownerID uuid.UUID
 	var appStatus string
 	err = tx.QueryRow(ctx, `SELECT owner_account_id, status FROM applications WHERE id=$1 FOR UPDATE`, in.ApplicationID).
 		Scan(&ownerID, &appStatus)
@@ -157,7 +185,7 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 
 	var environmentApp uuid.UUID
 	var environmentStatus string
-	err = tx.QueryRow(ctx, `SELECT application_id, status FROM environments WHERE id=$1`, in.EnvironmentID).
+	err = tx.QueryRow(ctx, `SELECT application_id, status FROM environments WHERE id=$1 FOR SHARE`, in.EnvironmentID).
 		Scan(&environmentApp, &environmentStatus)
 	if err != nil || environmentApp != in.ApplicationID || environmentStatus != "active" {
 		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "environment_scope_denied", nil, nil); err != nil {
@@ -190,8 +218,8 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 		return Installation{}, ErrIdempotencyConflict
 	}
 	installationID := uuid.New()
-	_, err = tx.Exec(ctx, `INSERT INTO installations (id, application_id, environment_id, callback_url)
-		VALUES ($1,$2,$3,$4)`, installationID, in.ApplicationID, in.EnvironmentID, in.CallbackURL)
+	_, err = tx.Exec(ctx, `INSERT INTO installations (id, application_id, environment_id, bot_id, callback_url)
+		VALUES ($1,$2,$3,$4,$5)`, installationID, in.ApplicationID, in.EnvironmentID, in.BotID, in.CallbackURL)
 	if err != nil {
 		return Installation{}, fmt.Errorf("persist installation callback: %w", err)
 	}
@@ -212,6 +240,96 @@ func (s *Store) CreateInstallation(ctx context.Context, input CreateInstallation
 		return Installation{}, fmt.Errorf("commit installation registration: %w", err)
 	}
 	return installation, nil
+}
+
+// preflightInstallation resolves the owner from GIS-owned state and returns an
+// already committed idempotent result before making the Bot service call. This
+// keeps retries stable during Bot outages without holding a GIS transaction
+// open across the network.
+func (s *Store) preflightInstallation(ctx context.Context, in CreateInstallationInput, requestHash []byte) (uuid.UUID, Installation, bool, error) {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return uuid.Nil, Installation{}, false, fmt.Errorf("begin installation authority preflight: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var ownerID uuid.UUID
+	var appStatus string
+	err = tx.QueryRow(ctx, `SELECT owner_account_id, status FROM applications WHERE id=$1 FOR SHARE`, in.ApplicationID).
+		Scan(&ownerID, &appStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, Installation{}, false, ErrInstallationConflict
+	}
+	if err != nil {
+		return uuid.Nil, Installation{}, false, fmt.Errorf("resolve installation owner: %w", err)
+	}
+	if ownerID != in.OwnerAccountID {
+		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "owner_mismatch", nil, nil); err != nil {
+			return uuid.Nil, Installation{}, false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, Installation{}, false, fmt.Errorf("commit owner denial audit: %w", err)
+		}
+		return uuid.Nil, Installation{}, false, ErrInstallationConflict
+	}
+	if appStatus == "suspended" {
+		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "app_suspended", nil, nil); err != nil {
+			return uuid.Nil, Installation{}, false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, Installation{}, false, fmt.Errorf("commit suspended application denial: %w", err)
+		}
+		return uuid.Nil, Installation{}, false, ErrApplicationSuspended
+	}
+	if appStatus != "sandbox" && appStatus != "active" {
+		if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", "application_state_denied", nil, nil); err != nil {
+			return uuid.Nil, Installation{}, false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, Installation{}, false, fmt.Errorf("commit application state denial: %w", err)
+		}
+		return uuid.Nil, Installation{}, false, ErrInstallationConflict
+	}
+	var savedHash []byte
+	var savedID pgtype.UUID
+	var operationStatus string
+	err = tx.QueryRow(ctx, `SELECT request_hash, result_id, status FROM registry_operations
+		WHERE actor_kind='account' AND actor_id=$1 AND route=$2 AND idempotency_key=$3`, in.OwnerAccountID, createInstallationRoute, in.IdempotencyKey).
+		Scan(&savedHash, &savedID, &operationStatus)
+	if err == nil {
+		if !bytes.Equal(savedHash, requestHash) {
+			return uuid.Nil, Installation{}, false, ErrIdempotencyConflict
+		}
+		if operationStatus != "succeeded" || !savedID.Valid {
+			return uuid.Nil, Installation{}, false, ErrRegistryUnavailable
+		}
+		installation, err := getInstallation(ctx, tx, uuid.UUID(savedID.Bytes))
+		if err != nil {
+			return uuid.Nil, Installation{}, false, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return uuid.Nil, Installation{}, false, fmt.Errorf("commit installation retry: %w", err)
+		}
+		return ownerID, installation, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, Installation{}, false, fmt.Errorf("read installation idempotency record: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, Installation{}, false, fmt.Errorf("commit installation authority preflight: %w", err)
+	}
+	return ownerID, Installation{}, false, nil
+}
+
+func (s *Store) recordBotAuthorityFailure(ctx context.Context, in CreateInstallationInput, reason string) {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := writeInstallationAudit(ctx, tx, in, "register_installation", "denied", "authenticated_account", reason, nil, nil); err != nil {
+		return
+	}
+	_ = tx.Commit(ctx)
 }
 
 func (s *Store) now() time.Time {
@@ -293,9 +411,9 @@ func writeInstallationAudit(ctx context.Context, tx pgx.Tx, in CreateInstallatio
 
 func getInstallation(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Installation, error) {
 	var installation Installation
-	err := tx.QueryRow(ctx, `SELECT id, application_id, environment_id, callback_url, status, created_at
+	err := tx.QueryRow(ctx, `SELECT id, application_id, environment_id, bot_id, callback_url, status, created_at
 		FROM installations WHERE id=$1`, id).Scan(
-		&installation.ID, &installation.ApplicationID, &installation.EnvironmentID,
+		&installation.ID, &installation.ApplicationID, &installation.EnvironmentID, &installation.BotID,
 		&installation.CallbackURL, &installation.Status, &installation.CreatedAt)
 	if err != nil {
 		return Installation{}, fmt.Errorf("read installation: %w", err)

@@ -875,8 +875,66 @@ the authenticated Voice account when the application was created and is never
 accepted from a game request. GIS obtains the installation's Bot ID from the
 active T11 installation authority record, not from the game request. Bot checks
 that `bots.owner_account_id` for that Bot equals the asserted application owner
-and that the Bot is live. T11 remains open and must define its installation
-authority record; this contract does not prescribe its physical table shape.
+and that the Bot is live. T11 persists this as `installations.bot_id` and
+requires registration to verify the authority as specified below.
+
+The installation-registration Bot proof is a separate internal HTTP operation
+from T51's future `PublishGameEvent` S2S RPC. GIS calls
+`POST /internal/v1/game-integrations/bots/{bot_id}/authority` on Bot with the
+JSON body `{"application_owner_account_id":"<canonical-lowercase-uuid>"}`.
+The caller principal is `gameintegration`, the recipient audience is `bot`,
+and the method binding is the exact HTTP method, escaped path, canonical Unix
+timestamp, lowercase UUID nonce, and lowercase SHA-256 body digest. GIS and Bot
+use a dedicated shared 32-byte key, base64-encoded as
+`GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64` in both services' secret managers; it
+is distinct from the Auth workload key. The signature is unpadded base64url
+HMAC-SHA256 over UTF-8
+`v1\n{principal}\n{audience}\nPOST\n{escaped_path}\n{timestamp}\n{nonce}\n{body_sha256}`,
+where `{principal}` is exactly `gameintegration` and `{audience}` is exactly
+`bot`.
+Bot accepts one each of `X-Voice-Workload: gameintegration`,
+`X-Voice-Audience: bot`, `X-Voice-Timestamp`, `X-Voice-Nonce`, and
+`X-Voice-Signature`; timestamps are
+canonical Unix seconds within ±30 seconds, and nonce reuse is rejected for 61
+seconds through Bot's Redis replay store under the `bot:game-integration-proof:nonce:`
+key prefix. The 61-second TTL covers the inclusive symmetric timestamp-skew
+window, including a proof first received at the +30-second boundary. Query strings, request bodies over
+1 KiB, duplicate headers, malformed IDs, bad MACs, missing key/replay store,
+and replay-store errors fail closed.
+
+On a live Bot whose stored owner equals the request owner, Bot returns `200`
+with `{"bot_id":"<uuid>","owner_account_id":"<uuid>","status":"live"}`.
+It signs the exact response bytes with unpadded base64url HMAC-SHA256 over
+`v1\n200\n{escaped_path}\n{timestamp}\n{nonce}\n{response_body_sha256}` in
+`X-Voice-Response-Signature`, echoing timestamp and nonce in
+`X-Voice-Response-Timestamp` and `X-Voice-Response-Nonce`. GIS verifies status,
+echoes, signature, canonical body and exact Bot/owner/live values before
+persisting anything. Missing/malformed proof, an unknown/disabled Bot, a
+foreign owner, Bot/Redis unavailability, or invalid response proof leaves the
+installation unbound and returns a safe denial/unavailable result. GIS may
+record a sanitized denial audit, but writes no installation or successful
+idempotency result on proof failure. Invalid
+workload proof maps to HTTP 401, malformed signed body to 400, missing/foreign/
+non-live Bot to 403, and key/Redis/database failure to 503. GIS configures the
+Bot base URL with `BOT_INTERNAL_URL`; it and the key must be set together.
+Bot reads the same key and `BOT_REDIS_ADDR` (plus optional
+`BOT_REDIS_PASSWORD`); absent proof key, Redis, or Bot database leaves the
+endpoint unavailable and never falls back to a development key. Existing
+installations receive a nullable `bot_id` because legacy records cannot be
+backfilled with proven authority; NULL is unbound and must be denied by future
+event admission. For local
+bootstrap, generate a dedicated key with `openssl rand -base64 32` and provide
+it to both local services through their environment; the bootstrap acceptance
+uses an in-process fake Bot proof verifier and does not prove provider access.
+No owner ID
+is accepted from the public request; Bot never trusts forwarded user metadata
+for this proof. GIS performs the Bot proof before its registry transaction,
+then re-reads and locks the application/environment and persists the Bot ID,
+owner-scoped idempotency result, and audit record atomically. T51's future
+`PublishGameEvent` continues to use its separately specified service-principal
+contract. GIS resolves `binding_id` to an app-linked message chat using the
+active T30/T31 resource mapping; it does not accept caller-selected
+profile/account identity.
 GIS resolves `binding_id` to an app-linked message chat using the active
 T30/T31 resource mapping; it does not accept caller-selected profile/account
 identity. Bot rechecks its live state,

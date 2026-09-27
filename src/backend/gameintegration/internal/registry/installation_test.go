@@ -30,6 +30,12 @@ func (f installationDialerFunc) DialContext(ctx context.Context, network, addres
 	return f(ctx, network, address)
 }
 
+type botAuthorityFunc func(context.Context, uuid.UUID, uuid.UUID) error
+
+func (f botAuthorityFunc) VerifyGameIntegrationBot(ctx context.Context, botID, ownerID uuid.UUID) error {
+	return f(ctx, botID, ownerID)
+}
+
 func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient(t *testing.T) {
 	ctx := context.Background()
 	pool := startT12Postgres(t, ctx)
@@ -40,8 +46,11 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 		lookupCalls++
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(_ context.Context, _, owner uuid.UUID) error {
+		require.Equal(t, ownerID, owner, "GIS derives the Bot proof owner from the registry row")
+		return nil
+	})}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "HerdTrip", IdempotencyKey: "installation-app",
 	})
@@ -53,6 +62,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 
 	registered, err := store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "install-1",
 	})
 	require.NoError(t, err)
@@ -60,11 +70,13 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	require.Equal(t, env.ID, registered.EnvironmentID)
 	require.Equal(t, "https://callback.example/callback-v1", registered.CallbackURL)
 	var storedAppID, storedEnvironmentID uuid.UUID
+	var storedBotID uuid.UUID
 	var storedURL string
-	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id, environment_id, callback_url
-		FROM installations WHERE id=$1`, registered.ID).Scan(&storedAppID, &storedEnvironmentID, &storedURL))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id, environment_id, bot_id, callback_url
+		FROM installations WHERE id=$1`, registered.ID).Scan(&storedAppID, &storedEnvironmentID, &storedBotID, &storedURL))
 	require.Equal(t, app.ID, storedAppID)
 	require.Equal(t, env.ID, storedEnvironmentID)
+	require.Equal(t, registered.BotID, storedBotID)
 	require.Equal(t, registered.CallbackURL, storedURL)
 
 	var dialAddresses []string
@@ -88,6 +100,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	require.NoError(t, err)
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: otherEnv.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "cross-env-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict)
@@ -110,6 +123,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	foreignOwner := uuid.New()
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: foreignOwner, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "foreign-owner-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict)
@@ -132,8 +146,8 @@ func TestInstallationCallbackRejectsUnsafeDNSBeforePersistence(t *testing.T) {
 	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34"), netip.MustParseAddr("169.254.169.254")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "HerdTrip", IdempotencyKey: "unsafe-installation-app",
 	})
@@ -145,6 +159,7 @@ func TestInstallationCallbackRejectsUnsafeDNSBeforePersistence(t *testing.T) {
 
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "unsafe-installation",
 	})
 	require.ErrorIs(t, err, callbacksecurity.ErrUnsafeURL)
@@ -188,8 +203,9 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
 	now := time.Date(2026, 9, 27, 12, 34, 5, 0, time.UTC)
-	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now }}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now },
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "Quota", IdempotencyKey: "quota-installation-app",
 	})
@@ -218,6 +234,7 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 	create := func(appID, envID uuid.UUID, key string) error {
 		_, createErr := store.CreateInstallation(ctx, CreateInstallationInput{
 			OwnerAccountID: ownerID, ApplicationID: appID, EnvironmentID: envID,
+			BotID:       uuid.New(),
 			CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: key,
 		})
 		return createErr
@@ -317,8 +334,8 @@ func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testi
 	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "Pending Callback", IdempotencyKey: "pending-install-app",
 	})
@@ -334,6 +351,7 @@ func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testi
 
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: pendingEnvID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "pending-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict, "callbacks can only be registered on active environments")
@@ -352,6 +370,102 @@ func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testi
 	require.Equal(t, 1, auditCount, "pending environment denial is represented by one sanitized scope audit")
 }
 
+func TestInstallationRequiresBotAuthorityProofBeforePersistence(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	ownerID, botID := uuid.New(), uuid.New()
+	store := &Store{Pool: pool}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Unproven Bot", IdempotencyKey: "unproven-bot-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "unproven-bot-env",
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: botID, CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "unproven-bot-install",
+	})
+	require.ErrorIs(t, err, ErrBotAuthorityUnavailable)
+	var installationCount, successfulOperations int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM installations WHERE application_id=$1`, app.ID).Scan(&installationCount))
+	require.Zero(t, installationCount, "missing Bot proof must not persist an active installation")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_operations
+		WHERE actor_id=$1 AND route=$2 AND idempotency_key=$3 AND status='succeeded'`,
+		ownerID, createInstallationRoute, "unproven-bot-install").Scan(&successfulOperations))
+	require.Zero(t, successfulOperations, "missing Bot proof must not persist a successful idempotency result")
+}
+
+func TestInstallationRechecksOwnerAndLifecycleAfterBotProof(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	})
+	store := &Store{Pool: pool, CallbackResolver: resolver}
+	for _, scenario := range []struct {
+		name       string
+		want       error
+		mutateRows func(uuid.UUID, uuid.UUID, uuid.UUID) error
+	}{
+		{
+			name: "owner changed during proof",
+			want: ErrInstallationConflict,
+			mutateRows: func(appID, _, newOwner uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE applications SET owner_account_id=$2 WHERE id=$1`, appID, newOwner)
+				return err
+			},
+		},
+		{
+			name: "application suspended during proof",
+			want: ErrApplicationSuspended,
+			mutateRows: func(appID, _, _ uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE applications SET status='suspended' WHERE id=$1`, appID)
+				return err
+			},
+		},
+		{
+			name: "environment suspended during proof",
+			want: ErrInstallationConflict,
+			mutateRows: func(_, environmentID, _ uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE environments SET status='suspended' WHERE id=$1`, environmentID)
+				return err
+			},
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			ownerID, newOwnerID := uuid.New(), uuid.New()
+			app, err := store.CreateApplication(ctx, CreateApplicationInput{
+				OwnerAccountID: ownerID, Name: "Proof race " + scenario.name, IdempotencyKey: "race-app-" + scenario.name,
+			})
+			require.NoError(t, err)
+			env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+				ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "race-env-" + scenario.name,
+			})
+			require.NoError(t, err)
+			store.BotAuthority = botAuthorityFunc(func(_ context.Context, _, proofOwner uuid.UUID) error {
+				require.Equal(t, ownerID, proofOwner, "Bot proof must use the owner read from GIS registry preflight")
+				return scenario.mutateRows(app.ID, env.ID, newOwnerID)
+			})
+
+			_, err = store.CreateInstallation(ctx, CreateInstallationInput{
+				OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+				BotID: uuid.New(), CallbackURL: "https://callback.example/hook",
+				IdempotencyKey: "race-install-" + scenario.name,
+			})
+			require.ErrorIs(t, err, scenario.want)
+			var installations, successfulOperations int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM installations WHERE application_id=$1`, app.ID).Scan(&installations))
+			require.Zero(t, installations, "a registry owner or lifecycle change during proof cannot be bound")
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_operations WHERE actor_id=$1 AND route=$2 AND idempotency_key=$3 AND status='succeeded'`,
+				ownerID, createInstallationRoute, "race-install-"+scenario.name).Scan(&successfulOperations))
+			require.Zero(t, successfulOperations, "proof race denial cannot create a successful idempotency result")
+		})
+	}
+}
+
 func startT12Postgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	migrations := filepath.Join("..", "..", "..", "migrations", "game_integration_db")
@@ -359,6 +473,10 @@ func startT12Postgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t12Migration, err := os.ReadFile(filepath.Join(migrations, "000002_t12_registry_security.up.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(t12Migration))
+	require.NoError(t, err)
+	t11Migration, err := os.ReadFile(filepath.Join(migrations, "000004_t11_installation_bot_binding.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(t11Migration))
 	require.NoError(t, err)
 	return pool
 }

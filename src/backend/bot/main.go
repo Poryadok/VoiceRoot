@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/bot/internal/botevents"
 	"voice/backend/bot/internal/consumer"
 	"voice/backend/bot/internal/dispatch"
+	"voice/backend/bot/internal/gameintegrationproof"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/ratelimit"
 	"voice/backend/bot/internal/store"
@@ -28,6 +30,7 @@ import (
 	"voice/backend/pkg/postgres"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/pkg/workloadproof"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -52,6 +55,7 @@ func main() {
 	}
 
 	var grpcSrv *grpc.Server
+	var authorityBots gameintegrationproof.BotLookup
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -67,6 +71,7 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		st := &store.BotStore{Pool: pool}
+		authorityBots = st
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
 		wireDownstream(svc, logger)
@@ -115,12 +120,31 @@ func main() {
 			}
 		}()
 	} else {
-		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
+		logger.Warn("DATABASE_URL not set; gRPC and GIS authority proof are disabled")
 	}
+
+	proofKey, err := gameintegrationproof.DecodeWorkloadKey(os.Getenv("GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"))
+	if err != nil {
+		log.Fatalf("Bot authority proof configuration: %v", err)
+	}
+	var proofNonces workloadproof.NonceStore
+	var proofRedis *redis.Client
+	if redisAddr := strings.TrimSpace(os.Getenv("BOT_REDIS_ADDR")); redisAddr != "" {
+		proofRedis = redis.NewClient(&redis.Options{Addr: redisAddr, Password: strings.TrimSpace(os.Getenv("BOT_REDIS_PASSWORD"))})
+		defer func() { _ = proofRedis.Close() }()
+		proofNonces = gameintegrationproof.RedisNonceStore{Client: proofRedis}
+	}
+	if len(proofKey) != 32 || proofNonces == nil || authorityBots == nil {
+		logger.Warn("Bot GIS authority proof endpoint will fail closed; key, Redis, or database is unavailable")
+	}
+
+	httpMux := http.NewServeMux()
+	httpMux.Handle("/internal/v1/game-integrations/bots/", gameintegrationproof.NewHandler(authorityBots, proofKey, proofNonces, time.Now))
+	httpMux.Handle("/health", healthHandler(serviceName))
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(httpMux, metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)

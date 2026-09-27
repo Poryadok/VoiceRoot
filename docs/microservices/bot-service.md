@@ -239,8 +239,23 @@ existing `message.sent` JetStream consumer. GIS owns the game-event inbox and
 outbox; Bot verifies its live Bot actor, send scope and chat whitelist, then
 waits for Messaging's idempotent durable message result. The S2S calls use the
 service-principal contract and caller/method allowlist from
-[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md). The RPCs,
-installation-to-Bot binding, and their tests remain unimplemented.
+[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md). The T51
+RPCs and their tests remain unimplemented.
+
+T11 installation registration uses a separate protected HTTP proof endpoint:
+`POST /internal/v1/game-integrations/bots/{bot_id}/authority`. Only the
+`gameintegration` workload, authenticated with its dedicated 32-byte HMAC key,
+may call this endpoint. Bot binds the exact `bot` audience, method, path,
+timestamp, nonce and body digest; it rejects duplicate or stale proofs and keeps replayed nonces in
+Redis for 61 seconds (covering the inclusive ±30-second timestamp window), and
+returns an exact-body response MAC for the same request timestamp
+and nonce. It reads `bots.owner_account_id` and `bots.status` itself, and
+returns a success proof only when the supplied GIS registry owner matches the
+stored owner and status is `live`. Missing key/Redis, replay storage failure,
+unknown/disabled Bot and foreign owner all fail closed. The key is
+`GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64`, separate from GIS↔Auth workload
+credentials. This registration proof does not replace the future T51
+`PublishGameEvent` service-principal RPC or make that runtime path available.
 
 ## Публикуемые события (→ NATS)
 

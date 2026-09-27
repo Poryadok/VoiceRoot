@@ -36,6 +36,10 @@ func TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables(t *testing.T) {
 	require.NoError(t, err)
 	_, err = adminPool.Exec(ctx, string(t10Migration))
 	require.NoError(t, err)
+	t11Migration, err := os.ReadFile(filepath.Join(migrationDir, "000004_t11_installation_bot_binding.up.sql"))
+	require.NoError(t, err)
+	_, err = adminPool.Exec(ctx, string(t11Migration))
+	require.NoError(t, err)
 	_, err = adminPool.Exec(ctx, `CREATE DATABASE auth_db`)
 	require.NoError(t, err)
 

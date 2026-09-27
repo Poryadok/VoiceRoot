@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,4 +52,35 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = "short"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
+}
+
+func TestLoadConfigRequiresBotProofURLAndDedicatedKeyTogether(t *testing.T) {
+	values := map[string]string{
+		"DATABASE_URL":                  "postgres://game@localhost/game_integration_db",
+		"GAME_INTEGRATION_REDIS_ADDR":   "localhost:6379",
+		"GAME_INTEGRATION_JWKS_URL":     "https://auth.example/jwks",
+		"GAME_INTEGRATION_JWT_ISSUER":   "https://auth.example",
+		"GAME_INTEGRATION_JWT_AUDIENCE": "voice",
+	}
+	getenv := func(name string) string { return values[name] }
+	_, err := loadConfig(getenv)
+	require.NoError(t, err, "the endpoint remains fail closed while optional service wiring is absent")
+
+	values["BOT_INTERNAL_URL"] = "http://bot:8080"
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "must be configured together")
+	values["BOT_INTERNAL_URL"] = ""
+	values["GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "must be configured together")
+
+	values["BOT_INTERNAL_URL"] = "http://bot:8080"
+	config, err := loadConfig(getenv)
+	require.NoError(t, err)
+	require.Equal(t, "http://bot:8080", config.BotAuthorityURL)
+	require.Len(t, config.BotWorkloadKey, 32)
+
+	values["GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"] = "not-base64"
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64")
 }
