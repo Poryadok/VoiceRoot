@@ -132,6 +132,15 @@ Auth consumes these service keys; its existing client-JWT signing configuration
 does not sign principal credentials. Legacy `S2S_SIGNING_KEY_PEM` and
 `S2S_SIGNING_KID` aliases are rejected.
 
+The statement above describes the current Auth implementation. The accepted
+T14 target adds a separate Auth-issued User principal keyset; it must not reuse
+`AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`. Its selected
+key source, JWKS route, and rollout contract are recorded in
+[`auth-service.md`](../../../docs/microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending)
+and [Deployment: Auth-to-User SDK profile principal](../../../docs/DEPLOYMENT.md#auth-to-user-sdk-profile-principal).
+Until that signer/client is implemented and configured, T14 profile authority
+remains unavailable and fails closed.
+
 Deployment must route only these proof calls to port 9091, install the Auth
 certificate chain and CA trust for Gateway/Space clients, and verify the
 certificate's Auth service DNS name. Existing callers remain on 9090. Do not

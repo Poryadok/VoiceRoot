@@ -474,6 +474,84 @@ principal runtime absent, ordinary health/service calls can remain available,
 but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
+
+## Auth-to-User SDK profile principal
+
+This is the accepted T14 transport target; it is not yet implemented or
+deployed. It is intentionally separate from Auth's client JWT signer and from
+Auth's inbound Gateway/Space proof listener on `:9091`.
+
+| Holder | Setting or Secret | Contract |
+|---|---|---|
+| Auth | `AUTH_PRINCIPAL_SIGNING_KEYS_DIR` | Read-only secret-mounted directory containing exactly two distinct unencrypted RSA PKCS#8 private keys `<kid>.pem`, each at least 2048 bits. |
+| Auth | `AUTH_PRINCIPAL_ACTIVE_KID` | Must name one of the two loaded keys; only that key signs new credentials. |
+| Auth | `AUTH_USER_PRINCIPAL_GRPC_ADDR` | User's dedicated TLS listener, normally `voice-user:9094`. |
+| Auth | `AUTH_USER_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; JVM system roots remain enabled. |
+| Auth | `AUTH_USER_PRINCIPAL_TLS_SERVER_NAME` | Optional expected User certificate DNS name override; otherwise use endpoint authority. |
+| User | `USER_AUTH_PRINCIPAL_GRPC_LISTEN` | Auth-only TLS listener, default `:9094`; serves only the allowlisted Auth RPCs. |
+| User | `USER_AUTH_PRINCIPAL_TLS_CERT_FILE`, `USER_AUTH_PRINCIPAL_TLS_KEY_FILE` | Matching server certificate chain and private key, mounted read-only. |
+| User | `USER_AUTH_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis used by all User replicas for atomic credential replay rejection. |
+| User | `S2S_JWKS_URLS_JSON` | Must contain `auth` mapped to the HTTPS Auth principal JWKS endpoint. |
+| User | `S2S_JWKS_CA_FILE` | Optional additional CA for the HTTPS JWKS origin. |
+
+The exact signing secret name is `voice-auth-principal-signing`, with keys
+`current.pem`, `next.pem`, and `active-kid`. Mount only the two PEM files into
+`AUTH_PRINCIPAL_SIGNING_KEYS_DIR`; set `AUTH_PRINCIPAL_ACTIVE_KID` from
+`active-kid` (`current` or `next`). Mount keys read-only and never put private
+material in a ConfigMap, source control, logs, or review evidence. The Auth issuer is optional
+when all three required settings (`AUTH_PRINCIPAL_SIGNING_KEYS_DIR`,
+`AUTH_PRINCIPAL_ACTIVE_KID`, `AUTH_USER_PRINCIPAL_GRPC_ADDR`) are absent; in
+that state the T14 profile-authority path is unavailable and fails closed. If
+any required setting is supplied, all three must be valid or Auth fails startup.
+Optional CA/server-name overrides are valid only with the complete required
+set. Enabling `auth.sdk-authorization.enabled` requires all three. Invalid,
+partial, one-key,
+duplicate-key, weak-key, malformed-key, missing-mount, or untrusted-TLS
+configuration never falls back to client JWT signing, raw caller headers, or
+plaintext gRPC.
+
+Auth publishes only the two public principal keys at
+`/api/v1/auth/.well-known/principal-jwks.json`, separate from the client-token
+JWKS at `/api/v1/auth/.well-known/jwks.json`. User's `S2S_JWKS_URLS_JSON`
+`auth` entry points to the HTTPS URL for the principal endpoint. The principal
+JWKS contains the sorted current and next RSA signing keys (`kid`, `use=sig`,
+`alg=RS256`) and public parameters only. The existing User verifier cache
+remains bounded by `S2S_JWKS_REFRESH_AFTER=30s`, `S2S_JWKS_HARD_EXPIRY=2m`,
+and `S2S_UNKNOWN_KID_COOLDOWN=5s`; invalid refresh
+does not replace the last-good complete keyset and hard expiry fails closed.
+
+Provision the Auth signing secret and HTTPS JWKS route, User listener
+certificate, Auth-to-User network route, shared User replay Redis, and User
+issuer map before enabling the Auth caller. Deploy and verify User's issuer
+configuration first. Wait for the verifier's JWKS refresh (at most one 30s
+refresh interval) before the synthetic proof. Route only Auth to User `:9094`
+and User to the Auth HTTPS JWKS endpoint; do not expose the principal gRPC
+listener externally. User owns
+replay admission using shared Redis `SET NX` at
+`user:principal:replay:<hex SHA-256(issuer + NUL + jti)>`, with TTL bounded by
+credential expiry and at most 35 seconds. Redis failure, replay, missing keys,
+expired JWKS, TLS failure, or malformed proof denies the call.
+
+Rotation must preserve the complete current+next RS256 set across Auth replicas:
+
+1. Provision two distinct keys and publish both public keys at the principal
+   JWKS endpoint. Wait for User JWKS refresh and verify a synthetic request
+   signed by the peer key before selecting it for live signing.
+2. Change `active-kid` in the secret manager and restart Auth replicas to load
+   the selected key. Keep both private/public keys during the rollout.
+3. After the last old-signing Auth replica stops, retain its public key for at
+   least **35 seconds**: principal credentials live at most 30 seconds and User
+   permits up to five seconds of future issue/not-before skew.
+4. Replace only the inactive key, redeploy the complete two-key set everywhere,
+   wait for JWKS refresh, and verify another peer-signed synthetic request
+   before a later activation. Never remove an old verification key while a
+   credential it signed can still be accepted.
+
+Before T14 transport readiness is claimed, demonstrate valid Auth proof at User
+and denials for absent, malformed, wrong-issuer/audience/RPC/request/hash,
+replayed and expired proof; verify mismatched profile IDs and zero/stale
+revisions also deny. Do not use key values in the evidence.
+
 ## Social privacy principals
 
 The standard local/CI Compose app generates its own 30-day credentials through
