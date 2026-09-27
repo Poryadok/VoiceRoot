@@ -26,6 +26,9 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 
 	var claims tokenClaims
 	sdkPolicy, sdkAuthorizationRoute := sdkAuthorizationPolicy(r.Method, r.URL.Path)
+	if sdkAuthorizationRoute && sdkPolicy.principal == sdkAuthorizationCodeProof {
+		r.Header.Del("Authorization")
+	}
 	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path) ||
 		(sdkAuthorizationRoute && sdkPolicy.principal == sdkAuthorizationCodeProof)
 	botRoute := isBotTokenRESTRoute(r.URL.Path)

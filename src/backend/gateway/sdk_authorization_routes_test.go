@@ -91,7 +91,9 @@ func TestSDKAuthorizationGatewayPrincipalPolicies(t *testing.T) {
 				w.WriteHeader(http.StatusNoContent)
 			})},
 		})
-		resp := performRequest(h, http.MethodPost, base+"/"+requestID+"/exchange", body, nil)
+		resp := performRequest(h, http.MethodPost, base+"/"+requestID+"/exchange", body, map[string]string{
+			"Authorization": "Bearer irrelevant-voice-access-token",
+		})
 		if resp.Code != http.StatusNoContent || !forwarded {
 			t.Fatalf("exchange response = %d, forwarded = %t; body=%s", resp.Code, forwarded, resp.Body.String())
 		}
