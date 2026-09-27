@@ -87,10 +87,18 @@ The Auth-only T13a contract is independently testable with deterministic fake
 Google JWKS and synthetic game-ticket keys. Its Auth module suite must prove
 valid paired proofs, issuer/audience/nonce/expiry rejection, nonce and challenge
 replay rejection, app/env isolation, identity uniqueness, configured admission
-cap, atomic challenge consumption, and bootstrap credential/session/revoke
-semantics. It must also prove these Auth paths remain unpublished from Gateway
+cap (1,000 identities per app/env and 10 active devices per identity), atomic
+challenge consumption, and bootstrap credential/session/revoke semantics. It
+must also prove these Auth paths remain unpublished from Gateway
 and that no `guest` conversion path is called. This suite is a T13a implementation
 gate only; it does not pass the clean-start or live-Google gates below.
+
+On feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`, the Auth module
+contract suites passed: Google verifier/JWKS, REST controller and configuration
+tests reported 56 passed; the PostgreSQL `SdkIdentityJdbcIntegrationTest`
+reported 32 passed; full `rtk mvn -B test` reported 816 passed, zero failures,
+errors, or skips. This is local Auth implementation evidence only. It does not
+pass the disposable clean-start gate or real-Google provider gate below.
 
 Run both enrollment paths from disposable state. The developer path starts with
 an empty `game_integration_db`, runs the service-owned migration, creates a
@@ -308,7 +316,7 @@ acceptance Q01–Q12 перечислены в [design audit](game-integrations-
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
-| G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof и Auth challenge/exchange/session/revoke. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a может быть детерминированно реализован на fake provider fixtures; полный GI7 требует также реальных Google и clean-start gates выше плюс conversion ID07–ID13 |
+| G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof, Auth challenge/exchange/session/revoke, cap 1,000 identities per app/env и 10 active devices per identity. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a детерминированно проверяется на fake provider fixtures; полный GI7 требует также отдельных real-Google и clean-start gates выше плюс conversion ID07–ID13 |
 | G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
 | G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery; roster не обходит Voice ban |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
