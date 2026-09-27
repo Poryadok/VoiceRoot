@@ -21,6 +21,22 @@ global_paths="$(sed -n '/^global:$/,/^[[:alnum:]_]*:$/p' "${PATH_FILTERS}")"
 echo "${global_paths}" | grep -Fxq "  - ${GO_DOWNLOAD_HELPER}" \
   || fail "Docker Go module download helper must be a global CI-policy path"
 
+pr_trigger="$(sed -n '/^  pull_request:$/,/^  push:$/p' "${WORKFLOW}" | sed '$d')"
+echo "${pr_trigger}" | grep -Fq 'branches: [master, codex/game-sdk-federation-docs]' \
+  || fail "CI must run for PRs targeting master and the game SDK feature base"
+push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
+echo "${push_trigger}" | grep -Fq 'branches: [master]' \
+  || fail "CI push trigger must remain limited to master"
+! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
+  || fail "draft PRs must use the same path-filtered CI selection"
+changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${changes_block}" | grep -Fq "github.event_name == 'pull_request'" \
+  || fail "draft feature-base PRs must enter the normal changes job"
+echo "${changes_block}" | grep -Fq 'uses: dorny/paths-filter@v4' \
+  || fail "feature-base PRs must use the existing path-filtered job selection"
+echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
+  || fail "feature-base PRs must use the repository path filter definitions"
+
 echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
 echo "${job_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \

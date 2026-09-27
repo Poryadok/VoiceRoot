@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, codex/game-sdk-federation-docs]
   push:
     branches: [master]
   schedule:
