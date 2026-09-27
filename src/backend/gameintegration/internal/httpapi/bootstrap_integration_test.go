@@ -47,6 +47,18 @@ type bootstrapJWK struct {
 // TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs uses a
 // fake Voice JWKS only; it does not perform or claim real Google OIDC proof.
 func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testing.T) {
+	runGameIntegrationCleanBootstrap(t, false)
+}
+
+// TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture
+// keeps the denied production-environment case in the ordinary GIS suite. The
+// API cannot create production state yet, so this test is deliberately excluded
+// from the SQL-seed-free Q11 clean-start command.
+func TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture(t *testing.T) {
+	runGameIntegrationCleanBootstrap(t, true)
+}
+
+func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture bool) {
 	ctx := context.Background()
 	migration := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "game_integration_bootstrap", migration)
@@ -204,19 +216,21 @@ func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testin
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM environments WHERE application_id=$1 AND kind='production'`, appID).Scan(&prodEnvironments))
 	require.Zero(t, prodEnvironments)
 
-	// Seed the persisted production state that this API slice cannot create.
-	productionEnvID := uuid.New()
-	_, err = pool.Exec(ctx, `UPDATE applications SET status='active' WHERE id=$1`, appID)
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO environments (id, application_id, kind, status) VALUES ($1,$2,'production','active')`, productionEnvID, appID)
-	require.NoError(t, err)
-	productionCredential := call(http.MethodPost,
-		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+productionEnvID.String()+"/credentials",
-		applicantToken, "t11-production-environment-credential", `{"scopes":["game.events.write"]}`)
-	require.Equal(t, http.StatusForbidden, productionCredential.Code)
+	if includeProductionFixture {
+		// Seed the persisted production state that this API slice cannot create.
+		productionEnvID := uuid.New()
+		_, err = pool.Exec(ctx, `UPDATE applications SET status='active' WHERE id=$1`, appID)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `INSERT INTO environments (id, application_id, kind, status) VALUES ($1,$2,'production','active')`, productionEnvID, appID)
+		require.NoError(t, err)
+		productionCredential := call(http.MethodPost,
+			"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+productionEnvID.String()+"/credentials",
+			applicantToken, "t11-production-environment-credential", `{"scopes":["game.events.write"]}`)
+		require.Equal(t, http.StatusForbidden, productionCredential.Code)
 
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM environments WHERE application_id=$1 AND kind='production'`, appID).Scan(&prodEnvironments))
-	require.Equal(t, 1, prodEnvironments)
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM environments WHERE application_id=$1 AND kind='production'`, appID).Scan(&prodEnvironments))
+		require.Equal(t, 1, prodEnvironments)
+	}
 	var draftApplications int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM applications WHERE owner_account_id=$1 AND status='draft'`, applicant).Scan(&draftApplications))
 	require.Zero(t, draftApplications)

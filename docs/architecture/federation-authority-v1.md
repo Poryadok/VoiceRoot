@@ -40,6 +40,46 @@ revokes previous credential immediately, without overlap in this foundation.
 Suspension has no implicit resume endpoint; defederation is permanent. No
 operator certificate can be used on node routes. No NATS credential is issued.
 
+## HTTP request correlation and Q11 denial audit
+
+Every HTTP request on the authority listener receives one effective request ID.
+The server preserves `X-Request-ID` only when exactly one value is a canonical,
+nonzero UUID. A missing, invalid, noncanonical, or repeated value is replaced
+with a server-generated UUID. The effective value is returned in the
+`X-Request-ID` response header on success and error responses. This ID is for
+correlation only and never establishes identity or authority.
+
+The Q11 clean-start gate requires an audit row for its enumerated
+Federation-authority HTTP denials: an operator certificate on a node-only route;
+a node certificate on an operator-only route; a trusted but unregistered node
+certificate/pin; a cross-node or cross-Space node request; a stale or revoked
+node bearer; and duplicate node approval. Each row records a generated audit-row
+UUID, actor class, lowercase SHA-256 DER certificate fingerprint, canonical
+node/Space IDs when available, fixed action, `denied` or `conflict` result,
+HTTP status, safe reason code, effective request UUID, and server timestamp.
+Rows contain no request body, bearer, credential, claims, provider subject,
+certificate bytes, or private-key material.
+
+The fixed action values for these cases are `node.snapshot.read` (operator on a
+node route, unregistered node certificate, cross-node/Space request, or stale
+bearer), and `node.approve` (node certificate on an operator route or duplicate
+approval). Safe reason codes are respectively `certificate_role_mismatch`,
+`node_certificate_mismatch`, `node_scope_mismatch`, `credential_revoked`, and
+`approval_conflict`; they are stable classifications and never include
+database, certificate, bearer, or request-body details. The actor class is
+`operator` for the configured operator pin and `node` for any other
+verified-chain certificate, including an unregistered node certificate.
+
+The denial row is appended after the handler/domain transaction returns, in a
+separate database transaction, so a rejected operation cannot erase its audit
+event. The schema rejects `UPDATE`, `DELETE`, and `TRUNCATE` against audit rows.
+Audit persistence failure returns only the generic `503 unavailable` response
+with the effective request ID; a denial is never reported as completed without
+its audit row. Invalid TLS handshakes that fail before an HTTP request are
+outside this audit contract because no request ID or authority handler exists.
+Malformed routes/bodies and failures outside the enumerated Q11 denial cases do
+not gain a new audit guarantee from this slice.
+
 ## Complete snapshot and signature
 
 Snapshot fields (all required): `version:1`, `complete:true`, `page_count:1`,

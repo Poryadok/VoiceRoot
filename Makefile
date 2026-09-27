@@ -41,13 +41,19 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 
 ifeq ($(OS),Windows_NT)
 GAME_INTEGRATION_BOOTSTRAP_RUN = set CGO_ENABLED=0&& go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+FEDERATION_Q11_ACCEPTANCE_RUN = set CGO_ENABLED=0&& go test -run "^TestQ11FederationCleanStartAuthorityAPIs$$" -count=1 .
 else
 GAME_INTEGRATION_BOOTSTRAP_RUN = go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+FEDERATION_Q11_ACCEPTANCE_RUN = go test -run "^TestQ11FederationCleanStartAuthorityAPIs$$" -count=1 .
 endif
 
 .PHONY: game-integration-bootstrap-acceptance
 game-integration-bootstrap-acceptance:
 	cd "$(ROOT)/src/backend/gameintegration" && $(GAME_INTEGRATION_BOOTSTRAP_RUN)
+
+.PHONY: game-integrations-q11-acceptance
+game-integrations-q11-acceptance: game-integration-bootstrap-acceptance
+	cd "$(ROOT)/src/backend/federation" && $(FEDERATION_Q11_ACCEPTANCE_RUN)
 
 buf-lint:
 	buf lint

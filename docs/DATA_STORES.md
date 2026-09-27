@@ -28,7 +28,7 @@
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Game Integration Service | `game_integration_db` | — | App/env registry, bindings, operations, managed grants |
-| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
+| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | Nodes, placements, snapshots, lease nonces, and append-only Q11 denial audit |
 | Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 

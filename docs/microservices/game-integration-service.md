@@ -213,6 +213,14 @@ credential issuance and audit. This verifies the GIS path only; it is not a
 real Google OIDC run and does not close the broader Q11 GIS-plus-node clean-start
 gate.
 
+`game-integration-bootstrap-acceptance` runs
+`TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs`, which uses
+only API-created registry rows. The ordinary full GIS suite separately runs
+`TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture`;
+that security test uses a SQL fixture for a production environment the current
+API cannot create, and is intentionally excluded from Q11 clean-start. It is not
+evidence of production admission.
+
 This contract is subordinate to the game integration feature and API canon;
 later sections will add sessions, managed grants, bot and node-facing operations
 with their own tests and migration revisions.
