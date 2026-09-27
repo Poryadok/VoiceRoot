@@ -315,6 +315,7 @@ e2e-manifest-helper-test:
 
 nats-leaf-topology-invariants-test:
 	$(BASH) "$(ROOT)/scripts/ci/nats-leaf-topology-invariants-test_test.sh"
+	python3 "$(ROOT)/scripts/staging/nats-search-probe-workflow_test.py"
 
 .PHONY: staging-source-acquisition-workflow-test
 staging-source-acquisition-workflow-test:
