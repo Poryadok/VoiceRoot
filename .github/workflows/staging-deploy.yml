@@ -517,23 +517,38 @@ jobs:
                         trap 'rm -rf "$tmp"' EXIT
                         response="$tmp/response.json"
                         stderr="$tmp/stderr.txt"
+                        nats_status=0
                         if nats --server nats://voice-nats:4222 --creds /var/run/nats/creds/search.creds --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
                           if jq -e '(.error | not) and .config.durable_name == "search-indexer-message-v1"' "$response" >/dev/null 2>&1; then
                             echo "NATS_SEARCH_JS_INFO=PASS"
                             exit 0
                           fi
+                        else
+                          nats_status=$?
                         fi
-                        details="$(jq -r '.error.description // empty' "$response" 2>/dev/null || true) $(<"$stderr")"
+                        code="$(jq -r '.error.code // 0 | if type == "number" then floor else 0 end' "$response" 2>/dev/null || true)"
+                        err_code="$(jq -r '.error.err_code // 0 | if type == "number" then floor else 0 end' "$response" 2>/dev/null || true)"
+                        case "$code" in ''|*[!0-9]*) code=0 ;; esac
+                        case "$err_code" in ''|*[!0-9]*) err_code=0 ;; esac
+                        details="$(jq -r '.error.description // empty' "$response" 2>/dev/null || true) $(cat "$stderr")"
                         if printf '%s' "$details" | grep -Eqi 'jetstream[^[:cntrl:]]*(not enabled|disabled)|not enabled[^[:cntrl:]]*jetstream'; then
                           category=JETSTREAM_DISABLED
                         elif printf '%s' "$details" | grep -Eqi 'permission|authorization|not authorized|unauthorized|forbidden'; then
                           category=PERMISSION_DENIED
+                        elif printf '%s' "$details" | grep -Eqi 'authentication|credentials|invalid token'; then
+                          category=AUTHENTICATION_FAILED
                         elif printf '%s' "$details" | grep -Eqi 'timed out|timeout|no responders'; then
                           category=TIMEOUT
+                        elif [ "$code" = 404 ]; then
+                          category=NOT_FOUND
+                        elif [ "$nats_status" -ne 0 ]; then
+                          category=CLI_ERROR
+                        elif ! jq -e . "$response" >/dev/null 2>&1; then
+                          category=INVALID_RESPONSE
                         else
                           category=OTHER
                         fi
-                        printf 'NATS_SEARCH_JS_INFO=FAIL %s\n' "$category"
+                        printf 'NATS_SEARCH_JS_INFO=FAIL %s CODE_%s ERR_%s\n' "$category" "$code" "$err_code"
                         exit 1
                     volumeMounts:
                       - name: search-service-creds
@@ -567,13 +582,11 @@ jobs:
               [ "$conditions" = Complete ] || fail_probe JOB_STATUS_MISMATCH
               printf '%s\n' "$result"
               ;;
-            "NATS_SEARCH_JS_INFO=FAIL JETSTREAM_DISABLED"|"NATS_SEARCH_JS_INFO=FAIL PERMISSION_DENIED"|"NATS_SEARCH_JS_INFO=FAIL TIMEOUT"|"NATS_SEARCH_JS_INFO=FAIL OTHER")
+            *)
+              [[ "$result" =~ ^NATS_SEARCH_JS_INFO=FAIL\ (JETSTREAM_DISABLED|PERMISSION_DENIED|AUTHENTICATION_FAILED|TIMEOUT|NOT_FOUND|CLI_ERROR|INVALID_RESPONSE|OTHER)\ CODE_[0-9]+\ ERR_[0-9]+$ ]] || fail_probe JOB_RESULT
               [ "$conditions" = Failed ] || fail_probe JOB_STATUS_MISMATCH
               printf '%s\n' "$result"
               exit 1
-              ;;
-            *)
-              fail_probe JOB_RESULT
               ;;
           esac
 
