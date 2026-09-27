@@ -928,9 +928,14 @@ it to both local services through their environment; the bootstrap acceptance
 uses an in-process fake Bot proof verifier and does not prove provider access.
 No owner ID
 is accepted from the public request; Bot never trusts forwarded user metadata
-for this proof. GIS performs the Bot proof before its registry transaction,
-then re-reads and locks the application/environment and persists the Bot ID,
-owner-scoped idempotency result, and audit record atomically. T51's future
+for this proof. GIS preflights the authenticated owner, then atomically claims
+the owner-scoped idempotency key/hash and consumes one per-app quota attempt in
+a short transaction that commits before Bot I/O. A same-key/hash failed proof
+replays its saved denial without another quota charge or Bot call; a changed
+hash conflicts, an in-flight duplicate receives bounded unavailable, and the
+121st app attempt is rejected before Bot. After proof, GIS opens the binding
+transaction, re-reads and locks the application/environment, and persists the
+Bot ID, owner-scoped idempotency result, and audit record atomically. T51's future
 `PublishGameEvent` continues to use its separately specified service-principal
 contract. GIS resolves `binding_id` to an app-linked message chat using the
 active T30/T31 resource mapping; it does not accept caller-selected

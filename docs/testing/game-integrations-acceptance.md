@@ -204,9 +204,14 @@ registry rechecks and locks application owner/status and environment status
 after the network proof; concurrent owner transfer, app suspension, or
 environment suspension aborts without a binding or successful operation. The
 clean-bootstrap test applies `000004_t11_installation_bot_binding` and asserts
-the Bot ID persists, an exact retry does not repeat proof, an owner override is
-rejected, and proof denial creates no installation or successful idempotency
-result. It uses a fake Bot authority verifier, not the live internal endpoint.
+the Bot ID persists, an exact successful retry does not repeat proof, an owner
+override is rejected, and proof denial creates no installation or successful
+idempotency result. Proof attempts are charged once before Bot I/O in the
+application quota; the failed idempotency result is saved and replayed without
+another proof/audit/quota charge, a changed request hash conflicts, and an
+in-flight duplicate cannot make another proof call. The 121st app attempt is
+rejected before Bot. It uses a fake Bot authority verifier, not the live
+internal endpoint.
 GIS requires `BOT_INTERNAL_URL` together with the dedicated
 `GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64`; omitting both keeps unrelated local
 APIs available, while installation fails closed. Bot requires the same key and
@@ -318,7 +323,7 @@ not runtime, staging, or provider evidence.
 | BOT06 | Reject non-JCS bytes, body over 16 KiB, duplicate/unknown JSON keys, invalid HMAC, key-ID mismatch, timestamp outside ±300 seconds, duplicate auth/signature headers, cross-app/environment credential, and scope without `game.events.write`. While fresh, replay of the same `(credential_id, nonce, event_id, payload_hash)` is inert; reuse of that credential/nonce with another event/hash is `409 EVENT_NONCE_REUSE`. After freshness expiry, re-signing the same event/hash with a new nonce returns the saved operation; the stale original signature is rejected. |
 | BOT08 | Crash at GIS inbox/outbox commit boundaries and during both S2S hops. Retryable gRPC statuses use the canonical saved-intent backoff; one valid `voice-retry-delay-ms` trailer extends it, while duplicate/malformed/out-of-range hints are ignored. An already-expired request returns a durable `expired` operation without an outbox row; expiry while queued is a terminal fact with no publication. `PERMISSION_DENIED`/`NOT_FOUND` cancel, `UNAUTHENTICATED`/`UNIMPLEMENTED` block for operator repair with the outbox retained, and conflicting Messaging idempotency becomes reconciliation-required; none is success. |
 | BOT09, BOT12 | Credential revoke denies new ingress. App/environment/installation/binding revoke before dispatch cancels queued publication. A dispatch admitted before revoke may finish as one in-flight attempt; an ambiguous response after revoke becomes reconciliation-required and is never re-sent as a new publication. Already committed messages keep ordinary history ACL; later actions recheck live authority. |
-| BOT11 | T11 registration proof rejects owner overrides and fails closed on missing, foreign-owner, inactive/deleted Bot, bad/replayed GIS workload proof, bad response MAC, or Bot/Redis outage; no binding row or successful idempotency result is written. A valid proof binds the Bot ID under the GIS application owner's authority, and an exact retry returns the same binding. T51 GIS→Bot accepts only the verified `gameintegration` S2S principal and exact RPC/request hash; Bot→Messaging accepts only `bot`. GIS sources `app_owner_account_id` from the authenticated-owner application row and obtains `bot_id` from active T11 installation authority; Bot requires that value to equal its stored `bots.owner_account_id`. The hash matches `sha256:` plus lowercase hex of the complete deterministic protobuf request bytes; the JWT `request_id` equals the intent `operation_id`. Wrong issuer, audience, RPC, request hash, stale/expired token, replayed `jti`, invalid TLS/JWKS, or raw forwarded client identity is denied before message persistence. |
+| BOT11 | T11 registration proof rejects owner overrides and fails closed on missing, foreign-owner, inactive/deleted Bot, bad/replayed GIS workload proof, bad response MAC, or Bot/Redis outage; no binding row or successful idempotency result is written. A valid proof binds the Bot ID under the GIS application owner's authority, and an exact retry returns the same binding. For a new authenticated-owner registration request, GIS atomically claims the idempotency key/hash and consumes one app-wide quota attempt before Bot I/O; failed proof is charged once and its sanitized denial is replayed for the same key/hash, an in-flight duplicate cannot issue another proof, a different hash conflicts, and request 121 is rejected before Bot. T51 GIS→Bot accepts only the verified `gameintegration` S2S principal and exact RPC/request hash; Bot→Messaging accepts only `bot`. GIS sources `app_owner_account_id` from the authenticated-owner application row and obtains `bot_id` from active T11 installation authority; Bot requires that value to equal its stored `bots.owner_account_id`. The hash matches `sha256:` plus lowercase hex of the complete deterministic protobuf request bytes; the JWT `request_id` equals the intent `operation_id`. Wrong issuer, audience, RPC, request hash, stale/expired token, replayed `jti`, invalid TLS/JWKS, or raw forwarded client identity is denied before message persistence. |
 
 For two distinct event IDs, force outbox completion in reverse order and assert
 that the contract makes no FIFO promise. For same-event retries, assert saved
@@ -338,10 +343,12 @@ are implemented or prove any external game-provider admission.
 обещает пропускную способность всех GIS routes или T15 delivery.
 
 Регистрация разрешена только владельцу приложения и активной environment.
-После admission лимитера cross-environment и небезопасный callback отказ
-создают ровно одну sanitized denial запись без installation/credential writes;
-foreign-owner отказ не расходует квоту. Неверный/отсутствующий bearer не
-создаёт quota/store/audit обращений. Путь callback обязан быть HTTPS:443 с
+Квота владельца фиксируется до Bot authority proof: отказ proof расходует
+попытку, а 121-я попытка не вызывает Bot. После admission лимитера
+cross-environment и небезопасный callback отказ создают ровно одну sanitized
+denial запись без installation/credential writes; foreign-owner отказ не
+расходует квоту. Неверный/отсутствующий bearer не создаёт quota/store/audit
+обращений. Путь callback обязан быть HTTPS:443 с
 literal ASCII unreserved сегментами, без userinfo/query/fragment. DNS проверен
 при регистрации и повторно в dialer; все адреса проверяются, TCP фиксируется
 на разрешённом IP, TLS сверяет исходный hostname, redirect не исполняется.

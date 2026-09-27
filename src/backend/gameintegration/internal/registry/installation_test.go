@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -326,6 +327,123 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM service_credentials c
 		JOIN environments e ON e.id=c.environment_id WHERE e.application_id=$1`, app.ID).Scan(&credentialCount))
 	require.Zero(t, credentialCount)
+}
+
+func TestInstallationQuotaBoundsBotProofAttempts(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	now := time.Date(2026, 9, 27, 12, 35, 5, 0, time.UTC)
+	ownerID := uuid.New()
+	proofCalls := 0
+	store := &Store{Pool: pool, Now: func() time.Time { return now },
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			proofCalls++
+			return ErrBotAuthorityDenied
+		})}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Proof quota", IdempotencyKey: "proof-quota-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "proof-quota-env",
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO app_quota_windows (application_id, window_start, request_count)
+		VALUES ($1, $2, 119)`, app.ID, now.Truncate(time.Minute))
+	require.NoError(t, err)
+	botID := uuid.New()
+
+	create := func(key string) error {
+		_, createErr := store.CreateInstallation(ctx, CreateInstallationInput{
+			OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+			BotID: botID, CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: key,
+		})
+		return createErr
+	}
+	require.ErrorIs(t, create("proof-quota-120"), ErrBotAuthorityDenied,
+		"a failed Bot proof still consumes the owner's final admitted attempt")
+	require.ErrorIs(t, create("proof-quota-120"), ErrBotAuthorityDenied,
+		"an identical failed idempotency retry returns the saved denial without charging again")
+	_, changedPayloadErr := store.CreateInstallation(ctx, CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "proof-quota-120",
+	})
+	require.ErrorIs(t, changedPayloadErr, ErrIdempotencyConflict,
+		"a failed operation key cannot be reused with a different request hash")
+	require.ErrorIs(t, create("proof-quota-121"), ErrRateLimited)
+	require.Equal(t, 1, proofCalls, "the 121st request must be rejected before calling Bot")
+	var quotaCount, botDenials, quotaDenialRows, quotaDenials int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 120, quotaCount)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1
+		AND action='register_installation' AND reason_code='bot_authority_denied'`, app.ID).Scan(&botDenials))
+	require.Equal(t, 1, botDenials, "an admitted proof denial gets only one sanitized audit row")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*), coalesce(sum(denial_count),0) FROM registry_audit
+		WHERE application_id=$1 AND action='quota_denied'`, app.ID).Scan(&quotaDenialRows, &quotaDenials))
+	require.Equal(t, 1, quotaDenialRows, "quota denials are coalesced per app and UTC minute")
+	require.Equal(t, 1, quotaDenials)
+}
+
+func TestInstallationIdempotencyClaimCoalescesConcurrentBotProof(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	ownerID := uuid.New()
+	proofStarted := make(chan struct{})
+	releaseProof := make(chan struct{})
+	var proofCalls atomic.Int32
+	store := &Store{Pool: pool,
+		CallbackResolver: installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		}),
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			proofCalls.Add(1)
+			close(proofStarted)
+			<-releaseProof
+			return nil
+		}),
+	}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Concurrent install", IdempotencyKey: "concurrent-install-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "concurrent-install-env",
+	})
+	require.NoError(t, err)
+	input := CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "same-install-key",
+	}
+	type createResult struct {
+		installation Installation
+		err          error
+	}
+	firstResult := make(chan createResult, 1)
+	go func() {
+		installation, createErr := store.CreateInstallation(ctx, input)
+		firstResult <- createResult{installation: installation, err: createErr}
+	}()
+	select {
+	case <-proofStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first request did not reach Bot proof")
+	}
+	_, duplicateErr := store.CreateInstallation(ctx, input)
+	require.ErrorIs(t, duplicateErr, ErrRegistryUnavailable,
+		"an in-flight identical operation is bounded and does not trigger a second Bot proof")
+	var quotaCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount, "the concurrent duplicate must not consume another quota slot")
+	require.EqualValues(t, 1, proofCalls.Load())
+	close(releaseProof)
+	first := <-firstResult
+	require.NoError(t, first.err)
+	require.NotEqual(t, uuid.Nil, first.installation.ID)
+	duplicate, err := store.CreateInstallation(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, first.installation.ID, duplicate.ID,
+		"the completed retry returns the originally persisted result without another quota charge")
+	require.EqualValues(t, 1, proofCalls.Load())
 }
 
 func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testing.T) {

@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	ErrDenied       = errors.New("Bot owner authority denied")
+	ErrDenied       = errors.New("bot owner authority denied")
 	ErrInvalidProof = errors.New("invalid Bot authority proof")
-	ErrUnavailable  = errors.New("Bot authority proof unavailable")
+	ErrUnavailable  = errors.New("bot authority proof unavailable")
 )
 
 const maxResponseBytes = 1024
@@ -68,12 +68,12 @@ func (c *Client) VerifyGameIntegrationBot(ctx context.Context, botID, ownerID uu
 	client := c.HTTP
 	if client == nil {
 		client = &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
-			return errors.New("Bot authority redirects forbidden")
+			return errors.New("bot authority redirects forbidden")
 		}}
 	} else {
 		copy := *client
 		copy.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return errors.New("Bot authority redirects forbidden")
+			return errors.New("bot authority redirects forbidden")
 		}
 		client = &copy
 	}

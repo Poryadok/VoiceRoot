@@ -224,9 +224,11 @@ minute across all of that application's environments. The 121st request returns
 boundary. Repeated quota denials update one sanitized audit event per app and
 minute. Reads, current application/environment/policy/credential routes,
 operator actions, and future T15 delivery are outside this selected bucket.
-An authenticated owner denied after quota admission consumes the attempt; a
-foreign owner is denied before quota admission. Invalid bearer requests create
-no registry, quota, or audit writes.
+An authenticated owner's quota is admitted durably before the Bot authority
+proof call, so a denied or unavailable Bot proof consumes an attempt and cannot
+be used to amplify internal proof traffic. The 121st attempt is rejected before
+the Bot call. A foreign owner is denied before quota admission. Invalid bearer
+requests create no registry, quota, or audit writes.
 
 `PUT /api/v1/game-integrations/applications/{app_id}/suspension` is restricted
 to configured regular operator accounts and takes `{"suspended": boolean}`
