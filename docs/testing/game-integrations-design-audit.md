@@ -175,18 +175,41 @@ provider login, отсутствие оживших private данных/клю�
 — approval. Developer portal теперь вне спринта, поэтому требуется рабочий
 bootstrap через Voice API/операторский процесс, а не недоступный UI.
 
-Нужно определить approver, account/app ownership, credential issue/recovery,
-node enrollment, sandbox→production и ограничения численности sdk-accounts.
-Выбрать независимый provider для реальной приёмки: fake доказывает контракт,
-но не интеграцию с настоящим provider. До GI7/GI8; acceptance: clean bootstrap
-без прямой правки БД, чужой app ID, отозванный developer, независимый login proof.
+Решения закреплены в [Auth identity slice](../architecture/game-integration-api.md#замороженный-auth-identity-slice-game-auth-01),
+[GIS bootstrap](../microservices/game-integration-service.md#g06q11-application-bootstrap-decision)
+и [Federation authority v1](../architecture/federation-authority-v1.md):
+authenticated Voice account owns the app; a distinct allowlisted Voice operator
+approves sandbox; production is a separate reviewed admission; node enrollment
+uses pinned operator mTLS and out-of-band endpoint ownership attestation. Google
+OIDC is the real independent provider contract; fake JWKS proves verifier logic
+only. The remaining gate is evidence, not provider selection: follow the clean
+empty-DB/host walkthrough and negative cases in
+[acceptance Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open).
+Do not count fake-provider CI as real-provider acceptance or production approval.
 
 ### Q12. Совместимость, SLO и вместимость поставки
 
-Приняты version matrix, quotas и единый bundle; остаются конкретные API/node
-versions, support window, supported host/runtime, active-user/media/storage
-targets, retry/retention windows, RPO/RTO и G08/G09/G13 bounds. Цена/SLA не
-выводятся автоматически из решения использовать один экземпляр сервисов.
+API endpoints are versioned as `/api/v1` and Federation authority as `/v1`;
+the proposal is to support v1 until a successor major is generally available,
+then for 12 months. Compatibility must be proven by old-client/new-server and
+new-client/previous-server fixtures before production admission. This is a
+support policy proposal, not evidence of compatibility.
+
+Provisional single-host node qualification targets for planning are RPO ≤24h,
+RTO ≤4h, 250 concurrent authenticated clients, 50 concurrent media publishers,
+and 25 durable messages/second for a 60-minute steady-state run. The load profile
+uses two Space, real media, durable writes, a concurrent revoke, and a host
+restart; record p50/p95 latency, error rate, resource use, recovery point and
+recovery duration. Restore the latest scheduled backup into a fresh isolated
+host, validate owner/generation/revocation fences, then measure until readiness
+and permitted reads/writes return. Write a timestamped synthetic canary at least
+once per minute through the measured failure; RPO is failure time minus the
+latest recovered committed canary, and RTO is failure injection to readiness
+plus successful scoped read/write checks. These are unverified qualification proposals,
+not production capacity, SLO, or RPO/RTO claims. Revisit them against measured
+costs and supported hardware before production admission. Retry/retention values
+and G08/G09/G13 bounds keep their owning contracts and evidence gates; price/SLA
+is not inferred from using one service instance.
 
 До GI8/GI9: зафиксировать измеримые значения, платформы мессенджера для проверки
 и политику несовместимого upgrade. Нельзя считать media verifier реализуемым
