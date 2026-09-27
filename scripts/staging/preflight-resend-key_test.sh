@@ -49,7 +49,8 @@ printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voi
   "$encoded_key" >"${TMP}/existing.json"
 
 manifest() {
-  printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: voice-app-secrets\n  namespace: voice-staging\n'
+  printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: voice-app-secrets\n'
+  if [ "$1" != missing_namespace ]; then printf '  namespace: voice-staging\n'; fi
   if [ "$1" = encoded ] || [ "$1" = invalid_data ]; then printf 'data:\n'; else printf 'stringData:\n'; fi
   case "$1" in
     missing) ;;
@@ -58,6 +59,7 @@ manifest() {
     populated) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$key" ;;
     encoded) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$encoded_key" ;;
     invalid_data) printf '  AUTH_RESEND_API_KEY: "!"\n' ;;
+    missing_namespace) printf '  AUTH_RESEND_API_KEY: "%s"\n' "$key" ;;
   esac
 }
 
@@ -89,6 +91,7 @@ run_manifest_case spaces no
 run_manifest_case populated yes
 run_manifest_case encoded yes
 run_manifest_case invalid_data no
+run_manifest_case missing_namespace no
 
 run_existing_case() {
   local kind="$1" expected_mutations="$2" status

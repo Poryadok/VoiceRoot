@@ -15,7 +15,7 @@ def valid(document: object, namespace: str) -> bool:
         document.get("kind") != "Secret"
         or not isinstance(metadata, dict)
         or metadata.get("name") != "voice-app-secrets"
-        or metadata.get("namespace", namespace) != namespace
+        or metadata.get("namespace") != namespace
     ):
         return False
 
