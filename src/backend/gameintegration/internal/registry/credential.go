@@ -100,18 +100,18 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var ownerID uuid.UUID
-	var appStatus, envStatus string
-	err = tx.QueryRow(ctx, `SELECT a.owner_account_id, a.status, e.status FROM environments e
+	var appStatus, envStatus, environmentKind string
+	err = tx.QueryRow(ctx, `SELECT a.owner_account_id, a.status, e.status, e.kind FROM environments e
 		JOIN applications a ON a.id=e.application_id
 		WHERE e.id=$1 AND a.id=$2 FOR UPDATE OF e,a`, in.EnvironmentID, in.ApplicationID).
-		Scan(&ownerID, &appStatus, &envStatus)
+		Scan(&ownerID, &appStatus, &envStatus, &environmentKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrAdmissionConflict
 	}
 	if err != nil {
 		return Credential{}, fmt.Errorf("lock credential environment: %w", err)
 	}
-	if ownerID != in.OwnerAccountID || envStatus != "active" ||
+	if ownerID != in.OwnerAccountID || envStatus != "active" || environmentKind != "sandbox" ||
 		(appStatus != "sandbox" && appStatus != "active") {
 		return Credential{}, ErrAdmissionConflict
 	}

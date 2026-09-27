@@ -133,6 +133,11 @@ func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testin
 	require.Equal(t, http.StatusCreated, secondApp.Code)
 	secondAppID, err := uuid.Parse(decode(secondApp)["application_id"].(string))
 	require.NoError(t, err)
+	secondApproved := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+secondAppID.String()+"/admissions/sandbox", operatorToken, "t11-approve-2", "")
+	require.Equal(t, http.StatusCreated, secondApproved.Code, secondApproved.Body.String())
+	secondEnvID, err := uuid.Parse(decode(secondApproved)["environment_id"].(string))
+	require.NoError(t, err)
 	wrongOwner := call(http.MethodPut,
 		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/policy",
 		secondOwnerToken, "wrong-owner-policy", `{"expected_revision":1,"redirect_uris":["https://game.example/callback"],"allowed_origins":["https://game.example"],"providers":["google"],"player_scopes":["game.chat.read"]}`)
@@ -178,14 +183,35 @@ func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testin
 		AND column_name IN ('secret','raw_secret','secret_value')`).Scan(&rawCredentialColumns))
 	require.Zero(t, rawCredentialColumns)
 
-	productionCredential := call(http.MethodPost,
-		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+uuid.NewString()+"/credentials",
-		applicantToken, "t11-production-credential", `{"scopes":["game.events.write"]}`)
-	require.Equal(t, http.StatusForbidden, productionCredential.Code)
-
+	wrongApplicationCredential := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+secondAppID.String()+"/environments/"+envID.String()+"/credentials",
+		applicantToken, "t11-wrong-app-credential", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusForbidden, wrongApplicationCredential.Code)
+	wrongOwnerCredential := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		secondOwnerToken, "t11-wrong-owner-credential", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusForbidden, wrongOwnerCredential.Code)
+	crossEnvironmentCredential := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+secondEnvID.String()+"/credentials",
+		applicantToken, "t11-cross-env-credential", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusForbidden, crossEnvironmentCredential.Code)
 	var prodEnvironments int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM environments WHERE application_id=$1 AND kind='production'`, appID).Scan(&prodEnvironments))
 	require.Zero(t, prodEnvironments)
+
+	// Seed the persisted production state that this API slice cannot create.
+	productionEnvID := uuid.New()
+	_, err = pool.Exec(ctx, `UPDATE applications SET status='active' WHERE id=$1`, appID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO environments (id, application_id, kind, status) VALUES ($1,$2,'production','active')`, productionEnvID, appID)
+	require.NoError(t, err)
+	productionCredential := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+productionEnvID.String()+"/credentials",
+		applicantToken, "t11-production-environment-credential", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusForbidden, productionCredential.Code)
+
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM environments WHERE application_id=$1 AND kind='production'`, appID).Scan(&prodEnvironments))
+	require.Equal(t, 1, prodEnvironments)
 	var draftApplications int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM applications WHERE owner_account_id=$1 AND status='draft'`, applicant).Scan(&draftApplications))
 	require.Zero(t, draftApplications)
