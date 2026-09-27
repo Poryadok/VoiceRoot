@@ -8,7 +8,8 @@
 #   AUTH_JWT_PRIVATE_KEY_FILE        (default: repo jwt-test-private.pem)
 #   USER_R2_* / FILE_R2_*            optional endpoint/bucket settings; credentials use voice-minio-credentials
 #
-# CI: set secrets.STAGING_APP_SECRETS_YAML (base64 full Secret manifest) to apply custom values instead.
+# CI: set secrets.STAGING_APP_SECRETS_YAML (base64 Secret manifest) to patch
+# only supplied keys into the live Secret after validating the effective set.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -16,8 +17,41 @@ NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 SECRET_NAME="voice-app-secrets"
 
 if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ]; then
-  echo "Applying ${SECRET_NAME} from STAGING_APP_SECRETS_YAML_B64 (merge)"
-  echo "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d | kubectl apply -f -
+  umask 077
+  live_file="$(mktemp)"
+  upload_file="$(mktemp)"
+  patch_file="$(mktemp)"
+  trap 'rm -f "${live_file}" "${upload_file}" "${patch_file}"' EXIT
+  if ! kubectl get secret "$SECRET_NAME" -n "$NS" --ignore-not-found=true -o json >"$live_file" 2>/dev/null; then
+    echo "ERROR: unable to inspect live ${SECRET_NAME}" >&2
+    exit 1
+  fi
+  if ! printf '%s' "$STAGING_APP_SECRETS_YAML_B64" | base64 -d 2>/dev/null |
+    kubectl create --dry-run=client --validate=false -f - -o json >"$upload_file" 2>/dev/null; then
+    echo 'ERROR: invalid uploaded staging app Secret' >&2
+    exit 1
+  fi
+  if ! python3 "$ROOT/scripts/staging/check-resend-key.py" "$NS" --merge-check "$live_file" <"$upload_file"; then
+    echo "ERROR: effective ${SECRET_NAME} is incomplete" >&2
+    exit 1
+  fi
+  if [ -s "$live_file" ]; then
+    if ! python3 "$ROOT/scripts/staging/check-resend-key.py" "$NS" --patch "$live_file" <"$upload_file" >"$patch_file"; then
+      echo "ERROR: unable to prepare ${SECRET_NAME} patch" >&2
+      exit 1
+    fi
+    if ! kubectl patch secret "$SECRET_NAME" -n "$NS" --type=json --patch-file "$patch_file" >/dev/null 2>&1; then
+      echo "ERROR: ${SECRET_NAME} changed or patch failed; retry after inspecting key presence" >&2
+      exit 1
+    fi
+    echo "Patched supplied ${SECRET_NAME} keys in ${NS}"
+  else
+    if ! printf '%s' "$STAGING_APP_SECRETS_YAML_B64" | base64 -d 2>/dev/null | kubectl create -f - >/dev/null 2>&1; then
+      echo "ERROR: ${SECRET_NAME} create failed; retry after inspecting key presence" >&2
+      exit 1
+    fi
+    echo "Created ${SECRET_NAME} in ${NS} from complete upload"
+  fi
   exit 0
 fi
 

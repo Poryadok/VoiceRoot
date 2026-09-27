@@ -16,7 +16,16 @@ validate_manifest() {
 
 failure='invalid Secret document'
 if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ]; then
-  if ! failure="$(printf '%s' "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d 2>/dev/null | validate_manifest)"; then
+  umask 077
+  live_file="$(mktemp)"
+  trap 'rm -f "${live_file}"' EXIT
+  if ! kubectl get secret voice-app-secrets -n "${NS}" --ignore-not-found=true -o json >"${live_file}" 2>/dev/null; then
+    echo 'ERROR: unable to inspect live staging voice-app-secrets' >&2
+    exit 1
+  fi
+  if ! failure="$(printf '%s' "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d 2>/dev/null |
+    kubectl create --dry-run=client --validate=false -f - -o json 2>/dev/null |
+    python3 "${CHECK}" "${NS}" --merge-check "${live_file}")"; then
     echo "ERROR: staging voice-app-secrets preflight failed: ${failure}" >&2
     exit 1
   fi
