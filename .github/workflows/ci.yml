@@ -1356,7 +1356,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+          needs.changes.outputs.global == 'true'
         ) ||
         (
           github.event_name == 'push' &&
