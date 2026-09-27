@@ -587,6 +587,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 -m pip install PyYAML==6.0.3
+      - name: Check uploaded Auth mail fields
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d |
+            python3 scripts/staging/mail-only-patch.py "${VOICE_K8S_NAMESPACE:-voice-staging}" --yaml-check
       - name: Validate uploaded staging app Secret
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}

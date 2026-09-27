@@ -5,6 +5,10 @@ import base64
 import importlib.util
 from pathlib import Path
 import secrets
+import subprocess
+import sys
+
+import yaml
 
 
 path = Path(__file__).with_name("mail-only-patch.py")
@@ -34,6 +38,10 @@ for missing in ("AUTH_RESEND_API_KEY", "AUTH_RESEND_FROM"):
     broken = {**document, "stringData": {**document["stringData"], missing: ""}}
     assert module.build_patch(broken, "voice-staging") is None
 
+for sender_format in ("not-an-address", "Voice <sender@>", "Voice <sender@example.invalid> extra"):
+    broken = {**document, "stringData": {**document["stringData"], "AUTH_RESEND_FROM": sender_format}}
+    assert module.build_patch(broken, "voice-staging") is None
+
 encoded = {
     **document,
     "stringData": {},
@@ -46,4 +54,11 @@ assert set(module.build_patch(encoded, "voice-staging")["data"]) == {
     "AUTH_RESEND_API_KEY", "AUTH_RESEND_FROM"
 }
 assert module.build_patch({**document, "metadata": {"name": "wrong", "namespace": "voice-staging"}}, "voice-staging") is None
+
+checked = subprocess.run(
+    [sys.executable, str(path), "voice-staging", "--yaml-check"],
+    input=yaml.safe_dump(document), text=True, capture_output=True, check=False,
+)
+assert checked.returncode == 0 and checked.stdout.strip() == "MAIL_ONLY_INPUT=PASS"
+assert key not in checked.stdout + checked.stderr
 print("Mail-only patch contract passed.")

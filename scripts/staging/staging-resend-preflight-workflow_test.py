@@ -49,6 +49,7 @@ assert "environment: staging" in validation, "validation must read the staging E
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in validation
 assert "STAGING_SECRET_OFFLINE_PARSE: '1'" in validation
 assert "python3 -m pip install PyYAML==6.0.3" in validation
+assert "mail-only-patch.py" in validation and "--yaml-check" in validation
 assert "bash scripts/staging/preflight-resend-key.sh" in validation
 assert "configure-kubectl-ci.sh" not in validation, "validation must not load cluster credentials"
 assert "setup-kubectl" not in validation, "validation must parse YAML without kubectl"
