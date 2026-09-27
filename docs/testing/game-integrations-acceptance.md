@@ -214,6 +214,21 @@ reclaimed atomically after 30 seconds, repeated simulated crashes can reclaim
 again without another quota charge, and concurrent recovery still permits only
 one proof call. The 121st app attempt is rejected before Bot. These are GIS
 database/fake-verifier checks, not proof of the live internal endpoint.
+
+The T11 staged production-admission slice is development-only and does not
+close T11: operator admission creates one app-scoped `production/pending`
+environment without changing app `sandbox` status; wrong principal, owner
+self-approval, wrong app state, foreign application IDs, malformed body, and
+idempotency hash conflict are denied. Exact operator/key retry returns the
+same pending environment, and the unique `(application_id,kind)` cap prevents
+a second environment. The owner can CAS-stage only that environment's separate
+Google policy with production HTTPS redirect validation; policy revision
+conflicts and wrong-owner updates fail. Auth's signed resolver and the GIS
+credential issuer both remain fail-closed for pending/production as applicable.
+Suspension/restore never promotes pending to active, and no route accepts or
+returns production secrets. Tests use PostgreSQL and fake/no provider; real
+Google/user-proof, activation, and out-of-band secret provisioning remain
+OPEN / NOT RUN.
 GIS requires `BOT_INTERNAL_URL` together with the dedicated
 `GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64`; omitting both keeps unrelated local
 APIs available, while installation fails closed. Bot requires the same key and

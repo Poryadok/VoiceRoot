@@ -64,3 +64,40 @@ func TestSandboxPolicyRejectsUnsafeRedirectAndScope(t *testing.T) {
 	_, _, err := normalizePolicy(base)
 	require.ErrorIs(t, err, ErrInvalidPolicy)
 }
+
+func TestPendingProductionPolicyIsOwnerScopedHTTPSOnlyAndUnavailableToAuth(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	store := &Store{Pool: pool}
+	owner := uuid.New()
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{OwnerAccountID: owner, Name: "Game", IdempotencyKey: "app-prod-policy"})
+	require.NoError(t, err)
+	_, err = store.ApproveSandbox(ctx, ApproveSandboxInput{ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "sandbox-prod-policy"})
+	require.NoError(t, err)
+	env, err := store.PrepareProductionAdmission(ctx, PrepareProductionAdmissionInput{ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "prod-policy"})
+	require.NoError(t, err)
+
+	input := UpdateSandboxPolicyInput{OwnerAccountID: owner, ApplicationID: app.ID, EnvironmentID: env.ID,
+		ExpectedRevision: env.Revision, RedirectURIs: []string{"https://game.example/auth/callback"},
+		AllowedOrigins: []string{"https://game.example"}, Providers: []string{"google"},
+		PlayerScopes: []string{"game.chat.read"}, IdempotencyKey: "production-policy-1"}
+	updated, err := store.UpdateSandboxPolicy(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, "pending", updated.Status)
+	_, err = store.LoadAuthorizationPolicy(ctx, env.ID)
+	require.ErrorIs(t, err, ErrPolicyUnavailable)
+
+	unsafe := input
+	unsafe.IdempotencyKey = "production-policy-loopback"
+	unsafe.ExpectedRevision = updated.Revision
+	unsafe.RedirectURIs = []string{"http://localhost:8765/callback"}
+	_, err = store.UpdateSandboxPolicy(ctx, unsafe)
+	require.ErrorIs(t, err, ErrInvalidPolicy)
+
+	foreign := input
+	foreign.OwnerAccountID = uuid.New()
+	foreign.IdempotencyKey = "production-policy-foreign"
+	foreign.ExpectedRevision = updated.Revision
+	_, err = store.UpdateSandboxPolicy(ctx, foreign)
+	require.ErrorIs(t, err, ErrAdmissionConflict)
+}

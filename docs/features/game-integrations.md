@@ -284,6 +284,13 @@ Managed Voice и нода студии используют одинаковый
 Для self-hosted ноды нужны резервные копии, обновления, media capacity, мониторинг
 и moderation contact. Регистрация ноды не выдаёт безлимитные ресурсы master.
 
+Production setup is separate from sandbox and starts in a pending environment;
+its policy is configured independently. Pending production is not usable for
+identity admission or service credentials. Activation waits for reviewed operator
+approval, independent provider/user-proof acceptance, and out-of-band secret
+provisioning. The current staged workflow and open gates are specified in the
+[Game Integration API contract](../architecture/game-integration-api.md#t11-staged-production-admission-development-only).
+
 Self-hosted поставка — единый **Voice Node** bundle: один экземпляр необходимых
 сервисов и инфраструктуры, единые установка/config/version/update/backup.
 Внутренние микросервисные контракты сохраняются; оператор не собирает весь Voice
