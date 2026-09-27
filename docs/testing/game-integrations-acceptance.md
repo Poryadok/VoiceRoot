@@ -81,7 +81,7 @@ SDK03/SDK05/SDK06 проверяют серверную и messenger часть 
 варианты тех же проверок выполняются при поставке инструментов. OS-specific
 SDK cache/cleanup/UI не принимаются по результату server-only теста.
 
-### Q11 bootstrap evidence (contract; runtime gate remains open)
+### Q11 bootstrap evidence (API-only clean-start passed; real-Google gate open)
 
 The Auth-only T13a contract is independently testable with deterministic fake
 Google JWKS and synthetic game-ticket keys. Its Auth module suite must prove
@@ -161,7 +161,20 @@ close the separate live-Google gate or production admission.
 rtk make game-integrations-q11-acceptance
 ```
 
-The live-provider gate is separate and also must be added by implementation:
+The API-only clean-start gate passed on feature commit
+`165a11ecbdd45e0f39ca44698d56071d584fadc8`. The target ran the GIS bootstrap
+selector and Federation clean-start mTLS/audit path. On the same feature state,
+GIS `rtk go test ./...` passed 92 tests in 4 packages, Federation passed 38 tests
+in 1 package, and `rtk go vet ./...` passed in both modules. Before the master
+sync, hosted PR #509 checks `changes`, `markdown-link-check`, and `ci-gate` were
+green; the Q11 target was rerun successfully after the sync. This is API-only
+clean-start evidence and does not prove real Google login or production
+admission.
+
+The separate live-Google provider gate is OPEN / NOT RUN. It is not invoked by
+the API-only clean-start target; the opt-in harness still needs to be added and
+must perform a real login and JWKS refresh with a disposable Voice-owned client.
+No provider call was made for this clean-start proof.
 
 ```powershell
 rtk make game-integrations-q11-google-live
@@ -351,7 +364,9 @@ change; Q03 ownership transfer; Q04 signed revisions/files; Q05 confirmation
 bypass; Q06 flood+revoke; Q07 profile/alias isolation; Q08 conversion+voice race;
 Q09 moderation path; Q10 deletion+restore; Q11 clean enrollment/provider proof
 as specified above; Q12 measured capacity/compatibility. Q11 ownership, approver,
-provider, and bootstrap decisions are frozen; its runtime evidence remains open.
+provider, and bootstrap decisions are frozen. The API-only clean-start proof
+passed at `165a11e`; the real-Google gate is OPEN / NOT RUN, and production
+admission remains open.
 Q12 has provisional targets and a measurement procedure; its results remain
 unmeasured. An open runtime gate is never replaced by a skipped test when the
 sprint is declared done.
