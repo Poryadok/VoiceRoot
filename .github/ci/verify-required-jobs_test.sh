@@ -85,6 +85,30 @@ run_gate 1 \
   JOB_BACKEND_AUTH="${JOB_BACKEND_AUTH}" JOB_DEVELOPER_PORTAL="${JOB_DEVELOPER_PORTAL}" \
   JOB_ADMIN="${JOB_ADMIN}"
 
+echo "== broad Go CI with empty PR integration matrix permits skipped integration job =="
+all_jobs_success
+run_gate 0 \
+  GLOBAL=true RUN_GO=true RUN_GO_INTEGRATION=false RUN_PKG=true \
+  JOB_PROTOBUF="${JOB_PROTOBUF}" JOB_COMPOSE_CONFIG="${JOB_COMPOSE_CONFIG}" \
+  JOB_CI_SCRIPT_TESTS="${JOB_CI_SCRIPT_TESTS}" \
+  JOB_FLUTTER="${JOB_FLUTTER}" JOB_FLUTTER_DEVICE_DRIVER="${JOB_FLUTTER_DEVICE_DRIVER}" \
+  JOB_WEB="${JOB_WEB}" JOB_GOLANGCI="${JOB_GOLANGCI}" \
+  JOB_BACKEND_GO_PKG="${JOB_BACKEND_GO_PKG}" JOB_BACKEND_GO="${JOB_BACKEND_GO}" \
+  JOB_BACKEND_GO_INTEGRATION_PR=skipped \
+  JOB_BACKEND_AUTH="${JOB_BACKEND_AUTH}" JOB_DEVELOPER_PORTAL="${JOB_DEVELOPER_PORTAL}" \
+  JOB_ADMIN="${JOB_ADMIN}"
+
+echo "== changed-service integration matrix requires its PR job =="
+all_jobs_success
+run_gate 1 \
+  RUN_GO=true RUN_GO_INTEGRATION=true RUN_PKG=true \
+  JOB_PROTOBUF=skipped JOB_COMPOSE_CONFIG=skipped \
+  JOB_FLUTTER=skipped JOB_FLUTTER_DEVICE_DRIVER=skipped \
+  JOB_WEB=skipped JOB_GOLANGCI="${JOB_GOLANGCI}" \
+  JOB_BACKEND_GO_PKG="${JOB_BACKEND_GO_PKG}" JOB_BACKEND_GO="${JOB_BACKEND_GO}" \
+  JOB_BACKEND_GO_INTEGRATION_PR=skipped \
+  JOB_BACKEND_AUTH=skipped JOB_DEVELOPER_PORTAL=skipped JOB_ADMIN=skipped
+
 echo "== package rollout with skipped renderer image fails =="
 all_jobs_success
 run_gate 1 \
