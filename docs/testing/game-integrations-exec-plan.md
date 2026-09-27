@@ -162,10 +162,12 @@ contracts land before consumers; activation lands after all consumers.
   - [x] T07a local proof: `TestT07aPermitAuthoritySerializesIssueAndRevoke`,
     `TestT07aCallbackPersistsPermitAndImmutableReceiptThenReplays`,
     `TestT07aAuthorizationDenialAndAdmissionFailuresHaveNoEffect`, and
-    `TestT07aPermitStartAndCompletionBoundsAreExclusive` pass; the three
+    `TestT07aPermitStartAndCompletionBoundsAreExclusive`, plus
+    `TestT07aCompletionDeadlineCheckedAtTransactionCommit` pass; the four
     callback integration tests use isolated PostgreSQL 16 containers. The
     receipt test rejects UPDATE, DELETE and TRUNCATE while preserving committed
-    rows. Run from `src/backend/controlledgame/`:
+    rows; the final pre-commit check rejects a deadline crossed during receipt
+    persistence. Run from `src/backend/controlledgame/`:
     `rtk go test ./... -run '^TestT07a' -count=1`, then
     `rtk go test ./... -count=1`, `rtk go vet ./...`, and
     `rtk golangci-lint run ./...`. Exact-head review and hosted PR checks remain

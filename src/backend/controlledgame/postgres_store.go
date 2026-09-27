@@ -239,6 +239,12 @@ func (store *PostgresStore) accept(
 	if _, err := tx.Exec(ctx, `UPDATE command_inbox SET receipt_body = $2 WHERE command_id = $1`, commandID, resultBody); err != nil {
 		return nil, false, err
 	}
+	// Persistence itself is part of the bounded completion window. Recheck
+	// after every durable write so a slow result/outbox/inbox write cannot
+	// commit an effect at or beyond the exclusive permit deadline.
+	if store.clock().UTC().Unix() >= completeBefore {
+		return nil, false, errPermitWindowExpired
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, false, err
 	}

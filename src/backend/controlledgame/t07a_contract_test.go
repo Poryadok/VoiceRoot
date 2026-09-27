@@ -300,6 +300,132 @@ func TestT07aPermitStartAndCompletionBoundsAreExclusive(t *testing.T) {
 	}
 }
 
+func TestT07aCompletionDeadlineCheckedAtTransactionCommit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	pool := integrationtest.StartPostgres(t, ctx, "controlled_game_t07a_commit_deadline_test_db", "")
+	createT07aAuthorizationFixtures(t, ctx, pool)
+	createT07aEffectFixtures(t, ctx, pool)
+
+	base := time.Unix(1790500000, 0).UTC()
+	var clockMu sync.Mutex
+	now := base
+	clock := func() time.Time {
+		clockMu.Lock()
+		defer clockMu.Unlock()
+		return now
+	}
+	setNow := func(value time.Time) {
+		clockMu.Lock()
+		defer clockMu.Unlock()
+		now = value
+	}
+	authority := newT07aPermitAuthority(clock)
+	store, err := OpenPostgresStore(ctx, pool, clock)
+	require.NoError(t, err)
+	const lockKey int64 = 741234
+	_, err = pool.Exec(ctx, `CREATE FUNCTION controlled_game_test_hold_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			PERFORM pg_advisory_xact_lock(741234);
+			RETURN NEW;
+		END;
+		$$;
+		CREATE TRIGGER controlled_game_test_receipt_lock BEFORE UPDATE ON command_inbox
+		FOR EACH ROW EXECUTE FUNCTION controlled_game_test_hold_receipt()`)
+	require.NoError(t, err)
+
+	locker, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := false
+	var server *httptest.Server
+	cleanup := func() {
+		if locked {
+			if _, unlockErr := locker.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, lockKey); unlockErr != nil {
+				t.Errorf("release advisory lock: %v", unlockErr)
+			}
+			locked = false
+		}
+		if server != nil {
+			server.Close()
+		}
+		if _, dropErr := pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS controlled_game_test_receipt_lock ON command_inbox`); dropErr != nil {
+			t.Errorf("drop receipt blocking trigger: %v", dropErr)
+		}
+		if _, dropErr := pool.Exec(context.Background(), `DROP FUNCTION IF EXISTS controlled_game_test_hold_receipt()`); dropErr != nil {
+			t.Errorf("drop receipt blocking trigger function: %v", dropErr)
+		}
+		locker.Release()
+	}
+	locked = true // Cleanup also attempts unlock if acquisition returns an ambiguous error.
+	_, err = locker.Exec(ctx, `SELECT pg_advisory_lock($1)`, lockKey)
+	if err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	body := t07aCommandBody(t, 70, 80, nil)
+	seedT07aAuthorization(t, ctx, pool, body)
+	var effectCalls int
+	handler := NewHandler(HandlerConfig{
+		Store:           store,
+		PermitAuthority: authority,
+		Authorize:       authorizeT07aTestBinding,
+		Credentials:     map[string]SigningCredential{vectorKeyID: testCredential(testKey())},
+		Clock:           clock,
+		Apply: func(ctx context.Context, tx pgx.Tx, raw []byte) ([]byte, error) {
+			effectCalls++
+			command, err := parseCallbackCommand(raw)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO controlled_game_test_effects(command_id, character_id) VALUES ($1,$2)`, command.CommandID, "game-character-7"); err != nil {
+				return nil, err
+			}
+			return t07aResultForCommand(raw)
+		},
+	})
+	server = httptest.NewServer(handler)
+
+	type sendResult struct {
+		response callbackResponse
+		err      error
+	}
+	result := make(chan sendResult, 1)
+	go func() {
+		response, err := sendCanonicalCommand(server.Client(), server.URL, body, testKey())
+		result <- sendResult{response: response, err: err}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_locks WHERE locktype='advisory' AND classid=0::oid AND objid=$1::oid
+			AND objsubid=1 AND NOT granted)`, lockKey).Scan(&waiting); err != nil {
+			t.Errorf("observe receipt write lock: %v", err)
+			return false
+		}
+		return waiting
+	}, 5*time.Second, 10*time.Millisecond, "receipt persistence must reach its final UPDATE")
+
+	// The transaction is blocked after Apply, result and outbox writes. Crossing
+	// the exclusive completion boundary during this persistence interval must
+	// still abort the entire transaction before commit.
+	setNow(base.Add(60 * time.Second))
+	if _, err := locker.Exec(ctx, `SELECT pg_advisory_unlock($1)`, lockKey); err != nil {
+		t.Fatal(err)
+	}
+	locked = false
+	sent := <-result
+	require.NoError(t, sent.err)
+	require.Equal(t, http.StatusGone, sent.response.status)
+	require.Equal(t, 1, effectCalls, "the attempted effect must be rolled back")
+	assertNoDurableCommandRows(t, ctx, pool)
+	var effects int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM controlled_game_test_effects`).Scan(&effects))
+	require.Zero(t, effects, "the test game effect must roll back with its receipt")
+}
+
 func newT07aHandler(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clock func() time.Time, authority PermitAuthority, apply EffectApplier) http.Handler {
 	t.Helper()
 	store, err := OpenPostgresStore(ctx, pool, clock)
