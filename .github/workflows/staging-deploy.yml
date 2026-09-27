@@ -87,13 +87,19 @@ on:
         type: boolean
         default: false
 
+      mail_only:
+        description: "Patch only Auth mail fields and restart Auth"
+        required: false
+        type: boolean
+        default: false
+
 permissions:
   contents: read
   packages: read
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
@@ -357,7 +363,7 @@ jobs:
         run: bash scripts/staging/smoke-observability.sh
 
   nats-search-jetstream-probe:
-    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true
+    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true && inputs.mail_only != true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 8
     environment: staging
@@ -572,7 +578,7 @@ jobs:
           esac
 
   validate-app-secret:
-    if: github.event_name == 'workflow_dispatch' && inputs.validate_app_secret_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_app_secret_only == true && inputs.mail_only != true
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -593,3 +599,25 @@ jobs:
             exit 1
           fi
           bash scripts/staging/preflight-resend-key.sh
+
+  mail-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.mail_only == true && inputs.validate_app_secret_only != true && inputs.nats_probe_only != true
+    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v5
+      - name: Configure kubectl for Auth-only update
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+      - name: Update Auth mail fields only
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: bash scripts/staging/mail-only-resend.sh

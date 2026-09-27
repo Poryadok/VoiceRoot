@@ -43,7 +43,7 @@ assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" i
 assert "validate_app_secret_only:" in source, "read-only dispatch input missing"
 assert "inputs.validate_app_secret_only != true" in source, "validation dispatch must skip deploy job"
 assert "\n  validate-app-secret:\n" in source, "read-only validation job missing"
-validation = source.split("\n  validate-app-secret:\n", 1)[1]
+validation = source.split("\n  validate-app-secret:\n", 1)[1].split("\n  mail-only:\n", 1)[0]
 assert "runs-on: ubuntu-latest" in validation, "validation must use an isolated hosted runner"
 assert "environment: staging" in validation, "validation must read the staging Environment secret"
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in validation
@@ -90,4 +90,16 @@ assert checker.REQUIRED_KEYS == expected, (
     f"app Secret preflight/ref mismatch: missing {sorted(expected - checker.REQUIRED_KEYS)}, "
     f"stale {sorted(checker.REQUIRED_KEYS - expected)}"
 )
+
+assert "mail_only:" in source, "mail-only dispatch input missing"
+assert "inputs.mail_only != true" in source, "mail-only dispatch must skip other jobs"
+assert "\n  mail-only:\n" in source, "mail-only job missing"
+mail_job = source.split("\n  mail-only:\n", 1)[1]
+assert "github.event_name == 'workflow_dispatch' && inputs.mail_only == true" in mail_job
+assert "environment: staging" in mail_job
+assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in mail_job
+assert "bash scripts/staging/mail-only-resend.sh" in mail_job
+assert "set -x" not in mail_job
+assert "render-and-apply.sh" not in mail_job
+assert "ensure-minio-credentials.sh" not in mail_job
 print("Staging mail preflight workflow ordering passed.")

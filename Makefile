@@ -329,6 +329,8 @@ staging-kubectl-configmap-test:
 staging-app-secrets-test:
 	python3 "$(ROOT)/scripts/staging/staging-resend-preflight-workflow_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/preflight-resend-key_test.sh"
+	python3 "$(ROOT)/scripts/staging/mail-only-patch_test.py"
+	$(BASH) "$(ROOT)/scripts/staging/mail-only-resend_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-minio-credentials_test.sh"
