@@ -20,7 +20,7 @@ fi
 
 # Keep in sync with Makefile GO_MODULES_LINT
 modules=(
-  pkg analytics bot chat federation file gateway matchmaking messaging moderation
+  pkg analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation
   notification realtime role search social space story subscription user voice
 )
 
