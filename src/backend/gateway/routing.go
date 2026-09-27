@@ -25,9 +25,39 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims tokenClaims
-	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path)
+	sdkPolicy, sdkAuthorizationRoute := sdkAuthorizationPolicy(r.Method, r.URL.Path)
+	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path) ||
+		(sdkAuthorizationRoute && sdkPolicy.principal == sdkAuthorizationCodeProof)
 	botRoute := isBotTokenRESTRoute(r.URL.Path)
-	if !publicRoute {
+	if sdkAuthorizationRoute {
+		switch sdkPolicy.principal {
+		case sdkAuthorizationSDKAccount, sdkAuthorizationRegularAccount:
+			var code string
+			claims, code = g.authenticate(r)
+			if code != "" {
+				status := http.StatusUnauthorized
+				if code == "auth_unavailable" {
+					status = http.StatusServiceUnavailable
+				}
+				writeJSON(w, status, map[string]string{"error": code})
+				return
+			}
+			wantAccountType := "sdk-account"
+			if sdkPolicy.principal == sdkAuthorizationRegularAccount {
+				wantAccountType = "regular"
+			}
+			if effectiveAccountType(claims) != wantAccountType {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			applyClaims(r, claims)
+		case sdkAuthorizationLinkedBearer:
+			if !hasSingleBearerAuthorization(r) {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
+				return
+			}
+		}
+	} else if !publicRoute {
 		if botRoute {
 			if botBearerToken(r) == "" {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
