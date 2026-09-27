@@ -327,6 +327,7 @@ staging-kubectl-configmap-test:
 	$(BASH) "$(ROOT)/scripts/staging/lib/kubectl-configmap_test.sh"
 
 staging-app-secrets-test:
+	$(BASH) "$(ROOT)/scripts/staging/preflight-resend-key_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-minio-credentials_test.sh"

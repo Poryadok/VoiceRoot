@@ -16,6 +16,8 @@ export VOICE_IMAGE_TAG="${TAG}"
 export VOICE_K8S_NAMESPACE="${NS}"
 export DEPLOY_MODE="${MODE}"
 
+bash "${ROOT}/scripts/staging/preflight-resend-key.sh"
+
 echo "Applying Voice staging: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
 case "${MODE}" in
