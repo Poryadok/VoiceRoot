@@ -83,11 +83,11 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 	var effects int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM controlled_game_test_effects`).Scan(&effects))
 	require.Equal(t, 1, effects, "same command retry must not repeat the effect")
-	var storedResult, outboxResult string
+	var storedResult, outboxResult []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT result_body FROM command_results`).Scan(&storedResult))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT result_body FROM result_outbox`).Scan(&outboxResult))
-	require.Equal(t, canonicalResult, storedResult)
-	require.Equal(t, canonicalResult, outboxResult)
+	require.Equal(t, canonicalResult, string(storedResult))
+	require.Equal(t, canonicalResult, string(outboxResult))
 	var appliedCommandID string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT command_id FROM controlled_game_test_effects`).Scan(&appliedCommandID))
 	require.Equal(t, expected.CommandID, appliedCommandID, "effect must use the command ID from the signed envelope")
