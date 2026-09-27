@@ -96,16 +96,19 @@ contracts land before consumers; activation lands after all consumers.
   - [x] T03 permit epoch frozen: first committed admission mints
     `permit_issued_at`; t=15/t=31 first delivery may obtain a fresh epoch while
     authorized/unexpired; permit retries preserve one epoch; revoke shares its
-    serialization point. Runtime proof remains in T55/T07a.
+    serialization point. T07a receiver permit/revoke and completion-window
+    proof is complete; GIS online admission integration remains in T55.
   - [x] T03 G05/G06/Q11 decisions link to the existing `/api/v1`, Federation
     `/v1`, Google OIDC, GIS owner/operator bootstrap, and Federation mTLS
     contracts. Q11 clean-start, cross-scope negatives, fake-vs-real provider
-    evidence are specified in acceptance; runtime evidence remains open.
+    evidence are specified in acceptance; the API-only clean-start proof passed
+    at feature commit `165a11e`. The real-Google/provider proof remains open.
   - [x] T03-Q11-FED: Federation HTTP request-ID normalization and the bounded
     Q11 denial-audit fields, append-only storage, and TLS-handshake exclusion
     are frozen in [Federation authority v1](../architecture/federation-authority-v1.md)
-    and [Q11 acceptance](game-integrations-acceptance.md). This closes no broad
-    T03/T04 trust matrix or Federation runtime acceptance gate.
+    and [Q11 acceptance](game-integrations-acceptance.md). The Q11 clean-start
+    Federation HTTP path passed at `165a11e`; this closes no broad T03/T04 trust
+    matrix or wider Federation runtime gate.
   - [x] T03 Q12 provisional one-host capacity/RPO/RTO qualification targets and
     restore/load measurement method recorded in the design audit. These values
     are proposals only; T08/T93 must replace them with measured evidence.
@@ -139,7 +142,7 @@ contracts land before consumers; activation lands after all consumers.
     remain open.
   - [ ] Other OpenAPI/proto/resource contracts and executable compatibility
     tests remain open; this docs decision does not claim routes are implemented.
-- [ ] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
+- [x] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
   module and dedicated test DB: durable command inbox/outbox and transactional
   effect/result receipt as specified in the v1 contract. Never register it in
   production GIS or use `game_integration_db` for game effects. Version and
@@ -175,8 +178,9 @@ contracts land before consumers; activation lands after all consumers.
     persistence. Run from `src/backend/controlledgame/`:
     `rtk go test ./... -run '^TestT07a' -count=1`, then
     `rtk go test ./... -count=1`, `rtk go vet ./...`, and
-    `rtk golangci-lint run ./...`. Exact-head review and hosted PR checks remain
-    required before closing T07a; T03/T04/T06 parents remain open.
+    `rtk golangci-lint run ./...`. PR #508 merged after a separate Codex
+    exact-head review returned CLEAR and hosted checks passed. Broad
+    T03/T04/T06 parents remain open.
 - [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
   keys only after T15 key proof/registration semantics are implemented.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
@@ -216,10 +220,12 @@ contracts land before consumers; activation lands after all consumers.
   selection, per-device actor keys, recovery, or wider G01 trust policy.
   Consumer: remaining T13/Auth identity work and the later T14 authorization
   flow. Required acceptance is the T13a
-  module suite described in [Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open);
-  clean-start and real-Google gates remain separate and open. T13a module and
+  module suite described in [Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open);
+  the separate API-only clean-start gate passed at feature commit `165a11e`;
+  the real-Google gate is OPEN / NOT RUN, and production admission remains open.
+  T13a module and
   full Auth Maven checks passed on feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`;
-  see the exact counts and scope in [Q11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open).
+  see the exact counts and scope in [Q11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
 - [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a
