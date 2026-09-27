@@ -16,6 +16,15 @@ validate_manifest() {
 
 failure='invalid Secret document'
 if [ -n "${STAGING_APP_SECRETS_YAML_B64:-}" ]; then
+  if [ "${STAGING_SECRET_OFFLINE_PARSE:-}" = 1 ]; then
+    if ! failure="$(printf '%s' "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d 2>/dev/null |
+      python3 "${CHECK}" "${NS}" --yaml-upload)"; then
+      echo "ERROR: staging app Secret upload format failed: ${failure}" >&2
+      exit 1
+    fi
+    echo 'Staging app Secret upload format passed; effective completeness requires live Secret preflight.'
+    exit 0
+  fi
   umask 077
   live_file="$(mktemp)"
   trap 'rm -f "${live_file}"' EXIT

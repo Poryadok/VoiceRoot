@@ -30,6 +30,7 @@ PY
 cat >"$TMP/kubectl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[ "${TEST_FORBID_KUBECTL:-}" != 1 ] || { echo 'offline check called kubectl' >&2; exit 1; }
 case "$1 $2" in
   'get secret')
     if [ -s "$TEST_STATE/live.json" ]; then cat "$TEST_STATE/live.json"; fi
@@ -48,6 +49,13 @@ EOF
 chmod +x "$TMP/kubectl"
 export PATH="$TMP:$PATH"
 export STAGING_APP_SECRETS_YAML_B64="$(base64 -w0 "$TMP/upload.json")"
+
+TEST_FORBID_KUBECTL=1 STAGING_SECRET_OFFLINE_PARSE=1 \
+  bash "$ROOT/scripts/staging/preflight-resend-key.sh" >"$TMP/offline.out"
+grep -Fq 'effective completeness requires live Secret preflight' "$TMP/offline.out" || {
+  echo 'offline check claimed effective completeness' >&2
+  exit 1
+}
 
 bash "$ROOT/scripts/staging/preflight-resend-key.sh" >"$TMP/preflight.out"
 bash "$ROOT/scripts/staging/ensure-app-secrets.sh" >"$TMP/ensure.out"

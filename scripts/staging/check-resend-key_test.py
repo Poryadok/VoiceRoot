@@ -83,6 +83,12 @@ class MergeUploadTest(unittest.TestCase):
     def test_empty_upload_is_rejected(self):
         self.assertIsNone(module.plan_upload(secret(string_data={}, version=None), secret(data=self.live_data), "voice-staging"))
 
+    def test_offline_upload_format_accepts_partial_but_rejects_invalid_encoding(self):
+        upload = secret(string_data={"AUTH_RESEND_API_KEY": "new"}, version=None)
+        self.assertEqual(module.uploaded_data(upload, "voice-staging"), {"AUTH_RESEND_API_KEY": encoded("new")})
+        invalid = secret(data={"AUTH_RESEND_API_KEY": "!"}, version=None)
+        self.assertIsNone(module.uploaded_data(invalid, "voice-staging"))
+
 
 if __name__ == "__main__":
     unittest.main()

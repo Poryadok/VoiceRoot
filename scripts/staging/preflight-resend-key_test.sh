@@ -47,7 +47,7 @@ trap 'rm -rf "${TMP}"; unset key' EXIT
 encoded_key="$(printf '%s' "$key" | base64 | tr -d '\r\n')"
 fixture_keys="$(awk '/^---/{exit} /^  [A-Z][A-Z0-9_]*:/{sub(":", "", $1); if ($1 != "AUTH_RESEND_API_KEY") print $1}' "${ROOT}/deploy/staging/secret.example.yaml")"
 fixture_encoded="$(printf fixture | base64 | tr -d '\r\n')"
-printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{"AUTH_RESEND_API_KEY":"%s"}}\n' \
+printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging","resourceVersion":"42"},"data":{"AUTH_RESEND_API_KEY":"%s"}}\n' \
   "$encoded_key" >"${TMP}/existing.json"
 
 manifest() {
@@ -94,7 +94,7 @@ run_manifest_case() {
   fi
 }
 
-run_manifest_case missing no
+run_manifest_case missing yes
 run_manifest_case blank no
 run_manifest_case spaces no
 run_manifest_case populated yes

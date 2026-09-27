@@ -64,11 +64,9 @@ def valid(document: object, namespace: str) -> bool:
     return missing_keys(document, namespace) == []
 
 
-def plan_upload(upload: object, live: object | None, namespace: str) -> tuple[list[str], list[dict] | None] | None:
-    """Validate the effective Secret and plan a guarded patch of uploaded keys only."""
+def uploaded_data(upload: object, namespace: str) -> dict[str, str] | None:
+    """Check an upload's identity and format without claiming live completeness."""
     if missing_keys(upload, namespace) is None:
-        return None
-    if live is not None and missing_keys(live, namespace) is None:
         return None
     upload_data = upload.get("data") or {}
     string_data = upload.get("stringData") or {}
@@ -87,6 +85,16 @@ def plan_upload(upload: object, live: object | None, namespace: str) -> tuple[li
             return None
         encoded_upload[key] = base64.b64encode(value.encode("utf-8")).decode("ascii")
     if not encoded_upload:
+        return None
+    return encoded_upload
+
+
+def plan_upload(upload: object, live: object | None, namespace: str) -> tuple[list[str], list[dict] | None] | None:
+    """Validate the effective Secret and plan a guarded patch of uploaded keys only."""
+    encoded_upload = uploaded_data(upload, namespace)
+    if encoded_upload is None:
+        return None
+    if live is not None and missing_keys(live, namespace) is None:
         return None
     effective = {
         "kind": "Secret",
@@ -110,6 +118,19 @@ def plan_upload(upload: object, live: object | None, namespace: str) -> tuple[li
 
 
 def main() -> int:
+    if sys.argv[2:] == ["--yaml-upload"]:
+        import yaml
+
+        try:
+            documents = list(yaml.safe_load_all(sys.stdin))
+        except (yaml.YAMLError, UnicodeDecodeError):
+            documents = []
+        document = documents[0] if len(documents) == 1 else None
+        if uploaded_data(document, sys.argv[1]) is None:
+            print("invalid Secret upload identity or format")
+            return 1
+        print("SECRET_UPLOAD_FORMAT=PASS_EFFECTIVE_UNVERIFIED")
+        return 0
     if len(sys.argv) == 4 and sys.argv[2] in {"--merge-check", "--patch"}:
         try:
             upload = json.load(sys.stdin)
