@@ -101,6 +101,11 @@ contracts land before consumers; activation lands after all consumers.
     `/v1`, Google OIDC, GIS owner/operator bootstrap, and Federation mTLS
     contracts. Q11 clean-start, cross-scope negatives, fake-vs-real provider
     evidence are specified in acceptance; runtime evidence remains open.
+  - [x] T03-Q11-FED: Federation HTTP request-ID normalization and the bounded
+    Q11 denial-audit fields, append-only storage, and TLS-handshake exclusion
+    are frozen in [Federation authority v1](../architecture/federation-authority-v1.md)
+    and [Q11 acceptance](game-integrations-acceptance.md). This closes no broad
+    T03/T04 trust matrix or Federation runtime acceptance gate.
   - [x] T03 Q12 provisional one-host capacity/RPO/RTO qualification targets and
     restore/load measurement method recorded in the design audit. These values
     are proposals only; T08/T93 must replace them with measured evidence.

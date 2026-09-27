@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type authorityAPI struct {
@@ -29,9 +31,28 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, v any) error {
 	}
 	return strictJSON(b, v)
 }
+func effectiveRequestID(values []string) string {
+	if len(values) == 1 {
+		value := values[0]
+		id, err := uuid.Parse(value)
+		if err == nil && id != uuid.Nil && id.String() == value {
+			return value
+		}
+	}
+	return uuid.NewString()
+}
+
+func writeAPIError(w http.ResponseWriter, status int, reason string) {
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": reason})
+}
+
 func (a *authorityAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	requestID := effectiveRequestID(r.Header.Values("X-Request-ID"))
+	w.Header().Set("X-Request-ID", requestID)
+	r.Header.Set("X-Request-ID", requestID)
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
@@ -50,14 +71,71 @@ func (a *authorityAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			code = http.StatusConflict
 			reason = "conflict"
 		}
-		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": reason})
+		if pin, pinErr := peerFingerprint(r, time.Now()); pinErr == nil {
+			if record, ok := a.q11AuditForRequest(r, pin, err, code); ok {
+				if a.Store == nil || a.Store.appendQ11Audit(r.Context(), record) != nil {
+					writeAPIError(w, http.StatusServiceUnavailable, "unavailable")
+					return
+				}
+			}
+		}
+		writeAPIError(w, code, reason)
 		return
 	}
 	if result == nil {
 		result = map[string]string{"status": "ok"}
 	}
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (a *authorityAPI) q11AuditForRequest(r *http.Request, fingerprint string, err error, status int) (q11AuditRecord, bool) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 3 || parts[0] != "v1" || parts[1] != "nodes" || !canonicalID(parts[2]) {
+		return q11AuditRecord{}, false
+	}
+	operator := a.Operators[fingerprint]
+	record := q11AuditRecord{
+		ActorClass:       "node",
+		ActorFingerprint: fingerprint,
+		NodeID:           parts[2],
+		RequestID:        r.Header.Get("X-Request-ID"),
+		HTTPStatus:       status,
+	}
+	if operator {
+		record.ActorClass = "operator"
+	}
+	if len(parts) == 6 && parts[3] == "spaces" && canonicalID(parts[4]) && parts[5] == "snapshot" && r.Method == http.MethodGet {
+		record.SpaceID = parts[4]
+		record.Action = "node.snapshot.read"
+		if operator && errors.Is(err, errForbidden) {
+			record.ReasonCode = "certificate_role_mismatch"
+		} else if !operator {
+			reason, ok := q11DenialReason(err)
+			if !ok || !errors.Is(err, errForbidden) {
+				return q11AuditRecord{}, false
+			}
+			record.ReasonCode = reason
+		} else {
+			return q11AuditRecord{}, false
+		}
+	} else if len(parts) == 4 && parts[3] == "approve" && r.Method == http.MethodPost {
+		record.Action = "node.approve"
+		if operator && errors.Is(err, errQ11ApprovalConflict) {
+			record.ReasonCode = "approval_conflict"
+		} else if !operator && errors.Is(err, errForbidden) {
+			record.ReasonCode = "certificate_role_mismatch"
+		} else {
+			return q11AuditRecord{}, false
+		}
+	} else {
+		return q11AuditRecord{}, false
+	}
+	if status == http.StatusConflict {
+		record.Result = "conflict"
+	} else {
+		record.Result = "denied"
+	}
+	return record, true
 }
 func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, error) {
 	pin, err := peerFingerprint(r, time.Now())

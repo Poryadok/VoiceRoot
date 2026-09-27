@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,9 @@ import (
 
 //go:embed migrations/000001_authority.sql
 var migrationSQL string
+
+//go:embed migrations/000002_q11_http_audit.sql
+var auditMigrationSQL string
 
 func migrate(ctx context.Context, p *pgxpool.Pool) error {
 	tx, err := p.Begin(ctx)
@@ -31,15 +35,19 @@ func migrate(ctx context.Context, p *pgxpool.Pool) error {
 	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS federation_schema_versions(version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
 		return err
 	}
-	var exists bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM federation_schema_versions WHERE version=1)`).Scan(&exists); err != nil {
-		return err
-	}
-	if !exists {
-		if _, err = tx.Exec(ctx, migrationSQL); err != nil {
+	for version, migration := range []string{migrationSQL, auditMigrationSQL} {
+		version++
+		var exists bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM federation_schema_versions WHERE version=$1)`, version).Scan(&exists); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO federation_schema_versions(version) VALUES(1)`); err != nil {
+		if exists {
+			continue
+		}
+		if _, err = tx.Exec(ctx, migration); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO federation_schema_versions(version) VALUES($1)`, version); err != nil {
 			return err
 		}
 	}
@@ -50,6 +58,33 @@ type authorityStore struct {
 	Pool                       *pgxpool.Pool
 	Key                        ed25519.PrivateKey
 	KeyID, Issuer, Environment string
+}
+
+type q11AuditRecord struct {
+	ActorClass, ActorFingerprint, NodeID, SpaceID string
+	Action, Result, ReasonCode, RequestID         string
+	HTTPStatus                                    int
+}
+
+func (s *authorityStore) appendQ11Audit(ctx context.Context, record q11AuditRecord) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("federation audit store unavailable")
+	}
+	var nodeID, spaceID any
+	if record.NodeID != "" {
+		nodeID = record.NodeID
+	}
+	if record.SpaceID != "" {
+		spaceID = record.SpaceID
+	}
+	return s.transaction(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO federation_http_audit
+			(id,actor_class,actor_fingerprint_sha256,target_node_id,target_space_id,action,result,http_status,reason_code,request_id)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, uuid.NewString(), record.ActorClass,
+			record.ActorFingerprint, nodeID, spaceID, record.Action, record.Result,
+			record.HTTPStatus, record.ReasonCode, record.RequestID)
+		return err
+	})
 }
 
 const nodeCredentialEntropyBytes = 32
@@ -114,7 +149,13 @@ func (s *authorityStore) changeNode(ctx context.Context, id, action, pin, actor 
 			_, err = tx.Exec(ctx, `UPDATE federation_nodes SET status=$2,epoch=epoch+1,credential_hash=NULL,credential_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1`, id, status)
 			return err
 		}
-		if (action == "approve" && n.Status != "pending") || (action == "rotate" && n.Status != "active") {
+		if action == "approve" && n.Status != "pending" {
+			if n.Status == "active" {
+				return errQ11ApprovalConflict
+			}
+			return errConflict
+		}
+		if action == "rotate" && n.Status != "active" {
 			return errConflict
 		}
 		if pin == "" {
@@ -132,6 +173,9 @@ func (s *authorityStore) changeNode(ctx context.Context, id, action, pin, actor 
 		expiry := now.Add(24 * time.Hour)
 		result.ExpiresAt = expiry.UnixMilli()
 		_, err = tx.Exec(ctx, `UPDATE federation_nodes SET status='active',certificate_sha256=$2,credential_hash=$3,credential_expires_at=$4,approved_by=$5,epoch=epoch+1,updated_at=clock_timestamp() WHERE id=$1`, id, pin, digest([]byte(result.Secret)), expiry, actor)
+		if action == "approve" && isUniqueViolation(err) {
+			return errQ11ApprovalConflict
+		}
 		return uniqueViolationAsConflict(err)
 	})
 	if err != nil {
@@ -141,11 +185,15 @@ func (s *authorityStore) changeNode(ctx context.Context, id, action, pin, actor 
 }
 
 func uniqueViolationAsConflict(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+	if isUniqueViolation(err) {
 		return errConflict
 	}
 	return err
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 func (s *authorityStore) place(ctx context.Context, node, space string) error {
 	return s.transaction(ctx, func(tx pgx.Tx) error {
@@ -229,7 +277,26 @@ func (s *authorityStore) issue(ctx context.Context, node, space, pin, secret str
 		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 			return err
 		}
-		if n.Status != "active" || n.Pin != pin || !now.Before(n.Expiry) || subtle.ConstantTimeCompare([]byte(n.Hash), []byte(digest([]byte(secret)))) != 1 {
+		if n.Status == "suspended" || n.Status == "defederated" {
+			return errQ11CredentialRevoked
+		}
+		if n.Status != "active" {
+			return errForbidden
+		}
+		if n.Pin != pin {
+			var belongsToOtherNode bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM federation_nodes WHERE environment=$1 AND status='active' AND id<>$2 AND certificate_sha256=$3 AND credential_hash=$4)`, s.Environment, node, pin, digest([]byte(secret))).Scan(&belongsToOtherNode); err != nil {
+				return err
+			}
+			if belongsToOtherNode {
+				return errQ11ScopeMismatch
+			}
+			return errQ11NodeCertificateMismatch
+		}
+		if !now.Before(n.Expiry) {
+			return errQ11CredentialRevoked
+		}
+		if subtle.ConstantTimeCompare([]byte(n.Hash), []byte(digest([]byte(secret)))) != 1 {
 			return errForbidden
 		}
 		var generation, revision int64
@@ -238,7 +305,7 @@ func (s *authorityStore) issue(ctx context.Context, node, space, pin, secret str
 		var until *time.Time
 		if err = tx.QueryRow(ctx, `SELECT generation,revision,snapshot,snapshot_hash,valid_until FROM federation_placements WHERE space_id=$1 AND node_id=$2 FOR UPDATE`, space, node).Scan(&generation, &revision, &raw, &hash, &until); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return errForbidden
+				return errQ11ScopeMismatch
 			}
 			return err
 		}

@@ -128,6 +128,14 @@ gets its signed snapshot at
 revision/hash with a fresh nonce at
 `POST /v1/nodes/{node}/spaces/{space}/lease`, using its node certificate and
 node-scoped bearer. The test must not seed or repair registry rows with SQL.
+For every enumerated Federation HTTP denial below, send a canonical
+`X-Request-ID` and verify the response header and append-only Federation audit
+row agree on that ID, the actor certificate fingerprint, target IDs, action,
+result/status, and safe reason. The service replaces missing, malformed, or
+repeated request IDs with a returned server UUID. A TLS handshake rejected
+before HTTP dispatch has no request ID and is outside this audit gate. Verify
+that audit `UPDATE`, `DELETE`, and `TRUNCATE` are rejected without SQL-seeding
+or repairing registry rows.
 
 Cryptographic fixture proof and real provider proof are separate gates. Fake
 Google JWKS and synthetic game-ticket keys may prove signature, issuer, audience,
@@ -139,9 +147,15 @@ subject hash, request IDs, verifier result, and secret-free logs. Do not retain
 provider tokens or raw subjects in evidence. A missing Google credential or
 unavailable provider means this gate is pending, never passed by the fake suite.
 
-The implementation must provide this repository-root clean-start gate. It must
-create fresh disposable stores and exercise both paths and their negative
-cases; it is a required future target, not a target present at this docs base:
+The repository-root clean-start gate creates fresh disposable stores and runs
+the API-only GIS bootstrap selector plus the Federation API-only mTLS path and
+enumerated denials. GIS's SQL-seeded production-credential denial remains in
+the ordinary GIS suite under
+`TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture`;
+it is not selected by the Q11 target. Federation audit immutability/failure
+fault injection touches only API-created audit rows and never seeds or repairs
+registry state. This is a fake-provider clean-start proof only; it does not
+close the separate live-Google gate or production admission.
 
 ```powershell
 rtk make game-integrations-q11-acceptance

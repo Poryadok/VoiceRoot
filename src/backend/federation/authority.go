@@ -20,6 +20,27 @@ var errForbidden = errors.New("forbidden")
 var errConflict = errors.New("conflict")
 var errInvalid = errors.New("invalid_request")
 
+type q11DenialError struct {
+	Reason string
+	Cause  error
+}
+
+func (e q11DenialError) Error() string { return e.Cause.Error() }
+func (e q11DenialError) Unwrap() error { return e.Cause }
+
+var errQ11NodeCertificateMismatch error = q11DenialError{Reason: "node_certificate_mismatch", Cause: errForbidden}
+var errQ11ScopeMismatch error = q11DenialError{Reason: "node_scope_mismatch", Cause: errForbidden}
+var errQ11CredentialRevoked error = q11DenialError{Reason: "credential_revoked", Cause: errForbidden}
+var errQ11ApprovalConflict error = q11DenialError{Reason: "approval_conflict", Cause: errConflict}
+
+func q11DenialReason(err error) (string, bool) {
+	var denial q11DenialError
+	if !errors.As(err, &denial) {
+		return "", false
+	}
+	return denial.Reason, true
+}
+
 type Permission struct {
 	AccountID    string   `json:"account_id"`
 	ProfileID    string   `json:"profile_id"`

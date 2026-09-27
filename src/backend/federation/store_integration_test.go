@@ -191,7 +191,7 @@ func TestAPIBoundariesBeforeDatabase(t *testing.T) {
 	}{
 		{"no certificate", "POST", "/v1/nodes", "{}", nil, 403},
 		{"node cannot enroll", "POST", "/v1/nodes", "{}", node, 403},
-		{"operator cannot read node snapshot", "GET", "/v1/nodes/" + uuid.NewString() + "/spaces/" + uuid.NewString() + "/snapshot", "", operator, 403},
+		{"operator cannot read node snapshot", "GET", "/v1/nodes/" + uuid.NewString() + "/spaces/" + uuid.NewString() + "/snapshot", "", operator, 503},
 		{"missing attestation", "POST", "/v1/nodes/" + uuid.NewString() + "/approve", "{}", operator, 400},
 		{"unknown field", "POST", "/v1/nodes/" + uuid.NewString() + "/approve", `{"ownership_verified":true,"admin":true}`, operator, 400},
 		{"trailing body", "POST", "/v1/nodes/" + uuid.NewString() + "/approve", `{"ownership_verified":true}{}`, operator, 400},
@@ -206,6 +206,12 @@ func TestAPIBoundariesBeforeDatabase(t *testing.T) {
 			api.ServeHTTP(w, r)
 			require.Equal(t, tt.code, w.Code)
 			require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+			if tt.name == "operator cannot read node snapshot" {
+				requestID, parseErr := uuid.Parse(w.Header().Get("X-Request-ID"))
+				require.NoError(t, parseErr)
+				require.NotEqual(t, uuid.Nil, requestID)
+				require.JSONEq(t, `{"error":"unavailable"}`, w.Body.String())
+			}
 		})
 	}
 }
