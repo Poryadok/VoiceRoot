@@ -24,6 +24,8 @@ const (
 	UserService_ResolveAccountIDForProfile_FullMethodName    = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
 	UserService_ResolvePrimaryProfileIDs_FullMethodName      = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	UserService_MarkAccountRegular_FullMethodName            = "/voice.user.v1.UserService/MarkAccountRegular"
+	UserService_GetSdkProfileEligibility_FullMethodName      = "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	UserService_RecordSdkAuthorTombstone_FullMethodName      = "/voice.user.v1.UserService/RecordSdkAuthorTombstone"
 	UserService_GetProfile_FullMethodName                    = "/voice.user.v1.UserService/GetProfile"
 	UserService_GetProfiles_FullMethodName                   = "/voice.user.v1.UserService/GetProfiles"
 	UserService_UpdateProfile_FullMethodName                 = "/voice.user.v1.UserService/UpdateProfile"
@@ -75,6 +77,10 @@ type UserServiceClient interface {
 	// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
 	// Idempotent: an already-regular or unknown account succeeds unchanged.
 	MarkAccountRegular(ctx context.Context, in *MarkAccountRegularRequest, opts ...grpc.CallOption) (*MarkAccountRegularResponse, error)
+	// Auth-only protected listener: exact read-only SDK target profile snapshot.
+	GetSdkProfileEligibility(ctx context.Context, in *GetSdkProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSdkProfileEligibilityResponse, error)
+	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
+	RecordSdkAuthorTombstone(ctx context.Context, in *RecordSdkAuthorTombstoneRequest, opts ...grpc.CallOption) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(ctx context.Context, in *GetProfileRequest, opts ...grpc.CallOption) (*GetProfileResponse, error)
 	GetProfiles(ctx context.Context, in *GetProfilesRequest, opts ...grpc.CallOption) (*GetProfilesResponse, error)
 	UpdateProfile(ctx context.Context, in *UpdateProfileRequest, opts ...grpc.CallOption) (*UpdateProfileResponse, error)
@@ -166,6 +172,26 @@ func (c *userServiceClient) MarkAccountRegular(ctx context.Context, in *MarkAcco
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkAccountRegularResponse)
 	err := c.cc.Invoke(ctx, UserService_MarkAccountRegular_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetSdkProfileEligibility(ctx context.Context, in *GetSdkProfileEligibilityRequest, opts ...grpc.CallOption) (*GetSdkProfileEligibilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSdkProfileEligibilityResponse)
+	err := c.cc.Invoke(ctx, UserService_GetSdkProfileEligibility_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) RecordSdkAuthorTombstone(ctx context.Context, in *RecordSdkAuthorTombstoneRequest, opts ...grpc.CallOption) (*RecordSdkAuthorTombstoneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordSdkAuthorTombstoneResponse)
+	err := c.cc.Invoke(ctx, UserService_RecordSdkAuthorTombstone_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -482,6 +508,10 @@ type UserServiceServer interface {
 	// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
 	// Idempotent: an already-regular or unknown account succeeds unchanged.
 	MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error)
+	// Auth-only protected listener: exact read-only SDK target profile snapshot.
+	GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error)
+	// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
+	RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error)
 	GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error)
 	GetProfiles(context.Context, *GetProfilesRequest) (*GetProfilesResponse, error)
 	UpdateProfile(context.Context, *UpdateProfileRequest) (*UpdateProfileResponse, error)
@@ -543,6 +573,12 @@ func (UnimplementedUserServiceServer) ResolvePrimaryProfileIDs(context.Context, 
 }
 func (UnimplementedUserServiceServer) MarkAccountRegular(context.Context, *MarkAccountRegularRequest) (*MarkAccountRegularResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MarkAccountRegular not implemented")
+}
+func (UnimplementedUserServiceServer) GetSdkProfileEligibility(context.Context, *GetSdkProfileEligibilityRequest) (*GetSdkProfileEligibilityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSdkProfileEligibility not implemented")
+}
+func (UnimplementedUserServiceServer) RecordSdkAuthorTombstone(context.Context, *RecordSdkAuthorTombstoneRequest) (*RecordSdkAuthorTombstoneResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecordSdkAuthorTombstone not implemented")
 }
 func (UnimplementedUserServiceServer) GetProfile(context.Context, *GetProfileRequest) (*GetProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProfile not implemented")
@@ -738,6 +774,42 @@ func _UserService_MarkAccountRegular_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).MarkAccountRegular(ctx, req.(*MarkAccountRegularRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetSdkProfileEligibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSdkProfileEligibilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetSdkProfileEligibility(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetSdkProfileEligibility_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetSdkProfileEligibility(ctx, req.(*GetSdkProfileEligibilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_RecordSdkAuthorTombstone_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordSdkAuthorTombstoneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).RecordSdkAuthorTombstone(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_RecordSdkAuthorTombstone_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).RecordSdkAuthorTombstone(ctx, req.(*RecordSdkAuthorTombstoneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1290,6 +1362,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkAccountRegular",
 			Handler:    _UserService_MarkAccountRegular_Handler,
+		},
+		{
+			MethodName: "GetSdkProfileEligibility",
+			Handler:    _UserService_GetSdkProfileEligibility_Handler,
+		},
+		{
+			MethodName: "RecordSdkAuthorTombstone",
+			Handler:    _UserService_RecordSdkAuthorTombstone_Handler,
 		},
 		{
 			MethodName: "GetProfile",

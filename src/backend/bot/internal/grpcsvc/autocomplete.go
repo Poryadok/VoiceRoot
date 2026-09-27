@@ -10,6 +10,7 @@ import (
 
 	"voice/backend/bot/internal/authctx"
 	"voice/backend/bot/internal/dispatch"
+	"voice/backend/bot/internal/store"
 	"voice/backend/bot/internal/webhook"
 
 	botv1 "voice.app/voice/bot/v1"
@@ -35,9 +36,23 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 	if !allowed {
 		return nil, status.Error(codes.PermissionDenied, "bot not enabled in chat")
 	}
+	if err := s.requireInvokerMembership(ctx, chatID, invoker); err != nil {
+		return nil, err
+	}
 	botRow, err := s.Store.GetBotByID(ctx, botID)
 	if err != nil {
 		return nil, mapStoreErr(err)
+	}
+	if err := s.requireScope(botRow, "TEXT_CHAT_SEND_MESSAGES"); err != nil {
+		return nil, err
+	}
+	if !botRow.IsPollingMode && (botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "") {
+		return nil, status.Error(codes.FailedPrecondition, "webhook is not configured")
+	}
+	if chatRefIsDM(req.GetChat()) {
+		if err := s.requireScope(botRow, "DM_SEND"); err != nil {
+			return nil, err
+		}
 	}
 	if !s.isBotOnline(ctx, botID) {
 		// Mirror ExecuteSlashInteraction: offline bots cannot serve autocomplete (bots.md status).
@@ -79,6 +94,9 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 		return nil, status.Error(codes.InvalidArgument, "option is not autocomplete")
 	}
 	if botRow.IsPollingMode || botRow.WebhookURL == nil || strings.TrimSpace(*botRow.WebhookURL) == "" {
+		if !store.DevPollingEnabled() {
+			return nil, status.Error(codes.FailedPrecondition, "development polling is disabled")
+		}
 		cacheKey := dispatch.AutocompleteCacheKey(
 			botID.String(), chatID.String(), cmdName, optionName, strings.TrimSpace(req.GetFocusedValue()),
 		)
@@ -100,7 +118,10 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 			"chat_type":          req.GetChat().GetType().String(),
 			"invoker_profile_id": invoker.String(),
 		}
-		_, _ = s.Store.EnqueueEvent(ctx, botID, "autocomplete", payload, "")
+		if _, err := s.Store.EnqueueEvent(ctx, botID, "autocomplete", payload, ""); err != nil {
+			s.Hub.CancelAutocomplete(requestID)
+			return nil, status.Error(codes.Unavailable, "autocomplete could not be accepted")
+		}
 		pending := true
 		return &botv1.AutocompleteSlashOptionResponse{Pending: &pending}, nil
 	}
@@ -131,8 +152,12 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 }
 
 func (s *BotGRPC) CompleteAutocomplete(ctx context.Context, req *botv1.CompleteAutocompleteRequest) (*botv1.CompleteAutocompleteResponse, error) {
-	if _, err := s.botFromToken(ctx); err != nil {
+	botRow, err := s.botFromToken(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !botRow.IsPollingMode || !store.DevPollingEnabled() {
+		return nil, status.Error(codes.FailedPrecondition, "development polling is disabled")
 	}
 	requestID := strings.TrimSpace(req.GetRequestId())
 	if requestID == "" {
@@ -148,7 +173,7 @@ func (s *BotGRPC) CompleteAutocomplete(ctx context.Context, req *botv1.CompleteA
 	if len(choices) > 25 {
 		choices = choices[:25]
 	}
-	if s.Hub == nil || !s.Hub.CompleteAutocomplete(requestID, choices) {
+	if s.Hub == nil || !s.Hub.CompleteAutocomplete(requestID, botRow.ID.String(), choices) {
 		return nil, status.Error(codes.NotFound, "unknown autocomplete request")
 	}
 	return &botv1.CompleteAutocompleteResponse{}, nil

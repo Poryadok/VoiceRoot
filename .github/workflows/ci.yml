@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, codex/game-sdk-federation-docs]
   push:
     branches: [master]
   schedule:
@@ -47,6 +47,7 @@ jobs:
       packages: read
     outputs:
       global: ${{ steps.filter.outputs.global }}
+      ci_global: ${{ steps.filter.outputs.ci_global }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
@@ -59,6 +60,7 @@ jobs:
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
       code: ${{ steps.filter.outputs.code }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
+      integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
       build_services: ${{ steps.stagingmatrix.outputs.build_services }}
@@ -126,6 +128,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -168,6 +171,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.compose == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -196,6 +200,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (
         needs.changes.outputs.global == 'true' ||
+        needs.changes.outputs.ci_global == 'true' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
       )
     runs-on: ubuntu-latest
@@ -229,6 +234,7 @@ jobs:
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -269,6 +275,7 @@ jobs:
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -313,6 +320,7 @@ jobs:
       needs.changes.result == 'success' &&
       (needs.changes.outputs.run_pkg == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -333,7 +341,7 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
-        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.compose == 'true')) ||
+        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) ||
        (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
     runs-on: ubuntu-latest
     permissions:
@@ -419,6 +427,7 @@ jobs:
       needs.backend-go-pkg.result != 'cancelled' &&
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -476,15 +485,13 @@ jobs:
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
       needs.backend-go-pkg.result != 'cancelled' &&
-      (needs.changes.outputs.run_go == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.changes.outputs.go_services) }}
+        service: ${{ fromJSON(needs.changes.outputs.integration_go_services) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -642,6 +649,7 @@ jobs:
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -717,6 +725,7 @@ jobs:
       (needs.changes.outputs.run_developer_portal == 'true' ||
        needs.changes.outputs.developer-portal == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -815,6 +824,7 @@ jobs:
       (needs.changes.outputs.run_web == 'true' ||
        needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -903,6 +913,7 @@ jobs:
       (needs.changes.outputs.run_admin == 'true' ||
        needs.changes.outputs.admin == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
@@ -1060,6 +1071,7 @@ jobs:
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     steps:
@@ -1164,6 +1176,7 @@ jobs:
       - name: Verify required jobs ran
         env:
           RUN_GO: ${{ needs.changes.outputs.run_go }}
+          RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services != '[]' }}
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
@@ -1175,7 +1188,7 @@ jobs:
           FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
-          GLOBAL: ${{ needs.changes.outputs.global }}
+          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
           JOB_PROTOBUF: ${{ needs.protobuf.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
@@ -1202,7 +1215,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -1213,6 +1226,7 @@ jobs:
             needs.changes.outputs.compose == 'true' ||
             needs.changes.outputs.frontend == 'true' ||
             needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.ci_global == 'true' ||
             needs.changes.outputs.admin == 'true' ||
             needs.changes.outputs.developer-portal == 'true'
           )
@@ -1296,7 +1310,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -1470,6 +1484,7 @@ jobs:
           - chat
           - federation
           - file
+          - controlledgame
           - gameintegration
           - gateway
           - matchmaking
@@ -1602,7 +1617,7 @@ jobs:
       - name: Go mod tidy (all Go modules)
         run: |
           set -e
-          for m in pkg analytics bot chat federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+          for m in pkg analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
             (cd "src/backend/$m" && go mod tidy)
           done
       - name: Prefetch sqlite3mc native assets

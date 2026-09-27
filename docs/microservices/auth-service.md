@@ -18,6 +18,43 @@
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
 
+## T14 Auth-to-User selected-profile authority (accepted target; implementation pending)
+
+T14 authorization approval and code exchange use User's Auth-only
+`GetSdkProfileEligibility` RPC to verify the exact selected `(account_id,
+profile_id)`. Auth validates that both returned IDs exactly match the request,
+`profile_revision` is positive, and neither `deleted` nor `frozen` is true. A
+missing, mismatched, stale, deleted, frozen, malformed, timed-out or unavailable
+answer denies with the existing coarse `invalid_sdk_identity` response; it must
+not be translated into account/profile enumeration details.
+
+At approval, Auth stores the selected profile ID and returned revision with the
+approval. At exchange, Auth reads eligibility again and requires the same IDs,
+a positive unchanged revision, and an eligible profile. A changed revision,
+deletion or freeze invalidates the approval/code and requires a fresh
+authorization and consent. The profile revision is distinct from the consent
+revision and application-policy revision.
+
+The call is authorized by an Auth-issued service principal on User's dedicated
+TLS listener (`:9094`). Its signed RS256 credential is bound to the exact full
+RPC name, a fresh `x-request-id`, and SHA-256 of deterministic protobuf request
+bytes. It carries `principal_type=service`, `iss=auth`, `sub=service:auth`,
+`aud=user`, `iat`, `nbf`, `exp`, and unique `jti`; it carries no account ID,
+profile ID or session epoch. Credential lifetime is at most 30 seconds, with
+five seconds of permitted future issue/not-before skew and no expiry grace.
+Auth sends exactly one `authorization: Bearer ...` and one `x-request-id` and
+does not send raw identity metadata. User performs shared Redis replay
+admission; Redis failure or a repeated `jti` denies the call.
+
+Auth principal signing keys are a separate keyset from `auth.jwt` client-token
+keys. The Auth signer is optional while unconfigured: T14 remains unavailable
+and eligibility checks fail closed. Partial or invalid keyset configuration is
+a startup error. The exact environment, JWKS and rotation contract is in
+[Deployment: Auth-to-User SDK profile principal](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal).
+The principal JWKS endpoint is published only when the complete keyset is
+loaded. This accepted contract is a prerequisite for the T14 Auth signer/client
+slice; it does not claim that the signer or User client is implemented.
+
 ### Subscription claims (A7 accepted target; not implemented)
 
 Auth consumes the complete revisioned personal

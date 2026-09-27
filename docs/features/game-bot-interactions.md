@@ -55,8 +55,72 @@ interaction backend игры; бот отвечает. Игровая логик
    не проверяет `TEXT_CHAT_SEND_MESSAGES`. До production game notifications нужен
    одинаковый send-scope enforcement на обычном, deferred и recovery путях.
 
-Исправления не входят в этот docs-only change. Они перечислены как activation
-gates, а не обходятся повышенными правами бота.
+В baseline docs-only change исправления не входили. Они перечислены как
+activation gates, а не обходятся повышенными правами бота.
+
+### Реализованный Bot slice после baseline audit
+
+`GAME-BOT-01` добавляет для существующего slash RPC fail-closed acceptance:
+`ExecuteSlashInteraction` возвращает ошибку, если запись interaction в
+`bot_event_log` не сохранилась, и до этого не вызывает webhook. Webhook delivery
+берётся по lease из PostgreSQL outbox; отдельный worker после рестарта повторяет
+pending interaction с тем же `interaction_token`. Временная HTTP-ошибка оставляет
+запись pending с backoff до восьми lease attempts или 24 часов с момента
+acceptance, после чего запись становится terminal `failed`; постоянная ошибка
+сразу оставляет `failed`. Переходы `pending → deferred/delivered/failed` и
+retry требуют номер актуального claim и незавершённый lease, поэтому worker,
+продолживший работу после lease expiry, не переписывает результат нового worker.
+Timeout ожидания
+синхронного ответа больше не удаляет pending intent. Перед acceptance и перед
+повторной доставкой Bot запрашивает у Chat effective membership профиля и
+проверяет текущие whitelist и send scopes. `PollEvents` отклоняет вызовы
+webhook-бота, чтобы streaming path не забирал его pending outbox intent.
+
+Это только надёжная постановка и доставка **slash webhook**. Повторный webhook
+возможен после crash между выполнением HTTP на стороне игры и записью receipt;
+игра должна дедуплицировать стабильный `interaction_token`. Текущий slash RPC
+не содержит client-supplied invocation ID, поэтому повтор *самого* RPC создаёт
+новую команду. Ответ webhook после client timeout не восстанавливает
+синхронный ephemeral/content result в клиенте, а обычный message reply ещё не
+имеет стабильного idempotency key. BOT01–13 и новый game action endpoint этим
+slice не закрыты.
+
+Дополнение T50: production polling отключён без явного
+`BOT_ENABLE_DEV_POLLING=true`; это не leased polling с ACK. Получателей
+`message.sent` выбирают и повторно проверяют с текущим
+`TEXT_CHAT_READ_HISTORY`; отправка обычного и deferred сообщения требует
+`TEXT_CHAT_SEND_MESSAGES`, а `thread_parent_id` передаётся в Messaging.
+Completion, defer и send с interaction token сначала проверяют привязку к
+credential bot, исходному чату, текущему whitelist/scopes и effective
+membership вызывавшего профиля, затем меняют Hub или отправляют сообщение.
+Slash discovery и autocomplete также требуют effective membership; completion
+autocomplete привязан к credential bot. Таким образом семь baseline gaps
+закрыты в Bot-owned путях, кроме production polling: оно остаётся отключённым.
+Полный T50 требует интеграционного прогона с PostgreSQL/Chat/Messaging и проверки
+внешних Gateway маршрутов; здесь есть лишь source и локальные тесты без Docker.
+
+### Граница Bot для T51/T52
+
+Game Integration Service владеет проверкой service principal, app/environment,
+installation, recipient/binding/character, expiry и hash события, а также
+durable inbox/outbox и ответом 202/409. На границу публикации он передаёт
+только проверенный immutable intent: `(app_id, environment_id,
+installation_id, event_id, payload_hash, recipient, character_binding_id,
+expires_at, schema_version, fallback_text, card_revision)`. Повтор с тем же
+`event_id` и hash обязан обращаться к тому же intent и тому же
+`client_message_id`; изменение hash отклоняется до Bot/Messaging send. Bot
+не принимает raw game credential или произвольный account/chat recipient через
+существующий `SendBotMessage`: этот API не содержит нужной authority и
+идемпотентности. Каноническое представление intent и точный межсервисный
+transport нужно зафиксировать с владельцем Game Integration Service перед
+реализацией adapter.
+
+Для T52 сохранение versioned card, canonical actions, app/character attribution,
+forwarding/copy-as-new и history/search ACL принадлежит Messaging contract.
+Bot может переслать лишь проверенную ссылку/структуру карточки через будущий
+типизированный Messaging API; нынешний текстовый `SendBotMessage` не является
+card transport. До согласования схемы и проверяемого потребителя Bot не создаёт
+отдельный card store или обходной JSON в content.
 
 ## 1. Модель приложения и персонажа
 
@@ -111,12 +175,21 @@ intent отправки атомарны. Voice не может восстано
 
 Action хранит `action_id`, allowlisted `action_type`, label, immutable typed args,
 game state version, expiry, allowed actor policy и confirmation policy/summary.
-Принято владельцем: для опасных действий дополнительное подтверждение обязательно;
-опциональность допустима только для действий вне этого класса. Список классов,
-server-side proof подтверждения и его связь с actor/action/ценой/state revision
-нужно определить до реализации (Q05 в
-[design audit](../testing/game-integrations-design-audit.md)); один экран без
-проверки прямого API вызова не обеспечивает требование.
+Q05 contract: подтверждение не требуется только для явно allowlisted read-only
+действий. Irreversible, value/currency, one-shot consumption, privacy/data export,
+permission/authority и external-message действия всегда требуют challenge.
+Unknown/unclassified action также требует challenge; если сервер не может
+определить доверенный risk class/summary или выдать challenge, действие denied.
+Этот фиксированный безопасный default можно уточнить в будущей продуктовой
+версии, но реализация не должна иметь открытый allow-by-default класс.
+Challenge — opaque 256-bit value, хранится только hash, истекает через 5 минут и
+связывает account/profile/session epoch, app/env/installation, source message и
+card revision, action и canonical argument hash. Подтверждение — явный
+аутентифицированный вызов; consume challenge и acceptance команды атомарны.
+Параллельные подтверждения с двух устройств используют CAS, победитель один.
+Direct invoke не обходит challenge; exact idempotency retry возвращает ту же
+challenge/operation, иной replay отклоняется; после истечения/revoke нужна новая
+invoke. Нужны тесты на 5m-1/5m/5m+1 и конкурентный CAS.
 Сервер хранит canonical action отдельно от отображаемой подписи. Клиент отправляет
 ID, а не цену, recipient или выполняемую команду из редактируемого UI.
 Update карточки создаёт новую revision; старые action IDs не получают новое
@@ -143,9 +216,11 @@ message/chat, точный actor policy, revision/expiry, scope, block/sanction/
 После проверки Voice сохраняет command + delivery outbox, подписывает server
 envelope и отправляет его на зарегистрированный endpoint игры.
 
-Envelope содержит `command_id`, `invocation_id`, event/action/message IDs,
+Envelope version 1, его канонизация, key ID, HMAC bytes и request/receipt examples
+определены в [Game API contract](../architecture/game-integration-api.md#t03t06-command-contract-freeze-proposed-v1).
+Он содержит `command_id`, `operation_id`, `invocation_id`, event/action/message IDs,
 binding/profile context, installation/app/env, trusted actor proof,
-issued/expiry timestamps, game state version и canonical arguments. Для
+issued/expiry Unix seconds, game state version и canonical arguments. Для
 делегирования на удалённую ноду actor proof отдельно ограничен audience,
 operation, node, space и binding revision; node identity не позволяет
 самостоятельно изображать действие игрока.
@@ -158,7 +233,16 @@ operation, node, space и binding revision; node identity не позволяе�
 [Game API](../architecture/game-integration-api.md). Voice сериализует его с
 revoke в собственной БД. Отзыв, committed до admission, блокирует команду;
 ранее допущенная in-flight команда может завершиться после unlink в пределах
-permit window. Distributed atomic commit Voice↔game не предполагается. Игра
+permit window: start строго до `permit_issued_at+10s`; commit строго до
+`permit_issued_at+60s`. `permit_issued_at` выдаёт GIS при первом успешном
+admission commit, не при создании command. Поэтому первое получение command на
+delivery retry t=15/t=31 получает свежий permit epoch, если command ещё не
+истёк и authority не отозвана. Admission retry после сохранённого permit возвращает тот же
+timestamp/ID/bounds и не продлевает окно; пропущенный start не допускает нового
+permit для того же command. Новый запуск требует новой user invocation. Revoke
+первым в authority transaction → admission denied; permit commit первым → только
+эта операция получает ограниченную +10s/+60s completion grace.
+Distributed atomic commit Voice↔game не предполагается. Игра
 в своей транзакции связывает dedupe permit/command с эффектом. Назначение долгой
 задачи — короткая mutation; её последующие часы симуляции не являются in-flight
 webhook. Game cancel этой задачи — отдельная команда и отдельные правила.
@@ -182,7 +266,8 @@ Cancel до commit — best effort с CAS в игре; UI показывает �
 до terminal result и затем становится succeeded/failed. Operation GET содержит
 command ID и domain status. Успешная доставка webhook не завершает operation.
 
-Игра сохраняет result outbox и передаёт signed result receipt. Предлагаемый
+Игра сохраняет result outbox в той же транзакции, что inbox/effect, и передаёт
+signed immutable result receipt по определённому в Game API contract v1 пути. Предлагаемый
 `POST /api/v1/game-integrations/commands/{id}/result` принимает только credential
 точных app/environment/installation, владеющих командой. Body: `result_id`,
 terminal status, state version, safe summary. Result ID и normalized payload hash
@@ -250,23 +335,27 @@ state_version при execution. Если цена/последствия изм�
 Если карточка публична, приватный result не публикуется в общий чат автоматически:
 audience результата не шире исходного consent/actor policy.
 
-Сохраняем привычный v1 HMAC transport: `X-Voice-Signature: v1=<hex>`,
-`X-Voice-Timestamp`, подпись raw body с timestamp. Секрет берётся из установки;
-constant-time comparison, проверка окна ±5 минут и durable command ID dedupe.
-Timestamp window не заменяет dedupe. Retry получает новый delivery timestamp,
-но прежние command ID и semantic payload. Ключи ротируются через key ID и
-ограниченное overlap окно; старый ключ после revoke не принимается.
-
-Receiver отвечает в течение существующего 3s response budget; durable accepted
-ACK означает «сохранено для обработки». Длительная работа использует defer/result.
-Ошибка persistence → retryable error, не ACK. Предлагаемый outbox retry использует
-exponential backoff+jitter, Retry-After для 429, bounded expiry и operator-visible
-dead letter. 401/403 вызывают диагностику credential/config, а не бесконечную
-бурю повторов. Retry/retention budgets публикуются как application capabilities.
+Command/receipt HMAC canonicalization и key lookup следуют Game API contract v1.
+Receiver имеет 3s response bound от начала HTTP attempt, включая чтение body;
+durable accepted 202 означает «сохранено для обработки». Ошибка persistence —
+не ACK. Доставка повторяется ровно в t=0,1,3,7,15,31 секунд (не более 6 HTTP
+attempts), с 3s budget на попытку и тем же command ID/body; новая подпись получает
+свежий timestamp. После шестой неудачи нет дальнейшей отправки: запись ждёт
+`min(expires_at, accepted_at+120s)` в reconciling; по дедлайну она переходит в
+DLQ/operator reconciliation. Поэтому DLQ не наступает сразу после шестой попытки.
+Result receipt использует те же границы. Перезапуск восстанавливает попытки,
+неизменяемое тело и дедлайн из durable outbox; таймер не начинается заново.
+401/403 не повторяются автоматически; 409/410/422 требуют остановки/reconcile;
+429, timeout/network/5xx допускают только ограниченные попытки. Proof: fake-clock
+проверяет шесть timestamps и отсутствие седьмого после terminal deadline,
+stalled-body test проверяет 3s end-to-end read bound, restart test проверяет
+сохранение original deadline и DLQ outcome.
 
 Webhook URL проверяется при регистрации и доставке: HTTPS, разрешённые порты,
-защита от SSRF/private/metadata destinations и DNS rebinding, без auth-bearing
-redirects. Dev использует polling; webhook — staging/production по канону.
+ASCII callback path в canonical form из Game API contract (literal unreserved
+segments, `/` separators, без percent escapes/query/fragment), защита от
+SSRF/private/metadata destinations и DNS rebinding, без auth-bearing redirects.
+Dev использует polling; webhook — staging/production по канону.
 
 Новая durable polling capability, если будет выбрана, требует delivery lease,
 opaque cursor и отдельного ACK после записи game inbox. Текущий v1 PollEvents

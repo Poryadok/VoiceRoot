@@ -1788,6 +1788,157 @@ const MarkAccountRegularResponse$json = {
 final $typed_data.Uint8List markAccountRegularResponseDescriptor =
     $convert.base64Decode('ChpNYXJrQWNjb3VudFJlZ3VsYXJSZXNwb25zZQ==');
 
+@$core.Deprecated('Use getSdkProfileEligibilityRequestDescriptor instead')
+const GetSdkProfileEligibilityRequest$json = {
+  '1': 'GetSdkProfileEligibilityRequest',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `GetSdkProfileEligibilityRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSdkProfileEligibilityRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRTZGtQcm9maWxlRWxpZ2liaWxpdHlSZXF1ZXN0Eh0KCmFjY291bnRfaWQYASABKAlSCW'
+        'FjY291bnRJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use getSdkProfileEligibilityResponseDescriptor instead')
+const GetSdkProfileEligibilityResponse$json = {
+  '1': 'GetSdkProfileEligibilityResponse',
+  '2': [
+    {'1': 'account_id', '3': 1, '4': 1, '5': 9, '10': 'accountId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'profile_revision', '3': 3, '4': 1, '5': 4, '10': 'profileRevision'},
+    {'1': 'deleted', '3': 4, '4': 1, '5': 8, '10': 'deleted'},
+    {'1': 'frozen', '3': 5, '4': 1, '5': 8, '10': 'frozen'},
+  ],
+};
+
+/// Descriptor for `GetSdkProfileEligibilityResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSdkProfileEligibilityResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRTZGtQcm9maWxlRWxpZ2liaWxpdHlSZXNwb25zZRIdCgphY2NvdW50X2lkGAEgASgJUg'
+        'lhY2NvdW50SWQSHQoKcHJvZmlsZV9pZBgCIAEoCVIJcHJvZmlsZUlkEikKEHByb2ZpbGVfcmV2'
+        'aXNpb24YAyABKARSD3Byb2ZpbGVSZXZpc2lvbhIYCgdkZWxldGVkGAQgASgIUgdkZWxldGVkEh'
+        'YKBmZyb3plbhgFIAEoCFIGZnJvemVu');
+
+@$core.Deprecated('Use recordSdkAuthorTombstoneRequestDescriptor instead')
+const RecordSdkAuthorTombstoneRequest$json = {
+  '1': 'RecordSdkAuthorTombstoneRequest',
+  '2': [
+    {'1': 'version', '3': 1, '4': 1, '5': 13, '10': 'version'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'source_account_id', '3': 3, '4': 1, '5': 9, '10': 'sourceAccountId'},
+    {'1': 'source_actor_id', '3': 4, '4': 1, '5': 9, '10': 'sourceActorId'},
+    {'1': 'target_account_id', '3': 5, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'target_profile_id', '3': 6, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {
+      '1': 'expected_profile_revision',
+      '3': 7,
+      '4': 1,
+      '5': 4,
+      '10': 'expectedProfileRevision'
+    },
+    {'1': 'frozen_binding_id', '3': 8, '4': 1, '5': 9, '10': 'frozenBindingId'},
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 9,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {
+      '1': 'freeze_receipt_id',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '10': 'freezeReceiptId'
+    },
+    {'1': 'request_hash', '3': 11, '4': 1, '5': 9, '10': 'requestHash'},
+  ],
+};
+
+/// Descriptor for `RecordSdkAuthorTombstoneRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recordSdkAuthorTombstoneRequestDescriptor = $convert.base64Decode(
+    'Ch9SZWNvcmRTZGtBdXRob3JUb21ic3RvbmVSZXF1ZXN0EhgKB3ZlcnNpb24YASABKA1SB3Zlcn'
+    'Npb24SIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIqChFzb3VyY2VfYWNjb3Vu'
+    'dF9pZBgDIAEoCVIPc291cmNlQWNjb3VudElkEiYKD3NvdXJjZV9hY3Rvcl9pZBgEIAEoCVINc2'
+    '91cmNlQWN0b3JJZBIqChF0YXJnZXRfYWNjb3VudF9pZBgFIAEoCVIPdGFyZ2V0QWNjb3VudElk'
+    'EioKEXRhcmdldF9wcm9maWxlX2lkGAYgASgJUg90YXJnZXRQcm9maWxlSWQSOgoZZXhwZWN0ZW'
+    'RfcHJvZmlsZV9yZXZpc2lvbhgHIAEoBFIXZXhwZWN0ZWRQcm9maWxlUmV2aXNpb24SKgoRZnJv'
+    'emVuX2JpbmRpbmdfaWQYCCABKAlSD2Zyb3plbkJpbmRpbmdJZBI0ChZmcm96ZW5fYXV0aG9yaX'
+    'R5X2Vwb2NoGAkgASgEUhRmcm96ZW5BdXRob3JpdHlFcG9jaBIqChFmcmVlemVfcmVjZWlwdF9p'
+    'ZBgKIAEoCVIPZnJlZXplUmVjZWlwdElkEiEKDHJlcXVlc3RfaGFzaBgLIAEoCVILcmVxdWVzdE'
+    'hhc2g=');
+
+@$core.Deprecated('Use recordSdkAuthorTombstoneResponseDescriptor instead')
+const RecordSdkAuthorTombstoneResponse$json = {
+  '1': 'RecordSdkAuthorTombstoneResponse',
+  '2': [
+    {'1': 'version', '3': 1, '4': 1, '5': 13, '10': 'version'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'source_account_id', '3': 4, '4': 1, '5': 9, '10': 'sourceAccountId'},
+    {'1': 'source_actor_id', '3': 5, '4': 1, '5': 9, '10': 'sourceActorId'},
+    {'1': 'target_account_id', '3': 6, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'target_profile_id', '3': 7, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {'1': 'profile_revision', '3': 8, '4': 1, '5': 4, '10': 'profileRevision'},
+    {
+      '1': 'tombstone_revision',
+      '3': 9,
+      '4': 1,
+      '5': 4,
+      '10': 'tombstoneRevision'
+    },
+    {
+      '1': 'frozen_binding_id',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '10': 'frozenBindingId'
+    },
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 11,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {
+      '1': 'freeze_receipt_id',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '10': 'freezeReceiptId'
+    },
+    {'1': 'request_hash', '3': 13, '4': 1, '5': 9, '10': 'requestHash'},
+    {
+      '1': 'committed_at',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'committedAt'
+    },
+  ],
+};
+
+/// Descriptor for `RecordSdkAuthorTombstoneResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recordSdkAuthorTombstoneResponseDescriptor = $convert.base64Decode(
+    'CiBSZWNvcmRTZGtBdXRob3JUb21ic3RvbmVSZXNwb25zZRIYCgd2ZXJzaW9uGAEgASgNUgd2ZX'
+    'JzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJlY2VpcHRJZBIhCgxvcGVyYXRpb25faWQYAyAB'
+    'KAlSC29wZXJhdGlvbklkEioKEXNvdXJjZV9hY2NvdW50X2lkGAQgASgJUg9zb3VyY2VBY2NvdW'
+    '50SWQSJgoPc291cmNlX2FjdG9yX2lkGAUgASgJUg1zb3VyY2VBY3RvcklkEioKEXRhcmdldF9h'
+    'Y2NvdW50X2lkGAYgASgJUg90YXJnZXRBY2NvdW50SWQSKgoRdGFyZ2V0X3Byb2ZpbGVfaWQYBy'
+    'ABKAlSD3RhcmdldFByb2ZpbGVJZBIpChBwcm9maWxlX3JldmlzaW9uGAggASgEUg9wcm9maWxl'
+    'UmV2aXNpb24SLQoSdG9tYnN0b25lX3JldmlzaW9uGAkgASgEUhF0b21ic3RvbmVSZXZpc2lvbh'
+    'IqChFmcm96ZW5fYmluZGluZ19pZBgKIAEoCVIPZnJvemVuQmluZGluZ0lkEjQKFmZyb3plbl9h'
+    'dXRob3JpdHlfZXBvY2gYCyABKARSFGZyb3plbkF1dGhvcml0eUVwb2NoEioKEWZyZWV6ZV9yZW'
+    'NlaXB0X2lkGAwgASgJUg9mcmVlemVSZWNlaXB0SWQSIQoMcmVxdWVzdF9oYXNoGA0gASgJUgty'
+    'ZXF1ZXN0SGFzaBI9Cgxjb21taXR0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZX'
+    'N0YW1wUgtjb21taXR0ZWRBdA==');
+
 @$core.Deprecated('Use searchProfileProjectionEventDescriptor instead')
 const SearchProfileProjectionEvent$json = {
   '1': 'SearchProfileProjectionEvent',

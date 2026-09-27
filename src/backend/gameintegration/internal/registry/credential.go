@@ -100,20 +100,23 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var ownerID uuid.UUID
-	var appStatus, envStatus string
-	err = tx.QueryRow(ctx, `SELECT a.owner_account_id, a.status, e.status FROM environments e
+	var appStatus, envStatus, environmentKind string
+	err = tx.QueryRow(ctx, `SELECT a.owner_account_id, a.status, e.status, e.kind FROM environments e
 		JOIN applications a ON a.id=e.application_id
 		WHERE e.id=$1 AND a.id=$2 FOR UPDATE OF e,a`, in.EnvironmentID, in.ApplicationID).
-		Scan(&ownerID, &appStatus, &envStatus)
+		Scan(&ownerID, &appStatus, &envStatus, &environmentKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credential{}, ErrAdmissionConflict
 	}
 	if err != nil {
 		return Credential{}, fmt.Errorf("lock credential environment: %w", err)
 	}
-	if ownerID != in.OwnerAccountID || envStatus != "active" ||
-		(appStatus != "sandbox" && appStatus != "active") {
+	if ownerID != in.OwnerAccountID || envStatus != "active" || environmentKind != "sandbox" ||
+		(appStatus != "sandbox" && appStatus != "active" && appStatus != "suspended") {
 		return Credential{}, ErrAdmissionConflict
+	}
+	if appStatus == "suspended" {
+		return Credential{}, ErrApplicationSuspended
 	}
 	const route = "credentials.issue"
 	command, err := tx.Exec(ctx, `INSERT INTO registry_operations
@@ -181,8 +184,9 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 		return Credential{}, fmt.Errorf("complete credential operation: %w", err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO registry_audit
-		(id, actor_kind, actor_id, application_id, environment_id, action, new_status, operation_key)
-		VALUES ($1,'account',$2,$3,$4,'issue_credential','active',$5)`,
+		(id, actor_kind, actor_id, application_id, environment_id, action, new_status, operation_key,
+		 source, result, reason_code)
+		VALUES ($1,'account',$2,$3,$4,'issue_credential','active',$5,'authenticated_account','success','credential_issued')`,
 		uuid.New(), in.OwnerAccountID, in.ApplicationID, in.EnvironmentID, in.IdempotencyKey)
 	if err != nil {
 		return Credential{}, fmt.Errorf("audit credential issue: %w", err)

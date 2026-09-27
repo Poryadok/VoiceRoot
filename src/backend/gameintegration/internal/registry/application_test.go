@@ -3,19 +3,16 @@ package registry
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"voice/backend/pkg/integrationtest"
 )
 
 func TestCreateApplicationIdempotencyAndIsolation(t *testing.T) {
 	ctx := context.Background()
-	migration := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000001_init.up.sql")
-	pool := integrationtest.StartPostgres(t, ctx, "game_integration_test", migration)
+	pool := startT12Postgres(t, ctx)
 	store := &Store{Pool: pool}
 	ownerA := uuid.New()
 	ownerB := uuid.New()
@@ -57,8 +54,7 @@ func TestCreateApplicationIdempotencyAndIsolation(t *testing.T) {
 
 func TestCreateApplicationConcurrentRetryHasOneResult(t *testing.T) {
 	ctx := context.Background()
-	migration := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000001_init.up.sql")
-	pool := integrationtest.StartPostgres(t, ctx, "game_integration_test", migration)
+	pool := startT12Postgres(t, ctx)
 	store := &Store{Pool: pool}
 	owner := uuid.New()
 	const clients = 8

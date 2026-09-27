@@ -87,6 +87,8 @@ func (h *Handler) serveSandboxPolicyUpdate(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
 		case errors.Is(err, registry.ErrAdmissionConflict):
 			writeError(w, http.StatusForbidden, "ENVIRONMENT_DENIED")
+		case errors.Is(err, registry.ErrApplicationSuspended):
+			writeError(w, http.StatusServiceUnavailable, "APP_SUSPENDED")
 		case errors.Is(err, registry.ErrPolicyConflict), errors.Is(err, registry.ErrIdempotencyConflict):
 			writeError(w, http.StatusConflict, "POLICY_CONFLICT")
 		default:

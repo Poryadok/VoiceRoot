@@ -12,7 +12,7 @@
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db`         | presence cache; Social principal replay | —                         |
+| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | —                                |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
@@ -28,7 +28,7 @@
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Game Integration Service | `game_integration_db` | — | App/env registry, bindings, operations, managed grants |
-| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
+| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | Nodes, placements, snapshots, lease nonces, and append-only Q11 denial audit |
 | Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
@@ -146,12 +146,11 @@ or profile IDs. This is storage evidence, not an activated party snapshot source
 
 ## Подсчёт логических PostgreSQL БД
 
-**18** PostgreSQL databases are listed above. Compose provisions **17**,
-including the new `game_integration_db`; its staging/production manifests still
-require the matching deployment changes before activation. The existing
-`federation_db` row describes the old scaffold and is not yet provisioned.
-The game sprint in [PLAN](PLAN.md) includes implementing its new authority
-store and deployment; the old deferred-runtime description is superseded.
+**17** current service PostgreSQL databases are listed above; **16** are provisioned in staging.
+The staging manifests still include legacy `gateway_db` and lack `game_integration_db`; the local
+Compose initializer also carries the planned `federation_db` scaffold. The game sprint in
+[PLAN](PLAN.md) includes implementing its new authority store and deployment;
+the old deferred-runtime description is superseded.
 
 ---
 

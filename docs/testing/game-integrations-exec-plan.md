@@ -91,9 +91,40 @@ contracts land before consumers; activation lands after all consumers.
   test and consumer. The owner has delegated these choices; escalate only a
   genuine product contradiction or unavailable external dependency. See the
   decision checklist below.
+  - [x] T03 command delivery, v1 envelope/HMAC, retry/deadline, restart and
+    Q05 risk-class defaults frozen in the linked API/feature docs.
+  - [x] T03 permit epoch frozen: first committed admission mints
+    `permit_issued_at`; t=15/t=31 first delivery may obtain a fresh epoch while
+    authorized/unexpired; permit retries preserve one epoch; revoke shares its
+    serialization point. T07a receiver permit/revoke and completion-window
+    proof is complete; GIS online admission integration remains in T55.
+  - [x] T03 G05/G06/Q11 decisions link to the existing `/api/v1`, Federation
+    `/v1`, Google OIDC, GIS owner/operator bootstrap, and Federation mTLS
+    contracts. Q11 clean-start, cross-scope negatives, fake-vs-real provider
+    evidence are specified in acceptance; the API-only clean-start proof passed
+    at feature commit `165a11e`. The real-Google/provider proof remains open.
+  - [x] T03-Q11-FED: Federation HTTP request-ID normalization and the bounded
+    Q11 denial-audit fields, append-only storage, and TLS-handshake exclusion
+    are frozen in [Federation authority v1](../architecture/federation-authority-v1.md)
+    and [Q11 acceptance](game-integrations-acceptance.md). The Q11 clean-start
+    Federation HTTP path passed at `165a11e`; this closes no broad T03/T04 trust
+    matrix or wider Federation runtime gate.
+  - [x] T03 Q12 provisional one-host capacity/RPO/RTO qualification targets and
+    restore/load measurement method recorded in the design audit. These values
+    are proposals only; T08/T93 must replace them with measured evidence.
+  - [x] T03-AUTH: freeze only the Auth identity proof rules in
+    [GAME-AUTH-01](../architecture/game-integration-api.md#замороженный-auth-identity-slice-game-auth-01):
+    Google OIDC + separate app/env game ticket, nonce/freshness, device proof,
+    configured app/env admission, and no Gateway publication. This closes no
+    conversion, transfer/recovery, or cross-service G01 decision.
+  - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
+  - [x] T04-AUTH: the Auth-only provider/ticket issuers, audiences, key sources,
+    proof binding, storage boundary, freshness and replay rules are frozen in
+    GAME-AUTH-01 for T13a. The service/bot/node trust matrix and runtime
+    negative-case suite remain open.
 - [ ] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
   selected profile/alias, character, app/env/installation, binding, party,
   match/fleet, corporation→Space, grant reasons, operations and tombstones.
@@ -102,10 +133,59 @@ contracts land before consumers; activation lands after all consumers.
   version negotiation, errors, canonical IDs, idempotency, pagination,
   capability fallback, signed envelope/revision, required security fields.
   Add contract tests and generated-code compatibility checks.
-- [ ] **T07** `D: T03,T06` Build internal controlled game backend with durable
-  outbox, command inbox and transactional effect store; build independent
-  protocol client with per-device keys plus real media clients. Version and
-  retain fixtures. These are test infrastructure, not a public SDK.
+  - [x] Command/result JSON v1 routes, envelope canonicalization, status/error,
+    idempotency and receipt contract frozen in `game-integration-api.md`.
+  - [x] T06-AUTH: Auth challenge/exchange/session/revoke paths, request and
+    response fields, device proof bytes, credential semantics and denial policy
+    are frozen in GAME-AUTH-01 for T13a. Gateway/OpenAPI publication, other
+    resource APIs, generated contracts and executable compatibility checks
+    remain open.
+  - [ ] Other OpenAPI/proto/resource contracts and executable compatibility
+    tests remain open; this docs decision does not claim routes are implemented.
+- [x] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
+  module and dedicated test DB: durable command inbox/outbox and transactional
+  effect/result receipt as specified in the v1 contract. Never register it in
+  production GIS or use `game_integration_db` for game effects. Version and
+  retain deterministic fixtures. Its internal test adapter is not a GIS HTTP
+  contract: `PermitAuthority.Admit` receives command/operation IDs, exact
+  app/environment/installation IDs, opaque actor-proof profile/proof IDs, and
+  binding revision; it returns a stable permit ID and integer Unix-second
+  `permit_issued_at`, or distinct denied/unavailable errors. A fake authority
+  returns one permit per command ID, serializes new issuance against revoke
+  (revoke-first denies; permit-first preserves only that permit's fixed window),
+  and returns the same permit on retry/lost-response without extending it or
+  reminting after the start bound. Start and completion bounds are exclusive at
+  `permit_issued_at+10s` and `permit_issued_at+60s`; a missed start, denied or
+  unavailable admission produces no game effect. The receiver persists the
+  permit receipt with the command, runs a transaction-scoped local authorization
+  check before the game mutation, and commits effect plus immutable result/outbox
+  only before the completion bound. The local check binds the signed
+  app/environment/installation and opaque actor proof to the game-owned profile,
+  character and current binding revision, and requires the command's state
+  version to match. Test fixtures model this mapping without defining a proof
+  format or making a live GIS call. Testcontainers PostgreSQL is per-test and
+  isolated; its receiver-owned schema is initialized only inside that database.
+  This vertical is the durable receiver foundation consumed by T56; T56 remains
+  responsible for integrating actual GIS authority and game-specific state.
+  - [x] T07a local proof: `TestT07aPermitAuthoritySerializesIssueAndRevoke`,
+    `TestT07aCallbackPersistsPermitAndImmutableReceiptThenReplays`,
+    `TestT07aAuthorizationDenialAndAdmissionFailuresHaveNoEffect`, and
+    `TestT07aPermitStartAndCompletionBoundsAreExclusive`, plus
+    `TestT07aCompletionDeadlineCheckedAtTransactionCommit` pass; the four
+    callback integration tests use isolated PostgreSQL 16 containers. The
+    receipt test rejects UPDATE, DELETE and TRUNCATE while preserving committed
+    rows; the final pre-commit check rejects a deadline crossed during receipt
+    persistence. Run from `src/backend/controlledgame/`:
+    `rtk go test ./... -run '^TestT07a' -count=1`, then
+    `rtk go test ./... -count=1`, `rtk go vet ./...`, and
+    `rtk golangci-lint run ./...`. PR #508 merged after a separate Codex
+    exact-head review returned CLEAR and hosted checks passed. Broad
+    T03/T04/T06 parents remain open.
+- [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
+  keys only after T15 key proof/registration semantics are implemented.
+- [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
+  LiveKit/media and public-client acceptance paths exist. These are test
+  infrastructure, not a public SDK.
 - [ ] **T08** `D: T03` Define measured targets and harness: revocation clocks,
   game→Voice roster latency, lease/skew/eject budget, retry/retention windows,
   RPO/RTO, host/runtime/version matrix, concurrency and capacity. Separate
@@ -121,17 +201,45 @@ contracts land before consumers; activation lands after all consumers.
   sandbox/prod isolation, credential issue/rotation/revoke, allowed provider,
   redirect, origin and webhook configuration. Clean bootstrap works through
   API/operator process, without direct SQL or portal.
-- [ ] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
+- [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.
 - [ ] **T13** `D: T04,T06` Implement Java Auth `sdk-account` type and schema,
   independent provider proof verifier (real chosen provider plus fake),
   issuer/audience/nonce/replay checks, admission cap and app/env-scoped account
-  uniqueness. Never route via `guest`/`ConvertGuest`.
+  uniqueness. Never route via `guest`/`ConvertGuest`. Parent remains open for
+  the full identity vertical and its broader acceptance.
+- [x] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
+  GAME-AUTH-01 foundation in Java: `sdk-account` schema/principal, paired Google
+  OIDC and app/env game-ticket verification, challenge/device proof, replay and
+  freshness checks, operator-configured app/env admission, cap of 1,000
+  identities per app/env and 10 active devices per identity, uniqueness,
+  bootstrap/session/revoke. Deterministic fake-provider tests pass; Auth routes
+  remain opt-in and are not published in Gateway. Do not integrate GIS
+  registry/Gateway or implement conversion, browser/PKCE, User profile
+  selection, per-device actor keys, recovery, or wider G01 trust policy.
+  Consumer: remaining T13/Auth identity work and the later T14 authorization
+  flow. Required acceptance is the T13a
+  module suite described in [Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open);
+  the separate API-only clean-start gate passed at feature commit `165a11e`;
+  the real-Google gate is OPEN / NOT RUN, and production admission remains open.
+  T13a module and
+  full Auth Maven checks passed on feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`;
+  see the exact counts and scope in [Q11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
 - [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a
   player token. Add device-code route only if required by frozen capabilities.
+  Auth's request-bound `service:auth` principal and User profile eligibility
+  adapter are one security prerequisite for this vertical; their accepted
+  keyset/transport contract is in [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending)
+  and [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal). At
+  approval, validate exact response IDs and positive revision, deny deleted or
+  frozen profiles, and persist `profile_revision`. At exchange, re-read and
+  require the same eligible IDs and revision; otherwise deny with existing
+  `invalid_sdk_identity` and require a fresh authorization. No new external
+  error code is introduced. These docs freeze the target contract, not runtime
+  implementation or rollout evidence.
 - [ ] **T15** `D: T13,T14` Register per-device public keys after independent
   proof; sign canonical actor/chat/body/message envelope, verify at receiver,
   revoke/rotate keys, reject tamper/replay/same ID different payload. Separate
@@ -214,7 +322,7 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T55** `D: T54` Implement online execution admission serialized with
   revoke, one permit per command with fixed start/complete bounds, retry without
   extending window and narrow completion right for prior game commit.
-- [ ] **T56** `D: T55,T07` Controlled game backend verifies actor, binding,
+- [ ] **T56** `D: T55,T07a` Controlled game backend verifies actor, binding,
   character, game state and permit, commits dedupe+effect+result outbox in one
   transaction. Different command IDs for same one-shot event cannot double
   effect. Reconcile lost ACK without inventing a new command.
@@ -295,9 +403,11 @@ contracts land before consumers; activation lands after all consumers.
 | G01, Q03, Q07, Q08, Q10 | provider and subject ownership, recovery/retirement, sdk profile/alias and limits, conversion conflicts/history, voice handoff, tombstones | T13–T19 |
 | G02, G03, Q01, Q09 | alt-rank merge rule, protected Owner recovery, entitlement intervals/rejoin, block/report in shared chat | T33,T37–T39 |
 | G04, G09 | retention and retry windows, roster source freshness and fail-closed policy | T30–T39 |
-| G05, G06, G07, Q11, Q12 | API/node versions, store schema, bootstrap approver/provider, quotas, host support/capacity/RPO/RTO | T06,T10–T12,T76 |
+| G05, G06, Q11 | `/api/v1` and Federation `/v1`; proposed 12-month v1 support after successor-major GA; GIS-owned store; distinct Voice app owner/operator; Google OIDC; clean DB/host bootstrap and negative cases | T06,T10–T14,T70,T76; acceptance Q11 |
+| G07, Q12 | Quotas and supported host/runtime; provisional capacity/RPO/RTO plus restore/load harness | T08,T11–T12,T76,T93; proposals remain unmeasured |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
-| G13, Q05 | dangerous action classes/challenge, execution start/complete bounds and in-flight UX | T53–T57 |
+| T14 Auth-to-User principal | Dedicated Auth RS256 current+next keyset and JWKS separate from client JWTs; exact request-bound claims; User TLS `:9094`, shared User replay Redis; 30s credential/5s skew/35s key overlap; selected-profile IDs and positive revision checked at approval and exchange, revision change requires fresh authorization | T14 Auth signer/client; [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending), [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal) |
+| G13, Q05 | read-only no-confirm allowlist; all risky/unknown classes require single-use challenge (fail closed if unavailable); permit +10s start/+60s commit and revoke race UX | T53–T57 |
 | G08, G10, Q04, Q06 | signed revisions/files, control-plane capacity, media lease/eject budget, export/loss/defederation terms | T70–T78 |
 
 No numerical default in the right column is inferred from a proposed target.
@@ -354,6 +464,12 @@ test assertion, not just prose.
 - The owner delegated all routine G01–G13/Q01–Q12 technical choices to this
   implementation team. Record choices before dependent code without asking for
   another approval.
+- T14 Auth→User selected-profile authority is fixed to a dedicated Auth
+  service-principal keyset and JWKS (separate from client JWTs), User TLS
+  `:9094`, and User-owned shared Redis replay admission. The exact request-bound
+  credential, two-key rotation and 35-second overlap, and approval/exchange
+  profile-revision checks are the accepted target in the Auth service and
+  deployment docs above; implementation and rollout evidence remain open.
 
 ## Risks and follow-ups
 
@@ -364,12 +480,15 @@ test assertion, not just prose.
   budget and durable event/command semantics.
 - Bot audit was source-only at `77ec7240a`, not a current-code or live proof.
   T02 rechecks all gaps; T50 closes those that remain.
-- The current Federation service is a scaffold and `federation_db` is not
-  provisioned. `FED10` cannot be passed by issuing a shorter LiveKit JWT alone;
-  enforce active media-path fencing and measure it.
-- Independent provider proof, Q11 bootstrap and operational Q12 values are
-  design-and-build tasks owned by this sprint. A fake provider proves the
-  contract; a real selected provider must pass the acceptance path before
-  production admission.
+- The current Federation service has a bounded HTTPS authority foundation and
+  service-owned schema, but `federation_db` is not provisioned and there is no
+  Voice Node consumer, owning-service snapshot publisher, or media enforcement.
+  `FED10` cannot be passed by issuing a shorter LiveKit JWT alone; enforce
+  active media-path fencing and measure it.
+- Google OIDC and operator/bootstrap contracts are already frozen in the API,
+  GIS and Federation docs. Fake JWKS tests prove verifier behavior only; a real
+  Voice-owned Google client must pass acceptance on the release SHA before
+  production admission. Q12 targets in the design audit are proposed and
+  unmeasured until T08/T93 produce restore/load results.
 - This plan contains no calendar estimate: no team size, compatible host target
   or measured capacity exists yet. Those are T08/T93 outputs.

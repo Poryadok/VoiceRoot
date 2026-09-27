@@ -49,6 +49,10 @@ func (h *InternalPolicyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	policy, err := h.Store.LoadAuthorizationPolicy(r.Context(), envID)
 	if err != nil {
+		if errors.Is(err, registry.ErrApplicationSuspended) {
+			writeError(w, http.StatusServiceUnavailable, "APP_SUSPENDED")
+			return
+		}
 		writeError(w, http.StatusServiceUnavailable, "POLICY_UNAVAILABLE")
 		return
 	}

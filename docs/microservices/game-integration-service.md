@@ -58,7 +58,9 @@ does not enable a public game communication capability.
 accepts an owner bearer, `Idempotency-Key` and an exact `scopes` array from
 `game.events.write`, `game.sessions.write`, `game.roster.write` and
 `game.commands.read`. It returns `vgi1_{credential_id}_{secret}` with
-`Cache-Control: no-store`; no owner account ID is accepted in the body. The
+`Cache-Control: no-store`; the secret is unpadded base64url and may contain `_`,
+so the credential ID is the first field after `vgi1_` and the remaining bytes
+are parsed as the secret. No owner account ID is accepted in the body. The
 endpoint is unavailable until `GAME_INTEGRATION_CREDENTIAL_KEY_B64` contains
 one base64-encoded 32-byte deployment secret. It must be supplied via the
 deployment secret manager; it is not a development default. The key must be
@@ -69,6 +71,17 @@ the registry database on each call. `DELETE /api/v1/game-integrations/applicatio
 revokes an owned credential immediately and is idempotent. Production
 admission and a live game-service operation consuming the verifier remain
 dependent steps.
+
+The future command contract is frozen separately in
+[`game-integration-api.md`](../architecture/game-integration-api.md) and
+[`game-bot-interactions.md`](../features/game-bot-interactions.md): callback
+delivery is installation-scoped, and proposed GIS invoke/admission/result/status
+routes use the documented v1 envelope. These routes are not implemented by this
+registry slice. The current credential allowlist above remains authoritative for
+deployed code; `game.commands.execute` is a future explicit scope and must not be
+accepted until its API, verifier, migration, and negative tests are implemented.
+The controlled T07a receiver is test infrastructure in an independent module
+and database, never a production GIS registry or `game_integration_db` table.
 
 The approved sandbox owner configures Auth admission with
 `PUT /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/policy`.
@@ -143,6 +156,70 @@ the service before enabling any route.
   message/credential/device paths and after revoke; no raw secret persists.
 - Clean bootstrap creates owner/app/sandbox and an independently approved
   environment without direct SQL or developer portal access.
+
+## T12: registry security, callback admission and diagnostics
+
+`POST /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/installations`
+is an owner route. It takes only `callback_url`, an `Idempotency-Key`, and the
+application/environment IDs from the path and trusted bearer. Registration
+requires an active environment and a canonical HTTPS callback on port 443. The
+URL cannot contain userinfo, a query, or a fragment; each path segment must be
+literal ASCII unreserved text. Registration resolves DNS and rejects the URL if
+any answer is non-public or special-use. The shared callback transport resolves
+again when dialing, validates every answer, pins the socket to an approved IP,
+and keeps TLS verification bound to the original hostname. Redirects are
+terminal responses. T12 stores the callback with its app, environment, and
+installation; it does not dispatch commands. T15 must use this transport for
+every command callback.
+
+Installation registration is limited to 120 attempts per application per UTC
+minute across all of that application's environments. The 121st request returns
+`429 RATE_LIMITED` with integer `Retry-After` seconds to the next minute
+boundary. Repeated quota denials update one sanitized audit event per app and
+minute. Reads, current application/environment/policy/credential routes,
+operator actions, and future T15 delivery are outside this selected bucket.
+An authenticated owner denied after quota admission consumes the attempt; a
+foreign owner is denied before quota admission. Invalid bearer requests create
+no registry, quota, or audit writes.
+
+`PUT /api/v1/game-integrations/applications/{app_id}/suspension` is restricted
+to configured regular operator accounts and takes `{"suspended": boolean}`
+plus an `Idempotency-Key`. A blocked lifecycle transition returns `409
+APPLICATION_STATE_CONFLICT`; suspended application credential and Auth policy
+consumers fail closed with `503 APP_SUSPENDED`. State change and audit commit in
+one transaction. Restore returns the prior application state and never
+reactivates revoked credentials or independently suspended/retired
+environments. An identical retry returns its originally persisted result
+snapshot and revision.
+
+`GET /api/v1/game-integrations/applications/{app_id}/diagnostics` is owner-only
+and returns application/environment/installation IDs and states, quota use and
+reset time, developer-entered provider assertions, and at most 20 newest audit
+events. It omits callback URLs, credentials and digests, OAuth subjects,
+assertions, provider proofs, payloads, and secrets. Provenance values remain
+separate: `developer_asserted`, `operator_approved`, and `provider_verified` /
+`provider_admitted`. T12 records developer assertions and operator approval;
+provider status remains `not_verified` without independent provider evidence.
+Audit result values are `success` or `denied`; source identifies the trusted
+actor/provenance. The T12 migration backfills only old operator
+`approve_sandbox` events as `operator_approved` and leaves other legacy events
+at `system` / `success`.
+
+The T11 HTTP bootstrap acceptance is
+`rtk make game-integration-bootstrap-acceptance`. It starts a disposable empty
+registry, uses synthetic Voice access tokens verified through a fake JWKS, and
+exercises the applicant/operator API boundary, sandbox policy ownership,
+credential issuance and audit. This verifies the GIS path only; it is not a
+real Google OIDC run and does not close the broader Q11 GIS-plus-node clean-start
+gate.
+
+`game-integration-bootstrap-acceptance` runs
+`TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs`, which uses
+only API-created registry rows. The ordinary full GIS suite separately runs
+`TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture`;
+that security test uses a SQL fixture for a production environment the current
+API cannot create, and is intentionally excluded from Q11 clean-start. It is not
+evidence of production admission.
 
 This contract is subordinate to the game integration feature and API canon;
 later sections will add sessions, managed grants, bot and node-facing operations

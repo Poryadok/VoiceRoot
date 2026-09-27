@@ -156,8 +156,12 @@ func (s *Store) UpdateSandboxPolicy(ctx context.Context, input UpdateSandboxPoli
 	if err != nil {
 		return Environment{}, fmt.Errorf("lock policy environment: %w", err)
 	}
-	if ownerID != in.OwnerAccountID || appStatus != "sandbox" || envStatus != "active" || envKind != "sandbox" {
+	if ownerID != in.OwnerAccountID || envStatus != "active" || envKind != "sandbox" ||
+		(appStatus != "sandbox" && appStatus != "suspended") {
 		return Environment{}, ErrAdmissionConflict
+	}
+	if appStatus == "suspended" {
+		return Environment{}, ErrApplicationSuspended
 	}
 	const route = "environments.update_sandbox_policy"
 	command, err := tx.Exec(ctx, `INSERT INTO registry_operations
@@ -219,8 +223,8 @@ func (s *Store) UpdateSandboxPolicy(ctx context.Context, input UpdateSandboxPoli
 		return Environment{}, fmt.Errorf("complete policy operation: %w", err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO registry_audit
-		(id,actor_kind,actor_id,application_id,environment_id,action,new_status,operation_key)
-		VALUES ($1,'account',$2,$3,$4,'update_sandbox_policy','active',$5)`,
+		(id,actor_kind,actor_id,application_id,environment_id,action,new_status,operation_key,source,result,reason_code)
+		VALUES ($1,'account',$2,$3,$4,'update_sandbox_policy','active',$5,'developer_asserted','success','provider_policy_asserted')`,
 		uuid.New(), in.OwnerAccountID, in.ApplicationID, in.EnvironmentID, in.IdempotencyKey)
 	if err != nil {
 		return Environment{}, fmt.Errorf("audit policy update: %w", err)
@@ -254,6 +258,9 @@ func (s *Store) LoadAuthorizationPolicy(ctx context.Context, environmentID uuid.
 	}
 	if err != nil {
 		return AuthorizationPolicy{}, fmt.Errorf("read authorization policy: %w", err)
+	}
+	if appStatus == "suspended" {
+		return AuthorizationPolicy{}, ErrApplicationSuspended
 	}
 	if envStatus != "active" || appStatus != "sandbox" && appStatus != "active" {
 		return AuthorizationPolicy{}, ErrPolicyUnavailable

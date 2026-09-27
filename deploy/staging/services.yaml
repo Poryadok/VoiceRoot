@@ -1160,7 +1160,8 @@ metadata:
   namespace: voice-staging
   labels: {app: voice-federation}
 spec:
-  replicas: 1
+  # Keep the authority dormant until its Voice Node consumer is implemented.
+  replicas: 0
   selector:
     matchLabels: {app: voice-federation}
   template:
@@ -1171,15 +1172,31 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: federation
           image: __IMAGE_REGISTRY__/federation:__IMAGE_TAG__
-          ports: [{containerPort: 8080}, {containerPort: 9090}]
+          ports: [{containerPort: 8080, name: http}, {containerPort: 9443, name: authority}]
           env:
             - {name: LISTEN_ADDR, value: ":8080"}
-            - {name: FEDERATION_GRPC_LISTEN, value: ":9090"}
+            - {name: FEDERATION_DATABASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FEDERATION_DATABASE_URL}}}
+            - {name: FEDERATION_TLS_CERT, value: "/etc/voice/federation/tls.crt"}
+            - {name: FEDERATION_TLS_KEY, value: "/etc/voice/federation/tls.key"}
+            - {name: FEDERATION_CLIENT_CA, value: "/etc/voice/federation/client-ca.crt"}
+            - {name: FEDERATION_SIGNING_SEED_FILE, value: "/etc/voice/federation/signing-seed"}
+            - {name: FEDERATION_KEY_ID, valueFrom: {configMapKeyRef: {name: voice-app-config, key: FEDERATION_KEY_ID}}}
+            - {name: FEDERATION_ISSUER, valueFrom: {configMapKeyRef: {name: voice-app-config, key: FEDERATION_ISSUER}}}
+            - {name: FEDERATION_ENVIRONMENT, value: "staging"}
+            - {name: FEDERATION_OPERATOR_CERT_SHA256, valueFrom: {configMapKeyRef: {name: voice-app-config, key: FEDERATION_OPERATOR_CERT_SHA256}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
-          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          volumeMounts:
+            - {name: federation-authority-secrets, mountPath: /etc/voice/federation, readOnly: true}
+          readinessProbe: {httpGet: {path: /ready, port: http}, periodSeconds: 5}
+      volumes:
+        - name: federation-authority-secrets
+          secret: {secretName: voice-federation-authority, defaultMode: 0440}
 ---
 apiVersion: v1
 kind: Service
@@ -1188,4 +1205,4 @@ metadata:
   namespace: voice-staging
 spec:
   selector: {app: voice-federation}
-  ports: [{name: http, port: 8080}, {name: grpc, port: 9090}]
+  ports: [{name: http, port: 8080}, {name: authority, port: 9443}]

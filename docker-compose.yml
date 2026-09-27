@@ -865,12 +865,30 @@ services:
       retries: 10
       start_period: 10s
 
-  # Legacy Federation scaffold; game-node runtime is implemented by this sprint.
+  # Federation is opt-in until a Voice Node verifier is ready. The mounted
+  # local credentials and operator settings are required when this profile is selected.
   federation:
-    profiles: ["app"]
+    profiles: ["federation"]
     build:
       context: ./src/backend
       dockerfile: federation/Dockerfile
+    environment:
+      FEDERATION_DATABASE_URL: ${FEDERATION_DATABASE_URL:-}
+      FEDERATION_TLS_CERT: /run/voice/federation/tls.crt
+      FEDERATION_TLS_KEY: /run/voice/federation/tls.key
+      FEDERATION_CLIENT_CA: /run/voice/federation/client-ca.crt
+      FEDERATION_SIGNING_SEED_FILE: /run/voice/federation/signing-seed
+      FEDERATION_KEY_ID: ${FEDERATION_KEY_ID:-}
+      FEDERATION_ISSUER: ${FEDERATION_ISSUER:-}
+      FEDERATION_ENVIRONMENT: ${FEDERATION_ENVIRONMENT:-}
+      FEDERATION_OPERATOR_CERT_SHA256: ${FEDERATION_OPERATOR_CERT_SHA256:-}
+    volumes:
+      - ${FEDERATION_LOCAL_SECRET_DIR:-./tmp/federation-local}:/run/voice/federation:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -890,6 +908,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/bot_db?sslmode=disable
       BOT_GRPC_LISTEN: :9090
       BOT_GRPC_GATEWAY_ONLY: "true"
+      BOT_ENABLE_DEV_POLLING: "true"
       BOT_REDIS_ADDR: redis:6379
       MESSAGING_GRPC_ADDR: messaging:9090
       CHAT_GRPC_ADDR: chat:9090
