@@ -55,6 +55,15 @@ grep -Fq 'if [[ "${svc}" == "controlledgame" ]]; then' "${ROOT}/scripts/ci/resol
   && grep -Fq 'add_integration_unique gameintegration' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \
   || fail "controlledgame changes must include the Game Integration consumer in PR integration tests"
 
+for minio_job in minio-server-image-publish minio-mc-image-publish; do
+  minio_block="$(sed -n "/^  ${minio_job}:$/,/^  [[:alnum:]_-]*:$/p" "${WORKFLOW}")"
+  echo "${minio_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \
+    || fail "${minio_job} must remain limited to deployment-global changes"
+  if echo "${minio_block}" | grep -Fq "needs.changes.outputs.ci_global"; then
+    fail "${minio_job} must not publish images for CI-only changes"
+  fi
+done
+
 echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
 echo "${job_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \
