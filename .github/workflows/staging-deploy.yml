@@ -249,6 +249,12 @@ jobs:
           set -euo pipefail
           bash scripts/staging/preflight-nats-pvc.sh
 
+      - name: Preflight staging Auth email credential
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: bash scripts/staging/preflight-resend-key.sh
+
       - name: Ensure MinIO credentials
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
