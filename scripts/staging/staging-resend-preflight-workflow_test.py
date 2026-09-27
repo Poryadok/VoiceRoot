@@ -2,6 +2,7 @@
 """Keep the mail secret preflight ahead of staging workflow mutations."""
 
 from pathlib import Path
+import importlib.util
 import re
 
 
@@ -46,7 +47,47 @@ validation = source.split("\n  validate-app-secret:\n", 1)[1]
 assert "runs-on: ubuntu-latest" in validation, "validation must use an isolated hosted runner"
 assert "environment: staging" in validation, "validation must read the staging Environment secret"
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in validation
+assert "STAGING_SECRET_OFFLINE_PARSE: '1'" in validation
+assert "python3 -m pip install PyYAML==6.0.3" in validation
 assert "bash scripts/staging/preflight-resend-key.sh" in validation
 assert "configure-kubectl-ci.sh" not in validation, "validation must not load cluster credentials"
+assert "setup-kubectl" not in validation, "validation must parse YAML without kubectl"
+assert "STAGING_KUBECONFIG" not in validation
+assert "STAGING_SSH_PRIVATE_KEY" not in validation
+assert "kubectl" not in validation
+assert "set -x" not in validation
 assert not re.search(r"kubectl (apply|patch|delete|rollout|create secret)", validation)
+
+root = Path(__file__).resolve().parents[2]
+checker_path = root / "scripts/staging/check-resend-key.py"
+spec = importlib.util.spec_from_file_location("staging_secret_checker", checker_path)
+assert spec and spec.loader
+checker = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(checker)
+referenced = set()
+for path in (root / "deploy/staging").glob("*.yaml"):
+    if path.name == "secret.example.yaml":
+        continue
+    manifest = path.read_text(encoding="utf-8")
+    for match in re.finditer(r"secretKeyRef:\s*\{([^{}]*)\}", manifest):
+        fields = match.group(1)
+        if not re.search(r"\bname:\s*voice-app-secrets\b", fields):
+            continue
+        if re.search(r"\boptional:\s*true\b", fields):
+            continue
+        key = re.search(r"\bkey:\s*([A-Z][A-Z0-9_]*)\b", fields)
+        assert key, f"unrecognized app Secret reference in {path.name}"
+        referenced.add(key.group(1))
+    for match in re.finditer(
+        r"secretKeyRef:\s*\n\s*name:\s*voice-app-secrets\s*\n\s*key:\s*([A-Z][A-Z0-9_]*)"
+        r"(?:\s*\n\s*optional:\s*(true|false))?",
+        manifest,
+    ):
+        if match.group(2) != "true":
+            referenced.add(match.group(1))
+expected = referenced | {"AUTH_JWT_PRIVATE_KEY", "AUTH_RESEND_API_KEY"}
+assert checker.REQUIRED_KEYS == expected, (
+    f"app Secret preflight/ref mismatch: missing {sorted(expected - checker.REQUIRED_KEYS)}, "
+    f"stale {sorted(checker.REQUIRED_KEYS - expected)}"
+)
 print("Staging mail preflight workflow ordering passed.")

@@ -103,6 +103,15 @@ run_manifest_case encoded yes
 run_manifest_case invalid_data no
 run_manifest_case missing_namespace no
 
+# The hosted validation-only job has no Kubernetes context, so YAML parsing
+# must work without invoking kubectl or accessing a cluster.
+manifest populated | python3 "${ROOT}/scripts/staging/check-resend-key.py" voice-staging --yaml >/dev/null ||
+  { echo 'FAIL: complete YAML did not pass offline validation' >&2; exit 1; }
+if manifest missing_required | python3 "${ROOT}/scripts/staging/check-resend-key.py" voice-staging --yaml >/dev/null; then
+  echo 'FAIL: incomplete YAML passed offline validation' >&2
+  exit 1
+fi
+
 run_existing_case() {
   local kind="$1" expected_mutations="$2" status
   rm -f "${TMP}/mutations"

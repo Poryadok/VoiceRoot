@@ -7,7 +7,11 @@ NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 CHECK="${ROOT}/scripts/staging/check-resend-key.py"
 
 validate_manifest() {
-  kubectl create --dry-run=client --validate=false -f - -o json 2>/dev/null | python3 "${CHECK}" "${NS}"
+  if [ "${STAGING_SECRET_OFFLINE_PARSE:-}" = 1 ]; then
+    python3 "${CHECK}" "${NS}" --yaml
+  else
+    kubectl create --dry-run=client --validate=false -f - -o json 2>/dev/null | python3 "${CHECK}" "${NS}"
+  fi
 }
 
 failure='invalid Secret document'
