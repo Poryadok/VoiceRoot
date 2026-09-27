@@ -205,8 +205,8 @@ spec:
             - {name: USER_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - {name: USER_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ENDPOINT}}}
             - {name: USER_R2_REGION, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_REGION}}}
-            - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ACCESS_KEY_ID}}}
-            - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_SECRET_ACCESS_KEY}}}
+            - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-minio-credentials, key: MINIO_ROOT_USER}}}
+            - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-minio-credentials, key: MINIO_ROOT_PASSWORD}}}
             - {name: USER_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_BUCKET}}}
             - {name: USER_R2_PUBLIC_BASE_URL, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_PUBLIC_BASE_URL}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
@@ -462,8 +462,8 @@ spec:
             - {name: USER_FILE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-user"}
             - {name: FILE_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ENDPOINT}}}
             - {name: FILE_R2_REGION, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_REGION}}}
-            - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ACCESS_KEY_ID}}}
-            - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_SECRET_ACCESS_KEY}}}
+            - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-minio-credentials, key: MINIO_ROOT_USER}}}
+            - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-minio-credentials, key: MINIO_ROOT_PASSWORD}}}
             - {name: FILE_R2_BUCKET, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_BUCKET}}}
           envFrom: [{configMapRef: {name: voice-app-config}}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}

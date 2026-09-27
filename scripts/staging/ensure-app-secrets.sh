@@ -6,7 +6,7 @@
 #   VOICE_K8S_NAMESPACE              (default: voice-staging)
 #   VOICE_STAGING_POSTGRES_PASSWORD  (default: voice)
 #   AUTH_JWT_PRIVATE_KEY_FILE        (default: repo jwt-test-private.pem)
-#   USER_R2_* / FILE_R2_*            optional object storage (empty = pods start, uploads may fail)
+#   USER_R2_* / FILE_R2_*            optional endpoint/bucket settings; credentials use voice-minio-credentials
 #
 # CI: set secrets.STAGING_APP_SECRETS_YAML (base64 full Secret manifest) to apply custom values instead.
 set -euo pipefail
@@ -78,13 +78,9 @@ generate_auth_secret() {
 }
 
 USER_R2_ENDPOINT="${USER_R2_ENDPOINT:-}"
-USER_R2_ACCESS_KEY_ID="${USER_R2_ACCESS_KEY_ID:-}"
-USER_R2_SECRET_ACCESS_KEY="${USER_R2_SECRET_ACCESS_KEY:-}"
 USER_R2_BUCKET="${USER_R2_BUCKET:-voice-staging-avatars}"
 USER_R2_PUBLIC_BASE_URL="${USER_R2_PUBLIC_BASE_URL:-}"
 FILE_R2_ENDPOINT="${FILE_R2_ENDPOINT:-}"
-FILE_R2_ACCESS_KEY_ID="${FILE_R2_ACCESS_KEY_ID:-}"
-FILE_R2_SECRET_ACCESS_KEY="${FILE_R2_SECRET_ACCESS_KEY:-}"
 FILE_R2_BUCKET="${FILE_R2_BUCKET:-voice-staging-files}"
 AUTH_TOTP_ENCRYPTION_KEY="$(generate_auth_secret)"
 ACCOUNT_DELETE_TOKEN_SECRET="$(generate_auth_secret)"
@@ -149,13 +145,9 @@ kubectl_apply_bootstrap_secret "$SECRET_NAME" \
   --from-literal=AUTH_TOTP_ENCRYPTION_KEY="$AUTH_TOTP_ENCRYPTION_KEY" \
   --from-literal=ACCOUNT_DELETE_TOKEN_SECRET="$ACCOUNT_DELETE_TOKEN_SECRET" \
   --from-literal=USER_R2_ENDPOINT="$USER_R2_ENDPOINT" \
-  --from-literal=USER_R2_ACCESS_KEY_ID="$USER_R2_ACCESS_KEY_ID" \
-  --from-literal=USER_R2_SECRET_ACCESS_KEY="$USER_R2_SECRET_ACCESS_KEY" \
   --from-literal=USER_R2_BUCKET="$USER_R2_BUCKET" \
   --from-literal=USER_R2_PUBLIC_BASE_URL="$USER_R2_PUBLIC_BASE_URL" \
   --from-literal=FILE_R2_ENDPOINT="$FILE_R2_ENDPOINT" \
-  --from-literal=FILE_R2_ACCESS_KEY_ID="$FILE_R2_ACCESS_KEY_ID" \
-  --from-literal=FILE_R2_SECRET_ACCESS_KEY="$FILE_R2_SECRET_ACCESS_KEY" \
   --from-literal=FILE_R2_BUCKET="$FILE_R2_BUCKET" \
   --from-literal=FCM_PROJECT_ID="" \
   --from-literal=FCM_SERVICE_ACCOUNT_JSON="" \

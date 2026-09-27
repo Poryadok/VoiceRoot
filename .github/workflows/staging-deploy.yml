@@ -81,13 +81,25 @@ on:
         type: boolean
         default: false
 
+      validate_app_secret_only:
+        description: "Validate the uploaded staging app Secret without cluster access"
+        required: false
+        type: boolean
+        default: false
+
+      mail_only:
+        description: "Patch only Auth mail fields and restart Auth"
+        required: false
+        type: boolean
+        default: false
+
 permissions:
   contents: read
   packages: read
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_dispatch' || inputs.nats_probe_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
@@ -249,6 +261,12 @@ jobs:
           set -euo pipefail
           bash scripts/staging/preflight-nats-pvc.sh
 
+      - name: Preflight staging Auth email credential
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: bash scripts/staging/preflight-resend-key.sh
+
       - name: Ensure MinIO credentials
         env:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
@@ -345,7 +363,7 @@ jobs:
         run: bash scripts/staging/smoke-observability.sh
 
   nats-search-jetstream-probe:
-    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true && inputs.mail_only != true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 8
     environment: staging
@@ -558,3 +576,60 @@ jobs:
               fail_probe JOB_RESULT
               ;;
           esac
+
+  validate-app-secret:
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_app_secret_only == true && inputs.mail_only != true
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install PyYAML==6.0.3
+      - name: Check uploaded Auth mail fields
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${STAGING_APP_SECRETS_YAML_B64}" | base64 -d |
+            python3 scripts/staging/mail-only-patch.py "${VOICE_K8S_NAMESPACE:-voice-staging}" --yaml-check
+      - name: Validate uploaded staging app Secret
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+          STAGING_SECRET_OFFLINE_PARSE: '1'
+        run: |
+          set -euo pipefail
+          if [ -z "${STAGING_APP_SECRETS_YAML_B64}" ]; then
+            echo 'ERROR: staging app Secret upload is missing' >&2
+            exit 1
+          fi
+          bash scripts/staging/preflight-resend-key.sh
+
+  mail-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.mail_only == true && inputs.validate_app_secret_only != true && inputs.nats_probe_only != true
+    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
+    environment: staging
+    steps:
+      - name: Download exact staging source archive
+        env:
+          STAGING_SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: *download_staging_source
+      - uses: azure/setup-kubectl@v5
+      - name: Configure kubectl for Auth-only update
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+      - name: Update Auth mail fields only
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}
+        run: bash scripts/staging/mail-only-resend.sh
