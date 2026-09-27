@@ -12,12 +12,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 @ConditionalOnProperty(prefix = "auth.sdk-identity", name = "enabled", havingValue = "true")
+@Import(SdkGameIntegrationPolicyConfiguration.class)
 @EnableConfigurationProperties(SdkIdentityConfiguration.Settings.class)
 public class SdkIdentityConfiguration {
   @ConfigurationProperties(prefix = "auth.sdk-identity")
@@ -32,7 +34,8 @@ public class SdkIdentityConfiguration {
   @Bean
   @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
   SdkIdentityService sdkIdentityService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager,
-                                      Clock clock, Settings settings) throws java.text.ParseException {
+                                      Clock clock, Settings settings, SdkAuthorizationPolicy policies)
+      throws java.text.ParseException {
     Map<String, SdkApplication> admitted = new HashMap<>();
     var audiences = new HashSet<String>();
     for (Application app : settings.getApplications()) {
@@ -44,6 +47,6 @@ public class SdkIdentityConfiguration {
       }
     }
     return new SdkIdentityService(jdbc, new TransactionTemplate(manager),
-        new GoogleOidcProofVerifier(clock, new GoogleJwks(clock)), Map.copyOf(admitted), clock);
+        new GoogleOidcProofVerifier(clock, new GoogleJwks(clock)), Map.copyOf(admitted), policies, clock);
   }
 }

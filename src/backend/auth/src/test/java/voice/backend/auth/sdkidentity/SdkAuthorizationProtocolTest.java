@@ -37,7 +37,8 @@ class SdkAuthorizationProtocolTest {
   }
 
   private SdkAuthorizationPolicy.Policy policy() {
-    return new SdkAuthorizationPolicy.Policy(APP, ENV, 7, "Example game", Set.of(REDIRECT), ALL_PLAYER_SCOPES);
+    return new SdkAuthorizationPolicy.Policy(APP, ENV, 7, "Example game", Set.of(REDIRECT), ALL_PLAYER_SCOPES,
+        Set.of("google"));
   }
 
   private void denied(org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {
@@ -159,7 +160,8 @@ class SdkAuthorizationProtocolTest {
   @Test
   void registryOwnsAllowedRedirectSchemes() {
     for (String redirect : List.of("voicegame://auth/callback", "http://127.0.0.1:8765/callback")) {
-      var policy = new SdkAuthorizationPolicy.Policy(APP, ENV, 1, "Game", Set.of(redirect), SCOPES);
+      var policy = new SdkAuthorizationPolicy.Policy(APP, ENV, 1, "Game", Set.of(redirect), SCOPES,
+          Set.of("google"));
       assertThat(hash(KEY, redirect, CHALLENGE, STATE, SCOPES)).isNotBlank();
       assertThatCode(() -> SdkAuthorizationProtocol.requirePolicy(policy, APP, ENV, redirect, SCOPES))
           .doesNotThrowAnyException();
@@ -173,19 +175,19 @@ class SdkAuthorizationProtocolTest {
     denied(() -> SdkAuthorizationProtocol.requirePolicy(policy(), APP, null, REDIRECT, SCOPES));
     for (UUID app : Arrays.asList(null, ENV)) {
       denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-          app, ENV, 1, "Game", Set.of(REDIRECT), SCOPES), APP, ENV, REDIRECT, SCOPES));
+          app, ENV, 1, "Game", Set.of(REDIRECT), SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     }
     for (UUID env : Arrays.asList(null, APP)) {
       denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-          APP, env, 1, "Game", Set.of(REDIRECT), SCOPES), APP, ENV, REDIRECT, SCOPES));
+          APP, env, 1, "Game", Set.of(REDIRECT), SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     }
     for (long revision : new long[] {0, -1}) {
       denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-          APP, ENV, revision, "Game", Set.of(REDIRECT), SCOPES), APP, ENV, REDIRECT, SCOPES));
+          APP, ENV, revision, "Game", Set.of(REDIRECT), SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     }
     for (String name : Arrays.asList(null, "", " \t ")) {
       denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-          APP, ENV, 1, name, Set.of(REDIRECT), SCOPES), APP, ENV, REDIRECT, SCOPES));
+          APP, ENV, 1, name, Set.of(REDIRECT), SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     }
   }
 
@@ -201,19 +203,19 @@ class SdkAuthorizationProtocolTest {
   @Test
   void missingAllowlistOrScopesAndUnapprovedOrServiceScopesFailClosed() {
     denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-        APP, ENV, 1, "Game", null, SCOPES), APP, ENV, REDIRECT, SCOPES));
+        APP, ENV, 1, "Game", null, SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-        APP, ENV, 1, "Game", Set.of(), SCOPES), APP, ENV, REDIRECT, SCOPES));
+        APP, ENV, 1, "Game", Set.of(), SCOPES, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-        APP, ENV, 1, "Game", Set.of(REDIRECT), null), APP, ENV, REDIRECT, SCOPES));
+        APP, ENV, 1, "Game", Set.of(REDIRECT), null, Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-        APP, ENV, 1, "Game", Set.of(REDIRECT), Set.of("game.identity.read")), APP, ENV, REDIRECT, SCOPES));
+        APP, ENV, 1, "Game", Set.of(REDIRECT), Set.of("game.identity.read"), Set.of("google")), APP, ENV, REDIRECT, SCOPES));
     for (Set<String> scopes : Arrays.asList(null, Set.<String>of(), Set.of("game.sessions.manage"),
         Set.of("unknown.scope"))) {
       denied(() -> SdkAuthorizationProtocol.requirePolicy(policy(), APP, ENV, REDIRECT, scopes));
     }
     Set<String> serviceScope = Set.of("game.sessions.manage");
     denied(() -> SdkAuthorizationProtocol.requirePolicy(new SdkAuthorizationPolicy.Policy(
-        APP, ENV, 1, "Game", Set.of(REDIRECT), serviceScope), APP, ENV, REDIRECT, serviceScope));
+        APP, ENV, 1, "Game", Set.of(REDIRECT), serviceScope, Set.of("google")), APP, ENV, REDIRECT, serviceScope));
   }
 }

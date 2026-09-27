@@ -119,7 +119,8 @@ class SdkAuthorizationJdbcIntegrationTest {
         APPROVAL_JTI, "regular", 7));
     when(auth.prepareOAuthAccessToken(targetAccount.toString()))
         .thenReturn(new PreparedSessionEpoch(targetAccount, 7));
-    policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES));
+    policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES,
+        Set.of("google")));
     profile.set(new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 11, false, false));
     profileFailure.set(null);
     device = new ECKeyGenerator(Curve.P_256).generate();
@@ -271,9 +272,9 @@ class SdkAuthorizationJdbcIntegrationTest {
   void unavailableOrMismatchedRegistryPolicyFailsClosed(String invalid) throws Exception {
     policy.set(switch (invalid) {
       case "wrong-app" -> new SdkAuthorizationPolicy.Policy(UUID.randomUUID(), env, 3,
-          "Wrong app", Set.of(REDIRECT), SCOPES);
+          "Wrong app", Set.of(REDIRECT), SCOPES, Set.of("google"));
       case "wrong-environment" -> new SdkAuthorizationPolicy.Policy(app, UUID.randomUUID(), 3,
-          "Wrong environment", Set.of(REDIRECT), SCOPES);
+          "Wrong environment", Set.of(REDIRECT), SCOPES, Set.of("google"));
       default -> null;
     });
     assertThatThrownBy(() -> start(authorization(), UUID.randomUUID(), REDIRECT, STATE, SCOPES))
@@ -504,7 +505,8 @@ class SdkAuthorizationJdbcIntegrationTest {
           new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 0, false, false));
       case "profile-unavailable" -> profileFailure.set(new IllegalStateException("User unavailable"));
       case "policy-revision" -> policy.set(
-          new SdkAuthorizationPolicy.Policy(app, env, 4, "Example Game", Set.of(REDIRECT), SCOPES));
+          new SdkAuthorizationPolicy.Policy(app, env, 4, "Example Game", Set.of(REDIRECT), SCOPES,
+              Set.of("google")));
       case "target-epoch" -> {
         jdbc.update("UPDATE accounts SET session_epoch=8 WHERE id=:id", Map.of("id", targetAccount));
         when(auth.prepareOAuthAccessToken(targetAccount.toString()))
@@ -533,7 +535,11 @@ class SdkAuthorizationJdbcIntegrationTest {
         new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
         new GoogleOidcProofVerifier(clock,
             kid -> googleKey.getKeyID().equals(kid) ? googleKey.toPublicJWK() : null),
-        Map.of(app + "/" + env, new SdkApplication(app, env, client, gameKey.toPublicJWK())), clock);
+        Map.of(app + "/" + env, new SdkApplication(app, env, client, gameKey.toPublicJWK())),
+        (requestedApp, requestedEnv) -> app.equals(requestedApp) && env.equals(requestedEnv)
+            ? new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES,
+                Set.of("google")) : null,
+        clock);
   }
 
   private SdkAuthorizationService authorization() {

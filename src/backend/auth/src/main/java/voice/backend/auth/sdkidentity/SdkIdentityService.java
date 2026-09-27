@@ -27,6 +27,7 @@ public class SdkIdentityService {
   private final TransactionTemplate transactions;
   private final GoogleOidcProofVerifier verifier;
   private final Map<String, SdkApplication> applications;
+  private final SdkAuthorizationPolicy policies;
   private final Clock clock;
   private final SecureRandom random = new SecureRandom();
 
@@ -37,11 +38,12 @@ public class SdkIdentityService {
 
   public SdkIdentityService(NamedParameterJdbcTemplate jdbc, TransactionTemplate transactions,
                            GoogleOidcProofVerifier verifier, Map<String, SdkApplication> applications,
-                           Clock clock) {
+                           SdkAuthorizationPolicy policies, Clock clock) {
     this.jdbc = jdbc;
     this.transactions = transactions;
     this.verifier = verifier;
     this.applications = Map.copyOf(applications);
+    this.policies = policies;
     this.clock = clock;
   }
 
@@ -227,6 +229,18 @@ public class SdkIdentityService {
     if (app == null || env == null) throw new SdkIdentityDeniedException();
     SdkApplication admission = applications.get(app + "/" + env);
     if (admission == null || !app.equals(admission.applicationId()) || !env.equals(admission.environmentId())) {
+      throw new SdkIdentityDeniedException();
+    }
+    try {
+      SdkAuthorizationPolicy.Policy policy = policies.resolve(app, env);
+      if (policy == null || !app.equals(policy.applicationId()) || !env.equals(policy.environmentId())
+          || policy.revision() <= 0 || policy.displayName() == null || policy.displayName().isBlank()
+          || policy.providers() == null || !policy.providers().contains("google")) {
+        throw new SdkIdentityDeniedException();
+      }
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (RuntimeException unavailable) {
       throw new SdkIdentityDeniedException();
     }
     return admission;

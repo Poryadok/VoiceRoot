@@ -69,6 +69,7 @@ class SdkGameIntegrationPolicyClientTest {
     assertThat(policy.applicationId()).isEqualTo(APP);
     assertThat(policy.environmentId()).isEqualTo(ENV);
     assertThat(policy.revision()).isEqualTo(7);
+    assertThat(policy.providers()).containsExactly("google");
     assertThat(policy.displayName()).isEqualTo("Example Game");
     assertThat(policy.redirectUris()).containsExactly("voicegame://auth/callback");
     assertThat(policy.playerScopes()).containsExactlyInAnyOrder("game.identity.read", "game.chat.send");
@@ -151,6 +152,45 @@ class SdkGameIntegrationPolicyClientTest {
       String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
       String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
       respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+    });
+
+    assertDenied(client(baseUrl())::resolve);
+  }
+
+  @Test
+  void rejectsInactiveOrEmptyProviderPolicyEvenWhenResponseIsSigned() throws Exception {
+    for (String providers : List.of("[]", "[\"apple\"]", "[\"google\",\"apple\"]")) {
+      String body = BODY.replace("[\"google\"]", providers);
+      start(exchange -> {
+        String path = exchange.getRequestURI().getRawPath();
+        String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+        String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+        respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+      });
+      assertDenied(client(baseUrl())::resolve);
+      stopServer();
+      server = null;
+    }
+  }
+
+  @Test
+  void rejectsMalformedPolicyJsonWithValidResponseSignature() throws Exception {
+    String body = "{not-json}\n";
+    start(exchange -> {
+      String path = exchange.getRequestURI().getRawPath();
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+    });
+
+    assertDenied(client(baseUrl())::resolve);
+  }
+
+  @Test
+  void unavailableRegistryDeniesPolicyResolution() throws Exception {
+    start(exchange -> {
+      exchange.sendResponseHeaders(503, -1);
+      exchange.close();
     });
 
     assertDenied(client(baseUrl())::resolve);
