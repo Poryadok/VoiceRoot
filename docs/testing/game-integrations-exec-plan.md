@@ -197,10 +197,17 @@ contracts land before consumers; activation lands after all consumers.
   service-owned DB/migrations, health/metrics, config/secrets, deploy wiring,
   internal auth and least-privilege credentials. Prove it cannot write other
   service DBs.
-- [ ] **T11** `D: T10` Implement app/env/installation registry, owner approval,
-  sandbox/prod isolation, credential issue/rotation/revoke, allowed provider,
-  redirect, origin and webhook configuration. Clean bootstrap works through
-  API/operator process, without direct SQL or portal.
+- [ ] **T11** `D: T10` Complete the developer registry lifecycle. The bounded
+  implementation covers owner-derived application creation, separate operator
+  sandbox approval, app/environment-scoped policy and installation
+  configuration, provider, redirect/origin and callback configuration, and
+  credential issue/retry, rotation and revoke. Empty-database API bootstrap
+  and cross-scope denials pass without direct SQL or a portal. T11 remains open
+  because its T10 prerequisite is open: cross-service database write-isolation
+  still needs proof. The current API also has no production-admission route;
+  the seeded-fixture test denies production credentials and makes no claim of
+  production onboarding. See the GIS service contract and
+  [Q11 T11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
 - [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.
@@ -447,10 +454,19 @@ test assertion, not just prose.
   registry and public game capability remain incomplete.
 - [x] Bot T50 durable slash admission/lease slice committed on
   `codex/game-bot-durable`; remaining Bot work continues on that branch.
-- [ ] Run required PostgreSQL integration assertions once Docker Desktop's
-  Windows engine is available. `go test -short ./...` passes for the new
-  module; the full registry test currently fails before assertions because
-  testcontainers reports `rootless Docker is not supported on Windows`.
+- [x] Run T11's bounded lifecycle verification on the feature branch after
+  T15 merge: `rtk make game-integration-bootstrap-acceptance` and
+  `rtk make game-integrations-q11-acceptance` pass. GIS `rtk go test ./...`
+  passes 92 tests in 4 packages; `rtk go vet ./...` and
+  `rtk golangci-lint run ./...` pass. Hosted PR #518 checks passed on code head
+  `ec281db115f46dcc46f14842ad677f481f4e9505`; this is CI evidence for that
+  exact head, not for later documentation commits. No live provider, staging,
+  or deployment proof is claimed.
+- [x] Run required GIS PostgreSQL integration assertions in the supported
+  workspace: full `rtk go test ./...` passes 92 tests across 4 packages,
+  including the API-created empty-database bootstrap and SQL-backed registry
+  lifecycle. The previous Windows Testcontainers attempt failed before
+  assertions and is superseded by this successful GIS run.
 - [ ] T00–T94 implementation and acceptance remain open. Update each check as
   work lands; do not infer completion from this planning pass.
 
@@ -484,6 +500,19 @@ test assertion, not just prose.
   supersedes that text for this sprint. Remove or mark obsolete references in
   the implementation docs; implement and measure the new ≤5s authority/media
   budget and durable event/command semantics.
+- T10's cross-service database write-isolation proof is still open. The
+  development Compose Postgres and GIS service currently share
+  `${POSTGRES_USER:-voice}`; `docker/postgres/compose-migrate-dbs.sh` also uses
+  that principal for every Go-owned database. The next T10 slice should
+  provision a GIS runtime database principal limited to `game_integration_db`,
+  wire its secret into the GIS service, and prove with PostgreSQL integration
+  that it can use GIS-owned tables while writes to another service database
+  are denied. Relevant paths are `docker-compose.yml`,
+  `docker/postgres/initdb.d/01-init-databases.sh`,
+  `docker/postgres/compose-migrate-dbs.sh`, and GIS config/SQL integration
+  tests under `src/backend/gameintegration/` and
+  `src/backend/migrations/game_integration_db/`. Do not mark T11 complete
+  until this T10 prerequisite is proven.
 - Bot audit was source-only at `77ec7240a`, not a current-code or live proof.
   T02 rechecks all gaps; T50 closes those that remain.
 - The current Federation service has a bounded HTTPS authority foundation and

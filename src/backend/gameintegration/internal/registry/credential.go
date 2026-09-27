@@ -146,7 +146,7 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 		if err != nil {
 			return Credential{}, err
 		}
-		if time.Since(credential.CreatedAt) > 10*time.Minute {
+		if s.now().Sub(credential.CreatedAt) > 10*time.Minute {
 			return Credential{}, ErrCredentialRevealExpired
 		}
 		credential.Secret = deriveCredentialSecret(in.SecretKey, credential.ID)
@@ -160,7 +160,10 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 	if err != nil {
 		return Credential{}, fmt.Errorf("select credential generation: %w", err)
 	}
-	now := time.Now().UTC()
+	// PostgreSQL stores timestamps at microsecond precision. Return and persist
+	// the same creation/expiry values so an idempotent retry has an identical
+	// response after the transaction is read back from the database.
+	now := s.now().Truncate(time.Microsecond)
 	credential := Credential{ID: uuid.New(), EnvironmentID: in.EnvironmentID, Scopes: in.Scopes,
 		Generation: generation, CreatedAt: now, ExpiresAt: now.Add(90 * 24 * time.Hour)}
 	credential.Secret = deriveCredentialSecret(in.SecretKey, credential.ID)
@@ -205,5 +208,7 @@ func getCredential(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Credential, er
 	if err != nil {
 		return Credential{}, fmt.Errorf("read service credential: %w", err)
 	}
+	credential.CreatedAt = credential.CreatedAt.UTC()
+	credential.ExpiresAt = credential.ExpiresAt.UTC()
 	return credential, nil
 }

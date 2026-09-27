@@ -171,6 +171,24 @@ green; the Q11 target was rerun successfully after the sync. This is API-only
 clean-start evidence and does not prove real Google login or production
 admission.
 
+The T11 registry lifecycle was rerun after the T15 contract merge on feature
+commit `7f55fce72d88f0274a2d60dbaabdf9585f56574c`.
+`rtk make game-integration-bootstrap-acceptance` passed from an empty GIS
+database, and `rtk make game-integrations-q11-acceptance` passed both the GIS
+bootstrap selector and Federation clean-start mTLS/audit selector.
+The GIS API test verifies authenticated owner-derived application creation,
+separate operator approval, sandbox provider/redirect/origin policy, denial of
+cross-owner/application/environment access, and SQL-backed credential
+issue/retry/rotation/revoke behavior. An identical issue retry returns the
+same secret and expiry; rotating creates generation 2, keeps the prior
+credential valid during overlap, and bounds its expiry to ten minutes from the
+injected rotation instant. Revoke immediately denies verification and an
+identical revoke retry adds no second audit row. The ordinary GIS suite also
+retains the SQL-fixture test that denies a production credential; it is not a
+production admission flow. These checks use a fake Voice JWKS and do not claim
+Google provider proof, production admission, or an unmeasured latency or
+restore result.
+
 The separate live-Google provider gate is OPEN / NOT RUN. It is not invoked by
 the API-only clean-start target; the opt-in harness still needs to be added and
 must perform a real login and JWKS refresh with a disposable Voice-owned client.

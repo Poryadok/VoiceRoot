@@ -28,11 +28,15 @@ does not enable a public game communication capability.
    disables approval. The transition is audited and transactional; the
    applicant cannot approve their own application even if on the allowlist.
    Production admission is a separate reviewed transition and cannot inherit
-   sandbox credentials, bindings, subjects or data.
-3. An approved application may create `sandbox` and `production` environments,
-   each with its own ID, provider allowlist, redirect/origin allowlist,
-   installation and credential namespace. Production environment activation
-   requires the production application admission transition.
+   sandbox credentials, bindings, subjects or data. That production transition
+   has no API route in this slice; operators cannot create a production
+   environment through the current API.
+3. Sandbox admission creates one `sandbox` environment with its own ID, provider
+   allowlist, redirect/origin allowlist, installation and credential namespace.
+   A future production admission API must create an independent `production`
+   environment with a separate ID, provider/origin/callback policy,
+   installations and credentials. No sandbox credential is accepted for
+   production, and the current API cannot issue a production credential.
 4. Game service credentials are 256-bit HMAC-derived opaque secrets from a
    random credential ID and deployment-held 256-bit key; the database stores
    only keyed digests. The issue response returns the secret and an identical
@@ -209,9 +213,14 @@ The T11 HTTP bootstrap acceptance is
 `rtk make game-integration-bootstrap-acceptance`. It starts a disposable empty
 registry, uses synthetic Voice access tokens verified through a fake JWKS, and
 exercises the applicant/operator API boundary, sandbox policy ownership,
-credential issuance and audit. This verifies the GIS path only; it is not a
-real Google OIDC run and does not close the broader Q11 GIS-plus-node clean-start
-gate.
+credential issue/retry, generation rotation, ten-minute maximum overlap,
+owner-only revoke, immediate admission denial, and audit idempotency. A repeated
+issue request returns the same secret and normalized expiry during its ten-minute
+reveal window and returns `CREDENTIAL_REVEAL_EXPIRED` after it; rotation creates
+a new generation while bounding the old credential's remaining lifetime to ten
+minutes. Revoke returns success on retry and writes only one audit row. This
+verifies the GIS path only; it is not a real Google OIDC run and does not close
+the broader Q11 GIS-plus-node clean-start gate.
 
 `game-integration-bootstrap-acceptance` runs
 `TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs`, which uses
