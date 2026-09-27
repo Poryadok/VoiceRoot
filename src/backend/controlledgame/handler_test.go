@@ -62,7 +62,7 @@ func TestCallbackHandlerRejectsDuplicateAuthenticationAndContentTypeHeaders(t *t
 func TestCallbackHandlerRejectsBodyOver64KiBAndAcceptsExactLimit(t *testing.T) {
 	key := testKey()
 	now := time.Unix(1790500000, 0).UTC()
-	handler := NewHandler(HandlerConfig{Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)}, Clock: func() time.Time { return now }, Store: acceptingStore{}, Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil }})
+	handler := NewHandler(HandlerConfig{Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)}, Clock: func() time.Time { return now }, Store: acceptingStore{clock: func() time.Time { return now }}, Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil }})
 	for _, test := range []struct {
 		name   string
 		body   []byte
@@ -92,18 +92,65 @@ func TestCallbackHandlerRejectsBodyOver64KiBAndAcceptsExactLimit(t *testing.T) {
 	}
 }
 
-type acceptingStore struct{}
+type acceptingStore struct {
+	clock func() time.Time
+}
 
-func (acceptingStore) accept(ctx context.Context, _, _ string, _, _ []byte, apply EffectApplier) ([]byte, bool, error) {
+func (store acceptingStore) accept(ctx context.Context, _, _ string, _, _ []byte, expiresAt int64, apply EffectApplier) ([]byte, bool, error) {
+	if store.clock != nil && store.clock().UTC().Unix() >= expiresAt {
+		return nil, false, errCommandExpired
+	}
 	receipt, err := apply(ctx, nil, []byte(canonicalCommand))
 	return receipt, false, err
+}
+
+type replayingStore struct {
+	calls   int
+	receipt []byte
+}
+
+func (store *replayingStore) accept(context.Context, string, string, []byte, []byte, int64, EffectApplier) ([]byte, bool, error) {
+	store.calls++
+	return append([]byte(nil), store.receipt...), true, nil
+}
+
+func TestCallbackHandlerReturnsSavedReceiptForExpiredReplay(t *testing.T) {
+	key := testKey()
+	now := time.Unix(1790500120, 0).UTC()
+	store := &replayingStore{receipt: []byte(canonicalResult)}
+	applyCalls := 0
+	handler := NewHandler(HandlerConfig{
+		Store:       store,
+		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:       func() time.Time { return now },
+		Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) {
+			applyCalls++
+			return nil, nil
+		},
+	})
+	request := httptest.NewRequest(http.MethodPost, vectorPath, bytes.NewReader([]byte(canonicalCommand)))
+	request.Header.Set("Content-Type", callbackContentType)
+	request.Header.Set("X-Voice-Key-Id", vectorKeyID)
+	request.Header.Set("X-Voice-Timestamp", vectorTimestamp)
+	request.Header.Set("X-Voice-Signature", testSignature(key, http.MethodPost, vectorPath, vectorTimestamp, vectorKeyID, []byte(canonicalCommand)))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusAccepted, recorder.Code, "an expired command may recover its committed receipt")
+	require.Equal(t, canonicalResult, recorder.Body.String())
+	require.Equal(t, 1, store.calls, "the durable store must decide replay before new admission expiry")
+	require.Zero(t, applyCalls, "replay must not apply the effect again")
 }
 
 func TestCallbackHandlerRejectsCommandAtExpiryBoundary(t *testing.T) {
 	key := testKey()
 	now := time.Unix(1790500120, 0).UTC()
 	command := []byte(canonicalCommand)
-	handler := NewHandler(HandlerConfig{Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)}, Clock: func() time.Time { return now }})
+	handler := NewHandler(HandlerConfig{
+		Store:       acceptingStore{clock: func() time.Time { return now }},
+		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:       func() time.Time { return now },
+		Apply:       func(context.Context, pgx.Tx, []byte) ([]byte, error) { return []byte(canonicalResult), nil },
+	})
 	request := httptest.NewRequest(http.MethodPost, vectorPath, bytes.NewReader(command))
 	request.Header.Set("Content-Type", callbackContentType)
 	request.Header.Set("X-Voice-Key-Id", vectorKeyID)

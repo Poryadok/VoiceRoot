@@ -15,6 +15,7 @@ import (
 )
 
 var errCommandConflict = errors.New("command conflicts with durable receiver state")
+var errCommandExpired = errors.New("command expired before first admission")
 
 const receiverSchema = `
 CREATE TABLE IF NOT EXISTS command_inbox (
@@ -71,6 +72,7 @@ func (store *PostgresStore) accept(
 	commandID, operationID string,
 	effectKey []byte,
 	body []byte,
+	expiresAt int64,
 	apply EffectApplier,
 ) (receipt []byte, replay bool, err error) {
 	if store == nil || store.pool == nil || store.clock == nil || apply == nil {
@@ -103,6 +105,12 @@ func (store *PostgresStore) accept(
 			return nil, false, err
 		}
 		return storedReceipt, true, nil
+	}
+	// A newly inserted inbox row is not durable until commit. Check expiry only
+	// after the command-ID conflict path so a committed receipt remains
+	// recoverable after expiry, while an expired first admission rolls back.
+	if store.clock().UTC().Unix() >= expiresAt {
+		return nil, false, errCommandExpired
 	}
 
 	_, err = tx.Exec(ctx, `INSERT INTO effect_ledger(operation_id, effect_key, command_id, consumed_at) VALUES ($1, $2, $3, $4)`,

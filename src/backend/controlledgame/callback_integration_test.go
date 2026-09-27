@@ -74,7 +74,9 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 	server.Close()
 
 	// A newly constructed handler over the same PostgreSQL database must return
-	// the stored receipt for a same-ID/same-body retry without applying twice.
+	// the stored receipt for a same-ID/same-body retry without applying twice,
+	// even after the original command expires (the sender may have lost its 202).
+	now = time.Unix(1790500120, 0).UTC()
 	server = httptest.NewServer(open())
 	defer server.Close()
 	replay := postCanonicalCommand(t, server.Client(), server.URL, []byte(canonicalCommand), key)
@@ -97,6 +99,36 @@ func TestCallbackDurableAcceptanceReplayAndBodyConflictAcrossRestart(t *testing.
 	require.Equal(t, http.StatusConflict, conflict.status, "same command ID with different canonical bytes conflicts")
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM controlled_game_test_effects`).Scan(&effects))
 	require.Equal(t, 1, effects, "conflicting body must not apply an effect")
+}
+
+func TestCallbackExpiredFirstAdmissionRollsBackInboxAndEffect(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	pool := integrationtest.StartPostgres(t, ctx, "controlled_game_expired_admission_test_db", "")
+	key := testKey()
+	now := time.Unix(1790500120, 0).UTC()
+	store, err := OpenPostgresStore(ctx, pool, func() time.Time { return now })
+	require.NoError(t, err)
+	var effectCalls atomic.Int32
+	handler := NewHandler(HandlerConfig{
+		Store:       store,
+		Credentials: map[string]SigningCredential{vectorKeyID: testCredential(key)},
+		Clock:       func() time.Time { return now },
+		Apply: func(context.Context, pgx.Tx, []byte) ([]byte, error) {
+			effectCalls.Add(1)
+			return []byte(canonicalResult), nil
+		},
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	response := postCanonicalCommand(t, server.Client(), server.URL, []byte(canonicalCommand), key)
+	require.Equal(t, http.StatusGone, response.status, "expiry prevents a first admission")
+	require.Zero(t, effectCalls.Load(), "expired command must not call the effect")
+	for _, table := range []string{"command_inbox", "effect_ledger", "command_results", "result_outbox"} {
+		var rows int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&rows))
+		require.Zero(t, rows, "expired first admission must roll back "+table)
+	}
 }
 
 func TestCallbackRejectsDifferentCommandIDsForSameOneShotEffect(t *testing.T) {

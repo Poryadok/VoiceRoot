@@ -37,7 +37,7 @@ type SigningCredential struct {
 type EffectApplier func(context.Context, pgx.Tx, []byte) ([]byte, error)
 
 type commandAcceptor interface {
-	accept(context.Context, string, string, []byte, []byte, EffectApplier) ([]byte, bool, error)
+	accept(context.Context, string, string, []byte, []byte, int64, EffectApplier) ([]byte, bool, error)
 }
 
 type HandlerConfig struct {
@@ -133,15 +133,11 @@ func NewHandler(config HandlerConfig) http.Handler {
 			http.Error(response, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if now.Unix() >= command.ExpiresAt {
-			http.Error(response, "command expired", http.StatusGone)
-			return
-		}
 		if config.Store == nil || config.Apply == nil {
 			http.Error(response, "receiver unavailable", http.StatusInternalServerError)
 			return
 		}
-		result, replay, err := config.Store.accept(request.Context(), command.CommandID, command.OperationID, oneShotEffectKey(command), body,
+		result, replay, err := config.Store.accept(request.Context(), command.CommandID, command.OperationID, oneShotEffectKey(command), body, command.ExpiresAt,
 			func(ctx context.Context, tx pgx.Tx, commandBody []byte) ([]byte, error) {
 				resultBody, applyErr := config.Apply(ctx, tx, commandBody)
 				if applyErr != nil {
@@ -153,6 +149,10 @@ func NewHandler(config HandlerConfig) http.Handler {
 				return resultBody, nil
 			})
 		if err != nil {
+			if errors.Is(err, errCommandExpired) {
+				http.Error(response, "command expired", http.StatusGone)
+				return
+			}
 			if errors.Is(err, errCommandConflict) {
 				http.Error(response, "command conflict", http.StatusConflict)
 				return

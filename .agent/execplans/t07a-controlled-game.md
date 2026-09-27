@@ -18,11 +18,11 @@ terminal result, and result outbox in the isolated game database.
 - Milestone: `docs/testing/game-integrations-exec-plan.md`, T07a.
 - Verification conventions: `docs/TESTING.md`; the module has its own `go.mod`
   and PostgreSQL Testcontainers contract suite.
-- Current state: branch `codex/game-controlled-backend` at test-only commit
-  `50f7cc5b5dee40aafe56c8cbdf2a0a46550c7ed8`, whose parent is the specified
-  feature base `859f07ff3a62c41e298847ab000945a9976e6fa7`. Accepted tests are
-  independent-review CLEAR and expect RED because implementation seams are
-  absent.
+- Current state: branch `codex/game-controlled-backend` is merge-refreshed
+  through feature-target commit `aa3962e9a799e71adb1bd454a761f1256932b672` at
+  merge commit `44e0b2b841901da82df576917b45c3b36eb8a39b`. The callback is
+  implemented; the latest independent review identified a replay-after-expiry
+  ordering defect now under test/fix.
 - Constraints: do not implement GIS permit issue/revoke, Voice Q05 challenge,
   sender retry/DLQ, production registration, Docker/Firewall runtime tests on
   this Windows host, or master-target PR/merge.
@@ -32,10 +32,10 @@ terminal result, and result outbox in the isolated game database.
 - In: exact callback method/path/header/body/HMAC validation; PostgreSQL inbox,
   command/body idempotency and one-command-per-operation collision handling;
   transaction-scoped effect callback; immutable result and result outbox;
-  rollback, lost acknowledgement, restart, and concurrent redelivery behavior.
-- Out: permit authority or expiry semantics, GIS/Voice service integration,
-  outbound result delivery/retries, production configuration, and unrelated
-  game behavior.
+  rollback, lost acknowledgement, restart, concurrent redelivery, and the
+  distinction between expired first admission and replay of a committed receipt.
+- Out: permit authority expiry, GIS/Voice service integration, outbound result
+  delivery/retries, production configuration, and unrelated game behavior.
 - Receiver callback bodies are bounded at 64 KiB. The receiver checks the cap
   before authentication and returns 413 when the body exceeds it; a body of
   exactly 65,536 bytes proceeds through normal authenticated handling.
@@ -48,6 +48,9 @@ terminal result, and result outbox in the isolated game database.
   `voice-controlled-game-effect-v1\n{installation_id}\n{message_id}\n{action_id}\n{actor_proof.profile_id}`
   from the signed envelope. A distinct command or operation colliding on this
   key returns 409 without returning another command's receipt.
+- Command expiry blocks only a first durable admission. The store resolves an
+  existing same-command/body receipt before checking expiry; an expired new
+  admission returns 410 and rolls its temporary inbox insertion back.
 - Documentation gap: none for this receiver slice; the wire and durable
   receiver semantics are frozen in the API document.
 
@@ -69,6 +72,9 @@ terminal result, and result outbox in the isolated game database.
   test-only changes from staging build, image promotion and rollout matrices.
 - [x] Verify final focused non-container checks locally; use hosted Linux CI for the
   Docker-backed integration suite.
+- [x] Add a RED handler regression for saved receipt recovery after expiry and
+  a PostgreSQL regression for expired first-admission rollback; move expiry
+  enforcement into the durable store after command-ID replay lookup.
 - [ ] Update T07a owning docs with implementation and exact verification
   evidence; independent implementation review clear.
 
@@ -161,7 +167,7 @@ terminal result, and result outbox in the isolated game database.
   bytes reaching a fake acceptor, and 65,537 bytes => 413 before signature
   verification. Credential tests cover current, active/expired overlap,
   revoked, unknown key ID, and app/environment/installation mismatch.
-- Current local checks: `go test -short ./...` (34 passed), `go vet ./...`,
+- Current local checks after the expiry replay fix: `go test -short ./...` (35 passed) and focused expiry/body tests (5 passed); earlier `go vet ./...`,
   `golangci-lint run ./...`, `go mod tidy -diff`, script syntax checks, YAML
   parse and `git diff --check` pass. The Testcontainers cross-operation
   collision test remains hosted-Linux evidence.
