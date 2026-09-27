@@ -197,10 +197,15 @@ contracts land before consumers; activation lands after all consumers.
   service-owned DB/migrations, health/metrics, config/secrets, deploy wiring,
   internal auth and least-privilege credentials. Prove it cannot write other
   service DBs.
-- [ ] **T11** `D: T10` Implement app/env/installation registry, owner approval,
-  sandbox/prod isolation, credential issue/rotation/revoke, allowed provider,
-  redirect, origin and webhook configuration. Clean bootstrap works through
-  API/operator process, without direct SQL or portal.
+- [x] **T11** `D: T10` Implement the bounded developer registry lifecycle:
+  owner-derived application creation, separate operator sandbox approval,
+  app/environment-scoped policy and installation configuration, provider,
+  redirect/origin and callback configuration, and credential issue/retry,
+  rotation and revoke. The empty-database API bootstrap and cross-scope denials
+  pass without direct SQL or a portal. The current API deliberately has no
+  production-admission route; the seeded-fixture test denies production
+  credentials, and this slice claims no production onboarding. See the GIS
+  service contract and [Q11 T11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
 - [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.
@@ -447,10 +452,18 @@ test assertion, not just prose.
   registry and public game capability remain incomplete.
 - [x] Bot T50 durable slash admission/lease slice committed on
   `codex/game-bot-durable`; remaining Bot work continues on that branch.
-- [ ] Run required PostgreSQL integration assertions once Docker Desktop's
-  Windows engine is available. `go test -short ./...` passes for the new
-  module; the full registry test currently fails before assertions because
-  testcontainers reports `rootless Docker is not supported on Windows`.
+- [x] Complete T11 lifecycle verification on the feature branch after T15
+  merge: `rtk make game-integration-bootstrap-acceptance` and
+  `rtk make game-integrations-q11-acceptance` pass. GIS `rtk go test ./...`
+  passes 92 tests in 4 packages; `rtk go vet ./...` and
+  `rtk golangci-lint run ./...` pass. Hosted PR #518 checks and the independent exact-head security
+  review are recorded with the T11 lifecycle slice; no live provider,
+  staging, or deployment proof is claimed.
+- [x] Run required GIS PostgreSQL integration assertions in the supported
+  workspace: full `rtk go test ./...` passes 92 tests across 4 packages,
+  including the API-created empty-database bootstrap and SQL-backed registry
+  lifecycle. The previous Windows Testcontainers attempt failed before
+  assertions and is superseded by this successful GIS run.
 - [ ] T00–T94 implementation and acceptance remain open. Update each check as
   work lands; do not infer completion from this planning pass.
 
