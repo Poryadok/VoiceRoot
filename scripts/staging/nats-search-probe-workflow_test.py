@@ -49,6 +49,8 @@ assert '"$category"' in pod_script
 
 with tempfile.TemporaryDirectory() as directory:
     bin_dir = Path(directory)
+    probe_script = pod_script.replace("/var/run/nats/creds/search.creds", "./credentials")
+    assert probe_script != pod_script
     nats = bin_dir / "nats"
     nats.write_text(
         '#!/bin/sh\nprintf "%s" "$FAKE_NATS_RESPONSE"\n'
@@ -83,26 +85,43 @@ else:
     )
     nats.chmod(0o755)
     jq.chmod(0o755)
+    for name, status_var in (("getent", "FAKE_DNS_STATUS"), ("nc", "FAKE_TCP_STATUS")):
+        command = bin_dir / name
+        command.write_text(f'#!/bin/sh\nexit "${status_var}"\n', encoding="utf-8")
+        command.chmod(0o755)
+    credentials = bin_dir / "credentials"
     sh = Path(os.environ["PROGRAMFILES"]) / "Git/bin/sh.exe" if os.name == "nt" else "sh"
 
-    def probe(response: str, stderr: str = "", status: int = 0) -> str:
+    def probe(response: str, stderr: str = "", status: int = 0, dns_status: int = 0, tcp_status: int = 0, creds_present: bool = True) -> str:
+        if creds_present:
+            credentials.touch()
+        else:
+            credentials.unlink(missing_ok=True)
         env = os.environ.copy()
         env.update(
             FAKE_NATS_RESPONSE=response,
             FAKE_NATS_STDERR=stderr,
             FAKE_NATS_STATUS=str(status),
+            FAKE_DNS_STATUS=str(dns_status),
+            FAKE_TCP_STATUS=str(tcp_status),
             PATH=f"{bin_dir}{os.pathsep}{env['PATH']}",
         )
-        result = subprocess.run([str(sh), "-ceu", pod_script], env=env, text=True, capture_output=True)
+        result = subprocess.run([str(sh), "-ceu", probe_script], cwd=bin_dir, env=env, text=True, capture_output=True)
         assert "secret-sentinel" not in result.stdout + result.stderr
         return result.stdout.strip()
 
+    assert probe("", creds_present=False) == "NATS_SEARCH_JS_INFO=FAIL CREDS_UNREADABLE CODE_0 ERR_0"
+    assert probe("", dns_status=1) == "NATS_SEARCH_JS_INFO=FAIL DNS_FAILURE CODE_0 ERR_0"
+    assert probe("", tcp_status=1) == "NATS_SEARCH_JS_INFO=FAIL TCP_FAILURE CODE_0 ERR_0"
     assert probe('{"config":{"durable_name":"search-indexer-message-v1"}}') == "NATS_SEARCH_JS_INFO=PASS"
     assert probe('{"error":{"code":403,"err_code":10037,"description":"authorization violation secret-sentinel"}}') == (
         "NATS_SEARCH_JS_INFO=FAIL PERMISSION_DENIED CODE_403 ERR_10037"
     )
     assert probe("", "authentication failed secret-sentinel", 1) == (
         "NATS_SEARCH_JS_INFO=FAIL AUTHENTICATION_FAILED CODE_0 ERR_0"
+    )
+    assert probe("", "no servers available secret-sentinel", 1) == (
+        "NATS_SEARCH_JS_INFO=FAIL CONNECT_ERROR CODE_0 ERR_0"
     )
     assert probe("not-json secret-sentinel") == "NATS_SEARCH_JS_INFO=FAIL INVALID_RESPONSE CODE_0 ERR_0"
     assert probe('{"error":{"code":500,"err_code":123,"description":"secret-sentinel"}}') == (
