@@ -4,15 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import 'stories_routes.dart';
 import '../ui/chat/chat_archive_screen.dart';
+import '../ui/sdk/sdk_authorization_screens.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
-typedef VoiceShellBuilder = Widget Function(BuildContext context, GoRouterState state);
+typedef VoiceShellBuilder =
+    Widget Function(BuildContext context, GoRouterState state);
 
 abstract final class VoiceAppRoutes {
   static const home = '/';
   static const chatArchive = '/chats/archive';
   static const invitePrefix = '/invite/';
+  static const sdkAuthorizationCallback = '/sdk/authorization/callback';
 }
 
 /// Builds the authenticated app [GoRouter] (home shell + story overlays + deep links).
@@ -26,9 +29,20 @@ GoRouter createVoiceGoRouter({
     initialLocation: VoiceAppRoutes.home,
     observers: observers,
     routes: [
+      GoRoute(path: VoiceAppRoutes.home, builder: shellBuilder),
       GoRoute(
-        path: VoiceAppRoutes.home,
-        builder: shellBuilder,
+        path: VoiceAppRoutes.sdkAuthorizationCallback,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => SdkAuthorizationCallbackScreen(
+          callback: state.extra is Uri ? state.extra! as Uri : state.uri,
+        ),
+      ),
+      GoRoute(
+        path: '/sdk/authorization/:requestId',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => SdkAuthorizationConsentScreen(
+          requestId: state.pathParameters['requestId']!,
+        ),
       ),
       GoRoute(
         path: '/invite/:code',

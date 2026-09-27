@@ -35,6 +35,23 @@ _Пока пусто — критичные клиентские блокеры 
 ### Flutter delivery
 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
+
+### Game SDK authorization (T14 client slice)
+
+- [ ] **T14 integration gates remain open** — the Flutter consent/callback
+  consumer uses the existing Auth authorization routes only. The compact proof
+  signer is an adapter keyed by Auth-issued `kid`; the T15 device lifecycle
+  must provide platform secure-store P-256 enrollment, rotation/revocation, and
+  signing of the exact payload bytes. Private keys must remain non-exportable.
+  GAME-AUTH-02 defines no deny endpoint, so Cancel currently abandons the local
+  screen and lets the Auth request expire; no remote denial is claimed.
+  Gateway route/principal/scopes/rate-limit publication and T20 integration
+  remain downstream. GIS active binding/T16, direct Voice-only first-login
+  variant, device-code flow, and live Google/Q11 provider proof remain open.
+  The client does not enumerate profiles beyond the authenticated user's own
+  `/api/v1/users/profiles` response and requires a deliberate eligible-profile
+  selection. Auth revalidates that profile and policy revision at approve and
+  exchange.
 ### Multi-profile
 
 - [x] **[Multi-Profile] No delete-profile UI** — `ManageProfilesSheet` in settings (`settings_manage_profiles`); `DELETE /api/v1/users/profiles/{id}` via `VoiceUsersClient.deleteProfile`; blocks primary/active delete (Batch 13).
