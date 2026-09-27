@@ -104,16 +104,21 @@ autocomplete привязан к credential bot. Таким образом се�
 Game Integration Service владеет проверкой service principal, app/environment,
 installation, recipient/binding/character, expiry и hash события, а также
 durable inbox/outbox и ответом 202/409. На границу публикации он передаёт
-только проверенный immutable intent: `(app_id, environment_id,
-installation_id, event_id, payload_hash, recipient, character_binding_id,
-expires_at, schema_version, fallback_text, card_revision)`. Повтор с тем же
-`event_id` и hash обязан обращаться к тому же intent и тому же
-`client_message_id`; изменение hash отклоняется до Bot/Messaging send. Bot
-не принимает raw game credential или произвольный account/chat recipient через
-существующий `SendBotMessage`: этот API не содержит нужной authority и
-идемпотентности. Каноническое представление intent и точный межсервисный
-transport нужно зафиксировать с владельцем Game Integration Service перед
-реализацией adapter.
+только проверенный immutable intent. Его канонический wire contract —
+[T51 Game Event v1](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+GIS хранит event dedupe/outbox; Bot синхронно передаёт проверенный текст в
+Messaging, а Messaging owns the durable message and
+`(chat_id, sender_profile_id, client_message_id)` dedupe. Raw game credentials
+and caller-selected account identities are never forwarded. Existing
+`SendBotMessage` is not this contract: it lacks event authority and a stable
+publication key.
+
+T51 schema version 1 publishes plain fallback text only. Cards, media, actions,
+and their app/character display metadata stay in T52 and require the typed
+Messaging card contract; T51 does not smuggle them through message JSON/content.
+GIS installation-to-Bot binding, active binding authority, and app-linked
+chat/resource mapping are prerequisites and are not implemented by this
+contract freeze.
 
 Для T52 сохранение versioned card, canonical actions, app/character attribution,
 forwarding/copy-as-new и history/search ACL принадлежит Messaging contract.
@@ -140,32 +145,14 @@ E2E DM с ключами только людей не становится до�
 
 ## 2. Событие игры
 
-Предлагаемый `POST /api/v1/game-integrations/events` принимает service principal;
-app/env выводятся из credential. Схема:
-
-| Поле | Тип / правило |
-|---|---|
-| `event_id` | Стабильный UUID события, повтор сохраняет ID и payload |
-| `installation_id` | UUID активной установки этой игры/окружения |
-| `recipient` | Ровно один `binding_id` либо разрешённый `chat_id`; не произвольный account ID |
-| `character_binding_id` | Optional UUID; игра доказывает ownership выбранному адресату |
-| `event_type`, `schema_version` | Allowlisted enum/string + положительная версия |
-| `occurred_at`, `expires_at` | UTC; expiry обязательно для ограниченных во времени actions |
-| `state_version` | Opaque game revision для compare-and-set |
-| `text`, `card` | Локализованный fallback и разрешённая component schema |
-| `notification_category` | Разрешённая категория user consent, например discoveries/tasks |
-| `correlation_id` | Нечувствительный tracing ID, не token |
-
-Ingest сохраняет inbox/event record + publish intent в одной транзакции и только
-после этого отвечает 202. Дубликат с тем же hash возвращает исходный result;
-изменённый payload с тем же event ID → 409. Worker публикует в Messaging с
-детерминированным client ID и сохраняет message ID. Crash между send и receipt
-не создаёт второго сообщения при повторе. Просроченное событие может попасть в
-журнал как факт, но не получает активных кнопок или запоздалого срочного push.
-
-Game backend использует собственный transactional outbox: commit события игры и
-intent отправки атомарны. Voice не может восстановить событие, которое игра
-никогда durable не сохранила.
+`POST /api/v1/game-integrations/events` and its schema, HMAC, event identity,
+expiry, retry, and GIS→Bot→Messaging transport are frozen in the linked
+[T51 Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+Schema version 1 accepts one recipient, one optional character binding, and
+plain fallback text; it does not accept cards/actions or proactive DMs. GIS
+persists the event and publication outbox atomically. A game backend must also
+persist its game event and source send intent atomically; Voice cannot recover
+an event the game never durably recorded.
 
 ## 3. Карточки и действия
 

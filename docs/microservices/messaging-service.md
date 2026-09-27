@@ -27,6 +27,16 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 
 `SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
 
+T51 adds a planned Bot-only S2S publication surface,
+`MessagingService.SendGameEventMessage`; it is not in the current proto or
+runtime. Its canonical request and retry contract live in
+[Game Event v1](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+Messaging owns the committed message and deduplicates by the same
+`(chat_id, sender_profile_id, client_message_id)` rule. Only a verified Bot
+service principal may supply the Bot-owned sender identity; public game
+credentials and GIS are not message senders. The RPC must retain normal
+membership, Space permission, moderation, block, content and expiry checks.
+
 ## API (gRPC)
 
 Источник истины по RPC и сообщениям: [protos/voice/messaging/v1/messaging.proto](../../protos/voice/messaging/v1/messaging.proto). Ниже — краткая схема для навигации по документу (имена типов как в репозитории).
