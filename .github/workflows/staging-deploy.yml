@@ -613,7 +613,11 @@ jobs:
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - name: Download exact staging source archive
+        env:
+          STAGING_SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: *download_staging_source
       - uses: azure/setup-kubectl@v5
       - name: Configure kubectl for Auth-only update
         env:
