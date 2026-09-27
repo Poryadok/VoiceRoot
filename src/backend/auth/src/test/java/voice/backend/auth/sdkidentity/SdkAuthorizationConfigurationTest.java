@@ -45,6 +45,34 @@ class SdkAuthorizationConfigurationTest {
   }
 
   @Test
+  void allPrincipalSettingsAbsentAreAllowedWhenAuthorizationIsOff() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class)
+        .withPropertyValues("auth.persistence=jdbc").run(ctx -> {
+      assertThat(ctx).hasNotFailed()
+          .doesNotHaveBean(AuthUserPrincipalIssuer.class)
+          .doesNotHaveBean(io.grpc.ManagedChannel.class)
+          .doesNotHaveBean(SdkProfileEligibility.class);
+    });
+  }
+
+  @Test
+  void partialPrincipalSettingsFailStartupWhenAuthorizationFlagIsAbsent() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class).withPropertyValues(
+        "auth.persistence=jdbc",
+        "AUTH_PRINCIPAL_SIGNING_KEYS_DIR=/run/secrets/auth-principal")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void partialPrincipalSettingsFailStartupWhenAuthorizationIsExplicitlyDisabled() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class).withPropertyValues(
+        "auth.persistence=jdbc",
+        "auth.sdk-authorization.enabled=false",
+        "AUTH_USER_PRINCIPAL_GRPC_ADDR=user.internal:9094")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
   void enabledJdbcRequiresTheDedicatedAuthUserPrincipalConfiguration() {
     context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc")
         .run(ctx -> assertThat(ctx).hasFailed());

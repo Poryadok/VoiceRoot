@@ -19,37 +19,75 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /** Enables Auth's dedicated principal issuer and TLS User eligibility client. */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
 public class AuthUserPrincipalConfiguration {
+  private static final String KEYS_DIR = "AUTH_PRINCIPAL_SIGNING_KEYS_DIR";
+  private static final String ACTIVE_KID = "AUTH_PRINCIPAL_ACTIVE_KID";
+  private static final String GRPC_ADDR = "AUTH_USER_PRINCIPAL_GRPC_ADDR";
+  private static final String TLS_CA_FILE = "AUTH_USER_PRINCIPAL_TLS_CA_FILE";
+  private static final String TLS_SERVER_NAME = "AUTH_USER_PRINCIPAL_TLS_SERVER_NAME";
+
   @Bean
-  AuthUserPrincipalIssuer authUserPrincipalIssuer(
-      @Value("${AUTH_PRINCIPAL_SIGNING_KEYS_DIR:}") String directory,
-      @Value("${AUTH_PRINCIPAL_ACTIVE_KID:}") String activeKid, Clock clock) {
-    if (directory == null || directory.isBlank() || activeKid == null || activeKid.isBlank()) {
-      throw new IllegalStateException("Auth principal signing keys are required when T14 authorization is enabled");
+  PrincipalSettings authUserPrincipalSettings(Environment environment, Clock clock) {
+    boolean enabled = environment.getProperty("auth.sdk-authorization.enabled", Boolean.class, false);
+    boolean anySettingPresent = List.of(KEYS_DIR, ACTIVE_KID, GRPC_ADDR, TLS_CA_FILE, TLS_SERVER_NAME)
+        .stream().anyMatch(environment::containsProperty);
+    if (!enabled && !anySettingPresent) return new PrincipalSettings(false, null, null, null, null);
+
+    String directory = environment.getProperty(KEYS_DIR, "");
+    String activeKid = environment.getProperty(ACTIVE_KID, "");
+    String address = environment.getProperty(GRPC_ADDR, "");
+    String caFile = environment.getProperty(TLS_CA_FILE, "");
+    String serverName = environment.getProperty(TLS_SERVER_NAME, "");
+    if (directory.isBlank() || activeKid.isBlank() || address.isBlank()) {
+      throw new IllegalStateException("Auth principal issuer requires signing keys, active key ID, and User TLS endpoint");
     }
-    return AuthUserPrincipalIssuer.load(Path.of(directory), activeKid, clock);
+    if (environment.containsProperty(TLS_CA_FILE) && caFile.isBlank()) {
+      throw new IllegalStateException("Auth User principal TLS CA file must not be blank");
+    }
+    if (environment.containsProperty(TLS_SERVER_NAME) && serverName.isBlank()) {
+      throw new IllegalStateException("Auth User principal TLS server name must not be blank");
+    }
+
+    AuthUserPrincipalIssuer validatedIssuer = AuthUserPrincipalIssuer.load(Path.of(directory), activeKid, clock);
+    try {
+      NettyChannelBuilder.forTarget(address.trim());
+      if (!caFile.isBlank()) trustManager(new File(caFile));
+    } catch (Exception invalidConfiguration) {
+      throw new IllegalStateException("invalid Auth-to-User principal TLS configuration", invalidConfiguration);
+    }
+    return new PrincipalSettings(enabled, enabled ? validatedIssuer : null, address, caFile, serverName);
+  }
+
+  record PrincipalSettings(boolean enabled, AuthUserPrincipalIssuer issuer, String address, String caFile,
+      String serverName) {}
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
+  AuthUserPrincipalIssuer authUserPrincipalIssuer(
+      PrincipalSettings settings) {
+    return settings.issuer();
   }
 
   @Bean(destroyMethod = "shutdownNow")
+  @ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
   ManagedChannel authUserPrincipalChannel(
-      @Value("${AUTH_USER_PRINCIPAL_GRPC_ADDR:}") String address,
-      @Value("${AUTH_USER_PRINCIPAL_TLS_CA_FILE:}") String caFile,
-      @Value("${AUTH_USER_PRINCIPAL_TLS_SERVER_NAME:}") String serverName) {
-    if (address == null || address.isBlank()) {
-      throw new IllegalStateException("Auth User principal TLS endpoint is required when T14 authorization is enabled");
-    }
+      PrincipalSettings settings) {
     try {
-      NettyChannelBuilder builder = NettyChannelBuilder.forTarget(address.trim());
+      NettyChannelBuilder builder = NettyChannelBuilder.forTarget(settings.address().trim());
       var ssl = GrpcSslContexts.forClient();
-      if (caFile != null && !caFile.isBlank()) ssl.trustManager(trustManager(new File(caFile)));
+      if (settings.caFile() != null && !settings.caFile().isBlank()) {
+        ssl.trustManager(trustManager(new File(settings.caFile())));
+      }
       builder.sslContext(ssl.build());
-      if (serverName != null && !serverName.isBlank()) builder.overrideAuthority(serverName.trim());
+      if (settings.serverName() != null && !settings.serverName().isBlank()) {
+        builder.overrideAuthority(settings.serverName().trim());
+      }
       return builder.build();
     } catch (Exception invalidTls) {
       throw new IllegalStateException("invalid Auth-to-User principal TLS configuration", invalidTls);
@@ -104,6 +142,7 @@ public class AuthUserPrincipalConfiguration {
   }
 
   @Bean
+  @ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
   SdkProfileEligibility authUserProfileEligibilityClient(ManagedChannel authUserPrincipalChannel,
       AuthUserPrincipalIssuer authUserPrincipalIssuer,
       @Value("${auth.user-grpc.deadline:PT15S}") String deadlineValue) {
