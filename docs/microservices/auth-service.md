@@ -211,6 +211,12 @@ lookup is not an exemption from erasure policy.
 matching, historical and hard-deleted-account recovery, no state mutation, and
 uncommitted/rolled-back consume isolation on separate and ambient transactions.
 
+### Registration input validation
+
+`POST /api/v1/auth/register` rejects a supplied malformed email with HTTP `400`
+and `{ "error": "validation_failed" }` before creating an identity or sending
+an email verification code. Email may be omitted for guest and phone registration.
+
 ### ConvertGuest (guest → regular)
 
 REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».
