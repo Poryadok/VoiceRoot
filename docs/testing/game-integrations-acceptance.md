@@ -249,7 +249,7 @@ ID, with no token, provider claim or private-key bytes.
 | SDK04 | Scene reload/Dispose/Editor stop | Tasks/callbacks/media освобождены, после Dispose нет UI calls |
 | SDK05 | SDK/messenger одновременно делают voice и listen-only join на master/node | Одна account-wide session; атомарный admission, явный transfer либо conflict |
 | SDK06 | Unsupported SDK/schema/capability | Typed error + fallback, отсутствие частичной небезопасной работы |
-| BOT01 | Game outbox повторяет событие | Одна карточка/message, один notification intent |
+| BOT01 | Game outbox повторяет событие | Один deduplicated message; уведомления подчиняются обычной политике Messaging, отдельный intent count не обещан |
 | BOT02 | Игрок slash/button вызывает действие | Backend проверяет binding/ownership; подтверждённый result в Voice |
 | BOT03 | Падение до/после game commit и потеря ACK | Reconcile по прежнему command ID, ровно один эффект в game DB |
 | BOT04 | Двойной клик/два устройства/новый invocation ID | Game event consumption/CAS исключает повторное расходование |
@@ -279,6 +279,31 @@ ID, with no token, provider claim or private-key bytes.
 | FED10 | Unexpired старый LiveKit bearer повторён после authority expiry при упавшем control plane | Media verifier не допускает track admission/delivery; одного повторного eject недостаточно |
 | OPS01 | Rollback SDK/server одной поддержанной версии | Compatibility и данные сохраняются; disable новой capability |
 | OPS02 | Перегрузка/tenant quota/неудачный webhook URL | Изоляция, 429/SSRF defense; чужие app не деградируют бесконтрольно |
+
+### T51 Game Event v1 contract cases
+
+The exact public request, verified GIS intent, S2S caller/RPC identities,
+durability ownership, and retry/revoke behavior are frozen in the
+[canonical Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+These assertions belong to the T51 implementation suites; this docs freeze is
+not runtime, staging, or provider evidence.
+
+| BOT ID | Required assertion |
+|---|---|
+| BOT01 | Post the same `(app_id, environment_id, event_id, payload_hash)` repeatedly, restart GIS before and after outbox commit, and lose the Bot/Messaging reply after the message commit. One operation and one message result; every retry keeps the same UUIDv5 `client_message_id`. Any notification follows ordinary Messaging policy; no separate notification-intent count is guaranteed. Mention-like text remains literal and creates no mention target/notification. A changed body under the same event ID returns `409 EVENT_ID_CONFLICT` and creates no second send. |
+| BOT05 | Unknown/foreign recipient, inactive binding, character binding outside the recipient, unlinked chat, DM, or unsupported event schema is rejected before Bot/Messaging publication. No caller-supplied account/sender identity can redirect the event. |
+| BOT06 | Reject non-JCS bytes, body over 16 KiB, duplicate/unknown JSON keys, invalid HMAC, key-ID mismatch, timestamp outside ±300 seconds, duplicate auth/signature headers, cross-app/environment credential, and scope without `game.events.write`. While fresh, replay of the same `(credential_id, nonce, event_id, payload_hash)` is inert; reuse of that credential/nonce with another event/hash is `409 EVENT_NONCE_REUSE`. After freshness expiry, re-signing the same event/hash with a new nonce returns the saved operation; the stale original signature is rejected. |
+| BOT08 | Crash at GIS inbox/outbox commit boundaries and during both S2S hops. Retryable gRPC statuses use the canonical saved-intent backoff; one valid `voice-retry-delay-ms` trailer extends it, while duplicate/malformed/out-of-range hints are ignored. An already-expired request returns a durable `expired` operation without an outbox row; expiry while queued is a terminal fact with no publication. `PERMISSION_DENIED`/`NOT_FOUND` cancel, `UNAUTHENTICATED`/`UNIMPLEMENTED` block for operator repair with the outbox retained, and conflicting Messaging idempotency becomes reconciliation-required; none is success. |
+| BOT09, BOT12 | Credential revoke denies new ingress. App/environment/installation/binding revoke before dispatch cancels queued publication. A dispatch admitted before revoke may finish as one in-flight attempt; an ambiguous response after revoke becomes reconciliation-required and is never re-sent as a new publication. Already committed messages keep ordinary history ACL; later actions recheck live authority. |
+| BOT11 | GIS→Bot accepts only the verified `gameintegration` S2S principal and exact RPC/request hash; Bot→Messaging accepts only `bot`. GIS sources `app_owner_account_id` from the authenticated-owner application row and obtains `bot_id` from active T11 installation authority; Bot requires that value to equal its stored `bots.owner_account_id`. The hash matches `sha256:` plus lowercase hex of the complete deterministic protobuf request bytes; the JWT `request_id` equals the intent `operation_id`. Wrong issuer, audience, RPC, request hash, stale/expired token, replayed `jti`, invalid TLS/JWKS, or raw forwarded client identity is denied before message persistence. |
+
+For two distinct event IDs, force outbox completion in reverse order and assert
+that the contract makes no FIFO promise. For same-event retries, assert saved
+resolved recipient/authority revision and message key are reused rather than
+re-resolving the event to a different chat. T11 installation-to-Bot binding,
+T16 binding authority and T30/T31 resource mapping are required test fixtures
+from their owner services; synthetic fixtures do not prove those prerequisites
+are implemented or prove any external game-provider admission.
 
 Для T12 OPS02 registry suite фиксирует конкретные enforcement values и
 границы: 120 регистраций installation callback на приложение за UTC-минуту,

@@ -229,6 +229,19 @@ Replay after a completed delivery is inert. Webhook payload
 `options.delivery_id` is stable across retries; receivers should deduplicate
 that ID for an ambiguous HTTP response (remote success before local receipt).
 
+### T51 game-event adapter (planned)
+
+The GIS→Bot `PublishGameEvent` boundary and Bot→Messaging
+`SendGameEventMessage` call are defined in the
+[canonical Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+These are future S2S RPCs, not the public Bot `SendBotMessage` path and not the
+existing `message.sent` JetStream consumer. GIS owns the game-event inbox and
+outbox; Bot verifies its live Bot actor, send scope and chat whitelist, then
+waits for Messaging's idempotent durable message result. The S2S calls use the
+service-principal contract and caller/method allowlist from
+[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md). The RPCs,
+installation-to-Bot binding, and their tests remain unimplemented.
+
 ## Публикуемые события (→ NATS)
 
 Доменный поток JetStream: **`bot.events`** ([CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md)).

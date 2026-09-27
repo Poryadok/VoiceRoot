@@ -101,6 +101,13 @@ accepted until its API, verifier, migration, and negative tests are implemented.
 The controlled T07a receiver is test infrastructure in an independent module
 and database, never a production GIS registry or `game_integration_db` table.
 
+The T51 event ingress and GIS→Bot→Messaging transport are specified in the
+[canonical Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+It uses the existing `game.events.write` credential scope. GIS will own the
+event inbox, immutable dedupe identity, publication outbox, and operation
+status. This docs-only freeze does not implement the event route or satisfy the
+open installation-to-Bot, binding-authority, and resource-mapping prerequisites.
+
 The approved sandbox owner configures Auth admission with
 `PUT /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/policy`.
 The body carries `expected_revision`, exact redirect URIs, browser origins,

@@ -207,7 +207,9 @@ contracts land before consumers; activation lands after all consumers.
   implementation covers owner-derived application creation, separate operator
   sandbox approval, app/environment-scoped policy and installation
   configuration, provider, redirect/origin and callback configuration, and
-  credential issue/retry, rotation and revoke. Empty-database API bootstrap
+  credential issue/retry, rotation and revoke. Before enabling `game.events.write`,
+  each event-enabled installation must also be bound to a live Bot ID owned by
+  the application owner. Empty-database API bootstrap
   and cross-scope denials pass without direct SQL or a portal. Its T10 database
   isolation prerequisite is now proven. T11 remains open because the current
   API has no production-admission route; the seeded-fixture test denies
@@ -325,9 +327,11 @@ contracts land before consumers; activation lands after all consumers.
   activation: durable slash enqueue/outbox, leased polling or disable reliable
   claim, membership/read/send scope at every route, uniform interaction-token
   lookup, thread parent propagation and bot-bound completion.
-- [ ] **T51** `D: T50` Accept signed game event into durable inbox/outbox with
-  stable event ID/payload hash, own installation/recipient/character validation,
-  expiry, 409 mismatch and idempotent Messaging publication.
+- [ ] **T51** `D: T50,T11,T16,T30,T31` Accept signed game event into durable
+  inbox/outbox with stable event ID/payload hash, own installation/recipient/
+  character validation, expiry, 409 mismatch and idempotent Messaging
+  publication. GIS installation-to-Bot binding, active binding authority and
+  app-linked chat mapping must be available before runtime activation.
 - [ ] **T52** `D: T51` Persist versioned cards/actions, trusted app/character
   attribution, immutable arguments, media references, safe fallback and
   forwarding/copy-as-new with actions disabled. Apply search/history ACL.
@@ -460,6 +464,10 @@ test assertion, not just prose.
   registry and public game capability remain incomplete.
 - [x] Bot T50 durable slash admission/lease slice committed on
   `codex/game-bot-durable`; remaining Bot work continues on that branch.
+- [x] Freeze the T51 Game Event v1 contract in the API, feature, service,
+  acceptance and plan docs. This is contract-only progress; T51 runtime remains
+  open behind T11 installation-to-Bot binding, T16 authority and T30/T31 chat
+  mapping. See the [Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
 - [x] Run T11's bounded lifecycle verification on the feature branch after
   T15 merge: `rtk make game-integration-bootstrap-acceptance` and
   `rtk make game-integrations-q11-acceptance` pass. GIS `rtk go test ./...`
