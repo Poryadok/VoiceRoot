@@ -218,6 +218,42 @@ ID, with no token, provider claim or private-key bytes.
 | OPS01 | Rollback SDK/server одной поддержанной версии | Compatibility и данные сохраняются; disable новой capability |
 | OPS02 | Перегрузка/tenant quota/неудачный webhook URL | Изоляция, 429/SSRF defense; чужие app не деградируют бесконтрольно |
 
+Для T12 OPS02 registry suite фиксирует конкретные enforcement values и
+границы: 120 регистраций installation callback на приложение за UTC-минуту,
+общих между его sandbox/production environments; второе приложение получает
+собственный лимит. 121-я попытка отвечает `429 RATE_LIMITED` с целым
+`Retry-After` до границы следующей минуты. Denial audit объединяется в одну
+строку на app/minute со счётчиком. После минутного rollover квота снова
+доступна. Этот лимит относится только к новой регистрации installation; он не
+обещает пропускную способность всех GIS routes или T15 delivery.
+
+Регистрация разрешена только владельцу приложения и активной environment.
+После admission лимитера cross-environment и небезопасный callback отказ
+создают ровно одну sanitized denial запись без installation/credential writes;
+foreign-owner отказ не расходует квоту. Неверный/отсутствующий bearer не
+создаёт quota/store/audit обращений. Путь callback обязан быть HTTPS:443 с
+literal ASCII unreserved сегментами, без userinfo/query/fragment. DNS проверен
+при регистрации и повторно в dialer; все адреса проверяются, TCP фиксируется
+на разрешённом IP, TLS сверяет исходный hostname, redirect не исполняется.
+Проверки используют controlled DNS/TLS servers и подтверждают отсутствие
+запроса к redirect target.
+
+Тесты suspension проверяют operator allowlist, атомарное audit/state изменение,
+повтор idempotency key после последующего перехода возвращает исходные
+status/revision, а owner credential/Auth policy fail closed с
+`503 APP_SUSPENDED`. Заблокированный переход получает `409
+APPLICATION_STATE_CONFLICT`; restore не возрождает revoke или отдельно
+suspended environment.
+
+Diagnostics проверяется на owner-only доступ, максимум 20 newest-first audit
+событий, отсутствие callback URL/credential/proof/subject/payload secrets и
+раздельные `developer_asserted`, `operator_approved`, `not_verified`. Migration
+acceptance начинает с 000001 schema, сохраняет старое operator
+`approve_sandbox` событие как `operator_approved` и оставляет прочие legacy
+события с provenance `system` и result `success`. Тестовая operator approval
+не является Google или иным live provider proof; отправка callback команд
+остаётся T15 scope.
+
 ## 4. Как запускать проверки при реализации
 
 - Contracts: `rtk buf lint`, `rtk buf format -d --exit-code`, breaking/regeneration

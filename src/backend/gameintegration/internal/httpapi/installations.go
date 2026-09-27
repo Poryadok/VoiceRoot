@@ -5,21 +5,24 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"voice/backend/gameintegration/internal/registry"
 )
 
-func (h *Handler) serveSandboxPolicyUpdate(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serveInstallationRegistration(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/v1/game-integrations/applications/"
 	const separator = "/environments/"
-	const suffix = "/policy"
-	if r.Method != http.MethodPut {
+	const suffix = "/installations"
+	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
 	}
-	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), suffix), separator)
+	path := strings.TrimPrefix(r.URL.Path, prefix)
+	parts := strings.Split(strings.TrimSuffix(path, suffix), separator)
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
@@ -30,7 +33,7 @@ func (h *Handler) serveSandboxPolicyUpdate(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
-	if h == nil || h.Tokens == nil || h.Policies == nil {
+	if h == nil || h.Tokens == nil || h.Installations == nil {
 		writeError(w, http.StatusServiceUnavailable, "REGISTRY_UNAVAILABLE")
 		return
 	}
@@ -57,15 +60,11 @@ func (h *Handler) serveSandboxPolicyUpdate(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "IDEMPOTENCY_KEY_REQUIRED")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var body struct {
-		ExpectedRevision int64    `json:"expected_revision"`
-		RedirectURIs     []string `json:"redirect_uris"`
-		AllowedOrigins   []string `json:"allowed_origins"`
-		Providers        []string `json:"providers"`
-		PlayerScopes     []string `json:"player_scopes"`
+		CallbackURL string `json:"callback_url"`
 	}
 	if err := decoder.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
@@ -75,30 +74,47 @@ func (h *Handler) serveSandboxPolicyUpdate(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
 		return
 	}
-	env, err := h.Policies.UpdateSandboxPolicy(r.Context(), registry.UpdateSandboxPolicyInput{
+	installation, err := h.Installations.CreateInstallation(r.Context(), registry.CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: appID, EnvironmentID: envID,
-		ExpectedRevision: body.ExpectedRevision, RedirectURIs: body.RedirectURIs,
-		AllowedOrigins: body.AllowedOrigins, Providers: body.Providers,
-		PlayerScopes: body.PlayerScopes, IdempotencyKey: key,
+		CallbackURL: body.CallbackURL, IdempotencyKey: key,
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, registry.ErrInvalidPolicy):
+		case errors.Is(err, registry.ErrInvalidApplication):
 			writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
-		case errors.Is(err, registry.ErrAdmissionConflict):
-			writeError(w, http.StatusForbidden, "ENVIRONMENT_DENIED")
+		case errors.Is(err, registry.ErrUnsafeCallbackURL):
+			writeError(w, http.StatusBadRequest, "CALLBACK_URL_REJECTED")
+		case errors.Is(err, registry.ErrInstallationConflict):
+			writeError(w, http.StatusForbidden, "INSTALLATION_DENIED")
 		case errors.Is(err, registry.ErrApplicationSuspended):
 			writeError(w, http.StatusServiceUnavailable, "APP_SUSPENDED")
-		case errors.Is(err, registry.ErrPolicyConflict), errors.Is(err, registry.ErrIdempotencyConflict):
-			writeError(w, http.StatusConflict, "POLICY_CONFLICT")
+		case errors.Is(err, registry.ErrRateLimited):
+			var limited *registry.RateLimitError
+			if errors.As(err, &limited) {
+				seconds := int64((limited.RetryAfter + time.Second - 1) / time.Second)
+				if seconds < 1 {
+					seconds = 1
+				}
+				if seconds > 60 {
+					seconds = 60
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+			}
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED")
+		case errors.Is(err, registry.ErrIdempotencyConflict):
+			writeError(w, http.StatusConflict, "IDEMPOTENCY_CONFLICT")
 		default:
 			writeError(w, http.StatusServiceUnavailable, "REGISTRY_UNAVAILABLE")
 		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"environment_id": env.ID.String(), "revision": env.Revision, "status": env.Status,
+		"installation_id": installation.ID.String(),
+		"application_id":  installation.ApplicationID.String(),
+		"environment_id":  installation.EnvironmentID.String(),
+		"status":          installation.Status,
 	})
 }

@@ -61,8 +61,13 @@ func (s *Store) VerifyCredential(ctx context.Context, bearer, scope string, key 
 		return ServicePrincipal{}, fmt.Errorf("read service credential: %w", err)
 	}
 	if !hmac.Equal(digest, credentialDigest(key, secret)) || !slices.Contains(principal.Scopes, scope) ||
-		!time.Now().Before(expiresAt) || revokedAt.Valid || envStatus != "active" ||
-		(appStatus != "sandbox" && appStatus != "active") {
+		!time.Now().Before(expiresAt) || revokedAt.Valid {
+		return ServicePrincipal{}, ErrInvalidServiceCredential
+	}
+	if appStatus == "suspended" {
+		return ServicePrincipal{}, ErrApplicationSuspended
+	}
+	if envStatus != "active" || appStatus != "sandbox" && appStatus != "active" {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
 	return principal, nil
@@ -103,8 +108,9 @@ func (s *Store) RevokeCredential(ctx context.Context, ownerID, appID, envID, cre
 			return fmt.Errorf("revoke credential: %w", err)
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO registry_audit
-			(id,actor_kind,actor_id,application_id,environment_id,action,new_status,operation_key)
-			VALUES ($1,'account',$2,$3,$4,'revoke_credential','revoked',$5)`,
+			(id,actor_kind,actor_id,application_id,environment_id,action,new_status,operation_key,
+			 source,result,reason_code)
+			VALUES ($1,'account',$2,$3,$4,'revoke_credential','revoked',$5,'authenticated_account','success','credential_revoked')`,
 			uuid.New(), ownerID, appID, envID, credentialID.String())
 		if err != nil {
 			return fmt.Errorf("audit credential revoke: %w", err)

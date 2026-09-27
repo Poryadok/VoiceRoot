@@ -157,6 +157,54 @@ the service before enabling any route.
 - Clean bootstrap creates owner/app/sandbox and an independently approved
   environment without direct SQL or developer portal access.
 
+## T12: registry security, callback admission and diagnostics
+
+`POST /api/v1/game-integrations/applications/{app_id}/environments/{env_id}/installations`
+is an owner route. It takes only `callback_url`, an `Idempotency-Key`, and the
+application/environment IDs from the path and trusted bearer. Registration
+requires an active environment and a canonical HTTPS callback on port 443. The
+URL cannot contain userinfo, a query, or a fragment; each path segment must be
+literal ASCII unreserved text. Registration resolves DNS and rejects the URL if
+any answer is non-public or special-use. The shared callback transport resolves
+again when dialing, validates every answer, pins the socket to an approved IP,
+and keeps TLS verification bound to the original hostname. Redirects are
+terminal responses. T12 stores the callback with its app, environment, and
+installation; it does not dispatch commands. T15 must use this transport for
+every command callback.
+
+Installation registration is limited to 120 attempts per application per UTC
+minute across all of that application's environments. The 121st request returns
+`429 RATE_LIMITED` with integer `Retry-After` seconds to the next minute
+boundary. Repeated quota denials update one sanitized audit event per app and
+minute. Reads, current application/environment/policy/credential routes,
+operator actions, and future T15 delivery are outside this selected bucket.
+An authenticated owner denied after quota admission consumes the attempt; a
+foreign owner is denied before quota admission. Invalid bearer requests create
+no registry, quota, or audit writes.
+
+`PUT /api/v1/game-integrations/applications/{app_id}/suspension` is restricted
+to configured regular operator accounts and takes `{"suspended": boolean}`
+plus an `Idempotency-Key`. A blocked lifecycle transition returns `409
+APPLICATION_STATE_CONFLICT`; suspended application credential and Auth policy
+consumers fail closed with `503 APP_SUSPENDED`. State change and audit commit in
+one transaction. Restore returns the prior application state and never
+reactivates revoked credentials or independently suspended/retired
+environments. An identical retry returns its originally persisted result
+snapshot and revision.
+
+`GET /api/v1/game-integrations/applications/{app_id}/diagnostics` is owner-only
+and returns application/environment/installation IDs and states, quota use and
+reset time, developer-entered provider assertions, and at most 20 newest audit
+events. It omits callback URLs, credentials and digests, OAuth subjects,
+assertions, provider proofs, payloads, and secrets. Provenance values remain
+separate: `developer_asserted`, `operator_approved`, and `provider_verified` /
+`provider_admitted`. T12 records developer assertions and operator approval;
+provider status remains `not_verified` without independent provider evidence.
+Audit result values are `success` or `denied`; source identifies the trusted
+actor/provenance. The T12 migration backfills only old operator
+`approve_sandbox` events as `operator_approved` and leaves other legacy events
+at `system` / `success`.
+
 The T11 HTTP bootstrap acceptance is
 `rtk make game-integration-bootstrap-acceptance`. It starts a disposable empty
 registry, uses synthetic Voice access tokens verified through a fake JWKS, and

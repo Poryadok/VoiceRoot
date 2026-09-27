@@ -82,6 +82,8 @@ func (h *Handler) serveCredentialIssue(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
 		case errors.Is(err, registry.ErrAdmissionConflict):
 			writeError(w, http.StatusForbidden, "ENVIRONMENT_DENIED")
+		case errors.Is(err, registry.ErrApplicationSuspended):
+			writeError(w, http.StatusServiceUnavailable, "APP_SUSPENDED")
 		case errors.Is(err, registry.ErrIdempotencyConflict):
 			writeError(w, http.StatusConflict, "IDEMPOTENCY_CONFLICT")
 		case errors.Is(err, registry.ErrCredentialRevealExpired):
