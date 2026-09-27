@@ -304,7 +304,7 @@ jobs:
           VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
           VOICE_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
-          VOICE_APPLY_OBSERVABILITY: ${{ vars.VOICE_APPLY_OBSERVABILITY }}
+          VOICE_APPLY_OBSERVABILITY: ${{ github.event_name == 'workflow_call' && vars.VOICE_APPLY_OBSERVABILITY || 'false' }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           NOTIFICATIONS_ENABLED: ${{ vars.STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
@@ -357,7 +357,7 @@ jobs:
           bash scripts/staging/smoke-staging.sh
 
       - name: Observability smoke (optional)
-        if: vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
+        if: github.event_name == 'workflow_call' && vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: bash scripts/staging/smoke-observability.sh

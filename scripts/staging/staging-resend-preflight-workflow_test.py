@@ -39,6 +39,14 @@ assert "echo" not in step
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in named_steps[
     "Apply staging manifests"
 ], "preflight and apply must receive the same secure YAML artifact"
+assert (
+    "VOICE_APPLY_OBSERVABILITY: ${{ github.event_name == 'workflow_call' && vars.VOICE_APPLY_OBSERVABILITY || 'false' }}"
+    in named_steps["Apply staging manifests"]
+), "manual app deploy must not apply resources in the observability namespace"
+assert (
+    "if: github.event_name == 'workflow_call' && vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'"
+    in named_steps["Observability smoke (optional)"]
+), "manual app deploy must not run smoke in the observability namespace"
 
 assert "validate_app_secret_only:" in source, "read-only dispatch input missing"
 assert "inputs.validate_app_secret_only != true" in source, "validation dispatch must skip deploy job"
