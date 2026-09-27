@@ -23,9 +23,10 @@ import voice.backend.auth.support.RecordingAuthEventPublisher;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
 import voice.backend.auth.service.GuestConversionPendingEventWorker;
+import voice.backend.auth.service.GuestConversionPendingEventRecoveryRunner;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
 
-@SpringBootTest
+@SpringBootTest(properties = "auth.guest-conversion.pending-event.enabled=false")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class GuestConvertNatsEventIntegrationTest {
@@ -39,6 +40,9 @@ class GuestConvertNatsEventIntegrationTest {
 
   @Test
   void emailOtpCompletionDefersEventUntilTheSeparatePendingEventPublisher() throws Exception {
+    assertThat(applicationContext.getBeansOfType(GuestConversionPendingEventRecoveryRunner.class))
+        .as("this test drives the pending-event worker synchronously")
+        .isEmpty();
     RecordingAuthEventPublisher events = findRecordingPublisher(applicationContext);
     assertThat(events).isNotNull();
     events.clear();
