@@ -495,98 +495,216 @@ payload)` input from RFC 7515. The payload contains exactly these required
 fields:
 
 ```json
-{"version":1,"operation":"create","audience":"voice.game-message","application_id":"<UUID>","environment_id":"<UUID>","account_id":"<UUID>","actor_id":"<UUID>","binding_id":"<UUID>","device_id":"<UUID>","operation_id":"<UUID>","authority_revision":1,"chat_id":"<UUID>","message_id":"<UUIDv7>","revision":1,"previous_revision_hash":null,"issued_at":"<RFC3339 UTC with seconds>","expires_at":"<RFC3339 UTC with seconds>","content_type":"text/plain","content_sha256":"<lowercase SHA-256 hex>","attachment_manifest_sha256":null}
+{"version":1,"operation":"create","audience":"voice.game-message","application_id":"<UUID>","environment_id":"<UUID>","account_id":"<UUID>","actor_id":"<UUID>","binding_id":"<UUID>","device_id":"<UUID>","operation_id":"<UUID>","authority_revision":1,"chat_id":"<UUID>","message_id":"<UUIDv7>","revision":1,"previous_revision_hash":null,"issued_at":"<RFC3339 UTC with seconds>","expires_at":"<RFC3339 UTC with seconds>","content_type":"text/plain","content_b64":"<unpadded base64url of exact UTF-8 content bytes>","content_sha256":"<lowercase SHA-256 hex>","attachment_manifest_b64":null,"attachment_manifest_sha256":null}
 ```
 
 UUIDs use lowercase canonical hyphenated form; `revision` and
 `authority_revision` are positive JSON integers no greater than 2^53-1; times
 are UTC RFC 3339 second precision, with `issued_at < expires_at` and a maximum
-five-minute envelope lifetime. `content_sha256` hashes the exact UTF-8 content
-bytes for create/edit; it and `content_type` are `null` for delete.
-`attachment_manifest_sha256` is `null` when the operation has no attachments.
+five-minute envelope lifetime. For create/edit, `content_type` is `text/plain`
+and `content_b64` is unpadded base64url of the complete message content bytes
+(valid UTF-8, at most 4000 Unicode scalar values); partial patches are not
+allowed. The receiver decodes and stores these exact bytes, and
+`content_sha256` is lowercase SHA-256 hex of them. Since `content_b64` is in
+the canonical payload, the JWS covers the content as well as its digest. For
+delete, `content_type`, `content_b64`, `content_sha256`,
+`attachment_manifest_b64`, and `attachment_manifest_sha256` are all `null`.
 JWS protected-header, payload and signature use unpadded base64url as defined
-by JWS. A receiver
-rejects non-canonical payload bytes, duplicate JSON names, invalid UTF-8,
-unknown security fields/operations, mismatched route/body audience or identity,
-expired/future envelopes outside 30 seconds of receiver time, and invalid
-signature before writing any message state. It then checks current Auth device
-status, app/environment/binding and chat authorization, authority revision,
-and `(application_id, environment_id, device_id, operation_id)` plus
-`(chat_id, message_id, revision)` dedupe. The first accepted operation stores
-its exact compact JWS and result; retries of those exact bytes return the saved
-result even if the original envelope has since expired or its key was revoked.
-They cannot create a new effect. Reuse of either tuple with different signed
-bytes is a conflict. The client signs once and persists that compact JWS until
-it gets a terminal result; all network retries send the identical bytes.
+by JWS. `content_b64` and `attachment_manifest_b64` accept only the URL-safe
+alphabet with no padding; decoding and re-encoding must reproduce the exact
+field value. For a new operation, the receiver rejects non-canonical payload bytes,
+duplicate JSON names, invalid UTF-8, unknown security fields/operations,
+mismatched route/body audience or identity, expired/future envelopes outside
+30 seconds of receiver time, and invalid signature before any state write.
+Receipt ordering is explicit:
+after strict parsing and extraction of both dedupe tuples, the receiver looks
+for an existing receipt first. If either tuple exists with different compact
+JWS bytes, it returns conflict without mutation. If both tuples match and the
+stored compact JWS is byte-identical, it returns the immutable result
+read-only; this path needs no fresh Auth assertion and remains valid after
+expiry, rotation or revoke. It cannot create a new effect. Only when no receipt
+exists does the receiver verify the device signature and current Auth device
+authority, check envelope freshness, app/environment/binding and chat
+authorization, and attempt the atomic insert/effect. Unique constraints close
+concurrent first-delivery races. The first accepted operation stores its exact
+compact JWS and result. The client signs once, persists that JWS until terminal
+result, and sends identical bytes on every network retry.
 
 Each edit is a new signed `operation:"edit"` envelope for the same
 `message_id`, with `revision = previous + 1` and
 `previous_revision_hash = SHA-256` lowercase hex of the preceding compact JWS
 ASCII bytes. Delete is terminal: a user deletion is a signed
-`operation:"delete"` envelope with the next revision and previous hash;
-moderator/system deletion instead carries a separate Voice service tombstone
-signature and named issuer/reason class, never a fabricated player signature.
-Receivers require contiguous revisions and a matching previous hash. They
+`operation:"delete"` envelope with the next revision and previous hash.
+Moderator/system deletion is a separate
+`application/vnd.voice.game-message-tombstone+jws;version=1` compact JWS, never
+a fabricated player signature. Its protected header is exactly
+`{"alg":"EdDSA","kid":"<messaging key UUID>","typ":"voice.game-message-tombstone+jws"}`.
+Its RFC 8785 payload has exactly `version:1`, `operation:"moderator_delete"`,
+`issuer:"messaging"`, `audience:"voice.game-message"`, `application_id`,
+`environment_id`, `chat_id`, `message_id`, `revision`,
+`previous_revision_hash`, `action_id`, `reason_class`, and `issued_at`. The
+revision is next and contiguous; `previous_revision_hash` is SHA-256 of the
+preceding compact JWS ASCII bytes. `reason_class` is one of `moderation` or
+`system_retention`; unknown values fail closed. Messaging generates
+`action_id` and uses it as the operation/dedupe ID. Reuse of its action or
+chat/message/revision tuple returns the identical stored tombstone; different
+bytes conflict. Messaging signs only after its owning authorization checks
+and atomically commits the tombstone with deletion. The signature covers every
+listed field. The issuer uses a Messaging-owned Ed25519 key. The node's master-
+provisioned trust record pins issuer `messaging`, the fixed internal HTTPS JWKS
+origin `https://voice-messaging:8443/.well-known/game-tombstone-jwks.json`, its
+TLS server name and CA; fetch uses node mTLS, and no payload or developer value
+may select the URL. Unknown `kid` triggers one refresh from that pinned origin,
+then fails closed. Key records bind ID, algorithm, public key, `not_before`,
+`not_after` and optional `revoked_at`; rotated keys are historical-verification
+only, and a signature issued at/after explicit key revocation is rejected.
+`issued_at` is RFC 3339 UTC seconds, immutable, and no more than 30 seconds in
+the receiver's future. Receivers require contiguous revisions and a matching previous hash. They
 reject a lower revision after observing a higher one and flag equal-revision,
 different-hash responses as equivocation. This detects rollback or conflict
 only when a client has prior evidence or compares replicas; it does not prove
 history completeness or prevent a node from withholding unseen messages.
+Clients display only verified revisions as authenticated content. On a gap,
+invalid signature/digest, or equivocation, they retain at most the last
+verified revision, label it stale/unverified, and disable message actions. If
+no verified revision exists, they suppress the payload and show an integrity
+failure state. A valid terminal deletion tombstone hides the message content.
 
-Attachments are immutable File objects. The canonical manifest is an ordered
-array of `{file_id, object_revision, byte_length, content_sha256, media_type}`;
-`attachment_manifest_sha256` is SHA-256 of its RFC 8785 UTF-8 bytes. The signed
-envelope binds that digest, while File remains authoritative for access and
-retention. A message with an attachment is rejected if File cannot provide and
-later verify this immutable provenance; a client must not display unverified
-bytes as an authenticated attachment. A changed manifest requires a signed edit
-revision. This establishes object provenance, not that a node showed every
-attachment or complete history.
+Attachments are immutable File objects. For create/edit with attachments,
+`attachment_manifest_b64` is unpadded base64url of the complete RFC 8785 JCS
+UTF-8 array of `{file_id, object_revision, byte_length, content_sha256,
+media_type}` records in user-selected display order;
+`attachment_manifest_sha256` is SHA-256 of those decoded bytes. Both fields are
+inside the device-signed payload. Each ID is a canonical UUID, revision and
+length are non-negative exact JSON integers, and digest is lowercase SHA-256
+hex. File remains authoritative for the exact immutable object metadata,
+access and retention; the receiver compares every listed value to File before
+display. With no attachments, both fields are `null`. A message is rejected if
+File cannot provide and later verify this immutable provenance; a client must
+not display unverified bytes as authenticated. A changed manifest requires a
+signed edit revision. This establishes object provenance, not that a node
+showed every attachment or complete history.
 
 Auth assigns a fresh random UUID `key_id` per public-key generation; `kid` is
 that immutable `key_id`, never a caller-selected value. The Auth key record
-binds key ID, device ID, application/environment, JWK thumbprint, generation,
-`not_before`, `not_after`, status and optional `revoked_at`; those timestamps
-and status are Auth authority values, never client claims. Auth publishes key
+binds key ID, device ID, application/environment, public P-256 JWK and its
+RFC 7638 thumbprint (unpadded base64url SHA-256), generation,
+`not_before`, `not_after`, status and optional `revoked_at` as Unix milliseconds;
+those timestamps and status are Auth authority values, never client claims. Auth publishes key
 records through its authenticated key lookup. Initial enrollment uses the
 existing five-minute Auth device challenge bound to app/env and public P-256
 JWK, then the independent-provider exchange and device proof from GAME-AUTH-01.
-An ordinary rotation requires a fresh five-minute Auth challenge, independent
-user proof for the same sdk identity, possession proof signed by the current
-key, and the new public JWK; Auth atomically consumes the challenge and
-idempotency key with the replacement record. Explicit revoke requires
-independent user proof and current-key possession when the key is available;
-recovery is used for a lost key. Recovery uses a fresh five-minute challenge,
-independent proof for the same identity and proof by the newly generated key;
-Auth creates the replacement and revokes every prior active key atomically.
+For lifecycle routes, `POST /api/v1/auth/sdk/device-keys/challenges` accepts
+purpose `rotate|recover`, new public JWK containing only `kty:"EC"`,
+`crv:"P-256"`, `x`, and `y`, and, for recovery,
+`replaces_device_id`; it returns one-use challenge ID/nonce with five-minute
+expiry bound to the current app/env/binding. `POST
+/api/v1/auth/sdk/device-keys/rotate` requires that challenge, fresh proof of
+the same current app-scoped identity, possession proof from the current key,
+new-key proof and an idempotency UUID. `POST
+/api/v1/auth/sdk/device-keys/recover` requires the challenge, fresh proof of
+that identity and new-key proof; it cannot require the lost private key.
+Independent proof is the configured independent provider proof or, after
+conversion, the authenticated permanent Voice identity bound to this app
+binding. Auth atomically consumes challenge and idempotency key and returns
+only `device_id`, `key_id`, generation and authority revision. Explicit revoke
+is `DELETE /api/v1/auth/sdk/devices/{device_id}` and requires fresh identity
+proof plus current-key possession if that key is available; loss uses recovery.
+Recovery registers a new device/key and revokes every active generation for
+only the named replaced device. Other devices remain active. Identical request
+ID and bytes return the saved result; changed bytes conflict.
+
+An ordinary rotation requires the new public JWK and a fresh five-minute Auth
+challenge, independent user proof for the same app-scoped identity, and
+possession proof signed by the current key. The replacement becomes active
+atomically; the old key remains admissible for new operations only while
+`now < old.not_after`, where `old.not_after` is exactly replacement commit time
+plus 600 seconds. At `now >= not_after`, it is rejected for new admission.
 Rotation, revoke and recovery are Auth-owned and return only public key
-metadata, never private material or player bearer credentials. The replacement
-becomes active atomically and the old key remains admissible for new operations
-only through a ten-minute overlap. After that, and after explicit revoke, it
-remains available for historical signature verification only. Explicit revoke
-ends new message admission at Auth commit and is never delayed by overlap.
+metadata, never private material or player bearer credentials. After expiry or
+explicit revoke, a public key remains available for historical signature
+verification only. Explicit revoke stops Auth issuance at commit and is never
+delayed by rotation overlap; nodes enforce the bounded assertion expiry below.
 Recovery is unavailable when independent proof for the existing identity is
 unavailable. Revoked public keys never grant fresh admission.
 
-On master, verification consults current Auth device status. A node may accept
-only master-authorized, signed device-status authority that is no more than
-five seconds old; revoke propagation is measured from Auth commit and must
-close new admission within that five-second bound. At expiry, partition, invalid
-signature, stale/unknown revision, or clock uncertainty, the receiver fails
-closed for new sends and mutations. Existing delivered history remains
-readable according to chat/File policy. Receiver implementations must retain
-dedupe receipts for at least the lifetime of the message plus 30 days; an
-operation older than the receiver's retained receipt window is rejected for
-reconciliation rather than applied again.
+Every new game-message request also carries a separate Auth-signed device-authority
+assertion in `X-Voice-Device-Authority`; it never replaces the player JWS.
+Auth owns `POST /api/v1/auth/sdk/device-authority`. It accepts the existing
+app-scoped SDK session and a device-signed request whose RFC 8785 payload has
+exactly `version:1`, `audience:"voice.game-message"`, `request_id`,
+`application_id`, `environment_id`, `device_id`, and `issued_at` (integer Unix
+milliseconds, within ±30 seconds of Auth time). The request JWS uses ES256 and protected `typ`
+`voice.game-device-authority-request+jws`; audience is a signed payload field.
+Auth derives account/actor/binding from its current grant, verifies key
+possession, serializes issuance with device/binding revocation, and returns an
+Auth principal RS256 compact JWS whose payload is canonical RFC 8785 UTF-8 JSON.
+The request proof payload is canonical RFC 8785 UTF-8 JSON, protected header is
+exactly `{"alg":"ES256","kid":"<device key UUID>","typ":"voice.game-device-authority-request+jws"}`,
+and the JWS signature covers the normal RFC 7515 signing input. The assertion
+protected header is exactly
+`{"alg":"RS256","kid":"<Auth principal key ID>","typ":"voice.game-device-status+jwt"}`.
+Payload fields are exactly `version:1`, `iss:"auth"`,
+`aud:"voice.game-message"`, `jti` (fresh UUID), `application_id`,
+`environment_id`, `account_id`, `actor_id`, `binding_id`, `device_id`,
+`key_id`, `public_jwk`, `key_thumbprint`, `device_generation`, `authority_revision`,
+`status:"active"`, `not_after`, `iat`, and `exp`. `public_jwk` is the Auth-recorded P-256
+key and its thumbprint must match the Auth key record's `key_thumbprint` for
+`key_id`; it is public material. Times are integer Unix milliseconds and
+`exp = min(iat + 4000, not_after)`; it must be greater than `iat`. Auth refuses
+new assertions at or after `not_after` and serializes expiry, rotation and
+revoke with assertion issuance.
+Auth returns no active assertion if revocation commits first; an assertion
+issued first is usable only until its fixed expiry. Identical request ID and
+request bytes return the same assertion; changed bytes conflict.
+
+Nodes validate the assertion against Auth's dedicated principal JWKS at
+`https://voice-auth:8443/api/v1/auth/.well-known/principal-jwks.json`, over
+mTLS with configured CA, exact `voice-auth` server name and the registered
+node service identity authorized for `auth.device_status.keys.read`. Auth
+serves this on its internal HTTPS listener only; Gateway/public exposure is
+forbidden. This current/next RS256 keyset is separate from client-token keys;
+`kid` is only a lookup hint. Auth principal-key rotation overlap is 35 seconds.
+Nodes refresh the pinned JWKS at least once per second while a game session is
+active and reject it if its last successful TLS refresh is over five seconds
+old. Unknown key IDs trigger one immediate refresh from the pinned origin,
+then fail closed. Expected
+issuer/audience and app/env/account/actor/binding/device/key IDs and authority
+revision must match the signed message and request. Revision is monotonic per
+`(application_id, environment_id, device_id)`: lower values are rejected, the
+same value is allowed only with matching key/status claims, and forward jumps
+are allowed because assertions are complete for that device. Require
+`status=active`, `iat` no more than 250 ms in the future, current time earlier
+than `exp - 250 ms` and `not_after`, `exp - iat <= 4000 ms`, and combined Auth/node clock
+uncertainty at most 250 ms. Convert the remaining deadline to a monotonic timer and recheck it
+immediately before the message transaction commits.
+
+The client refreshes assertions at least once per second during an active
+session and attaches one to every new send/edit/delete. If Auth, JWKS, network,
+or clock is unavailable, a received assertion is usable only to its monotonic
+deadline; after expiry, new sends/mutations fail closed. Issuance serializes
+with Auth revoke and lifetime is four seconds, so a node closes new admission
+no later than 4.25 seconds after Auth revoke commit; the acceptance ceiling is
+five seconds. Existing receipt reads and verified history need no fresh
+assertion. Receivers retain exact idempotency JWS bytes, the verified device
+public key and immutable result receipt for at least the message lifetime plus
+30 days. Exact receipt reads follow the ordering above; an expired operation
+without a retained receipt is rejected for reconciliation, never reapplied.
 
 Acceptance mapping: ID14 proves developer/node/bot credentials cannot enroll,
-replace, or impersonate a player key; ID15 covers canonical signature,
-tampering, route/env/actor substitution, replay, revision conflict, attachment
-digest mismatch, immediate revoke and five-second node bound; ID16 preserves
-the authorized-client-only guarantee. Q04 is closed for signed revisions,
-terminal deletion provenance and immutable attachment digest. There is no
-external provider decision left in this wire contract. Sources: [RFC 8785
-JCS](https://www.rfc-editor.org/rfc/rfc8785.html) and [RFC 7515
-JWS](https://www.rfc-editor.org/rfc/rfc7515.html).
+rotate, recover, or impersonate a player key and positively exercises each
+Auth-owned key lifecycle path. ID15 covers canonical body bytes/signature,
+tampering, route/env/actor substitution, exact-receipt retry after expiry/revoke,
+revision conflicts, tombstone verification, attachment digest mismatch,
+rotation at and around `not_after`, explicit revoke, and the 4.25-second
+node-close target. ID16 preserves the authorized-client-only guarantee. Q04 is
+closed for signed revisions, fully specified terminal deletion provenance,
+immutable attachment digest and invalid/unverifiable display state. No external
+provider decision remains for this wire contract. Sources: [RFC 8785
+JCS](https://www.rfc-editor.org/rfc/rfc8785.html), [RFC 7515
+JWS](https://www.rfc-editor.org/rfc/rfc7515.html), and [RFC 8037
+EdDSA](https://www.rfc-editor.org/rfc/rfc8037.html), and [JWK
+Thumbprint](https://www.rfc-editor.org/rfc/rfc7638.html).
 
 ### Предлагаемые scopes
 
