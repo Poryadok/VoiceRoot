@@ -167,17 +167,21 @@ contracts land before consumers; activation lands after all consumers.
   issuer/audience/nonce/replay checks, admission cap and app/env-scoped account
   uniqueness. Never route via `guest`/`ConvertGuest`. Parent remains open for
   the full identity vertical and its broader acceptance.
-- [ ] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
+- [x] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
   GAME-AUTH-01 foundation in Java: `sdk-account` schema/principal, paired Google
   OIDC and app/env game-ticket verification, challenge/device proof, replay and
-  freshness checks, operator-configured app/env admission, cap and uniqueness,
-  bootstrap/session/revoke. Use deterministic fake provider fixtures and prove
-  the routes remain unpublished; do not integrate GIS registry/Gateway or
-  implement conversion, browser/PKCE, User profile selection, per-device actor
-  keys, recovery, or wider G01 trust policy. Consumer: remaining T13/Auth identity
-  work and the later T14 authorization flow. Required acceptance is the T13a
+  freshness checks, operator-configured app/env admission, cap of 1,000
+  identities per app/env and 10 active devices per identity, uniqueness,
+  bootstrap/session/revoke. Deterministic fake-provider tests pass; Auth routes
+  remain opt-in and are not published in Gateway. Do not integrate GIS
+  registry/Gateway or implement conversion, browser/PKCE, User profile
+  selection, per-device actor keys, recovery, or wider G01 trust policy.
+  Consumer: remaining T13/Auth identity work and the later T14 authorization
+  flow. Required acceptance is the T13a
   module suite described in [Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open);
-  clean-start and real-Google gates remain separate and open.
+  clean-start and real-Google gates remain separate and open. T13a module and
+  full Auth Maven checks passed on feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`;
+  see the exact counts and scope in [Q11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open).
 - [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a

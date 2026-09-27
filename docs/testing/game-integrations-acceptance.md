@@ -87,10 +87,18 @@ The Auth-only T13a contract is independently testable with deterministic fake
 Google JWKS and synthetic game-ticket keys. Its Auth module suite must prove
 valid paired proofs, issuer/audience/nonce/expiry rejection, nonce and challenge
 replay rejection, app/env isolation, identity uniqueness, configured admission
-cap, atomic challenge consumption, and bootstrap credential/session/revoke
-semantics. It must also prove these Auth paths remain unpublished from Gateway
+cap (1,000 identities per app/env and 10 active devices per identity), atomic
+challenge consumption, and bootstrap credential/session/revoke semantics. It
+must also prove these Auth paths remain unpublished from Gateway
 and that no `guest` conversion path is called. This suite is a T13a implementation
 gate only; it does not pass the clean-start or live-Google gates below.
+
+On feature base `df0e084383ce1f9915d0bbc59651ae0227b1c75d`, the Auth module
+contract suites passed: Google verifier/JWKS, REST controller and configuration
+tests reported 56 passed; the PostgreSQL `SdkIdentityJdbcIntegrationTest`
+reported 32 passed; full `rtk mvn -B test` reported 816 passed, zero failures,
+errors, or skips. This is local Auth implementation evidence only. It does not
+pass the disposable clean-start gate or real-Google provider gate below.
 
 Run both enrollment paths from disposable state. The developer path starts with
 an empty `game_integration_db`, runs the service-owned migration, creates a
