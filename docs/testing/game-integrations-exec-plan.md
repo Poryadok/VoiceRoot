@@ -178,8 +178,9 @@ contracts land before consumers; activation lands after all consumers.
     persistence. Run from `src/backend/controlledgame/`:
     `rtk go test ./... -run '^TestT07a' -count=1`, then
     `rtk go test ./... -count=1`, `rtk go vet ./...`, and
-    `rtk golangci-lint run ./...`. PR #508 merged after CLEAR exact-head review
-    and green hosted checks. Broad T03/T04/T06 parents remain open.
+    `rtk golangci-lint run ./...`. PR #508 merged after a separate Codex
+    exact-head review returned CLEAR and hosted checks passed. Broad
+    T03/T04/T06 parents remain open.
 - [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
   keys only after T15 key proof/registration semantics are implemented.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
