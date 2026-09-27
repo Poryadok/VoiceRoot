@@ -25,6 +25,10 @@ type ApprovalStore interface {
 	ApproveSandbox(context.Context, registry.ApproveSandboxInput) (registry.Environment, error)
 }
 
+type ProductionAdmissionStore interface {
+	PrepareProductionAdmission(context.Context, registry.PrepareProductionAdmissionInput) (registry.Environment, error)
+}
+
 type CredentialStore interface {
 	IssueCredential(context.Context, registry.IssueCredentialInput) (registry.Credential, error)
 	RevokeCredential(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) error
@@ -50,6 +54,7 @@ type Handler struct {
 	Tokens           TokenValidator
 	Applications     ApplicationStore
 	Approvals        ApprovalStore
+	Production       ProductionAdmissionStore
 	Credentials      CredentialStore
 	Policies         PolicyStore
 	Installations    InstallationStore
@@ -63,6 +68,9 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 	h := &Handler{Tokens: tokens, Applications: applications}
 	if approvals, ok := applications.(ApprovalStore); ok {
 		h.Approvals = approvals
+	}
+	if production, ok := applications.(ProductionAdmissionStore); ok {
+		h.Production = production
 	}
 	if credentials, ok := applications.(CredentialStore); ok {
 		h.Credentials = credentials
@@ -86,6 +94,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
 		if strings.HasSuffix(r.URL.Path, "/policy") {
 			h.serveSandboxPolicyUpdate(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/admissions/production") {
+			h.serveProductionAdmission(w, r)
 			return
 		}
 		if strings.Contains(r.URL.Path, "/credentials/") {

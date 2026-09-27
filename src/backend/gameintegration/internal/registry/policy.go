@@ -156,14 +156,32 @@ func (s *Store) UpdateSandboxPolicy(ctx context.Context, input UpdateSandboxPoli
 	if err != nil {
 		return Environment{}, fmt.Errorf("lock policy environment: %w", err)
 	}
-	if ownerID != in.OwnerAccountID || envStatus != "active" || envKind != "sandbox" ||
-		(appStatus != "sandbox" && appStatus != "suspended") {
+	sandboxPolicy := envKind == "sandbox" && envStatus == "active" &&
+		(appStatus == "sandbox" || appStatus == "suspended")
+	pendingProductionPolicy := envKind == "production" && envStatus == "pending" && appStatus == "sandbox"
+	if ownerID != in.OwnerAccountID {
 		return Environment{}, ErrAdmissionConflict
 	}
 	if appStatus == "suspended" {
 		return Environment{}, ErrApplicationSuspended
 	}
-	const route = "environments.update_sandbox_policy"
+	if !sandboxPolicy && !pendingProductionPolicy {
+		return Environment{}, ErrAdmissionConflict
+	}
+	if pendingProductionPolicy {
+		for _, redirect := range in.RedirectURIs {
+			parsed, parseErr := url.Parse(redirect)
+			if parseErr != nil || parsed.Scheme != "https" {
+				return Environment{}, ErrInvalidPolicy
+			}
+		}
+	}
+	route := "environments.update_sandbox_policy"
+	action := "update_sandbox_policy"
+	if pendingProductionPolicy {
+		route = "environments.update_production_policy"
+		action = "stage_production_policy"
+	}
 	command, err := tx.Exec(ctx, `INSERT INTO registry_operations
 		(actor_kind,actor_id,route,idempotency_key,request_hash,status)
 		VALUES ('account',$1,$2,$3,$4,'pending') ON CONFLICT DO NOTHING`,
@@ -224,8 +242,8 @@ func (s *Store) UpdateSandboxPolicy(ctx context.Context, input UpdateSandboxPoli
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO registry_audit
 		(id,actor_kind,actor_id,application_id,environment_id,action,new_status,operation_key,source,result,reason_code)
-		VALUES ($1,'account',$2,$3,$4,'update_sandbox_policy','active',$5,'developer_asserted','success','provider_policy_asserted')`,
-		uuid.New(), in.OwnerAccountID, in.ApplicationID, in.EnvironmentID, in.IdempotencyKey)
+		VALUES ($1,'account',$2,$3,$4,$5,$6,$7,'developer_asserted','success','provider_policy_asserted')`,
+		uuid.New(), in.OwnerAccountID, in.ApplicationID, in.EnvironmentID, action, envStatus, in.IdempotencyKey)
 	if err != nil {
 		return Environment{}, fmt.Errorf("audit policy update: %w", err)
 	}

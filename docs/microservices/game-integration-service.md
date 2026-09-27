@@ -42,15 +42,17 @@ does not enable a public game communication capability.
    disables approval. The transition is audited and transactional; the
    applicant cannot approve their own application even if on the allowlist.
    Production admission is a separate reviewed transition and cannot inherit
-   sandbox credentials, bindings, subjects or data. That production transition
-   has no API route in this slice; operators cannot create a production
-   environment through the current API.
+   sandbox credentials, bindings, subjects or data. The staged development
+   workflow is defined in the API contract below; it creates only a pending
+   production environment and does not enable production.
 3. Sandbox admission creates one `sandbox` environment with its own ID, provider
    allowlist, redirect/origin allowlist, installation and credential namespace.
-   A future production admission API must create an independent `production`
-   environment with a separate ID, provider/origin/callback policy,
-   installations and credentials. No sandbox credential is accepted for
-   production, and the current API cannot issue a production credential.
+   Staged production admission creates an independent `production` environment
+   with a separate ID and owner-configured policy, initially `pending`. No
+   sandbox credential, installation, binding, subject or data is copied. The
+   current credential API remains sandbox-only and cannot issue a production
+   credential. Production activation, live provider/user proof and out-of-band
+   secret provisioning remain OPEN.
 4. Game service credentials are 256-bit HMAC-derived opaque secrets from a
    random credential ID and deployment-held 256-bit key; the database stores
    only keyed digests. The issue response returns the secret and an identical

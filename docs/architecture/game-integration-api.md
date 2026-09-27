@@ -1484,3 +1484,39 @@ API major version не меняется молча; optional additive поля �
 операцию. Deprecated SDK получает migration guide и срок поддержки, который
 должен быть принят перед публичным release. Контракт не требует включать друзья,
 presence или invites ради одной voice capability: модульность — цель Voice.
+
+### T11 staged production admission (development-only)
+
+`POST /api/v1/game-integrations/applications/{app_id}/admissions/production`
+is an operator-only staging operation. It accepts an empty body and required
+`Idempotency-Key`; the actor is the regular Voice account from the validated
+Bearer token and must be in `GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS`. The current
+application owner is read and locked from `applications.owner_account_id`; the
+request cannot supply or override an owner. An owner cannot approve their own
+application. The application must be in `sandbox` state. Success creates the
+one `production` environment allowed by `(application_id, kind)`, with status
+`pending`; the application remains `sandbox`. Exact actor/key retries return
+the same pending environment, a changed request hash conflicts, and another key
+cannot create a second production environment. This stage has no numeric quota;
+one production environment per application is the enforced cap.
+
+The owner may then use the existing `PUT .../environments/{env_id}/policy`
+CAS route to stage a separate production policy while the environment is
+pending. Policy remains owner-derived and app/env-bound; provider selection is
+exactly `google`, scopes use the existing enumerated player-scope set, and
+production redirects must be HTTPS (no loopback HTTP or `voicegame:` callback).
+Origins remain HTTPS. The policy route returns the new revision but does not
+activate the environment. Auth's signed environment-policy resolver returns
+unavailable for pending environments, and the GIS credential issuer rejects
+production environments; no production secret or credential is accepted or
+returned by these routes. Sandbox policy, bindings, credentials, and data are
+not copied.
+
+This staged workflow deliberately has no production activation route. The
+current signed Google policy is configuration, not provider identity proof.
+Production activation remains OPEN until separately reviewed operator
+activation, live Google/user-proof acceptance, and out-of-band production
+secret provisioning are implemented and accepted. A pending environment never
+expires or activates implicitly; retries use the original idempotency key.
+Suspending/restoring the application never changes pending to active. Retire,
+restore, and pending-admission cancellation are not part of this staged slice.
