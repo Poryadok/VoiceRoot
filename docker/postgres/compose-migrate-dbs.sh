@@ -10,6 +10,28 @@ PGPASSWORD="${PGPASSWORD:-voice}"
 
 export PGPASSWORD
 
+ensure_gameintegration_runtime_role() {
+  if [ -z "${GAME_INTEGRATION_DB_PASSWORD:-}" ]; then
+    echo "ERROR: GAME_INTEGRATION_DB_PASSWORD must be configured" >&2
+    return 1
+  fi
+
+  psql -v ON_ERROR_STOP=1 --dbname postgres <<'SQL'
+\getenv gis_runtime_password GAME_INTEGRATION_DB_PASSWORD
+SELECT format(
+  'CREATE ROLE gameintegration_runtime WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
+  :'gis_runtime_password'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gameintegration_runtime')
+\gexec
+SELECT format(
+  'ALTER ROLE gameintegration_runtime WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
+  :'gis_runtime_password'
+)
+\gexec
+SQL
+}
+
 dsn() {
   echo "postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/$1?sslmode=disable"
 }
@@ -191,6 +213,8 @@ GO_OWNED_DBS="
   matchmaking_db search_db moderation_db gateway_db subscription_db
   voice_db game_integration_db
 "
+
+ensure_gameintegration_runtime_role
 
 for db in $GO_OWNED_DBS; do
   migrate_db "$db"
