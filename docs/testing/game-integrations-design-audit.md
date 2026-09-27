@@ -87,12 +87,21 @@ bindings без наследования private контекста. Требу�
 и показ старой подписанной версии вместо актуальной. Подпись не доказывает
 полноту истории и сама не предотвращает сокрытие сообщений нодой.
 
-Нужно выбрать точную гарантию: проверка происхождения каждого payload либо ещё
-обнаружение rollback/equivocation. Предложение: подписанные revisions и content
-digests, отдельное происхождение moderator deletion, правила invalid/unverifiable
-UI; старые device public keys сохраняются для проверки авторства, но не дают
-новый admission после revoke. До GI4/GI6; acceptance: modified attachment, edit
-rollback, forged delete, revoked key и противоречащие версии на двух клиентах.
+Решение принято в [замороженном T15 контракте](../architecture/game-integration-api.md#frozen-t15-device-signature-and-message-revision-contract):
+каждый create/edit/user-delete подписан device key как версионированный JWS,
+edits образуют hash chain, а moderator/system delete имеет отдельную Voice
+tombstone signature. Attachment provenance связывает неизменяемый File object
+revision, length и SHA-256 через подписанный manifest; без верифицируемого
+manifest вложение закрывается fail-closed. Receiver отвергает rollback после
+наблюдённой более высокой revision и помечает равную revision с другим hash как
+equivocation. Это обнаруживает противоречие только при наличии предыдущего
+свидетельства/сравнения реплик и не обещает полноту истории. Историческую
+подпись можно проверить после revoke, но revoked key не даёт нового admission;
+на ноде новый admission прекращается не позднее пяти секунд после Auth revoke
+commit, а истёкшая authority закрывает доступ fail-closed. Матрица acceptance:
+ID14–ID16, включая изменённый attachment, rollback, forged moderator delete,
+revoke и две расходящиеся реплики. Decision gate Q04 закрыт; реализация и
+измеренное runtime evidence остаются в T15/GI4/GI6.
 
 ### Q05. Обязательное подтверждение команды на сервере
 

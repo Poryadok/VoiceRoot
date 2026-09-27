@@ -243,11 +243,11 @@ contracts land before consumers; activation lands after all consumers.
   error code is introduced. This completes only the Auth→User prerequisite;
   the broader T14 browser/device authorization work and operational rollout
   remain pending.
-- [ ] **T15** `D: T13,T14` Register per-device public keys after independent
-  proof; sign canonical actor/chat/body/message envelope, verify at receiver,
-  revoke/rotate keys, reject tamper/replay/same ID different payload. Separate
-  service, bot and node credentials; cover versioned edit/delete/attachment
-  provenance per Q04.
+- [ ] **T15** `D: T13,T14` Implement the frozen Auth-owned ES256/P-256 device
+  key lifecycle and RFC 8785/JWS v1 message envelope in the API contract. The
+  decision gate (enrollment/recovery/revoke/rotation, revisions/deletes,
+  attachments, receiver verification and five-second node authority bound) is
+  closed; runtime, conformance vectors and revoke measurements remain open.
 - [ ] **T16** `D: T14,T15` Implement limited delegated grants, binding/authority
   reads, selected profile/alias serialization, direct-call scope checks and
   account/profile/app/device revocation epochs. Verify hidden profiles cannot
@@ -411,7 +411,8 @@ contracts land before consumers; activation lands after all consumers.
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
 | T14 Auth-to-User principal | Dedicated Auth RS256 current+next keyset and JWKS separate from client JWTs; exact request-bound claims; User TLS `:9094`, shared User replay Redis; 30s credential/5s skew/35s key overlap; selected-profile IDs and positive revision checked at approval and exchange, revision change requires fresh authorization | Auth signer/client implemented and focused tests pass locally; [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-signerclient-implemented), [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal) |
 | G13, Q05 | read-only no-confirm allowlist; all risky/unknown classes require single-use challenge (fail closed if unavailable); permit +10s start/+60s commit and revoke race UX | T53–T57 |
-| G08, G10, Q04, Q06 | signed revisions/files, control-plane capacity, media lease/eject budget, export/loss/defederation terms | T70–T78 |
+| T15 / Q04 | Auth-owned ES256 device keys; JCS/JWS v1 envelope; revision chain, delete provenance, immutable attachment manifest, recovery/revoke/rotation, five-second node authority freshness | T07b, T15, T70–T78 |
+| G08, G10, Q06 | control-plane capacity, export/loss/defederation terms, media lease/eject budget | T70–T78 |
 
 No numerical default in the right column is inferred from a proposed target.
 For a genuinely unspecified product choice, record a narrow question in the
