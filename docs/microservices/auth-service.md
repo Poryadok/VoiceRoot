@@ -18,7 +18,7 @@
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
 
-## T14 Auth-to-User selected-profile authority (accepted target; implementation pending)
+## T14 Auth-to-User selected-profile authority (accepted target; signer/client implemented)
 
 T14 authorization approval and code exchange use User's Auth-only
 `GetSdkProfileEligibility` RPC to verify the exact selected `(account_id,
@@ -47,13 +47,15 @@ does not send raw identity metadata. User performs shared Redis replay
 admission; Redis failure or a repeated `jti` denies the call.
 
 Auth principal signing keys are a separate keyset from `auth.jwt` client-token
-keys. The Auth signer is optional while unconfigured: T14 remains unavailable
-and eligibility checks fail closed. Partial or invalid keyset configuration is
-a startup error. The exact environment, JWKS and rotation contract is in
+keys. The signer/client is optional only while SDK authorization is disabled;
+enabling it requires the complete validated keyset and TLS endpoint. Partial or
+invalid keyset configuration is a startup error. The exact environment, JWKS
+and rotation contract is in
 [Deployment: Auth-to-User SDK profile principal](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal).
 The principal JWKS endpoint is published only when the complete keyset is
-loaded. This accepted contract is a prerequisite for the T14 Auth signer/client
-slice; it does not claim that the signer or User client is implemented.
+loaded. The Auth signer, dedicated JWKS endpoint and TLS User eligibility client
+are implemented with focused Auth tests. This does not claim deployment,
+operational key-rotation proof or provider acceptance.
 
 ### Subscription claims (A7 accepted target; not implemented)
 

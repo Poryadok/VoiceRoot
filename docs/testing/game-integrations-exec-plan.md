@@ -231,15 +231,18 @@ contracts land before consumers; activation lands after all consumers.
   login, no account enumeration; unauthenticated game ticket cannot mint a
   player token. Add device-code route only if required by frozen capabilities.
   Auth's request-bound `service:auth` principal and User profile eligibility
-  adapter are one security prerequisite for this vertical; their accepted
-  keyset/transport contract is in [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending)
+  adapter are one security prerequisite for this vertical and are implemented
+  with focused tests in this slice; hosted checks and exact-head review remain
+  required before merge. Their accepted
+  keyset/transport contract is in [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-signerclient-implemented)
   and [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal). At
   approval, validate exact response IDs and positive revision, deny deleted or
   frozen profiles, and persist `profile_revision`. At exchange, re-read and
   require the same eligible IDs and revision; otherwise deny with existing
   `invalid_sdk_identity` and require a fresh authorization. No new external
-  error code is introduced. These docs freeze the target contract, not runtime
-  implementation or rollout evidence.
+  error code is introduced. This completes only the Auth→User prerequisite;
+  the broader T14 browser/device authorization work and operational rollout
+  remain pending.
 - [ ] **T15** `D: T13,T14` Register per-device public keys after independent
   proof; sign canonical actor/chat/body/message envelope, verify at receiver,
   revoke/rotate keys, reject tamper/replay/same ID different payload. Separate
@@ -406,7 +409,7 @@ contracts land before consumers; activation lands after all consumers.
 | G05, G06, Q11 | `/api/v1` and Federation `/v1`; proposed 12-month v1 support after successor-major GA; GIS-owned store; distinct Voice app owner/operator; Google OIDC; clean DB/host bootstrap and negative cases | T06,T10–T14,T70,T76; acceptance Q11 |
 | G07, Q12 | Quotas and supported host/runtime; provisional capacity/RPO/RTO plus restore/load harness | T08,T11–T12,T76,T93; proposals remain unmeasured |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
-| T14 Auth-to-User principal | Dedicated Auth RS256 current+next keyset and JWKS separate from client JWTs; exact request-bound claims; User TLS `:9094`, shared User replay Redis; 30s credential/5s skew/35s key overlap; selected-profile IDs and positive revision checked at approval and exchange, revision change requires fresh authorization | T14 Auth signer/client; [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending), [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal) |
+| T14 Auth-to-User principal | Dedicated Auth RS256 current+next keyset and JWKS separate from client JWTs; exact request-bound claims; User TLS `:9094`, shared User replay Redis; 30s credential/5s skew/35s key overlap; selected-profile IDs and positive revision checked at approval and exchange, revision change requires fresh authorization | Auth signer/client implemented and focused tests pass locally; [Auth Service](../microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-signerclient-implemented), [Deployment](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal) |
 | G13, Q05 | read-only no-confirm allowlist; all risky/unknown classes require single-use challenge (fail closed if unavailable); permit +10s start/+60s commit and revoke race UX | T53–T57 |
 | G08, G10, Q04, Q06 | signed revisions/files, control-plane capacity, media lease/eject budget, export/loss/defederation terms | T70–T78 |
 

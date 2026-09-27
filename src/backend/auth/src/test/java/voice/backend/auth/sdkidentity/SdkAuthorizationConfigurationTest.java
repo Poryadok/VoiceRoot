@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -43,47 +45,104 @@ class SdkAuthorizationConfigurationTest {
   }
 
   @Test
-  void enabledJdbcCreatesServiceAndControllerWithClosedAuthorityAdapters() {
-    context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc")
-        .run(ctx -> {
-          assertThat(ctx).hasNotFailed().hasSingleBean(SdkAuthorizationService.class)
-              .hasSingleBean(SdkAuthorizationRestController.class)
-              .hasSingleBean(SdkAuthorizationPolicy.class).hasSingleBean(SdkProfileEligibility.class);
-          assertThatThrownBy(() -> ctx.getBean(SdkAuthorizationPolicy.class)
-              .resolve(UUID.randomUUID(), UUID.randomUUID()))
-              .isInstanceOf(SdkIdentityDeniedException.class).hasMessage("invalid_sdk_identity");
-          assertThatThrownBy(() -> ctx.getBean(SdkProfileEligibility.class)
-              .inspect(UUID.randomUUID(), UUID.randomUUID()))
-              .isInstanceOf(SdkIdentityDeniedException.class).hasMessage("invalid_sdk_identity");
-        });
+  void allPrincipalSettingsAbsentAreAllowedWhenAuthorizationIsOff() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class)
+        .withPropertyValues("auth.persistence=jdbc").run(ctx -> {
+      assertThat(ctx).hasNotFailed()
+          .doesNotHaveBean(AuthUserPrincipalIssuer.class)
+          .doesNotHaveBean(io.grpc.ManagedChannel.class)
+          .doesNotHaveBean(SdkProfileEligibility.class);
+    });
   }
 
   @Test
-  void verifiedRegistryAndUserAdaptersArePreservedWithoutCompetingDefaults() {
+  void partialPrincipalSettingsFailStartupWhenAuthorizationFlagIsAbsent() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class).withPropertyValues(
+        "auth.persistence=jdbc",
+        "AUTH_PRINCIPAL_SIGNING_KEYS_DIR=/run/secrets/auth-principal")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void partialPrincipalSettingsFailStartupWhenAuthorizationIsExplicitlyDisabled() {
+    context().withUserConfiguration(AuthUserPrincipalConfiguration.class).withPropertyValues(
+        "auth.persistence=jdbc",
+        "auth.sdk-authorization.enabled=false",
+        "AUTH_USER_PRINCIPAL_GRPC_ADDR=user.internal:9094")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void enabledJdbcRequiresTheDedicatedAuthUserPrincipalConfiguration() {
+    context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void partialAuthUserPrincipalConfigurationFailsStartupInsteadOfUsingAnUnavailableAdapter() {
+    context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc",
+        "AUTH_PRINCIPAL_SIGNING_KEYS_DIR=/run/secrets/auth-principal",
+        "AUTH_PRINCIPAL_ACTIVE_KID=current")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void configuredRegistryAndProfileAdapterCannotBypassMissingPrincipalConfiguration() {
     SdkAuthorizationPolicy policy = mock(SdkAuthorizationPolicy.class);
     SdkProfileEligibility profiles = mock(SdkProfileEligibility.class);
     context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc")
         .withBean(SdkAuthorizationPolicy.class, () -> policy)
         .withBean(SdkProfileEligibility.class, () -> profiles)
-        .run(ctx -> {
-          assertThat(ctx).hasNotFailed().hasSingleBean(SdkAuthorizationService.class)
-              .hasSingleBean(SdkAuthorizationPolicy.class).hasSingleBean(SdkProfileEligibility.class);
-          assertThat(ctx.getBean(SdkAuthorizationPolicy.class)).isSameAs(policy);
-          assertThat(ctx.getBean(SdkProfileEligibility.class)).isSameAs(profiles);
-        });
+        .run(ctx -> assertThat(ctx).hasFailed());
   }
 
   @Test
-  void providingRegistryAdapterDoesNotMakeMissingProfileAuthorityPermissive() {
+  void registryOverrideDoesNotBypassMissingProfileAuthorityConfiguration() {
     SdkAuthorizationPolicy policy = mock(SdkAuthorizationPolicy.class);
     context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc")
         .withBean(SdkAuthorizationPolicy.class, () -> policy)
         .run(ctx -> {
-          assertThat(ctx).hasNotFailed().hasSingleBean(SdkAuthorizationPolicy.class)
-              .hasSingleBean(SdkProfileEligibility.class);
-          assertThat(ctx.getBean(SdkAuthorizationPolicy.class)).isSameAs(policy);
-          assertThatThrownBy(() -> ctx.getBean(SdkProfileEligibility.class)
-              .inspect(UUID.randomUUID(), UUID.randomUUID())).isInstanceOf(SdkIdentityDeniedException.class);
+          assertThat(ctx).hasFailed();
         });
+  }
+
+  @Test
+  void malformedAuthPrincipalKeysetFailsStartup(@org.junit.jupiter.api.io.TempDir Path temp) throws Exception {
+    Files.writeString(temp.resolve("current.pem"), "not a PKCS#8 private key");
+    Files.writeString(temp.resolve("next.pem"), "also not a PKCS#8 private key");
+    context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc",
+        "AUTH_PRINCIPAL_SIGNING_KEYS_DIR=" + temp,
+        "AUTH_PRINCIPAL_ACTIVE_KID=current",
+        "AUTH_USER_PRINCIPAL_GRPC_ADDR=localhost:9094")
+        .run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void completePrincipalKeysetWiresTheUserBackedProfileEligibilityClient(@org.junit.jupiter.api.io.TempDir Path temp)
+      throws Exception {
+    writePrivateKey(temp.resolve("current.pem"));
+    writePrivateKey(temp.resolve("next.pem"));
+    Class<?> principalConfiguration = Class.forName(
+        "voice.backend.auth.sdkidentity.AuthUserPrincipalConfiguration");
+
+    context().withPropertyValues("auth.sdk-authorization.enabled=true", "auth.persistence=jdbc",
+            "AUTH_PRINCIPAL_SIGNING_KEYS_DIR=" + temp,
+            "AUTH_PRINCIPAL_ACTIVE_KID=current",
+            "AUTH_USER_PRINCIPAL_GRPC_ADDR=voice-user:9094")
+        .run(ctx -> {
+          assertThat(ctx).hasNotFailed().hasSingleBean(SdkAuthorizationService.class)
+              .hasSingleBean(SdkProfileEligibility.class);
+          assertThat(ctx.getBean(SdkProfileEligibility.class).getClass().getSimpleName())
+              .isEqualTo("AuthUserProfileEligibilityClient");
+        });
+  }
+
+  private static void writePrivateKey(Path path) throws Exception {
+    var generator = java.security.KeyPairGenerator.getInstance("RSA");
+    generator.initialize(2048);
+    byte[] der = generator.generateKeyPair().getPrivate().getEncoded();
+    Files.writeString(path, "-----BEGIN PRIVATE KEY-----\n"
+        + java.util.Base64.getMimeEncoder(64, new byte[] {'\n'}).encodeToString(der)
+        + "\n-----END PRIVATE KEY-----\n");
   }
 }

@@ -92,6 +92,7 @@ class SdkAuthorizationJdbcIntegrationTest {
   private final TokenBlacklist blacklist = mock(TokenBlacklist.class);
   private final AtomicReference<SdkAuthorizationPolicy.Policy> policy = new AtomicReference<>();
   private final AtomicReference<SdkProfileEligibility.Profile> profile = new AtomicReference<>();
+  private final AtomicReference<RuntimeException> profileFailure = new AtomicReference<>();
   private NamedParameterJdbcTemplate jdbc;
   private DriverManagerDataSource database;
   private SdkIdentityService identity;
@@ -120,6 +121,7 @@ class SdkAuthorizationJdbcIntegrationTest {
         .thenReturn(new PreparedSessionEpoch(targetAccount, 7));
     policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES));
     profile.set(new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 11, false, false));
+    profileFailure.set(null);
     device = new ECKeyGenerator(Curve.P_256).generate();
     identity = identity();
     var challenge = identity.challenge(app, env, device.toPublicJWK().toJSONString());
@@ -307,13 +309,20 @@ class SdkAuthorizationJdbcIntegrationTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"wrong-owner", "wrong-profile", "deleted", "frozen"})
+  @ValueSource(strings = {"wrong-owner", "wrong-profile", "missing", "zero-revision", "deleted", "frozen", "unavailable"})
   void selectedProfileMustHaveExactOwnerAndCurrentEligibility(String invalid) throws Exception {
     var request = start(authorization(), UUID.randomUUID(), REDIRECT, STATE, SCOPES);
-    profile.set(new SdkProfileEligibility.Profile(
-        invalid.equals("wrong-owner") ? UUID.randomUUID() : targetAccount,
-        invalid.equals("wrong-profile") ? primaryProfile : secondaryProfile, 11,
-        invalid.equals("deleted"), invalid.equals("frozen")));
+    if (invalid.equals("missing")) profile.set(null);
+    if (invalid.equals("unavailable")) profileFailure.set(new IllegalStateException("User unavailable"));
+    if (!invalid.equals("missing") && !invalid.equals("unavailable")) {
+      profile.set(new SdkProfileEligibility.Profile(
+          invalid.equals("wrong-owner") ? UUID.randomUUID() : targetAccount,
+          invalid.equals("wrong-profile") ? primaryProfile : secondaryProfile, 11,
+          invalid.equals("deleted"), invalid.equals("frozen")));
+      if (invalid.equals("zero-revision")) {
+        profile.set(new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 0, false, false));
+      }
+    }
     assertThatThrownBy(() -> authorization().approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3))
         .isInstanceOf(SdkIdentityDeniedException.class);
   }
@@ -331,7 +340,9 @@ class SdkAuthorizationJdbcIntegrationTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"source-revoked", "source-generation", "profile-frozen", "profile-revision", "policy-revision",
+  @ValueSource(strings = {"source-revoked", "source-generation", "profile-frozen", "profile-revision",
+      "profile-deleted", "profile-missing", "profile-wrong-owner", "profile-wrong-id", "profile-zero-revision",
+      "profile-unavailable", "policy-revision",
       "target-epoch", "logout", "target-guest", "target-suspended", "target-email-pending"})
   void exchangeRechecksCurrentAuthoritiesAfterBrowserApproval(String mutation) throws Exception {
     var request = start(authorization(), UUID.randomUUID(), REDIRECT, STATE, SCOPES);
@@ -480,8 +491,18 @@ class SdkAuthorizationJdbcIntegrationTest {
           Map.of("id", source.accountId()));
       case "profile-frozen" -> profile.set(
           new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 11, false, true));
+      case "profile-deleted" -> profile.set(
+          new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 11, true, false));
       case "profile-revision" -> profile.set(
           new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 12, false, false));
+      case "profile-missing" -> profile.set(null);
+      case "profile-wrong-owner" -> profile.set(
+          new SdkProfileEligibility.Profile(UUID.randomUUID(), secondaryProfile, 11, false, false));
+      case "profile-wrong-id" -> profile.set(
+          new SdkProfileEligibility.Profile(targetAccount, primaryProfile, 11, false, false));
+      case "profile-zero-revision" -> profile.set(
+          new SdkProfileEligibility.Profile(targetAccount, secondaryProfile, 0, false, false));
+      case "profile-unavailable" -> profileFailure.set(new IllegalStateException("User unavailable"));
       case "policy-revision" -> policy.set(
           new SdkAuthorizationPolicy.Policy(app, env, 4, "Example Game", Set.of(REDIRECT), SCOPES));
       case "target-epoch" -> {
@@ -524,7 +545,10 @@ class SdkAuthorizationJdbcIntegrationTest {
     return new SdkAuthorizationService(new NamedParameterJdbcTemplate(dataSource),
         new TransactionTemplate(new DataSourceTransactionManager(dataSource)), identity(clock), auth,
         (application, environment) -> app.equals(application) && env.equals(environment) ? policy.get() : null,
-        (account, selected) -> targetAccount.equals(account) && secondaryProfile.equals(selected) ? profile.get() : null,
+        (account, selected) -> {
+          if (profileFailure.get() != null) throw profileFailure.get();
+          return targetAccount.equals(account) && secondaryProfile.equals(selected) ? profile.get() : null;
+        },
         blacklist, clock);
   }
 
