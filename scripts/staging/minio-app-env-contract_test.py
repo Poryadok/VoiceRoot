@@ -47,4 +47,15 @@ for prefix in ("USER", "FILE"):
             rf"(?m)^  {prefix}_R2_{suffix}:", app_secret
         ), "staging app Secret template must not request duplicated MinIO credentials"
 
+for script_name in (
+    "ensure-app-secrets.sh",
+    "patch-app-secrets-database-urls.sh",
+):
+    script = (root / "scripts/staging" / script_name).read_text(encoding="utf-8")
+    for prefix in ("USER", "FILE"):
+        for suffix in ("ACCESS_KEY_ID", "SECRET_ACCESS_KEY"):
+            assert f"{prefix}_R2_{suffix}" not in script, (
+                f"{script_name} still writes duplicated {prefix} MinIO credentials"
+            )
+
 print("Staging User/File MinIO env contract passed.")
