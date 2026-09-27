@@ -267,6 +267,25 @@ authorization contract; этот slice не объявляет весь T14 за
 
 #### Замороженный Auth identity slice GAME-AUTH-01
 
+Это замороженный Auth-only контракт для реализации **T13a**, а не заявление,
+что целиком закрыт G01 или готовы весь T03/T04/T06. T13a реализует только
+локальный `sdk-account` principal, таблицы и ограничения ниже, проверку
+Google OIDC вместе с отдельным app/env game ticket, одноразовый nonce/device
+challenge, replay denial, bootstrap credential/session/revoke и app/env
+uniqueness/admission cap. Для детерминированных тестов verifier принимает
+тестовые JWKS/clock и синтетические подписанные fixture tokens; эти fixtures
+не заменяют отдельную real-Google acceptance.
+
+T13a использует текущую operator configuration как admission source. Он не
+подключает GIS registry, не добавляет Gateway маршруты и не включает capability
+в deployment; документированные Auth paths остаются unpublished до отдельного
+registry/Gateway activation gate. T13a не включает браузер/PKCE/consent и
+выбранный User profile (T14), per-device actor signing keys (T15), conversion,
+межсервисную trust matrix, transfer/recovery/history/conflict policy или
+production admission. Эти более широкие вопросы остаются в G01 и родительских
+T03/T04/T06 либо в последующих Auth slices. Их не следует трактовать как
+неявно решённые этим Auth-only контрактом.
+
 G01/Q11: первый независимый provider — Google OpenID Connect, issuer строго
 `https://accounts.google.com`, RS256 и ключи только из Google JWKS. Для каждого
 app/env оператор Voice регистрирует отдельный **Voice-owned** Google client ID;

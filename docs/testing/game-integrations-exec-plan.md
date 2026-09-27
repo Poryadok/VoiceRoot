@@ -104,10 +104,19 @@ contracts land before consumers; activation lands after all consumers.
   - [x] T03 Q12 provisional one-host capacity/RPO/RTO qualification targets and
     restore/load measurement method recorded in the design audit. These values
     are proposals only; T08/T93 must replace them with measured evidence.
+  - [x] T03-AUTH: freeze only the Auth identity proof rules in
+    [GAME-AUTH-01](../architecture/game-integration-api.md#замороженный-auth-identity-slice-game-auth-01):
+    Google OIDC + separate app/env game ticket, nonce/freshness, device proof,
+    configured app/env admission, and no Gateway publication. This closes no
+    conversion, transfer/recovery, or cross-service G01 decision.
   - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
+  - [x] T04-AUTH: the Auth-only provider/ticket issuers, audiences, key sources,
+    proof binding, storage boundary, freshness and replay rules are frozen in
+    GAME-AUTH-01 for T13a. The service/bot/node trust matrix and runtime
+    negative-case suite remain open.
 - [ ] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
   selected profile/alias, character, app/env/installation, binding, party,
   match/fleet, corporation→Space, grant reasons, operations and tombstones.
@@ -118,6 +127,11 @@ contracts land before consumers; activation lands after all consumers.
   Add contract tests and generated-code compatibility checks.
   - [x] Command/result JSON v1 routes, envelope canonicalization, status/error,
     idempotency and receipt contract frozen in `game-integration-api.md`.
+  - [x] T06-AUTH: Auth challenge/exchange/session/revoke paths, request and
+    response fields, device proof bytes, credential semantics and denial policy
+    are frozen in GAME-AUTH-01 for T13a. Gateway/OpenAPI publication, other
+    resource APIs, generated contracts and executable compatibility checks
+    remain open.
   - [ ] Other OpenAPI/proto/resource contracts and executable compatibility
     tests remain open; this docs decision does not claim routes are implemented.
 - [ ] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
@@ -151,7 +165,19 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T13** `D: T04,T06` Implement Java Auth `sdk-account` type and schema,
   independent provider proof verifier (real chosen provider plus fake),
   issuer/audience/nonce/replay checks, admission cap and app/env-scoped account
-  uniqueness. Never route via `guest`/`ConvertGuest`.
+  uniqueness. Never route via `guest`/`ConvertGuest`. Parent remains open for
+  the full identity vertical and its broader acceptance.
+- [ ] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
+  GAME-AUTH-01 foundation in Java: `sdk-account` schema/principal, paired Google
+  OIDC and app/env game-ticket verification, challenge/device proof, replay and
+  freshness checks, operator-configured app/env admission, cap and uniqueness,
+  bootstrap/session/revoke. Use deterministic fake provider fixtures and prove
+  the routes remain unpublished; do not integrate GIS registry/Gateway or
+  implement conversion, browser/PKCE, User profile selection, per-device actor
+  keys, recovery, or wider G01 trust policy. Consumer: remaining T13/Auth identity
+  work and the later T14 authorization flow. Required acceptance is the T13a
+  module suite described in [Q11](game-integrations-acceptance.md#q11-bootstrap-evidence-contract-runtime-gate-remains-open);
+  clean-start and real-Google gates remain separate and open.
 - [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a
