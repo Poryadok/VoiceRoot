@@ -4,6 +4,7 @@
 import base64
 import binascii
 import json
+import pathlib
 import sys
 
 REQUIRED_KEYS = frozenset(
@@ -63,7 +64,95 @@ def valid(document: object, namespace: str) -> bool:
     return missing_keys(document, namespace) == []
 
 
+def uploaded_data(upload: object, namespace: str) -> dict[str, str] | None:
+    """Check an upload's identity and format without claiming live completeness."""
+    if missing_keys(upload, namespace) is None:
+        return None
+    upload_data = upload.get("data") or {}
+    string_data = upload.get("stringData") or {}
+    if set(upload_data).intersection(string_data):
+        return None
+    encoded_upload = dict(upload_data)
+    for key, value in encoded_upload.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            return None
+        try:
+            base64.b64decode(value, validate=True)
+        except binascii.Error:
+            return None
+    for key, value in string_data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            return None
+        encoded_upload[key] = base64.b64encode(value.encode("utf-8")).decode("ascii")
+    if not encoded_upload:
+        return None
+    return encoded_upload
+
+
+def plan_upload(upload: object, live: object | None, namespace: str) -> tuple[list[str], list[dict] | None] | None:
+    """Validate the effective Secret and plan a guarded patch of uploaded keys only."""
+    encoded_upload = uploaded_data(upload, namespace)
+    if encoded_upload is None:
+        return None
+    if live is not None and missing_keys(live, namespace) is None:
+        return None
+    effective = {
+        "kind": "Secret",
+        "metadata": {"name": "voice-app-secrets", "namespace": namespace},
+        "data": dict((live or {}).get("data") or {}),
+    }
+    effective["data"].update(encoded_upload)
+    missing = missing_keys(effective, namespace)
+    if missing:
+        return missing, None
+    if live is None:
+        return [], None
+    version = live["metadata"].get("resourceVersion")
+    if not isinstance(version, str) or not version:
+        return None
+    patch = [{"op": "test", "path": "/metadata/resourceVersion", "value": version}]
+    for key, value in sorted(encoded_upload.items()):
+        pointer = key.replace("~", "~0").replace("/", "~1")
+        patch.append({"op": "add", "path": "/data/" + pointer, "value": value})
+    return [], patch
+
+
 def main() -> int:
+    if sys.argv[2:] == ["--yaml-upload"]:
+        import yaml
+
+        try:
+            documents = list(yaml.safe_load_all(sys.stdin))
+        except (yaml.YAMLError, UnicodeDecodeError):
+            documents = []
+        document = documents[0] if len(documents) == 1 else None
+        if uploaded_data(document, sys.argv[1]) is None:
+            print("invalid Secret upload identity or format")
+            return 1
+        print("SECRET_UPLOAD_FORMAT=PASS_EFFECTIVE_UNVERIFIED")
+        return 0
+    if len(sys.argv) == 4 and sys.argv[2] in {"--merge-check", "--patch"}:
+        try:
+            upload = json.load(sys.stdin)
+            live_text = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+            live = json.loads(live_text) if live_text.strip() else None
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            print("invalid Secret document")
+            return 1
+        result = plan_upload(upload, live, sys.argv[1])
+        if result is None:
+            print("invalid Secret identity or data")
+            return 1
+        missing, patch = result
+        if missing:
+            print("missing or blank required keys: " + ", ".join(missing))
+            return 1
+        if sys.argv[2] == "--patch":
+            if patch is None:
+                print("live Secret is required for patch")
+                return 1
+            json.dump(patch, sys.stdout, separators=(",", ":"))
+        return 0
     if sys.argv[2:] == ["--yaml"]:
         import yaml
 
