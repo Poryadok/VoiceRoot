@@ -84,14 +84,15 @@ in GitHub repository **Settings → Environments → staging → Environment sec
 The staging deploy creates `voice-minio-credentials` from them when absent and
 never rotates an existing Secret. For production, create the Secret from the
 external secret manager before infra apply. Copy the stage/prod
-`secret.example.yaml` shape but never commit credentials. `voice-app-secrets`
-receives the existing `USER_R2_*` and `FILE_R2_*` names because those are
-service configuration names; they accept
-any S3-compatible endpoint. For MinIO use `http://voice-minio:9000`, region
-`us-east-1`, and the environment-specific avatar/file buckets.
-The staging `STAGING_APP_SECRETS_YAML` environment secret is a base64-encoded
-`voice-app-secrets` manifest; its `USER_R2_*` and `FILE_R2_*` credentials must
-match the MinIO Secret when those services use MinIO.
+`secret.example.yaml` shape but never commit credentials. In staging, User and
+File read their `USER_R2_*` and `FILE_R2_*` access key and secret directly from
+`voice-minio-credentials` (`MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`). The
+base64-encoded `STAGING_APP_SECRETS_YAML` manifest therefore needs only their
+endpoint, region, and separate avatar/file bucket settings; MinIO credentials
+must not be copied into `voice-app-secrets`. For MinIO use
+`http://voice-minio:9000`, region `us-east-1`, and the environment-specific
+avatar/file buckets. Production keeps its own provider credentials in
+`voice-app-secrets`.
 
 ## Backup, restore, and optional provider migration
 
@@ -102,8 +103,11 @@ without a deliberate object migration makes existing objects inaccessible.
 
 For MinIO to R2 (or another provider), create destination buckets, copy with a
 version-aware tool, verify object counts and SHA-256 metadata/sample downloads,
-then atomically update all six endpoint/region/key/bucket values for both
-`USER_R2_*` and `FILE_R2_*`. Keep the old store read-only until File download
+then atomically update the endpoint, region, key, and bucket values for both
+`USER_R2_*` and `FILE_R2_*`. On staging, first change the User/File Deployment
+credential references from `voice-minio-credentials` to the new provider Secret
+as part of that migration; changing only `STAGING_APP_SECRETS_YAML` cannot
+switch credentials. Keep the old store read-only until File download
 and delete-access checks pass. Do not use a destructive mirror/delete option.
 Rollback is the same configuration switch while the old store and credentials
 are retained. This procedure does not expose a public restore endpoint and is
