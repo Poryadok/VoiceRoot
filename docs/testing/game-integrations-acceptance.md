@@ -81,6 +81,67 @@ SDK03/SDK05/SDK06 проверяют серверную и messenger часть 
 варианты тех же проверок выполняются при поставке инструментов. OS-specific
 SDK cache/cleanup/UI не принимаются по результату server-only теста.
 
+### Q11 bootstrap evidence (contract; runtime gate remains open)
+
+Run both enrollment paths from disposable state. The developer path starts with
+an empty `game_integration_db`, runs the service-owned migration, creates a
+regular Voice account through the supported Auth test/bootstrap surface, creates
+a draft application as that account, and obtains sandbox approval from a
+different allowlisted Voice operator. Then create the sandbox environment,
+configure its Voice-owned Google client and redirect/origin policy, and issue an
+app/env-scoped service credential through the API. No direct SQL, developer
+portal, production provider account, or production credential is part of this
+proof. A fresh operator identity must not inherit the applicant's authority.
+
+The node path starts from a clean disposable host and empty `federation_db`.
+Provision only the documented service database login, TLS trust, signing seed,
+and operator certificate pin through the test secret manager. An operator
+creates a pending node through `/v1/nodes`; ownership of its configured endpoint
+is checked out of band, and approval binds the exact node certificate pin. The
+node then reads only its own signed snapshot and lease with its node certificate
+and node-scoped bearer. The test must not seed or repair registry rows with SQL.
+
+Cryptographic fixture proof and real provider proof are separate gates. Fake
+Google JWKS and synthetic game-ticket keys may prove signature, issuer, audience,
+nonce, expiry, replay, and binding behavior in deterministic CI. They do not
+prove a real Google integration. Before production admission, a disposable
+Google OIDC client registered to Voice must complete a real login and JWKS key
+refresh on the exact release SHA; record client configuration revision, test
+subject hash, request IDs, verifier result, and secret-free logs. Do not retain
+provider tokens or raw subjects in evidence. A missing Google credential or
+unavailable provider means this gate is pending, never passed by the fake suite.
+
+The implementation must provide this repository-root clean-start gate. It must
+create fresh disposable stores and exercise both paths and their negative
+cases; it is a required future target, not a target present at this docs base:
+
+```powershell
+rtk make game-integrations-q11-acceptance
+```
+
+The live-provider gate is separate and also must be added by implementation:
+
+```powershell
+rtk make game-integrations-q11-google-live
+```
+
+Supporting module checks are `rtk go test ./...` from both
+`src/backend/gameintegration` and `src/backend/federation`, and
+`rtk mvn -f src/backend/auth/pom.xml test` for Auth. These do not replace the
+clean-start or live-provider gates. The exact-SHA release evidence must attach
+the clean-start logs and external Google provider run separately. No gate is
+passed merely because its command exists.
+
+Negative cases are mandatory: applicant self-approval (including when also in
+the operator allowlist); caller-supplied foreign owner/account ID; operator
+service token used as a player or vice versa; sandbox credential on production;
+cross-app/env credential, provider subject, node, Space, audience or certificate
+pin; operator certificate on node routes; node certificate on operator routes;
+wrong node certificate, stale/revoked node bearer, duplicate approval, and
+attempted direct SQL recovery. Each must fail without minting authority and
+leave an audit event that records actor, target IDs, action, result and request
+ID, with no token, provider claim or private-key bytes.
+
 | ID | Given / When | Then / свидетельство |
 |---|---|---|
 | ID01 | Игровой пользователь подключает существующий Voice | Явный профиль/scopes; только выбранная identity доступна игре |
@@ -193,10 +254,10 @@ acceptance Q01–Q12 перечислены в [design audit](game-integrations-
 |---|---|---|
 | G01 | sdk-account отдельно от guest и оба пути конвертации приняты владельцем; открыты trust matrix, conflicts/history/recovery и wire contract | GI7 в этом же спринте; обязательны новый и существующий permanent target, ID07–ID13 |
 | G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
-| G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery и bootstrap Q11; roster не обходит Voice ban |
+| G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery; roster не обходит Voice ban |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
-| G05 | Voice API/node protocol versions и support window; версии движков вынесены | GI4 принимает wire compatibility и conformance; engine versions/assets — отдельная задача |
-| G06 | Отдельный Go Game Integration Service принят владельцем; открыты storage schema, contracts и deployment | Собственное хранилище, не Gateway DB; спроектировать миграции до GI0 schema freeze |
+| G05 | Current contracts are Voice Game API `/api/v1` and Federation authority `/v1`; proposed support is current v1 until a successor major is generally available, then 12 months | GI4 old/new client-server conformance and exact-version manifest; support proposal is not runtime proof; engine versions/assets remain separate |
+| G06 | Отдельный Go Game Integration Service и собственное `game_integration_db` приняты; app owner, operator approval, API bootstrap and credential lifecycle are frozen in the service contract | Clean empty-DB bootstrap and scoped credential lifecycle via API; no direct SQL/portal; run Q11 acceptance before enabling |
 | G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
 | G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |
 | G09 | Roster freshness и доступ при падении game backend | Bounded source lease, fail closed для managed доступа; конкретный срок перед GI5 |
@@ -210,10 +271,12 @@ acceptance Q01–Q12 перечислены в [design audit](game-integrations-
 Дополнительная приёмка design audit: Q01 history rejoin matrix; Q02 consent
 change; Q03 ownership transfer; Q04 signed revisions/files; Q05 confirmation
 bypass; Q06 flood+revoke; Q07 profile/alias isolation; Q08 conversion+voice race;
-Q09 moderation path; Q10 deletion+restore; Q11 clean enrollment/provider proof;
-Q12 measured capacity/compatibility. Детальные Then фиксируются после решения
-соответствующего вопроса. Открытый вопрос на активном пути не заменяется skipped
-тестом при объявлении спринта готовым.
+Q09 moderation path; Q10 deletion+restore; Q11 clean enrollment/provider proof
+as specified above; Q12 measured capacity/compatibility. Q11 ownership, approver,
+provider, and bootstrap decisions are frozen; its runtime evidence remains open.
+Q12 has provisional targets and a measurement procedure; its results remain
+unmeasured. An open runtime gate is never replaced by a skipped test when the
+sprint is declared done.
 
 Каждая capability включается отдельно: linked identity, sessions, native voice,
 managed communities, cards, proactive DM, node hosting. Default off до собственного
