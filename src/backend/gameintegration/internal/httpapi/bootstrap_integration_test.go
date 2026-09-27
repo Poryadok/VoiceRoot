@@ -87,7 +87,8 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 		Tokens: voicejwt.NewJWKSValidator(jwks.URL, bootstrapIssuer, bootstrapAudience),
 		State:  bootstrapAuthorityState{},
 	}
-	store := &registry.Store{Pool: pool}
+	storeNow := time.Now().UTC()
+	store := &registry.Store{Pool: pool, Now: func() time.Time { return storeNow }}
 	handler := NewHandler(authorizer, store)
 	applicant, secondOwner, operator, guest := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	applicantToken := bootstrapAccessToken(t, key, applicant, "regular")
@@ -191,6 +192,63 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 	require.NoError(t, err)
 	secret := credentialBody["secret"].(string)
 	require.True(t, strings.HasPrefix(secret, "vgi1_"))
+	firstPrincipal, err := store.VerifyCredential(ctx, secret, "game.events.write", handler.CredentialKey)
+	require.NoError(t, err)
+	require.Equal(t, appID, firstPrincipal.ApplicationID)
+	require.Equal(t, envID, firstPrincipal.EnvironmentID)
+
+	// A lost issue response can be recovered with the same API request, while
+	// changing the idempotency key creates a distinct rotation generation.
+	credentialRetry := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		applicantToken, "t11-credential-1", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusCreated, credentialRetry.Code, credentialRetry.Body.String())
+	require.Equal(t, credentialBody, decode(credentialRetry))
+	otherOwnerRevoke := call(http.MethodDelete,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials/"+credentialID.String(),
+		secondOwnerToken, "", "")
+	require.Equal(t, http.StatusForbidden, otherOwnerRevoke.Code)
+
+	rotated := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		applicantToken, "t11-credential-2", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusCreated, rotated.Code, rotated.Body.String())
+	rotatedBody := decode(rotated)
+	rotatedRetry := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		applicantToken, "t11-credential-2", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusCreated, rotatedRetry.Code, rotatedRetry.Body.String())
+	require.Equal(t, rotatedBody, decode(rotatedRetry))
+	rotatedID, err := uuid.Parse(rotatedBody["credential_id"].(string))
+	require.NoError(t, err)
+	rotatedSecret := rotatedBody["secret"].(string)
+	require.NotEqual(t, credentialID, rotatedID)
+	require.Equal(t, float64(2), rotatedBody["generation"])
+	_, err = store.VerifyCredential(ctx, secret, "game.events.write", handler.CredentialKey)
+	require.NoError(t, err, "rotation keeps the prior credential valid during its bounded overlap")
+	_, err = store.VerifyCredential(ctx, rotatedSecret, "game.events.write", handler.CredentialKey)
+	require.NoError(t, err)
+	var priorCredentialWithinOverlap bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT expires_at <= now() + interval '10 minutes' FROM service_credentials WHERE id=$1`, credentialID).Scan(&priorCredentialWithinOverlap))
+	require.True(t, priorCredentialWithinOverlap, "rotation must bound prior credential overlap to ten minutes")
+
+	revoked := call(http.MethodDelete,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials/"+rotatedID.String(),
+		applicantToken, "", "")
+	require.Equal(t, http.StatusNoContent, revoked.Code)
+	_, err = store.VerifyCredential(ctx, rotatedSecret, "game.events.write", handler.CredentialKey)
+	require.ErrorIs(t, err, registry.ErrInvalidServiceCredential, "revocation ends admission immediately")
+	var firstRevokeAuditCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND environment_id=$2 AND action='revoke_credential' AND operation_key=$3`, appID, envID, rotatedID.String()).Scan(&firstRevokeAuditCount))
+	require.Equal(t, 1, firstRevokeAuditCount, "first revoke must append one audit event")
+	revokedRetry := call(http.MethodDelete,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials/"+rotatedID.String(),
+		applicantToken, "", "")
+	require.Equal(t, http.StatusNoContent, revokedRetry.Code)
+	var revokeAuditCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND environment_id=$2 AND action='revoke_credential' AND operation_key=$3`, appID, envID, rotatedID.String()).Scan(&revokeAuditCount))
+	require.Equal(t, 1, revokeAuditCount, "idempotent revoke must append one audit event")
+
 	var storedDigest []byte
 	require.NoError(t, pool.QueryRow(ctx, `SELECT secret_digest FROM service_credentials WHERE id=$1`, credentialID).Scan(&storedDigest))
 	require.NotContains(t, string(storedDigest), secret)
@@ -242,7 +300,14 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 	require.Equal(t, 1, createdAudit)
 	require.Equal(t, 1, approvedAudit)
 	require.Equal(t, 1, policyAudit)
-	require.Equal(t, 1, credentialAudit)
+	require.Equal(t, 2, credentialAudit, "initial issuance and rotation must each be audited once")
+
+	storeNow = storeNow.Add(10*time.Minute + time.Nanosecond)
+	expiredReveal := call(http.MethodPost,
+		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		applicantToken, "t11-credential-1", `{"scopes":["game.events.write"]}`)
+	require.Equal(t, http.StatusConflict, expiredReveal.Code)
+	require.Equal(t, "CREDENTIAL_REVEAL_EXPIRED", decode(expiredReveal)["error_code"])
 }
 
 func bootstrapAccessToken(t *testing.T, key *rsa.PrivateKey, userID uuid.UUID, accountType string) string {
