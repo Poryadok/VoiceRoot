@@ -37,6 +37,15 @@ add_unique() {
   services+=("$svc")
 }
 
+add_integration_unique() {
+  local svc="$1"
+  local existing
+  for existing in "${integration_services[@]:-}"; do
+    [[ "${existing}" == "${svc}" ]] && return 0
+  done
+  integration_services+=("${svc}")
+}
+
 expand_s2s_deps() {
   local seed=("$@")
   local svc
@@ -70,7 +79,12 @@ run_pkg=false
 # ordinary backend-go matrix may widen via ci_global/global for broad CI.
 for svc in "${GO_SERVICES[@]}"; do
   if filter_val "svc_${svc}"; then
-    integration_services+=("${svc}")
+    add_integration_unique "${svc}"
+    # The callback receiver contract is consumed by Game Integration; run
+    # both full integration suites when the receiver changes.
+    if [[ "${svc}" == "controlledgame" ]]; then
+      add_integration_unique gameintegration
+    fi
   fi
 done
 

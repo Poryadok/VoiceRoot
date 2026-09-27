@@ -85,6 +85,10 @@ assert_contains "${go_services}" controlledgame
 assert_contains "${go_services}" gameintegration
 assert_exact_services "${integration_go_services}" '["controlledgame","gameintegration"]'
 
+echo "== controlledgame callback changes also validate the Game Integration consumer =="
+FILTER_JSON='{"code":"true","ci_global":"true","svc_controlledgame":"true"}' run_matrix
+assert_exact_services "${integration_go_services}" '["controlledgame","gameintegration"]'
+
 echo "== global (scripts/staging|prod) runs full Go matrix =="
 FILTER_JSON='{"code":"true","global":"true"}' run_matrix
 [[ "${run_go}" == "true" ]] || fail "expected run_go=true for global"

@@ -51,6 +51,9 @@ grep -Fq 'RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services 
   || fail "ci-gate must receive whether the PR integration matrix is scheduled"
 grep -Fq 'check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr' "${REQUIRED_JOBS}" \
   || fail "ci-gate must require PR integration only when its matrix is nonempty"
+grep -Fq 'if [[ "${svc}" == "controlledgame" ]]; then' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \
+  && grep -Fq 'add_integration_unique gameintegration' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \
+  || fail "controlledgame changes must include the Game Integration consumer in PR integration tests"
 
 echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
