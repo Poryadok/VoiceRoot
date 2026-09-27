@@ -137,6 +137,7 @@ public class SdkIdentityService {
       now = clock.instant();
       fresh(providerToken, now);
       fresh(gameTicket, now);
+      admitted(pending.applicationId(), pending.environmentId());
       if (jdbc.update("UPDATE sdk_challenges SET consumed_at=:now WHERE challenge_id=:id AND consumed_at IS NULL AND expires_at>:now",
           Map.of("now", Timestamp.from(now), "id", challengeId)) != 1) throw new SdkIdentityDeniedException();
       String token = randomToken();

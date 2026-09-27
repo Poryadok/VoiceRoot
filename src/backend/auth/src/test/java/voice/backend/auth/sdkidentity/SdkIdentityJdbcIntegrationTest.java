@@ -34,6 +34,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -431,7 +432,7 @@ class SdkIdentityJdbcIntegrationTest {
     googleEnabled.set(false);
     assertThatThrownBy(() -> service.session(session.accessToken(), sessionProof(device, session)))
         .isInstanceOf(SdkIdentityDeniedException.class);
-    assertThat(revisions).containsExactly(1L, 2L, 3L, 4L, 5L);
+    assertThat(revisions).containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
   }
 
   @Test
@@ -536,6 +537,63 @@ class SdkIdentityJdbcIntegrationTest {
         }
         assertThat(waiting).as("exchange reached the advisory lock while its proofs were valid").isTrue();
         currentTime.set(NOW.plusSeconds(expiring.equals("challenge") ? 301 : 61));
+      } finally {
+        blocker.rollback();
+      }
+      assertThatThrownBy(() -> exchange.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(SdkIdentityDeniedException.class);
+      assertThat(count("sdk_identities")).isZero();
+      assertThat(count("sdk_devices")).isZero();
+      assertThat(count("sdk_sessions")).isZero();
+      assertThat(jdbc.queryForObject("SELECT consumed_at IS NULL FROM sdk_challenges WHERE challenge_id=:id",
+          Map.of("id", challenge.challengeId()), Boolean.class)).isTrue();
+    } finally {
+      worker.shutdownNow();
+      assertThat(worker.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
+  }
+
+  @Test
+  void exchangeRechecksGoogleAdmissionAfterWaitingForApplicationAdmissionLock() throws Exception {
+    var googleEnabled = new AtomicBoolean(true);
+    policies = (application, environment) -> new SdkAuthorizationPolicy.Policy(
+        application, environment, 1, "Example Game", java.util.Set.of("voicegame://auth/callback"),
+        java.util.Set.of("game.identity.read"),
+        googleEnabled.get() ? java.util.Set.of("google") : java.util.Set.of("apple"));
+    var service = service(NOW);
+    var challenge = challenge(service, app, env, device);
+    String provider = provider(challenge, client);
+    String ticket = gameTicket(challenge, app, env, subjectHash());
+    String proof = enroll(device, challenge);
+    var worker = Executors.newSingleThreadExecutor();
+    try (var blocker = source().getConnection()) {
+      blocker.setAutoCommit(false);
+      int blockerPid;
+      try (var statement = blocker.createStatement();
+           var result = statement.executeQuery("SELECT pg_backend_pid()")) {
+        assertThat(result.next()).isTrue();
+        blockerPid = result.getInt(1);
+      }
+      try (var lock = blocker.prepareStatement(
+          "SELECT pg_advisory_xact_lock(hashtextextended(?,0))")) {
+        lock.setString(1, "voice-sdk:" + app + "/" + env);
+        lock.execute();
+      }
+      var exchange = worker.submit(() -> service.exchange(challenge.challengeId(), provider, ticket, proof));
+      try {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        boolean waiting = false;
+        while (System.nanoTime() < deadline && !exchange.isDone()) {
+          waiting = Boolean.TRUE.equals(jdbc.queryForObject("""
+              SELECT EXISTS(SELECT 1 FROM pg_stat_activity a
+                WHERE a.datname=current_database() AND a.wait_event_type='Lock'
+                  AND a.wait_event='advisory' AND :blocker=ANY(pg_blocking_pids(a.pid)))
+              """, Map.of("blocker", blockerPid), Boolean.class));
+          if (waiting) break;
+          Thread.sleep(20);
+        }
+        assertThat(waiting).as("exchange reached the app/env lock").isTrue();
+        googleEnabled.set(false);
       } finally {
         blocker.rollback();
       }
