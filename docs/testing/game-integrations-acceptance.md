@@ -316,7 +316,7 @@ acceptance Q01–Q12 перечислены в [design audit](game-integrations-
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
-| G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof и Auth challenge/exchange/session/revoke. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a может быть детерминированно реализован на fake provider fixtures; полный GI7 требует также реальных Google и clean-start gates выше плюс conversion ID07–ID13 |
+| G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof, Auth challenge/exchange/session/revoke, cap 1,000 identities per app/env и 10 active devices per identity. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a детерминированно проверяется на fake provider fixtures; полный GI7 требует также отдельных real-Google и clean-start gates выше плюс conversion ID07–ID13 |
 | G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
 | G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery; roster не обходит Voice ban |
 | G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
