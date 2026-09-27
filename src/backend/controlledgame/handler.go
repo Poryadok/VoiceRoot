@@ -37,14 +37,16 @@ type SigningCredential struct {
 type EffectApplier func(context.Context, pgx.Tx, []byte) ([]byte, error)
 
 type commandAcceptor interface {
-	accept(context.Context, string, string, []byte, []byte, int64, EffectApplier) ([]byte, bool, error)
+	accept(context.Context, callbackCommand, []byte, PermitAuthority, BindingAuthorizer, EffectApplier) ([]byte, bool, error)
 }
 
 type HandlerConfig struct {
-	Store       commandAcceptor
-	Credentials map[string]SigningCredential
-	Clock       func() time.Time
-	Apply       EffectApplier
+	Store           commandAcceptor
+	PermitAuthority PermitAuthority
+	Authorize       BindingAuthorizer
+	Credentials     map[string]SigningCredential
+	Clock           func() time.Time
+	Apply           EffectApplier
 }
 
 type callbackCommand struct {
@@ -133,11 +135,11 @@ func NewHandler(config HandlerConfig) http.Handler {
 			http.Error(response, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if config.Store == nil || config.Apply == nil {
+		if config.Store == nil || config.PermitAuthority == nil || config.Authorize == nil || config.Apply == nil {
 			http.Error(response, "receiver unavailable", http.StatusInternalServerError)
 			return
 		}
-		result, replay, err := config.Store.accept(request.Context(), command.CommandID, command.OperationID, oneShotEffectKey(command), body, command.ExpiresAt,
+		result, replay, err := config.Store.accept(request.Context(), command, body, config.PermitAuthority, config.Authorize,
 			func(ctx context.Context, tx pgx.Tx, commandBody []byte) ([]byte, error) {
 				resultBody, applyErr := config.Apply(ctx, tx, commandBody)
 				if applyErr != nil {
@@ -149,8 +151,16 @@ func NewHandler(config HandlerConfig) http.Handler {
 				return resultBody, nil
 			})
 		if err != nil {
-			if errors.Is(err, errCommandExpired) {
+			if errors.Is(err, errCommandExpired) || errors.Is(err, errPermitWindowExpired) {
 				http.Error(response, "command expired", http.StatusGone)
+				return
+			}
+			if errors.Is(err, errPermitDenied) || errors.Is(err, errAuthorizationDenied) {
+				http.Error(response, "command not authorized", http.StatusForbidden)
+				return
+			}
+			if errors.Is(err, errPermitUnavailable) {
+				http.Error(response, "authority unavailable", http.StatusServiceUnavailable)
 				return
 			}
 			if errors.Is(err, errCommandConflict) {
