@@ -327,6 +327,10 @@ staging-kubectl-configmap-test:
 	$(BASH) "$(ROOT)/scripts/staging/lib/kubectl-configmap_test.sh"
 
 staging-app-secrets-test:
+	python3 "$(ROOT)/scripts/staging/staging-resend-preflight-workflow_test.py"
+	$(BASH) "$(ROOT)/scripts/staging/preflight-resend-key_test.sh"
+	python3 "$(ROOT)/scripts/staging/mail-only-patch_test.py"
+	$(BASH) "$(ROOT)/scripts/staging/mail-only-resend_test.sh"
 	python3 "$(ROOT)/scripts/staging/minio-app-env-contract_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-app-secrets-dry-run_test.sh"
