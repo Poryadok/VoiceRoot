@@ -513,12 +513,25 @@ jobs:
                       - |
                         set +x
                         umask 077
+                        creds=/var/run/nats/creds/search.creds
+                        if [ ! -r "$creds" ]; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL CREDS_UNREADABLE CODE_0 ERR_0'
+                          exit 1
+                        fi
+                        if ! getent hosts voice-nats >/dev/null 2>&1; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL DNS_FAILURE CODE_0 ERR_0'
+                          exit 1
+                        fi
+                        if ! nc -z -w 3 voice-nats 4222 >/dev/null 2>&1; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL TCP_FAILURE CODE_0 ERR_0'
+                          exit 1
+                        fi
                         tmp="$(mktemp -d)"
                         trap 'rm -rf "$tmp"' EXIT
                         response="$tmp/response.json"
                         stderr="$tmp/stderr.txt"
                         nats_status=0
-                        if nats --server nats://voice-nats:4222 --creds /var/run/nats/creds/search.creds --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
+                        if nats --server nats://voice-nats:4222 --creds "$creds" --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
                           if jq -e '(.error | not) and .config.durable_name == "search-indexer-message-v1"' "$response" >/dev/null 2>&1; then
                             echo "NATS_SEARCH_JS_INFO=PASS"
                             exit 0
@@ -537,8 +550,12 @@ jobs:
                           category=PERMISSION_DENIED
                         elif printf '%s' "$details" | grep -Eqi 'authentication|credentials|invalid token'; then
                           category=AUTHENTICATION_FAILED
+                        elif printf '%s' "$details" | grep -Eqi 'tls|x509|certificate'; then
+                          category=TLS_ERROR
                         elif printf '%s' "$details" | grep -Eqi 'timed out|timeout|no responders'; then
                           category=TIMEOUT
+                        elif printf '%s' "$details" | grep -Eqi 'no servers available|failed to connect|connection refused|network is unreachable|connection reset|broken pipe'; then
+                          category=CONNECT_ERROR
                         elif [ "$code" = 404 ]; then
                           category=NOT_FOUND
                         elif [ "$nats_status" -ne 0 ]; then
@@ -583,7 +600,7 @@ jobs:
               printf '%s\n' "$result"
               ;;
             *)
-              [[ "$result" =~ ^NATS_SEARCH_JS_INFO=FAIL\ (JETSTREAM_DISABLED|PERMISSION_DENIED|AUTHENTICATION_FAILED|TIMEOUT|NOT_FOUND|CLI_ERROR|INVALID_RESPONSE|OTHER)\ CODE_[0-9]+\ ERR_[0-9]+$ ]] || fail_probe JOB_RESULT
+              [[ "$result" =~ ^NATS_SEARCH_JS_INFO=FAIL\ (CREDS_UNREADABLE|DNS_FAILURE|TCP_FAILURE|JETSTREAM_DISABLED|PERMISSION_DENIED|AUTHENTICATION_FAILED|TLS_ERROR|TIMEOUT|CONNECT_ERROR|NOT_FOUND|CLI_ERROR|INVALID_RESPONSE|OTHER)\ CODE_[0-9]+\ ERR_[0-9]+$ ]] || fail_probe JOB_RESULT
               [ "$conditions" = Failed ] || fail_probe JOB_STATUS_MISMATCH
               printf '%s\n' "$result"
               exit 1
