@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,12 +97,21 @@ func sdkTombstoneMatches(existing SdkAuthorTombstone, in SdkAuthorTombstoneInput
 		existing.RequestHash == in.RequestHash
 }
 
-func (s *ProfileStore) RecordSdkAuthorTombstone(ctx context.Context, in SdkAuthorTombstoneInput) (SdkAuthorTombstone, error) {
+func joinSdkAuthorRollbackError(primaryErr, rollbackErr error) error {
+	if rollbackErr == nil || errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		return primaryErr
+	}
+	return errors.Join(primaryErr, fmt.Errorf("rollback sdk author tombstone transaction: %w", rollbackErr))
+}
+
+func (s *ProfileStore) RecordSdkAuthorTombstone(ctx context.Context, in SdkAuthorTombstoneInput) (result SdkAuthorTombstone, returnErr error) {
 	tx, err := s.Pool().Begin(ctx)
 	if err != nil {
 		return SdkAuthorTombstone{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		returnErr = joinSdkAuthorRollbackError(returnErr, tx.Rollback(ctx))
+	}()
 
 	findExisting := func() (SdkAuthorTombstone, error) {
 		return scanSdkTombstone(tx.QueryRow(ctx,
