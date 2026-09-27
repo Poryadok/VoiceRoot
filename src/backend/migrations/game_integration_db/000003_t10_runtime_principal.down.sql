@@ -1,0 +1,8 @@
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    REVOKE USAGE, SELECT ON SEQUENCES FROM gameintegration_runtime;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM gameintegration_runtime;
+REVOKE USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public FROM gameintegration_runtime;
+REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public FROM gameintegration_runtime;
+REVOKE USAGE ON SCHEMA public FROM gameintegration_runtime;
+REVOKE CONNECT ON DATABASE game_integration_db FROM gameintegration_runtime;

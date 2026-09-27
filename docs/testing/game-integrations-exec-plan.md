@@ -193,20 +193,26 @@ contracts land before consumers; activation lands after all consumers.
 
 ### P1 — developer bootstrap and player identity
 
-- [ ] **T10** `D: T04–T06` Implement Game Integration Go service module,
+- [x] **T10** `D: T04–T06` Implement Game Integration Go service module,
   service-owned DB/migrations, health/metrics, config/secrets, deploy wiring,
-  internal auth and least-privilege credentials. Prove it cannot write other
-  service DBs.
+  internal auth and least-privilege credentials. The Compose initializer and
+  dev/CI migration helper share idempotent provisioning for a distinct GIS
+  runtime login, and the GIS runtime URL uses it.
+  PostgreSQL integration proves that credentials loaded through GIS config can
+  insert GIS registry rows while an insert into `auth_db` is denied with
+  SQLSTATE `42501`; it also checks restricted role attributes and default table
+  and sequence grants for later migrations. No global `PUBLIC` ACL is changed.
+  See the GIS service contract and `runtime_database_access_integration_test.go`.
 - [ ] **T11** `D: T10` Complete the developer registry lifecycle. The bounded
   implementation covers owner-derived application creation, separate operator
   sandbox approval, app/environment-scoped policy and installation
   configuration, provider, redirect/origin and callback configuration, and
   credential issue/retry, rotation and revoke. Empty-database API bootstrap
-  and cross-scope denials pass without direct SQL or a portal. T11 remains open
-  because its T10 prerequisite is open: cross-service database write-isolation
-  still needs proof. The current API also has no production-admission route;
-  the seeded-fixture test denies production credentials and makes no claim of
-  production onboarding. See the GIS service contract and
+  and cross-scope denials pass without direct SQL or a portal. Its T10 database
+  isolation prerequisite is now proven. T11 remains open because the current
+  API has no production-admission route; the seeded-fixture test denies
+  production credentials and makes no claim of production onboarding. See the
+  GIS service contract and
   [Q11 T11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
 - [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
@@ -500,19 +506,15 @@ test assertion, not just prose.
   supersedes that text for this sprint. Remove or mark obsolete references in
   the implementation docs; implement and measure the new ≤5s authority/media
   budget and durable event/command semantics.
-- T10's cross-service database write-isolation proof is still open. The
-  development Compose Postgres and GIS service currently share
-  `${POSTGRES_USER:-voice}`; `docker/postgres/compose-migrate-dbs.sh` also uses
-  that principal for every Go-owned database. The next T10 slice should
-  provision a GIS runtime database principal limited to `game_integration_db`,
-  wire its secret into the GIS service, and prove with PostgreSQL integration
-  that it can use GIS-owned tables while writes to another service database
-  are denied. Relevant paths are `docker-compose.yml`,
-  `docker/postgres/initdb.d/01-init-databases.sh`,
-  `docker/postgres/compose-migrate-dbs.sh`, and GIS config/SQL integration
-  tests under `src/backend/gameintegration/` and
-  `src/backend/migrations/game_integration_db/`. Do not mark T11 complete
-  until this T10 prerequisite is proven.
+- T10 database write isolation now has focused PostgreSQL integration proof:
+  the dedicated `gameintegration_runtime` login writes a GIS-owned row and is
+  denied an insert into an Auth-owned database table. The runtime login is
+  provisioned by the privileged Compose database initializer and receives
+  only GIS table/sequence privileges from the service-owned migration. The test
+  does not assert that connecting to another database is denied; it verifies
+  the required cross-service write boundary without changing global `PUBLIC`
+  connection ACLs. T11's parent lifecycle remains open for its own remaining
+  acceptance and production-admission work.
 - Bot audit was source-only at `77ec7240a`, not a current-code or live proof.
   T02 rechecks all gaps; T50 closes those that remain.
 - The current Federation service has a bounded HTTPS authority foundation and

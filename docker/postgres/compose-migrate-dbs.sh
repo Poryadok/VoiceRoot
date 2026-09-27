@@ -4,11 +4,22 @@
 set -eu
 
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
+SCHEMA_DIR="${SCHEMA_DIR:-/schema}"
 PGHOST="${PGHOST:-postgres}"
 PGUSER="${PGUSER:-voice}"
 PGPASSWORD="${PGPASSWORD:-voice}"
 
 export PGPASSWORD
+
+ensure_gameintegration_runtime_role() {
+  if [ -z "${GAME_INTEGRATION_DB_PASSWORD:-}" ]; then
+    echo "ERROR: GAME_INTEGRATION_DB_PASSWORD must be configured" >&2
+    return 1
+  fi
+
+  psql -v ON_ERROR_STOP=1 --dbname postgres \
+    -f "${SCHEMA_DIR}/provision-gameintegration-runtime-role.sql"
+}
 
 dsn() {
   echo "postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/$1?sslmode=disable"
@@ -191,6 +202,8 @@ GO_OWNED_DBS="
   matchmaking_db search_db moderation_db gateway_db subscription_db
   voice_db game_integration_db
 "
+
+ensure_gameintegration_runtime_role
 
 for db in $GO_OWNED_DBS; do
   migrate_db "$db"

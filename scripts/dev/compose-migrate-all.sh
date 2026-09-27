@@ -17,6 +17,8 @@ fi
 POSTGRES_USER="${POSTGRES_USER:-voice}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-voice}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+GAME_INTEGRATION_DB_PASSWORD="${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}"
+export POSTGRES_USER POSTGRES_PASSWORD GAME_INTEGRATION_DB_PASSWORD
 # Compose publishes Postgres to the host; reach it from one-off migrate containers.
 MIGRATE_PG_HOST="${VOICE_MIGRATE_PG_HOST:-host.docker.internal}"
 MIGRATE_DOCKER_HOST_ARGS=(--add-host=host.docker.internal:host-gateway)
@@ -64,6 +66,16 @@ migrate_db() {
     -database "${dsn}" up
 }
 
+provision_gameintegration_runtime_role() {
+  echo "==> provision GIS runtime database role"
+  PGPASSWORD="${POSTGRES_PASSWORD}" docker run --rm -i "${MIGRATE_DOCKER_HOST_ARGS[@]}" \
+    -e PGPASSWORD -e GAME_INTEGRATION_DB_PASSWORD \
+    -v "${ROOT}/docker/postgres/provision-gameintegration-runtime-role.sql:/provision.sql:ro" \
+    postgres:16-alpine psql -v ON_ERROR_STOP=1 \
+      -h "${MIGRATE_PG_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" \
+      -d postgres -f /provision.sql
+}
+
 run_e2e() {
   migrate_db chat_db
   migrate_db messaging_db
@@ -82,6 +94,7 @@ run_voice() {
 }
 
 run_other_go_owned() {
+  provision_gameintegration_runtime_role
   local dbs=(
     user_db social_db file_db space_db role_db notification_db
     matchmaking_db search_db moderation_db gateway_db subscription_db game_integration_db
