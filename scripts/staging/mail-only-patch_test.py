@@ -38,7 +38,14 @@ for missing in ("AUTH_RESEND_API_KEY", "AUTH_RESEND_FROM"):
     broken = {**document, "stringData": {**document["stringData"], missing: ""}}
     assert module.build_patch(broken, "voice-staging") is None
 
-for sender_format in ("not-an-address", "Voice <sender@>", "Voice <sender@example.invalid> extra"):
+for sender_format in (
+    "not-an-address",
+    "Voice <sender@>",
+    "Voice <sender@example.invalid> extra",
+    "Injected\n<sender@example.invalid>",
+    "Injected\r<sender@example.invalid>",
+    "Injected\x00<sender@example.invalid>",
+):
     broken = {**document, "stringData": {**document["stringData"], "AUTH_RESEND_FROM": sender_format}}
     assert module.build_patch(broken, "voice-staging") is None
 

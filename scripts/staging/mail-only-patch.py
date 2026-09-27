@@ -6,12 +6,15 @@ import binascii
 import json
 import re
 import sys
+import unicodedata
 
 
 MAIL_KEYS = ("AUTH_RESEND_API_KEY", "AUTH_RESEND_FROM")
 
 
 def valid_sender(value: str) -> bool:
+    if any(unicodedata.category(char) in {"Cc", "Zl", "Zp"} for char in value):
+        return False
     sender = value.strip()
     if "<" in sender or ">" in sender:
         match = re.fullmatch(r"[^<>]*<([^<>\s]+)>\s*", sender)
