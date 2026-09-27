@@ -39,14 +39,35 @@ assert "echo" not in step
 assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in named_steps[
     "Apply staging manifests"
 ], "preflight and apply must receive the same secure YAML artifact"
-assert (
-    "VOICE_APPLY_OBSERVABILITY: ${{ github.event_name == 'workflow_call' && vars.VOICE_APPLY_OBSERVABILITY || 'false' }}"
-    in named_steps["Apply staging manifests"]
-), "manual app deploy must not apply resources in the observability namespace"
-assert (
-    "if: github.event_name == 'workflow_call' && vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'"
-    in named_steps["Observability smoke (optional)"]
-), "manual app deploy must not run smoke in the observability namespace"
+def evaluate_observability_expression(expression: str, event_name: str, variable: str):
+    expression = expression.replace("github.event_name", "event_name")
+    expression = expression.replace("vars.VOICE_APPLY_OBSERVABILITY", "variable")
+    expression = expression.replace("vars.STAGING_OBSERVABILITY_SMOKE_ENABLED", "variable")
+    expression = expression.replace("&&", "and").replace("||", "or")
+    assert re.fullmatch(r"[\w\s'!=()]+", expression), "unexpected observability expression syntax"
+    result = eval(expression, {"__builtins__": {}}, {"event_name": event_name, "variable": variable})
+    return result is True or result == "true"
+
+
+apply_step = named_steps["Apply staging manifests"]
+apply_expression = re.search(r"VOICE_APPLY_OBSERVABILITY: \${{ (.+?) }}", apply_step)
+assert apply_expression, "observability apply guard missing"
+smoke_step = named_steps["Observability smoke (optional)"]
+smoke_expression = re.search(r"if: (.+)\n", smoke_step)
+assert smoke_expression, "observability smoke guard missing"
+for expression in (apply_expression.group(1), smoke_expression.group(1)):
+    assert not evaluate_observability_expression(expression, "workflow_dispatch", "true"), (
+        "manual deploy must not touch the observability namespace"
+    )
+    assert evaluate_observability_expression(expression, "push", "true"), (
+        "reusable CI called from push must retain configured observability behavior"
+    )
+    assert evaluate_observability_expression(expression, "workflow_call", "true"), (
+        "direct reusable-call context must retain configured observability behavior"
+    )
+    assert not evaluate_observability_expression(expression, "push", "false"), (
+        "disabled observability variable must remain disabled"
+    )
 
 assert "validate_app_secret_only:" in source, "read-only dispatch input missing"
 assert "inputs.validate_app_secret_only != true" in source, "validation dispatch must skip deploy job"
