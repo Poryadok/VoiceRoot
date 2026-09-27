@@ -487,11 +487,11 @@ jobs:
           }
           trap cleanup EXIT
 
-          kctl create -f - >/dev/null 2>&1 <<EOF || fail_probe JOB_CREATE
+          sed "s/__PROBE_JOB_NAME__/${PROBE_JOB_NAME}/" <<'EOF' | kctl create -f - >/dev/null 2>&1 || fail_probe JOB_CREATE
           apiVersion: batch/v1
           kind: Job
           metadata:
-            name: $PROBE_JOB_NAME
+            name: __PROBE_JOB_NAME__
             namespace: voice-staging
           spec:
             backoffLimit: 0
