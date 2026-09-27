@@ -195,12 +195,14 @@ contracts land before consumers; activation lands after all consumers.
 
 - [x] **T10** `D: T04–T06` Implement Game Integration Go service module,
   service-owned DB/migrations, health/metrics, config/secrets, deploy wiring,
-  internal auth and least-privilege credentials. The Compose migration job
-  provisions a distinct GIS runtime login, and the GIS runtime URL uses it.
+  internal auth and least-privilege credentials. The Compose initializer and
+  dev/CI migration helper share idempotent provisioning for a distinct GIS
+  runtime login, and the GIS runtime URL uses it.
   PostgreSQL integration proves that credentials loaded through GIS config can
   insert GIS registry rows while an insert into `auth_db` is denied with
-  SQLSTATE `42501`; no global `PUBLIC` ACL is changed. See the GIS service
-  contract and `runtime_database_access_integration_test.go`.
+  SQLSTATE `42501`; it also checks restricted role attributes and default table
+  and sequence grants for later migrations. No global `PUBLIC` ACL is changed.
+  See the GIS service contract and `runtime_database_access_integration_test.go`.
 - [ ] **T11** `D: T10` Complete the developer registry lifecycle. The bounded
   implementation covers owner-derived application creation, separate operator
   sandbox approval, app/environment-scoped policy and installation

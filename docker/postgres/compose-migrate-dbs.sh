@@ -4,6 +4,7 @@
 set -eu
 
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
+SCHEMA_DIR="${SCHEMA_DIR:-/schema}"
 PGHOST="${PGHOST:-postgres}"
 PGUSER="${PGUSER:-voice}"
 PGPASSWORD="${PGPASSWORD:-voice}"
@@ -16,20 +17,8 @@ ensure_gameintegration_runtime_role() {
     return 1
   fi
 
-  psql -v ON_ERROR_STOP=1 --dbname postgres <<'SQL'
-\getenv gis_runtime_password GAME_INTEGRATION_DB_PASSWORD
-SELECT format(
-  'CREATE ROLE gameintegration_runtime WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
-  :'gis_runtime_password'
-)
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gameintegration_runtime')
-\gexec
-SELECT format(
-  'ALTER ROLE gameintegration_runtime WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
-  :'gis_runtime_password'
-)
-\gexec
-SQL
+  psql -v ON_ERROR_STOP=1 --dbname postgres \
+    -f "${SCHEMA_DIR}/provision-gameintegration-runtime-role.sql"
 }
 
 dsn() {

@@ -15,10 +15,14 @@ The privileged Compose database initializer provisions or rotates that login
 from `GAME_INTEGRATION_DB_PASSWORD` before applying GIS migrations. The GIS
 container receives only the dedicated runtime URL; the initializer uses the
 separate privileged `POSTGRES_USER` credential for role provisioning and
-migrations. Migration `000003_t10_runtime_principal` grants GIS table and
-sequence DML in `game_integration_db` only. It does not change cluster-wide
-`PUBLIC` connect privileges. Compose supplies a local development default;
-deployments must provide the runtime secret through their secret manager.
+migrations. The same role provisioning SQL is used by the dev/CI
+`compose-migrate-all.sh` helper so migrations cannot run ahead of role
+creation. The GIS role has no superuser, database/role creation, inheritance,
+RLS bypass, or replication privileges. Migration `000003_t10_runtime_principal`
+grants GIS table and sequence DML in `game_integration_db` only. It does not
+change cluster-wide `PUBLIC` connect privileges. Compose supplies a local
+development default; deployments must provide the runtime secret through their
+secret manager.
 
 The current implementation sequence is registry → identity/binding → session
 orchestration → managed community projection. A registry implementation alone

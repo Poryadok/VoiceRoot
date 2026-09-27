@@ -73,23 +73,28 @@ func TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables(t *testing.T) {
 	require.NoError(t, runtimePool.QueryRow(ctx, `SELECT current_user, current_database()`).Scan(&runtimeRole, &runtimeDatabase))
 	require.Equal(t, "gameintegration_runtime", runtimeRole)
 	require.Equal(t, "game_integration_db", runtimeDatabase)
-	var isSuperuser, canCreateDB, canCreateRole, canInherit bool
+	var isSuperuser, canCreateDB, canCreateRole, canInherit, canBypassRLS, canReplicate bool
 	require.NoError(t, runtimePool.QueryRow(ctx, `
-		SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit
+		SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolbypassrls, rolreplication
 		FROM pg_roles WHERE rolname = current_user
-	`).Scan(&isSuperuser, &canCreateDB, &canCreateRole, &canInherit))
+	`).Scan(&isSuperuser, &canCreateDB, &canCreateRole, &canInherit, &canBypassRLS, &canReplicate))
 	require.False(t, isSuperuser)
 	require.False(t, canCreateDB)
 	require.False(t, canCreateRole)
 	require.False(t, canInherit)
+	require.False(t, canBypassRLS)
+	require.False(t, canReplicate)
 	_, err = runtimePool.Exec(ctx,
 		`INSERT INTO applications (id, owner_account_id, name, status) VALUES ($1, $2, 'isolation-test', 'draft')`,
 		uuid.New(), uuid.New())
 	require.NoError(t, err, "GIS runtime credentials must write GIS-owned registry rows")
-	_, err = adminPool.Exec(ctx, `CREATE TABLE future_registry_rows (id UUID PRIMARY KEY)`)
+	_, err = adminPool.Exec(ctx, `CREATE TABLE future_registry_rows (id BIGSERIAL PRIMARY KEY)`)
 	require.NoError(t, err)
-	_, err = runtimePool.Exec(ctx, `INSERT INTO future_registry_rows (id) VALUES ($1)`, uuid.New())
-	require.NoError(t, err, "default privileges must cover tables created by later GIS migrations")
+	var nextID int64
+	require.NoError(t, runtimePool.QueryRow(ctx, `SELECT nextval('future_registry_rows_id_seq')`).Scan(&nextID))
+	require.EqualValues(t, 1, nextID, "default sequence privileges must cover sequences created by later GIS migrations")
+	_, err = runtimePool.Exec(ctx, `INSERT INTO future_registry_rows DEFAULT VALUES`)
+	require.NoError(t, err, "default table and sequence privileges must cover later GIS migrations")
 
 	authURL := gisURL
 	authURL.Path = "/auth_db"
