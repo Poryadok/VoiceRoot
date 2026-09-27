@@ -37,6 +37,21 @@ echo "${changes_block}" | grep -Fq 'uses: dorny/paths-filter@v4' \
 echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
   || fail "feature-base PRs must use the repository path filter definitions"
 
+integration_pr_block="$(sed -n '/^  backend-go-integration-pr:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+backend_go_block="$(sed -n '/^  backend-go:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+grep -Fq 'integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}' "${WORKFLOW}" \
+  || fail "changes must publish a separate changed-service integration matrix"
+echo "${integration_pr_block}" | grep -Fq 'fromJSON(needs.changes.outputs.integration_go_services)' \
+  || fail "PR integration tests must use the changed-service matrix"
+echo "${backend_go_block}" | grep -Fq 'fromJSON(needs.changes.outputs.go_services)' \
+  || fail "normal backend Go CI must retain its broad Go test matrix"
+grep -Fq "needs.changes.outputs.integration_go_services != '[]'" "${WORKFLOW}" \
+  || fail "PR integration matrix must skip when no Go service path changed"
+grep -Fq 'RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services != '\''[]'\'' }}' "${WORKFLOW}" \
+  || fail "ci-gate must receive whether the PR integration matrix is scheduled"
+grep -Fq 'check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require PR integration only when its matrix is nonempty"
+
 echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
 echo "${job_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \

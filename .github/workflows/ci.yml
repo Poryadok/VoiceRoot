@@ -60,6 +60,7 @@ jobs:
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
       code: ${{ steps.filter.outputs.code }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
+      integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
       build_services: ${{ steps.stagingmatrix.outputs.build_services }}
@@ -484,16 +485,13 @@ jobs:
       needs.changes.result == 'success' &&
       needs.backend-go-pkg.result != 'failure' &&
       needs.backend-go-pkg.result != 'cancelled' &&
-      (needs.changes.outputs.run_go == 'true' ||
-       needs.changes.outputs.global == 'true' ||
-       needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+      needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.changes.outputs.go_services) }}
+        service: ${{ fromJSON(needs.changes.outputs.integration_go_services) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -1178,6 +1176,7 @@ jobs:
       - name: Verify required jobs ran
         env:
           RUN_GO: ${{ needs.changes.outputs.run_go }}
+          RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services != '[]' }}
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}

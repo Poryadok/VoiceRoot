@@ -63,7 +63,16 @@ expand_s2s_deps() {
 }
 
 services=()
+integration_services=()
 run_pkg=false
+
+# Testcontainers run only the Go services whose path filters changed. The
+# ordinary backend-go matrix may widen via ci_global/global for broad CI.
+for svc in "${GO_SERVICES[@]}"; do
+  if filter_val "svc_${svc}"; then
+    integration_services+=("${svc}")
+  fi
+done
 
 if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg; then
   services=("${GO_SERVICES[@]}")
@@ -94,10 +103,17 @@ else
   run_go=true
 fi
 
+if ((${#integration_services[@]} == 0)); then
+  integration_json='[]'
+else
+  integration_json="$(printf '%s\n' "${integration_services[@]}" | jq -R . | jq -s -c .)"
+fi
+
 {
   echo "go_services=${go_json}"
+  echo "integration_go_services=${integration_json}"
   echo "run_pkg=${run_pkg}"
   echo "run_go=${run_go}"
 } >>"${GITHUB_OUTPUT:-/dev/stdout}"
 
-echo "resolve-go-matrix: services=${go_json} run_pkg=${run_pkg} run_go=${run_go}"
+echo "resolve-go-matrix: services=${go_json} integration=${integration_json} run_pkg=${run_pkg} run_go=${run_go}"
