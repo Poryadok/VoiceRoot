@@ -331,6 +331,7 @@ e2e-manifest-helper-test:
 
 nats-leaf-topology-invariants-test:
 	$(BASH) "$(ROOT)/scripts/ci/nats-leaf-topology-invariants-test_test.sh"
+	python3 "$(ROOT)/scripts/staging/nats-search-probe-workflow_test.py"
 
 .PHONY: staging-source-acquisition-workflow-test
 staging-source-acquisition-workflow-test:
@@ -345,6 +346,8 @@ staging-kubectl-configmap-test:
 staging-app-secrets-test:
 	python3 "$(ROOT)/scripts/staging/staging-resend-preflight-workflow_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/preflight-resend-key_test.sh"
+	python3 "$(ROOT)/scripts/staging/check-resend-key_test.py"
+	$(BASH) "$(ROOT)/scripts/staging/app-secret-merge_test.sh"
 	python3 "$(ROOT)/scripts/staging/mail-only-patch_test.py"
 	$(BASH) "$(ROOT)/scripts/staging/mail-only-resend_test.sh"
 	python3 "$(ROOT)/scripts/staging/minio-app-env-contract_test.py"

@@ -304,7 +304,7 @@ jobs:
           VOICE_GATEWAY_TLS_SECRET: ${{ vars.VOICE_GATEWAY_TLS_SECRET }}
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
           VOICE_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
-          VOICE_APPLY_OBSERVABILITY: ${{ vars.VOICE_APPLY_OBSERVABILITY }}
+          VOICE_APPLY_OBSERVABILITY: ${{ github.event_name != 'workflow_dispatch' && vars.VOICE_APPLY_OBSERVABILITY || 'false' }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           NOTIFICATIONS_ENABLED: ${{ vars.STAGING_ALERTMANAGER_NOTIFICATIONS_ENABLED }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
@@ -357,7 +357,7 @@ jobs:
           bash scripts/staging/smoke-staging.sh
 
       - name: Observability smoke (optional)
-        if: vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
+        if: github.event_name != 'workflow_dispatch' && vars.STAGING_OBSERVABILITY_SMOKE_ENABLED == 'true'
         env:
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: bash scripts/staging/smoke-observability.sh
@@ -487,11 +487,11 @@ jobs:
           }
           trap cleanup EXIT
 
-          kctl create -f - >/dev/null 2>&1 <<EOF || fail_probe JOB_CREATE
+          sed "s/__PROBE_JOB_NAME__/${PROBE_JOB_NAME}/" <<'EOF' | kctl create -f - >/dev/null 2>&1 || fail_probe JOB_CREATE
           apiVersion: batch/v1
           kind: Job
           metadata:
-            name: $PROBE_JOB_NAME
+            name: __PROBE_JOB_NAME__
             namespace: voice-staging
           spec:
             backoffLimit: 0
@@ -513,27 +513,59 @@ jobs:
                       - |
                         set +x
                         umask 077
+                        creds=/var/run/nats/creds/search.creds
+                        if [ ! -r "$creds" ]; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL CREDS_UNREADABLE CODE_0 ERR_0'
+                          exit 1
+                        fi
+                        if ! getent hosts voice-nats >/dev/null 2>&1; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL DNS_FAILURE CODE_0 ERR_0'
+                          exit 1
+                        fi
+                        if ! nc -z -w 3 voice-nats 4222 >/dev/null 2>&1; then
+                          echo 'NATS_SEARCH_JS_INFO=FAIL TCP_FAILURE CODE_0 ERR_0'
+                          exit 1
+                        fi
                         tmp="$(mktemp -d)"
                         trap 'rm -rf "$tmp"' EXIT
                         response="$tmp/response.json"
                         stderr="$tmp/stderr.txt"
-                        if nats --server nats://voice-nats:4222 --creds /var/run/nats/creds/search.creds --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
+                        nats_status=0
+                        if nats --server nats://voice-nats:4222 --creds "$creds" --inbox-prefix _INBOX.voice.search req --raw --timeout 5s '$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1' '' >"$response" 2>"$stderr"; then
                           if jq -e '(.error | not) and .config.durable_name == "search-indexer-message-v1"' "$response" >/dev/null 2>&1; then
                             echo "NATS_SEARCH_JS_INFO=PASS"
                             exit 0
                           fi
+                        else
+                          nats_status=$?
                         fi
-                        details="$(jq -r '.error.description // empty' "$response" 2>/dev/null || true) $(<"$stderr")"
+                        code="$(jq -r '.error.code // 0 | if type == "number" then floor else 0 end' "$response" 2>/dev/null || true)"
+                        err_code="$(jq -r '.error.err_code // 0 | if type == "number" then floor else 0 end' "$response" 2>/dev/null || true)"
+                        case "$code" in ''|*[!0-9]*) code=0 ;; esac
+                        case "$err_code" in ''|*[!0-9]*) err_code=0 ;; esac
+                        details="$(jq -r '.error.description // empty' "$response" 2>/dev/null || true) $(cat "$stderr")"
                         if printf '%s' "$details" | grep -Eqi 'jetstream[^[:cntrl:]]*(not enabled|disabled)|not enabled[^[:cntrl:]]*jetstream'; then
                           category=JETSTREAM_DISABLED
                         elif printf '%s' "$details" | grep -Eqi 'permission|authorization|not authorized|unauthorized|forbidden'; then
                           category=PERMISSION_DENIED
+                        elif printf '%s' "$details" | grep -Eqi 'authentication|credentials|invalid token'; then
+                          category=AUTHENTICATION_FAILED
+                        elif printf '%s' "$details" | grep -Eqi 'tls|x509|certificate'; then
+                          category=TLS_ERROR
                         elif printf '%s' "$details" | grep -Eqi 'timed out|timeout|no responders'; then
                           category=TIMEOUT
+                        elif printf '%s' "$details" | grep -Eqi 'no servers available|failed to connect|connection refused|network is unreachable|connection reset|broken pipe'; then
+                          category=CONNECT_ERROR
+                        elif [ "$code" = 404 ]; then
+                          category=NOT_FOUND
+                        elif [ "$nats_status" -ne 0 ]; then
+                          category=CLI_ERROR
+                        elif ! jq -e . "$response" >/dev/null 2>&1; then
+                          category=INVALID_RESPONSE
                         else
                           category=OTHER
                         fi
-                        printf 'NATS_SEARCH_JS_INFO=FAIL %s\n' "$category"
+                        printf 'NATS_SEARCH_JS_INFO=FAIL %s CODE_%s ERR_%s\n' "$category" "$code" "$err_code"
                         exit 1
                     volumeMounts:
                       - name: search-service-creds
@@ -567,13 +599,11 @@ jobs:
               [ "$conditions" = Complete ] || fail_probe JOB_STATUS_MISMATCH
               printf '%s\n' "$result"
               ;;
-            "NATS_SEARCH_JS_INFO=FAIL JETSTREAM_DISABLED"|"NATS_SEARCH_JS_INFO=FAIL PERMISSION_DENIED"|"NATS_SEARCH_JS_INFO=FAIL TIMEOUT"|"NATS_SEARCH_JS_INFO=FAIL OTHER")
+            *)
+              [[ "$result" =~ ^NATS_SEARCH_JS_INFO=FAIL\ (CREDS_UNREADABLE|DNS_FAILURE|TCP_FAILURE|JETSTREAM_DISABLED|PERMISSION_DENIED|AUTHENTICATION_FAILED|TLS_ERROR|TIMEOUT|CONNECT_ERROR|NOT_FOUND|CLI_ERROR|INVALID_RESPONSE|OTHER)\ CODE_[0-9]+\ ERR_[0-9]+$ ]] || fail_probe JOB_RESULT
               [ "$conditions" = Failed ] || fail_probe JOB_STATUS_MISMATCH
               printf '%s\n' "$result"
               exit 1
-              ;;
-            *)
-              fail_probe JOB_RESULT
               ;;
           esac
 
