@@ -149,15 +149,12 @@ else
   done
 fi
 
-# R2 keys for user/file services (empty credentials = pods start, uploads may fail).
+# Object-storage endpoint and bucket settings for User/File; MinIO credentials
+# come from the separately managed voice-minio-credentials Secret.
 add_if_missing USER_R2_ENDPOINT "${USER_R2_ENDPOINT:-}"
-add_if_missing USER_R2_ACCESS_KEY_ID "${USER_R2_ACCESS_KEY_ID:-}"
-add_if_missing USER_R2_SECRET_ACCESS_KEY "${USER_R2_SECRET_ACCESS_KEY:-}"
 add_if_missing USER_R2_BUCKET "${USER_R2_BUCKET:-voice-staging-avatars}"
 add_if_missing USER_R2_PUBLIC_BASE_URL "${USER_R2_PUBLIC_BASE_URL:-}"
 add_if_missing FILE_R2_ENDPOINT "${FILE_R2_ENDPOINT:-}"
-add_if_missing FILE_R2_ACCESS_KEY_ID "${FILE_R2_ACCESS_KEY_ID:-}"
-add_if_missing FILE_R2_SECRET_ACCESS_KEY "${FILE_R2_SECRET_ACCESS_KEY:-}"
 add_if_missing FILE_R2_BUCKET "${FILE_R2_BUCKET:-voice-staging-files}"
 
 needs_jwt_patch=false
