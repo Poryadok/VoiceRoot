@@ -870,7 +870,7 @@ client_message_id)` idempotency record.
 
 Before T51 is enabled, T11 binds each active GIS installation to one live Bot
 ID. GIS takes the application owner from the GIS registry's
-`game_integration_applications.owner_account_id`; that value was assigned from
+`applications.owner_account_id`; that value was assigned from
 the authenticated Voice account when the application was created and is never
 accepted from a game request. GIS obtains the installation's Bot ID from the
 active T11 installation authority record, not from the game request. Bot checks
@@ -948,7 +948,8 @@ message GameEventPublicationResponse {
 
 The binding recipient arm carries both the authority binding ID and its GIS-
 resolved chat ID. The direct-chat arm carries the resolved chat ID. GIS must
-derive `app_owner_account_id` from its application registry as described above;
+derive `app_owner_account_id` from `applications.owner_account_id` as
+described above;
 the field is an attestation from the authenticated GIS service, not a game
 identity. `authority_revision` is a nonzero opaque revision from T16 binding
 authority and is copied unchanged through the transport. Neither the game nor
