@@ -98,8 +98,19 @@ Provision only the documented service database login, TLS trust, signing seed,
 and operator certificate pin through the test secret manager. An operator
 creates a pending node through `/v1/nodes`; ownership of its configured endpoint
 is checked out of band, and approval binds the exact node certificate pin. The
-node then reads only its own signed snapshot and lease with its node certificate
-and node-scoped bearer. The test must not seed or repair registry rows with SQL.
+operator then creates a synthetic Space placement with
+`POST /v1/nodes/{node}/spaces/{space}` and `{}`. The operator-publisher fixture
+publishes its initial complete allowlist with
+`POST /v1/nodes/{node}/spaces/{space}/snapshot`, revision `1`, one page, and a
+`valid_until` no more than five seconds ahead. Use only synthetic Space, account,
+profile and resource IDs; the permission may grant `read` for this fixture.
+Federation has no production owning-service snapshot publisher yet, so this
+operator-published snapshot proves only the authority contract. The node then
+gets its signed snapshot at
+`GET /v1/nodes/{node}/spaces/{space}/snapshot` and acknowledges the exact
+revision/hash with a fresh nonce at
+`POST /v1/nodes/{node}/spaces/{space}/lease`, using its node certificate and
+node-scoped bearer. The test must not seed or repair registry rows with SQL.
 
 Cryptographic fixture proof and real provider proof are separate gates. Fake
 Google JWKS and synthetic game-ticket keys may prove signature, issuer, audience,
