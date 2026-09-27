@@ -189,13 +189,15 @@ func TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs(t *testin
 	var draftApplications int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM applications WHERE owner_account_id=$1 AND status='draft'`, applicant).Scan(&draftApplications))
 	require.Zero(t, draftApplications)
-	var createdAudit, approvedAudit, policyAudit int
+	var createdAudit, approvedAudit, policyAudit, credentialAudit int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND action='create_application'`, appID).Scan(&createdAudit))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND actor_kind='operator' AND actor_id=$2 AND action='approve_sandbox'`, appID, operator).Scan(&approvedAudit))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND environment_id=$2 AND action='update_sandbox_policy'`, appID, envID).Scan(&policyAudit))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1 AND environment_id=$2 AND actor_kind='account' AND actor_id=$3 AND action='issue_credential'`, appID, envID, applicant).Scan(&credentialAudit))
 	require.Equal(t, 1, createdAudit)
 	require.Equal(t, 1, approvedAudit)
 	require.Equal(t, 1, policyAudit)
+	require.Equal(t, 1, credentialAudit)
 }
 
 func bootstrapAccessToken(t *testing.T, key *rsa.PrivateKey, userID uuid.UUID, accountType string) string {
