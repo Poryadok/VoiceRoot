@@ -69,8 +69,12 @@ ReadWriteOnce PVC. Configure `VOICE_MINIO_STORAGE_CLASS` and
 --ignore-existing`, so retries are idempotent. Kubernetes Job pod templates
 are immutable: staging replaces an existing bucket Job only when it matches the
 expected bucket action and credential references, uses the previous pinned mc
-image, and has completed successfully. Active Jobs and unexpected specs stop
-infra apply without deletion; a Job already using the selected image is kept.
+image, and has completed successfully. The guard accepts the observed Kubernetes
+defaults (`manualSelector: false`, `podReplacementPolicy: TerminatingOrFailed`,
+and empty container resources) and the exact controller/job labels emitted by
+the cluster; other selector fields, labels, actions, and credentials remain
+unexpected. Active Jobs and unexpected specs stop infra apply without deletion;
+a Job already using the selected image is kept.
 The replacement guard is restricted to `voice-staging` and deletes with the
 observed Job UID as a precondition, so a same-name replacement after inspection
 is left untouched.

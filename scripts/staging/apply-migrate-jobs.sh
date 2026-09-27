@@ -152,6 +152,57 @@ apply_migrate search_db \
   voice-migrate-search-db \
   voice-search-db-migrations
 
+# These service-owned schemas were absent from the staging migration runner.
+# Use each service's existing URL SecretRef so migration credentials stay out of
+# rendered Job specs, shell arguments, and logs.
+apply_migrate social_db \
+  "${ROOT}/src/backend/migrations/social_db" \
+  "${ROOT}/deploy/templates/migrate-social-db-job.yaml" \
+  voice-migrate-social-db \
+  voice-social-db-migrations
+
+apply_migrate chat_db \
+  "${ROOT}/src/backend/migrations/chat_db" \
+  "${ROOT}/deploy/templates/migrate-chat-db-job.yaml" \
+  voice-migrate-chat-db \
+  voice-chat-db-migrations
+
+apply_migrate messaging_db \
+  "${ROOT}/src/backend/migrations/messaging_db" \
+  "${ROOT}/deploy/templates/migrate-messaging-db-job.yaml" \
+  voice-migrate-messaging-db \
+  voice-messaging-db-migrations
+
+apply_migrate file_db \
+  "${ROOT}/src/backend/migrations/file_db" \
+  "${ROOT}/deploy/templates/migrate-file-db-job.yaml" \
+  voice-migrate-file-db \
+  voice-file-db-migrations
+
+apply_migrate space_db \
+  "${ROOT}/src/backend/migrations/space_db" \
+  "${ROOT}/deploy/templates/migrate-space-db-job.yaml" \
+  voice-migrate-space-db \
+  voice-space-db-migrations
+
+apply_migrate role_db \
+  "${ROOT}/src/backend/migrations/role_db" \
+  "${ROOT}/deploy/templates/migrate-role-db-job.yaml" \
+  voice-migrate-role-db \
+  voice-role-db-migrations
+
+apply_migrate notification_db \
+  "${ROOT}/src/backend/migrations/notification_db" \
+  "${ROOT}/deploy/templates/migrate-notification-db-job.yaml" \
+  voice-migrate-notification-db \
+  voice-notification-db-migrations
+
+apply_migrate matchmaking_db \
+  "${ROOT}/src/backend/migrations/matchmaking_db" \
+  "${ROOT}/deploy/templates/migrate-matchmaking-db-job.yaml" \
+  voice-migrate-matchmaking-db \
+  voice-matchmaking-db-migrations
+
 apply_migrate voice_db \
   "${ROOT}/src/backend/migrations/voice_db" \
   "${ROOT}/deploy/templates/migrate-voice-db-job.yaml" \

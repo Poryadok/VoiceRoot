@@ -5,6 +5,57 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 grep -Fq 'apply_migrate search_db' "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
 grep -Fq 'name: voice-search-db-migrations' "${ROOT}/deploy/templates/migrate-search-db-job.yaml"
+
+require_migration_target() {
+  local db="$1" job="$2" key="$3"
+  local template_db="${db%_db}"
+  local template="${ROOT}/deploy/templates/migrate-${template_db}-db-job.yaml"
+  grep -Fq "apply_migrate ${db}" "${ROOT}/scripts/staging/apply-migrate-jobs.sh" || {
+    echo "FAIL: staging migration runner omits ${db}" >&2
+    return 1
+  }
+  grep -Fq "\${ROOT}/src/backend/migrations/${db}" "${ROOT}/scripts/staging/apply-migrate-jobs.sh" || {
+    echo "FAIL: staging migration runner points ${db} at the wrong SQL directory" >&2
+    return 1
+  }
+  grep -Fq "\${ROOT}/deploy/templates/migrate-${template_db}-db-job.yaml" "${ROOT}/scripts/staging/apply-migrate-jobs.sh" || {
+    echo "FAIL: staging migration runner omits the ${db} Job template" >&2
+    return 1
+  }
+  grep -Fq "${job}" "${ROOT}/scripts/staging/apply-migrate-jobs.sh" || {
+    echo "FAIL: staging migration runner uses the wrong ${db} Job name" >&2
+    return 1
+  }
+  grep -Fq "voice-${template_db}-db-migrations" "${ROOT}/scripts/staging/apply-migrate-jobs.sh" || {
+    echo "FAIL: staging migration runner uses the wrong ${db} ConfigMap name" >&2
+    return 1
+  }
+  grep -Fq "name: ${job}" "${template}" || {
+    echo "FAIL: staging migration template for ${db} is missing or has the wrong Job name" >&2
+    return 1
+  }
+  grep -Fq "key: ${key}" "${template}" || {
+    echo "FAIL: staging migration template for ${db} does not use ${key}" >&2
+    return 1
+  }
+  grep -Fq 'name: voice-app-secrets' "${template}" || {
+    echo "FAIL: staging migration template for ${db} does not use the application Secret" >&2
+    return 1
+  }
+  grep -Fq -- '-database=$(DATABASE_URL)' "${template}" || {
+    echo "FAIL: staging migration template for ${db} does not consume DATABASE_URL" >&2
+    return 1
+  }
+}
+
+require_migration_target social_db voice-migrate-social-db SOCIAL_DATABASE_URL
+require_migration_target chat_db voice-migrate-chat-db CHAT_DATABASE_URL
+require_migration_target messaging_db voice-migrate-messaging-db MESSAGING_DATABASE_URL
+require_migration_target file_db voice-migrate-file-db FILE_DATABASE_URL
+require_migration_target space_db voice-migrate-space-db SPACE_DATABASE_URL
+require_migration_target role_db voice-migrate-role-db ROLE_DATABASE_URL
+require_migration_target notification_db voice-migrate-notification-db NOTIFICATION_DATABASE_URL
+require_migration_target matchmaking_db voice-migrate-matchmaking-db MATCHMAKING_DATABASE_URL
 TEST_TMP="$(mktemp -d)"
 trap 'rm -rf "${TEST_TMP}"' EXIT
 
