@@ -717,7 +717,7 @@ Thumbprint](https://www.rfc-editor.org/rfc/rfc7638.html).
 | `game.voice.join` | Admission комнаты; speak проверяется отдельно Role/Voice |
 | `game.presence.write` | Только activity своей игры, с user privacy |
 | `game.invites.create` | Только разрешённая session; не импорт списка друзей |
-| `game.events.publish` | Game backend → включённая bot installation |
+| `game.events.write` | Game backend → включённая bot installation |
 | `game.commands.receive` | Проверенные interactions своей installation |
 | `game.notifications.send` | Только отдельный user opt-in и разрешённые категории |
 
@@ -749,13 +749,342 @@ opaque external IDs, enum strings. Все mutations требуют authorization
 | `POST /sessions/{id}/keep-group` | Player | consenting participants, session revision → group operation | Individual consent; 403/409 |
 | `POST /community-bindings` | Service + admin approval | external corporation key, allowed Space template → operation | Provision once; 403/409 |
 | `PUT /community-bindings/{id}/roster` | Service | complete roster and ranks, source revision → operation | Snapshot rules; 409/422 |
-| `POST /events` | Service | event envelope from bot spec → event/message operation | event_id dedupe; 409/422 |
+| `POST /events` | Service (`game.events.write`) | Game Event v1 → durable event operation | `(app_id, environment_id, event_id)` dedupe; 409/422 |
 | `GET /operations/{id}` | Initiator/authorized service | — → durable status, result IDs or error | Не раскрывает чужие operations |
 
 Конкретные chat send/history и voice calls идут через существующие доменные
 Gateway endpoints с новым ограниченным admission. Не вводится вторая модель
 сообщений «только для SDK». Bot card actions описаны отдельно; публичный player
 не может вызвать service-only roster sync.
+
+### T51: Game Event v1 ingress and publication contract
+
+This is a documentation contract freeze only. The public event route, the Bot
+publication RPC, and the Messaging RPC below are not implemented. The T11
+credential/installation registry, T16 binding authority, and T30/T31 resource
+mapping remain implementation prerequisites. No event is accepted until those
+authorities are available and fail closed.
+
+The game backend calls `POST /api/v1/game-integrations/events` over HTTPS. Its
+`Authorization: Bearer vgi1_{credential_id}_{secret}` credential is scoped to
+one application/environment and must include the existing `game.events.write`
+scope. `X-Voice-Key-Id` must equal the credential ID in the bearer value. The
+request also has exactly one each of `X-Voice-Timestamp` (canonical unsigned
+Unix seconds), `X-Voice-Nonce` (lowercase canonical UUID), and
+`X-Voice-Signature: v1={64 lowercase hex}`. The key is the raw 32-byte service
+credential secret; it is never logged or forwarded. Timestamp skew is at most
+300 seconds. The HMAC-SHA256 input is the UTF-8 bytes below, with LF separators
+and no final LF:
+
+```text
+v1
+POST
+/api/v1/game-integrations/events
+{timestamp}
+{credential_id}
+{nonce}
+{lowercase_sha256_of_body_bytes}
+```
+
+The body is `application/vnd.voice.game-event+json;version=1`, UTF-8 RFC 8785
+JCS with no BOM and at most 16 KiB. The raw bytes must equal their JCS
+serialization. Duplicate JSON keys, unknown fields, duplicate
+authorization/signature headers, query strings, fragments, malformed canonical
+UUIDs, or an invalid MAC are rejected before any event/outbox write. The
+`Idempotency-Key` header is required and must equal the body `event_id`.
+
+```json
+{"event_id":"00000000-0000-4000-8000-000000000001","event_type":"creature.discovered","expires_at":"2026-09-27T22:00:00Z","fallback_text":"A creature was discovered.","installation_id":"00000000-0000-4000-8000-000000000002","occurred_at":"2026-09-27T21:00:00Z","recipient":{"binding_id":"00000000-0000-4000-8000-000000000003"},"schema_version":1,"state_version":"encounter-42:v3"}
+```
+
+For schema version 1, `event_id`, `installation_id`, `event_type`,
+`occurred_at`, `recipient`, `schema_version`, and `fallback_text` are required;
+`character_binding_id`, `expires_at`, and `state_version` are optional. No
+`card`, media, action, account ID, or arbitrary sender field is accepted in v1;
+the versioned card contract belongs to T52. `recipient` is exactly one of
+`{"binding_id":"<uuid>"}` or `{"chat_id":"<uuid>"}`. A binding target must
+resolve through the same active app/environment mapping to one message chat; a
+chat target must be an active app-linked, Bot-whitelisted group/channel. DMs
+and arbitrary account recipients are refused in T51. A supplied
+`character_binding_id` must be active in the same app/environment and owned by
+the binding recipient or belong to the resolved chat. `event_type` is an
+informational lowercase dotted identifier (1–128 ASCII bytes); it grants no
+authority. `occurred_at` and optional `expires_at` are UTC RFC3339 values;
+`expires_at`, when present, must be later than `occurred_at`. `fallback_text`
+is plain text, nonempty, and at most Messaging's documented 4,000-character
+limit (Unicode scalar values). T51 rejects card/action/media payloads. The
+specialized Messaging method persists an empty mentions array and bypasses the
+generic content-to-mentions parser; it stores/renders the text without resolving
+mention syntax or creating mention notifications. Event text cannot address
+users or roles.
+
+GIS derives `app_id` and `environment_id` only from the verified credential,
+then checks active app/environment/credential/scope, installation ownership,
+recipient mapping, binding and optional character authority. The event identity
+is `(app_id, environment_id, event_id)`; `payload_hash` is lowercase SHA-256 of
+the exact canonical body bytes. The first valid request stores the immutable
+body/hash, resolved Bot ID/chat target, authority revision, deterministic
+`client_message_id`, and operation ID in one GIS transaction. If the event is
+not expired, that transaction also stores one publication outbox row. If it is
+already expired, GIS stores the terminal `expired` operation and no outbox row.
+The transaction commits before returning `202`. An exact retry with the same
+event ID and hash returns that operation and its current status; the same event
+ID with a different hash returns `409 EVENT_ID_CONFLICT` before publication.
+The nonce replay key is `(credential_id, nonce)` and is retained until
+`X-Voice-Timestamp + 300 seconds`, the last instant at which that signed
+request can pass freshness validation. While the timestamp is fresh, replaying
+the same credential/nonce/event/hash is an inert retry; reusing that
+credential/nonce with another event or hash returns `409 EVENT_NONCE_REUSE`.
+After the freshness window, the exact old signature is rejected; the game
+backend must re-sign its durable source event with a fresh timestamp and nonce
+while keeping the same `event_id`. A fresh nonce with the same event ID/hash
+returns the saved operation. Credentials are revalidated before returning
+stored operation details. The event identity
+tombstone is retained for the lifetime of its environment, so event IDs cannot
+be reused after message/outbox payload cleanup.
+
+The public response is `202 {operation_id, event_id, status, payload_hash}`
+after commit; `status` is the saved state (`queued` or `expired` for a new
+request). A duplicate returns the same operation ID and current saved status; a
+completed replay may return `200`. `GET /operations/{id}` returns only an
+operation authorized to that app/environment. It never returns credential
+material or a foreign recipient. If `expires_at` is set, Messaging must commit
+the message before that time; an event that expires while queued is retained as
+a terminal fact but is not published or notified.
+
+T51 event operation status is `queued → processing → succeeded | rejected |
+expired | cancelled | reconciliation_required`. A retryable RPC error returns
+the operation to `queued`. On publication, the operation is `succeeded` and
+the outbox row is `published`; `published` is not a separate operation status.
+Authority revoke before dispatch sets `cancelled` with a safe `revoked` reason.
+An ambiguous result that cannot safely be retried sets
+`reconciliation_required`; it never creates a fresh event identity.
+
+GIS owns the event inbox, dedupe identity, publication outbox, retry schedule,
+and operation status. The game backend owns its source outbox and must persist
+the game event and send intent atomically. Bot owns no second game-event queue:
+it accepts a verified GIS intent and synchronously calls Messaging; GIS keeps
+the outbox row pending until Messaging returns its durable message ID. Messaging
+owns the message row and its existing `(chat_id, sender_profile_id,
+client_message_id)` idempotency record.
+
+Before T51 is enabled, T11 binds each active GIS installation to one live Bot
+ID. GIS takes the application owner from the GIS registry's
+`game_integration_applications.owner_account_id`; that value was assigned from
+the authenticated Voice account when the application was created and is never
+accepted from a game request. GIS obtains the installation's Bot ID from the
+active T11 installation authority record, not from the game request. Bot checks
+that `bots.owner_account_id` for that Bot equals the asserted application owner
+and that the Bot is live. T11 remains open and must define its installation
+authority record; this contract does not prescribe its physical table shape.
+GIS resolves `binding_id` to an app-linked message chat using the active
+T30/T31 resource mapping; it does not accept caller-selected profile/account
+identity. Bot rechecks its live state,
+`TEXT_CHAT_SEND_MESSAGES`, actor membership, and current chat whitelist before
+publication. A Bot actor/profile is loaded from Bot-owned state; it is never
+accepted from game input. Messaging permits the new send method only for the
+verified Bot workload principal and applies its normal chat membership, Space
+permission, moderation, block, and content checks.
+
+The following typed protobuf contract is proposed for the two future gRPC
+methods; it is not implemented and does not add a protobuf today. UUID fields
+are canonical lowercase UUID strings. `payload_hash` is 64 lowercase hex
+characters without a prefix. Timestamp fields use `google.protobuf.Timestamp`
+and must be valid. Protobuf presence is significant: each recipient oneof must
+select exactly one arm; optional scalar presence is preserved. Both methods
+reject schema versions other than 1, unknown protobuf fields, malformed
+identifiers, absent required values, and conflicting/missing recipient arms.
+
+```proto
+syntax = "proto3";
+package voice.gameintegration.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message BindingEventRecipient {
+  string binding_id = 1;
+  string resolved_chat_id = 2;
+}
+
+message DirectChatEventRecipient {
+  string chat_id = 1;
+}
+
+message VerifiedGameEventIntent {
+  string operation_id = 1;
+  string app_id = 2;
+  string app_owner_account_id = 3;
+  string environment_id = 4;
+  string installation_id = 5;
+  string bot_id = 6;
+  string event_id = 7;
+  string payload_hash = 8;
+  oneof recipient {
+    BindingEventRecipient binding = 9;
+    DirectChatEventRecipient direct_chat = 10;
+  }
+  uint64 authority_revision = 11;
+  uint32 schema_version = 12;
+  google.protobuf.Timestamp occurred_at = 13;
+  google.protobuf.Timestamp expires_at = 14;
+  optional string character_binding_id = 15;
+  optional string state_version = 16;
+  string fallback_text = 17;
+  string client_message_id = 18;
+  string event_type = 19;
+}
+
+enum GameEventPublicationStatus {
+  GAME_EVENT_PUBLICATION_STATUS_UNSPECIFIED = 0;
+  GAME_EVENT_PUBLICATION_STATUS_PUBLISHED = 1;
+  GAME_EVENT_PUBLICATION_STATUS_EXPIRED = 2;
+}
+
+message GameEventPublicationResponse {
+  GameEventPublicationStatus status = 1;
+  optional string message_id = 2;
+}
+```
+
+The binding recipient arm carries both the authority binding ID and its GIS-
+resolved chat ID. The direct-chat arm carries the resolved chat ID. GIS must
+derive `app_owner_account_id` from its application registry as described above;
+the field is an attestation from the authenticated GIS service, not a game
+identity. `authority_revision` is a nonzero opaque revision from T16 binding
+authority and is copied unchanged through the transport. Neither the game nor
+Bot may choose or rewrite it.
+
+```proto
+// Add to the existing Bot proto file.
+package voice.bot.v1;
+import "voice/gameintegration/v1/game_event.proto";
+
+message PublishGameEventRequest {
+  voice.gameintegration.v1.VerifiedGameEventIntent intent = 1;
+}
+service BotService {
+  rpc PublishGameEvent(PublishGameEventRequest)
+      returns (voice.gameintegration.v1.GameEventPublicationResponse);
+}
+```
+
+```proto
+// Add to the existing Messaging proto file.
+package voice.messaging.v1;
+import "voice/gameintegration/v1/game_event.proto";
+
+message SendGameEventMessageRequest {
+  voice.gameintegration.v1.VerifiedGameEventIntent intent = 1;
+  string sender_profile_id = 2;
+}
+service MessagingService {
+  rpc SendGameEventMessage(SendGameEventMessageRequest)
+      returns (voice.gameintegration.v1.GameEventPublicationResponse);
+}
+```
+
+The shared message definitions in the preceding snippet belong in
+`protos/voice/gameintegration/v1/game_event.proto`. The two service snippets
+show the exact new method and request/response types to add to their existing
+service definitions; they are separate proto files and packages.
+
+GIS→Bot uses the exact full RPC `voice.bot.v1.BotService/PublishGameEvent`
+with caller `gameintegration`; Bot→Messaging uses
+`voice.messaging.v1.MessagingService/SendGameEventMessage` with caller `bot`.
+Both use the service-principal JWT contract in
+[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md): TLS, JWKS,
+exact issuer/audience/full-RPC claims, caller/method allowlist, time/replay
+checks. The JWT `request_id` equals `intent.operation_id`. Its `request_hash`
+is `sha256:` plus lowercase hex SHA-256 of the complete top-level protobuf
+request serialized with deterministic protobuf encoding
+(`proto.MarshalOptions{Deterministic:true}`); it excludes gRPC metadata and the
+JWT. The receiver computes the same bytes from the received request before
+handler execution, including nested message fields, selected oneof arm and
+optional-field presence. Each retry creates a fresh service JWT/JTI but keeps
+the exact protobuf request bytes, `operation_id`, and idempotency identity.
+The GIS→Bot request contains no game credential, HMAC, raw unverified body, or
+player/account credential.
+
+Bot reads `sender_profile_id` from its own `bots.actor_profile_id` row for the
+validated `bot_id`; it is never copied from game data. The Bot service
+principal is the only allowed caller of the Messaging method. Messaging treats
+that field as Bot-attested sender data only on this method and runs its ordinary
+sender membership, Space permission, moderation, block, and content checks.
+Bot forwards the same immutable intent, without changing the recipient, hash,
+expiry, text, or message key.
+
+For either RPC, `OK` with `status=PUBLISHED` and a present `message_id` means
+Messaging committed the message and idempotency record. `OK` with
+`status=EXPIRED` and no `message_id` means expiry was observed before message
+commit. Any other status/message-id combination is invalid and requires
+reconciliation. Bot returns Messaging's result unchanged; GIS marks the saved
+operation `succeeded` and outbox `published`, or marks the operation `expired`,
+only from these responses.
+
+The gRPC error mapping is fixed: `UNAVAILABLE`, `DEADLINE_EXCEEDED`,
+`RESOURCE_EXHAUSTED`, `ABORTED`, `INTERNAL`, `UNKNOWN`, and `CANCELLED` are
+retryable with the same immutable request. `ALREADY_EXISTS` means the stable
+message key conflicts with different stored content and moves the operation to
+`reconciliation_required`; it is never success. `UNAUTHENTICATED` and
+`UNIMPLEMENTED` block the worker and retain the outbox row for operator repair;
+after repair, only the same operation and request may resume. `PERMISSION_DENIED`
+and `NOT_FOUND` cancel the operation as revoked/unavailable authority.
+`INVALID_ARGUMENT`, `FAILED_PRECONDITION`, `OUT_OF_RANGE`, and `DATA_LOSS` move
+it to `reconciliation_required`. None of these outcomes is reported as success.
+`CANCELLED` and transport loss are ambiguous and therefore retry with the same
+operation and key.
+
+Retryable responses may include one gRPC trailing metadata entry
+`voice-retry-delay-ms`. Its value is exactly one ASCII base-10 integer from 0
+through 300000 inclusive, with no sign, whitespace, or leading zero except
+`0`. Duplicate, malformed, or out-of-range values are ignored and the local
+backoff applies. For a valid value, the next attempt waits the larger of that
+delay and the local schedule; the hint cannot exceed five minutes. The local
+schedule is immediate, then 1s, 5s, 30s, and 5m (capped at 5m) with no
+attempt-count drop. This is gRPC trailing metadata; HTTP `Retry-After` is not
+part of these RPCs.
+
+`client_message_id` is UUIDv5 with RFC 4122 `NameSpaceURL` and UTF-8 name
+`https://voice.app/game-events/v1/{app_id}/{environment_id}/{event_id}` using
+canonical lowercase UUIDs. It is stable across GIS/Bot retries and never
+derived from mutable message text or a retry timestamp. Messaging returns the
+same message ID for an identical normalized request; the same ID with a
+different chat, Bot actor, expiry, or content is a conflict and enters
+`reconciliation_required`, never a second send. Bot does not forward the public
+HMAC or trust game-supplied `sender_profile_id`.
+
+Each distinct event is independent: there is no FIFO guarantee across event
+IDs, recipients, or retry attempts. `occurred_at` is source time, not a sequence;
+`state_version` is opaque and is not sorted. Retries always preserve the saved
+intent and client message ID. GIS attempts immediately, then after 1s, 5s, 30s,
+and 5m, capped at 5m, with no attempt-count drop. `UNAVAILABLE`,
+`DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `ABORTED`, `INTERNAL`, `UNKNOWN`, and
+`CANCELLED` retry according to the gRPC status mapping and optional
+`voice-retry-delay-ms` rule above. A valid Messaging success records the returned
+message ID and marks the outbox published. Authentication/authority denial,
+invalid intent, or a conflicting idempotency result is never reported as
+success. A lost response is retried with the same intent and client ID; a
+published message is recovered by Messaging idempotency.
+
+Credential revoke blocks new public ingress. App/environment/installation or
+binding revoke blocks later delivery attempts and marks undelivered events
+`revoked`; a dispatch admitted by GIS before the revoke commit may finish as
+that one in-flight attempt. A timed-out in-flight attempt after revoke remains
+`reconciliation_required`; it is not sent again without an authoritative
+message lookup. T51 does not add that lookup route, so such a state requires
+operator reconciliation. A message already committed by Messaging remains
+subject to ordinary history ACL; T53 rechecks current binding/installation
+authority before any action. Revocation never reactivates an old event or
+credential.
+
+Acceptance mapping: BOT01 covers duplicate source event, GIS restart and lost
+Bot/Messaging response with exactly one message; BOT05 covers foreign/unmapped
+recipient and character mismatch; BOT06 covers malformed JCS, bad HMAC, stale
+timestamp, nonce replay/collision and wrong app/environment credential; BOT08
+covers persistent retry, expiry, terminal errors and visible reconciliation;
+BOT09/BOT12 cover revoke before acceptance, queued dispatch, and the explicitly
+bounded in-flight race. These are contract assertions, not evidence of runtime
+or provider readiness.
 
 Пример запроса создания (поля — proposal):
 
