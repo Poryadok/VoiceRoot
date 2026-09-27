@@ -58,7 +58,9 @@ does not enable a public game communication capability.
 accepts an owner bearer, `Idempotency-Key` and an exact `scopes` array from
 `game.events.write`, `game.sessions.write`, `game.roster.write` and
 `game.commands.read`. It returns `vgi1_{credential_id}_{secret}` with
-`Cache-Control: no-store`; no owner account ID is accepted in the body. The
+`Cache-Control: no-store`; the secret is unpadded base64url and may contain `_`,
+so the credential ID is the first field after `vgi1_` and the remaining bytes
+are parsed as the secret. No owner account ID is accepted in the body. The
 endpoint is unavailable until `GAME_INTEGRATION_CREDENTIAL_KEY_B64` contains
 one base64-encoded 32-byte deployment secret. It must be supplied via the
 deployment secret manager; it is not a development default. The key must be
