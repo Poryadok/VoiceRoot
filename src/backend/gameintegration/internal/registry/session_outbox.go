@@ -55,7 +55,7 @@ func (s *Store) ClaimSessionEvent(ctx context.Context, principal SessionPrincipa
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	claim := &SessionEventClaim{}
 	err = tx.QueryRow(ctx, `SELECT event_id,application_id,environment_id,session_id,payload_bytes,payload_sha256
 		FROM gis_session_outbox
@@ -99,7 +99,7 @@ func (s *Store) AckSessionEvent(ctx context.Context, principal SessionPrincipal,
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	tag, err := tx.Exec(ctx, `UPDATE gis_session_outbox SET delivered_at=clock_timestamp(),
 		consumer_ack_lease_id=$4,consumer_ack_payload_sha256=$5,claim_lease_id=NULL,claim_lease_until=NULL
 		WHERE event_id=$1 AND application_id=$2 AND environment_id=$3 AND delivered_at IS NULL
@@ -142,7 +142,7 @@ func (s *Store) ConsumeActiveSessionEvent(ctx context.Context, event SessionActi
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := tx.Exec(ctx, `INSERT INTO gis_session_inbox(application_id,environment_id,event_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, event.ApplicationID, event.EnvironmentID, event.EventID)
 	if err != nil {
 		return false, err

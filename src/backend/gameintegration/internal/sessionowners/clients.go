@@ -218,7 +218,7 @@ func (c *Clients) provisionVoice(ctx context.Context, owner registry.SessionOwne
 		return registry.SessionOwnerReceipt{}, err
 	}
 	if !hashBytesMatch(response.GetRequestHash(), owner.RequestHash) {
-		return registry.SessionOwnerReceipt{}, errors.New("Voice provision receipt request hash mismatch")
+		return registry.SessionOwnerReceipt{}, errors.New("voice provision receipt request hash mismatch")
 	}
 	return registry.SessionOwnerReceipt{ResourceID: roomID, ReceiptID: receiptID, RequestHash: owner.RequestHash}, nil
 }
@@ -265,7 +265,7 @@ func (c *Clients) closeVoice(ctx context.Context, owner registry.SessionOwnerReq
 		return registry.SessionOwnerReceipt{}, err
 	}
 	if !hashBytesMatch(response.GetRequestHash(), owner.RequestHash) {
-		return registry.SessionOwnerReceipt{}, errors.New("Voice close receipt request hash mismatch")
+		return registry.SessionOwnerReceipt{}, errors.New("voice close receipt request hash mismatch")
 	}
 	return registry.SessionOwnerReceipt{ResourceID: roomID, ReceiptID: receiptID, RequestHash: owner.RequestHash}, nil
 }
@@ -305,7 +305,7 @@ func (c *Clients) authContext(ctx context.Context, audience, method string, requ
 
 func roleReceipt(receipt *rolev1.GameSessionGrantReceipt, expectedHash, resource string) (registry.SessionOwnerReceipt, error) {
 	if receipt == nil || !hashBytesMatch(receipt.GetRequestSha256(), expectedHash) {
-		return registry.SessionOwnerReceipt{}, errors.New("Role grant receipt request hash mismatch")
+		return registry.SessionOwnerReceipt{}, errors.New("role grant receipt request hash mismatch")
 	}
 	receiptID, err := parseUUID(receipt.GetReceiptId())
 	if err != nil {
