@@ -59,9 +59,11 @@ Voice Node bundle входят в работу спринта. G01–G13 и Q01�
 конкретными техническими решениями в owning docs до зависимого кода.
 Спринт имеет отдельную integration queue: владелец очереди принимает PR,
 сохраняет последний принятый commit как rollback point и готовит revert в этой
-feature-ветке при неудачной интеграции. Merge игровых PR в `master` и staging
-rollout не входят в этот спринт; после приёмки `A1` для них всё равно
-потребуется отдельное решение владельца. Live provider/device tests также не
+feature-ветке при неудачной интеграции. Отдельно разрешённая синхронизация
+remote `master` → feature-ветку уже выполнена в PR #549; merge игровых PR в
+`master`, staging rollout и live/real-provider tests в этот спринт не входят.
+Gate `A1` acceptance со staging остаётся отдельным и открытым; этот спринт и
+его PR не меняют его состояние. Live provider/device tests также не
 входят в разрешённую приёмку: используются локальные/fake/sandbox checks и
 controlled game adapter. Ни один из этих checks не считается подтверждением
 live gate. Состояние `A1` и его собственные gates/rollout не меняются.
