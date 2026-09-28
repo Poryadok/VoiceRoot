@@ -722,7 +722,9 @@ public class AuthService {
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureAnonymousGuest(account);
     Instant now = Instant.now(clock);
-    accounts.markGuestReminderShown(account.id(), now);
+    if (!accounts.claimGuestReminder(account.id(), now, now.minus(Duration.ofHours(24)))) {
+      throw new AuthException("guest_reminder_already_shown");
+    }
     return new GuestReminderState(now, false);
   }
 

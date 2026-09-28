@@ -411,16 +411,18 @@ public class JdbcAccountRepository implements AccountRepository {
   }
 
   @Override
-  public void markGuestReminderShown(UUID accountId, Instant shownAt) {
-    jdbc.update(
+  public boolean claimGuestReminder(UUID accountId, Instant shownAt, Instant cutoff) {
+    return jdbc.update(
         """
         UPDATE accounts
         SET guest_reminder_last_shown_at = :shownAt, updated_at = now()
-        WHERE id = :id
+        WHERE id = :id AND type = 'guest'
+          AND (guest_reminder_last_shown_at IS NULL OR guest_reminder_last_shown_at < :cutoff)
         """,
         new MapSqlParameterSource()
             .addValue("id", accountId)
-            .addValue("shownAt", java.sql.Timestamp.from(shownAt)));
+            .addValue("shownAt", java.sql.Timestamp.from(shownAt))
+            .addValue("cutoff", java.sql.Timestamp.from(cutoff))) == 1;
   }
 
   @Override

@@ -78,8 +78,7 @@ class GuestSaveAccountReminderController {
     if (!await shouldShow(accountId, authorization: authorization)) {
       return false;
     }
-    await markShown(accountId, authorization: authorization);
-    return true;
+    return markShown(accountId, authorization: authorization);
   }
 
   Future<bool?> _serverShouldShow(String? authorization) async {
@@ -96,20 +95,27 @@ class GuestSaveAccountReminderController {
     }
   }
 
-  Future<void> markShown(String accountId, {String? authorization}) async {
-    final prefs = await _preferences();
-    await prefs.setInt(
-      '$_lastShownKeyPrefix$accountId',
-      DateTime.now().millisecondsSinceEpoch,
-    );
+  Future<bool> markShown(String accountId, {String? authorization}) async {
     final client = _authClient;
     if (client == null || authorization == null || authorization.isEmpty) {
-      return;
+      return false;
     }
     try {
-      await client.markGuestReminderShown(authorization: authorization);
+      if (!await client.markGuestReminderShown(authorization: authorization)) {
+        return false;
+      }
     } catch (_) {
-      // Keep local mark even if server mark fails.
+      return false;
     }
+    try {
+      final prefs = await _preferences();
+      await prefs.setInt(
+        '$_lastShownKeyPrefix$accountId',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // The server owns the claim; local persistence is only a fast path.
+    }
+    return true;
   }
 }

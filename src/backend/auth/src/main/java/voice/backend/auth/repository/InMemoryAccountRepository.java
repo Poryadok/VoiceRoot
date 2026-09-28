@@ -353,10 +353,12 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
-  public synchronized void markGuestReminderShown(UUID accountId, Instant shownAt) {
-    if (byId.containsKey(accountId)) {
-      guestReminderShownAt.put(accountId, shownAt);
-    }
+  public synchronized boolean claimGuestReminder(UUID accountId, Instant shownAt, Instant cutoff) {
+    if (!byId.containsKey(accountId)) return false;
+    Instant previous = guestReminderShownAt.get(accountId);
+    if (previous != null && !previous.isBefore(cutoff)) return false;
+    guestReminderShownAt.put(accountId, shownAt);
+    return true;
   }
 
   @Override

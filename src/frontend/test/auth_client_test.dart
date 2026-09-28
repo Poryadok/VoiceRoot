@@ -185,6 +185,30 @@ void main() {
   });
 
   group('VoiceAuthClient.guestReminder', () {
+    test('only a successful mark claims the reminder', () async {
+      var marks = 0;
+      final mock = MockClient((req) async {
+        expect(req.method, 'POST');
+        expect(req.url.path, '/api/v1/auth/guest-reminder/mark');
+        marks++;
+        return http.Response(
+          marks == 1 ? '{}' : '{"error":"guest_reminder_already_shown"}',
+          marks == 1 ? 200 : 409,
+        );
+      });
+      final client = VoiceAuthClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      expect(
+        await client.markGuestReminderShown(authorization: 'Bearer token'),
+        isTrue,
+      );
+      expect(
+        await client.markGuestReminderShown(authorization: 'Bearer token'),
+        isFalse,
+      );
+    });
+
     test('reads protojson camelCase shouldShow from gateway', () async {
       final mock = MockClient((req) async {
         expect(req.method, 'GET');
@@ -416,9 +440,7 @@ void main() {
         );
 
         expect(
-          await client.sendGuestConversionEmailOtp(
-            session: guest,
-          ),
+          await client.sendGuestConversionEmailOtp(session: guest),
           isA<AuthApiOk<void>>(),
         );
         final verificationResult = await client.verifyGuestConversionEmailOtp(
