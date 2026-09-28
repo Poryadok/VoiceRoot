@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 env:
   T31_COMPOSE_PROJECT: voice-t31-session-events-${{ github.run_id }}
@@ -36,8 +37,18 @@ jobs:
   compose-https-claim-inbox-ack:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
+      VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
       - uses: actions/checkout@v5
+
+      - name: Log in to GHCR for pinned MinIO images
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-java@v4
         with:
@@ -58,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e/tls
+          mkdir -p tmp/phase0-t31-ci-fixture tmp/t31-session-event-e2e/tls tmp/t31-session-event-e2e/state
           python3 scripts/dev/generate-phase0-fixture.py tmp/phase0-t31-ci-fixture/credentials
           printf 'PHASE0_FIXTURE_DIR=%s/tmp/phase0-t31-ci-fixture/credentials\n' "$GITHUB_WORKSPACE" > tmp/phase0-t31-ci-fixture/fixture.env
           TLS_DIR="$GITHUB_WORKSPACE/tmp/t31-session-event-e2e/tls"
@@ -78,6 +89,8 @@ jobs:
           rm "$TLS_DIR/ca.key" "$TLS_DIR/gateway.csr" "$TLS_DIR/gateway.ext" "$TLS_DIR/ca.srl"
           cat > tmp/t31-session-event-e2e/compose.env <<EOF
           T31_E2E_TLS_DIR=$TLS_DIR
+          T31_E2E_STATE_DIR=$GITHUB_WORKSPACE/tmp/t31-session-event-e2e/state
+          T31_ACCEPTANCE_PHASE=unselected
           T31_APPLICATION_ID=00000000-0000-4000-8000-000000000001
           T31_ENVIRONMENT_ID=00000000-0000-4000-8000-000000000002
           T31_GAME_SERVER_CREDENTIAL=bootstrap-pending
@@ -130,16 +143,71 @@ jobs:
             --tls-dir tmp/t31-session-event-e2e/tls \
             --result tmp/t31-session-event-e2e/bootstrap-result.json
 
-      - name: Exercise HTTPS claim, isolated inbox/effect, reclaim, and ACK replay
+      - name: Claim active event before GIS restart
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+          T31_ACCEPTANCE_PHASE=claim-before-gis-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app \
+            -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.t31-session-events-e2e.yml \
+            -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
+            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+
+      - name: Restart GIS while the claim lease is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.phase0.yml
+            -f docker-compose.t31-session-events-e2e.yml -p "$T31_COMPOSE_PROJECT")
+          "${compose[@]}" restart gameintegration
+          "${compose[@]}" up -d --no-deps --wait gameintegration
+
+      - name: Reclaim after GIS restart and commit receiver effect before ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          T31_ACCEPTANCE_PHASE=reclaim-and-commit-before-ack docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
-            t31-session-event-runner 2>&1 | tee tmp/t31-session-event-e2e/acceptance.log
+            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+
+      - name: Restart GIS after receiver commit, before receiver ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.phase0.yml
+            -f docker-compose.t31-session-events-e2e.yml -p "$T31_COMPOSE_PROJECT")
+          "${compose[@]}" restart gameintegration
+          "${compose[@]}" up -d --no-deps --wait gameintegration
+
+      - name: Start new receiver process and drop committed ACK response
+        shell: bash
+        run: |
+          set -euo pipefail
+          T31_ACCEPTANCE_PHASE=drop-ack-response-after-receiver-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app \
+            -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.t31-session-events-e2e.yml \
+            -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
+            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+
+      - name: Start another receiver process and replay exact ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          T31_ACCEPTANCE_PHASE=replay-ack-after-runner-restart docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app \
+            -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.t31-session-events-e2e.yml \
+            -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
+            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Save sanitized T31 acceptance evidence
         if: always()

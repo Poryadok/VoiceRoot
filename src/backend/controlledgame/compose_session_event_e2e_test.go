@@ -1,10 +1,13 @@
 package controlledgame
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -54,70 +57,154 @@ func TestT31ComposeHTTPSClaimInboxEffectAckReclaim(t *testing.T) {
 	require.NoError(t, pool.Ping(ctx))
 	store, err := OpenPostgresStore(ctx, pool, time.Now)
 	require.NoError(t, err)
+	statePath := requireT31Env(t, "T31_ACCEPTANCE_STATE_FILE")
+	switch requireT31Env(t, "T31_ACCEPTANCE_PHASE") {
+	case "claim-before-gis-restart":
+		t31RunInitialClaimPhase(t, ctx, httpClient, baseURL, statePath, applicationID, environmentID,
+			otherApplicationID, otherEnvironmentID, eventID, credential, otherCredential)
+	case "reclaim-and-commit-before-ack":
+		t31RunReclaimAndCommitPhase(t, ctx, httpClient, baseURL, statePath, applicationID, environmentID,
+			eventID, credential, store, pool)
+	case "drop-ack-response-after-receiver-restart":
+		t31RunDropAckResponsePhase(t, ctx, transport, baseURL, applicationID, environmentID, eventID,
+			credential, store, pool)
+	case "replay-ack-after-runner-restart":
+		t31RunAckReplayPhase(t, ctx, httpClient, baseURL, applicationID, environmentID, eventID,
+			credential, store, pool)
+	default:
+		t.Fatal("T31_ACCEPTANCE_PHASE must select a documented Compose acceptance phase")
+	}
+}
 
-	// A credential for another application/environment cannot claim this event.
-	otherClaim := t31Claim(t, ctx, httpClient, baseURL, otherCredential)
+type t31ClaimCheckpoint struct {
+	EventID        string    `json:"event_id"`
+	PayloadSHA256  string    `json:"payload_sha256"`
+	Payload        []byte    `json:"payload_bytes"`
+	LeaseID        string    `json:"lease_id"`
+	LeaseExpiresAt time.Time `json:"lease_expires_at"`
+}
+
+func t31RunInitialClaimPhase(t *testing.T, ctx context.Context, client *http.Client, baseURL, statePath string,
+	applicationID, environmentID, otherApplicationID, otherEnvironmentID, eventID uuid.UUID,
+	credential, otherCredential string) {
+	t.Helper()
+	otherClaim := t31Claim(t, ctx, client, baseURL, otherCredential)
 	require.Equal(t, http.StatusNoContent, otherClaim.StatusCode)
 	require.Equal(t, "1", otherClaim.Header.Get("Retry-After"))
 	t.Logf("scope isolation: target_app=%s target_env=%s foreign_app=%s foreign_env=%s foreign_claim_status=%d retry_after=%s",
 		applicationID, environmentID, otherApplicationID, otherEnvironmentID, otherClaim.StatusCode, otherClaim.Header.Get("Retry-After"))
 
-	first := t31Claim(t, ctx, httpClient, baseURL, credential)
+	first := t31Claim(t, ctx, client, baseURL, credential)
 	require.Equal(t, http.StatusOK, first.StatusCode)
-	firstBody, err := io.ReadAll(first.Body)
+	body, err := io.ReadAll(first.Body)
 	require.NoError(t, err)
 	require.NoError(t, first.Body.Close())
-	firstClaim, err := parseSessionEventClaim(first.Header, firstBody, applicationID, environmentID)
+	claim, err := parseSessionEventClaim(first.Header, body, applicationID, environmentID)
 	require.NoError(t, err)
-	require.Equal(t, eventID, firstClaim.EventID)
-	require.Equal(t, eventID.String(), firstClaim.Event.EventID)
+	require.Equal(t, eventID, claim.EventID)
+	require.Equal(t, eventID.String(), claim.Event.EventID)
 	require.NotEqual(t, applicationID, otherApplicationID)
 	require.NotEqual(t, environmentID, otherEnvironmentID)
-	t.Logf("first HTTPS claim: status=%d event_id=%s payload_sha256=%x lease_id=%s lease_expires_at=%s body_bytes=%d",
-		first.StatusCode, firstClaim.EventID, firstClaim.PayloadSHA256, firstClaim.LeaseID,
-		firstClaim.LeaseExpiresAt.UTC().Format(time.RFC3339Nano), len(firstBody))
+	require.NoError(t, writeT31ClaimCheckpoint(statePath, claim, body))
+	t.Logf("pre-restart HTTPS claim: status=%d event_id=%s payload_sha256=%x lease_id=%s lease_expires_at=%s body_bytes=%d",
+		first.StatusCode, claim.EventID, claim.PayloadSHA256, claim.LeaseID,
+		claim.LeaseExpiresAt.UTC().Format(time.RFC3339Nano), len(body))
+}
 
-	// Let GIS expire the first real lease. Re-claim must return the exact stored
-	// body/digest with a new lease, proving reclaim over Gateway rather than a DB
-	// update or an in-memory delivery stub.
-	waitT31LeaseExpiry(t, ctx, firstClaim.LeaseExpiresAt)
-	second := t31Claim(t, ctx, httpClient, baseURL, credential)
-	require.Equal(t, http.StatusOK, second.StatusCode)
-	secondBody, err := io.ReadAll(second.Body)
+func t31RunReclaimAndCommitPhase(t *testing.T, ctx context.Context, client *http.Client, baseURL, statePath string,
+	applicationID, environmentID, eventID uuid.UUID, credential string, store *PostgresStore, pool *pgxpool.Pool) {
+	t.Helper()
+	checkpoint, err := readT31ClaimCheckpoint(statePath)
 	require.NoError(t, err)
-	require.NoError(t, second.Body.Close())
-	secondClaim, err := parseSessionEventClaim(second.Header, secondBody, applicationID, environmentID)
-	require.NoError(t, err)
-	require.Equal(t, firstBody, secondBody)
-	require.Equal(t, firstClaim.PayloadSHA256, secondClaim.PayloadSHA256)
-	require.NotEqual(t, firstClaim.LeaseID, secondClaim.LeaseID)
-	t.Logf("lease reclaim: status=%d event_id=%s payload_sha256=%x new_lease_id=%s body_bytes=%d bytes_identical=true",
-		second.StatusCode, secondClaim.EventID, secondClaim.PayloadSHA256, secondClaim.LeaseID, len(secondBody))
-	// PollOnce issues its own claim request, so release the inspected lease before
-	// the receiver starts. The client must receive a current lease to exercise ACK.
-	waitT31LeaseExpiry(t, ctx, secondClaim.LeaseExpiresAt)
+	require.Equal(t, eventID.String(), checkpoint.EventID)
 
-	// The consumer commits its own inbox/effect and sends ACK through the real
-	// HTTPS path. Drop only the first successful ACK response to simulate a lost
-	// reply after GIS commit; PollOnce then replays the exact ACK idempotently.
-	dropper := &t31DropFirstAckResponse{next: transport}
-	consumer := &SessionEventClient{
-		BaseURL: baseURL, Credential: credential, ApplicationID: applicationID,
-		EnvironmentID: environmentID, Store: store,
-		HTTPClient: &http.Client{Transport: dropper, Timeout: 10 * time.Second},
-	}
-	applied, firstErr := consumer.PollOnce(ctx)
-	require.Error(t, firstErr, "first ACK response is intentionally lost after its upstream commit")
+	stillLeased := t31Claim(t, ctx, client, baseURL, credential)
+	require.Equal(t, http.StatusNoContent, stillLeased.StatusCode, "GIS restart must preserve the active durable lease")
+	t.Logf("GIS restart with active lease: claim_status=%d event_id=%s lease_id=%s expires_at=%s",
+		stillLeased.StatusCode, checkpoint.EventID, checkpoint.LeaseID, checkpoint.LeaseExpiresAt.UTC().Format(time.RFC3339Nano))
+	waitT31LeaseExpiry(t, ctx, checkpoint.LeaseExpiresAt)
+
+	response := t31Claim(t, ctx, client, baseURL, credential)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+	claim, err := parseSessionEventClaim(response.Header, body, applicationID, environmentID)
+	require.NoError(t, err)
+	require.Equal(t, eventID, claim.EventID)
+	require.Equal(t, checkpoint.PayloadSHA256, fmt.Sprintf("%x", claim.PayloadSHA256), "GIS restart reclaim preserves exact payload digest")
+	require.True(t, bytes.Equal(checkpoint.Payload, body), "GIS restart reclaim preserves exact payload bytes")
+	require.NotEqual(t, checkpoint.LeaseID, claim.LeaseID)
+	t.Logf("post-restart lease reclaim: status=%d event_id=%s payload_sha256=%x old_lease_id=%s new_lease_id=%s bytes_identical_digest=true",
+		response.StatusCode, claim.EventID, claim.PayloadSHA256, checkpoint.LeaseID, claim.LeaseID)
+	waitT31LeaseExpiry(t, ctx, claim.LeaseExpiresAt)
+
+	// Persist the receiver effect and its pending ACK, then exit this one-shot
+	// runner. The workflow starts a new runner container before any ACK reaches GIS.
+	preAckFailure := &t31FailAckBeforeGIS{next: client.Transport}
+	consumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store,
+		&http.Client{Transport: preAckFailure, Timeout: 10 * time.Second})
+	applied, err := consumer.PollOnce(ctx)
+	require.Error(t, err, "injected transport failure occurs before the ACK reaches GIS")
 	require.False(t, applied)
+	require.EqualValues(t, 1, preAckFailure.ackRequests.Load())
 	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, false)
-	t.Logf("injected lost ACK response: receiver inbox_rows=1 effect_rows=1 acknowledged=false upstream_ack_responses=%d", dropper.ackResponses.Load())
+	t.Logf("receiver stopped before ACK: ack_requests=%d gis_ack_sent=false inbox_rows=1 effect_rows=1 acknowledged=false",
+		preAckFailure.ackRequests.Load())
+}
 
-	applied, err = consumer.PollOnce(ctx)
-	require.NoError(t, err, "pending exact ACK replay must complete")
+func t31RunDropAckResponsePhase(t *testing.T, ctx context.Context, transport http.RoundTripper, baseURL string,
+	applicationID, environmentID, eventID uuid.UUID, credential string, store *PostgresStore, pool *pgxpool.Pool) {
+	t.Helper()
+	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, false)
+	dropper := &t31DropFirstAckResponse{next: transport}
+	consumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store,
+		&http.Client{Transport: dropper, Timeout: 10 * time.Second})
+	applied, err := consumer.PollOnce(ctx)
+	require.Error(t, err, "first ACK response is intentionally lost after GIS commit")
+	require.False(t, applied)
+	require.EqualValues(t, 1, dropper.ackResponses.Load())
+	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, false)
+	t.Logf("receiver restart then lost ACK response: upstream_ack_responses=%d inbox_rows=1 effect_rows=1 acknowledged=false",
+		dropper.ackResponses.Load())
+}
+
+func t31RunAckReplayPhase(t *testing.T, ctx context.Context, client *http.Client, baseURL string,
+	applicationID, environmentID, eventID uuid.UUID, credential string, store *PostgresStore, pool *pgxpool.Pool) {
+	t.Helper()
+	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, false)
+	consumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store, client)
+	applied, err := consumer.PollOnce(ctx)
+	require.NoError(t, err, "new runner process must replay the exact durable ACK")
 	require.False(t, applied, "ACK replay completes before the client claims another event")
-	require.EqualValues(t, 2, dropper.ackResponses.Load())
 	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, true)
-	t.Logf("exact ACK replay: upstream_ack_responses=%d receiver inbox_rows=1 effect_rows=1 acknowledged=true", dropper.ackResponses.Load())
+	t.Log("exact ACK replay after GIS and runner restart: inbox_rows=1 effect_rows=1 acknowledged=true")
+}
+
+func t31SessionEventClient(baseURL, credential string, applicationID, environmentID uuid.UUID,
+	store *PostgresStore, client *http.Client) *SessionEventClient {
+	return &SessionEventClient{BaseURL: baseURL, Credential: credential, ApplicationID: applicationID,
+		EnvironmentID: environmentID, Store: store, HTTPClient: client}
+}
+
+func writeT31ClaimCheckpoint(path string, claim parsedSessionEventClaim, payload []byte) error {
+	checkpoint := t31ClaimCheckpoint{EventID: claim.EventID.String(), PayloadSHA256: fmt.Sprintf("%x", claim.PayloadSHA256),
+		Payload: payload, LeaseID: claim.LeaseID.String(), LeaseExpiresAt: claim.LeaseExpiresAt.UTC()}
+	encoded, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, encoded, 0o600)
+}
+
+func readT31ClaimCheckpoint(path string) (t31ClaimCheckpoint, error) {
+	var checkpoint t31ClaimCheckpoint
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		return checkpoint, err
+	}
+	err = json.Unmarshal(encoded, &checkpoint)
+	return checkpoint, err
 }
 
 func waitT31LeaseExpiry(t *testing.T, ctx context.Context, expiresAt time.Time) {
@@ -151,6 +238,19 @@ type t31DropFirstAckResponse struct {
 	next         http.RoundTripper
 	dropped      atomic.Bool
 	ackResponses atomic.Int32
+}
+
+type t31FailAckBeforeGIS struct {
+	next        http.RoundTripper
+	ackRequests atomic.Int32
+}
+
+func (transport *t31FailAckBeforeGIS) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(request.URL.Path, "/ack") {
+		transport.ackRequests.Add(1)
+		return nil, errors.New("injected receiver stop before GIS ACK request")
+	}
+	return transport.next.RoundTrip(request)
 }
 
 func (transport *t31DropFirstAckResponse) RoundTrip(request *http.Request) (*http.Response, error) {

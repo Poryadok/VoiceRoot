@@ -62,8 +62,11 @@ services:
       T31_OTHER_ENVIRONMENT_ID: ${T31_OTHER_ENVIRONMENT_ID:?bootstrap a second app/env credential}
       T31_OTHER_GAME_SERVER_CREDENTIAL: ${T31_OTHER_GAME_SERVER_CREDENTIAL:?issue credential for the other app/env}
       T31_EXPECTED_EVENT_ID: ${T31_EXPECTED_EVENT_ID:?create an active GIS session first}
+      T31_ACCEPTANCE_PHASE: ${T31_ACCEPTANCE_PHASE:?select a hosted acceptance phase}
+      T31_ACCEPTANCE_STATE_FILE: /run/t31-state/claim.json
     volumes:
       - ${T31_E2E_TLS_DIR:?generate the disposable T31 gateway certificate first}:/run/t31:ro
+      - ${T31_E2E_STATE_DIR:?create the T31 acceptance state directory first}:/run/t31-state:rw
     depends_on:
       t31-session-event-gateway-tls:
         condition: service_healthy

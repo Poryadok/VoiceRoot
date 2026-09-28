@@ -469,10 +469,16 @@ contracts land before consumers; activation lands after all consumers.
       rebuilds Gateway from the exact worktree before bootstrap, then explicitly
       rebuilds/recreates only GIS with the operator allowlist. It bootstraps
       verified sandbox identities through public APIs and runs the
-      controlledgame Compose test. No provider secrets are configured. The
-      workflow saves only sanitized acceptance IDs/hashes/leases and tears down
-      its unique Compose project. A passing hosted run is required before
-      closing the HTTPS acceptance gate.
+      controlledgame Compose test in four one-shot receiver processes. The
+      first claim is held across a GIS restart and reclaimed after lease expiry
+      with byte-identical payload. The next process commits inbox/effect and a
+      pending ACK, then exits before sending ACK; GIS restarts before a fresh
+      receiver process retries. That ACK response is dropped after GIS commit,
+      and another fresh receiver process proves exact ACK replay without a
+      duplicate effect. No provider secrets are configured. The workflow saves
+      only sanitized acceptance IDs/hashes/leases and tears down its unique
+      Compose project. A passing hosted run is required before closing the
+      HTTPS acceptance gate.
   - [x] Historical pre-HTTPS T31 Compose evidence on the exact base above:
     public app/environment/credential bootstrap; Party then parented Match
     activation after Chat, roster, Voice, and Role receipts; two stable
