@@ -17,6 +17,12 @@ enum VoiceSessionKind {
   VOICE_SESSION_KIND_VOICE_ROOM = 3;
 }
 
+enum GameSessionResourceKind {
+  GAME_SESSION_RESOURCE_KIND_UNSPECIFIED = 0;
+  GAME_SESSION_RESOURCE_KIND_PARTY = 1;
+  GAME_SESSION_RESOURCE_KIND_MATCH = 2;
+  GAME_SESSION_RESOURCE_KIND_FLEET_SESSION = 3;
+}
 enum CallMediaKind {
   CALL_MEDIA_KIND_UNSPECIFIED = 0;
   CALL_MEDIA_KIND_AUDIO = 1;
@@ -46,6 +52,11 @@ enum VoiceRoomLifecycleOutcome {
   VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT = 2;
   VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED = 3;
   VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP = 4;
+}
+
+// GIS-only room provisioning. Register this service only on the private listener.
+service GameSessionProvisioningService {
+  rpc ProvisionGameSessionRoom(ProvisionGameSessionRoomRequest) returns (ProvisionGameSessionRoomResponse);
 }
 
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
@@ -87,6 +98,37 @@ service VoiceService {
   rpc PurgeSpace(voice.calls.v1.PurgeSpaceRequest) returns (voice.calls.v1.PurgeSpaceResponse);
 }
 
+// Opaque GIS resource identity. Voice never interprets external keys as user or owner IDs.
+message GameSessionResourceRef {
+  GameSessionResourceKind kind = 1;
+  string external_resource_key = 2;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message ProvisionGameSessionRoomRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  // Chat create receipt identity is its original operation_id.
+  string chat_creation_operation_id = 6;
+}
+
+message ProvisionGameSessionRoomResponse {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  string chat_creation_operation_id = 6;
+  string room_id = 7;
+  string livekit_room_name = 8;
+  string voice_creation_receipt_id = 9;
+  bytes request_hash = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
 message StartCallRequest {
   string room_type = 1; // call | group_voice | voice_room; prefer room_type_enum when set
   optional voice.chat.v1.ChatRef linked_chat = 2;
