@@ -442,15 +442,27 @@ the retired-space fence. Current deployment settings do not bypass that hold.
 | Space | `ROLE_PRINCIPAL_GRPC_ADDR` | Dedicated Role TLS endpoint, normally `voice-role:9091` |
 | Space | `ROLE_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; system roots remain available |
 | Space | `ROLE_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Role certificate DNS name override; otherwise use endpoint authority |
+| Space | `SPACE_ROLE_CLIENT_CERT_FILE`, `SPACE_ROLE_CLIENT_KEY_FILE` | Required mutual-TLS client identity for the Role private listener; mount read-only and scope the certificate to Space |
 | Space | `AUTH_PRINCIPAL_GRPC_ADDR` | Dedicated Auth TLS proof endpoint; enabling it requires the Space principal signer |
 | Space | `AUTH_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted Auth CA PEM; system roots remain available |
 | Space | `AUTH_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Auth certificate DNS name override; otherwise use endpoint authority |
 | Space | `SPACE_OWNERSHIP_RECOVERY_INTERVAL` | Positive interval for bounded private journal convergence; defaults to `1s` and starts only when both protected Auth and Role clients are configured |
 | Role | `ROLE_PRINCIPAL_GRPC_LISTEN` | Dedicated listener address; default `:9091` when enabled |
 | Role | `ROLE_PRINCIPAL_TLS_CERT_FILE`, `ROLE_PRINCIPAL_TLS_KEY_FILE` | Server TLS certificate chain and matching private key secret mounts |
-| Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map, including `space` |
-| Role | `S2S_JWKS_CA_FILE` | Optional private CA for the HTTPS issuer endpoint |
+| Role | `ROLE_PRINCIPAL_CLIENT_CA_FILE` | Required PEM CA bundle used to verify mutual-TLS clients on the private listener |
+| Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map; include exact keys `space`, `gameintegration`, and `voice` |
+| Role | `S2S_JWKS_CA_FILE` | CA bundle for HTTPS issuer endpoints using a private or local CA; Phase0 uses the fixture CA |
 | Role | `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis for atomic credential replay rejection |
+
+Role's private listener requires a verified client certificate before signed
+principal verification. Space, GIS, and Voice each present a distinct client
+certificate trusted by `ROLE_PRINCIPAL_CLIENT_CA_FILE`. Configure
+`S2S_JWKS_URLS_JSON` with HTTPS URLs for Space's `/.well-known/jwks.json` and
+GIS/Voice's `/internal/v1/principal/jwks.json`; the issuer keys must be exactly
+`space`, `gameintegration`, and `voice`. Keep each signing private key mounted
+only into its issuer. Phase0's GIS and Voice signer settings are
+`GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE` / `GAME_INTEGRATION_PRINCIPAL_KID`
+and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`.
 
 Space signs both Role and Auth ownership calls with a fresh `service:space`
 principal bound to the exact full RPC, deterministic protobuf request hash and

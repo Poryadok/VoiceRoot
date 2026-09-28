@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"voice/backend/gameintegration/internal/authbinding"
 	"voice/backend/gameintegration/internal/botproof"
+	"voice/backend/gameintegration/internal/sessionowners"
 )
 
 type config struct {
@@ -31,6 +33,15 @@ type config struct {
 	MessagingWorkloadKey         []byte
 	MessagingPreviousWorkloadKey []byte
 	MessagingPreviousKeyUntil    time.Time
+	PrincipalPrivateKeyFile      string
+	PrincipalKeyID               string
+	PrincipalNextPrivateKeyFile  string
+	PrincipalNextKeyID           string
+	PrincipalJWKSListenAddr      string
+	PrincipalJWKSTLSCertFile     string
+	PrincipalJWKSTLSKeyFile      string
+	SessionOwnerConfig           sessionowners.Config
+	SessionOwnersEnabled         bool
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -119,6 +130,57 @@ func loadConfig(getenv func(string) string) (config, error) {
 			return config{}, fmt.Errorf("invalid GIS Auth game-binding client configuration")
 		}
 		c.AuthBindingClient = client
+	}
+	principalValues := []struct{ name, value string }{
+		{"GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE"))},
+		{"GAME_INTEGRATION_PRINCIPAL_KID", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_KID"))},
+		{"GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE"))},
+		{"GAME_INTEGRATION_PRINCIPAL_NEXT_KID", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_NEXT_KID"))},
+		{"GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE"))},
+		{"GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE"))},
+	}
+	principalConfigured := 0
+	for _, value := range principalValues {
+		if value.value != "" {
+			principalConfigured++
+		}
+	}
+	listenAddr := strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR"))
+	if principalConfigured != 0 && principalConfigured != len(principalValues) {
+		return config{}, fmt.Errorf("GAME_INTEGRATION current/next principal JWKS signers and TLS files must be configured together")
+	}
+	if principalConfigured == len(principalValues) {
+		if listenAddr == "" {
+			listenAddr = ":8443"
+		}
+		if _, _, err := net.SplitHostPort(listenAddr); err != nil {
+			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR")
+		}
+		keyID := principalValues[1].value
+		nextKeyID := principalValues[3].value
+		if len(keyID) > 128 || strings.ContainsAny(keyID, " \t\r\n") || len(nextKeyID) > 128 || strings.ContainsAny(nextKeyID, " \t\r\n") {
+			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_PRINCIPAL_KID")
+		}
+		if keyID == nextKeyID {
+			return config{}, fmt.Errorf("current and next GIS principal key IDs must be distinct")
+		}
+		c.PrincipalPrivateKeyFile, c.PrincipalKeyID = principalValues[0].value, keyID
+		c.PrincipalNextPrivateKeyFile, c.PrincipalNextKeyID = principalValues[2].value, nextKeyID
+		c.PrincipalJWKSTLSCertFile, c.PrincipalJWKSTLSKeyFile = principalValues[4].value, principalValues[5].value
+		c.PrincipalJWKSListenAddr = listenAddr
+	}
+	ownerConfig, ownerClientsEnabled, err := sessionowners.LoadFromEnv(getenv)
+	if err != nil {
+		return config{}, err
+	}
+	if ownerClientsEnabled {
+		if c.PrincipalJWKSListenAddr == "" {
+			return config{}, fmt.Errorf("GIS principal signer and JWKS TLS listener are required for session owner clients")
+		}
+		if len(c.CredentialKey) != 32 {
+			return config{}, fmt.Errorf("GAME_INTEGRATION_CREDENTIAL_KEY_B64 is required for session routes")
+		}
+		c.SessionOwnerConfig, c.SessionOwnersEnabled = ownerConfig, true
 	}
 	messagingValues := []struct{ name, value string }{
 		{"GAME_INTEGRATION_MESSAGING_LISTEN_ADDR", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_LISTEN_ADDR"))},

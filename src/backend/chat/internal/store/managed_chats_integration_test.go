@@ -36,18 +36,24 @@ func TestProvisionManagedChatIsOwnerlessAndIdempotent(t *testing.T) {
 	require.Nil(t, creatorID)
 	require.Equal(t, applicationID, managedApp)
 	require.False(t, first.Replayed)
+	require.Equal(t, request.OperationID, first.ReceiptID)
+	require.Equal(t, request.RequestHash, first.RequestHash)
 	require.Equal(t, 0, countMembers(t, chatStore, first.ChatID))
 
 	replayed, err := chatStore.ProvisionManagedChat(ctx, request)
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed)
 	require.Equal(t, first.ChatID, replayed.ChatID)
+	require.Equal(t, first.ReceiptID, replayed.ReceiptID)
+	require.Equal(t, first.RequestHash, replayed.RequestHash)
 	_, err = pool.Exec(ctx, `UPDATE chats SET updated_at=updated_at + interval '1 minute', last_message_at=now() WHERE id=$1`, first.ChatID)
 	require.NoError(t, err)
 	secondReplay, err := chatStore.ProvisionManagedChat(ctx, request)
 	require.NoError(t, err)
 	require.True(t, secondReplay.Replayed)
 	require.Equal(t, first.ChatID, secondReplay.ChatID)
+	require.Equal(t, first.ReceiptID, secondReplay.ReceiptID)
+	require.Equal(t, first.RequestHash, secondReplay.RequestHash)
 
 	conflict := request
 	conflict.RequestHash = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -86,6 +92,8 @@ func TestSyncManagedChatMembersReplacesRosterWithMemberRolesAndReplaysReceipt(t 
 	first, err := chatStore.SyncManagedChatMembers(ctx, request)
 	require.NoError(t, err)
 	require.False(t, first.Replayed)
+	require.Equal(t, request.OperationID, first.ReceiptID)
+	require.Equal(t, request.RequestHash, first.RequestHash)
 	require.ElementsMatch(t, []uuid.UUID{firstMember, secondMember}, first.ProfileIDs)
 	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, firstMember))
 	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, secondMember))
@@ -98,6 +106,8 @@ func TestSyncManagedChatMembersReplacesRosterWithMemberRolesAndReplaysReceipt(t 
 	require.NoError(t, err)
 	require.True(t, replayed.Replayed)
 	require.Equal(t, first.ProfileIDs, replayed.ProfileIDs)
+	require.Equal(t, first.ReceiptID, replayed.ReceiptID)
+	require.Equal(t, first.RequestHash, replayed.RequestHash)
 
 	joinedAt := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Microsecond)
 	mutedUntil := time.Now().UTC().Add(2 * time.Hour).Truncate(time.Microsecond)

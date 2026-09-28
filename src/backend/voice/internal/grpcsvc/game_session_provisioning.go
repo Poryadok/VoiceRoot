@@ -20,9 +20,38 @@ type GameSessionProvisioner interface {
 	Provision(context.Context, *callsv1.ProvisionGameSessionRoomRequest) (*callsv1.ProvisionGameSessionRoomResponse, error)
 }
 
+type GameSessionCloser interface {
+	CloseGameSessionRoom(context.Context, *callsv1.CloseGameSessionRoomRequest, gameprovision.ManagedGameSessionMediaFencer) (*callsv1.CloseGameSessionRoomResponse, error)
+}
+
 type GameSessionProvisioningGRPC struct {
 	callsv1.UnimplementedGameSessionProvisioningServiceServer
-	Store GameSessionProvisioner
+	Store  GameSessionProvisioner
+	Closer GameSessionCloser
+	Fencer gameprovision.ManagedGameSessionMediaFencer
+}
+
+func (s *GameSessionProvisioningGRPC) CloseGameSessionRoom(ctx context.Context, request *callsv1.CloseGameSessionRoomRequest) (*callsv1.CloseGameSessionRoomResponse, error) {
+	if err := gameprincipal.RequireClose(ctx, request); err != nil {
+		return nil, err
+	}
+	if s == nil || s.Closer == nil || s.Fencer == nil {
+		return nil, status.Error(codes.Unavailable, "game session close unavailable")
+	}
+	response, err := s.Closer.CloseGameSessionRoom(ctx, request, s.Fencer)
+	if errors.Is(err, gameprovision.ErrConflict) {
+		return nil, status.Error(codes.AlreadyExists, "close operation or room conflicts")
+	}
+	if errors.Is(err, gameprovision.ErrInvalidRequest) {
+		return nil, status.Error(codes.InvalidArgument, "invalid game session close request")
+	}
+	if errors.Is(err, gameprovision.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "managed game session room not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "game session close failed")
+	}
+	return response, nil
 }
 
 func (s *GameSessionProvisioningGRPC) ProvisionGameSessionRoom(ctx context.Context, request *callsv1.ProvisionGameSessionRoomRequest) (*callsv1.ProvisionGameSessionRoomResponse, error) {

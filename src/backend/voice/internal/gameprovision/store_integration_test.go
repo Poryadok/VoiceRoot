@@ -39,12 +39,17 @@ func TestPostgresGameSessionProvisioning_ExactReplayAndConflict(t *testing.T) {
 	require.NoError(t, err, "a fresh Voice store resolves the stable room mapping for user admission")
 	require.Equal(t, original.RoomId, room.RoomID)
 	require.Equal(t, request.ChatId, room.ChatID)
+	require.Equal(t, request.SessionId, room.SessionID)
 	require.Equal(t, original.LivekitRoomName, room.LiveKitRoomName)
 
 	changed := proto.Clone(request).(*callsv1.ProvisionGameSessionRoomRequest)
 	changed.ChatId = uuid.NewString()
 	_, err = restarted.Provision(ctx, changed)
 	require.ErrorIs(t, err, ErrConflict, "same operation with changed deterministic request conflicts")
+	changedSession := proto.Clone(request).(*callsv1.ProvisionGameSessionRoomRequest)
+	changedSession.SessionId = uuid.NewString()
+	_, err = restarted.Provision(ctx, changedSession)
+	require.ErrorIs(t, err, ErrConflict, "the same resource cannot be rebound to another GIS session")
 
 	otherOperation := proto.Clone(request).(*callsv1.ProvisionGameSessionRoomRequest)
 	otherOperation.OperationId = uuid.NewString()
@@ -125,7 +130,7 @@ VALUES($1,NULL,NULL,$2,'active',0,now(),now(),NULL,'group_voice','MATCH_SQUAD',$
 
 func validProvisionRequest() *callsv1.ProvisionGameSessionRoomRequest {
 	return &callsv1.ProvisionGameSessionRoomRequest{
-		OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(),
+		OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(), SessionId: uuid.NewString(),
 		Resource: &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "realm:match/opaque-key"},
 		ChatId:   uuid.NewString(), ChatCreationOperationId: uuid.NewString(),
 	}
@@ -138,7 +143,7 @@ func startGameSessionPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
 	pool := integrationtest.StartPostgres(t, ctx, "voice_game_session", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms"} {
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

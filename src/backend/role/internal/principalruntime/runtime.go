@@ -25,7 +25,7 @@ import (
 
 const dependencyTimeout = 2 * time.Second
 
-// Runtime is the fail-closed verifier for the dedicated Space ownership listener.
+// Runtime is the fail-closed verifier for Role's dedicated trusted-service listener.
 type Runtime struct {
 	resolver                      *principal.JWKSResolver
 	replay                        *redis.Client
@@ -52,6 +52,14 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("principal listener TLS: %w", err)
 	}
+	clientCA, err := os.ReadFile(config.ClientCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("principal client CA: %w", err)
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(clientCA) {
+		return nil, errors.New("principal client CA has no certificates")
+	}
 	roots, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, fmt.Errorf("principal JWKS trust: %w", err)
@@ -70,9 +78,9 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
-	endpoint := config.JWKSURLs["space"]
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
-		if issuer != "space" {
+		endpoint, trusted := config.JWKSURLs[issuer]
+		if !trusted || endpoint == "" {
 			return nil, errors.New("untrusted principal issuer")
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -119,7 +127,9 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: config.ReplayAddr, Password: config.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	runtime := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	runtime := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{
+		MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs,
+	})}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -152,11 +162,29 @@ var ownershipV2Methods = []string{
 	rolev1.RoleService_AbortOwnershipTransfer_FullMethodName,
 }
 
+var gameSessionGrantMethods = []string{
+	rolev1.RoleService_ApplyGameSessionGrants_FullMethodName,
+	rolev1.RoleService_RevokeGameSessionGrants_FullMethodName,
+	rolev1.RoleService_CheckGameSessionGrant_FullMethodName,
+}
+
 func isOwnershipMethod(method string) bool {
 	if method == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName || method == rolev1.RoleService_RetireSpace_FullMethodName {
 		return true
 	}
 	for _, allowed := range ownershipV2Methods {
+		if method == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func isTrustedServiceMethod(method string) bool {
+	if isOwnershipMethod(method) {
+		return true
+	}
+	for _, allowed := range gameSessionGrantMethods {
 		if method == allowed {
 			return true
 		}
@@ -183,10 +211,21 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, principalgrpc.Unavailable(errors.New("principal runtime unavailable"))
 	}
-	if !isOwnershipMethod(method) {
+	issuer := ""
+	switch method {
+	case rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, rolev1.RoleService_RevokeGameSessionGrants_FullMethodName:
+		issuer = "gameintegration"
+	case rolev1.RoleService_CheckGameSessionGrant_FullMethodName:
+		issuer = "voice"
+	default:
+		if isOwnershipMethod(method) {
+			issuer = "space"
+		}
+	}
+	if issuer == "" {
 		return principal.Principal{}, errors.New("principal method is not allowed")
 	}
-	verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "space", ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+	verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: issuer, ExpectedAudience: "role", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
 	if err != nil {
 		return principal.Principal{}, err
 	}

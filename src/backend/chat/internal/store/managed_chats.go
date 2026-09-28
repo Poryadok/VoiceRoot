@@ -34,8 +34,10 @@ type ManagedChatCreate struct {
 }
 
 type ManagedChatCreateResult struct {
-	ChatID   uuid.UUID
-	Replayed bool
+	ChatID      uuid.UUID
+	ReceiptID   uuid.UUID
+	RequestHash string
+	Replayed    bool
 }
 
 type ManagedChatMemberSync struct {
@@ -48,8 +50,10 @@ type ManagedChatMemberSync struct {
 }
 
 type ManagedChatMemberSyncResult struct {
-	ProfileIDs []uuid.UUID
-	Replayed   bool
+	ProfileIDs  []uuid.UUID
+	ReceiptID   uuid.UUID
+	RequestHash string
+	Replayed    bool
 }
 
 type managedChatReceipt struct {
@@ -81,7 +85,7 @@ func (s *DMStore) ProvisionManagedChat(ctx context.Context, request ManagedChatC
 		if err := tx.Commit(ctx); err != nil {
 			return ManagedChatCreateResult{}, err
 		}
-		return ManagedChatCreateResult{ChatID: saved.ChatID, Replayed: true}, nil
+		return ManagedChatCreateResult{ChatID: saved.ChatID, ReceiptID: request.OperationID, RequestHash: saved.RequestHash, Replayed: true}, nil
 	}
 	resourceLock := request.ApplicationID.String() + "/" + request.EnvironmentID.String() + "/" + request.ExternalKey
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 31421))`, resourceLock); err != nil {
@@ -123,7 +127,7 @@ RETURNING id, created_at, updated_at
 	if err := tx.Commit(ctx); err != nil {
 		return ManagedChatCreateResult{}, err
 	}
-	return ManagedChatCreateResult{ChatID: chat.ID}, nil
+	return ManagedChatCreateResult{ChatID: chat.ID, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
 }
 
 func managedString(value *string) string {
@@ -173,7 +177,7 @@ func (s *DMStore) SyncManagedChatMembers(ctx context.Context, request ManagedCha
 		if err := tx.Commit(ctx); err != nil {
 			return ManagedChatMemberSyncResult{}, err
 		}
-		return ManagedChatMemberSyncResult{ProfileIDs: profiles, Replayed: true}, nil
+		return ManagedChatMemberSyncResult{ProfileIDs: profiles, ReceiptID: request.OperationID, RequestHash: saved.RequestHash, Replayed: true}, nil
 	}
 	var managedApplication, managedEnvironment uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT managed_by_application_id, managed_environment_id FROM chats WHERE id = $1 FOR UPDATE`, request.ChatID).
@@ -208,12 +212,13 @@ func (s *DMStore) SyncManagedChatMembers(ctx context.Context, request ManagedCha
 	if err := tx.Commit(ctx); err != nil {
 		return ManagedChatMemberSyncResult{}, err
 	}
-	return ManagedChatMemberSyncResult{ProfileIDs: profiles}, nil
+	return ManagedChatMemberSyncResult{ProfileIDs: profiles, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
 }
 
 type savedManagedOperation struct {
-	ChatID uuid.UUID
-	Bytes  []byte
+	ChatID      uuid.UUID
+	RequestHash string
+	Bytes       []byte
 }
 
 func lockManagedOperation(ctx context.Context, tx pgx.Tx, applicationID, environmentID, operationID uuid.UUID) error {
@@ -236,6 +241,7 @@ func readManagedOperation(ctx context.Context, tx pgx.Tx, applicationID, environ
 	if savedMethod != method || savedHash != requestHash {
 		return savedManagedOperation{}, false, ErrManagedOperationConflict
 	}
+	saved.RequestHash = savedHash
 	return saved, true, nil
 }
 

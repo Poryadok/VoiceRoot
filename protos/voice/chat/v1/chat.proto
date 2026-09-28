@@ -122,6 +122,9 @@ message ProvisionManagedChatRequest {
 message ProvisionManagedChatResponse {
   string chat_id = 1;
   bool replayed = 2;
+  // Stable managed_chat_operations identity and the exact persisted request hash.
+  string receipt_id = 3;
+  string request_hash = 4;
 }
 message SyncManagedChatMembersRequest {
   string application_id = 1;
@@ -133,6 +136,9 @@ message SyncManagedChatMembersRequest {
 message SyncManagedChatMembersResponse {
   repeated string profile_ids = 1;
   bool replayed = 2;
+  // Stable managed_chat_operations identity and the exact persisted request hash.
+  string receipt_id = 3;
+  string request_hash = 4;
 }
 
 message CreateDMRequest {

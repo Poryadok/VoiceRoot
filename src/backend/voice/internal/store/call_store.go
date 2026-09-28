@@ -77,6 +77,9 @@ type Call struct {
 	LivekitRoomName    string                      `json:"livekit_room_name"`
 	ChatID             string                      `json:"chat_id"`
 	ManagedGameSession bool                        `json:"managed_game_session,omitempty"`
+	ApplicationID      string                      `json:"application_id,omitempty"`
+	EnvironmentID      string                      `json:"environment_id,omitempty"`
+	SessionID          string                      `json:"session_id,omitempty"`
 	VoiceRoomID        string                      `json:"voice_room_id,omitempty"`
 	SpaceID            string                      `json:"space_id,omitempty"`
 	SessionKind        callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`

@@ -21,12 +21,15 @@ import (
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
 	voicepostgres "voice/backend/pkg/postgres"
+	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/principaljwks"
+	"voice/backend/voice/internal/rolegrant"
 	"voice/backend/voice/internal/s2s"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
@@ -71,10 +74,39 @@ func main() {
 	if err != nil {
 		log.Fatalf("voice GIS principal configuration: %v", err)
 	}
+	principalJWKSConfig, principalJWKSEnabled, err := principaljwks.LoadFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("voice principal JWKS configuration: %v", err)
+	}
+	roleGrantConfig, roleGrantEnabled, err := rolegrant.LoadFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("voice Role grant checker configuration: %v", err)
+	}
+	if gamePrincipalEnabled != roleGrantEnabled {
+		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
+	}
+	if roleGrantEnabled && !principalJWKSEnabled {
+		log.Fatal("Voice Role grant checker requires the Voice service principal signer")
+	}
 	var gamePrincipalRuntime *gameprincipal.Runtime
 	var gameProvisionServer *grpc.Server
 	var gameProvisionListener net.Listener
 	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
+	var managedGameSessionGrants grpcsvc.ManagedGameSessionGrantChecker
+	if roleGrantEnabled {
+		voiceIssuer, issuerErr := principal.NewIssuer(principal.IssuerConfig{
+			Issuer: "voice", KeyID: principalJWKSConfig.KeyID, PrivateKey: principalJWKSConfig.SigningKey,
+		})
+		if issuerErr != nil {
+			log.Fatalf("voice Role principal issuer: %v", issuerErr)
+		}
+		checker, roleConn, clientErr := rolegrant.New(roleGrantConfig, voiceIssuer)
+		if clientErr != nil {
+			log.Fatalf("voice Role grant checker: %v", clientErr)
+		}
+		defer func() { _ = roleConn.Close() }()
+		managedGameSessionGrants = checker
+	}
 	if gamePrincipalEnabled {
 		gamePrincipalRuntime, err = gameprincipal.New(runCtx, gamePrincipalConfig)
 		if err != nil {
@@ -95,12 +127,17 @@ func main() {
 			log.Fatalf("voice GIS database schema: %v", err)
 		}
 		managedGameSessionRooms = gameStore
+		mediaFencer := gameprovision.NewLiveKitRoomFencer(gameStore,
+			livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+				strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))))
 		gameProvisionListener, err = net.Listen("tcp", gamePrincipalConfig.ListenAddr)
 		if err != nil {
 			log.Fatalf("voice GIS listener: %v", err)
 		}
 		gameProvisionServer = grpc.NewServer(gamePrincipalRuntime.ServerOptions()...)
-		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, &grpcsvc.GameSessionProvisioningGRPC{Store: gameStore})
+		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, &grpcsvc.GameSessionProvisioningGRPC{
+			Store: gameStore, Closer: gameStore, Fencer: mediaFencer,
+		})
 		go func() {
 			logger.Info("GIS room provisioning listener started", slog.String("addr", gamePrincipalConfig.ListenAddr))
 			if serveErr := gameProvisionServer.Serve(gameProvisionListener); serveErr != nil {
@@ -210,16 +247,17 @@ func main() {
 
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
-		Calls:                   callStore,
-		ManagedGameSessionRooms: managedGameSessionRooms,
-		ChatMembers:             chatMembers,
-		SpaceMembers:            spaceMembers,
-		VoiceRoomAccessResolver: voiceRoomAccessResolver,
-		SpacePro:                spacePro,
-		Roles:                   rolePerms,
-		Privacy:                 callPrivacy,
-		Friends:                 callFriends,
-		SpaceCoMembership:       callSpaceCoMembership,
+		Calls:                    callStore,
+		ManagedGameSessionRooms:  managedGameSessionRooms,
+		ManagedGameSessionGrants: managedGameSessionGrants,
+		ChatMembers:              chatMembers,
+		SpaceMembers:             spaceMembers,
+		VoiceRoomAccessResolver:  voiceRoomAccessResolver,
+		SpacePro:                 spacePro,
+		Roles:                    rolePerms,
+		Privacy:                  callPrivacy,
+		Friends:                  callFriends,
+		SpaceCoMembership:        callSpaceCoMembership,
 		Tokens: livekit.NewHS256TokenIssuer(
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
@@ -249,11 +287,26 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName, lifecycleReadiness), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
+	var principalJWKSServer *http.Server
+	if principalJWKSEnabled {
+		mux := http.NewServeMux()
+		mux.Handle("/internal/v1/principal/jwks.json", principal.JWKSHandlerKeys([]principal.JWKSKey{
+			{KeyID: principalJWKSConfig.KeyID, PublicKey: &principalJWKSConfig.SigningKey.PublicKey},
+			{KeyID: principalJWKSConfig.NextKeyID, PublicKey: &principalJWKSConfig.NextSigningKey.PublicKey},
+		}))
+		principalJWKSServer = &http.Server{Addr: principalJWKSConfig.ListenAddr, Handler: httpserver.Wrap(mux, logger), ReadHeaderTimeout: 5 * time.Second}
+	}
+	errCh := make(chan error, 2)
 	logger.Info("listening", slog.String("addr", addr))
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
+	if principalJWKSServer != nil {
+		go func() {
+			logger.Info("principal JWKS TLS listener started", slog.String("addr", principalJWKSServer.Addr))
+			errCh <- principalJWKSServer.ListenAndServeTLS(principalJWKSConfig.TLSCert, principalJWKSConfig.TLSKey)
+		}()
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -269,6 +322,11 @@ func main() {
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if principalJWKSServer != nil {
+			if err := principalJWKSServer.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()

@@ -117,6 +117,43 @@ func TestProvisionInterceptor_RejectsUnknownProtobufFields(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+func TestCloseInterceptorBindsGISPrincipalToExactCloseRequest(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gameintegration", KeyID: "gis-key", PrivateKey: key})
+	require.NoError(t, err)
+	verifier := &Verifier{
+		Resolve: func(_ context.Context, gotIssuer, keyID string) (*rsa.PublicKey, error) {
+			require.Equal(t, "gameintegration", gotIssuer)
+			require.Equal(t, "gis-key", keyID)
+			return &key.PublicKey, nil
+		}, Replay: newTestReplayGuard().record,
+	}
+	request := validCloseRequest()
+	requestHash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	token := issueGameServiceToken(t, issuer, "voice", CloseMethod, request.OperationId, requestHash)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"authorization", "Bearer "+token, "x-request-id", request.OperationId,
+	))
+	called := false
+	_, err = UnaryServerInterceptor(verifier)(ctx, request, &grpc.UnaryServerInfo{FullMethod: CloseMethod}, func(verified context.Context, received any) (any, error) {
+		called = true
+		require.NoError(t, RequireClose(verified, received.(*callsv1.CloseGameSessionRoomRequest)))
+		return nil, nil
+	})
+	require.NoError(t, err)
+	require.True(t, called)
+	require.True(t, AllowsMethod(CloseMethod))
+	require.False(t, AllowsMethod("/voice.calls.v1.GameSessionProvisioningService/Other"))
+
+	_, err = UnaryServerInterceptor(verifier)(ctx, request, &grpc.UnaryServerInfo{FullMethod: ProvisionMethod}, func(context.Context, any) (any, error) {
+		t.Fatal("close assertion must not authorize provisioning")
+		return nil, nil
+	})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
 func TestGamePrincipalConfig_FailsClosedWhenPartiallyConfigured(t *testing.T) {
 	t.Setenv("VOICE_GAME_PRINCIPAL_GRPC_LISTEN", ":9191")
 	t.Setenv("VOICE_GAME_PRINCIPAL_TLS_CERT_FILE", "")
@@ -161,8 +198,17 @@ func issueGameServiceToken(t *testing.T, issuer *principal.Issuer, audience, rpc
 func validProvisionRequest() *callsv1.ProvisionGameSessionRoomRequest {
 	return &callsv1.ProvisionGameSessionRoomRequest{
 		OperationId: "00000000-0000-4000-8000-000000000011", ApplicationId: "00000000-0000-4000-8000-000000000012",
-		EnvironmentId: "00000000-0000-4000-8000-000000000013",
-		Resource:      &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "opaque"},
-		ChatId:        "00000000-0000-4000-8000-000000000014", ChatCreationOperationId: "00000000-0000-4000-8000-000000000015",
+		EnvironmentId: "00000000-0000-4000-8000-000000000013", SessionId: "00000000-0000-4000-8000-000000000016",
+		Resource: &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "opaque"},
+		ChatId:   "00000000-0000-4000-8000-000000000014", ChatCreationOperationId: "00000000-0000-4000-8000-000000000015",
+	}
+}
+
+func validCloseRequest() *callsv1.CloseGameSessionRoomRequest {
+	return &callsv1.CloseGameSessionRoomRequest{
+		OperationId: "00000000-0000-4000-8000-000000000021", ApplicationId: "00000000-0000-4000-8000-000000000012",
+		EnvironmentId: "00000000-0000-4000-8000-000000000013", SessionId: "00000000-0000-4000-8000-000000000016",
+		Resource: &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "opaque"},
+		ChatId:   "00000000-0000-4000-8000-000000000014", ChatCreationOperationId: "00000000-0000-4000-8000-000000000015",
 	}
 }

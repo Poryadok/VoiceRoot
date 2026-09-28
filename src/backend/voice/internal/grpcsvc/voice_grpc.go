@@ -32,22 +32,35 @@ type SpaceProLookup interface {
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
-	Calls                   voicestore.CallStore
-	ManagedGameSessionRooms ManagedGameSessionRoomLookup
-	ChatMembers             ChatMembership
-	SpaceMembers            SpaceMembership
-	VoiceRoomAccessResolver AuthoritativeVoiceRoomAccessResolver
-	SpacePro                SpaceProLookup
-	Roles                   RolePermissionChecker
-	Privacy                 CallPrivacyChecker
-	Friends                 CallProfileFriendChecker
-	SpaceCoMembership       CallSpaceCoMembershipChecker
-	Tokens                  livekit.TokenIssuer
-	Events                  voiceevents.Publisher
-	Now                     func() time.Time
-	RingTimeout             time.Duration
+	Calls                    voicestore.CallStore
+	ManagedGameSessionRooms  ManagedGameSessionRoomLookup
+	ManagedGameSessionGrants ManagedGameSessionGrantChecker
+	ChatMembers              ChatMembership
+	SpaceMembers             SpaceMembership
+	VoiceRoomAccessResolver  AuthoritativeVoiceRoomAccessResolver
+	SpacePro                 SpaceProLookup
+	Roles                    RolePermissionChecker
+	Privacy                  CallPrivacyChecker
+	Friends                  CallProfileFriendChecker
+	SpaceCoMembership        CallSpaceCoMembershipChecker
+	Tokens                   livekit.TokenIssuer
+	Events                   voiceevents.Publisher
+	Now                      func() time.Time
+	RingTimeout              time.Duration
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+}
+
+// ManagedGameSessionGrantChecker reads Role's session-scoped grant ledger.
+// It is separate from ordinary Voice permission checks and fails closed when absent.
+type ManagedGameSessionGrantChecker interface {
+	CheckGameSessionGrant(context.Context, string, string, string, string, string) error
+}
+
+func (s *VoiceGRPC) setManagedGameSessionGrantChecker(checker ManagedGameSessionGrantChecker) {
+	if s != nil {
+		s.ManagedGameSessionGrants = checker
+	}
 }
 
 func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest) (*callsv1.StartCallResponse, error) {
@@ -191,7 +204,7 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 	}
 	if call.IsGroupVoice() {
 		if call.ManagedGameSession {
-			if err := s.ensureManagedGameSessionMember(ctx, call.ChatID, profileID); err != nil {
+			if err := s.ensureManagedGameSessionMember(ctx, call, profileID); err != nil {
 				return nil, err
 			}
 		} else if err := s.ensureChatMember(ctx, call.ChatID, profileID); err != nil {
@@ -272,11 +285,15 @@ func (s *VoiceGRPC) joinManagedGameSession(ctx context.Context, roomID, profileI
 	if err != nil {
 		return voicestore.Call{}, false, status.Error(codes.Unavailable, "managed game session lookup unavailable")
 	}
-	if err := s.ensureManagedGameSessionMember(ctx, room.ChatID, profileID); err != nil {
+	if err := s.ensureManagedGameSessionMember(ctx, voicestore.Call{
+		RoomID: room.RoomID, ChatID: room.ChatID, ManagedGameSession: true,
+		ApplicationID: room.ApplicationID, EnvironmentID: room.EnvironmentID, SessionID: room.SessionID,
+	}, profileID); err != nil {
 		return voicestore.Call{}, true, err
 	}
 	call := voicestore.Call{
 		RoomID: room.RoomID, LivekitRoomName: room.LiveKitRoomName, ChatID: room.ChatID,
+		ApplicationID: room.ApplicationID, EnvironmentID: room.EnvironmentID, SessionID: room.SessionID,
 		ManagedGameSession: true,
 		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
 		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
@@ -303,11 +320,37 @@ func (s *VoiceGRPC) joinManagedGameSession(ctx context.Context, roomID, profileI
 	return joined, true, nil
 }
 
-func (s *VoiceGRPC) ensureManagedGameSessionMember(ctx context.Context, chatID, profileID string) error {
-	if s == nil || s.ChatMembers == nil {
-		return status.Error(codes.FailedPrecondition, "chat membership check not configured")
+func (s *VoiceGRPC) ensureManagedGameSessionMember(ctx context.Context, call voicestore.Call, profileID string) error {
+	if s == nil || s.ManagedGameSessionRooms == nil {
+		return status.Error(codes.FailedPrecondition, "managed game session owner lookup not configured")
 	}
-	return s.ensureChatMember(ctx, chatID, profileID)
+	if s.ManagedGameSessionGrants == nil {
+		return status.Error(codes.FailedPrecondition, "managed game session grant check not configured")
+	}
+	if s.ChatMembers == nil {
+		return status.Error(codes.FailedPrecondition, "managed game session Chat membership check not configured")
+	}
+	// Consult the Voice-owned durable room on both cold and warm CallStore paths.
+	// A durable CLOSING/CLOSED owner row disappears from the joinable projection.
+	room, err := s.ManagedGameSessionRooms.GetRoom(ctx, call.RoomID)
+	if err != nil {
+		if errors.Is(err, gameprovision.ErrNotFound) {
+			return status.Error(codes.PermissionDenied, "managed game session is closing or closed")
+		}
+		return status.Error(codes.Unavailable, "managed game session owner lookup unavailable")
+	}
+	if room.ChatID != call.ChatID || room.SessionID == "" || room.SessionID != call.SessionID ||
+		room.ApplicationID != call.ApplicationID || room.EnvironmentID != call.EnvironmentID {
+		return status.Error(codes.PermissionDenied, "managed game session identity mismatch")
+	}
+	if err := s.ManagedGameSessionGrants.CheckGameSessionGrant(ctx, room.ApplicationID,
+		room.EnvironmentID, room.SessionID, room.RoomID, profileID); err != nil {
+		if status.Code(err) == codes.Unavailable || status.Code(err) == codes.DeadlineExceeded {
+			return status.Error(codes.Unavailable, "managed game session grant check unavailable")
+		}
+		return status.Error(codes.PermissionDenied, "managed game session grant denied")
+	}
+	return s.ensureChatMember(ctx, room.ChatID, profileID)
 }
 
 func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenRequest) (*callsv1.GetJoinTokenResponse, error) {
@@ -329,7 +372,7 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		}
 		call = managed
 	} else if call.ManagedGameSession {
-		if err := s.ensureManagedGameSessionMember(ctx, call.ChatID, profileID); err != nil {
+		if err := s.ensureManagedGameSessionMember(ctx, call, profileID); err != nil {
 			return nil, err
 		}
 	}

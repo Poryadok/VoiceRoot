@@ -354,9 +354,144 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T30** `D: T05,T10,T16` Persist app/env/external resource keys,
   operations, request hashes and state transitions. Stable retries return the
   same result; conflicting body/revision returns 409; tombstoned key is fenced.
-- [ ] **T31** `D: T30` Orchestrate party/match/fleet: Chat create, Voice room,
-  member grants, stage receipts, compensation and reconciliation after each
-  crash point. Publish active only after all required resources are ready.
+- [ ] **T31** `D: T30` Implement the normative durable orchestration contract in
+  `game-integration-api.md` and `game-integration-service.md`: scoped JCS
+  idempotency and read-only operation status; party-stable Chat, child-owned
+  parent-party Chat reuse and self-owned Chat for an unparented match/fleet;
+  durable Chat/Voice/Role operation IDs and receipts; Chat roster before Voice
+  admission; forward recovery across lost replies/restarts; and an atomic
+  active/outbox commit consumed through the app/environment-authenticated GIS
+  HTTPS claim/ACK API by the game-server inbox. Accept
+  only after durable GIS commit (≤2s with
+  healthy GIS DB); reclaim expired work within 6s after restart when DB/owners
+  are healthy; exponential retry from 1s capped at 30s. These are engineering
+   bounds, not outage availability SLAs. Voice close is owner-idempotent and
+   fences admission/media; Role grants have durable complete-set apply/revoke
+   receipts. Close/revoke affects only the addressed session and never a
+   referenced party resource. T31 includes new Voice close proto/server/Postgres
+   fence and receipt/migration work, plus Role grant proto/server/ledger and
+   migration work; neither exists at base
+   `c31a8e0b771f99d00f00a760a2c6e2f7ec67cbcd`. Chat managed provisioning and
+   roster sync already exist. Add a typed `SessionPrincipal` verifier and
+   injectable GIS orchestration driver with a one-stage test/worker advance;
+   drive Chat-create, Chat-roster, Voice, and Role receipt fakes independently
+   and observe the GIS transaction that writes active state plus its outbox row.
+  Operation responses freeze stable resource/receipt keys in the API contract.
+  See T31 owner/service contracts and SE01–SE03.
+  - [ ] **T31 HTTPS event pull/inbox acceptance** — docs-first red-green plan:
+    - Sources of truth: `game-integration-api.md` §T31;
+      `game-integration-service.md` §T31; `game-integrations-acceptance.md` SE02;
+      and T07a's controlled receiver boundary above. The receiver is the
+      test-only controlled game backend in `src/backend/controlledgame/`, with
+      an independent PostgreSQL schema and durable inbox/effect. It polls the
+      GIS HTTPS API in isolated Compose and is not a public SDK product.
+    - Receiver-owned paths: `src/backend/controlledgame/` pull client, inbox
+      schema/migration, atomic effect and isolated DB tests. GIS-owned paths:
+      `src/backend/gameintegration/internal/httpapi/` claim/ACK handlers and
+      credential verification; `internal/registry/session_outbox.go` scoped
+      claim/ACK store operations; `internal/registry/session_orchestration.go`
+      one-time event body construction; runtime wiring; and the next migration
+      under `src/backend/migrations/game_integration_db/`. Retire the T31
+      JetStream publisher in `internal/sessionevents/jetstream.go` from this
+      lane. `Store.ConsumeActiveSessionEvent` is not evidence because it writes
+      to the GIS database.
+    - Freeze claim as empty-body
+      `POST /api/v1/session-events/claim`, using HTTPS and the existing
+      app/environment credential with `game.sessions.manage`. Scope comes only
+      from the verified credential. Filter app/environment before row locking
+      with `FOR UPDATE SKIP LOCKED`; claim one undelivered row, with lease UUID
+      and 30-second expiry stored per event in `claim_lease_id` and
+      `claim_lease_until`, replacing rather than reusing the former relay-global
+      lease fields. Return 200 with the exact body bytes and event ID,
+      SHA-256, lease ID, and lease-expiry headers; empty is 204 with
+      `Retry-After: 1`. Each re-claim after expiry gets a new lease and the same
+       stored body bytes. Never expose master NATS credentials or streams.
+     - Gateway implementation/test ownership: `src/backend/gateway/routing.go`
+       and focused `src/backend/gateway/routing_test.go`. Add first-segment
+       aliases `sessions`, `operations`, and `session-events` to the existing
+       `game-integrations` upstream. Exempt only these exact GIS app/env
+       credential routes from Voice-JWT validation, preserving the original
+       `Authorization` header byte-for-byte for GIS on all published endpoints:
+       `POST /api/v1/sessions`, `GET /api/v1/operations/{id}`,
+       `POST /api/v1/session-events/claim`, and
+       `POST /api/v1/session-events/{id}/ack`. Assert unrelated routes still
+       require Voice JWT; verify absent, malformed, expired, revoked, or
+       wrong-scope GIS credentials are rejected by GIS.
+     - Public acceptance exercises all four endpoints using the configured
+       HTTPS Gateway hostname and trusted certificate with hostname validation.
+       Verify request/response headers survive the Gateway hop, no direct public
+       GIS HTTP endpoint exists, and scoped credentials cannot claim, read
+       operations, or ACK events from another app/environment.
+    - Freeze ACK as
+      `POST /api/v1/session-events/{event_id}/ack` with the same scoped
+      credential and JSON `{lease_id,payload_sha256}`. First ACK requires the
+      current unexpired lease and digest; atomically record `delivered_at`, ACK
+      lease ID and digest, then clear claim lease. Exact post-commit ACK retry
+      returns 200 idempotently; differing ACK data returns 409. Unknown/foreign
+      event is 404, bad credential 401, insufficient scope 403, expired or
+      superseded lease/digest mismatch 409. The receiver commits inbox key
+      `(application_id,environment_id,event_id)`, SHA-256 of exact response body
+      bytes, and game activation effect in one own-DB transaction before ACK.
+      Same key+digest is a no-op; changed digest conflicts.
+    - In the active transition, generate the exact seven-field UTF-8 JSON body
+      once (`event_id`, `application_id`, `environment_id`, `session_id`,
+      `operation_id`, `kind`, `active_at`), persist `payload_bytes bytea` and
+      its 32-byte `payload_sha256 bytea` atomically with active/outbox. `payload
+      jsonb` is inspection-only. Keep claim lease state per app/env/event, plus
+      durable `consumer_ack_lease_id` and `consumer_ack_payload_sha256`. Backfill
+      pending legacy rows with the frozen v1 encoder before API startup and
+      requeue all rows whose old `delivered_at` meant only publisher PubAck.
+    - Red: write failing tests first for (1) GIS constructs/persists the full
+      seven-field body once and pull retries return byte-identical body bytes
+      and hash; (2) two app/env principals cannot claim each other's rows and
+      concurrent claims cannot lease the same row; (3) empty claim is 204 with
+      `Retry-After`, lease expiry permits a new lease, and the event bytes remain
+      unchanged; (4) ACK rejects wrong event scope, lease ID, expired lease,
+      revoked/expired/wrong-scope credential, and mismatched digest without
+      setting delivered; (5) same ACK after commit/lost response is idempotent;
+      (6) receiver transaction rollback has no effect/ACK, same key+digest
+      redelivery no-ops, and same key+different digest rejects. Then implement
+      GIS body persistence/migration and app/env-scoped claim/ACK, receiver DB
+      inbox/effect, and finally Compose HTTPS acceptance. Inject claim timeout
+      after lease commit, receiver DB failure, lease expiry between commit and
+      ACK, ACK timeout after GIS commit, and restart; verify reclaim, no duplicate
+      effect, and eventual `delivered_at` only after valid ACK. Operation polling
+      does not satisfy SE02.
+    - Focused verification when implementation starts: `rtk go test ./...` in
+      `src/backend/controlledgame/`; focused GIS registry and HTTP API tests in
+      `src/backend/gameintegration/`; then isolated T31 Compose HTTPS pull/commit/
+      ACK acceptance and failure matrix. Update SE02 evidence only from the
+      independent receiver DB and authenticated pull/ACK path.
+    - Hosted isolated Compose entrypoint:
+      `.github/workflows/t31-session-events-e2e.yml` runs on `ubuntu-latest` for
+      relevant pull requests or by `workflow_dispatch`. It generates Phase0/TLS
+      fixtures, starts the app-profile owner graph and independent receiver DB,
+      rebuilds Gateway from the exact worktree before bootstrap, then explicitly
+      rebuilds/recreates only GIS with the operator allowlist. It bootstraps
+      verified sandbox identities through public APIs and runs the
+      controlledgame Compose test. No provider secrets are configured. The
+      workflow saves only sanitized acceptance IDs/hashes/leases and tears down
+      its unique Compose project. A passing hosted run is required before
+      closing the HTTPS acceptance gate.
+  - [x] Historical pre-HTTPS T31 Compose evidence on the exact base above:
+    public app/environment/credential bootstrap; Party then parented Match
+    activation after Chat, roster, Voice, and Role receipts; two stable
+    JetStream active events under the earlier transport; child close with media fence and grant revoke;
+    parent remains active; parent close and exact replay preserve receipts;
+    both sessions finish closed with no grants. Evidence and resource/receipt
+    IDs are recorded in `tmp/slave-driver/game-integrations-2026-09-27/STATE.md`.
+    This historical evidence does not satisfy the HTTPS claim/inbox/ACK gate
+    above; T31 active events now use the GIS HTTPS outbox API, with no JetStream
+    game-server consumer lane.
+    Voice close retry after persisted CLOSING was fixed test-first and verified.
+  - [x] T31 retry bounds verified against PostgreSQL: healthy-DB acceptance
+    completed under 2s; a restarted worker reclaimed the real five-second
+    lease and advanced the stage within 6s; transient owner failures retained
+    the same stage and stable owner request while per-stage delays followed
+    1/2/4/8/16/30/30s, resetting after stage success. Focused evidence is in
+    `session_retry_bounds_integration_test.go`.
+  - [ ] Authenticated consumer inbox integration and the remaining restart
+    fault matrix still need acceptance.
 - [ ] **T32** `D: T31` Implement stable party/match lifecycle, host transfer,
   explicit close, late join and roster freshness under the frozen contracts: a
   complete roster lease is 60s from GIS DB commit; retries do not renew; host
@@ -550,6 +685,23 @@ test assertion, not just prose.
   including the API-created empty-database bootstrap and SQL-backed registry
   lifecycle. The previous Windows Testcontainers attempt failed before
   assertions and is superseded by this successful GIS run.
+- [x] Historical pre-HTTPS T31 local E2E on 2026-09-28: Party + parented Match
+  activated only after all four owner receipts; exactly two JetStream active
+  events under the earlier transport; child close
+  fenced Voice and revoked child Role grants while parent stayed active; parent
+  close and replay returned stable receipts; public API revoked the disposable
+  credential. Full details, IDs, and scoped test results are in `STATE.md`.
+  This proves orchestration/close behavior only; it does not satisfy the current
+  HTTPS claim/inbox/ACK acceptance gate.
+  `rtk go test -timeout 120s ./internal/store` in Role timed out during
+  `TestOwnershipTransferV2_AbsentFinalizeCannotMoveOwnerOrCreateReceipt`
+  cleanup (`StartPostgres.func1` at `src/backend/pkg/integrationtest/postgres.go:100`);
+  the six focused `TestGameSessionGrant` store tests passed. This fixture cleanup
+  timeout is recorded as a suite limitation, not a T31 grant assertion failure.
+- [x] T31 retry and recovery bounds on 2026-09-28: focused PostgreSQL tests
+  verified healthy-DB acceptance under 2s, per-stage exponential owner retry
+  delays capped at 30s, and fresh-worker reclaim of a real five-second lease within
+  6s. Both focused tests passed.
 - [ ] T00–T94 implementation and acceptance remain open. Update each check as
   work lands; do not infer completion from this planning pass.
 

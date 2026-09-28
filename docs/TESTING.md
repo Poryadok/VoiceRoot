@@ -260,6 +260,14 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 
 Ручной запуск CI: **Actions → CI → Run workflow** — профиль `auto` (как PR по diff), `tier3-only` (ночной набор), `full` (все тиры).
 
+Отдельный Linux Compose gate T31 запускается workflow
+[`.github/workflows/t31-session-events-e2e.yml`](../.github/workflows/t31-session-events-e2e.yml)
+через `workflow_dispatch` на нужном ref или автоматически для затронутых
+путей в PR. Он собирает Phase0 fixture, Gateway и GIS из checkout, создаёт
+локальные Auth аккаунты через verification-stub и проверяет HTTPS claim,
+независимый receiver inbox/effect, lease reclaim и повтор ACK. Для этого gate
+не требуются Windows Docker runtime или реальные provider credentials.
+
 Состав tier 1 (детали) в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 
 1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.

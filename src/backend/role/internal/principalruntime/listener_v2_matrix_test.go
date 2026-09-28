@@ -2,14 +2,12 @@ package principalruntime
 
 import (
 	"context"
-	"crypto/tls"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -56,10 +54,129 @@ func (s *recordingRoleServer) ResolveVoiceRoomGrants(ctx context.Context, _ *rol
 	return &rolev1.ResolveVoiceRoomGrantsResponse{}, nil
 }
 
+func (s *recordingRoleServer) ApplyGameSessionGrants(ctx context.Context, _ *rolev1.ApplyGameSessionGrantsRequest) (*rolev1.ApplyGameSessionGrantsResponse, error) {
+	s.calls.Add(1)
+	p, _ := principal.FromContext(ctx)
+	s.principals <- p
+	return &rolev1.ApplyGameSessionGrantsResponse{Receipt: &rolev1.GameSessionGrantReceipt{}}, nil
+}
+
+func (s *recordingRoleServer) RevokeGameSessionGrants(ctx context.Context, _ *rolev1.RevokeGameSessionGrantsRequest) (*rolev1.RevokeGameSessionGrantsResponse, error) {
+	s.calls.Add(1)
+	p, _ := principal.FromContext(ctx)
+	s.principals <- p
+	return &rolev1.RevokeGameSessionGrantsResponse{Receipt: &rolev1.GameSessionGrantReceipt{}}, nil
+}
+
+func (s *recordingRoleServer) CheckGameSessionGrant(ctx context.Context, _ *rolev1.CheckGameSessionGrantRequest) (*rolev1.CheckGameSessionGrantResponse, error) {
+	s.calls.Add(1)
+	p, _ := principal.FromContext(ctx)
+	s.principals <- p
+	return &rolev1.CheckGameSessionGrantResponse{Allowed: true}, nil
+}
+
+func TestRuntimeListener_AuthenticatesOnlyTheDocumentedGameGrantIssuers(t *testing.T) {
+	f := newRuntimeFixture(t, 2)
+	address, recorder, roots := startRuntimeListener(t, f)
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
+	apply := &rolev1.ApplyGameSessionGrantsRequest{
+		ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(), SessionId: uuid.NewString(),
+		VoiceRoomId: uuid.NewString(), OperationId: uuid.NewString(), RosterRevision: 1,
+	}
+	revoke := &rolev1.RevokeGameSessionGrantsRequest{
+		ApplicationId: apply.ApplicationId, EnvironmentId: apply.EnvironmentId, SessionId: apply.SessionId,
+		OperationId: uuid.NewString(),
+	}
+	check := &rolev1.CheckGameSessionGrantRequest{
+		ApplicationId: apply.ApplicationId, EnvironmentId: apply.EnvironmentId, SessionId: apply.SessionId,
+		VoiceRoomId: apply.VoiceRoomId, ProfileId: uuid.NewString(),
+	}
+	tests := []struct {
+		name, issuer, requestID string
+		request                 proto.Message
+		call                    func(context.Context) error
+	}{
+		{"apply", "gameintegration", apply.OperationId, apply, func(ctx context.Context) error {
+			_, err := client.ApplyGameSessionGrants(ctx, apply)
+			return err
+		}},
+		{"revoke", "gameintegration", revoke.OperationId, revoke, func(ctx context.Context) error {
+			_, err := client.RevokeGameSessionGrants(ctx, revoke)
+			return err
+		}},
+		{"check", "voice", uuid.NewString(), check, func(ctx context.Context) error {
+			response, err := client.CheckGameSessionGrant(ctx, check)
+			if err == nil && !response.Allowed {
+				t.Errorf("authenticated fixture check should be admitted")
+			}
+			return err
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hash, err := principal.RequestHash(tc.request)
+			require.NoError(t, err)
+			token := issueRuntimeToken(t, f.key, tc.issuer, "current", "role", grpcMethodForGrant(tc.name), tc.requestID, hash)
+			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+				"authorization", "Bearer "+token, "x-request-id", tc.requestID)), 2*time.Second)
+			defer cancel()
+			require.NoError(t, tc.call(ctx))
+			verified := <-recorder.principals
+			require.Equal(t, tc.issuer, verified.Issuer)
+			require.Equal(t, "service:"+tc.issuer, verified.Subject)
+			require.Equal(t, "role", verified.Audience)
+			require.Equal(t, hash, verified.RequestHash)
+		})
+	}
+	require.Equal(t, int64(len(tests)), recorder.calls.Load())
+
+	// The same valid mTLS client certificate cannot select another workload issuer.
+	for _, tc := range []struct {
+		name, issuer, method, requestID string
+		request                         proto.Message
+		call                            func(context.Context) error
+	}{
+		{"voice_cannot_apply", "voice", rolev1.RoleService_ApplyGameSessionGrants_FullMethodName, apply.OperationId, apply, func(ctx context.Context) error {
+			_, err := client.ApplyGameSessionGrants(ctx, apply)
+			return err
+		}},
+		{"voice_cannot_revoke", "voice", rolev1.RoleService_RevokeGameSessionGrants_FullMethodName, revoke.OperationId, revoke, func(ctx context.Context) error {
+			_, err := client.RevokeGameSessionGrants(ctx, revoke)
+			return err
+		}},
+		{"gis_cannot_check", "gameintegration", rolev1.RoleService_CheckGameSessionGrant_FullMethodName, uuid.NewString(), check, func(ctx context.Context) error {
+			_, err := client.CheckGameSessionGrant(ctx, check)
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hash, err := principal.RequestHash(tc.request)
+			require.NoError(t, err)
+			token := issueRuntimeToken(t, f.key, tc.issuer, "next", "role", tc.method, tc.requestID, hash)
+			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+				"authorization", "Bearer "+token, "x-request-id", tc.requestID)), 2*time.Second)
+			defer cancel()
+			require.Equal(t, codes.Unauthenticated, status.Code(tc.call(ctx)))
+		})
+	}
+	require.Equal(t, int64(len(tests)), recorder.calls.Load(), "wrong issuers must fail before handlers")
+}
+
+func grpcMethodForGrant(name string) string {
+	switch name {
+	case "apply":
+		return rolev1.RoleService_ApplyGameSessionGrants_FullMethodName
+	case "revoke":
+		return rolev1.RoleService_RevokeGameSessionGrants_FullMethodName
+	default:
+		return rolev1.RoleService_CheckGameSessionGrant_FullMethodName
+	}
+}
+
 func TestRuntimeListener_AllowsOnlyAuthenticatedV2OwnershipSurface(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	intent := &rolev1.OwnershipTransferIntent{
 		ProtocolVersion: 2,
 		SpaceId:         uuid.NewString(), OldOwnerProfileId: uuid.NewString(),
@@ -116,7 +233,7 @@ func TestRuntimeListener_AllowsOnlyAuthenticatedV2OwnershipSurface(t *testing.T)
 func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -135,7 +252,7 @@ func TestRuntimeListener_DeniesLegacyAndUnrelatedMethodsBeforeHandler(t *testing
 func TestRuntimeListener_V2RejectsChangedUnknownFieldsAndReplayBeforeHandler(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{
 		ProtocolVersion: 2, SpaceId: uuid.NewString(), OldOwnerProfileId: uuid.NewString(),
 		NewOwnerProfileId: uuid.NewString(), OperationId: uuid.NewString(),

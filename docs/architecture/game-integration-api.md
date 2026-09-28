@@ -72,13 +72,15 @@ the listener remains disabled there until those deployment changes ship.
 and environment. It has no human creator, owner, or administrator. The unique
 `(application_id, environment_id, external_chat_key)` mapping and durable
 operation receipt are stored by Chat in the same transaction as resource
-creation. Repeating an operation UUID and request hash returns the same
-immutable chat ID receipt; callers fetch mutable chat fields through Chat's
-ordinary read API. Reusing an operation ID with another RPC or hash conflicts.
+creation. Its response returns the immutable `chat_id`, `receipt_id`, and
+`request_hash`; `receipt_id` is the operation UUID because that is the durable
+primary key in `managed_chat_operations`. Exact retries return those same
+values and `replayed=true`. Reusing an operation ID with another RPC or hash
+conflicts. Callers fetch mutable chat fields through Chat's ordinary read API.
 `SyncManagedChatMembers` reconciles the desired roster atomically and assigns
 every profile `member` role. Retained members keep their joined time, mute,
 archive, inbox, and other per-member state. Its persisted receipt makes a retry
-return the original roster result. Normal
+return the original roster result, `receipt_id`, and `request_hash`. Normal
 player `AddMembers`, `RemoveMember`, `LeaveChat`, group role, ownership transfer,
 and chat update paths cannot mutate a managed roster or promote a player to
 owner/admin; only the two exact GIS methods can change it.
@@ -87,9 +89,10 @@ The request ID is the operation ID; the JWT `jti` is a separate, short-lived
 credential replay nonce. A transport retry must use a fresh principal credential
 with the same operation ID and identical deterministic request hash. Chat's
 durable receipt, rather than the short JWT replay window, provides operation
-idempotency. This is a recipient-side Chat slice: GIS orchestration, Voice
-resource provisioning, grants, compensation, and cross-service crash recovery
-remain open T31 work.
+idempotency. This is a recipient-side Chat implementation slice. The normative
+GIS/Voice orchestration and recovery target is frozen below; runtime wiring
+remains open T31 work. Recovery uses forward retries and owner receipts, not
+compensating deletion.
 
 Ни один сервис не пишет в чужую БД. Межсервисные UUID — logical references без
 FK. Существующие IDs сохраняют правила [DATA_MODEL](../DATA_MODEL.md): UUIDv4 для
@@ -1759,6 +1762,256 @@ expires or activates implicitly; retries use the original idempotency key.
 Suspending/restoring the application never changes pending to active. Retire,
 restore, and pending-admission cancellation are not part of this staged slice.
 
+## T31: durable session orchestration
+
+The public mutation is `POST /api/v1/sessions` with a strict JSON body containing
+`operation_id`, `kind` (`party`, `match`, or `fleet`), `external_key`,
+`parent_party_key`, `display_name`, `roster_revision`, `roster_complete: true`, and the complete
+`members` array of canonical profile UUIDs. `parent_party_key` is optional for
+match/fleet and forbidden for party. A party owns its stable Chat. A child with
+a parent reuses that party Chat; an unparented match/fleet owns a dedicated
+Chat and Voice room under its own external key. For a parented child, `members`
+is the complete child roster and must be a subset of the current complete
+party roster; GIS does not synchronize a child's roster into the shared Party
+Chat. This preserves Party membership while Voice admission requires both
+current Chat membership and the child's Role grant. `display_name` is required
+and used for party and unparented resources; it is forbidden for a parented
+child and cannot mutate its parent Chat. The caller is an authenticated
+game-server credential with `game.sessions.manage`; GIS derives
+`application_id` and `environment_id` from that verified principal and rejects
+scope fields in the body. Browser/game clients cannot call this mutation.
+An application owner explicitly selects `game.sessions.manage` in the
+app/environment credential issue request. Credential issuance grants exactly
+the requested allowlist; this scope covers only the documented managed-session
+operations and does not imply general chat, roster, membership, or admin access.
+Unknown/duplicate JSON fields, incomplete rosters, or noncanonical identifiers
+are rejected before an operation or owner effect is created. The decoder
+requires UTF-8 and canonical lowercase hyphenated UUIDs. `kind` is lowercase;
+`roster_revision` is an integer from 1 through 9,007,199,254,740,991;
+`roster_complete` is the JSON boolean `true`; `members` is unique and sorted by
+canonical UUID text in ascending byte order; it may be empty because the
+request carries an explicit complete marker. `external_key` is case-sensitive
+opaque UTF-8 of 1–255 bytes and is never trimmed or Unicode-normalized.
+`display_name`, when allowed, is nonblank and at most 128 Unicode scalar
+values; its exact content is preserved. JCS sorts object keys and encodes the validated request.
+GIS hashes exactly
+`{"api_version":"v1","scope":{"application_id":"…","environment_id":"…"},"request":<validated request>}`
+using SHA-256. Object-key order is immaterial; array order and validated
+string content follow the rules above.
+
+GIS hashes the validated request after RFC 8785 JSON Canonicalization Scheme
+(JCS), with the verified application/environment UUIDs and API version included
+in the canonical object, using SHA-256. The operation key is
+`(application_id, environment_id, operation_id)`. An exact hash retry returns
+the same operation and session IDs; the same operation ID with another hash is
+HTTP 409 `OPERATION_ID_CONFLICT` and makes no owner call. A scoped external key
+is immutable to its kind, parent, and creation intent; changed intent conflicts.
+`POST` durably commits the operation before responding and returns HTTP 202
+with `operation_id`, `session_id`, `status: pending`, and `stage`. Request
+acceptance targets at most two seconds while GIS PostgreSQL is healthy; this is
+not a dependency-availability promise. `GET /api/v1/operations/{operation_id}`
+requires the same verified server credential and returns `operation_id`,
+`session_id`, operation `status` (`pending|succeeded|failed`), `session_status`
+(`provisioning|active|closing|closed|failed`), `stage`, stable resource IDs, owner
+receipt IDs, `last_error` (`code`, `outcome: transient|permanent|unknown`,
+`retry_after` or null), and `active_event_id` or null. Unknown IDs and IDs in
+another app/environment both return 404. It does not trigger work.
+
+The operation response uses these stable JSON fields: `chat_id`,
+`voice_room_id`, `chat_owner_session_id`, `chat_create_receipt_id`,
+`chat_roster_receipt_id`, `voice_provision_receipt_id`, and
+`role_grant_receipt_id`. Each field is present and null until its resource or
+owner receipt is durably recorded. A party and an unparented match/fleet set
+`chat_owner_session_id` to their own `session_id`. A parented child returns the
+party's `chat_id`, `chat_owner_session_id`, `chat_create_receipt_id`, and
+`chat_roster_receipt_id` unchanged; it receives its own `voice_room_id`, Voice
+receipt, and Role receipt. These fields remain in operation status after the
+child closes, so callers can verify that child close retained the party Chat
+and its roster receipt. The POST response has the same fields and values
+available at its durable accepted stage.
+
+The HTTP adapter verifies a game-server credential into a typed principal
+containing `application_id`, `environment_id`, and scopes. Only the
+`game.sessions.manage` scope is accepted. Those verified values are passed to
+the orchestration service and never read from request JSON. The deterministic
+test seam injects that credential verifier and the durable session
+orchestrator; the orchestrator accepts injected Chat, Voice, Role, and active
+event publisher owners and exposes one-stage advancement for tests and worker
+execution. Tests can withhold an owner receipt and verify that neither active
+state nor its outbox event exists until all required receipts commit.
+
+Operations advance durably through `accepted`, `chat_ready`, `roster_ready`,
+`voice_ready`, `grants_ready`, then `active`. Each stage stores its immutable
+request hash and owner receipt before advancing. Party owns one stable Chat
+mapping shared by its matches. Match and fleet have their own Voice resource
+keys and may reference the party Chat; each resource operation is distinct.
+An owned Chat's complete member set (party or unparented child) is synchronized
+before Voice provisioning so Voice admission can verify Chat membership. For a
+parented child, GIS verifies the child roster is within the party roster and
+does not mutate the shared Chat. GIS uses deterministic,
+scope-bound owner operation IDs for Chat create, Chat roster sync (including
+roster revision), Voice provision, and Role grants; every retry uses the same
+ID and byte-identical canonical owner request. An owner response counts as
+success only when its durable receipt and resource IDs validate. GIS obtains
+the Role grant receipt from the Role-owned `ApplyGameSessionGrants` API; it
+binds the complete profile set to the session's Voice-join capability and
+returns the same durable receipt for an exact operation retry. GIS cannot
+advance to `grants_ready` without this receipt.
+
+GIS passes its persisted `session_id` in `ProvisionGameSessionRoom`. Voice
+stores and returns that exact ID in its immutable provision receipt; it never
+derives the grant key from `room_id`, the external resource key, or an owner
+operation ID. Role grant apply and Voice grant checks use this same GIS session
+ID so admission and revoke address one session identity.
+
+Every owner operation ID is
+`UUIDv5(URL_NAMESPACE, "voice-gis-t31/v1\n" + application_id + "\n" +
+environment_id + "\n" + session_id + "\n" + stage + "\n" + discriminator)`,
+where `URL_NAMESPACE` is `6ba7b811-9dad-11d1-80b4-00c04fd430c8`. For roster
+sync/apply, `discriminator` is the decimal `roster_revision`. Terminal Voice
+close and Role revoke use stages `terminalize_voice_close` and
+`terminalize_role_revoke`, with `discriminator` equal to the winning
+`terminalization_operation_id`; explicit close and permanent failure therefore
+reuse the same owner IDs and receipts. The same ID and
+deterministic protobuf request bytes are used across retry/restart. Owner
+request hashes and receipt IDs are persisted before GIS advances a stage.
+
+The `active` transition and one outbox row commit in the same GIS database
+transaction. The GIS outbox serves the active-event v1 body through the HTTPS
+claim API, with stable `event_id`, `application_id`, `environment_id`, `session_id`,
+`operation_id`, `kind`, and `active_at`. GIS constructs the complete v1 UTF-8
+JSON body once when the session becomes active and stores those exact immutable
+bytes plus their 32-byte SHA-256 in the same outbox row. JSONB may remain as an
+inspection projection, but the delivery path never decodes/re-encodes it. The
+digest is `SHA-256(body_bytes)`; byte equality, not canonical JSON, defines
+replay identity.
+
+The v1 body has exactly these seven fields and no others:
+`event_id`, `application_id`, `environment_id`, `session_id`, `operation_id`
+(canonical lowercase hyphenated UUID strings), `kind` (`party|match|fleet`),
+and `active_at` (UTC RFC 3339 timestamp). GIS creates the event values, serializes
+the body once, computes the digest, and inserts both byte fields atomically with
+the `active` session transition and outbox row.
+
+The game server pulls one event at a time over the GIS HTTPS API. Both claim and
+ACK require the application's current `vgi1` game-server credential with
+`game.sessions.manage`; GIS derives application/environment from that verified
+credential, never from request fields. `POST /api/v1/session-events/claim` has
+an empty body. For one available event in that app/environment, GIS transactionally
+sets a fresh random lease UUID with a 30-second expiry and returns HTTP 200,
+`Content-Type: application/json`, `Content-Encoding: identity`,
+`Cache-Control: no-store`, and the exact persisted event body bytes (no envelope
+or reserialization). Headers are
+`X-Voice-Event-Id` (canonical UUID), `X-Voice-Payload-SHA256` (lowercase hex),
+`X-Voice-Claim-Lease-Id` (canonical UUID), and
+`X-Voice-Claim-Lease-Expires-At` (UTC RFC 3339 timestamp). GIS filters for the
+verified app/environment and undelivered rows before locking eligible rows with
+`FOR UPDATE SKIP LOCKED`; claim lease state is stored per outbox row in
+`claim_lease_id` and `claim_lease_until`, not shared through the former relay
+lease columns. An absent or expired claim lease is eligible; each claim assigns
+a new lease ID. With no available row in that credential's scope it returns
+HTTP 204 and `Retry-After: 1`. A GIS database failure before claim commit returns
+503 without a lease; a response timeout with an uncertain commit may leave a
+lease active until expiry.
+
+The controlled receiver is the test-only backend in
+`src/backend/controlledgame/`, with an independent PostgreSQL schema. It hashes
+the exact HTTP response body bytes and, in one receiver-owned transaction,
+inserts `(application_id, environment_id, event_id)` plus digest into its
+durable inbox and applies the verifiable game-side activation effect. Same key
+and digest redelivery is a no-op; same key with a different digest is an
+integrity conflict with no success ACK. A database failure or crash before
+commit sends no ACK.
+
+After that transaction commits, the receiver sends
+`POST /api/v1/session-events/{event_id}/ack` over HTTPS with JSON body
+`{"lease_id":"<claim UUID>","payload_sha256":"<lowercase hex>"}` and the
+same credential. The first ACK must match the row's current, unexpired lease
+and stored payload digest. GIS atomically records `delivered_at`, the accepted
+lease ID in `consumer_ack_lease_id` and digest in
+`consumer_ack_payload_sha256`, and clears the active lease. Repeating that exact ACK after
+success returns HTTP 200 idempotently, even if the lease has since expired; a
+different lease or digest after success returns HTTP 409. An unknown event or
+an event outside the verified app/environment returns 404; an expired or
+superseded lease or digest mismatch returns 409. Missing, expired, revoked, or
+insufficient-scope credentials are rejected (401/403) and never mark delivery.
+A GIS database failure before ACK commit returns 503 without marking delivery;
+retry the same ACK body. If the claim response times out after its transaction commits, that lease stays
+reserved until expiry and a later claim returns the same body with a new lease.
+If the controlled DB fails, the receiver does not ACK; the lease expires and
+the same body can be claimed again. If the ACK response is lost after GIS
+commits it, the receiver retries the same ACK and receives the idempotent 200.
+If the lease expires between receiver commit and ACK, GIS rejects that ACK;
+after re-claim the receiver sees the inbox duplicate and ACKs with the new lease.
+GIS marks delivery only on this authenticated receipt. T31 does not publish
+active-session events to JetStream or expose master NATS credentials/streams to
+game servers.
+
+The controlled receiver is acceptance infrastructure, not a public SDK product.
+Real external partner transport provisioning and operational credential
+delivery remain deployment work; this internal HTTPS path does not claim those
+external integrations are provisioned.
+No response or event reports `active` before all required owner receipts are
+ready. A crash or unknown remote outcome leaves the stage unchanged; recovery
+replays the same owner operation and reconciles its receipt before proceeding.
+After restart, an expired worker lease is reclaimed within six seconds while
+GIS and required owners are healthy. Retry delay is exponential from one
+second, capped at 30 seconds; dependency outage has no completion-time SLA.
+Transient and unknown owner outcomes remain retryable with the backoff above;
+unknown is never treated as success until a durable receipt is read. Permanent
+owner rejections are recorded with the failed stage and do not publish active;
+the worker stops automatic retries. If Voice or Role resources exist, GIS enters
+`failure_voice_close_pending` then `failure_role_revoke_pending`, persists the
+Voice close and Role revoke receipts, and only then marks the session terminal
+`failed`. The create operation then reports `status: failed`,
+`session_status: failed`, `stage: failed`, and the Voice/Role close receipts.
+If neither resource exists, it records terminal `failed` immediately with no
+owner close receipts.
+Failure fencing is retried with the deterministic terminalization owner IDs;
+it never deletes Chat or removes a referenced party roster. A failure before
+Voice creation leaves any created owned Chat retained but inactive. After the
+cause is corrected, an exact same-operation replay resumes an un-fenced pending
+failure. Since Chat and
+Voice expose no operation-scoped delete API, recovery is forward-only and GIS
+never deletes an owner resource to compensate.
+
+Before either explicit close or permanent-failure fencing starts, GIS
+transactionally claims the session's single `terminalization_operation_id` by
+compare-and-set from null. The winner fixes the terminalization intent and
+owner operation IDs. A competing close/failure does not call Voice or Role
+with a second owner operation; it records `terminalization_outcome: coalesced`,
+references the winner, and returns the same eventual Voice close and Role
+revoke receipt IDs/status. If failure wins, a close replay resolves to
+`session_status: failed`; if close wins, the create operation remains
+`status: failed` but references the winning `session_status: closed`. Restart
+reads and resumes this one terminalization row. This CAS is the only legal
+path to Voice close/revoke.
+
+The close-operation request hash uses the validated close body plus
+`operation_kind: "close"`, target `session_id`, API version, and verified
+application/environment scope under RFC 8785 JCS. A reused operation ID with
+another close target or body returns 409 `OPERATION_ID_CONFLICT` before owner
+calls.
+
+`POST /api/v1/sessions/{session_id}/close` takes JSON `{ "operation_id": "<UUID>" }`
+and returns `202` with `operation_id`, `session_id`, `status: pending`,
+`session_status: closing`, and `stage: voice_close_pending`; exact retry returns the saved close operation. Close is
+allowed for party, match, and fleet sessions. It closes only the addressed
+Voice room and revokes that session's grants. A child close never closes the
+parent party or removes its Chat membership. The Voice close receipt is durable;
+Voice rejects new JoinCall/GetJoinToken admission once it commits the close and
+fences active media within five seconds. GIS then records `stage:
+role_revoke_pending` until the Role revoke receipt commits; the status query
+reports `status: succeeded`, `session_status: closed`, `stage: closed`,
+and both owner receipt IDs. A party may be closed only when it has
+no active children. Party roster removal otherwise requires a complete higher
+`roster_revision`. `GET /api/v1/operations/{operation_id}` reports
+`status: pending` and `session_status: closing` until both Voice close and Role
+revoke receipts are durable, then `status: succeeded` and
+`session_status: closed`.
+Terminal session history and operation receipt retention follow the
+T32 30-day boundary; non-content external-key tombstones remain indefinitely.
+
 ## T32: party/match lifecycle, roster lease and host authority
 
 A party has one stable external-resource mapping across its matches. Every
@@ -1802,3 +2055,16 @@ SE03/SE04/SE07 in
 [Game Integrations acceptance](../testing/game-integrations-acceptance.md)
 are the normative boundary assertions. Runtime implementation and exact-SHA
 evidence remain open under T32–T34.
+
+### T31 Gateway and public transport
+
+The existing API paths remain unchanged. Gateway maps first-segment aliases
+`sessions`, `operations`, and `session-events` to the configured
+`game-integrations` upstream. These exact GIS app/environment credential routes
+bypass Voice-JWT validation; the exemption is limited to these aliases and
+their T31 routes. Gateway forwards the original `Authorization` header intact
+so GIS can verify the `vgi1` credential and `game.sessions.manage` scope. Other
+routes retain normal authentication. Clients use the configured public HTTPS
+Gateway hostname with certificate and hostname validation. TLS terminates at
+the configured external Gateway proxy/Ingress; GIS HTTP stays private behind
+that boundary and is never exposed directly to the public network.

@@ -57,6 +57,22 @@ func TestCredentialIssueDerivesOwnerAndRequiresDeploymentKey(t *testing.T) {
 	require.NotContains(t, w.Body.String(), owner.String())
 }
 
+func TestCredentialIssueForwardsExplicitSessionManageScope(t *testing.T) {
+	owner, appID, envID := uuid.New(), uuid.New(), uuid.New()
+	store := &testCredentialStore{}
+	h := NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "regular"}}, store)
+	h.CredentialKey = []byte("0123456789abcdef0123456789abcdef")
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/credentials",
+		bytes.NewBufferString(`{"scopes":["game.sessions.manage"]}`))
+	r.Header.Set("Authorization", "Bearer player-token")
+	r.Header.Set("Idempotency-Key", "issue-session-manage")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Equal(t, []string{"game.sessions.manage"}, store.issued.Scopes)
+}
+
 func TestCredentialRevokeRequiresVerifiedOwner(t *testing.T) {
 	owner, appID, envID, credentialID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	store := &testCredentialStore{}

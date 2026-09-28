@@ -16,6 +16,7 @@ import (
 
 const (
 	ProvisionMethod = callsv1.GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName
+	CloseMethod     = callsv1.GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName
 	trustedIssuer   = "gameintegration"
 	trustedAudience = "voice"
 )
@@ -25,7 +26,7 @@ type Verifier struct {
 	Replay  principal.ReplayGuard
 }
 
-func AllowsMethod(method string) bool { return method == ProvisionMethod }
+func AllowsMethod(method string) bool { return method == ProvisionMethod || method == CloseMethod }
 
 func UnaryServerInterceptor(verifier *Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -39,12 +40,12 @@ func UnaryServerInterceptor(verifier *Verifier) grpc.UnaryServerInterceptor {
 		if hasUnknownFields(message.ProtoReflect()) {
 			return nil, status.Error(codes.InvalidArgument, "unknown request fields are not supported")
 		}
-		provision, ok := request.(*callsv1.ProvisionGameSessionRoomRequest)
-		if !ok || provision == nil || strings.TrimSpace(provision.GetOperationId()) == "" {
+		requestID := gameSessionOperationID(request)
+		if requestID == "" {
 			return nil, status.Error(codes.InvalidArgument, "operation_id is required")
 		}
 		transport, err := principal.IncomingMetadata(ctx)
-		if err != nil || transport.RequestID != provision.GetOperationId() {
+		if err != nil || transport.RequestID != requestID {
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
 		if verifier == nil || verifier.Resolve == nil || verifier.Replay == nil {
@@ -85,20 +86,42 @@ func hasUnknownFields(message protoreflect.Message) bool {
 // RequireProvisioning repeats method, operation and request binding at the
 // handler boundary so direct server calls cannot bypass listener verification.
 func RequireProvisioning(ctx context.Context, request *callsv1.ProvisionGameSessionRoomRequest) error {
-	if request == nil || hasUnknownFields(request.ProtoReflect()) || !AllowsMethod(ProvisionMethod) || strings.TrimSpace(request.GetOperationId()) == "" {
+	return requireGameSessionPrincipal(ctx, request, ProvisionMethod)
+}
+
+func RequireClose(ctx context.Context, request *callsv1.CloseGameSessionRoomRequest) error {
+	return requireGameSessionPrincipal(ctx, request, CloseMethod)
+}
+
+func requireGameSessionPrincipal(ctx context.Context, message proto.Message, method string) error {
+	if message == nil || hasUnknownFields(message.ProtoReflect()) || !AllowsMethod(method) || gameSessionOperationID(message) == "" {
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
 	verified, ok := principal.FromContext(ctx)
 	if !ok || verified.Kind != "service" || verified.Issuer != trustedIssuer || verified.Subject != "service:"+trustedIssuer {
 		return status.Error(codes.Unauthenticated, "verified GIS principal required")
 	}
-	hash, err := principal.RequestHash(request)
+	hash, err := principal.RequestHash(message)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, "invalid request")
 	}
-	if verified.Audience != trustedAudience || verified.RPC != ProvisionMethod || verified.RequestID != request.GetOperationId() ||
+	if verified.Audience != trustedAudience || verified.RPC != method || verified.RequestID != gameSessionOperationID(message) ||
 		verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
 		return status.Error(codes.Unauthenticated, "invalid principal binding")
 	}
 	return nil
+}
+
+func gameSessionOperationID(message any) string {
+	switch request := message.(type) {
+	case *callsv1.ProvisionGameSessionRoomRequest:
+		if request != nil {
+			return strings.TrimSpace(request.GetOperationId())
+		}
+	case *callsv1.CloseGameSessionRoomRequest:
+		if request != nil {
+			return strings.TrimSpace(request.GetOperationId())
+		}
+	}
+	return ""
 }

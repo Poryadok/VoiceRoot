@@ -152,7 +152,7 @@ func main() {
 			}
 			defer func() { _ = conn.Close() }()
 			ownershipRoleClient = rolev1.NewRoleServiceClient(conn)
-		} else if strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CA_FILE")) != "" || strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_SERVER_NAME")) != "" {
+		} else if strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CA_FILE")) != "" || strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_SERVER_NAME")) != "" || strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_CERT_FILE")) != "" || strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_KEY_FILE")) != "" {
 			log.Fatal("ROLE_PRINCIPAL_GRPC_ADDR is required with Role ownership TLS settings")
 		}
 

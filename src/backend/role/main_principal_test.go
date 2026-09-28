@@ -122,7 +122,7 @@ func TestNewRoleGRPCServersLegacyDeniesOwnershipWhenRuntimeAbsent(t *testing.T) 
 }
 
 func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T) {
-	runtime, roots, key := newMainPrincipalRuntime(t)
+	runtime, roots, key, clientCertificate := newMainPrincipalRuntime(t)
 	service := &principalBootstrapRoleServer{}
 	legacy, protected := newRoleGRPCServers(nil, service, runtime)
 	require.NotNil(t, legacy)
@@ -144,7 +144,7 @@ func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T
 	legacyConn, err := grpc.NewClient(legacyListener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, legacyConn.Close()) })
-	protectedConn, err := grpc.NewClient(protectedListener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots})))
+	protectedConn, err := grpc.NewClient(protectedListener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, protectedConn.Close()) })
 	legacyClient := rolev1.NewRoleServiceClient(legacyConn)
@@ -222,7 +222,7 @@ func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T
 	require.Equal(t, int64(len(v2Calls)), service.ownershipCalls.Load())
 }
 
-func newMainPrincipalRuntime(t *testing.T) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey) {
+func newMainPrincipalRuntime(t *testing.T) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey, tls.Certificate) {
 	t.Helper()
 	current, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -242,17 +242,33 @@ func newMainPrincipalRuntime(t *testing.T) (*principalruntime.Runtime, *x509.Cer
 	keyDER, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600))
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	clientTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(9911), NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, BasicConstraintsValid: true, IsCA: true,
+	}
+	clientDER, err := x509.CreateCertificate(rand.Reader, clientTemplate, clientTemplate, &clientKey.PublicKey, clientKey)
+	require.NoError(t, err)
+	clientCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER})
+	clientKeyDER, err := x509.MarshalPKCS8PrivateKey(clientKey)
+	require.NoError(t, err)
+	clientCAFile := filepath.Join(dir, "role-client-ca.pem")
+	require.NoError(t, os.WriteFile(clientCAFile, clientCertPEM, 0o600))
+	clientCertificate, err := tls.X509KeyPair(clientCertPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER}))
+	require.NoError(t, err)
 	replay := miniredis.RunT(t)
 	runtime, err := principalruntime.New(context.Background(), principalruntime.Config{
-		JWKSURLs: map[string]string{"space": server.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
+		JWKSURLs: map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
 		UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
-		TLSCertFile: certFile, TLSKeyFile: keyFile, ListenAddr: "127.0.0.1:0",
+		TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(certPEM))
-	return runtime, roots, current
+	return runtime, roots, current, clientCertificate
 }
 
 func mainPrincipalToken(t *testing.T, key *rsa.PrivateKey, rpc, requestID, hash string) string {
