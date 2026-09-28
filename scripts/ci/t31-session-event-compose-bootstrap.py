@@ -150,6 +150,18 @@ def sandbox_app(args, name, applicant_token, operator_token):
     }
 
 
+def canonical_member_profile_ids(*profile_ids):
+    return sorted(profile_ids)
+
+
+def safe_error_code(response):
+    if isinstance(response, dict):
+        code = response.get("error_code")
+        if isinstance(code, str) and re.fullmatch(r"[A-Z0-9_]{1,64}", code):
+            return code
+    return "UNAVAILABLE"
+
+
 def write_compose_env(path, tls_dir, state_dir, operator_id, app, other, event_id="bootstrap-pending"):
     values = {
         "T31_E2E_TLS_DIR": str(tls_dir.resolve()),
@@ -219,11 +231,12 @@ def main():
     payload = {
         "operation_id": operation_id, "kind": "party", "external_key": f"t31-e2e-{operation_id}",
         "display_name": "T31 local HTTPS receiver", "roster_revision": 1,
-        "roster_complete": True, "members": [applicant["profile_id"], operator["profile_id"]],
+        "roster_complete": True,
+        "members": canonical_member_profile_ids(applicant["profile_id"], operator["profile_id"]),
     }
-    status, _ = api("POST", args.gateway_base.rstrip("/") + "/api/v1/sessions", payload, app["secret"])
+    status, create_response = api("POST", args.gateway_base.rstrip("/") + "/api/v1/sessions", payload, app["secret"])
     if status != 202:
-        raise RuntimeError(f"GIS session create failed with HTTP {status}")
+        raise RuntimeError(f"GIS session create failed with HTTP {status} error_code={safe_error_code(create_response)}")
     operation = None
     for _ in range(90):
         status, operation = api("GET", args.gateway_base.rstrip("/") + f"/api/v1/operations/{operation_id}", token=app["secret"])
