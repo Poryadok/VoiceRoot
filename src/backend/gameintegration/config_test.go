@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -87,4 +88,43 @@ func TestLoadConfigRequiresBotProofURLAndDedicatedKeyTogether(t *testing.T) {
 	values["GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"] = "not-base64"
 	_, err = loadConfig(getenv)
 	require.ErrorContains(t, err, "GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64")
+}
+
+func TestLoadConfigMessagingPrivateListenerRequiresCompleteMTLSAndRotatingKeys(t *testing.T) {
+	values := map[string]string{
+		"DATABASE_URL":                  "postgres://game@localhost/game_integration_db",
+		"GAME_INTEGRATION_REDIS_ADDR":   "localhost:6379",
+		"GAME_INTEGRATION_JWKS_URL":     "https://auth.example/jwks",
+		"GAME_INTEGRATION_JWT_ISSUER":   "https://auth.example",
+		"GAME_INTEGRATION_JWT_AUDIENCE": "voice",
+	}
+	getenv := func(name string) string { return values[name] }
+	_, err := loadConfig(getenv)
+	require.NoError(t, err)
+
+	values["GAME_INTEGRATION_MESSAGING_LISTEN_ADDR"] = ":9443"
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "messaging mTLS")
+	values["GAME_INTEGRATION_MESSAGING_TLS_CERT_FILE"] = "gis.crt"
+	values["GAME_INTEGRATION_MESSAGING_TLS_KEY_FILE"] = "gis.key"
+	values["GAME_INTEGRATION_MESSAGING_CLIENT_CA_FILE"] = "messaging-ca.crt"
+	values["GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("c", 32)))
+	config, err := loadConfig(getenv)
+	require.NoError(t, err)
+	require.Equal(t, ":9443", config.MessagingListenAddr)
+	require.Len(t, config.MessagingWorkloadKey, 32)
+
+	values["GAME_INTEGRATION_MESSAGING_PREVIOUS_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32)))
+	values["GAME_INTEGRATION_MESSAGING_PREVIOUS_KEY_UNTIL"] = time.Now().Add(4 * time.Minute).UTC().Format(time.RFC3339)
+	config, err = loadConfig(getenv)
+	require.NoError(t, err)
+	require.Len(t, config.MessagingPreviousWorkloadKey, 32)
+
+	values["GAME_INTEGRATION_MESSAGING_PREVIOUS_WORKLOAD_KEY_B64"] = values["GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64"]
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "must be distinct")
+	values["GAME_INTEGRATION_MESSAGING_PREVIOUS_WORKLOAD_KEY_B64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", 32)))
+	values["GAME_INTEGRATION_MESSAGING_PREVIOUS_KEY_UNTIL"] = time.Now().Add(6 * time.Minute).UTC().Format(time.RFC3339)
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "five-minute")
 }

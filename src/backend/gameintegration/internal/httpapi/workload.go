@@ -26,9 +26,12 @@ type NonceStore interface {
 }
 
 type WorkloadVerifier struct {
-	Key    []byte
-	Now    func() time.Time
-	Nonces NonceStore
+	Key              []byte
+	PreviousKey      []byte
+	PreviousKeyUntil time.Time
+	Principal        string
+	Now              func() time.Time
+	Nonces           NonceStore
 }
 
 func workloadMessage(method, path, timestamp, nonce string) string {
@@ -56,8 +59,12 @@ func bodyWorkloadSignature(key []byte, method, path, timestamp, nonce string, bo
 // SignBodyWorkloadRequest is the test/controlled-client counterpart for
 // authenticated internal POSTs that have a request body but no device assertion.
 func SignBodyWorkloadRequest(r *http.Request, key []byte, now time.Time, nonce string, body []byte) {
+	SignBodyWorkloadRequestForPrincipal(r, key, now, nonce, body, "auth")
+}
+
+func SignBodyWorkloadRequestForPrincipal(r *http.Request, key []byte, now time.Time, nonce string, body []byte, principal string) {
 	timestamp := strconv.FormatInt(now.Unix(), 10)
-	r.Header.Set("X-Voice-Workload", "auth")
+	r.Header.Set("X-Voice-Workload", principal)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Voice-Timestamp", timestamp)
 	r.Header.Set("X-Voice-Nonce", nonce)
@@ -222,57 +229,80 @@ func (v WorkloadVerifier) VerifyAssertionBound(r *http.Request) ([]byte, error) 
 // VerifyBody authenticates an internal JSON POST using the established v1
 // principal/path/body/timestamp/nonce HMAC inputs and Redis replay guard.
 func (v WorkloadVerifier) VerifyBody(r *http.Request) ([]byte, error) {
-	if len(v.Key) != 32 || v.Nonces == nil || v.Now == nil {
-		return nil, ErrWorkloadUnavailable
+	body, _, err := v.VerifyBodyWithKey(r)
+	return body, err
+}
+
+// VerifyBodyWithKey verifies WorkloadProof v1 for the configured principal and
+// returns the key that authenticated it so the response can use the same key.
+func (v WorkloadVerifier) VerifyBodyWithKey(r *http.Request) ([]byte, []byte, error) {
+	if len(v.Key) != 32 || v.Nonces == nil || v.Now == nil ||
+		(len(v.PreviousKey) != 0 && (len(v.PreviousKey) != 32 || hmac.Equal(v.Key, v.PreviousKey))) ||
+		(len(v.PreviousKey) == 32 && v.PreviousKeyUntil.IsZero()) {
+		return nil, nil, ErrWorkloadUnavailable
 	}
-	if r == nil || r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.EscapedPath() != r.URL.Path || r.Header.Get("X-Voice-Workload") != "auth" {
-		return nil, ErrInvalidWorkloadProof
+	principal := v.Principal
+	if principal == "" {
+		principal = "auth"
+	}
+	if r == nil || r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.EscapedPath() != r.URL.Path || r.Header.Get("X-Voice-Workload") != principal {
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	for _, name := range []string{"X-Voice-Workload", "X-Voice-Timestamp", "X-Voice-Nonce", "X-Voice-Signature"} {
 		if len(r.Header.Values(name)) != 1 {
-			return nil, ErrInvalidWorkloadProof
+			return nil, nil, ErrInvalidWorkloadProof
 		}
 	}
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 2<<10))
 	if err != nil {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	r.Body = io.NopCloser(strings.NewReader(string(body)))
 	if r.ContentLength >= 0 && int64(len(body)) != r.ContentLength {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	timestamp := r.Header.Get("X-Voice-Timestamp")
 	seconds, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || strconv.FormatInt(seconds, 10) != timestamp {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	now := v.Now()
 	issued := time.Unix(seconds, 0)
 	if issued.Before(now.Add(-30*time.Second)) || issued.After(now.Add(30*time.Second)) {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	nonce := r.Header.Get("X-Voice-Nonce")
 	parsedNonce, err := uuid.Parse(nonce)
 	if err != nil || parsedNonce == uuid.Nil || parsedNonce.String() != nonce {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	signature := r.Header.Get("X-Voice-Signature")
 	if len(signature) != 43 || strings.ContainsAny(signature, "= \t\r\n") {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
-	expected := bodyWorkloadSignature(v.Key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body)
-	if !hmac.Equal([]byte(signature), []byte(expected)) {
-		return nil, ErrInvalidWorkloadProof
+	currentExpected := bodyWorkloadSignature(v.Key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body)
+	currentValid := hmac.Equal([]byte(signature), []byte(currentExpected))
+	previousValid := false
+	if len(v.PreviousKey) == 32 {
+		previousExpected := bodyWorkloadSignature(v.PreviousKey, r.Method, r.URL.EscapedPath(), timestamp, nonce, body)
+		matchesPrevious := hmac.Equal([]byte(signature), []byte(previousExpected))
+		previousValid = matchesPrevious && now.Before(v.PreviousKeyUntil)
+	}
+	if !currentValid && !previousValid {
+		return nil, nil, ErrInvalidWorkloadProof
 	}
 	used, err := v.Nonces.Use(r.Context(), nonce, 60*time.Second)
 	if err != nil {
-		return nil, ErrWorkloadUnavailable
+		return nil, nil, ErrWorkloadUnavailable
 	}
 	if !used {
-		return nil, ErrInvalidWorkloadProof
+		return nil, nil, ErrInvalidWorkloadProof
 	}
-	return body, nil
+	if currentValid {
+		return body, append([]byte(nil), v.Key...), nil
+	}
+	return body, append([]byte(nil), v.PreviousKey...), nil
 }

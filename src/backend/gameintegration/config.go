@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"voice/backend/gameintegration/internal/authbinding"
@@ -11,18 +12,25 @@ import (
 )
 
 type config struct {
-	ListenAddr        string
-	DatabaseURL       string
-	RedisAddr         string
-	JWKSURL           string
-	JWTIssuer         string
-	JWTAudience       string
-	OperatorAccounts  map[uuid.UUID]struct{}
-	CredentialKey     []byte
-	AuthWorkloadKey   []byte
-	BotAuthorityURL   string
-	BotWorkloadKey    []byte
-	AuthBindingClient *authbinding.Client
+	ListenAddr                   string
+	DatabaseURL                  string
+	RedisAddr                    string
+	JWKSURL                      string
+	JWTIssuer                    string
+	JWTAudience                  string
+	OperatorAccounts             map[uuid.UUID]struct{}
+	CredentialKey                []byte
+	AuthWorkloadKey              []byte
+	BotAuthorityURL              string
+	BotWorkloadKey               []byte
+	AuthBindingClient            *authbinding.Client
+	MessagingListenAddr          string
+	MessagingTLSCertFile         string
+	MessagingTLSKeyFile          string
+	MessagingClientCAFile        string
+	MessagingWorkloadKey         []byte
+	MessagingPreviousWorkloadKey []byte
+	MessagingPreviousKeyUntil    time.Time
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -112,5 +120,59 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 		c.AuthBindingClient = client
 	}
+	messagingValues := []struct{ name, value string }{
+		{"GAME_INTEGRATION_MESSAGING_LISTEN_ADDR", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_LISTEN_ADDR"))},
+		{"GAME_INTEGRATION_MESSAGING_TLS_CERT_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_TLS_CERT_FILE"))},
+		{"GAME_INTEGRATION_MESSAGING_TLS_KEY_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_TLS_KEY_FILE"))},
+		{"GAME_INTEGRATION_MESSAGING_CLIENT_CA_FILE", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_CLIENT_CA_FILE"))},
+		{"GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64", strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64"))},
+	}
+	messagingConfigured := 0
+	for _, value := range messagingValues {
+		if value.value != "" {
+			messagingConfigured++
+		}
+	}
+	previousRaw := strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_PREVIOUS_WORKLOAD_KEY_B64"))
+	previousUntilRaw := strings.TrimSpace(getenv("GAME_INTEGRATION_MESSAGING_PREVIOUS_KEY_UNTIL"))
+	if (previousRaw == "") != (previousUntilRaw == "") {
+		return config{}, fmt.Errorf("messaging mTLS previous key and deadline must be configured together")
+	}
+	if messagingConfigured != 0 && messagingConfigured != len(messagingValues) {
+		return config{}, fmt.Errorf("messaging mTLS listener, certificate, CA and workload key must be configured together")
+	}
+	if messagingConfigured == len(messagingValues) {
+		c.MessagingListenAddr = messagingValues[0].value
+		c.MessagingTLSCertFile, c.MessagingTLSKeyFile, c.MessagingClientCAFile = messagingValues[1].value, messagingValues[2].value, messagingValues[3].value
+		key, err := decodeMessagingWorkloadKey(messagingValues[4].value)
+		if err != nil {
+			return config{}, err
+		}
+		c.MessagingWorkloadKey = key
+		if previousRaw != "" {
+			previous, err := decodeMessagingWorkloadKey(previousRaw)
+			if err != nil {
+				return config{}, fmt.Errorf("invalid GAME_INTEGRATION_MESSAGING_PREVIOUS_WORKLOAD_KEY_B64")
+			}
+			if string(previous) == string(key) {
+				return config{}, fmt.Errorf("messaging workload keys must be distinct")
+			}
+			until, err := time.Parse(time.RFC3339, previousUntilRaw)
+			if err != nil || until.Before(time.Now()) || until.After(time.Now().Add(5*time.Minute)) {
+				return config{}, fmt.Errorf("messaging previous key deadline must be within the five-minute overlap")
+			}
+			c.MessagingPreviousWorkloadKey, c.MessagingPreviousKeyUntil = previous, until
+		}
+	} else if previousRaw != "" {
+		return config{}, fmt.Errorf("messaging previous key requires a configured Messaging mTLS listener")
+	}
 	return c, nil
+}
+
+func decodeMessagingWorkloadKey(encoded string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != 32 {
+		return nil, fmt.Errorf("invalid GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64")
+	}
+	return key, nil
 }

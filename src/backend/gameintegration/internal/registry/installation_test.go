@@ -698,5 +698,9 @@ func startT12Postgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(t16ConsentMigration))
 	require.NoError(t, err)
+	t30MappingMigration, err := os.ReadFile(filepath.Join(migrations, "000011_t30_resource_mappings.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(t30MappingMigration))
+	require.NoError(t, err)
 	return pool
 }

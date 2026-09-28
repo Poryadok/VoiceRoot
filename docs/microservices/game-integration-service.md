@@ -450,6 +450,101 @@ The T32 section below freezes session/roster behavior; runtime implementation,
 managed grants, bot and node-facing operations remain separate work with their
 own tests and migration revisions.
 
+## T30: resource mappings and immutable receipts
+
+GIS owns T30 mapping and receipt rows in `game_integration_db`; it never reads
+or writes Chat/Voice databases. The migration adds `game_resource_mappings`,
+`game_resource_operations`, and `game_resource_binding_chats`. A mapping's
+namespace is exactly `(application_id, environment_id, external_key)`. Identical key text in another
+application or environment is independent. A scoped key has one resource kind
+(`chat`, `voice`, or `space`) and one Voice resource ID; replacing its kind,
+resource ID, or creation proof conflicts. Retired/tombstoned keys are retained
+as non-reusable fences.
+
+Each GIS mutation is keyed by `(application_id, environment_id, operation_id)`
+and persists the canonical request hash and immutable terminal receipt. An
+exact retry returns the stored receipt, including after a process restart. A
+reused operation ID with a different request hash, or a scoped key already
+bound to a different resource/proof, conflicts without changing either row.
+The request hash covers the complete T30 mapping mutation: resource kind,
+external key, resource intent, and associated Chat creation receipt. Binding
+and Chat authorization tuples belong to the separate T31 roster revision and
+are not part of a T30 mapping operation.
+
+Chat creation provenance is a same-scope tuple of the exact Chat
+`ProvisionManagedChat` `operation_id`, deterministic full-protobuf
+`request_hash`, and returned `chat_id`. A `chat` mapping's resource ID must
+equal that receipt's `chat_id`. A `voice` mapping must persist an associated
+Chat ID and the same-scope Chat creation receipt; GIS exposes the mapping only
+while the referenced Chat mapping and receipt still agree. A `space` mapping
+uses the same app/environment/external-key namespace and retains its own
+resource kind and ID. If the Chat response is uncertain, T31's GIS provisioning
+caller retries the identical Chat operation ID and request bytes before
+committing the mapping; Chat returns its original durable receipt, so the
+retry cannot create a second Chat resource.
+
+GIS also owns the exact binding-to-chat relation used by game-authored message
+authorization. T31 party/session roster acceptance owns populating and removing
+`game_resource_binding_chats` from complete, revisioned authoritative roster
+updates. Stale, incomplete, failed, or partial roster input never clears these
+rows. T32's current lease and binding revoke rules govern expiry and revocation;
+an absent, expired, or revoked relation denies access. Until T31 wiring exists,
+the table is empty and the lookup denies. The lookup key is
+`(application_id, environment_id, binding_id, chat_id)` and succeeds only for
+an active GIS binding and active same-scope Chat mapping. No partial binding,
+membership-only, cross-environment, or caller-selected fallback lookup is
+allowed. Missing, retired, tombstoned, expired, revoked, or mismatched state
+denies new writes.
+
+T30 stores and tests the mapping and lookup seams only. Mapping creation is not
+exposed to a runtime caller until T31 passes the returned Chat ID and exact
+`ProvisionManagedChat` request hash from the Chat RPC response into GIS. The
+GIS unit fixture derives that deterministic hash from the generated request
+proto with `principal.RequestHash`; it checks tuple validation, not that an RPC
+was executed. T31 integrated acceptance must prove the actual Chat handler
+receipt is passed through and an uncertain RPC is retried with the identical
+operation and request before GIS commits the mapping.
+
+Messaging uses the private
+`POST /internal/v1/game-integrations/resource-mappings/authorize-chat` route.
+The private listener is disabled unless its address, server certificate/key,
+Messaging client CA, and current 32-byte WorkloadProof key are configured
+together; partial configuration fails startup. It is separate from the public
+HTTP listener and does not register on the public mux.
+The strict JSON body contains exactly `application_id`, `environment_id`,
+`binding_id`, and `chat_id`, each a canonical UUID. The route is served on the
+GIS private listener over HTTPS with a pinned server CA/name and a Messaging
+client certificate verified against the GIS Messaging CA with URI SAN
+`spiffe://voice/service/messaging`. The HTTP proof reuses the exact
+WorkloadProof v1 contract implemented by `httpapi.WorkloadVerifier.VerifyBody`
+and `responseSignature`; it changes only the expected service principal from
+`auth` to `messaging`, with a separate dedicated 32-byte key. Request headers
+are exactly one each of `X-Voice-Workload: messaging`, `X-Voice-Timestamp`
+(canonical Unix seconds), `X-Voice-Nonce` (lowercase UUID),
+`X-Voice-Signature` (unpadded base64url HMAC-SHA256), and
+`Content-Type: application/json`. The request HMAC input is exactly
+`v1\n{METHOD}\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_exact_body}`;
+timestamp skew is ±30 seconds and Redis `SETNX` retains each nonce for 60
+seconds. WorkloadProof v1 has no key-ID header. GIS verifies the request against
+the current Messaging key and, during rotation, one configured previous key.
+The previous key has an explicit acceptance deadline no more than five minutes
+after rotation begins; a successful response is signed with the same key that
+verified the request. The client holds both keys during this overlap so it can
+verify that response. Keys must be distinct 32-byte secrets. Malformed or
+partial key configuration fails startup; emergency revoke unsets the previous
+key and restarts GIS, after which the old key is rejected immediately. No
+change is made to Auth's verifier or the v1 HMAC bytes.
+GIS signs exact response bytes with the existing status/path/timestamp/nonce
+response proof. The response contains only `allowed` and, when allowed,
+`mapping_revision`; a denial reveals no external key or resource details.
+Missing TLS identity, key, proof, replay protection, or mapping state fails
+closed. Messaging supplies the app/environment/binding/chat values it just
+verified from the signed game message and Auth authority; GIS independently
+checks the exact tuple against its own rows.
+
+This producer and lookup contract does not implement T31 session orchestration,
+roster synchronization, or Chat/Voice provisioning.
+
 ## T32: session lifecycle and roster authority
 
 GIS owns stable app/environment external-resource mappings, session operation

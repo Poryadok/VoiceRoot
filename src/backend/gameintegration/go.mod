@@ -12,6 +12,12 @@ require (
 )
 
 require (
+	golang.org/x/net v0.32.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	voice.app/voice/common v0.0.0 // indirect
+)
+
+require (
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -73,6 +79,11 @@ require (
 	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/chat v0.0.0
 )
 
 replace voice/backend/pkg => ../pkg
+
+replace voice.app/voice/chat => ../chat/pb/voice/chat
+
+replace voice.app/voice/common => ../user/pb/voice/common
