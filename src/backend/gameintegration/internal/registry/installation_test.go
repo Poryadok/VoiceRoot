@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +31,12 @@ func (f installationDialerFunc) DialContext(ctx context.Context, network, addres
 	return f(ctx, network, address)
 }
 
+type botAuthorityFunc func(context.Context, uuid.UUID, uuid.UUID) error
+
+func (f botAuthorityFunc) VerifyGameIntegrationBot(ctx context.Context, botID, ownerID uuid.UUID) error {
+	return f(ctx, botID, ownerID)
+}
+
 func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient(t *testing.T) {
 	ctx := context.Background()
 	pool := startT12Postgres(t, ctx)
@@ -40,8 +47,11 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 		lookupCalls++
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(_ context.Context, _, owner uuid.UUID) error {
+		require.Equal(t, ownerID, owner, "GIS derives the Bot proof owner from the registry row")
+		return nil
+	})}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "HerdTrip", IdempotencyKey: "installation-app",
 	})
@@ -53,6 +63,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 
 	registered, err := store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "install-1",
 	})
 	require.NoError(t, err)
@@ -60,11 +71,13 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	require.Equal(t, env.ID, registered.EnvironmentID)
 	require.Equal(t, "https://callback.example/callback-v1", registered.CallbackURL)
 	var storedAppID, storedEnvironmentID uuid.UUID
+	var storedBotID uuid.UUID
 	var storedURL string
-	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id, environment_id, callback_url
-		FROM installations WHERE id=$1`, registered.ID).Scan(&storedAppID, &storedEnvironmentID, &storedURL))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id, environment_id, bot_id, callback_url
+		FROM installations WHERE id=$1`, registered.ID).Scan(&storedAppID, &storedEnvironmentID, &storedBotID, &storedURL))
 	require.Equal(t, app.ID, storedAppID)
 	require.Equal(t, env.ID, storedEnvironmentID)
+	require.Equal(t, registered.BotID, storedBotID)
 	require.Equal(t, registered.CallbackURL, storedURL)
 
 	var dialAddresses []string
@@ -88,6 +101,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	require.NoError(t, err)
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: otherEnv.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "cross-env-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict)
@@ -110,6 +124,7 @@ func TestInstallationCallbackPersistenceIsAdmittedAndConsumedThroughPinnedClient
 	foreignOwner := uuid.New()
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: foreignOwner, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "foreign-owner-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict)
@@ -132,8 +147,8 @@ func TestInstallationCallbackRejectsUnsafeDNSBeforePersistence(t *testing.T) {
 	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34"), netip.MustParseAddr("169.254.169.254")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "HerdTrip", IdempotencyKey: "unsafe-installation-app",
 	})
@@ -145,6 +160,7 @@ func TestInstallationCallbackRejectsUnsafeDNSBeforePersistence(t *testing.T) {
 
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "unsafe-installation",
 	})
 	require.ErrorIs(t, err, callbacksecurity.ErrUnsafeURL)
@@ -188,8 +204,9 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
 	now := time.Date(2026, 9, 27, 12, 34, 5, 0, time.UTC)
-	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now }}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now },
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "Quota", IdempotencyKey: "quota-installation-app",
 	})
@@ -218,6 +235,7 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 	create := func(appID, envID uuid.UUID, key string) error {
 		_, createErr := store.CreateInstallation(ctx, CreateInstallationInput{
 			OwnerAccountID: ownerID, ApplicationID: appID, EnvironmentID: envID,
+			BotID:       uuid.New(),
 			CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: key,
 		})
 		return createErr
@@ -311,14 +329,209 @@ func TestInstallationQuotaIsAppWideIndependentAndResetsAtUTCMinute(t *testing.T)
 	require.Zero(t, credentialCount)
 }
 
+func TestInstallationQuotaBoundsBotProofAttempts(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	now := time.Date(2026, 9, 27, 12, 35, 5, 0, time.UTC)
+	ownerID := uuid.New()
+	proofCalls := 0
+	store := &Store{Pool: pool, Now: func() time.Time { return now },
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			proofCalls++
+			return ErrBotAuthorityDenied
+		})}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Proof quota", IdempotencyKey: "proof-quota-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "proof-quota-env",
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO app_quota_windows (application_id, window_start, request_count)
+		VALUES ($1, $2, 119)`, app.ID, now.Truncate(time.Minute))
+	require.NoError(t, err)
+	botID := uuid.New()
+
+	create := func(key string) error {
+		_, createErr := store.CreateInstallation(ctx, CreateInstallationInput{
+			OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+			BotID: botID, CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: key,
+		})
+		return createErr
+	}
+	require.ErrorIs(t, create("proof-quota-120"), ErrBotAuthorityDenied,
+		"a failed Bot proof still consumes the owner's final admitted attempt")
+	require.ErrorIs(t, create("proof-quota-120"), ErrBotAuthorityDenied,
+		"an identical failed idempotency retry returns the saved denial without charging again")
+	_, changedPayloadErr := store.CreateInstallation(ctx, CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "proof-quota-120",
+	})
+	require.ErrorIs(t, changedPayloadErr, ErrIdempotencyConflict,
+		"a failed operation key cannot be reused with a different request hash")
+	require.ErrorIs(t, create("proof-quota-121"), ErrRateLimited)
+	require.Equal(t, 1, proofCalls, "the 121st request must be rejected before calling Bot")
+	var quotaCount, botDenials, quotaDenialRows, quotaDenials int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 120, quotaCount)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_audit WHERE application_id=$1
+		AND action='register_installation' AND reason_code='bot_authority_denied'`, app.ID).Scan(&botDenials))
+	require.Equal(t, 1, botDenials, "an admitted proof denial gets only one sanitized audit row")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*), coalesce(sum(denial_count),0) FROM registry_audit
+		WHERE application_id=$1 AND action='quota_denied'`, app.ID).Scan(&quotaDenialRows, &quotaDenials))
+	require.Equal(t, 1, quotaDenialRows, "quota denials are coalesced per app and UTC minute")
+	require.Equal(t, 1, quotaDenials)
+}
+
+func TestInstallationIdempotencyClaimCoalescesConcurrentBotProof(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	ownerID := uuid.New()
+	proofStarted := make(chan struct{})
+	releaseProof := make(chan struct{})
+	var proofCalls atomic.Int32
+	store := &Store{Pool: pool,
+		CallbackResolver: installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		}),
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			proofCalls.Add(1)
+			close(proofStarted)
+			<-releaseProof
+			return nil
+		}),
+	}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Concurrent install", IdempotencyKey: "concurrent-install-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "concurrent-install-env",
+	})
+	require.NoError(t, err)
+	input := CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "same-install-key",
+	}
+	type createResult struct {
+		installation Installation
+		err          error
+	}
+	firstResult := make(chan createResult, 1)
+	go func() {
+		installation, createErr := store.CreateInstallation(ctx, input)
+		firstResult <- createResult{installation: installation, err: createErr}
+	}()
+	select {
+	case <-proofStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first request did not reach Bot proof")
+	}
+	_, duplicateErr := store.CreateInstallation(ctx, input)
+	require.ErrorIs(t, duplicateErr, ErrRegistryUnavailable,
+		"an in-flight identical operation is bounded and does not trigger a second Bot proof")
+	var quotaCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount, "the concurrent duplicate must not consume another quota slot")
+	require.EqualValues(t, 1, proofCalls.Load())
+	close(releaseProof)
+	first := <-firstResult
+	require.NoError(t, first.err)
+	require.NotEqual(t, uuid.Nil, first.installation.ID)
+	duplicate, err := store.CreateInstallation(ctx, input)
+	require.NoError(t, err)
+	require.Equal(t, first.installation.ID, duplicate.ID,
+		"the completed retry returns the originally persisted result without another quota charge")
+	require.EqualValues(t, 1, proofCalls.Load())
+}
+
+func TestInstallationPendingClaimReclaimsAfterRepeatedProcessCrash(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	now := time.Now().UTC()
+	ownerID := uuid.New()
+	var proofCalls atomic.Int32
+	proofStarted := make(chan struct{})
+	releaseProof := make(chan struct{})
+	defer func() {
+		select {
+		case <-releaseProof:
+		default:
+			close(releaseProof)
+		}
+	}()
+	store := &Store{Pool: pool, Now: func() time.Time { return now },
+		CallbackResolver: installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		}),
+		BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error {
+			call := proofCalls.Add(1)
+			if call < 3 {
+				panic("simulated GIS crash after committed installation claim")
+			}
+			close(proofStarted)
+			<-releaseProof
+			return nil
+		}),
+	}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Crash recovery", IdempotencyKey: "crash-recovery-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "crash-recovery-env",
+	})
+	require.NoError(t, err)
+	input := CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: uuid.New(), CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "crash-recovery-key",
+	}
+	require.Panics(t, func() { _, _ = store.CreateInstallation(ctx, input) },
+		"a crash after claim commit must leave a reclaimable operation, not an open SQL transaction")
+	var quotaCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount)
+
+	now = now.Add(installationOperationLease + time.Second)
+	require.Panics(t, func() { _, _ = store.CreateInstallation(ctx, input) },
+		"a second crashed proof attempt is reclaimable after its refreshed lease expires")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount, "reclaiming the same key/hash must not double-charge quota")
+
+	now = now.Add(installationOperationLease + time.Second)
+	firstResult := make(chan error, 1)
+	go func() {
+		_, createErr := store.CreateInstallation(ctx, input)
+		firstResult <- createErr
+	}()
+	select {
+	case <-proofStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("stale claim was not reclaimed for a new proof attempt")
+	}
+	_, duplicateErr := store.CreateInstallation(ctx, input)
+	require.ErrorIs(t, duplicateErr, ErrRegistryUnavailable,
+		"a concurrent duplicate after recovery sees the refreshed lease and cannot issue another proof")
+	require.EqualValues(t, 3, proofCalls.Load())
+	require.NoError(t, pool.QueryRow(ctx, `SELECT request_count FROM app_quota_windows WHERE application_id=$1`, app.ID).Scan(&quotaCount))
+	require.Equal(t, 1, quotaCount)
+	close(releaseProof)
+	require.NoError(t, <-firstResult)
+	installation, err := store.CreateInstallation(ctx, input)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, installation.ID)
+	require.EqualValues(t, 3, proofCalls.Load(), "terminal success must remain immutable on retry")
+}
+
 func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testing.T) {
 	ctx := context.Background()
 	pool := startT12Postgres(t, ctx)
 	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver}
 	ownerID := uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, BotAuthority: botAuthorityFunc(func(context.Context, uuid.UUID, uuid.UUID) error { return nil })}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "Pending Callback", IdempotencyKey: "pending-install-app",
 	})
@@ -334,6 +547,7 @@ func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testi
 
 	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: pendingEnvID,
+		BotID:       uuid.New(),
 		CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "pending-install",
 	})
 	require.ErrorIs(t, err, ErrInstallationConflict, "callbacks can only be registered on active environments")
@@ -352,6 +566,102 @@ func TestInstallationCallbackRejectsPendingEnvironmentBeforePersistence(t *testi
 	require.Equal(t, 1, auditCount, "pending environment denial is represented by one sanitized scope audit")
 }
 
+func TestInstallationRequiresBotAuthorityProofBeforePersistence(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	ownerID, botID := uuid.New(), uuid.New()
+	store := &Store{Pool: pool}
+	app, err := store.CreateApplication(ctx, CreateApplicationInput{
+		OwnerAccountID: ownerID, Name: "Unproven Bot", IdempotencyKey: "unproven-bot-app",
+	})
+	require.NoError(t, err)
+	env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+		ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "unproven-bot-env",
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateInstallation(ctx, CreateInstallationInput{
+		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+		BotID: botID, CallbackURL: "https://callback.example/callback-v1", IdempotencyKey: "unproven-bot-install",
+	})
+	require.ErrorIs(t, err, ErrBotAuthorityUnavailable)
+	var installationCount, successfulOperations int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM installations WHERE application_id=$1`, app.ID).Scan(&installationCount))
+	require.Zero(t, installationCount, "missing Bot proof must not persist an active installation")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_operations
+		WHERE actor_id=$1 AND route=$2 AND idempotency_key=$3 AND status='succeeded'`,
+		ownerID, createInstallationRoute, "unproven-bot-install").Scan(&successfulOperations))
+	require.Zero(t, successfulOperations, "missing Bot proof must not persist a successful idempotency result")
+}
+
+func TestInstallationRechecksOwnerAndLifecycleAfterBotProof(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	})
+	store := &Store{Pool: pool, CallbackResolver: resolver}
+	for _, scenario := range []struct {
+		name       string
+		want       error
+		mutateRows func(uuid.UUID, uuid.UUID, uuid.UUID) error
+	}{
+		{
+			name: "owner changed during proof",
+			want: ErrInstallationConflict,
+			mutateRows: func(appID, _, newOwner uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE applications SET owner_account_id=$2 WHERE id=$1`, appID, newOwner)
+				return err
+			},
+		},
+		{
+			name: "application suspended during proof",
+			want: ErrApplicationSuspended,
+			mutateRows: func(appID, _, _ uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE applications SET status='suspended' WHERE id=$1`, appID)
+				return err
+			},
+		},
+		{
+			name: "environment suspended during proof",
+			want: ErrInstallationConflict,
+			mutateRows: func(_, environmentID, _ uuid.UUID) error {
+				_, err := pool.Exec(ctx, `UPDATE environments SET status='suspended' WHERE id=$1`, environmentID)
+				return err
+			},
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			ownerID, newOwnerID := uuid.New(), uuid.New()
+			app, err := store.CreateApplication(ctx, CreateApplicationInput{
+				OwnerAccountID: ownerID, Name: "Proof race " + scenario.name, IdempotencyKey: "race-app-" + scenario.name,
+			})
+			require.NoError(t, err)
+			env, err := store.ApproveSandbox(ctx, ApproveSandboxInput{
+				ApplicationID: app.ID, OperatorAccountID: uuid.New(), IdempotencyKey: "race-env-" + scenario.name,
+			})
+			require.NoError(t, err)
+			store.BotAuthority = botAuthorityFunc(func(_ context.Context, _, proofOwner uuid.UUID) error {
+				require.Equal(t, ownerID, proofOwner, "Bot proof must use the owner read from GIS registry preflight")
+				return scenario.mutateRows(app.ID, env.ID, newOwnerID)
+			})
+
+			_, err = store.CreateInstallation(ctx, CreateInstallationInput{
+				OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
+				BotID: uuid.New(), CallbackURL: "https://callback.example/hook",
+				IdempotencyKey: "race-install-" + scenario.name,
+			})
+			require.ErrorIs(t, err, scenario.want)
+			var installations, successfulOperations int
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM installations WHERE application_id=$1`, app.ID).Scan(&installations))
+			require.Zero(t, installations, "a registry owner or lifecycle change during proof cannot be bound")
+			require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_operations WHERE actor_id=$1 AND route=$2 AND idempotency_key=$3 AND status='succeeded'`,
+				ownerID, createInstallationRoute, "race-install-"+scenario.name).Scan(&successfulOperations))
+			require.Zero(t, successfulOperations, "proof race denial cannot create a successful idempotency result")
+		})
+	}
+}
+
 func startT12Postgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	migrations := filepath.Join("..", "..", "..", "migrations", "game_integration_db")
@@ -359,6 +669,10 @@ func startT12Postgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t12Migration, err := os.ReadFile(filepath.Join(migrations, "000002_t12_registry_security.up.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(t12Migration))
+	require.NoError(t, err)
+	t11Migration, err := os.ReadFile(filepath.Join(migrations, "000004_t11_installation_bot_binding.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(t11Migration))
 	require.NoError(t, err)
 	return pool
 }

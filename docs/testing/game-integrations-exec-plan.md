@@ -211,11 +211,21 @@ contracts land before consumers; activation lands after all consumers.
   each event-enabled installation must also be bound to a live Bot ID owned by
   the application owner. Empty-database API bootstrap
   and cross-scope denials pass without direct SQL or a portal. Its T10 database
-  isolation prerequisite is now proven. T11 remains open because the current
-  API has no production-admission route; the seeded-fixture test denies
-  production credentials and makes no claim of production onboarding. See the
+  isolation prerequisite is now proven. T11 remains open: the staged operator
+  route can create only a pending production environment and owner policy; it
+  cannot activate production. Live provider/user proof and out-of-band
+  production secret provisioning are still required. The seeded-fixture test
+  denies production credentials and makes no claim of production onboarding. See the
   GIS service contract and
   [Q11 T11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
+  The sandbox installation authority slice is implemented: registration takes
+  a Bot ID, derives owner only from the application row, and persists the
+  binding only after a protected, replay-resistant GIS→Bot owner/live proof.
+  BOT11 acceptance covers the exact request/response authentication, owner and
+  lifecycle denials, durable binding/idempotency, and clean-bootstrap flow.
+  Proof failure may write a sanitized denial audit, but never an installation
+  or successful idempotency result. This bounded slice does not close T11's
+  production-admission gate.
 - [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.

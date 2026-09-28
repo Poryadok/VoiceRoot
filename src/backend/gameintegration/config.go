@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"voice/backend/gameintegration/internal/botproof"
 )
 
 type config struct {
@@ -18,6 +19,8 @@ type config struct {
 	OperatorAccounts map[uuid.UUID]struct{}
 	CredentialKey    []byte
 	AuthWorkloadKey  []byte
+	BotAuthorityURL  string
+	BotWorkloadKey   []byte
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -25,12 +28,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return config{}, fmt.Errorf("environment reader not configured")
 	}
 	c := config{
-		ListenAddr:  strings.TrimSpace(getenv("LISTEN_ADDR")),
-		DatabaseURL: strings.TrimSpace(getenv("DATABASE_URL")),
-		RedisAddr:   strings.TrimSpace(getenv("GAME_INTEGRATION_REDIS_ADDR")),
-		JWKSURL:     strings.TrimSpace(getenv("GAME_INTEGRATION_JWKS_URL")),
-		JWTIssuer:   strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_ISSUER")),
-		JWTAudience: strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_AUDIENCE")),
+		ListenAddr:      strings.TrimSpace(getenv("LISTEN_ADDR")),
+		DatabaseURL:     strings.TrimSpace(getenv("DATABASE_URL")),
+		RedisAddr:       strings.TrimSpace(getenv("GAME_INTEGRATION_REDIS_ADDR")),
+		JWKSURL:         strings.TrimSpace(getenv("GAME_INTEGRATION_JWKS_URL")),
+		JWTIssuer:       strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_ISSUER")),
+		JWTAudience:     strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_AUDIENCE")),
+		BotAuthorityURL: strings.TrimSpace(getenv("BOT_INTERNAL_URL")),
 	}
 	if c.ListenAddr == "" {
 		c.ListenAddr = ":8080"
@@ -74,6 +78,14 @@ func loadConfig(getenv func(string) string) (config, error) {
 			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
 		}
 		c.AuthWorkloadKey = key
+	}
+	key, err := botproof.DecodeWorkloadKey(getenv("GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64"))
+	if err != nil {
+		return config{}, err
+	}
+	c.BotWorkloadKey = key
+	if (c.BotAuthorityURL == "") != (len(c.BotWorkloadKey) == 0) {
+		return config{}, fmt.Errorf("BOT_INTERNAL_URL and GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64 must be configured together")
 	}
 	return c, nil
 }

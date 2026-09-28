@@ -32,15 +32,16 @@ func (s *testInstallationStore) CreateInstallation(_ context.Context, in registr
 }
 
 func TestInstallationRegistrationBindsAuthenticatedOwnerAndPathIDs(t *testing.T) {
-	owner, appID, envID, installationID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	owner, appID, envID, installationID, botID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	store := &testInstallationStore{result: registry.Installation{
 		ID: installationID, ApplicationID: appID, EnvironmentID: envID,
+		BotID: botID,
 		CallbackURL: "https://callback.example/callback-v1", Status: "active",
 	}}
 	handler := NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "regular"}}, store)
 	request := httptest.NewRequest(http.MethodPost,
 		"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/installations",
-		bytes.NewBufferString(`{"callback_url":"https://callback.example/callback-v1"}`))
+		bytes.NewBufferString(`{"callback_url":"https://callback.example/callback-v1","bot_id":"`+botID.String()+`"}`))
 	request.Header.Set("Authorization", "Bearer player-token")
 	request.Header.Set("Idempotency-Key", "installation-1")
 	w := httptest.NewRecorder()
@@ -51,6 +52,7 @@ func TestInstallationRegistrationBindsAuthenticatedOwnerAndPathIDs(t *testing.T)
 	require.Equal(t, owner, store.created.OwnerAccountID)
 	require.Equal(t, appID, store.created.ApplicationID)
 	require.Equal(t, envID, store.created.EnvironmentID)
+	require.Equal(t, botID, store.created.BotID)
 	require.Equal(t, "https://callback.example/callback-v1", store.created.CallbackURL)
 	require.Equal(t, "installation-1", store.created.IdempotencyKey)
 	require.NotContains(t, w.Body.String(), "secret")
@@ -63,13 +65,14 @@ func TestInstallationRegistrationRejectsOwnerAndBodyOverridesBeforeStore(t *test
 	request := func(body string) *http.Request {
 		r := httptest.NewRequest(http.MethodPost,
 			"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/installations",
-			bytes.NewBufferString(body))
+		bytes.NewBufferString(body))
 		r.Header.Set("Authorization", "Bearer player-token")
 		r.Header.Set("Idempotency-Key", "installation-1")
 		return r
 	}
 	handler := NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "regular"}}, store)
-	unauthenticated := request(`{"callback_url":"https://callback.example/callback-v1"}`)
+	validBody := `{"callback_url":"https://callback.example/callback-v1","bot_id":"` + uuid.NewString() + `"}`
+	unauthenticated := request(validBody)
 	unauthenticated.Header.Set("Authorization", "Bearer invalid-token")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, unauthenticated)
@@ -78,15 +81,15 @@ func TestInstallationRegistrationRejectsOwnerAndBodyOverridesBeforeStore(t *test
 
 	handler = NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "guest"}}, store)
 	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, request(`{"callback_url":"https://callback.example/callback-v1"}`))
+	handler.ServeHTTP(w, request(validBody))
 	require.Equal(t, http.StatusForbidden, w.Code)
 	require.Zero(t, store.calls)
 
 	handler = NewHandler(testValidator{claims: voicejwt.Claims{UserID: owner.String(), AccountType: "regular"}}, store)
 	for _, body := range []string{
-		`{"callback_url":"https://callback.example/callback-v1","owner_account_id":"` + uuid.NewString() + `"}`,
-		`{"callback_url":"https://callback.example/callback-v1","application_id":"` + uuid.NewString() + `"}`,
-		`{"callback_url":"https://callback.example/callback-v1","environment_id":"` + uuid.NewString() + `"}`,
+		`{"callback_url":"https://callback.example/callback-v1","bot_id":"` + uuid.NewString() + `","owner_account_id":"` + uuid.NewString() + `"}`,
+		`{"callback_url":"https://callback.example/callback-v1","bot_id":"` + uuid.NewString() + `","application_id":"` + uuid.NewString() + `"}`,
+		`{"callback_url":"https://callback.example/callback-v1","bot_id":"` + uuid.NewString() + `","environment_id":"` + uuid.NewString() + `"}`,
 	} {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, request(body))
@@ -102,7 +105,7 @@ func TestInstallationRegistrationMapsSafeDestinationAndScopeErrors(t *testing.T)
 	request := func() *http.Request {
 		r := httptest.NewRequest(http.MethodPost,
 			"/api/v1/game-integrations/applications/"+appID.String()+"/environments/"+envID.String()+"/installations",
-			bytes.NewBufferString(`{"callback_url":"https://127.0.0.1/callback-v1"}`))
+		bytes.NewBufferString(`{"callback_url":"https://127.0.0.1/callback-v1","bot_id":"`+uuid.NewString()+`"}`))
 		r.Header.Set("Authorization", "Bearer player-token")
 		r.Header.Set("Idempotency-Key", "installation-1")
 		return r

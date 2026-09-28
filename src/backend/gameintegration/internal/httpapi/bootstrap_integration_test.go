@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,26 @@ type bootstrapAuthorityState struct{}
 
 func (bootstrapAuthorityState) Minimum(context.Context, string) (int64, error)  { return 1, nil }
 func (bootstrapAuthorityState) IsRevoked(context.Context, string) (bool, error) { return false, nil }
+
+type bootstrapBotAuthority struct {
+	expectedOwner uuid.UUID
+	deniedBot     uuid.UUID
+	calls         int
+}
+
+func (f *bootstrapBotAuthority) VerifyGameIntegrationBot(_ context.Context, botID, ownerID uuid.UUID) error {
+	f.calls++
+	if ownerID != f.expectedOwner || botID == uuid.Nil || botID == f.deniedBot {
+		return registry.ErrBotAuthorityDenied
+	}
+	return nil
+}
+
+type bootstrapCallbackResolver struct{}
+
+func (bootstrapCallbackResolver) LookupNetIP(context.Context, string, string) ([]netip.Addr, error) {
+	return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+}
 
 type bootstrapJWK struct {
 	Kty string `json:"kty"`
@@ -66,6 +87,10 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(t12Migration))
 	require.NoError(t, err)
+	t11Migration, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000004_t11_installation_bot_binding.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(t11Migration))
+	require.NoError(t, err)
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -88,9 +113,11 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 		State:  bootstrapAuthorityState{},
 	}
 	storeNow := time.Now().UTC()
-	store := &registry.Store{Pool: pool, Now: func() time.Time { return storeNow }}
-	handler := NewHandler(authorizer, store)
 	applicant, secondOwner, operator, guest := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	botAuthority := &bootstrapBotAuthority{expectedOwner: applicant}
+	store := &registry.Store{Pool: pool, Now: func() time.Time { return storeNow },
+		CallbackResolver: bootstrapCallbackResolver{}, BotAuthority: botAuthority}
+	handler := NewHandler(authorizer, store)
 	applicantToken := bootstrapAccessToken(t, key, applicant, "regular")
 	secondOwnerToken := bootstrapAccessToken(t, key, secondOwner, "regular")
 	operatorToken := bootstrapAccessToken(t, key, operator, "regular")
@@ -146,6 +173,36 @@ func runGameIntegrationCleanBootstrap(t *testing.T, includeProductionFixture boo
 	envID, err := uuid.Parse(decode(approved)["environment_id"].(string))
 	require.NoError(t, err)
 	require.Equal(t, "sandbox", decode(approved)["kind"])
+
+	botID := uuid.New()
+	installationPath := "/api/v1/game-integrations/applications/" + appID.String() + "/environments/" + envID.String() + "/installations"
+	installationBody := `{"callback_url":"https://callback.example/hook","bot_id":"` + botID.String() + `"}`
+	installation := call(http.MethodPost, installationPath, applicantToken, "t11-installation-1", installationBody)
+	require.Equal(t, http.StatusCreated, installation.Code, installation.Body.String())
+	installationResult := decode(installation)
+	require.Equal(t, botID.String(), installationResult["bot_id"])
+	require.Equal(t, 1, botAuthority.calls)
+	installationRetry := call(http.MethodPost, installationPath, applicantToken, "t11-installation-1", installationBody)
+	require.Equal(t, http.StatusCreated, installationRetry.Code, installationRetry.Body.String())
+	require.Equal(t, installationResult, decode(installationRetry))
+	require.Equal(t, 1, botAuthority.calls, "exact retry returns the committed Bot binding without another proof call")
+
+	ownerOverride := call(http.MethodPost, installationPath, applicantToken, "t11-installation-owner-override",
+		`{"callback_url":"https://callback.example/hook","bot_id":"`+uuid.NewString()+`","owner_account_id":"`+secondOwner.String()+`"}`)
+	require.Equal(t, http.StatusBadRequest, ownerOverride.Code, "public install body does not accept an owner claim")
+	deniedBotID := uuid.New()
+	botAuthority.deniedBot = deniedBotID
+	deniedInstall := call(http.MethodPost, installationPath, applicantToken, "t11-installation-denied",
+		`{"callback_url":"https://callback.example/hook","bot_id":"`+deniedBotID.String()+`"}`)
+	require.Equal(t, http.StatusForbidden, deniedInstall.Code)
+	var installationCount, successfulInstallOperations int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM installations WHERE application_id=$1`, appID).Scan(&installationCount))
+	require.Equal(t, 1, installationCount, "failed Bot proof must not add an installation")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM registry_operations WHERE actor_id=$1 AND route='installations.create' AND status='succeeded'`, applicant).Scan(&successfulInstallOperations))
+	require.Equal(t, 1, successfulInstallOperations, "failed Bot proof must not add a successful idempotency record")
+	var persistedBotID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT bot_id FROM installations WHERE id=$1`, installationResult["installation_id"]).Scan(&persistedBotID))
+	require.Equal(t, botID, persistedBotID, "registry persists the Bot ID derived from the validated request")
 
 	secondApp := call(http.MethodPost, "/api/v1/game-integrations/applications", secondOwnerToken, "t11-app-2", `{"name":"Dejavu"}`)
 	require.Equal(t, http.StatusCreated, secondApp.Code)

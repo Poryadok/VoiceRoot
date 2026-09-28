@@ -65,6 +65,7 @@ func (h *Handler) serveInstallationRegistration(w http.ResponseWriter, r *http.R
 	decoder.DisallowUnknownFields()
 	var body struct {
 		CallbackURL string `json:"callback_url"`
+		BotID       string `json:"bot_id"`
 	}
 	if err := decoder.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
@@ -74,9 +75,14 @@ func (h *Handler) serveInstallationRegistration(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
 		return
 	}
+	botID, err := uuid.Parse(body.BotID)
+	if err != nil || botID == uuid.Nil || botID.String() != body.BotID {
+		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT")
+		return
+	}
 	installation, err := h.Installations.CreateInstallation(r.Context(), registry.CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: appID, EnvironmentID: envID,
-		CallbackURL: body.CallbackURL, IdempotencyKey: key,
+		BotID: botID, CallbackURL: body.CallbackURL, IdempotencyKey: key,
 	})
 	if err != nil {
 		switch {
@@ -86,6 +92,10 @@ func (h *Handler) serveInstallationRegistration(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusBadRequest, "CALLBACK_URL_REJECTED")
 		case errors.Is(err, registry.ErrInstallationConflict):
 			writeError(w, http.StatusForbidden, "INSTALLATION_DENIED")
+		case errors.Is(err, registry.ErrBotAuthorityDenied):
+			writeError(w, http.StatusForbidden, "BOT_AUTHORITY_DENIED")
+		case errors.Is(err, registry.ErrBotAuthorityUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "BOT_AUTHORITY_UNAVAILABLE")
 		case errors.Is(err, registry.ErrApplicationSuspended):
 			writeError(w, http.StatusServiceUnavailable, "APP_SUSPENDED")
 		case errors.Is(err, registry.ErrRateLimited):
@@ -115,6 +125,7 @@ func (h *Handler) serveInstallationRegistration(w http.ResponseWriter, r *http.R
 		"installation_id": installation.ID.String(),
 		"application_id":  installation.ApplicationID.String(),
 		"environment_id":  installation.EnvironmentID.String(),
+		"bot_id":          installation.BotID.String(),
 		"status":          installation.Status,
 	})
 }

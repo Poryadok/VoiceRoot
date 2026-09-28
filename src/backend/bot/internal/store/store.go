@@ -171,6 +171,22 @@ FROM bots WHERE id = $1`, id)
 	return scanBot(row)
 }
 
+// LookupGameIntegrationBotAuthority returns only the owner and lifecycle state
+// needed by GIS installation binding; Bot credentials and profile data stay
+// inside the Bot service.
+func (s *BotStore) LookupGameIntegrationBotAuthority(ctx context.Context, id uuid.UUID) (uuid.UUID, string, bool, error) {
+	var ownerID uuid.UUID
+	var status string
+	err := s.Pool.QueryRow(ctx, `SELECT owner_account_id, status FROM bots WHERE id=$1`, id).Scan(&ownerID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, "", false, nil
+	}
+	if err != nil {
+		return uuid.Nil, "", false, err
+	}
+	return ownerID, status, true, nil
+}
+
 // GetBotByIDForUpdate reads a bot while holding its row lock until tx commits.
 func (s *BotStore) GetBotByIDForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*BotRow, error) {
 	row := tx.QueryRow(ctx, `

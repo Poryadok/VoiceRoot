@@ -1068,8 +1068,74 @@ the authenticated Voice account when the application was created and is never
 accepted from a game request. GIS obtains the installation's Bot ID from the
 active T11 installation authority record, not from the game request. Bot checks
 that `bots.owner_account_id` for that Bot equals the asserted application owner
-and that the Bot is live. T11 remains open and must define its installation
-authority record; this contract does not prescribe its physical table shape.
+and that the Bot is live. T11 persists this as `installations.bot_id` and
+requires registration to verify the authority as specified below.
+
+The installation-registration Bot proof is a separate internal HTTP operation
+from T51's future `PublishGameEvent` S2S RPC. GIS calls
+`POST /internal/v1/game-integrations/bots/{bot_id}/authority` on Bot with the
+JSON body `{"application_owner_account_id":"<canonical-lowercase-uuid>"}`.
+The caller principal is `gameintegration`, the recipient audience is `bot`,
+and the method binding is the exact HTTP method, escaped path, canonical Unix
+timestamp, lowercase UUID nonce, and lowercase SHA-256 body digest. GIS and Bot
+use a dedicated shared 32-byte key, base64-encoded as
+`GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64` in both services' secret managers; it
+is distinct from the Auth workload key. The signature is unpadded base64url
+HMAC-SHA256 over UTF-8
+`v1\n{principal}\n{audience}\nPOST\n{escaped_path}\n{timestamp}\n{nonce}\n{body_sha256}`,
+where `{principal}` is exactly `gameintegration` and `{audience}` is exactly
+`bot`.
+Bot accepts one each of `X-Voice-Workload: gameintegration`,
+`X-Voice-Audience: bot`, `X-Voice-Timestamp`, `X-Voice-Nonce`, and
+`X-Voice-Signature`; timestamps are
+canonical Unix seconds within ±30 seconds, and nonce reuse is rejected for 61
+seconds through Bot's Redis replay store under the `bot:game-integration-proof:nonce:`
+key prefix. The 61-second TTL covers the inclusive symmetric timestamp-skew
+window, including a proof first received at the +30-second boundary. Query strings, request bodies over
+1 KiB, duplicate headers, malformed IDs, bad MACs, missing key/replay store,
+and replay-store errors fail closed.
+
+On a live Bot whose stored owner equals the request owner, Bot returns `200`
+with `{"bot_id":"<uuid>","owner_account_id":"<uuid>","status":"live"}`.
+It signs the exact response bytes with unpadded base64url HMAC-SHA256 over
+`v1\n200\n{escaped_path}\n{timestamp}\n{nonce}\n{response_body_sha256}` in
+`X-Voice-Response-Signature`, echoing timestamp and nonce in
+`X-Voice-Response-Timestamp` and `X-Voice-Response-Nonce`. GIS verifies status,
+echoes, signature, canonical body and exact Bot/owner/live values before
+persisting anything. Missing/malformed proof, an unknown/disabled Bot, a
+foreign owner, Bot/Redis unavailability, or invalid response proof leaves the
+installation unbound and returns a safe denial/unavailable result. GIS may
+record a sanitized denial audit, but writes no installation or successful
+idempotency result on proof failure. Invalid
+workload proof maps to HTTP 401, malformed signed body to 400, missing/foreign/
+non-live Bot to 403, and key/Redis/database failure to 503. GIS configures the
+Bot base URL with `BOT_INTERNAL_URL`; it and the key must be set together.
+Bot reads the same key and `BOT_REDIS_ADDR` (plus optional
+`BOT_REDIS_PASSWORD`); absent proof key, Redis, or Bot database leaves the
+endpoint unavailable and never falls back to a development key. Existing
+installations receive a nullable `bot_id` because legacy records cannot be
+backfilled with proven authority; NULL is unbound and must be denied by future
+event admission. For local
+bootstrap, generate a dedicated key with `openssl rand -base64 32` and provide
+it to both local services through their environment; the bootstrap acceptance
+uses an in-process fake Bot proof verifier and does not prove provider access.
+No owner ID
+is accepted from the public request; Bot never trusts forwarded user metadata
+for this proof. GIS preflights the authenticated owner, then atomically claims
+the owner-scoped idempotency key/hash and consumes one per-app quota attempt in
+a short transaction that commits before Bot I/O. A same-key/hash failed proof
+replays its saved denial without another quota charge or Bot call; a changed
+hash conflicts, an in-flight duplicate receives bounded unavailable, and the
+121st app attempt is rejected before Bot. A `pending` claim uses its UTC
+`updated_at` as a 30-second lease; after expiry GIS conditionally reclaims it
+under a row lock and retries the read-only proof without charging quota again.
+After proof, GIS opens the binding transaction, re-reads and locks the
+application/environment, and persists the Bot ID, owner-scoped idempotency
+result, and audit record atomically. T51's future
+`PublishGameEvent` continues to use its separately specified service-principal
+contract. GIS resolves `binding_id` to an app-linked message chat using the
+active T30/T31 resource mapping; it does not accept caller-selected
+profile/account identity.
 GIS resolves `binding_id` to an app-linked message chat using the active
 T30/T31 resource mapping; it does not accept caller-selected profile/account
 identity. Bot rechecks its live state,
@@ -1611,3 +1677,39 @@ API major version не меняется молча; optional additive поля �
 операцию. Deprecated SDK получает migration guide и срок поддержки, который
 должен быть принят перед публичным release. Контракт не требует включать друзья,
 presence или invites ради одной voice capability: модульность — цель Voice.
+
+### T11 staged production admission (development-only)
+
+`POST /api/v1/game-integrations/applications/{app_id}/admissions/production`
+is an operator-only staging operation. It accepts an empty body and required
+`Idempotency-Key`; the actor is the regular Voice account from the validated
+Bearer token and must be in `GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS`. The current
+application owner is read and locked from `applications.owner_account_id`; the
+request cannot supply or override an owner. An owner cannot approve their own
+application. The application must be in `sandbox` state. Success creates the
+one `production` environment allowed by `(application_id, kind)`, with status
+`pending`; the application remains `sandbox`. Exact actor/key retries return
+the same pending environment, a changed request hash conflicts, and another key
+cannot create a second production environment. This stage has no numeric quota;
+one production environment per application is the enforced cap.
+
+The owner may then use the existing `PUT .../environments/{env_id}/policy`
+CAS route to stage a separate production policy while the environment is
+pending. Policy remains owner-derived and app/env-bound; provider selection is
+exactly `google`, scopes use the existing enumerated player-scope set, and
+production redirects must be HTTPS (no loopback HTTP or `voicegame:` callback).
+Origins remain HTTPS. The policy route returns the new revision but does not
+activate the environment. Auth's signed environment-policy resolver returns
+unavailable for pending environments, and the GIS credential issuer rejects
+production environments; no production secret or credential is accepted or
+returned by these routes. Sandbox policy, bindings, credentials, and data are
+not copied.
+
+This staged workflow deliberately has no production activation route. The
+current signed Google policy is configuration, not provider identity proof.
+Production activation remains OPEN until separately reviewed operator
+activation, live Google/user-proof acceptance, and out-of-band production
+secret provisioning are implemented and accepted. A pending environment never
+expires or activates implicitly; retries use the original idempotency key.
+Suspending/restoring the application never changes pending to active. Retire,
+restore, and pending-admission cancellation are not part of this staged slice.

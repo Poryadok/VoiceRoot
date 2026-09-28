@@ -62,8 +62,12 @@ func TestOwnerDiagnosticsPreserveProvenanceAndRedactSensitiveValues(t *testing.T
 	resolver := installationResolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	})
-	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now }}
 	ownerID, operatorID := uuid.New(), uuid.New()
+	store := &Store{Pool: pool, CallbackResolver: resolver, Now: func() time.Time { return now },
+		BotAuthority: botAuthorityFunc(func(_ context.Context, _, proofOwner uuid.UUID) error {
+			require.Equal(t, ownerID, proofOwner, "proof authority must use the GIS registry owner")
+			return nil
+		})}
 	app, err := store.CreateApplication(ctx, CreateApplicationInput{
 		OwnerAccountID: ownerID, Name: "Diagnostic game", IdempotencyKey: "diagnostic-app",
 	})
@@ -88,7 +92,7 @@ func TestOwnerDiagnosticsPreserveProvenanceAndRedactSensitiveValues(t *testing.T
 	callbackURL := "https://callback.example/private-registration-path"
 	installation, err := store.CreateInstallation(ctx, CreateInstallationInput{
 		OwnerAccountID: ownerID, ApplicationID: app.ID, EnvironmentID: env.ID,
-		CallbackURL: callbackURL, IdempotencyKey: "diagnostic-installation",
+		BotID: uuid.New(), CallbackURL: callbackURL, IdempotencyKey: "diagnostic-installation",
 	})
 	require.NoError(t, err)
 	var digest []byte

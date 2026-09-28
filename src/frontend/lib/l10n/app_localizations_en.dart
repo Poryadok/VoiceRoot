@@ -12,6 +12,75 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Voice';
 
   @override
+  String get sdkAuthorizationTitle => 'Connect a game';
+
+  @override
+  String get sdkAuthorizationLoadError =>
+      'Could not load authorization details.';
+
+  @override
+  String get sdkAuthorizationApplication => 'Application';
+
+  @override
+  String get sdkAuthorizationEnvironment => 'Environment';
+
+  @override
+  String get sdkAuthorizationGameAccount => 'Game account';
+
+  @override
+  String get sdkAuthorizationPermissions => 'Requested permissions';
+
+  @override
+  String get sdkAuthorizationSelectProfile =>
+      'Choose the Voice profile to connect';
+
+  @override
+  String get sdkAuthorizationProfilesError => 'Profiles could not be loaded.';
+
+  @override
+  String get sdkAuthorizationNoProfiles =>
+      'No eligible Voice profiles are available.';
+
+  @override
+  String get sdkAuthorizationApprove => 'Approve';
+
+  @override
+  String get sdkAuthorizationCancel => 'Cancel';
+
+  @override
+  String get sdkAuthorizationRegularRequired =>
+      'A regular Voice account is required to approve.';
+
+  @override
+  String get sdkAuthorizationCallbackTitle => 'Game connection';
+
+  @override
+  String get sdkAuthorizationCallbackInvalid =>
+      'This authorization link is invalid or expired. Start again from the game.';
+
+  @override
+  String get sdkAuthorizationResumeTemporaryError =>
+      'Voice is temporarily unavailable. The secure session can be resumed.';
+
+  @override
+  String get sdkAuthorizationRetryResume => 'Retry session resume';
+
+  @override
+  String sdkAuthorizationConnected(String application) {
+    return 'Connected to $application';
+  }
+
+  @override
+  String sdkAuthorizationProfile(String profile) {
+    return 'Profile $profile';
+  }
+
+  @override
+  String sdkAuthorizationGrantedPermissions(String permissions) {
+    return 'Permissions: $permissions';
+  }
+
+  @override
   String get gatewayStatusOk => 'Gateway: ok';
 
   @override
