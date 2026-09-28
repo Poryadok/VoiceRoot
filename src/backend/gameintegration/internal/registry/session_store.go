@@ -50,7 +50,7 @@ func (s *Store) accept(ctx context.Context, principal SessionPrincipal, in Creat
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var oldHash []byte
 	var oldSession uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT request_hash, session_id FROM gis_session_operations WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, in.OperationID).Scan(&oldHash, &oldSession)
