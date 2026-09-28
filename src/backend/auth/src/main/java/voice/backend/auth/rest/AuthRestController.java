@@ -1,8 +1,10 @@
 package voice.backend.auth.rest;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +13,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -369,6 +372,11 @@ public class AuthRestController {
     return response.body(Map.of("error", ex.getMessage()));
   }
 
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ResponseEntity<Map<String, String>> validationError(MethodArgumentNotValidException ex) {
+    return ResponseEntity.badRequest().body(Map.of("error", "validation_failed"));
+  }
+
   @ExceptionHandler(DuplicateKeyException.class)
   public ResponseEntity<Map<String, String>> duplicateKey(DuplicateKeyException ex) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -376,7 +384,7 @@ public class AuthRestController {
   }
 
   public record RegisterRequest(
-      String email,
+      @Email @Pattern(regexp = ".*\\S.*") String email,
       String phone,
       @NotBlank String password,
       boolean guest,
