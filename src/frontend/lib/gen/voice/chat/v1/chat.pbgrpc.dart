@@ -1272,3 +1272,92 @@ abstract class ChatServiceBase extends $grpc.Service {
   $async.Future<$0.GetSpacePurgeManifestPageResponse> getSpacePurgeManifestPage(
       $grpc.ServiceCall call, $0.GetSpacePurgeManifestPageRequest request);
 }
+
+/// GIS-only API. Register on Chat's dedicated TLS/mTLS listener; never expose
+/// this service on the player-facing ChatService listener.
+@$pb.GrpcServiceName('voice.chat.v1.GameIntegrationChatService')
+class GameIntegrationChatServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  GameIntegrationChatServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  $grpc.ResponseFuture<$0.ProvisionManagedChatResponse> provisionManagedChat(
+    $0.ProvisionManagedChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$provisionManagedChat, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.SyncManagedChatMembersResponse>
+      syncManagedChatMembers(
+    $0.SyncManagedChatMembersRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$syncManagedChatMembers, request,
+        options: options);
+  }
+
+  // method descriptors
+
+  static final _$provisionManagedChat = $grpc.ClientMethod<
+          $0.ProvisionManagedChatRequest, $0.ProvisionManagedChatResponse>(
+      '/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat',
+      ($0.ProvisionManagedChatRequest value) => value.writeToBuffer(),
+      $0.ProvisionManagedChatResponse.fromBuffer);
+  static final _$syncManagedChatMembers = $grpc.ClientMethod<
+          $0.SyncManagedChatMembersRequest, $0.SyncManagedChatMembersResponse>(
+      '/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers',
+      ($0.SyncManagedChatMembersRequest value) => value.writeToBuffer(),
+      $0.SyncManagedChatMembersResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.chat.v1.GameIntegrationChatService')
+abstract class GameIntegrationChatServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.chat.v1.GameIntegrationChatService';
+
+  GameIntegrationChatServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ProvisionManagedChatRequest,
+            $0.ProvisionManagedChatResponse>(
+        'ProvisionManagedChat',
+        provisionManagedChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ProvisionManagedChatRequest.fromBuffer(value),
+        ($0.ProvisionManagedChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SyncManagedChatMembersRequest,
+            $0.SyncManagedChatMembersResponse>(
+        'SyncManagedChatMembers',
+        syncManagedChatMembers_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SyncManagedChatMembersRequest.fromBuffer(value),
+        ($0.SyncManagedChatMembersResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.ProvisionManagedChatResponse> provisionManagedChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ProvisionManagedChatRequest> $request) async {
+    return provisionManagedChat($call, await $request);
+  }
+
+  $async.Future<$0.ProvisionManagedChatResponse> provisionManagedChat(
+      $grpc.ServiceCall call, $0.ProvisionManagedChatRequest request);
+
+  $async.Future<$0.SyncManagedChatMembersResponse> syncManagedChatMembers_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SyncManagedChatMembersRequest> $request) async {
+    return syncManagedChatMembers($call, await $request);
+  }
+
+  $async.Future<$0.SyncManagedChatMembersResponse> syncManagedChatMembers(
+      $grpc.ServiceCall call, $0.SyncManagedChatMembersRequest request);
+}

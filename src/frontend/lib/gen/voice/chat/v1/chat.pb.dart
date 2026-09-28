@@ -257,6 +257,358 @@ class Chat extends $pb.GeneratedMessage {
   void clearAllowGuests() => $_clearField(15);
 }
 
+/// The operation_id is also the x-request-id principal binding. Request hash
+/// covers the deterministic protobuf encoding of the complete request.
+class ProvisionManagedChatRequest extends $pb.GeneratedMessage {
+  factory ProvisionManagedChatRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? operationId,
+    $core.String? externalChatKey,
+    $core.String? name,
+    $core.String? topic,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (operationId != null) result.operationId = operationId;
+    if (externalChatKey != null) result.externalChatKey = externalChatKey;
+    if (name != null) result.name = name;
+    if (topic != null) result.topic = topic;
+    return result;
+  }
+
+  ProvisionManagedChatRequest._();
+
+  factory ProvisionManagedChatRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProvisionManagedChatRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProvisionManagedChatRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'externalChatKey')
+    ..aOS(5, _omitFieldNames ? '' : 'name')
+    ..aOS(6, _omitFieldNames ? '' : 'topic')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatRequest copyWith(
+          void Function(ProvisionManagedChatRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ProvisionManagedChatRequest))
+          as ProvisionManagedChatRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatRequest create() =>
+      ProvisionManagedChatRequest._();
+  @$core.override
+  ProvisionManagedChatRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProvisionManagedChatRequest>(create);
+  static ProvisionManagedChatRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get externalChatKey => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set externalChatKey($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExternalChatKey() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExternalChatKey() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get name => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set name($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasName() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearName() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get topic => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set topic($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTopic() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTopic() => $_clearField(6);
+}
+
+class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
+  factory ProvisionManagedChatResponse({
+    Chat? chat,
+    $core.bool? replayed,
+  }) {
+    final result = create();
+    if (chat != null) result.chat = chat;
+    if (replayed != null) result.replayed = replayed;
+    return result;
+  }
+
+  ProvisionManagedChatResponse._();
+
+  factory ProvisionManagedChatResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProvisionManagedChatResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProvisionManagedChatResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOM<Chat>(1, _omitFieldNames ? '' : 'chat', subBuilder: Chat.create)
+    ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatResponse copyWith(
+          void Function(ProvisionManagedChatResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ProvisionManagedChatResponse))
+          as ProvisionManagedChatResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatResponse create() =>
+      ProvisionManagedChatResponse._();
+  @$core.override
+  ProvisionManagedChatResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProvisionManagedChatResponse>(create);
+  static ProvisionManagedChatResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Chat get chat => $_getN(0);
+  @$pb.TagNumber(1)
+  set chat(Chat value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChat() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChat() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Chat ensureChat() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $core.bool get replayed => $_getBF(1);
+  @$pb.TagNumber(2)
+  set replayed($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReplayed() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReplayed() => $_clearField(2);
+}
+
+class SyncManagedChatMembersRequest extends $pb.GeneratedMessage {
+  factory SyncManagedChatMembersRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? operationId,
+    $core.String? chatId,
+    $core.Iterable<$core.String>? profileIds,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    return result;
+  }
+
+  SyncManagedChatMembersRequest._();
+
+  factory SyncManagedChatMembersRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncManagedChatMembersRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncManagedChatMembersRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'chatId')
+    ..pPS(5, _omitFieldNames ? '' : 'profileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersRequest copyWith(
+          void Function(SyncManagedChatMembersRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncManagedChatMembersRequest))
+          as SyncManagedChatMembersRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersRequest create() =>
+      SyncManagedChatMembersRequest._();
+  @$core.override
+  SyncManagedChatMembersRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncManagedChatMembersRequest>(create);
+  static SyncManagedChatMembersRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get chatId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set chatId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasChatId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearChatId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.String> get profileIds => $_getList(4);
+}
+
+class SyncManagedChatMembersResponse extends $pb.GeneratedMessage {
+  factory SyncManagedChatMembersResponse({
+    $core.Iterable<$core.String>? profileIds,
+    $core.bool? replayed,
+  }) {
+    final result = create();
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    if (replayed != null) result.replayed = replayed;
+    return result;
+  }
+
+  SyncManagedChatMembersResponse._();
+
+  factory SyncManagedChatMembersResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncManagedChatMembersResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncManagedChatMembersResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'profileIds')
+    ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersResponse copyWith(
+          void Function(SyncManagedChatMembersResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncManagedChatMembersResponse))
+          as SyncManagedChatMembersResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersResponse create() =>
+      SyncManagedChatMembersResponse._();
+  @$core.override
+  SyncManagedChatMembersResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncManagedChatMembersResponse>(create);
+  static SyncManagedChatMembersResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get profileIds => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.bool get replayed => $_getBF(1);
+  @$pb.TagNumber(2)
+  set replayed($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReplayed() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReplayed() => $_clearField(2);
+}
+
 class CreateDMRequest extends $pb.GeneratedMessage {
   factory CreateDMRequest({
     $core.String? otherProfileId,

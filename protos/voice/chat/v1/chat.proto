@@ -76,6 +76,13 @@ service ChatService {
   rpc GetSpacePurgeManifestPage(voice.chat.v1.GetSpacePurgeManifestPageRequest) returns (voice.chat.v1.GetSpacePurgeManifestPageResponse);
 }
 
+// GIS-only API. Register on Chat's dedicated TLS/mTLS listener; never expose
+// this service on the player-facing ChatService listener.
+service GameIntegrationChatService {
+  rpc ProvisionManagedChat(ProvisionManagedChatRequest) returns (ProvisionManagedChatResponse);
+  rpc SyncManagedChatMembers(SyncManagedChatMembersRequest) returns (SyncManagedChatMembersResponse);
+}
+
 enum ChatType {
   CHAT_TYPE_UNSPECIFIED = 0;
   CHAT_TYPE_DM = 1;
@@ -100,6 +107,32 @@ message Chat {
   bool e2e_enabled = 14;
   // Guest admission is explicit and defaults to false for standalone chats.
   bool allow_guests = 15;
+}
+
+// The operation_id is also the x-request-id principal binding. Request hash
+// covers the deterministic protobuf encoding of the complete request.
+message ProvisionManagedChatRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string operation_id = 3;
+  string external_chat_key = 4;
+  string name = 5;
+  optional string topic = 6;
+}
+message ProvisionManagedChatResponse {
+  Chat chat = 1;
+  bool replayed = 2;
+}
+message SyncManagedChatMembersRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string operation_id = 3;
+  string chat_id = 4;
+  repeated string profile_ids = 5;
+}
+message SyncManagedChatMembersResponse {
+  repeated string profile_ids = 1;
+  bool replayed = 2;
 }
 
 message CreateDMRequest {
