@@ -19,6 +19,113 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName = "/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom"
+)
+
+// GameSessionProvisioningServiceClient is the client API for GameSessionProvisioningService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// GIS-only room provisioning. Register this service only on the private listener.
+type GameSessionProvisioningServiceClient interface {
+	ProvisionGameSessionRoom(ctx context.Context, in *ProvisionGameSessionRoomRequest, opts ...grpc.CallOption) (*ProvisionGameSessionRoomResponse, error)
+}
+
+type gameSessionProvisioningServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewGameSessionProvisioningServiceClient(cc grpc.ClientConnInterface) GameSessionProvisioningServiceClient {
+	return &gameSessionProvisioningServiceClient{cc}
+}
+
+func (c *gameSessionProvisioningServiceClient) ProvisionGameSessionRoom(ctx context.Context, in *ProvisionGameSessionRoomRequest, opts ...grpc.CallOption) (*ProvisionGameSessionRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvisionGameSessionRoomResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GameSessionProvisioningServiceServer is the server API for GameSessionProvisioningService service.
+// All implementations must embed UnimplementedGameSessionProvisioningServiceServer
+// for forward compatibility.
+//
+// GIS-only room provisioning. Register this service only on the private listener.
+type GameSessionProvisioningServiceServer interface {
+	ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error)
+	mustEmbedUnimplementedGameSessionProvisioningServiceServer()
+}
+
+// UnimplementedGameSessionProvisioningServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedGameSessionProvisioningServiceServer struct{}
+
+func (UnimplementedGameSessionProvisioningServiceServer) ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProvisionGameSessionRoom not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) mustEmbedUnimplementedGameSessionProvisioningServiceServer() {
+}
+func (UnimplementedGameSessionProvisioningServiceServer) testEmbeddedByValue() {}
+
+// UnsafeGameSessionProvisioningServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GameSessionProvisioningServiceServer will
+// result in compilation errors.
+type UnsafeGameSessionProvisioningServiceServer interface {
+	mustEmbedUnimplementedGameSessionProvisioningServiceServer()
+}
+
+func RegisterGameSessionProvisioningServiceServer(s grpc.ServiceRegistrar, srv GameSessionProvisioningServiceServer) {
+	// If the following call pancis, it indicates UnimplementedGameSessionProvisioningServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&GameSessionProvisioningService_ServiceDesc, srv)
+}
+
+func _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvisionGameSessionRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).ProvisionGameSessionRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).ProvisionGameSessionRoom(ctx, req.(*ProvisionGameSessionRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// GameSessionProvisioningService_ServiceDesc is the grpc.ServiceDesc for GameSessionProvisioningService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var GameSessionProvisioningService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.calls.v1.GameSessionProvisioningService",
+	HandlerType: (*GameSessionProvisioningServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProvisionGameSessionRoom",
+			Handler:    _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/calls/v1/calls.proto",
+}
+
+const (
 	VoiceService_StartCall_FullMethodName                = "/voice.calls.v1.VoiceService/StartCall"
 	VoiceService_AcceptCall_FullMethodName               = "/voice.calls.v1.VoiceService/AcceptCall"
 	VoiceService_DeclineCall_FullMethodName              = "/voice.calls.v1.VoiceService/DeclineCall"

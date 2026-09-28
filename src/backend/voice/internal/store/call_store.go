@@ -76,6 +76,7 @@ type Call struct {
 	RoomID             string                      `json:"room_id"`
 	LivekitRoomName    string                      `json:"livekit_room_name"`
 	ChatID             string                      `json:"chat_id"`
+	ManagedGameSession bool                        `json:"managed_game_session,omitempty"`
 	VoiceRoomID        string                      `json:"voice_room_id,omitempty"`
 	SpaceID            string                      `json:"space_id,omitempty"`
 	SessionKind        callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`
@@ -180,6 +181,9 @@ func NewMemoryCallStore() *MemoryCallStore {
 func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if existing, exists := s.calls[call.RoomID]; exists && (call.ManagedGameSession || existing.ManagedGameSession) {
+		return Call{}, ErrInvalidState
+	}
 	if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
 		return Call{}, err
 	}
@@ -230,6 +234,7 @@ func (s *MemoryCallStore) GetActiveGroupCallForChat(_ context.Context, chatID st
 	defer s.mu.Unlock()
 	for _, call := range s.calls {
 		if call.IsGroupVoice() &&
+			!call.ManagedGameSession &&
 			call.ChatID == chatID &&
 			call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			return call, nil

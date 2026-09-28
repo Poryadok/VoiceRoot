@@ -32,6 +32,24 @@ final $typed_data.Uint8List voiceSessionKindDescriptor = $convert.base64Decode(
     'sKF1ZPSUNFX1NFU1NJT05fS0lORF9DQUxMEAESIgoeVk9JQ0VfU0VTU0lPTl9LSU5EX0dST1VQ'
     'X1ZPSUNFEAISIQodVk9JQ0VfU0VTU0lPTl9LSU5EX1ZPSUNFX1JPT00QAw==');
 
+@$core.Deprecated('Use gameSessionResourceKindDescriptor instead')
+const GameSessionResourceKind$json = {
+  '1': 'GameSessionResourceKind',
+  '2': [
+    {'1': 'GAME_SESSION_RESOURCE_KIND_UNSPECIFIED', '2': 0},
+    {'1': 'GAME_SESSION_RESOURCE_KIND_PARTY', '2': 1},
+    {'1': 'GAME_SESSION_RESOURCE_KIND_MATCH', '2': 2},
+    {'1': 'GAME_SESSION_RESOURCE_KIND_FLEET_SESSION', '2': 3},
+  ],
+};
+
+/// Descriptor for `GameSessionResourceKind`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List gameSessionResourceKindDescriptor = $convert.base64Decode(
+    'ChdHYW1lU2Vzc2lvblJlc291cmNlS2luZBIqCiZHQU1FX1NFU1NJT05fUkVTT1VSQ0VfS0lORF'
+    '9VTlNQRUNJRklFRBAAEiQKIEdBTUVfU0VTU0lPTl9SRVNPVVJDRV9LSU5EX1BBUlRZEAESJAog'
+    'R0FNRV9TRVNTSU9OX1JFU09VUkNFX0tJTkRfTUFUQ0gQAhIsCihHQU1FX1NFU1NJT05fUkVTT1'
+    'VSQ0VfS0lORF9GTEVFVF9TRVNTSU9OEAM=');
+
 @$core.Deprecated('Use callMediaKindDescriptor instead')
 const CallMediaKind$json = {
   '1': 'CallMediaKind',
@@ -105,6 +123,126 @@ final $typed_data.Uint8List voiceRoomLifecycleOutcomeDescriptor = $convert.base6
     'RBABEiUKIVZPSUNFX1JPT01fTElGRUNZQ0xFX09VVENPTUVfTEVGVBACEiYKIlZPSUNFX1JPT0'
     '1fTElGRUNZQ0xFX09VVENPTUVfTU9WRUQQAxImCiJWT0lDRV9ST09NX0xJRkVDWUNMRV9PVVRD'
     'T01FX05PX09QEAQ=');
+
+@$core.Deprecated('Use gameSessionResourceRefDescriptor instead')
+const GameSessionResourceRef$json = {
+  '1': 'GameSessionResourceRef',
+  '2': [
+    {
+      '1': 'kind',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.GameSessionResourceKind',
+      '10': 'kind'
+    },
+    {
+      '1': 'external_resource_key',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'externalResourceKey'
+    },
+  ],
+};
+
+/// Descriptor for `GameSessionResourceRef`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List gameSessionResourceRefDescriptor = $convert.base64Decode(
+    'ChZHYW1lU2Vzc2lvblJlc291cmNlUmVmEjsKBGtpbmQYASABKA4yJy52b2ljZS5jYWxscy52MS'
+    '5HYW1lU2Vzc2lvblJlc291cmNlS2luZFIEa2luZBIyChVleHRlcm5hbF9yZXNvdXJjZV9rZXkY'
+    'AiABKAlSE2V4dGVybmFsUmVzb3VyY2VLZXk=');
+
+@$core.Deprecated('Use provisionGameSessionRoomRequestDescriptor instead')
+const ProvisionGameSessionRoomRequest$json = {
+  '1': 'ProvisionGameSessionRoomRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {
+      '1': 'resource',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.GameSessionResourceRef',
+      '10': 'resource'
+    },
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_creation_operation_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'chatCreationOperationId'
+    },
+  ],
+};
+
+/// Descriptor for `ProvisionGameSessionRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List provisionGameSessionRoomRequestDescriptor = $convert.base64Decode(
+    'Ch9Qcm92aXNpb25HYW1lU2Vzc2lvblJvb21SZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCV'
+    'ILb3BlcmF0aW9uSWQSJQoOYXBwbGljYXRpb25faWQYAiABKAlSDWFwcGxpY2F0aW9uSWQSJQoO'
+    'ZW52aXJvbm1lbnRfaWQYAyABKAlSDWVudmlyb25tZW50SWQSQgoIcmVzb3VyY2UYBCABKAsyJi'
+    '52b2ljZS5jYWxscy52MS5HYW1lU2Vzc2lvblJlc291cmNlUmVmUghyZXNvdXJjZRIXCgdjaGF0'
+    'X2lkGAUgASgJUgZjaGF0SWQSOwoaY2hhdF9jcmVhdGlvbl9vcGVyYXRpb25faWQYBiABKAlSF2'
+    'NoYXRDcmVhdGlvbk9wZXJhdGlvbklk');
+
+@$core.Deprecated('Use provisionGameSessionRoomResponseDescriptor instead')
+const ProvisionGameSessionRoomResponse$json = {
+  '1': 'ProvisionGameSessionRoomResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {
+      '1': 'resource',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.GameSessionResourceRef',
+      '10': 'resource'
+    },
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_creation_operation_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'chatCreationOperationId'
+    },
+    {'1': 'room_id', '3': 7, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'livekit_room_name', '3': 8, '4': 1, '5': 9, '10': 'livekitRoomName'},
+    {
+      '1': 'voice_creation_receipt_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '10': 'voiceCreationReceiptId'
+    },
+    {'1': 'request_hash', '3': 10, '4': 1, '5': 12, '10': 'requestHash'},
+    {
+      '1': 'created_at',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+  ],
+};
+
+/// Descriptor for `ProvisionGameSessionRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List provisionGameSessionRoomResponseDescriptor = $convert.base64Decode(
+    'CiBQcm92aXNpb25HYW1lU2Vzc2lvblJvb21SZXNwb25zZRIhCgxvcGVyYXRpb25faWQYASABKA'
+    'lSC29wZXJhdGlvbklkEiUKDmFwcGxpY2F0aW9uX2lkGAIgASgJUg1hcHBsaWNhdGlvbklkEiUK'
+    'DmVudmlyb25tZW50X2lkGAMgASgJUg1lbnZpcm9ubWVudElkEkIKCHJlc291cmNlGAQgASgLMi'
+    'Yudm9pY2UuY2FsbHMudjEuR2FtZVNlc3Npb25SZXNvdXJjZVJlZlIIcmVzb3VyY2USFwoHY2hh'
+    'dF9pZBgFIAEoCVIGY2hhdElkEjsKGmNoYXRfY3JlYXRpb25fb3BlcmF0aW9uX2lkGAYgASgJUh'
+    'djaGF0Q3JlYXRpb25PcGVyYXRpb25JZBIXCgdyb29tX2lkGAcgASgJUgZyb29tSWQSKgoRbGl2'
+    'ZWtpdF9yb29tX25hbWUYCCABKAlSD2xpdmVraXRSb29tTmFtZRI5Chl2b2ljZV9jcmVhdGlvbl'
+    '9yZWNlaXB0X2lkGAkgASgJUhZ2b2ljZUNyZWF0aW9uUmVjZWlwdElkEiEKDHJlcXVlc3RfaGFz'
+    'aBgKIAEoDFILcmVxdWVzdEhhc2gSOQoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2'
+    'J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdA==');
 
 @$core.Deprecated('Use startCallRequestDescriptor instead')
 const StartCallRequest$json = {
