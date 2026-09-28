@@ -332,17 +332,31 @@ Self-hosted поставка — единый **Voice Node** bundle: один э
 
 ## Основа и новые зависимости
 
-| Уже есть в проекте по docs/source | Требуется для целевого сценария |
-|---|---|
-| Account/profile, chat/Space/Role | Delegated app identity, binding, bounded scopes |
-| Realtime и Messaging | SDK-compatible external contract и recovery |
-| Voice/LiveKit | Native Unity/Unreal integration, device/handoff acceptance |
-| Bot registry, slash, webhook/polling | Durable command lifecycle, cards, opt-in notifications |
-| Federation scaffold/protos, deferred | Полная authority/routing/reconciliation вертикаль |
+Ниже — source inventory на feature target `b894441983b81fdce2964159bed9a123689b07e3`
+(2026-09-28), а не release sign-off. `Partial` означает, что в коде есть
+ограниченный slice с указанными тестами; это не доказывает общий Voice-owned
+acceptance. PR [#550](https://github.com/Poryadok/VoiceRoot/pull/550) открыт на
+этом base и ещё не входит в перечисленные ниже source paths: T31 orchestration
+остаётся pending.
 
-Наличие proto/handler не означает production-ready. Доказательства ботов —
-[source audit](game-bot-interactions.md#проверка-текущей-реализации), остальные
-релизные статусы — [PLAN](../PLAN.md), не эта таблица.
+| Capability | Статус на target | Source и test evidence | Что не доказано / отсутствует |
+|---|---|---|---|
+| Game Integration Service registry, app/environment authority, credentials, binding и resource mapping | Partial | [HTTP API](../../src/backend/gameintegration/main.go), [application](../../src/backend/gameintegration/internal/httpapi/applications.go), [credentials](../../src/backend/gameintegration/internal/httpapi/credentials.go), [binding authority](../../src/backend/gameintegration/internal/httpapi/binding_authority.go), [resource mapping](../../src/backend/gameintegration/internal/httpapi/resource_mapping_authorization.go); например [bootstrap](../../src/backend/gameintegration/internal/httpapi/bootstrap_integration_test.go), [authority](../../src/backend/gameintegration/internal/httpapi/binding_authority_test.go), [resource mapping test](../../src/backend/gameintegration/internal/httpapi/resource_mapping_authorization_test.go) | Это bounded service foundation; end-to-end game party/match path и release admission ещё не закрыты. |
+| Auth guest conversion и sdk-account identity/conversion | Partial | [guest OTP acceptance](../../src/backend/auth/src/main/java/voice/backend/auth/service/TransactionalGuestConversionOtpAcceptance.java), [SDK identity](../../src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/SdkIdentityService.java), [SDK conversion](../../src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/SdkConversionService.java); [guest OTP acceptance test](../../src/backend/auth/src/test/java/voice/backend/auth/GuestConversionOtpAcceptanceJdbcIntegrationTest.java), [SDK identity JDBC test](../../src/backend/auth/src/test/java/voice/backend/auth/sdkidentity/SdkIdentityJdbcIntegrationTest.java), [SDK conversion JDBC test](../../src/backend/auth/src/test/java/voice/backend/auth/sdkidentity/SdkConversionJdbcIntegrationTest.java) | Эти Auth-owned slices не доказывают обе game-account conversion вертикали со всеми сервисными receipts и client recovery. |
+| Bot interaction and message/event delivery | Partial | [slash interaction](../../src/backend/bot/internal/grpcsvc/interaction.go), [outbox delivery](../../src/backend/bot/internal/grpcsvc/interaction_outbox.go), [message recipient store](../../src/backend/bot/internal/store/message_delivery.go); [durable/restart tests](../../src/backend/bot/internal/grpcsvc/interaction_durable_test.go), [authority and fencing](../../src/backend/bot/internal/grpcsvc/interaction_authority_test.go), [read-history scope](../../src/backend/bot/internal/consumer/message_events_test.go) | Durable webhook slash slice exists. Production polling ACK, rich action cards, signed Game Event ingress and proactive opt-in DM remain incomplete; see [current Bot source audit](game-bot-interactions.md#проверка-текущей-реализации). |
+| Chat managed resources and Space lifecycle | Partial | [GIS-only Chat RPC](../../src/backend/chat/internal/grpcsvc/gameintegration_chat.go), [managed chat store](../../src/backend/chat/internal/store/managed_chats.go), [managed chat tests](../../src/backend/chat/internal/store/managed_chats_integration_test.go), [Space voice-room access](../../src/backend/space/internal/grpcsvc/voice_room_access.go), [Space access contract test](../../src/backend/space/internal/grpcsvc/voice_room_access_contract_test.go) | Idempotent managed-chat create/roster sync exists. MMO corporation-to-Space binding and end-to-end role/media enforcement are not proven by these tests. |
+| GIS party/match orchestration (T31) | Absent on this target | The [T31 requirement](../testing/game-integrations-exec-plan.md) has a pending [PR #550](https://github.com/Poryadok/VoiceRoot/pull/550); it is not part of target `b894441983b81fdce2964159bed9a123689b07e3`. | Chat + Voice resource staging, receipts, compensation, reconciliation and activate-after-ready are not integrated at this snapshot. |
+| Voice game-session admission and media | Partial | [game-session provisioning](../../src/backend/voice/internal/grpcsvc/game_session_provisioning.go), [game principal](../../src/backend/voice/internal/gameprincipal/interceptor.go), [LiveKit room lifecycle](../../src/backend/voice/internal/livekit/room_lifecycle.go); [provisioning contract](../../src/backend/voice/internal/grpcsvc/game_session_contract_test.go), [game provision store](../../src/backend/voice/internal/gameprovision/store_integration_test.go), [principal verification](../../src/backend/voice/internal/gameprincipal/interceptor_test.go) | Contract/store coverage is not proof of an actual game-client media session, account-wide admission/revocation, or device handoff. |
+| Federation authority and node runtime | Partial | [Federation API/runtime](../../src/backend/federation/api.go), [authority](../../src/backend/federation/authority.go), [store](../../src/backend/federation/store.go); [authority tests](../../src/backend/federation/authority_test.go), [clean-start acceptance](../../src/backend/federation/q11_acceptance_test.go), [runtime/profile guard](../../src/backend/federation/runtime_test.go), [contracts](../../protos/voice/s2s/v1/federation_management.proto) | Authority foundation exists. Full node transport/Voice Node bundle distribution, restoration and measured fencing are not proven; federation deployment remains outside `G0–G4`. |
+| Gateway routing for game-owned flows | Partial | Existing [SDK authorization routes](../../src/backend/gateway/sdk_authorization_routes.go), [Bot routes](../../src/backend/gateway/transcode_bots.go), and [matchmaking routes](../../src/backend/gateway/transcode_matchmaking.go); tests include [SDK route tests](../../src/backend/gateway/sdk_authorization_routes_test.go) and [matchmaking route tests](../../src/backend/gateway/transcode_matchmaking_test.go) | Existing SDK-auth/Bot/matchmaking routes do not establish the complete game party, resource mapping, event or command surface through Gateway. |
+| Flutter game surfaces | Partial | Flutter has [SDK authorization UI/client](../../src/frontend/lib/ui/sdk/sdk_authorization_screens.dart), [game catalog/matchmaking client](../../src/frontend/lib/backend/matchmaking_client.dart), [SDK widget tests](../../src/frontend/test/sdk_authorization_widget_test.dart), and [catalog tests](../../src/frontend/test/game_catalog_screen_test.dart). | Game-session party integration is incomplete in Flutter. |
+| Unity/Unreal SDK distributions | Absent / out of scope | Engine packages and distributable SDK assets are excluded from the Voice sprint in [PLAN](../PLAN.md) and the scope of this feature. | No Unity/Unreal runtime package or engine-client acceptance is claimed. |
+
+Таблица фиксирует наличие source/test files; проверки перечисленных tests не
+запускались этим docs-only audit. Live provider/device tests и staging runtime
+acceptance исключены из sprint scope и не заявляются. Общий acceptance и
+ограничения релиза задают [game acceptance](../testing/game-integrations-acceptance.md)
+и [PLAN](../PLAN.md).
 
 ## Проверка ценности
 
