@@ -703,6 +703,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRoomLoadError => 'Не удалось загрузить сообщения';
 
   @override
+  String get chatBlockedAccountsSendDisabled =>
+      'Сообщения между этими аккаунтами недоступны';
+
+  @override
   String get chatRoomPermissionDenied =>
       'У вас нет права просматривать этот чат';
 

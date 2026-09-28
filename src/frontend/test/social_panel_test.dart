@@ -434,6 +434,58 @@ void main() {
     expect(find.textContaining('Last seen'), findsOneWidget);
   });
 
+  testWidgets('profile Block sends account ID and selected profile ID', (
+    tester,
+  ) async {
+    const profileId = '11111111-1111-4111-8111-111111111111';
+    const accountId = '22222222-2222-4222-8222-222222222222';
+    Map<String, dynamic>? blockBody;
+    var blockCalls = 0;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const ProfileDetailSheet(profileId: profileId),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/users/profiles/$profileId') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': profileId,
+                  'account_id': accountId,
+                  'username': 'xronos',
+                  'discriminator': '0001',
+                  'display_name': 'Xronos+1',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/blocks' &&
+              req.method == 'POST') {
+            blockCalls++;
+            blockBody = Map<String, dynamic>.from(jsonDecode(req.body) as Map);
+            return http.Response('{}', 500);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(ProfileDetailSheet.blockKey));
+    await tester.tap(find.byKey(ProfileDetailSheet.blockKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Block user'));
+    await tester.pumpAndSettle();
+
+    expect(blockCalls, 1);
+    expect(blockBody?['blocked_account_id'], accountId);
+    expect(blockBody?['blocked_profile_id'], profileId);
+  });
+
   testWidgets('friends tab shows empty state when no friends', (tester) async {
     await tester.pumpWidget(
       socialTestApp(
@@ -686,7 +738,9 @@ void main() {
     expect(find.byKey(SocialPanel.blockedUnavailableKey), findsNothing);
   });
 
-  testWidgets('blocked tab unblock calls gateway', (tester) async {
+  testWidgets('blocked tab shows identity and unblocks by account ID', (
+    tester,
+  ) async {
     var unblocked = false;
     await tester.pumpWidget(
       socialTestApp(
@@ -697,7 +751,13 @@ void main() {
               jsonEncode({
                 'blocked_list': {
                   'blocked': [
-                    {'blocked_account_id': 'acc-blocked'},
+                    {
+                      'blocked_account_id': 'acc-blocked',
+                      'blocked_profile_id': '00000000-0000-4000-8000-000000000002',
+                      'display_name': 'Xronos+1',
+                      'username': 'xronos',
+                      'discriminator': '0001',
+                    },
                   ],
                 },
               }),
@@ -715,10 +775,46 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Xronos+1'), findsOneWidget);
+    expect(find.textContaining('acc-blocked'), findsNothing);
+
     await tester.tap(find.byKey(SocialPanel.unblockButtonKey('acc-blocked')));
     await tester.pumpAndSettle();
 
     expect(unblocked, isTrue);
+  });
+
+  testWidgets('blocked tab hides account ID when identity is unavailable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks') {
+            return http.Response(
+              jsonEncode({
+                'blocked_list': {
+                  'blocked': [
+                    {'blocked_account_id': 'acc-blocked'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('User unavailable'), findsOneWidget);
+    expect(find.textContaining('acc-blocked'), findsNothing);
+    expect(
+      find.byKey(SocialPanel.unblockButtonKey('acc-blocked')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('outgoing declined request shows declined label', (tester) async {

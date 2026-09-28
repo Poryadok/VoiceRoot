@@ -38,6 +38,7 @@ type SocialGRPC struct {
 	SpaceCoMembership  SpaceCoMembershipChecker
 	AccountProfiles    AccountProfilesResolver
 	ProfileAccounts    ProfileAccountsResolver
+	BlockedProfiles    BlockedProfileResolver
 	Events             interface {
 		PublishFriendRequest(ctx context.Context, requestID, requesterProfileID, targetProfileID string) error
 		PublishFriendAccepted(ctx context.Context, requesterProfileID, targetProfileID string) error
@@ -55,6 +56,14 @@ type AccountProfilesResolver interface {
 // ProfileAccountsResolver resolves profile_id → account_id for block checks (User S2S).
 type ProfileAccountsResolver interface {
 	AccountIDByProfileID(ctx context.Context, profileID uuid.UUID) (uuid.UUID, error)
+}
+
+// BlockedProfile is the selected public identity captured when an account is blocked.
+type BlockedProfile = store.BlockedProfile
+
+// BlockedProfileResolver fetches the exact profile selected by the blocker.
+type BlockedProfileResolver interface {
+	Profile(ctx context.Context, profileID uuid.UUID) (BlockedProfile, error)
 }
 
 // FriendRequestPrivacyChecker reads target profile friend-request audience.

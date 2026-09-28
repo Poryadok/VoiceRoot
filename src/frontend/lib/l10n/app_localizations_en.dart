@@ -702,6 +702,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRoomLoadError => 'Could not load messages';
 
   @override
+  String get chatBlockedAccountsSendDisabled =>
+      'Messages are disabled between these accounts';
+
+  @override
   String get chatRoomPermissionDenied =>
       'You do not have permission to view this chat';
 
