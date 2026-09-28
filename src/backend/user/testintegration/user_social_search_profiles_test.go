@@ -90,11 +90,13 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	integrationtest.ApplyUserDBMigrations(t, ctx, userPool, repoRoot(t))
 
 	socialPool := startPostgresPool(t, ctx, "socialdb")
-	socialMigration := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", "000001_init.up.sql")
-	sqlSocial, err := os.ReadFile(socialMigration)
-	require.NoError(t, err)
-	_, err = socialPool.Exec(ctx, string(sqlSocial))
-	require.NoError(t, err)
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql"} {
+		socialMigration := filepath.Join(repoRoot(t), "src", "backend", "migrations", "social_db", name)
+		sqlSocial, err := os.ReadFile(socialMigration)
+		require.NoError(t, err)
+		_, err = socialPool.Exec(ctx, string(sqlSocial))
+		require.NoError(t, err)
+	}
 
 	accountViewer := uuid.New()
 	accountTarget := uuid.New()
