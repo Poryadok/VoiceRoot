@@ -171,7 +171,7 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
                   profile?.displayName ??
                   item.chat.name ??
                   l10n.chatListDmFallback(_shortChatId(item.chatId));
-              return VoiceListRow(
+              final row = VoiceListRow(
                 key: ChatArchiveScreen.tileKey(item.chatId),
                 title: title,
                 titleWidget: peerId != null && !item.chat.isGroup
@@ -198,6 +198,30 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
                   Navigator.of(context).pop();
                 },
                 onLongPress: () => _unarchive(context, item.chatId),
+              );
+              final platform = Theme.of(context).platform;
+              if (platform != TargetPlatform.android &&
+                  platform != TargetPlatform.iOS) {
+                return row;
+              }
+              return Dismissible(
+                key: Key('chat_archive_swipe_${item.chatId}'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Icon(
+                    Icons.unarchive_outlined,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                confirmDismiss: (_) async {
+                  await _unarchive(context, item.chatId);
+                  // The archive state removes the row only after the API succeeds.
+                  return false;
+                },
+                child: row,
               );
             },
           );

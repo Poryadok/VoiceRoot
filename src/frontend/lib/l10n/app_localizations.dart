@@ -812,6 +812,12 @@ abstract class AppLocalizations {
   /// **'Create folder'**
   String get chatFolderCreateAction;
 
+  /// No description provided for @chatFolderReorderMayBePartial.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder order may have changed partly. Reopen folders to check it.'**
+  String get chatFolderReorderMayBePartial;
+
   /// No description provided for @chatFoldersCustomEmpty.
   ///
   /// In en, this message translates to:

@@ -409,6 +409,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatFolderCreateAction => 'Create folder';
 
   @override
+  String get chatFolderReorderMayBePartial =>
+      'The folder order may have changed partly. Reopen folders to check it.';
+
+  @override
   String get chatFoldersCustomEmpty =>
       'No custom folders yet. Create one above.';
 

@@ -188,6 +188,7 @@
   "chatFoldersManageAction": "Manage folders",
   "chatFolderCreateLabel": "New folder name",
   "chatFolderCreateAction": "Create folder",
+  "chatFolderReorderMayBePartial": "The folder order may have changed partly. Reopen folders to check it.",
   "chatFoldersCustomEmpty": "No custom folders yet. Create one above.",
   "chatFolderDeleteTitle": "Delete folder?",
   "chatFolderDeleteMessage": "Delete \"{name}\"? Chats stay in your inbox.",

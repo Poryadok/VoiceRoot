@@ -175,6 +175,7 @@
   "chatFoldersManageAction": "Управление папками",
   "chatFolderCreateLabel": "Название новой папки",
   "chatFolderCreateAction": "Создать папку",
+  "chatFolderReorderMayBePartial": "Порядок папок мог измениться частично. Откройте папки снова, чтобы проверить его.",
   "chatFoldersCustomEmpty": "Пользовательских папок пока нет. Создайте выше.",
   "chatFolderDeleteTitle": "Удалить папку?",
   "chatFolderDeleteMessage": "Удалить «{name}»? Чаты останутся в списке.",

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_navigation_providers.dart';
+import '../../state/chat_providers.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Create, rename, and delete custom chat folders (navigation.md § folders).
@@ -26,6 +28,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
   final _createController = TextEditingController();
   String? _renamingFolderId;
   final _renameController = TextEditingController();
+  bool _reordering = false;
 
   @override
   void dispose() {
@@ -35,12 +38,15 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
   }
 
   Future<void> _createFolder() async {
+    if (_reordering) return;
     final name = _createController.text.trim();
     if (name.isEmpty) return;
     final error = await ref.read(folderActionsProvider).createFolder(name);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     _createController.clear();
@@ -48,6 +54,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
   }
 
   Future<void> _renameFolder(String folderId) async {
+    if (_reordering) return;
     final name = _renameController.text.trim();
     if (name.isEmpty) return;
     final error = await ref
@@ -55,7 +62,9 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
         .updateFolder(folderId: folderId, name: name);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     setState(() {
@@ -65,6 +74,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
   }
 
   Future<void> _deleteFolder(String folderId, String folderName) async {
+    if (_reordering) return;
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -87,10 +97,39 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
     final error = await ref.read(folderActionsProvider).deleteFolder(folderId);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
     } else {
       setState(() {});
     }
+  }
+
+  Future<void> _reorderFolders(
+    List<VoiceFolder> folders,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (_reordering) return;
+    if (newIndex > oldIndex) newIndex--;
+    if (newIndex == oldIndex) return;
+    final reordered = [...folders];
+    final moved = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, moved);
+    setState(() => _reordering = true);
+    final error = await ref
+        .read(folderActionsProvider)
+        .reorderCustomFolders(reordered);
+    if (!mounted) return;
+    if (error != null && error != kChatActionStaleContext) {
+      final message = error == kFolderReorderMayBePartial
+          ? AppLocalizations.of(context)!.chatFolderReorderMayBePartial
+          : error;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+    setState(() => _reordering = false);
   }
 
   @override
@@ -117,6 +156,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
                   child: TextField(
                     key: const Key('manage_folders_create_field'),
                     controller: _createController,
+                    enabled: !_reordering,
                     decoration: InputDecoration(
                       labelText: l10n.chatFolderCreateLabel,
                     ),
@@ -126,7 +166,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
                 const SizedBox(width: 8),
                 IconButton(
                   key: const Key('manage_folders_create_button'),
-                  onPressed: _createFolder,
+                  onPressed: _reordering ? null : _createFolder,
                   icon: const Icon(Icons.add),
                   tooltip: l10n.chatFolderCreateAction,
                 ),
@@ -138,25 +178,36 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Text(l10n.backendUnavailable),
                 data: (data) {
-                  final custom = data.folders.where((f) => !f.isSystem).toList();
+                  final custom = data.folders
+                      .where((f) => !f.isSystem)
+                      .toList();
                   if (custom.isEmpty) {
                     return Text(
                       l10n.chatFoldersCustomEmpty,
                       style: Theme.of(context).textTheme.bodyMedium,
                     );
                   }
-                  return ListView.builder(
+                  return ReorderableListView.builder(
                     shrinkWrap: true,
+                    buildDefaultDragHandles: false,
                     itemCount: custom.length,
+                    onReorder: (oldIndex, newIndex) =>
+                        _reorderFolders(custom, oldIndex, newIndex),
                     itemBuilder: (context, index) {
                       final folder = custom[index];
                       final isRenaming = _renamingFolderId == folder.id;
                       return ListTile(
                         key: Key('manage_folder_${folder.id}'),
+                        leading: ReorderableDragStartListener(
+                          index: index,
+                          enabled: !_reordering,
+                          child: const Icon(Icons.drag_handle),
+                        ),
                         title: isRenaming
                             ? TextField(
                                 key: Key('manage_folder_rename_${folder.id}'),
                                 controller: _renameController,
+                                enabled: !_reordering,
                                 autofocus: true,
                                 onSubmitted: (_) => _renameFolder(folder.id),
                               )
@@ -168,19 +219,22 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
                               key: Key('manage_folder_edit_${folder.id}'),
                               icon: const Icon(Icons.edit_outlined),
                               tooltip: l10n.commonEdit,
-                              onPressed: () {
-                                setState(() {
-                                  _renamingFolderId = folder.id;
-                                  _renameController.text = folder.name;
-                                });
-                              },
+                              onPressed: _reordering
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _renamingFolderId = folder.id;
+                                        _renameController.text = folder.name;
+                                      });
+                                    },
                             ),
                             IconButton(
                               key: Key('manage_folder_delete_${folder.id}'),
                               icon: const Icon(Icons.delete_outline),
                               tooltip: l10n.commonDelete,
-                              onPressed: () =>
-                                  _deleteFolder(folder.id, folder.name),
+                              onPressed: _reordering
+                                  ? null
+                                  : () => _deleteFolder(folder.id, folder.name),
                             ),
                           ],
                         ),
