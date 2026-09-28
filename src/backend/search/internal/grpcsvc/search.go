@@ -139,6 +139,14 @@ func requireProfile(ctx context.Context) (uuid.UUID, error) {
 	return pid, nil
 }
 
+func requireAccount(ctx context.Context) (uuid.UUID, error) {
+	account, ok := authctx.AccountID(ctx)
+	if !ok {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	return account, nil
+}
+
 func requireQuery(q string) (string, error) {
 	if len(q) > maxQueryBytes {
 		return "", status.Error(codes.InvalidArgument, "query too long")
@@ -167,10 +175,13 @@ func filterProfileHits(ctx context.Context, viewer uuid.UUID, blocks BlockList, 
 	out := make([]string, 0, limit)
 	matcher := privacy.Matcher{Social: social, Space: spaces}
 	viewerIsGuest := guestguard.IsGuest(ctx)
+	viewerAccount, hasViewerAccount := authctx.AccountID(ctx)
 	for _, hit := range hits {
+		if hit.ProfileID == viewer || (hasViewerAccount && hit.AccountID == viewerAccount) {
+			continue
+		}
 		if blocks != nil {
-			viewerAccount, ok := authctx.AccountID(ctx)
-			if ok {
+			if hasViewerAccount {
 				blocked, err := blocks.AccountPairBlocked(ctx, viewerAccount, hit.AccountID)
 				if err != nil {
 					return nil, err
@@ -293,6 +304,9 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 	if err != nil {
 		return nil, err
 	}
+	if _, err := requireAccount(ctx); err != nil {
+		return nil, err
+	}
 	q, err := requireQuery(req.GetQuery())
 	if err != nil {
 		return nil, err
@@ -376,6 +390,9 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 func (s *SearchGRPC) SearchUsers(ctx context.Context, req *searchv1.SearchUsersRequest) (*searchv1.SearchUsersResponse, error) {
 	viewer, err := requireProfile(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := requireAccount(ctx); err != nil {
 		return nil, err
 	}
 	q, err := requireQuery(req.GetQuery())

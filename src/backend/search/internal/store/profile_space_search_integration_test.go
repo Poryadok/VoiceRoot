@@ -59,6 +59,23 @@ func TestProfileSpaceSearchStore_ProfileILIKE_postgres(t *testing.T) {
 		require.Len(t, hits, 1)
 		require.Equal(t, pidCarol, hits[0].ProfileID)
 	})
+
+	t.Run("own account is excluded before limit", func(t *testing.T) {
+		ownProfile := uuid.New()
+		siblingProfile := uuid.New()
+		foreignProfile := uuid.New()
+		for _, doc := range []ProfileDocument{
+			{ProfileID: ownProfile, AccountID: viewer, Username: "a_shared", Discriminator: "0001", DisplayName: "Shared"},
+			{ProfileID: siblingProfile, AccountID: viewer, Username: "b_shared", Discriminator: "0002", DisplayName: "Shared"},
+			{ProfileID: foreignProfile, AccountID: uuid.New(), Username: "c_shared", Discriminator: "0003", DisplayName: "Shared"},
+		} {
+			require.NoError(t, st.UpsertProfile(ctx, doc))
+		}
+		hits, err := st.SearchProfiles(ctx, viewer, "shared", nil, 1)
+		require.NoError(t, err)
+		require.Len(t, hits, 1)
+		require.Equal(t, foreignProfile, hits[0].ProfileID)
+	})
 }
 
 func TestProfileSpaceSearchStore_ExcludesBlockedProfiles_postgres(t *testing.T) {

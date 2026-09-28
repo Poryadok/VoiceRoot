@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"voice/backend/search/internal/authctx"
 	"voice/backend/search/internal/store"
 )
 
@@ -41,8 +42,9 @@ type ProfileStoreAdapter struct {
 	*store.ProfileSpaceSearchStore
 }
 
-func (a *ProfileStoreAdapter) SearchProfiles(ctx context.Context, viewer uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]ProfileSearchHit, error) {
-	hits, err := a.ProfileSpaceSearchStore.SearchProfiles(ctx, viewer, query, excludeBlocked, limit)
+func (a *ProfileStoreAdapter) SearchProfiles(ctx context.Context, _ uuid.UUID, query string, excludeBlocked []uuid.UUID, limit int) ([]ProfileSearchHit, error) {
+	viewerAccount, _ := authctx.AccountID(ctx)
+	hits, err := a.ProfileSpaceSearchStore.SearchProfiles(ctx, viewerAccount, query, excludeBlocked, limit)
 	if err != nil {
 		return nil, err
 	}
