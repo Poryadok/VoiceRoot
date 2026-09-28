@@ -20,6 +20,8 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
+	MessagingService_ApplyGameMessage_FullMethodName             = "/voice.messaging.v1.MessagingService/ApplyGameMessage"
+	MessagingService_TombstoneGameMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/TombstoneGameMessage"
 	MessagingService_EditMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/EditMessage"
 	MessagingService_DeleteMessage_FullMethodName                = "/voice.messaging.v1.MessagingService/DeleteMessage"
 	MessagingService_GetMessages_FullMethodName                  = "/voice.messaging.v1.MessagingService/GetMessages"
@@ -60,6 +62,13 @@ const (
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceClient interface {
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// @voice.security=protected;callers=service:gateway
+	// T15 internal ingress: the exact device-signed compact JWS and Auth
+	// assertion are forwarded unchanged; sender/profile/chat authority is
+	// derived by Messaging from Auth binding and chat policy.
+	ApplyGameMessage(ctx context.Context, in *ApplyGameMessageRequest, opts ...grpc.CallOption) (*ApplyGameMessageResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	TombstoneGameMessage(ctx context.Context, in *TombstoneGameMessageRequest, opts ...grpc.CallOption) (*TombstoneGameMessageResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
 	GetMessages(ctx context.Context, in *GetMessagesRequest, opts ...grpc.CallOption) (*GetMessagesResponse, error)
@@ -108,6 +117,26 @@ func (c *messagingServiceClient) SendMessage(ctx context.Context, in *SendMessag
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendMessageResponse)
 	err := c.cc.Invoke(ctx, MessagingService_SendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) ApplyGameMessage(ctx context.Context, in *ApplyGameMessageRequest, opts ...grpc.CallOption) (*ApplyGameMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyGameMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ApplyGameMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) TombstoneGameMessage(ctx context.Context, in *TombstoneGameMessageRequest, opts ...grpc.CallOption) (*TombstoneGameMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TombstoneGameMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_TombstoneGameMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -395,6 +424,13 @@ func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Contex
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceServer interface {
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
+	// @voice.security=protected;callers=service:gateway
+	// T15 internal ingress: the exact device-signed compact JWS and Auth
+	// assertion are forwarded unchanged; sender/profile/chat authority is
+	// derived by Messaging from Auth binding and chat policy.
+	ApplyGameMessage(context.Context, *ApplyGameMessageRequest) (*ApplyGameMessageResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	TombstoneGameMessage(context.Context, *TombstoneGameMessageRequest) (*TombstoneGameMessageResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
 	GetMessages(context.Context, *GetMessagesRequest) (*GetMessagesResponse, error)
@@ -441,6 +477,12 @@ type UnimplementedMessagingServiceServer struct{}
 
 func (UnimplementedMessagingServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) ApplyGameMessage(context.Context, *ApplyGameMessageRequest) (*ApplyGameMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyGameMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) TombstoneGameMessage(context.Context, *TombstoneGameMessageRequest) (*TombstoneGameMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TombstoneGameMessage not implemented")
 }
 func (UnimplementedMessagingServiceServer) EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EditMessage not implemented")
@@ -558,6 +600,42 @@ func _MessagingService_SendMessage_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceServer).SendMessage(ctx, req.(*SendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_ApplyGameMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyGameMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ApplyGameMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ApplyGameMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ApplyGameMessage(ctx, req.(*ApplyGameMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_TombstoneGameMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TombstoneGameMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).TombstoneGameMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_TombstoneGameMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).TombstoneGameMessage(ctx, req.(*TombstoneGameMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1058,6 +1136,14 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendMessage",
 			Handler:    _MessagingService_SendMessage_Handler,
+		},
+		{
+			MethodName: "ApplyGameMessage",
+			Handler:    _MessagingService_ApplyGameMessage_Handler,
+		},
+		{
+			MethodName: "TombstoneGameMessage",
+			Handler:    _MessagingService_TombstoneGameMessage_Handler,
 		},
 		{
 			MethodName: "EditMessage",

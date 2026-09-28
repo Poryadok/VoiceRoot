@@ -120,6 +120,48 @@ strict proof не завершает rollout во всех окружениях;
 
 ---
 
+## T05. Game integration ownership target
+
+This is the resource-ownership contract for the game-integration target, not a
+claim that these records or routes are implemented. T05 remains open until the
+relevant T03 defaults and T04 trust boundaries are recorded in their owning
+contracts. Each service writes only its own database. A cross-service ID is a
+UUID logical reference; there are no cross-service foreign keys or direct SQL
+reads. The resource lifecycle is enforced by its owning service through its API
+or events.
+
+| Record | Durable owner | Cross-service reference / ownership boundary |
+|---|---|---|
+| Voice account and SDK identity/device keys | Auth (`auth_db`) | GIS stores account/identity references only; Auth owns account issuance, provider proof, and device-key lifecycle. |
+| Voice profile and source alias/privacy attributes | User (`user_db`) | GIS refers to the selected `profile_id`; User remains the source for profile and privacy authority. App-visible alias serialization and hidden-profile rules remain open under G12/Q07. |
+| Application, environment, installation, app/environment player binding | Game Integration Service (`game_integration_db`) | Bindings refer to Auth identity and User profile UUIDs; GIS owns the app/environment relationship and its revision, while Auth remains the identity/device authority. |
+| Character binding | Game Integration Service (`game_integration_db`) | GIS stores the app-scoped Voice-side reference to opaque game/realm/character keys and the selected binding; the game is the source of game facts. Freshness and display-policy details remain subject to G09/G12. |
+| Party, match, fleet session and external resource mapping | Game Integration Service (`game_integration_db`) | GIS stores opaque external keys scoped by application and environment plus logical `chat_id`, `voice_room_id`, or `space_id` references. Chat, Voice, and Space own those resources. |
+| Corporation-to-Space mapping | Game Integration Service (`game_integration_db`) | GIS stores the external corporation key and logical Space reference. Space owns the Space and its protected human Owner; Role owns effective permissions. Owner-loss recovery remains open under G03. |
+| Managed grant intent and reason | Game Integration Service (`game_integration_db`) | GIS records the external membership/rank reason and desired bounded grant; Role owns effective permission state. Reasons stay distinct; do not union privileges implicitly. |
+| Orchestration operation and external-key retirement fence | Game Integration Service (`game_integration_db`) | GIS owns the immutable request hash, operation ID/stage/result references, and retired-key fence. Chat/Voice/Space own their side effects and local receipts. Per-service recovery must not mutate another service's database. |
+| Message and history | Messaging (`messaging_db`) | Messaging owns message IDs and history; `chat_id` refers to `chat_db.chats.id`. GIS stores only the logical Chat reference. |
+
+The target lifecycle vocabulary is: application `draft → sandbox → active →
+suspended/retired`; environment `sandbox` and `production` remain separate;
+installation `active → revoked` (a replacement is a new ID); player binding
+`pending → active → revoked`; character binding `attached → detached/deleted`;
+session `provisioning → active → closing → closed` or `failed`; resource
+mapping `active → retired`; managed grant `desired → applied → revoked`; and
+operation `pending → succeeded/failed`, with reconciliation after uncertainty.
+Do not reuse a retired external key silently. External IDs remain opaque strings,
+not Voice UUIDs or identity evidence. The API contract proposes app/environment
+scoping for external session keys and actor-scoped idempotency keys; exact
+operation/tombstone retention is still open under G04.
+
+For T15, the signed message request carries an explicit `chat_id`; authorization
+must validate the exact active `(application_id, environment_id, binding_id,
+chat_id)` relation. This does not make `chat_id` unique per binding. T51 separately
+requires a binding-addressed event to resolve to one message chat; the active
+session/chat selection rule is not defined here and must be frozen in the T51
+contract before that route is enabled. Never fan out or choose a default chat by
+inference.
+
 ## 3. Общие поля, время и soft delete
 
 ### Временные метки

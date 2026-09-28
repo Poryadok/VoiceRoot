@@ -436,6 +436,7 @@ class FileMetadata extends $pb.GeneratedMessage {
     FileLifecycleStatus? statusEnum,
     FileMediaCategory? fileTypeEnum,
     FileScanOutcome? scanResultEnum,
+    $fixnum.Int64? objectRevision,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -460,6 +461,7 @@ class FileMetadata extends $pb.GeneratedMessage {
     if (statusEnum != null) result.statusEnum = statusEnum;
     if (fileTypeEnum != null) result.fileTypeEnum = fileTypeEnum;
     if (scanResultEnum != null) result.scanResultEnum = scanResultEnum;
+    if (objectRevision != null) result.objectRevision = objectRevision;
     return result;
   }
 
@@ -504,6 +506,9 @@ class FileMetadata extends $pb.GeneratedMessage {
         enumValues: FileMediaCategory.values)
     ..aE<FileScanOutcome>(23, _omitFieldNames ? '' : 'scanResultEnum',
         enumValues: FileScanOutcome.values)
+    ..a<$fixnum.Int64>(
+        24, _omitFieldNames ? '' : 'objectRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -728,6 +733,17 @@ class FileMetadata extends $pb.GeneratedMessage {
   $core.bool hasScanResultEnum() => $_has(21);
   @$pb.TagNumber(23)
   void clearScanResultEnum() => $_clearField(23);
+
+  /// File IDs address one immutable source object; derived scan/convert fields
+  /// do not change its content provenance.
+  @$pb.TagNumber(24)
+  $fixnum.Int64 get objectRevision => $_getI64(22);
+  @$pb.TagNumber(24)
+  set objectRevision($fixnum.Int64 value) => $_setInt64(22, value);
+  @$pb.TagNumber(24)
+  $core.bool hasObjectRevision() => $_has(22);
+  @$pb.TagNumber(24)
+  void clearObjectRevision() => $_clearField(24);
 }
 
 /// @voice.unknown_fields=reject

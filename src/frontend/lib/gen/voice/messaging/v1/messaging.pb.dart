@@ -252,6 +252,317 @@ class SendMessageRequest extends $pb.GeneratedMessage {
   void clearSendWhenOnline() => $_clearField(13);
 }
 
+/// Internal T15 transport for the signed game-message body and its separate
+/// current Auth device-authority assertion. No caller-supplied profile, actor,
+/// or sender field is accepted as authority.
+class ApplyGameMessageRequest extends $pb.GeneratedMessage {
+  factory ApplyGameMessageRequest({
+    $core.String? compactJws,
+    $core.String? deviceAuthorityAssertion,
+  }) {
+    final result = create();
+    if (compactJws != null) result.compactJws = compactJws;
+    if (deviceAuthorityAssertion != null)
+      result.deviceAuthorityAssertion = deviceAuthorityAssertion;
+    return result;
+  }
+
+  ApplyGameMessageRequest._();
+
+  factory ApplyGameMessageRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyGameMessageRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyGameMessageRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'compactJws')
+    ..aOS(2, _omitFieldNames ? '' : 'deviceAuthorityAssertion')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameMessageRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameMessageRequest copyWith(
+          void Function(ApplyGameMessageRequest) updates) =>
+      super.copyWith((message) => updates(message as ApplyGameMessageRequest))
+          as ApplyGameMessageRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameMessageRequest create() => ApplyGameMessageRequest._();
+  @$core.override
+  ApplyGameMessageRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameMessageRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyGameMessageRequest>(create);
+  static ApplyGameMessageRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get compactJws => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set compactJws($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCompactJws() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCompactJws() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get deviceAuthorityAssertion => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set deviceAuthorityAssertion($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDeviceAuthorityAssertion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDeviceAuthorityAssertion() => $_clearField(2);
+}
+
+class ApplyGameMessageResponse extends $pb.GeneratedMessage {
+  factory ApplyGameMessageResponse({
+    Message? message,
+  }) {
+    final result = create();
+    if (message != null) result.message = message;
+    return result;
+  }
+
+  ApplyGameMessageResponse._();
+
+  factory ApplyGameMessageResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyGameMessageResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyGameMessageResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOM<Message>(1, _omitFieldNames ? '' : 'message',
+        subBuilder: Message.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameMessageResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameMessageResponse copyWith(
+          void Function(ApplyGameMessageResponse) updates) =>
+      super.copyWith((message) => updates(message as ApplyGameMessageResponse))
+          as ApplyGameMessageResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameMessageResponse create() => ApplyGameMessageResponse._();
+  @$core.override
+  ApplyGameMessageResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameMessageResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyGameMessageResponse>(create);
+  static ApplyGameMessageResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Message get message => $_getN(0);
+  @$pb.TagNumber(1)
+  set message(Message value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMessage() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMessage() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Message ensureMessage() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+class TombstoneGameMessageRequest extends $pb.GeneratedMessage {
+  factory TombstoneGameMessageRequest({
+    $core.String? actionId,
+    $core.String? chatId,
+    $core.String? messageId,
+    $core.String? reasonClass,
+    $core.String? applicationId,
+    $core.String? environmentId,
+  }) {
+    final result = create();
+    if (actionId != null) result.actionId = actionId;
+    if (chatId != null) result.chatId = chatId;
+    if (messageId != null) result.messageId = messageId;
+    if (reasonClass != null) result.reasonClass = reasonClass;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    return result;
+  }
+
+  TombstoneGameMessageRequest._();
+
+  factory TombstoneGameMessageRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory TombstoneGameMessageRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'TombstoneGameMessageRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'actionId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..aOS(3, _omitFieldNames ? '' : 'messageId')
+    ..aOS(4, _omitFieldNames ? '' : 'reasonClass')
+    ..aOS(5, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(6, _omitFieldNames ? '' : 'environmentId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TombstoneGameMessageRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TombstoneGameMessageRequest copyWith(
+          void Function(TombstoneGameMessageRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as TombstoneGameMessageRequest))
+          as TombstoneGameMessageRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static TombstoneGameMessageRequest create() =>
+      TombstoneGameMessageRequest._();
+  @$core.override
+  TombstoneGameMessageRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static TombstoneGameMessageRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<TombstoneGameMessageRequest>(create);
+  static TombstoneGameMessageRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get actionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set actionId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasActionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearActionId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get messageId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set messageId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMessageId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMessageId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get reasonClass => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set reasonClass($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasReasonClass() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearReasonClass() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get applicationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set applicationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasApplicationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearApplicationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get environmentId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set environmentId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasEnvironmentId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearEnvironmentId() => $_clearField(6);
+}
+
+class TombstoneGameMessageResponse extends $pb.GeneratedMessage {
+  factory TombstoneGameMessageResponse({
+    Message? message,
+  }) {
+    final result = create();
+    if (message != null) result.message = message;
+    return result;
+  }
+
+  TombstoneGameMessageResponse._();
+
+  factory TombstoneGameMessageResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory TombstoneGameMessageResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'TombstoneGameMessageResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOM<Message>(1, _omitFieldNames ? '' : 'message',
+        subBuilder: Message.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TombstoneGameMessageResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TombstoneGameMessageResponse copyWith(
+          void Function(TombstoneGameMessageResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as TombstoneGameMessageResponse))
+          as TombstoneGameMessageResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static TombstoneGameMessageResponse create() =>
+      TombstoneGameMessageResponse._();
+  @$core.override
+  TombstoneGameMessageResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static TombstoneGameMessageResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<TombstoneGameMessageResponse>(create);
+  static TombstoneGameMessageResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Message get message => $_getN(0);
+  @$pb.TagNumber(1)
+  set message(Message value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMessage() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMessage() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Message ensureMessage() => $_ensure(0);
+}
+
 /// The payload accepted when a schedule is created. Internal retry, lease and
 /// dispatch metadata remains in Messaging storage and never crosses RPC.
 class ScheduledMessagePayload extends $pb.GeneratedMessage {

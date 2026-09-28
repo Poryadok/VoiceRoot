@@ -30,6 +30,13 @@ enum DeleteScope {
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 service MessagingService {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  // @voice.security=protected;callers=service:gateway
+  // T15 internal ingress: the exact device-signed compact JWS and Auth
+  // assertion are forwarded unchanged; sender/profile/chat authority is
+  // derived by Messaging from Auth binding and chat policy.
+  rpc ApplyGameMessage(ApplyGameMessageRequest) returns (ApplyGameMessageResponse);
+  // @voice.security=protected;callers=service:moderation
+  rpc TombstoneGameMessage(TombstoneGameMessageRequest) returns (TombstoneGameMessageResponse);
   rpc EditMessage(EditMessageRequest) returns (EditMessageResponse);
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
   rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
@@ -104,6 +111,32 @@ message SendMessageRequest {
     google.protobuf.Timestamp scheduled_at = 12;
     bool send_when_online = 13;
   }
+}
+
+// Internal T15 transport for the signed game-message body and its separate
+// current Auth device-authority assertion. No caller-supplied profile, actor,
+// or sender field is accepted as authority.
+message ApplyGameMessageRequest {
+  string compact_jws = 1;
+  string device_authority_assertion = 2;
+}
+
+message ApplyGameMessageResponse {
+  Message message = 1;
+}
+
+// @voice.unknown_fields=reject
+message TombstoneGameMessageRequest {
+  string action_id = 1;
+  string chat_id = 2;
+  string message_id = 3;
+  string reason_class = 4;
+  string application_id = 5;
+  string environment_id = 6;
+}
+
+message TombstoneGameMessageResponse {
+  Message message = 1;
 }
 
 enum ScheduledMessageStatus {

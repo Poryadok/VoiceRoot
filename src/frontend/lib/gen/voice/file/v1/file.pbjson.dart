@@ -380,6 +380,7 @@ const FileMetadata$json = {
       '10': 'scanResultEnum',
       '17': true
     },
+    {'1': 'object_revision', '3': 24, '4': 1, '5': 4, '10': 'objectRevision'},
   ],
   '8': [
     {'1': '_width'},
@@ -417,11 +418,11 @@ final $typed_data.Uint8List fileMetadataDescriptor = $convert.base64Decode(
     'VudW0YFSABKA4yIi52b2ljZS5maWxlLnYxLkZpbGVMaWZlY3ljbGVTdGF0dXNIB1IKc3RhdHVz'
     'RW51bYgBARJLCg5maWxlX3R5cGVfZW51bRgWIAEoDjIgLnZvaWNlLmZpbGUudjEuRmlsZU1lZG'
     'lhQ2F0ZWdvcnlICFIMZmlsZVR5cGVFbnVtiAEBEk0KEHNjYW5fcmVzdWx0X2VudW0YFyABKA4y'
-    'Hi52b2ljZS5maWxlLnYxLkZpbGVTY2FuT3V0Y29tZUgJUg5zY2FuUmVzdWx0RW51bYgBAUIICg'
-    'Zfd2lkdGhCCQoHX2hlaWdodEITChFfZHVyYXRpb25fc2Vjb25kc0ITChFfdGh1bWJuYWlsX3Iy'
-    'X2tleUITChFfY29udmVydGVkX3IyX2tleUIHCgVfY2hhdEINCgtfZXhwaXJlc19hdEIOCgxfc3'
-    'RhdHVzX2VudW1CEQoPX2ZpbGVfdHlwZV9lbnVtQhMKEV9zY2FuX3Jlc3VsdF9lbnVtSgQIEBAR'
-    'UgljaGF0X3R5cGU=');
+    'Hi52b2ljZS5maWxlLnYxLkZpbGVTY2FuT3V0Y29tZUgJUg5zY2FuUmVzdWx0RW51bYgBARInCg'
+    '9vYmplY3RfcmV2aXNpb24YGCABKARSDm9iamVjdFJldmlzaW9uQggKBl93aWR0aEIJCgdfaGVp'
+    'Z2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRzQhMKEV90aHVtYm5haWxfcjJfa2V5QhMKEV9jb252ZX'
+    'J0ZWRfcjJfa2V5QgcKBV9jaGF0Qg0KC19leHBpcmVzX2F0Qg4KDF9zdGF0dXNfZW51bUIRCg9f'
+    'ZmlsZV90eXBlX2VudW1CEwoRX3NjYW5fcmVzdWx0X2VudW1KBAgQEBFSCWNoYXRfdHlwZQ==');
 
 @$core.Deprecated('Use getFileURLRequestDescriptor instead')
 const GetFileURLRequest$json = {
