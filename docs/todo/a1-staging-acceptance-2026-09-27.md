@@ -27,3 +27,9 @@ Full CI was dispatched at the exact deployed SHA: [run 36338102698](https://gith
 - Run the two-user Web acceptance against staging for friends/requests/block, DM/group/channel/thread, reconnect and inbox/history catch-up, unread/read, archive/folders/Quick Access, attachments, and account soft-delete behavior.
 - Guest sessions cannot substitute for this: the product rules prohibit guests from initiating friend invites and DMs, so this requires regular accounts with verified email.
 - Verify the Web UI empty/error/offline states and profile/chat switching. A1 remains open; A2 must not enter WIP before these checks and the complete A1 DoD pass.
+
+## 2026-09-28 follow-up
+
+- PR [#526](https://github.com/Poryadok/VoiceRoot/pull/526) merged as `a813d82c6ea6b803bf2f83b906db75d58971bb97`. It rejects malformed, empty, and whitespace-only supplied email values before registration or OTP work while keeping omitted email valid for guest registration. Auth tests passed 554/554 and master CI run [36378284780](https://github.com/Poryadok/VoiceRoot/actions/runs/36378284780) succeeded.
+- Full data-preserving staging deploy and smoke run [36379144973](https://github.com/Poryadok/VoiceRoot/actions/runs/36379144973) succeeded at the merge SHA. The Auth deployment rolled out successfully; the smoke checked Gateway, version, registration validation (malformed email returns HTTP 400), staff routes, web endpoints, and LiveKit signaling. Public Gateway and Flutter web `/health` returned `ok` afterward.
+- The workflow set `VOICE_NATS_FRESH_INSTALL=false`; `voice-staging` was unchanged and no wipe or namespace reset ran. Auth email-secret preflight passed. The prior browser registration reached verification-code entry, but the user has not confirmed whether the most recent Zoho email arrived. The current app tab shows “Enable accessibility.” A1 remains open; do not start A2 until live acceptance is complete.
