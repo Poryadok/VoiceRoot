@@ -52,6 +52,13 @@ func (s *MessagingGRPC) ApplyGameMessage(ctx context.Context, req *messagingv1.A
 	if req == nil || req.GetCompactJws() == "" {
 		return nil, status.Error(codes.InvalidArgument, "signed game message is required")
 	}
+	verified, ok := principal.FromContext(ctx)
+	requestHash, hashErr := principal.RequestHash(req)
+	if !ok || hashErr != nil || verified.Kind != "service" || verified.Issuer != "gateway" || verified.Subject != "service:gateway" || verified.Audience != "messaging" ||
+		verified.RPC != messagingv1.MessagingService_ApplyGameMessage_FullMethodName || verified.RequestID == "" || verified.RequestHash != requestHash ||
+		verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return nil, status.Error(codes.PermissionDenied, "authenticated Gateway service principal required")
+	}
 	if s == nil || s.GameMessages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "game message authority is unavailable")
 	}

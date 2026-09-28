@@ -43,7 +43,7 @@ func (s *MessagesStore) AppendGameMessageTombstone(ctx context.Context, tombston
 	if err != nil {
 		return nil, "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "game-tombstone-action/"+tombstone.ActionID.String()); err != nil {
 		return nil, "", err
 	}
@@ -171,7 +171,7 @@ func (s *MessagesStore) applyGameMessage(ctx context.Context, message gameprotoc
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Receipt lookup is first so an exact retry remains idempotent after the
 	// envelope expires or its device authority is later revoked.
@@ -264,7 +264,7 @@ func (s *MessagesStore) RecordAbortedGameMessagePermit(ctx context.Context, perm
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "game-permit-operation/"+permit.OperationID.String()); err != nil {
 		return err
 	}
@@ -477,7 +477,7 @@ WHERE chat_id=$1 AND message_id=$2 AND revision=$3
 }
 
 func (s *MessagesStore) insertGameMessage(ctx context.Context, tx pgx.Tx, message gameprotocol.Message, senderProfileID uuid.UUID) (*MessageRow, error) {
-	if message.Content == nil || len(message.Content) == 0 {
+	if len(message.Content) == 0 {
 		return nil, errors.New("game message: create requires non-empty content")
 	}
 	attachments, err := gameAttachmentsJSON(message.Attachments)

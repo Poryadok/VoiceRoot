@@ -31,33 +31,33 @@ type GameAuthKeys struct {
 
 func NewGameAuthKeys(config GameAuthKeysConfig) (*GameAuthKeys, error) {
 	if !strings.HasPrefix(config.JWKSURL, "https://") || !strings.HasSuffix(config.JWKSURL, "/.well-known/principal-jwks.json") || config.TLSCertFile == "" || config.TLSKeyFile == "" || config.CAFile == "" {
-		return nil, errors.New("Auth principal JWKS requires HTTPS and mTLS configuration")
+		return nil, errors.New("auth principal JWKS requires HTTPS and mTLS configuration")
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Auth principal JWKS client certificate is invalid")
+		return nil, errors.New("auth principal JWKS client certificate is invalid")
 	}
 	caPEM, err := os.ReadFile(config.CAFile)
 	if err != nil {
-		return nil, errors.New("Auth principal JWKS CA is unavailable")
+		return nil, errors.New("auth principal JWKS CA is unavailable")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
 		roots = x509.NewCertPool()
 	}
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Auth principal JWKS CA has no certificates")
+		return nil, errors.New("auth principal JWKS CA has no certificates")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}
 	return &GameAuthKeys{url: config.JWKSURL, client: &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("Auth principal JWKS redirects are forbidden")
+		return errors.New("auth principal JWKS redirects are forbidden")
 	}}}, nil
 }
 
 func (s *GameAuthKeys) Snapshot(ctx context.Context) (gameprotocol.AuthKeySnapshot, error) {
 	if s == nil || s.client == nil || s.url == "" {
-		return gameprotocol.AuthKeySnapshot{}, errors.New("Auth principal JWKS is unavailable")
+		return gameprotocol.AuthKeySnapshot{}, errors.New("auth principal JWKS is unavailable")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -66,19 +66,19 @@ func (s *GameAuthKeys) Snapshot(ctx context.Context) (gameprotocol.AuthKeySnapsh
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.url, nil)
 	if err != nil {
-		return gameprotocol.AuthKeySnapshot{}, errors.New("Auth principal JWKS request could not be created")
+		return gameprotocol.AuthKeySnapshot{}, errors.New("auth principal JWKS request could not be created")
 	}
 	response, err := s.client.Do(request)
 	if err != nil {
-		return gameprotocol.AuthKeySnapshot{}, errors.New("Auth principal JWKS request failed")
+		return gameprotocol.AuthKeySnapshot{}, errors.New("auth principal JWKS request failed")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return gameprotocol.AuthKeySnapshot{}, fmt.Errorf("Auth principal JWKS returned status %d", response.StatusCode)
+		return gameprotocol.AuthKeySnapshot{}, fmt.Errorf("auth principal JWKS returned status %d", response.StatusCode)
 	}
 	document, err := io.ReadAll(io.LimitReader(response.Body, 128*1024+1))
 	if err != nil || len(document) > 128*1024 {
-		return gameprotocol.AuthKeySnapshot{}, errors.New("Auth principal JWKS response is invalid")
+		return gameprotocol.AuthKeySnapshot{}, errors.New("auth principal JWKS response is invalid")
 	}
 	keys, err := principal.ParseJWKS(document)
 	if err != nil {

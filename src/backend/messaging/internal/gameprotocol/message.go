@@ -476,7 +476,7 @@ func VerifyDeviceAuthority(compact string, authKeys map[string]*rsa.PublicKey, n
 	} {
 		want, err := canonicalUUID(pair.want)
 		if err != nil || pair.got != want {
-			return result, errors.New("Auth assertion identity mismatch")
+			return result, errors.New("auth assertion identity mismatch")
 		}
 	}
 	result.AssertionJWS = compact
@@ -683,7 +683,7 @@ func parseP256JWK(jwk map[string]any) (*ecdsa.PublicKey, error) {
 		return nil, errors.New("invalid Auth device JWK")
 	}
 	key := &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
-	if !key.Curve.IsOnCurve(key.X, key.Y) {
+	if !key.IsOnCurve(key.X, key.Y) {
 		return nil, errors.New("invalid Auth device JWK")
 	}
 	return key, nil
@@ -828,7 +828,12 @@ func writeJSONString(out *bytes.Buffer, value string) {
 			out.WriteString(`\t`)
 		default:
 			if r < 0x20 {
-				out.WriteString(fmt.Sprintf(`\u%04x`, r))
+				const digits = "0123456789abcdef"
+				out.WriteString(`\u`)
+				out.WriteByte(digits[(r>>12)&0xf])
+				out.WriteByte(digits[(r>>8)&0xf])
+				out.WriteByte(digits[(r>>4)&0xf])
+				out.WriteByte(digits[r&0xf])
 			} else {
 				out.WriteRune(r)
 			}

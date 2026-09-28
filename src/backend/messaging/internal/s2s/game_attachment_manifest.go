@@ -26,7 +26,7 @@ type fileGameMetadataClient interface {
 
 func (v *GameAttachmentManifestVerifier) VerifyGameAttachmentManifest(ctx context.Context, profileID, _ uuid.UUID, attachments []gameprotocol.Attachment) error {
 	if v == nil || v.Client == nil || profileID == uuid.Nil || len(attachments) == 0 {
-		return errors.New("File game attachment verifier unavailable")
+		return errors.New("file game attachment verifier unavailable")
 	}
 	now := time.Now().UTC()
 	if v.Clock != nil {
@@ -36,16 +36,16 @@ func (v *GameAttachmentManifestVerifier) VerifyGameAttachmentManifest(ctx contex
 		ctx := profileMetadataContext(ctx, profileID)
 		response, err := v.Client.GetFileMetadata(ctx, &filev1.GetFileMetadataRequest{FileId: attachment.FileID.String()})
 		if err != nil || response == nil || response.GetFileMetadata() == nil {
-			return errors.New("File metadata unavailable")
+			return errors.New("file metadata unavailable")
 		}
 		file := response.GetFileMetadata()
 		if file.GetId() != attachment.FileID.String() || file.GetObjectRevision() != uint64(attachment.ObjectRevision) ||
 			file.GetSizeBytes() != attachment.ByteLength || file.GetSha256Hash() != attachment.ContentSHA256 ||
 			file.GetMimeType() != attachment.MediaType || file.GetStatus() != "ready" || file.GetScanResult() != "clean" {
-			return errors.New("File metadata does not match signed attachment manifest")
+			return errors.New("file metadata does not match signed attachment manifest")
 		}
 		if file.GetExpiresAt() != nil && !file.GetExpiresAt().AsTime().After(now) {
-			return errors.New("File attachment has expired")
+			return errors.New("file attachment has expired")
 		}
 	}
 	return nil

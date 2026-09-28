@@ -574,6 +574,8 @@ logged.
 | Messaging | `MESSAGING_TOMBSTONE_JWKS_LISTEN` | Dedicated HTTPS listener for Messaging's public-only tombstone JWKS. |
 | Messaging | `MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE`, `MESSAGING_TOMBSTONE_JWKS_TLS_KEY_FILE`, `MESSAGING_TOMBSTONE_JWKS_CLIENT_CA_FILE` | Server identity and CA for mandatory client-certificate verification on tombstone JWKS reads. |
 | Messaging | `MODERATION_PRINCIPAL_JWKS_URL`, `MODERATION_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS moderation principal keyset URL and trust CA. |
+| Messaging | `GATEWAY_PRINCIPAL_JWKS_URL`, `GATEWAY_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS Gateway principal keyset URL and trust CA for `ApplyGameMessage`. |
+| Messaging | `MESSAGING_GATEWAY_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_GATEWAY_PRINCIPAL_TLS_KEY_FILE`, `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Messaging mTLS client identity and shared replay store for exact Gateway service-principal verification. |
 | Messaging | `MESSAGING_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_PRINCIPAL_TLS_KEY_FILE` | Messaging client identity for moderation JWKS mTLS. |
 | Messaging | `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Shared Redis for atomic moderation service-principal replay rejection. |
 | Messaging | `AUTH_PRINCIPAL_JWKS_URL`, `AUTH_PRINCIPAL_JWKS_CA_FILE` | Fixed Auth device-status keyset URL and trust CA. |

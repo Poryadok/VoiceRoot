@@ -29,38 +29,46 @@ type Config struct {
 }
 
 type Runtime struct {
+	issuer   string
 	resolver *principal.JWKSResolver
 	redis    *redis.Client
 	http     *http.Client
 }
 
 func New(ctx context.Context, config Config) (*Runtime, error) {
+	return NewForIssuer(ctx, config, "moderation")
+}
+
+func NewForIssuer(ctx context.Context, config Config, expectedIssuer string) (*Runtime, error) {
+	if expectedIssuer != "moderation" && expectedIssuer != "gateway" {
+		return nil, errors.New("unsupported service principal issuer")
+	}
 	if !strings.HasPrefix(config.JWKSURL, "https://") || !strings.HasSuffix(config.JWKSURL, "/.well-known/principal-jwks.json") || config.TLSCertFile == "" || config.TLSKeyFile == "" || config.CAFile == "" || config.RedisURL == "" {
-		return nil, errors.New("moderation principal JWKS mTLS and replay configuration are required")
+		return nil, fmt.Errorf("%s principal JWKS mTLS and replay configuration are required", expectedIssuer)
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("moderation principal JWKS client certificate: %w", err)
+		return nil, fmt.Errorf("%s principal JWKS client certificate: %w", expectedIssuer, err)
 	}
 	caPEM, err := os.ReadFile(config.CAFile)
 	if err != nil {
-		return nil, fmt.Errorf("moderation principal JWKS CA: %w", err)
+		return nil, fmt.Errorf("%s principal JWKS CA: %w", expectedIssuer, err)
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
 		roots = x509.NewCertPool()
 	}
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("moderation principal JWKS CA contains no certificates")
+		return nil, fmt.Errorf("%s principal JWKS CA contains no certificates", expectedIssuer)
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("moderation principal JWKS redirects are forbidden")
+		return errors.New("service principal JWKS redirects are forbidden")
 	}}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
-		if issuer != "moderation" {
-			return nil, errors.New("untrusted moderation principal issuer")
+		if issuer != expectedIssuer {
+			return nil, errors.New("untrusted service principal issuer")
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, config.JWKSURL, nil)
 		if err != nil {
@@ -70,13 +78,13 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("moderation JWKS returned status %d", response.StatusCode)
+			return nil, fmt.Errorf("service JWKS returned status %d", response.StatusCode)
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 128*1024+1))
 		if err != nil || len(body) > 128*1024 {
-			return nil, errors.New("moderation JWKS response is invalid")
+			return nil, errors.New("service JWKS response is invalid")
 		}
 		return body, nil
 	}
@@ -86,21 +94,21 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	}
 	options, err := redis.ParseURL(config.RedisURL)
 	if err != nil {
-		return nil, errors.New("moderation principal replay Redis URL is invalid")
+		return nil, errors.New("service principal replay Redis URL is invalid")
 	}
 	redisClient := redis.NewClient(options)
 	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := redisClient.Ping(pingCtx).Err(); err != nil {
 		_ = redisClient.Close()
-		return nil, errors.New("moderation principal replay Redis unavailable")
+		return nil, errors.New("service principal replay Redis unavailable")
 	}
-	return &Runtime{resolver: resolver, redis: redisClient, http: client}, nil
+	return &Runtime{issuer: expectedIssuer, resolver: resolver, redis: redisClient, http: client}, nil
 }
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.redis == nil {
-		return principal.Principal{}, errors.New("moderation principal runtime unavailable")
+		return principal.Principal{}, errors.New("service principal runtime unavailable")
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -110,11 +118,11 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 		Issuer string `json:"iss"`
 	}
 	payload, err := decodeBase64URL(parts[1])
-	if err != nil || json.Unmarshal(payload, &hint) != nil || hint.Issuer != "moderation" {
+	if err != nil || json.Unmarshal(payload, &hint) != nil || hint.Issuer != r.issuer {
 		return principal.Principal{}, errors.New("untrusted service principal issuer")
 	}
 	return principal.VerifyService(ctx, token, principal.VerifyConfig{
-		ExpectedIssuer: "moderation", ExpectedAudience: "messaging", ExpectedRPC: method,
+		ExpectedIssuer: r.issuer, ExpectedAudience: "messaging", ExpectedRPC: method,
 		ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve,
 		ReplayGuard: r.recordReplay,
 	})
@@ -134,15 +142,15 @@ func decodeBase64URL(value string) ([]byte, error) {
 func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expiresAt time.Time) error {
 	ttl := time.Until(expiresAt)
 	if ttl <= 0 || ttl > 35*time.Second {
-		return errors.New("invalid moderation principal replay lifetime")
+		return errors.New("invalid service principal replay lifetime")
 	}
 	digest := sha256.Sum256([]byte(issuer + "\x00" + jwtID))
-	result, err := r.redis.SetArgs(ctx, fmt.Sprintf("messaging:moderation-principal:%x", digest), "1", redis.SetArgs{Mode: "NX", TTL: ttl}).Result()
+	result, err := r.redis.SetArgs(ctx, fmt.Sprintf("messaging:%s-principal:%x", r.issuer, digest), "1", redis.SetArgs{Mode: "NX", TTL: ttl}).Result()
 	if errors.Is(err, redis.Nil) {
-		return errors.New("moderation principal replay detected")
+		return errors.New("service principal replay detected")
 	}
 	if err != nil || result != "OK" {
-		return errors.New("moderation principal replay storage unavailable")
+		return errors.New("service principal replay storage unavailable")
 	}
 	return nil
 }

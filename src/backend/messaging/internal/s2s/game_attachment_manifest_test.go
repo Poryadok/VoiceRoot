@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 
 	filev1 "voice.app/voice/file/v1"
 	"voice/backend/messaging/internal/gameprotocol"
@@ -60,10 +61,26 @@ func TestGameAttachmentManifestVerifierFailsClosedOnMismatchOrFileUnavailable(t 
 		file *filev1.FileMetadata
 		err  error
 	}{
-		{name: "wrong revision", file: func() *filev1.FileMetadata { f := *base; f.ObjectRevision = 2; return &f }()},
-		{name: "wrong digest", file: func() *filev1.FileMetadata { f := *base; f.Sha256Hash = "bad"; return &f }()},
-		{name: "not ready", file: func() *filev1.FileMetadata { f := *base; f.Status = "deleted"; return &f }()},
-		{name: "infected", file: func() *filev1.FileMetadata { f := *base; f.ScanResult = "infected"; return &f }()},
+		{name: "wrong revision", file: func() *filev1.FileMetadata {
+			f := proto.Clone(base).(*filev1.FileMetadata)
+			f.ObjectRevision = 2
+			return f
+		}()},
+		{name: "wrong digest", file: func() *filev1.FileMetadata {
+			f := proto.Clone(base).(*filev1.FileMetadata)
+			f.Sha256Hash = "bad"
+			return f
+		}()},
+		{name: "not ready", file: func() *filev1.FileMetadata {
+			f := proto.Clone(base).(*filev1.FileMetadata)
+			f.Status = "deleted"
+			return f
+		}()},
+		{name: "infected", file: func() *filev1.FileMetadata {
+			f := proto.Clone(base).(*filev1.FileMetadata)
+			f.ScanResult = "infected"
+			return f
+		}()},
 		{name: "service unavailable", err: errors.New("File unavailable")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

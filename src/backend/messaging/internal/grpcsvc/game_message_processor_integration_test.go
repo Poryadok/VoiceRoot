@@ -83,12 +83,18 @@ type testGamePermitIssuer struct {
 	issued           int
 	outcomes         []string
 	completeFailures int
+	issueDelay       time.Duration
 }
 
 func (s *testGamePermitIssuer) Issue(_ context.Context, authority gameprotocol.DeviceAuthority, operationID uuid.UUID, mutation []byte) (string, error) {
 	s.issued++
+	issuedAt := s.now
+	if s.issueDelay > 0 {
+		time.Sleep(s.issueDelay)
+		issuedAt = time.Now().UTC().Truncate(time.Millisecond)
+	}
 	digest := sha256.Sum256(mutation)
-	expires := s.now.Add(3750 * time.Millisecond)
+	expires := issuedAt.Add(3750 * time.Millisecond)
 	if authority.ExpiresAt.Before(expires) {
 		expires = authority.ExpiresAt
 	}
@@ -99,7 +105,7 @@ func (s *testGamePermitIssuer) Issue(_ context.Context, authority gameprotocol.D
 		"actor_id": authority.ActorID.String(), "binding_id": authority.BindingID.String(), "profile_id": s.profileID.String(),
 		"device_id": authority.DeviceID.String(), "key_id": authority.KeyID.String(), "device_generation": authority.DeviceGeneration,
 		"authority_revision": authority.AuthorityRevision, "gis_permit_id": uuid.NewString(), "binding_revision": int64(5),
-		"assertion_jti": authority.AssertionJTI.String(), "iat_ms": s.now.UnixMilli(), "expires_at_ms": expires.UnixMilli(), "exp": expires.Unix(),
+		"assertion_jti": authority.AssertionJTI.String(), "iat_ms": issuedAt.UnixMilli(), "expires_at_ms": expires.UnixMilli(), "exp": expires.Unix(),
 	}
 	header, err := json.Marshal(map[string]any{"alg": "RS256", "kid": s.keyID, "typ": "voice.game-message-execution-permit+jwt"})
 	if err != nil {
@@ -289,6 +295,28 @@ func TestGameMessageProcessorPersistsAbortedPermitAndRejectsRetry(t *testing.T) 
 	var revisions int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM game_message_revisions WHERE message_id=$1`, message.MessageID).Scan(&revisions))
 	require.Zero(t, revisions)
+}
+
+func TestGameMessageProcessorVerifiesPermitUsingPostNetworkClock(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyBaseMessagingMigrations(t, ctx, pool)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000017_game_message_execution_permits.up.sql"))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	profile := uuid.New()
+	compact, _, assertion, authPrivate := freshSignedCreate(t, now, false)
+	authPublic := &authPrivate.PublicKey
+	permits := &testGamePermitIssuer{key: authPrivate, keyID: "auth-current", profileID: profile, now: now, issueDelay: 350 * time.Millisecond}
+	processor := &VerifiedGameMessageProcessor{
+		Store:    &store.MessagesStore{Pool: pool},
+		AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": authPublic}, at: now},
+		Permits:  permits, Bindings: allowGameBinding{profile: profile},
+	}
+	_, err := processor.ProcessGameMessage(ctx, compact, assertion)
+	require.NoError(t, err, "a valid permit issued after a bounded Auth call must be checked against the post-call clock")
+	require.Equal(t, 1, permits.issued)
+	require.Equal(t, []string{"committed"}, permits.outcomes)
 }
 
 func expiredSignedCreate(t *testing.T) (string, gameprotocol.Message) {

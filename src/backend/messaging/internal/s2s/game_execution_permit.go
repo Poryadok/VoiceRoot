@@ -57,43 +57,43 @@ type gameMessageExecutionPermitCompletionResponse struct {
 func NewGameMessageExecutionPermitClient(config GameMessageExecutionPermitConfig) (*GameMessageExecutionPermitClient, error) {
 	endpoint, err := url.Parse(config.Endpoint)
 	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != gameMessageExecutionPermitPath || config.TLSCertFile == "" || config.TLSKeyFile == "" || config.CAFile == "" {
-		return nil, errors.New("Auth execution permit requires the fixed HTTPS endpoint and mTLS credentials")
+		return nil, errors.New("auth execution permit requires the fixed HTTPS endpoint and mTLS credentials")
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Auth execution permit client certificate is invalid")
+		return nil, errors.New("auth execution permit client certificate is invalid")
 	}
 	caPEM, err := os.ReadFile(config.CAFile)
 	if err != nil {
-		return nil, errors.New("Auth execution permit trust file is unavailable")
+		return nil, errors.New("auth execution permit trust file is unavailable")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
 		roots = x509.NewCertPool()
 	}
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Auth execution permit trust file has no certificates")
+		return nil, errors.New("auth execution permit trust file has no certificates")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("Auth execution permit redirects are forbidden")
+		return errors.New("auth execution permit redirects are forbidden")
 	}}
 	return &GameMessageExecutionPermitClient{endpoint: endpoint, client: client}, nil
 }
 
 func (c *GameMessageExecutionPermitClient) Issue(ctx context.Context, authority gameprotocol.DeviceAuthority, operationID uuid.UUID, mutationBytes []byte) (string, error) {
 	if c == nil || c.endpoint == nil || c.client == nil || authority.AssertionJWS == "" || operationID == uuid.Nil || len(mutationBytes) == 0 || len(mutationBytes) > 128*1024 {
-		return "", errors.New("Auth execution permit request is unavailable or incomplete")
+		return "", errors.New("auth execution permit request is unavailable or incomplete")
 	}
 	digest := sha256.Sum256(mutationBytes)
 	body, err := json.Marshal(gameMessageExecutionPermitRequest{OperationID: operationID.String(), RequestSHA256: hex.EncodeToString(digest[:])})
 	if err != nil {
-		return "", errors.New("Auth execution permit request could not be encoded")
+		return "", errors.New("auth execution permit request could not be encoded")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint.String(), bytes.NewReader(body))
 	if err != nil {
-		return "", errors.New("Auth execution permit request could not be created")
+		return "", errors.New("auth execution permit request could not be created")
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
@@ -101,53 +101,53 @@ func (c *GameMessageExecutionPermitClient) Issue(ctx context.Context, authority 
 	request.Header.Set("X-Voice-Device-Authority", authority.AssertionJWS)
 	response, err := c.client.Do(request)
 	if err != nil {
-		return "", errors.New("Auth execution permit request failed")
+		return "", errors.New("auth execution permit request failed")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Auth execution permit denied with status %d", response.StatusCode)
+		return "", fmt.Errorf("auth execution permit denied with status %d", response.StatusCode)
 	}
 	if response.Header.Get("Content-Type") != "application/json" || !strings.EqualFold(response.Header.Get("Cache-Control"), "no-store") {
-		return "", errors.New("Auth execution permit response headers are invalid")
+		return "", errors.New("auth execution permit response headers are invalid")
 	}
 	var record gameMessageExecutionPermitResponse
 	if err := decodeStrictJSONBody(response.Body, 20*1024, &record, "permit_jws"); err != nil || record.PermitJWS == "" || len(record.PermitJWS) > 16*1024 {
-		return "", errors.New("Auth execution permit response is malformed")
+		return "", errors.New("auth execution permit response is malformed")
 	}
 	return record.PermitJWS, nil
 }
 
 func (c *GameMessageExecutionPermitClient) Complete(ctx context.Context, permitID, operationID uuid.UUID, outcome string) error {
 	if c == nil || c.endpoint == nil || c.client == nil || permitID == uuid.Nil || operationID == uuid.Nil || (outcome != "committed" && outcome != "aborted") {
-		return errors.New("Auth execution permit completion is unavailable or invalid")
+		return errors.New("auth execution permit completion is unavailable or invalid")
 	}
 	target := *c.endpoint
 	target.Path = gameMessageExecutionPermitPath + "/" + permitID.String() + "/completion"
 	body, err := json.Marshal(gameMessageExecutionPermitCompletionRequest{OperationID: operationID.String(), Outcome: outcome})
 	if err != nil {
-		return errors.New("Auth execution permit completion could not be encoded")
+		return errors.New("auth execution permit completion could not be encoded")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, target.String(), bytes.NewReader(body))
 	if err != nil {
-		return errors.New("Auth execution permit completion request could not be created")
+		return errors.New("auth execution permit completion request could not be created")
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Cache-Control", "no-store")
 	response, err := c.client.Do(request)
 	if err != nil {
-		return errors.New("Auth execution permit completion request failed")
+		return errors.New("auth execution permit completion request failed")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("Auth execution permit completion denied with status %d", response.StatusCode)
+		return fmt.Errorf("auth execution permit completion denied with status %d", response.StatusCode)
 	}
 	if response.Header.Get("Content-Type") != "application/json" || !strings.EqualFold(response.Header.Get("Cache-Control"), "no-store") {
-		return errors.New("Auth execution permit completion response headers are invalid")
+		return errors.New("auth execution permit completion response headers are invalid")
 	}
 	var receipt gameMessageExecutionPermitCompletionResponse
 	if err := decodeStrictJSONBody(response.Body, 4*1024, &receipt, "permit_id", "operation_id", "outcome", "status"); err != nil || receipt.Status != "completed" || receipt.Outcome != outcome || !canonicalIDEqual(receipt.PermitID, permitID) || !canonicalIDEqual(receipt.OperationID, operationID) {
-		return errors.New("Auth execution permit completion receipt is malformed or mismatched")
+		return errors.New("auth execution permit completion receipt is malformed or mismatched")
 	}
 	return nil
 }

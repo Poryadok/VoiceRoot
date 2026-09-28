@@ -71,6 +71,20 @@ func loadModerationPrincipalRuntime(ctx context.Context) (*principalruntime.Runt
 	return principalruntime.New(ctx, config)
 }
 
+func loadGatewayPrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("GATEWAY_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_GATEWAY_PRINCIPAL_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_GATEWAY_PRINCIPAL_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("GATEWAY_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" && config.RedisURL == "" {
+		return nil, nil
+	}
+	return principalruntime.NewForIssuer(ctx, config, "gateway")
+}
+
 func loadGameAuthKeys() (*s2s.GameAuthKeys, error) {
 	config := s2s.GameAuthKeysConfig{JWKSURL: strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_JWKS_URL")), TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_PRINCIPAL_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_PRINCIPAL_TLS_KEY_FILE")), CAFile: strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_JWKS_CA_FILE"))}
 	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
@@ -171,6 +185,15 @@ func main() {
 		}
 		if moderationPrincipal != nil {
 			defer func() { _ = moderationPrincipal.Close() }()
+		}
+		gatewayPrincipal, err := loadGatewayPrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("Gateway principal runtime: %v", err)
+		}
+		if gatewayPrincipal != nil {
+			defer func() { _ = gatewayPrincipal.Close() }()
+		} else {
+			logger.Warn("ApplyGameMessage ingress is fail-closed because Gateway principal verification is not configured")
 		}
 		gameAuthKeys, err := loadGameAuthKeys()
 		if err != nil {
@@ -408,7 +431,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), grpc.ChainUnaryInterceptor(principalgrpc.TombstoneUnaryInterceptor(moderationPrincipal)))...)
+		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), grpc.ChainUnaryInterceptor(
+			principalgrpc.TombstoneUnaryInterceptor(moderationPrincipal),
+			principalgrpc.ApplyGameMessageUnaryInterceptor(gatewayPrincipal),
+		))...)
 		var chatThreadPolicy *store.SQLChatThreadPolicy
 		if chatMetaPool != nil {
 			chatThreadPolicy = &store.SQLChatThreadPolicy{Pool: chatMetaPool}

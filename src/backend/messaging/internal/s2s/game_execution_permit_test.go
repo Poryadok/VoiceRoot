@@ -75,10 +75,8 @@ func TestGameMessagePermitClientRejectsMalformedOrCacheablePermitResponses(t *te
 		"denied status":      permitHTTPResponse(http.StatusOK, `{"permit_jws":"a.b.c"}`),
 	} {
 		t.Run(name, func(t *testing.T) {
-			status := response.StatusCode
 			if name == "denied status" {
-				status = http.StatusForbidden
-				response.StatusCode = status
+				response.StatusCode = http.StatusForbidden
 			}
 			client := &GameMessageExecutionPermitClient{endpoint: endpoint, client: &http.Client{Transport: executionPermitRoundTripper(func(*http.Request) (*http.Response, error) { return response, nil })}}
 			_, err := client.Issue(context.Background(), gameprotocol.DeviceAuthority{AssertionJWS: "assertion"}, uuid.New(), []byte(`{}`))

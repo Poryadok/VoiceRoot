@@ -57,7 +57,7 @@ func (a *AuthBackedGameBindingAuthority) AuthorizeMessageResource(ctx context.Co
 
 func (a *AuthBackedGameBindingAuthority) AuthorizeMessageChat(ctx context.Context, profileID uuid.UUID, authority gameprotocol.DeviceAuthority, message gameprotocol.Message) error {
 	if a == nil || a.Chats == nil || profileID == uuid.Nil {
-		return errors.New("Chat membership authority is unavailable")
+		return errors.New("chat membership authority is unavailable")
 	}
 	if err := a.Chats.EnsureMember(ctx, message.ChatID, profileID); err != nil {
 		return errors.New("current bound profile is not a member of the target chat")
@@ -115,7 +115,7 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 		now = p.Clock().UTC()
 	}
 	if snapshot.RefreshedAt.IsZero() || snapshot.RefreshedAt.After(now.Add(250*time.Millisecond)) || now.Sub(snapshot.RefreshedAt) > 5*time.Second {
-		return nil, errors.New("Auth principal JWKS is stale")
+		return nil, errors.New("auth principal JWKS is stale")
 	}
 	message, authority, err := gameprotocol.VerifyRequest(compactJWS, authorityJWS, snapshot.Keys,
 		now, snapshot.ClockUncertainty, expected)
@@ -147,13 +147,18 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 	}
 	permitJWS, err := p.Permits.Issue(ctx, authority, message.OperationID, message.RawPayload)
 	if err != nil {
-		return nil, errors.New("Auth execution permit issuance denied")
+		return nil, errors.New("auth execution permit issuance denied")
 	}
-	permit, err := gameprotocol.VerifyExecutionPermit(permitJWS, snapshot.Keys, now, snapshot.ClockUncertainty, gameprotocol.ExecutionPermitExpected{
+	permitMonotonicNow := time.Now()
+	permitNow := permitMonotonicNow.UTC()
+	if p.Clock != nil {
+		permitNow = p.Clock().UTC()
+	}
+	permit, err := gameprotocol.VerifyExecutionPermit(permitJWS, snapshot.Keys, permitNow, snapshot.ClockUncertainty, gameprotocol.ExecutionPermitExpected{
 		Device: authority, OperationID: message.OperationID, RequestSHA256: requestDigest, MutationBytes: message.RawPayload,
 	})
 	if err != nil {
-		return nil, errors.New("Auth execution permit verification denied")
+		return nil, errors.New("auth execution permit verification denied")
 	}
 	profileID := permit.ProfileID
 	completion := store.GameMessagePermitCompletion{
@@ -177,20 +182,20 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 	if len(message.Attachments) > 0 {
 		if p.Files == nil {
 			abortPermit()
-			return nil, errors.New("File attachment provenance is unavailable")
+			return nil, errors.New("file attachment provenance is unavailable")
 		}
 		if err := p.Files.VerifyGameAttachmentManifest(ctx, profileID, message.ChatID, message.Attachments); err != nil {
 			abortPermit()
-			return nil, errors.New("File attachment provenance denied")
+			return nil, errors.New("file attachment provenance denied")
 		}
 	}
-	remaining := permit.ExpiresAt.Sub(now) - 250*time.Millisecond
+	remaining := permit.ExpiresAt.Sub(permitNow) - 250*time.Millisecond
 	if remaining <= 0 {
 		abortPermit()
-		return nil, errors.New("Auth execution permit expires before bounded message transaction")
+		return nil, errors.New("auth execution permit expires before bounded message transaction")
 	}
 	transactionWindow := min(remaining, 250*time.Millisecond)
-	deadline := monotonicNow.Add(transactionWindow)
+	deadline := permitMonotonicNow.Add(transactionWindow)
 	transactionCtx, cancel := context.WithTimeout(ctx, transactionWindow)
 	defer cancel()
 	completion.Outcome = "committed"
