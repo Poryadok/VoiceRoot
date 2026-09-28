@@ -27,12 +27,33 @@
 | Moderation Service   | `moderation_db`   | —                         | —                                |
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
-| Game Integration Service | `game_integration_db` | — | App/env registry, bindings, operations, managed grants |
+| Game Integration Service | `game_integration_db` | — | Current app/env registry, credentials, installations, registry operations; target bindings, sessions, resource mappings, managed grants |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | Nodes, placements, snapshots, lease nonces, and append-only Q11 denial audit |
 | Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+
+### Game Integration Service (`game_integration_db`): T05 ownership target
+
+This inventory describes the target owner boundary; it is not a shipment claim.
+The current migrations implement registry/security, credentials, installations,
+and registry operations. Session/resource mappings and managed grants remain
+future GIS-owned records under T30/T31 and later community work.
+
+| GIS record family | GIS-owned data | Logical references; owner keeps the resource |
+|---|---|---|
+| Applications, environments, installations, credentials | Registry state, policy/revision, credential verifier, installation lifecycle | Auth owns accounts and SDK identity/device keys; Bot owns Bot lifecycle. |
+| Player/character bindings | App/environment-scoped binding state and opaque external game keys | Auth owns identity/device proof; User owns profiles/privacy; game owns external character facts. |
+| Sessions/resource mappings | External key, session state, Chat/Voice/Space resource IDs | Chat owns `chat_db.chats`/membership; Voice owns `voice_db` room/lifecycle; Space owns `space_db` Space; Role owns effective permission state. |
+| Desired managed grants | External origin/reason, subject reference, desired bounded permission and projection status | GIS owns desired intent; Role owns applied/effective permission. |
+| Operations/retirement fences | Request hash, durable stage/result references, reconciliation state, retired external-key fence | Each domain service owns its side effect and local receipt. No direct cross-database SQL or cross-service FK. |
+
+GIS schema changes belong in `src/backend/migrations/game_integration_db/`.
+The target contract does not yet fix G04 operation/tombstone retention, G09 roster
+freshness, or G12 app-visible alias/privacy details. Keep these explicit until
+their owning decisions are recorded; do not infer retention durations from other
+services.
 
 ### ClickHouse (Analytics Service)
 
