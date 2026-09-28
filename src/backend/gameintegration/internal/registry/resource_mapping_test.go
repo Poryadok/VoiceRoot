@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -43,6 +44,38 @@ func TestCreateResourceMappingReplaysExactReceiptWithNewStoreAndPool(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, first, retry, "a failed changed-body retry preserves the original receipt")
 	assertResourceMappingRowUnchanged(t, replacementStore, ctx, in, "active")
+}
+
+func TestCreateResourceMappingConcurrentExactRetriesReturnSameReceipt(t *testing.T) {
+	ctx := context.Background()
+	store := &Store{Pool: startT12Postgres(t, ctx)}
+	app, env := createBindingTestEnvironment(t, ctx, store)
+	in := resourceMappingInput(app, env, "chat", "match:concurrent", uuid.New())
+	in.ChatID = in.ResourceID
+
+	const callers = 8
+	start := make(chan struct{})
+	receipts := make([]ResourceMappingReceipt, callers)
+	errs := make([]error, callers)
+	var ready sync.WaitGroup
+	var done sync.WaitGroup
+	ready.Add(callers)
+	done.Add(callers)
+	for i := range callers {
+		go func(i int) {
+			defer done.Done()
+			ready.Done()
+			<-start
+			receipts[i], errs[i] = store.CreateResourceMapping(ctx, in)
+		}(i)
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+	for i := range callers {
+		require.NoError(t, errs[i])
+		require.Equal(t, receipts[0], receipts[i])
+	}
 }
 
 func TestT30ResourceMappingMigrationDownAndUp(t *testing.T) {

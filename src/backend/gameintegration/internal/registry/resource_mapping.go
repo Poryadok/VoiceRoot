@@ -87,6 +87,13 @@ func (s *Store) CreateResourceMapping(ctx context.Context, in ResourceMappingInp
 		return ResourceMappingReceipt{}, fmt.Errorf("begin resource mapping: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	// The operation row may not exist yet, so FOR UPDATE cannot serialize the
+	// first concurrent insert. Lock the operation scope before reading it; exact
+	// retries then see and replay the winner's committed receipt.
+	operationScope := in.ApplicationID.String() + ":" + in.EnvironmentID.String() + ":" + in.OperationID.String()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, operationScope); err != nil {
+		return ResourceMappingReceipt{}, fmt.Errorf("lock resource mapping operation: %w", err)
+	}
 
 	var savedHash []byte
 	var savedReceipt []byte
