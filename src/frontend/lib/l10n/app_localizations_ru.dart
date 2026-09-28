@@ -409,6 +409,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatFolderCreateAction => 'Создать папку';
 
   @override
+  String get chatFolderReorderMayBePartial =>
+      'Порядок папок мог измениться частично. Откройте папки снова, чтобы проверить его.';
+
+  @override
   String get chatFoldersCustomEmpty =>
       'Пользовательских папок пока нет. Создайте выше.';
 
