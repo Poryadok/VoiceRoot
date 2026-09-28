@@ -196,6 +196,35 @@ void main() {
   });
 
   group('VoiceChatsClient.quickAccess', () {
+    test('POST replacement names the selected slot in one request', () async {
+      final requests = <http.Request>[];
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(
+          MockClient((req) async {
+            requests.add(req);
+            return http.Response('', 204);
+          }),
+          config: config,
+        ),
+      );
+
+      expect(
+        await client.addQuickAccess(
+          authorization: auth,
+          chatId: 'chat-new',
+          replaceChatId: 'chat-old',
+        ),
+        isA<ChatsApiOk<void>>(),
+      );
+      expect(requests, hasLength(1));
+      expect(requests.single.method, 'POST');
+      expect(requests.single.url.path, '/api/v1/chats/quick-access');
+      expect(jsonDecode(requests.single.body), {
+        'chat_id': 'chat-new',
+        'replace_chat_id': 'chat-old',
+      });
+    });
+
     test('GET/POST/DELETE/PUT quick-access routes', () async {
       final paths = <String>[];
       final methods = <String>[];

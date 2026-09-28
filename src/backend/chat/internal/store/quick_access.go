@@ -15,6 +15,9 @@ const maxQuickAccessSlots = 15
 // ErrQuickAccessLimit is returned when a profile already has 15 quick-access slots.
 var ErrQuickAccessLimit = errors.New("quick access limit reached")
 
+// ErrQuickAccessReplaceSlotNotFound means the selected slot changed since the picker loaded.
+var ErrQuickAccessReplaceSlotNotFound = errors.New("quick access replacement slot not found")
+
 // QuickAccessRow is one quick-access slot for a profile.
 type QuickAccessRow struct {
 	ChatID    uuid.UUID
@@ -106,6 +109,48 @@ INSERT INTO quick_access_chats (profile_id, chat_id, sort_order)
 VALUES ($1, $2, $3)
 `, profileID, chatID, order)
 	return err
+}
+
+// ReplaceQuickAccess replaces one slot without exposing an intermediate removal.
+// The selected slot keeps its order; a failed replacement leaves it unchanged.
+func (s *DMStore) ReplaceQuickAccess(ctx context.Context, profileID, chatID, replacedChatID uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var archived bool
+	err = tx.QueryRow(ctx, `
+SELECT COALESCE(is_archived, false)
+FROM chat_members
+WHERE chat_id = $1 AND profile_id = $2
+FOR SHARE
+`, chatID, profileID).Scan(&archived)
+	if err != nil {
+		return err
+	}
+	if archived {
+		return fmt.Errorf("archived chat cannot be added to quick access")
+	}
+
+	var order int32
+	err = tx.QueryRow(ctx, `
+UPDATE quick_access_chats
+SET chat_id = $3, added_at = now()
+WHERE profile_id = $1 AND chat_id = $2
+RETURNING sort_order
+	`, profileID, replacedChatID, chatID).Scan(&order)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrQuickAccessReplaceSlotNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // RemoveQuickAccess removes a chat from quick access. Missing rows are a no-op.

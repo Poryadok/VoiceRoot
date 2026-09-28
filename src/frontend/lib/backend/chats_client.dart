@@ -497,9 +497,11 @@ class VoiceChatsClient {
     required String authorization,
     required String chatId,
     int? sortOrder,
+    String? replaceChatId,
   }) {
     final body = <String, dynamic>{'chat_id': chatId};
     if (sortOrder != null) body['sort_order'] = sortOrder;
+    if (replaceChatId != null) body['replace_chat_id'] = replaceChatId;
     return _postEmpty(
       '/api/v1/chats/quick-access',
       authorization,

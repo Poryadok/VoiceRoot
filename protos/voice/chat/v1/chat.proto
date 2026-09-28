@@ -223,6 +223,8 @@ message ListQuickAccessResponse {
 message AddQuickAccessRequest {
   string chat_id = 1;
   optional int32 sort_order = 2;
+  // Replaces this existing quick-access chat atomically when set.
+  string replace_chat_id = 3;
 }
 
 message RemoveQuickAccessRequest {

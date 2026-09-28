@@ -91,7 +91,7 @@ Rail slots for pinned-profile chats (≠ folder pin, ≠ Friends favourites):
 | 3 | Add to Quick Access (ctx) | — | — | **Canonical:** §1.4 #11 (chat list row ctx) |
 | 4 | Remove from Quick Access (ctx) | H+V | ctx on quick access row | Remove from rail |
 | 5 | Drag reorder | H — desktop rail; V — drawer QA list | Quick Access has ≥2 entries | Reorder quick access slots |
-| 6 | Quick Access limit reached | H+V | Already 15 chats in quick access | Open **replace picker** — pick slot to replace; atomic remove + add ([navigation.md](../features/navigation.md) § Quick Access) |
+| 6 | Quick Access limit reached | H+V | Already 15 chats in quick access | Open **replace picker** — pick slot to replace; atomic `AddQuickAccess(replace_chat_id)` ([navigation.md](../features/navigation.md) § Quick Access) |
 
 ### 1.2 Chat list header
 

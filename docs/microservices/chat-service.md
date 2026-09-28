@@ -371,6 +371,7 @@ message ListQuickAccessResponse {
 message AddQuickAccessRequest {
   string chat_id = 1;
   optional int32 sort_order = 2;
+  string replace_chat_id = 3; // existing slot to replace atomically; empty for ordinary add
 }
 message RemoveQuickAccessRequest {
   string chat_id = 1;
@@ -380,9 +381,9 @@ message ReorderQuickAccessRequest {
 }
 ```
 
-**At-limit UX (normative):** When the profile already has 15 QA slots, the client shows a **replace picker** ([navigation.md](../features/navigation.md) § Quick Access, [screen-controls.md](../design/screen-controls.md) §1.1c #6): list current slots → user picks one to replace → atomic `RemoveQuickAccess` + `AddQuickAccess`. No dedicated `ReplaceQuickAccess` RPC.
+**At-limit UX (normative):** When the profile already has 15 QA slots, the client shows a **replace picker** ([navigation.md](../features/navigation.md) § Quick Access, [screen-controls.md](../design/screen-controls.md) §1.1c #6): list current slots → user picks one to replace → `AddQuickAccess(replace_chat_id=<selected chat>)` atomically replaces that slot while preserving its order. On failure the original slot remains. No dedicated `ReplaceQuickAccess` RPC.
 
-**Errors:** `AddQuickAccess` returns `FAILED_PRECONDITION` when count is already 15 **and** the client did not remove a slot first (server safety net). The product UX is **not** a hard error toast — client **must** open the replace picker instead ([navigation.md](../features/navigation.md) § Quick Access «Server at-limit error», [screen-controls.md](../design/screen-controls.md) §1.1c #6). `NOT_FOUND` if chat is not a membership of caller.
+**Errors:** `AddQuickAccess` returns `FAILED_PRECONDITION` when count is already 15 and no replacement slot was supplied (server safety net), or when the selected replacement slot changed on another device. The product UX at 15/15 is **not** a hard error toast — client **must** open the replace picker instead ([navigation.md](../features/navigation.md) § Quick Access «Server at-limit error», [screen-controls.md](../design/screen-controls.md) §1.1c #6). `NOT_FOUND` if the new chat is not a membership of caller; `ALREADY_EXISTS` if the new chat already occupies another Quick Access slot. Failed replacement leaves the selected slot unchanged.
 
 ## Archive
 

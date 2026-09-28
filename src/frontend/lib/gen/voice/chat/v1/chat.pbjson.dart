@@ -668,6 +668,7 @@ const AddQuickAccessRequest$json = {
       '10': 'sortOrder',
       '17': true
     },
+    {'1': 'replace_chat_id', '3': 3, '4': 1, '5': 9, '10': 'replaceChatId'},
   ],
   '8': [
     {'1': '_sort_order'},
@@ -677,7 +678,8 @@ const AddQuickAccessRequest$json = {
 /// Descriptor for `AddQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List addQuickAccessRequestDescriptor = $convert.base64Decode(
     'ChVBZGRRdWlja0FjY2Vzc1JlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEiIKCnNvcn'
-    'Rfb3JkZXIYAiABKAVIAFIJc29ydE9yZGVyiAEBQg0KC19zb3J0X29yZGVy');
+    'Rfb3JkZXIYAiABKAVIAFIJc29ydE9yZGVyiAEBEiYKD3JlcGxhY2VfY2hhdF9pZBgDIAEoCVIN'
+    'cmVwbGFjZUNoYXRJZEINCgtfc29ydF9vcmRlcg==');
 
 @$core.Deprecated('Use removeQuickAccessRequestDescriptor instead')
 const RemoveQuickAccessRequest$json = {
