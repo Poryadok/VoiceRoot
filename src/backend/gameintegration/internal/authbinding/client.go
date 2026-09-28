@@ -27,7 +27,7 @@ const (
 	maxResponse    = 16 << 10
 )
 
-var ErrUnavailable = errors.New("Auth game-binding authority unavailable")
+var ErrUnavailable = errors.New("auth game-binding authority unavailable")
 
 var requestHashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var codePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
@@ -221,13 +221,13 @@ func (c *Client) post(ctx context.Context, path string, input, output any) error
 	if err != nil {
 		return ErrUnavailable
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-store" ||
-		!strings.EqualFold(response.Header.Get("Content-Type"), "application/json") {
+	raw, readErr := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
+	closeErr := response.Body.Close()
+	if readErr != nil || closeErr != nil || len(raw) == 0 || len(raw) > maxResponse {
 		return ErrUnavailable
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
-	if err != nil || len(raw) == 0 || len(raw) > maxResponse {
+	if response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-store" ||
+		!strings.EqualFold(response.Header.Get("Content-Type"), "application/json") {
 		return ErrUnavailable
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))

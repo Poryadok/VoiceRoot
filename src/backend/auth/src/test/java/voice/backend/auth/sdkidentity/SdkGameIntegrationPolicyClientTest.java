@@ -134,15 +134,7 @@ class SdkGameIntegrationPolicyClientTest {
         + "\",\"target_profile_id\":\"" + targetProfile
         + "\",\"profile_revision\":11,\"consent_revision\":12,\"policy_revision\":7,\"scopes\":[\"game.chat.read\",\"game.chat.send\"]}";
     String responseBody = "{\"challenge_id\":\"" + challenge + "\",\"nonce\":\"" + "n".repeat(43)
-        + "\",\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
-        + "\",\"provider\":\"google\",\"redirect_uri_sha256\":\"" + "a".repeat(64)
-        + "\",\"pkce_challenge\":\"" + "p".repeat(43) + "\",\"device_key_id\":\"" + device
-        + "\",\"device_key_thumbprint\":\"" + "t".repeat(43) + "\",\"operation_id\":\"" + operation
-        + "\",\"expires_at\":\"2026-09-26T12:38:56Z\",\"status\":\"pending\",\"source_account_id\":\""
-        + sourceAccount + "\",\"source_actor_id\":\"" + sourceActor + "\",\"source_device_id\":\"" + device
-        + "\",\"source_generation\":2,\"target_account_id\":\"" + targetAccount
-        + "\",\"target_profile_id\":\"" + targetProfile
-        + "\",\"profile_revision\":11,\"consent_revision\":12,\"policy_revision\":7,\"scopes\":[\"game.chat.read\",\"game.chat.send\"]}";
+        + "\",\"expires_at\":\"2026-09-26T12:38:56Z\"}";
     AtomicReference<String> received = new AtomicReference<>();
     start(exchange -> {
       String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");

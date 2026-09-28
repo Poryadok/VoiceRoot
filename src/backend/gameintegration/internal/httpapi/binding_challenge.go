@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"voice/backend/gameintegration/internal/registry"
@@ -22,6 +23,12 @@ type BindingChallengeStore interface {
 
 type BindingChallengeCreator interface {
 	CreateBindingChallengeForAuth(context.Context, registry.BindingChallengeCreate, string, uuid.UUID, string) (registry.BindingChallenge, error)
+}
+
+type bindingChallengeCreateResponse struct {
+	ChallengeID uuid.UUID `json:"challenge_id"`
+	Nonce       string    `json:"nonce"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 // InternalBindingChallengeCreateHandler is the only challenge writer. It is
@@ -81,7 +88,7 @@ func (h *InternalBindingChallengeCreateHandler) ServeHTTP(w http.ResponseWriter,
 		}
 		return
 	}
-	writeSignedChallenge(w, r, h.Verifier, challenge)
+	writeSignedChallengeCreate(w, r, h.Verifier, challenge)
 }
 
 type InternalBindingChallengeHandler struct {
@@ -137,6 +144,27 @@ func (h *InternalBindingChallengeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 
 func writeSignedChallenge(w http.ResponseWriter, r *http.Request, verifier WorkloadVerifier, challenge registry.BindingChallenge) {
 	body, err := json.Marshal(challenge)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "BINDING_CHALLENGE_UNAVAILABLE")
+		return
+	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Voice-Response-Timestamp", r.Header.Get("X-Voice-Timestamp"))
+	w.Header().Set("X-Voice-Response-Nonce", r.Header.Get("X-Voice-Nonce"))
+	w.Header().Set("X-Voice-Response-Signature", responseSignature(verifier.Key, http.StatusOK,
+		r.URL.EscapedPath(), r.Header.Get("X-Voice-Timestamp"), r.Header.Get("X-Voice-Nonce"), body))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+func writeSignedChallengeCreate(w http.ResponseWriter, r *http.Request, verifier WorkloadVerifier, challenge registry.BindingChallenge) {
+	body, err := json.Marshal(bindingChallengeCreateResponse{
+		ChallengeID: challenge.ChallengeID,
+		Nonce:       challenge.Nonce,
+		ExpiresAt:   challenge.ExpiresAt,
+	})
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "BINDING_CHALLENGE_UNAVAILABLE")
 		return

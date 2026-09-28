@@ -84,12 +84,12 @@ func (h *BindingRevocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	authority, err := h.Store.RevokePlayerBindingForOwner(r.Context(), bindingID, accountID,
 		body.ExpectedRevision, operationID)
 	if err != nil {
-		switch {
-		case err == registry.ErrPlayerBindingNotFound:
+		switch err {
+		case registry.ErrPlayerBindingNotFound:
 			writeError(w, http.StatusNotFound, "BINDING_NOT_FOUND")
-		case err == registry.ErrPlayerBindingConflict:
+		case registry.ErrPlayerBindingConflict:
 			writeError(w, http.StatusConflict, "BINDING_REVISION_CONFLICT")
-		case err == registry.ErrPlayerBindingDrainPending:
+		case registry.ErrPlayerBindingDrainPending:
 			writeError(w, http.StatusServiceUnavailable, "BINDING_REVOCATION_PENDING")
 		default:
 			writeError(w, http.StatusServiceUnavailable, "BINDING_REVOCATION_UNAVAILABLE")

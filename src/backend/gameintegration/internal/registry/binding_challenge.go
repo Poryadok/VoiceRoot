@@ -244,16 +244,19 @@ func (s *Store) LoadBindingChallenge(ctx context.Context, id uuid.UUID) (Binding
 	if err != nil {
 		return BindingChallenge{}, fmt.Errorf("read GIS binding challenge: %w", err)
 	}
+	legacyFacts := challenge.SourceAccountID == uuid.Nil && challenge.SourceActorID == uuid.Nil &&
+		challenge.SourceDeviceID == uuid.Nil && challenge.SourceGeneration == 0 && challenge.TargetAccountID == uuid.Nil &&
+		challenge.TargetProfileID == uuid.Nil && challenge.ProfileRevision == 0 && challenge.ConsentRevision == 0 &&
+		challenge.PolicyRevision == 0 && len(challenge.Scopes) == 0
+	completeFacts := challenge.SourceAccountID != uuid.Nil && challenge.SourceActorID != uuid.Nil &&
+		challenge.SourceDeviceID == challenge.DeviceKeyID && challenge.SourceGeneration > 0 &&
+		challenge.TargetAccountID != uuid.Nil && challenge.TargetProfileID != uuid.Nil && challenge.ProfileRevision > 0 &&
+		challenge.ConsentRevision > 0 && challenge.PolicyRevision > 0 && validScopes(challenge.Scopes)
 	if challenge.ChallengeID != id || challenge.Status != "pending" || !challenge.ExpiresAt.After(s.now()) ||
 		!challengeNoncePattern.MatchString(challenge.Nonce) || !challengeProviderPattern.MatchString(challenge.Provider) ||
 		!challengeDigestPattern.MatchString(challenge.RedirectURIHash) || !challengeCodePattern.MatchString(challenge.PKCEChallenge) ||
 		!challengeCodePattern.MatchString(challenge.DeviceKeyThumbprint) || challenge.OperationID == uuid.Nil ||
-		!((challenge.SourceAccountID == uuid.Nil && challenge.SourceActorID == uuid.Nil && challenge.SourceDeviceID == uuid.Nil &&
-			challenge.SourceGeneration == 0 && challenge.TargetAccountID == uuid.Nil && challenge.TargetProfileID == uuid.Nil &&
-			challenge.ProfileRevision == 0 && challenge.ConsentRevision == 0 && challenge.PolicyRevision == 0 && len(challenge.Scopes) == 0) ||
-			(challenge.SourceAccountID != uuid.Nil && challenge.SourceActorID != uuid.Nil && challenge.SourceDeviceID == challenge.DeviceKeyID &&
-				challenge.SourceGeneration > 0 && challenge.TargetAccountID != uuid.Nil && challenge.TargetProfileID != uuid.Nil &&
-				challenge.ProfileRevision > 0 && challenge.ConsentRevision > 0 && challenge.PolicyRevision > 0 && validScopes(challenge.Scopes))) {
+		(!legacyFacts && !completeFacts) {
 		return BindingChallenge{}, ErrRegistryUnavailable
 	}
 	return challenge, nil

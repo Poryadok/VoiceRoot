@@ -41,6 +41,8 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       "device_key_thumbprint", "operation_id", "expires_at", "status", "source_account_id", "source_actor_id",
       "source_device_id", "source_generation", "target_account_id", "target_profile_id", "profile_revision",
       "consent_revision", "policy_revision", "scopes");
+  private static final Set<String> BINDING_CHALLENGE_CREATE_RESPONSE_FIELDS =
+      Set.of("challenge_id", "nonce", "expires_at");
 
 
   private final String configuredBaseUrl;
@@ -181,7 +183,7 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
       requireHeader(response, "X-Voice-Response-Nonce", nonce);
       verifyResponse(key, path, timestamp, nonce, uniqueHeader(response, "X-Voice-Response-Signature"), response.body());
-      return parseBindingChallenge(response.body(), null);
+      return parseCreatedBindingChallenge(response.body(), value);
     } catch (InterruptedException interrupted) {
       Thread.currentThread().interrupt();
       throw denied();
@@ -246,6 +248,28 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       return new SdkBindingChallengeAuthority.Challenge(challenge, nonce, app, env, provider, redirectHash, pkce, device, thumbprint,
           operation, expires, status, sourceAccount, sourceActor, sourceDevice, sourceGeneration, targetAccount,
           targetProfile, profileRevision, consentRevision, policyRevision, scopes);
+    } catch (SdkIdentityDeniedException denied) { throw denied; }
+    catch (Exception malformed) { throw denied(); }
+  }
+
+  private static SdkBindingChallengeAuthority.Challenge parseCreatedBindingChallenge(byte[] raw,
+      SdkBindingChallengeAuthority.CreateRequest expected) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(BINDING_CHALLENGE_CREATE_RESPONSE_FIELDS)) throw denied();
+      UUID challengeId = canonicalUuid(text(root, "challenge_id"));
+      String nonce = text(root, "nonce");
+      Instant expiresAt = Instant.parse(text(root, "expires_at"));
+      if (!nonce.matches("[A-Za-z0-9_-]{43}") || !expiresAt.equals(expected.expiresAt())) throw denied();
+      return new SdkBindingChallengeAuthority.Challenge(challengeId, nonce, expected.applicationId(),
+          expected.environmentId(), expected.provider(), expected.redirectUriSha256(), expected.pkceChallenge(),
+          expected.deviceKeyId(), expected.deviceKeyThumbprint(), expected.operationId(), expiresAt, "pending",
+          expected.sourceAccountId(), expected.sourceActorId(), expected.sourceDeviceId(), expected.sourceGeneration(),
+          expected.targetAccountId(), expected.targetProfileId(), expected.profileRevision(), expected.consentRevision(),
+          expected.policyRevision(), expected.scopes());
     } catch (SdkIdentityDeniedException denied) { throw denied; }
     catch (Exception malformed) { throw denied(); }
   }

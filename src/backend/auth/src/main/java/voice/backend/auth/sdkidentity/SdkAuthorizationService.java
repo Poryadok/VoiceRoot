@@ -191,8 +191,8 @@ public class SdkAuthorizationService {
       fresh(claims.expiresAt());
       fresh(row.time("expires_at"));
       if (row.text("code_hash") != null) {
-        if (!Boolean.TRUE.equals(row.values().get("game_binding_intent")) || approvalCodeVault == null
-            || !target.equals(row.id("target_account_id")) || !selectedProfile.equals(row.id("target_profile_id"))
+        if (!Boolean.TRUE.equals(row.values().get("game_binding_intent")) || approvalCodeVault == null) throw denied();
+        if (!target.equals(row.id("target_account_id")) || !selectedProfile.equals(row.id("target_profile_id"))
             || claims.sessionEpoch() != row.number("target_epoch") || !claims.jti().equals(row.text("approval_jti"))
             || row.time("consumed_at") != null
             || row.id("game_binding_challenge_id") == null

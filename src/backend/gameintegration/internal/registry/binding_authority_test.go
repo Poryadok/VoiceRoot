@@ -83,11 +83,12 @@ func TestPlayerBindingRevocationRacesSerializeToOneEpoch(t *testing.T) {
 	close(errs)
 	successes, conflicts := 0, 0
 	for err := range errs {
-		if err == nil {
+		switch err {
+		case nil:
 			successes++
-		} else if err == ErrPlayerBindingConflict {
+		case ErrPlayerBindingConflict:
 			conflicts++
-		} else {
+		default:
 			require.NoError(t, err)
 		}
 	}
@@ -136,8 +137,8 @@ func TestPlayerBindingExecutionPermitIsBoundedIdempotentAndRevocationDrains(t *t
 	require.Equal(t, binding.BindingID, permit.BindingID)
 	require.Equal(t, claims.AssertionID, permit.AssertionID)
 	require.Equal(t, operationID, permit.OperationID)
-	require.LessOrEqual(t, permit.ExpiresAt.Sub(time.Now()), gameMessagePermitLifetime+time.Second)
-	require.Greater(t, permit.ExpiresAt, time.Now())
+	require.LessOrEqual(t, time.Until(permit.ExpiresAt), gameMessagePermitLifetime+time.Second)
+	require.True(t, permit.ExpiresAt.After(time.Now()))
 
 	retry, err := store.IssuePlayerBindingExecutionPermit(ctx, binding.BindingID, operationID, claims)
 	require.NoError(t, err)

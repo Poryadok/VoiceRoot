@@ -69,11 +69,19 @@ func TestInternalBindingChallengeCreateRequiresAuthProofAndReplaysDurableFacts(t
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, r)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var first registry.BindingChallenge
+	var first struct {
+		ChallengeID uuid.UUID `json:"challenge_id"`
+		Nonce       string    `json:"nonce"`
+		ExpiresAt   time.Time `json:"expires_at"`
+	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &first))
+	var responseFields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &responseFields))
+	require.ElementsMatch(t, []string{"challenge_id", "nonce", "expires_at"}, mapKeys(responseFields),
+		"the challenge create response must not serialize GIS-owned source/profile/scope facts")
 	require.NotEqual(t, uuid.Nil, first.ChallengeID)
 	require.Len(t, first.Nonce, 43)
-	require.Equal(t, requestValue.OperationID, first.OperationID)
+	require.True(t, requestValue.ExpiresAt.Equal(first.ExpiresAt))
 	digest := sha256.Sum256(body)
 	require.Equal(t, hex.EncodeToString(digest[:]), store.hashes[requestValue.OperationID])
 
@@ -81,7 +89,11 @@ func TestInternalBindingChallengeCreateRequiresAuthProofAndReplaysDurableFacts(t
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, r)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	var replay registry.BindingChallenge
+	var replay struct {
+		ChallengeID uuid.UUID `json:"challenge_id"`
+		Nonce       string    `json:"nonce"`
+		ExpiresAt   time.Time `json:"expires_at"`
+	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &replay))
 	require.Equal(t, first, replay, "exact retry returns the original GIS-generated id and nonce")
 
@@ -89,6 +101,14 @@ func TestInternalBindingChallengeCreateRequiresAuthProofAndReplaysDurableFacts(t
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, r)
 	require.Equal(t, http.StatusUnauthorized, response.Code, "unsigned challenge creation is denied")
+}
+
+func mapKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 type bindingChallengeStore struct{ challenge registry.BindingChallenge }
@@ -119,7 +139,10 @@ func TestInternalBindingChallengeRequiresAuthProofAndSignsExactPersistedFacts(t 
 		request.Header.Get("X-Voice-Nonce"), response.Body.Bytes()), response.Header().Get("X-Voice-Response-Signature"))
 	var decoded registry.BindingChallenge
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &decoded))
-	require.Equal(t, challenge, decoded)
+	expected := challenge
+	require.True(t, expected.ExpiresAt.Equal(decoded.ExpiresAt))
+	expected.ExpiresAt = decoded.ExpiresAt
+	require.Equal(t, expected, decoded)
 
 	bad := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)
 	denied := httptest.NewRecorder()
