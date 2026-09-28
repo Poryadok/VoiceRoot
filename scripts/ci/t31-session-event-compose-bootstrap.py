@@ -150,9 +150,11 @@ def sandbox_app(args, name, applicant_token, operator_token):
     }
 
 
-def write_compose_env(path, tls_dir, operator_id, app, other, event_id="bootstrap-pending"):
+def write_compose_env(path, tls_dir, state_dir, operator_id, app, other, event_id="bootstrap-pending"):
     values = {
         "T31_E2E_TLS_DIR": str(tls_dir.resolve()),
+        "T31_E2E_STATE_DIR": str(state_dir.resolve()),
+        "T31_ACCEPTANCE_PHASE": "unselected",
         "T31_E2E_OPERATOR_ACCOUNT_ID": operator_id,
         "T31_APPLICATION_ID": app["application_id"],
         "T31_ENVIRONMENT_ID": app["environment_id"],
@@ -172,6 +174,7 @@ def main():
     parser.add_argument("--phase0-env", type=Path, required=True)
     parser.add_argument("--compose-env", type=Path, required=True)
     parser.add_argument("--tls-dir", type=Path, required=True)
+    parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
     parser.add_argument("--gateway-base", default="http://127.0.0.1:18080")
     parser.add_argument("--mail-stub-base", default="http://127.0.0.1:14180")
@@ -184,7 +187,7 @@ def main():
 
     # Compose changes only GIS and rebuilds it from this checkout so the operator
     # allowlist and T31 routes are present without recreating its PostgreSQL DB.
-    write_compose_env(args.compose_env, args.tls_dir, operator["account_id"],
+    write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"],
                       {"application_id": "pending", "environment_id": "pending", "secret": "pending"},
                       {"application_id": "pending", "environment_id": "pending", "secret": "pending"})
     compose(args, "up", "-d", "--no-deps", "--build", "--force-recreate", "gameintegration")
@@ -201,7 +204,7 @@ def main():
 
     app = sandbox_app(args, f"T31 HTTPS receiver {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"])
     other = sandbox_app(args, f"T31 HTTPS isolation {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"])
-    write_compose_env(args.compose_env, args.tls_dir, operator["account_id"], app, other)
+    write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"], app, other)
     result = {
         "applicant_account_id": applicant["account_id"], "applicant_profile_id": applicant["profile_id"],
         "operator_account_id": operator["account_id"], "operator_profile_id": operator["profile_id"],
@@ -233,7 +236,8 @@ def main():
         stage = operation.get("stage") if operation else "unavailable"
         raise RuntimeError(f"GIS session did not become active; stage={stage}")
 
-    write_compose_env(args.compose_env, args.tls_dir, operator["account_id"], app, other, operation["active_event_id"])
+    write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"], app, other,
+                      operation["active_event_id"])
     result.update({
         "operation_id": operation_id, "session_id": operation["session_id"],
         "active_event_id": operation["active_event_id"], "session_status": operation["session_status"],

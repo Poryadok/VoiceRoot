@@ -10,6 +10,7 @@ on:
       - "docs/testing/game-integrations-acceptance.md"
       - "docs/testing/game-integrations-exec-plan.md"
       - "scripts/ci/t31-session-event-compose-bootstrap.py"
+      - "scripts/ci/t31-session-event-compose-bootstrap_test.py"
       - "scripts/dev/generate-phase0-fixture.py"
       - "scripts/dev/t31-session-event-gateway.conf"
       - "src/backend/auth/**"
@@ -141,6 +142,7 @@ jobs:
             --phase0-env tmp/phase0-t31-ci-fixture/fixture.env \
             --compose-env tmp/t31-session-event-e2e/compose.env \
             --tls-dir tmp/t31-session-event-e2e/tls \
+            --state-dir tmp/t31-session-event-e2e/state \
             --result tmp/t31-session-event-e2e/bootstrap-result.json
 
       - name: Claim active event before GIS restart

@@ -299,11 +299,15 @@ Gateway. It rebuilds Gateway from the T31 worktree before session requests, then
 rebuilds only GIS after the operator account is known. The controlled receiver
 uses a separate Compose PostgreSQL instance and reaches GIS only through a test
 TLS ingress with trusted CA and hostname validation. The runner proves foreign
-app/environment isolation, lease persistence across GIS restart, lease expiry/
-reclaim with identical bytes, and receiver process restart after its inbox/effect
-and pending ACK commit but before GIS receives the ACK. It then restarts GIS,
-drops the response to a committed ACK, restarts the receiver again, and proves
-exact ACK replay with one inbox row and one effect row. It makes no real
+app/environment isolation, a lost claim response after GIS lease commit, and
+lease persistence across GIS restart followed by expiry/reclaim with identical
+bytes. It forces a receiver effect insert failure and verifies the receiver
+transaction rolls back both inbox and effect without sending ACK. It then
+commits the effect, delays ACK until the claim lease expires, and verifies GIS
+returns 409 while the receiver retains one effect and a pending ACK. GIS and
+the receiver restart with that pending ACK; a fresh process reclaims the event,
+GIS commits the ACK, and the runner loses the response. A final fresh process
+proves exact ACK replay with one inbox row and one effect row. It makes no real
 identity-provider calls. Run the workflow with `workflow_dispatch` on the
 exact T31 branch or let matching pull request paths trigger it; keep SE02 open
 until that hosted run passes. Its Compose graph includes File and MinIO through

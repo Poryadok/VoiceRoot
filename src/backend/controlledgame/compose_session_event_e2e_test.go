@@ -29,7 +29,7 @@ func TestT31ComposeHTTPSClaimInboxEffectAckReclaim(t *testing.T) {
 		t.Skip("set VOICE_T31_COMPOSE_SESSION_EVENTS=1 for the isolated Compose acceptance")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
 	databaseURL := requireT31Env(t, "CONTROLLEDGAME_DATABASE_URL")
@@ -91,10 +91,21 @@ func t31RunInitialClaimPhase(t *testing.T, ctx context.Context, client *http.Cli
 	otherClaim := t31Claim(t, ctx, client, baseURL, otherCredential)
 	require.Equal(t, http.StatusNoContent, otherClaim.StatusCode)
 	require.Equal(t, "1", otherClaim.Header.Get("Retry-After"))
+	require.NoError(t, otherClaim.Body.Close())
 	t.Logf("scope isolation: target_app=%s target_env=%s foreign_app=%s foreign_env=%s foreign_claim_status=%d retry_after=%s",
 		applicationID, environmentID, otherApplicationID, otherEnvironmentID, otherClaim.StatusCode, otherClaim.Header.Get("Retry-After"))
 
-	first := t31Claim(t, ctx, client, baseURL, credential)
+	claimDropper := &t31DropFirstClaimResponse{next: client.Transport}
+	_, err := t31ClaimAttempt(t, ctx, &http.Client{Transport: claimDropper, Timeout: 10 * time.Second}, baseURL, credential)
+	require.Error(t, err, "the claim response is intentionally lost after GIS commits the lease")
+	require.EqualValues(t, 1, claimDropper.claimResponses.Load())
+	leaseHeld := t31Claim(t, ctx, client, baseURL, credential)
+	require.Equal(t, http.StatusNoContent, leaseHeld.StatusCode, "the lost response must not undo the committed claim")
+	require.NoError(t, leaseHeld.Body.Close())
+	t.Logf("injected claim timeout: upstream_claim_responses=%d followup_status=%d lease_stays_committed=true",
+		claimDropper.claimResponses.Load(), leaseHeld.StatusCode)
+
+	first := t31ClaimUntilAvailable(t, ctx, client, baseURL, credential, 50*time.Second)
 	require.Equal(t, http.StatusOK, first.StatusCode)
 	body, err := io.ReadAll(first.Body)
 	require.NoError(t, err)
@@ -120,6 +131,7 @@ func t31RunReclaimAndCommitPhase(t *testing.T, ctx context.Context, client *http
 
 	stillLeased := t31Claim(t, ctx, client, baseURL, credential)
 	require.Equal(t, http.StatusNoContent, stillLeased.StatusCode, "GIS restart must preserve the active durable lease")
+	require.NoError(t, stillLeased.Body.Close())
 	t.Logf("GIS restart with active lease: claim_status=%d event_id=%s lease_id=%s expires_at=%s",
 		stillLeased.StatusCode, checkpoint.EventID, checkpoint.LeaseID, checkpoint.LeaseExpiresAt.UTC().Format(time.RFC3339Nano))
 	waitT31LeaseExpiry(t, ctx, checkpoint.LeaseExpiresAt)
@@ -139,18 +151,36 @@ func t31RunReclaimAndCommitPhase(t *testing.T, ctx context.Context, client *http
 		response.StatusCode, claim.EventID, claim.PayloadSHA256, checkpoint.LeaseID, claim.LeaseID)
 	waitT31LeaseExpiry(t, ctx, claim.LeaseExpiresAt)
 
-	// Persist the receiver effect and its pending ACK, then exit this one-shot
-	// runner. The workflow starts a new runner container before any ACK reaches GIS.
-	preAckFailure := &t31FailAckBeforeGIS{next: client.Transport}
-	consumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store,
-		&http.Client{Transport: preAckFailure, Timeout: 10 * time.Second})
-	applied, err := consumer.PollOnce(ctx)
-	require.Error(t, err, "injected transport failure occurs before the ACK reaches GIS")
+	// A receiver DB failure must roll back both inbox and effect and send no ACK.
+	installT31EffectFailure(t, ctx, pool)
+	failureTransport := &t31AckCountingRoundTripper{next: client.Transport}
+	failureConsumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store,
+		&http.Client{Transport: failureTransport, Timeout: 10 * time.Second})
+	applied, err := failureConsumer.PollOnce(ctx)
+	require.Error(t, err, "injected receiver DB failure must prevent ACK")
 	require.False(t, applied)
-	require.EqualValues(t, 1, preAckFailure.ackRequests.Load())
+	require.EqualValues(t, 0, failureTransport.ackRequests.Load())
+	assertT31NoReceiverRows(t, ctx, pool, applicationID, environmentID, eventID)
+	require.False(t, failureTransport.claimLeaseExpiresAt.IsZero())
+	_, err = pool.Exec(ctx, `DROP TRIGGER t31_reject_session_effect ON session_activation_effects`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `DROP FUNCTION t31_reject_session_effect()`)
+	require.NoError(t, err)
+	t.Logf("receiver DB failure: ack_requests=%d inbox_rows=0 effect_rows=0 rolled_back=true",
+		failureTransport.ackRequests.Load())
+
+	// Allow the failed-consume lease to expire, then expire the next lease only
+	// after the receiver DB commit but before its first GIS ACK request.
+	waitT31LeaseExpiry(t, ctx, failureTransport.claimLeaseExpiresAt)
+	expireTransport := &t31ExpireClaimLeaseBeforeAck{next: client.Transport}
+	expireConsumer := t31SessionEventClient(baseURL, credential, applicationID, environmentID, store,
+		&http.Client{Transport: expireTransport, Timeout: 90 * time.Second})
+	applied, err = expireConsumer.PollOnce(ctx)
+	require.Error(t, err, "GIS must reject ACK after the receiver commit outlives its lease")
+	require.False(t, applied)
+	require.Equal(t, http.StatusConflict, expireTransport.ackStatus)
 	assertT31ReceiverRows(t, ctx, pool, applicationID, environmentID, eventID, 1, 1, false)
-	t.Logf("receiver stopped before ACK: ack_requests=%d gis_ack_sent=false inbox_rows=1 effect_rows=1 acknowledged=false",
-		preAckFailure.ackRequests.Load())
+	t.Log("lease expiry between receiver commit and ACK: ack_status=409 inbox_rows=1 effect_rows=1 acknowledged=false")
 }
 
 func t31RunDropAckResponsePhase(t *testing.T, ctx context.Context, transport http.RoundTripper, baseURL string,
@@ -225,13 +255,44 @@ type t31ObservedResponse struct {
 }
 
 func t31Claim(t *testing.T, ctx context.Context, client *http.Client, baseURL, credential string) *t31ObservedResponse {
+	response, err := t31ClaimAttempt(t, ctx, client, baseURL, credential)
+	require.NoError(t, err)
+	return response
+}
+
+func t31ClaimAttempt(t *testing.T, ctx context.Context, client *http.Client, baseURL, credential string) (*t31ObservedResponse, error) {
 	t.Helper()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+sessionEventsClaimPath, http.NoBody)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 	request.Header.Set("Authorization", "Bearer "+credential)
 	response, err := client.Do(request)
-	require.NoError(t, err)
-	return &t31ObservedResponse{StatusCode: response.StatusCode, Header: response.Header.Clone(), Body: response.Body}
+	if err != nil {
+		return nil, err
+	}
+	return &t31ObservedResponse{StatusCode: response.StatusCode, Header: response.Header.Clone(), Body: response.Body}, nil
+}
+
+func t31ClaimUntilAvailable(t *testing.T, ctx context.Context, client *http.Client, baseURL, credential string, maximum time.Duration) *t31ObservedResponse {
+	t.Helper()
+	deadline := time.Now().Add(maximum)
+	for time.Now().Before(deadline) {
+		response := t31Claim(t, ctx, client, baseURL, credential)
+		if response.StatusCode != http.StatusNoContent {
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			return response
+		}
+		require.Equal(t, "1", response.Header.Get("Retry-After"))
+		require.NoError(t, response.Body.Close())
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(time.Second):
+		}
+	}
+	t.Fatal("GIS did not make the timed-out claim available after lease expiry")
+	return nil
 }
 
 type t31DropFirstAckResponse struct {
@@ -240,17 +301,111 @@ type t31DropFirstAckResponse struct {
 	ackResponses atomic.Int32
 }
 
-type t31FailAckBeforeGIS struct {
-	next        http.RoundTripper
-	ackRequests atomic.Int32
+type t31DropFirstClaimResponse struct {
+	next           http.RoundTripper
+	claimResponses atomic.Int32
+	dropped        atomic.Bool
 }
 
-func (transport *t31FailAckBeforeGIS) RoundTrip(request *http.Request) (*http.Response, error) {
+func (transport *t31DropFirstClaimResponse) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := transport.next.RoundTrip(request)
+	if err != nil || !strings.HasSuffix(request.URL.Path, sessionEventsClaimPath) || response.StatusCode != http.StatusOK {
+		return response, err
+	}
+	transport.claimResponses.Add(1)
+	if transport.dropped.CompareAndSwap(false, true) {
+		_ = response.Body.Close()
+		return nil, errors.New("injected lost claim response after lease commit")
+	}
+	return response, nil
+}
+
+type t31AckCountingRoundTripper struct {
+	next                http.RoundTripper
+	ackRequests         atomic.Int32
+	claimLeaseExpiresAt time.Time
+}
+
+func (transport *t31AckCountingRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	if strings.HasSuffix(request.URL.Path, "/ack") {
 		transport.ackRequests.Add(1)
-		return nil, errors.New("injected receiver stop before GIS ACK request")
+	}
+	response, err := transport.next.RoundTrip(request)
+	if err == nil && response != nil && strings.HasSuffix(request.URL.Path, sessionEventsClaimPath) && response.StatusCode == http.StatusOK {
+		expiresAt, parseErr := time.Parse(time.RFC3339, response.Header.Get("X-Voice-Claim-Lease-Expires-At"))
+		if parseErr == nil {
+			transport.claimLeaseExpiresAt = expiresAt.UTC()
+		}
+	}
+	return response, err
+}
+
+type t31ExpireClaimLeaseBeforeAck struct {
+	next                http.RoundTripper
+	claimLeaseExpiresAt time.Time
+	ackStatus           int
+}
+
+func (transport *t31ExpireClaimLeaseBeforeAck) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(request.URL.Path, sessionEventsClaimPath) {
+		response, err := transport.next.RoundTrip(request)
+		if err == nil && response != nil && response.StatusCode == http.StatusOK {
+			expiresAt, parseErr := time.Parse(time.RFC3339, response.Header.Get("X-Voice-Claim-Lease-Expires-At"))
+			if parseErr != nil {
+				return response, parseErr
+			}
+			transport.claimLeaseExpiresAt = expiresAt.UTC()
+		}
+		return response, err
+	}
+	if strings.HasSuffix(request.URL.Path, "/ack") {
+		if transport.claimLeaseExpiresAt.IsZero() {
+			return nil, errors.New("claim lease expiry was not observed before ACK")
+		}
+		delay := time.Until(transport.claimLeaseExpiresAt.Add(250 * time.Millisecond))
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-request.Context().Done():
+				return nil, request.Context().Err()
+			case <-timer.C:
+			}
+		}
+		response, err := transport.next.RoundTrip(request)
+		if response != nil {
+			transport.ackStatus = response.StatusCode
+		}
+		return response, err
 	}
 	return transport.next.RoundTrip(request)
+}
+
+func installT31EffectFailure(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(ctx, `CREATE FUNCTION t31_reject_session_effect() RETURNS trigger
+		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected controlledgame effect failure'; END $$`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `CREATE TRIGGER t31_reject_session_effect BEFORE INSERT ON session_activation_effects
+		FOR EACH ROW EXECUTE FUNCTION t31_reject_session_effect()`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = pool.Exec(cleanupCtx, `DROP TRIGGER IF EXISTS t31_reject_session_effect ON session_activation_effects`)
+		_, _ = pool.Exec(cleanupCtx, `DROP FUNCTION IF EXISTS t31_reject_session_effect()`)
+	})
+}
+
+func assertT31NoReceiverRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, appID, envID, eventID uuid.UUID) {
+	t.Helper()
+	var inboxRows, effectRows int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM session_event_inbox WHERE application_id=$1 AND environment_id=$2 AND event_id=$3`,
+		appID, envID, eventID).Scan(&inboxRows))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM session_activation_effects WHERE application_id=$1 AND environment_id=$2 AND event_id=$3`,
+		appID, envID, eventID).Scan(&effectRows))
+	require.Zero(t, inboxRows)
+	require.Zero(t, effectRows)
 }
 
 func (transport *t31DropFirstAckResponse) RoundTrip(request *http.Request) (*http.Response, error) {
