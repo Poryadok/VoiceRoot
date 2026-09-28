@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/chat/internal/chatevents"
+	"voice/backend/chat/internal/gisprincipal"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/grpcclient"
@@ -58,9 +59,19 @@ func main() {
 	if v := strings.TrimSpace(os.Getenv("CHAT_GRPC_LISTEN")); v != "" {
 		grpcListen = v
 	}
+	gisListen := strings.TrimSpace(os.Getenv("CHAT_GIS_GRPC_LISTEN"))
+	gisPrincipalConfig, gisPrincipalConfigured, gisConfigErr := gisprincipal.ConfigFromEnv()
+	if gisConfigErr != nil {
+		log.Fatalf("GIS principal configuration: %v", gisConfigErr)
+	}
+	if (gisListen != "") != gisPrincipalConfigured {
+		log.Fatal("CHAT_GIS_GRPC_LISTEN and complete GIS principal configuration must be set together")
+	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var gisGRPCSrv *grpc.Server
+	var gisPrincipalRuntime *gisprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -72,6 +83,25 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		if gisPrincipalConfigured {
+			gisPrincipalRuntime, err = gisprincipal.New(context.Background(), gisPrincipalConfig)
+			if err != nil {
+				log.Fatalf("GIS principal runtime: %v", err)
+			}
+			defer func() { _ = gisPrincipalRuntime.Close() }()
+			gisLis, listenErr := net.Listen("tcp", gisListen)
+			if listenErr != nil {
+				log.Fatalf("GIS gRPC listen: %v", listenErr)
+			}
+			gisGRPCSrv = grpc.NewServer(gisPrincipalRuntime.ServerOptions()...)
+			chatv1.RegisterGameIntegrationChatServiceServer(gisGRPCSrv, &grpcsvc.GameIntegrationChatGRPC{Store: &store.DMStore{Pool: pool}})
+			go func() {
+				logger.Info("GIS mTLS gRPC listening", slog.String("addr", gisListen))
+				if err := gisGRPCSrv.Serve(gisLis); err != nil {
+					log.Fatalf("GIS gRPC serve: %v", err)
+				}
+			}()
+		}
 
 		var blocks grpcsvc.AccountBlockChecker
 		var friends grpcsvc.ProfileFriendChecker
@@ -263,6 +293,9 @@ func main() {
 			}
 		}()
 	} else {
+		if gisPrincipalConfigured {
+			log.Fatal("GIS principal listener requires DATABASE_URL")
+		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
@@ -293,6 +326,9 @@ func main() {
 	defer cancel()
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
+		if gisGRPCSrv != nil {
+			gisGRPCSrv.GracefulStop()
+		}
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}

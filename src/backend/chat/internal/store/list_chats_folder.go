@@ -316,7 +316,8 @@ type folderPinState struct {
 }
 
 func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
-	var id, creator uuid.UUID
+	var id uuid.UUID
+	var creator sql.NullString
 	var chatType string
 	var spaceID *uuid.UUID
 	var name, avatarURL, topic sql.NullString
@@ -342,7 +343,7 @@ func scanFolderListChatRow(rows pgx.Rows) (*ChatRow, folderPinState, error) {
 		ID:                id,
 		Type:              chatType,
 		SpaceID:           spaceID,
-		CreatorProfileID:  creator,
+		CreatorProfileID:  nullableCreatorProfileID(creator),
 		CreatedAt:         createdAt.UTC(),
 		UpdatedAt:         updatedAt.UTC(),
 		LastMessageAt:     lm,

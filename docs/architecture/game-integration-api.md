@@ -2,7 +2,9 @@
 
 **Proposed target.** Ограниченный Auth bootstrap GAME-AUTH-01 реализован в
 opt-in режиме; PostgreSQL/live-provider acceptance остаётся обязательным gate.
-Остальные новые API ниже ещё не реализованы. Продуктовые требования —
+Этот T31 slice реализует Chat-side recipient provisioning contract ниже;
+остальные новые API и полная GIS orchestration ещё не реализованы.
+Продуктовые требования —
 [интеграции игр](../features/game-integrations.md); acceptance и решения —
 [матрица](../testing/game-integrations-acceptance.md). API имена фиксируют
 предлагаемую семантику; до реализации нужны reviewed OpenAPI/proto и error schema.
@@ -45,6 +47,49 @@ G06 остаётся открытым для схемы хранилища, ко
 | Voice | Voice admission, grants, media lifecycle, revocation |
 | Bot | Installation, interaction delivery, credentials бота, response routing |
 | Game backend | Roster facts, владение персонажами, экономика, допустимость и commit команд |
+
+### Chat provisioning boundary (T31 recipient contract)
+
+Chat remains the sole owner of its chats and membership rows. GIS calls a
+dedicated `GameIntegrationChatService` on Chat's TLS listener with a verified
+client certificate chained to a GIS-dedicated CA and a service principal; it
+never connects to `chat_db`.
+That listener exposes exactly `ProvisionManagedChat` and
+`SyncManagedChatMembers`. The ordinary player `ChatService` listener does not
+register this service. GIS signing keys are resolved only from its configured
+HTTPS JWKS endpoint, credentials must bind issuer `gameintegration`, audience
+`chat`, the exact full RPC name, the operation UUID as `x-request-id`, and the
+deterministic protobuf SHA-256 of the complete request. Chat requires the
+single bearer authorization and request ID metadata, rejects raw identity
+headers, and records credential JTIs in Redis before calling a handler. Missing
+or partial listener configuration fails startup; the GIS listener is disabled
+when all its configuration is absent. Deployment network policy must allow
+only GIS workloads to reach its listener. Staging/production service ports,
+secret mounts, and that network policy are not wired by this recipient slice;
+the listener remains disabled there until those deployment changes ship.
+
+`ProvisionManagedChat` creates a standalone group owned by the application
+and environment. It has no human creator, owner, or administrator. The unique
+`(application_id, environment_id, external_chat_key)` mapping and durable
+operation receipt are stored by Chat in the same transaction as resource
+creation. Repeating an operation UUID and request hash returns the same
+immutable chat ID receipt; callers fetch mutable chat fields through Chat's
+ordinary read API. Reusing an operation ID with another RPC or hash conflicts.
+`SyncManagedChatMembers` reconciles the desired roster atomically and assigns
+every profile `member` role. Retained members keep their joined time, mute,
+archive, inbox, and other per-member state. Its persisted receipt makes a retry
+return the original roster result. Normal
+player `AddMembers`, `RemoveMember`, `LeaveChat`, group role, ownership transfer,
+and chat update paths cannot mutate a managed roster or promote a player to
+owner/admin; only the two exact GIS methods can change it.
+
+The request ID is the operation ID; the JWT `jti` is a separate, short-lived
+credential replay nonce. A transport retry must use a fresh principal credential
+with the same operation ID and identical deterministic request hash. Chat's
+durable receipt, rather than the short JWT replay window, provides operation
+idempotency. This is a recipient-side Chat slice: GIS orchestration, Voice
+resource provisioning, grants, compensation, and cross-service crash recovery
+remain open T31 work.
 
 Ни один сервис не пишет в чужую БД. Межсервисные UUID — logical references без
 FK. Существующие IDs сохраняют правила [DATA_MODEL](../DATA_MODEL.md): UUIDv4 для
