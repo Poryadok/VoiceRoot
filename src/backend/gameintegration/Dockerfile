@@ -4,9 +4,13 @@ WORKDIR /src
 ENV GOPROXY=https://proxy.golang.org,direct
 COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
+COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
+COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY gameintegration/go.mod ./gameintegration/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh gameintegration
 COPY pkg ./pkg
+COPY chat/pb/voice/chat ./chat/pb/voice/chat
+COPY user/pb/voice/common ./user/pb/voice/common
 COPY gameintegration ./gameintegration
 WORKDIR /src/gameintegration
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service .
