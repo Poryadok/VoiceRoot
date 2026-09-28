@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -19,8 +20,19 @@ public class SdkAuthorizationConfiguration {
   @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
   SdkAuthorizationService sdkAuthorizationService(NamedParameterJdbcTemplate jdbc,
       PlatformTransactionManager manager, SdkIdentityService identity, AuthService auth,
-      SdkAuthorizationPolicy policies, SdkProfileEligibility profiles, TokenBlacklist blacklist, Clock clock) {
+      SdkAuthorizationPolicy policies, SdkProfileEligibility profiles, TokenBlacklist blacklist, Clock clock,
+      SdkBindingChallengeAuthority bindingChallenges, AuthUserPrincipalIssuer issuer, Environment environment) {
     return new SdkAuthorizationService(jdbc, new TransactionTemplate(manager), identity, auth,
-        policies, profiles, blacklist, clock);
+        policies, profiles, blacklist, clock, bindingChallenges, issuer, AuthGameBindingSubjectDigest.configured(environment),
+        AuthGameBindingApprovalCodeVault.configured(environment));
+  }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
+  AuthGameBindingHandoffService authGameBindingHandoffService(NamedParameterJdbcTemplate jdbc,
+      PlatformTransactionManager manager, AuthUserPrincipalIssuer issuer, SdkAuthorizationPolicy policies,
+      SdkProfileEligibility profiles, SdkIdentityService identity, TokenBlacklist blacklist, Clock clock) {
+    return new AuthGameBindingHandoffService(jdbc, new TransactionTemplate(manager), issuer, policies, profiles,
+        identity, blacklist, clock);
   }
 }

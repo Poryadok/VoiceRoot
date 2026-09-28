@@ -146,6 +146,171 @@ received bytes before parsing or using the policy. Missing or invalid response
 proof fails closed. This authenticates the response over the Compose internal
 HTTP hop; externally configured endpoints still require HTTPS.
 
+### GIS player binding authority and execution permits (T16 producer slice)
+
+GIS owns player binding facts in `game_integration_db.player_bindings`:
+binding/app/environment IDs, account/actor/profile/device references, lifecycle
+state and a monotonic GIS `binding_revision`. These identity references are
+logical UUIDs; Auth/User databases are never queried or written. The new
+execution-time read is private
+`GET /internal/v1/bindings/{binding_id}/authority`. It uses the existing Auth
+workload v1 HMAC and Redis replay guard and returns only GIS-owned
+`application_id`, `environment_id`, `binding_id`, `status`,
+`binding_revision`, and `character_context`; the response is `no-store` and
+signed over its exact bytes. It never serializes account, actor or profile IDs.
+`active`, `revoking` and `revoked` are distinct states; reads never cache them.
+
+GIS implements the reserved
+`POST /api/v1/game-integrations/bindings/exchange` route (API section 4) as the
+producer sequence. It requires a regular bearer and strict JSON containing
+`challenge_id`, `code`, `code_verifier` and `device_proof`; GIS takes operation,
+app and environment from its persisted challenge. It hashes the canonical
+decoded request and commits the operation row before any Auth network call.
+Auth remains the source of provider proof, consent, delegated scopes and
+selected-profile eligibility.
+Auth issues a one-use, at-most-30-second `voice.game-binding-handoff+jwt` only
+after validating game/provider proof, current profile, device/ownership
+generation, app/environment policy and consent. Claims bind GIS challenge ID
+and nonce, app/environment, canonical redirect URI, PKCE S256 challenge,
+device-key identity, provider and a namespaced versioned keyed subject digest,
+operation ID, source account/actor/device generation, target account/profile
+and profile revision, sorted scopes, and consent/policy revisions. Raw provider
+tokens and subjects never enter or persist in GIS. GIS allocates the binding ID.
+
+Auth creates a persisted GIS challenge only after T14 `approve` has revalidated
+the signed-in source device/session, current app policy and the explicitly
+selected regular target profile. It calls private
+`POST /internal/v1/bindings/challenges` using WorkloadProof v1. The strict
+request binds app/environment/provider, operation ID, source account/actor/
+device and generation, selected target account/profile and profile revision,
+consent/policy revisions, sorted scopes, redirect URI hash, PKCE S256
+challenge, device key/thumbprint and expiry. It contains no provider subject or
+token. GIS returns exactly `challenge_id`, `nonce`, and `expires_at`, signs the
+exact response bytes, and stores an exact request hash with the operation.
+An exact retry returns the persisted ID/nonce/expiry without extending TTL;
+same operation with changed input conflicts. Challenges expire within five
+minutes. This is an Auth-only service route, not a public or Gateway route.
+
+Auth reads a persisted GIS challenge at private
+`GET /internal/v1/bindings/challenges/{challenge_id}` using WorkloadProof v1;
+the exact response fields are `challenge_id`, `nonce`, `application_id`,
+`environment_id`, `provider`, `redirect_uri_sha256`, `pkce_challenge`,
+`device_key_id`, `device_key_thumbprint`, `operation_id`, `expires_at`, and
+`status`. GIS returns only a live `pending` row, signs the exact response bytes,
+and rejects missing, invalid or replayed Auth workload proof. Auth compares
+the read tuple to the T14 approval pinned to the one-use code before it signs
+the post-consent handoff. The selected profile, consent and policy revisions
+are therefore fixed before the challenge is created; the namespaced provider
+subject digest is added only to the signed handoff after consent.
+
+GIS calls Auth's private mTLS
+`POST /internal/v1/auth/game-bindings/handoffs/exchange` with exact JSON
+`challenge_id`, `operation_id`, `code`, `code_verifier`, and `device_proof`.
+Auth responds with exactly `{"handoff_jws":"<compact JWS>"}` and `no-store`.
+GIS keeps the JWS internal and passes the same original device proof bytes to
+Auth's online claim; Auth pinned their SHA-256 to the issued JTI at atomic T14
+code consume. The GIS client requires HTTPS, private CA trust and a client
+certificate/key, uses a two-second timeout, forbids redirects, bounds the
+response and rejects unknown/trailing JSON. `GIS_AUTH_GAME_BINDING_BASE_URL`,
+`GIS_AUTH_GAME_BINDING_CA_FILE`, `GIS_AUTH_GAME_BINDING_CLIENT_CERT_FILE` and
+`GIS_AUTH_GAME_BINDING_CLIENT_KEY_FILE` must be set together; absent transport
+credentials disable this path.
+
+The signed handoff is delivery-only and cannot authorize offline creation. GIS
+online-claims the assertion JTI with Auth, forwarding the exact original device
+proof bytes. Auth revalidates the grant, consent/policy revisions, profile,
+device and revoke state, checks the proof digest pinned at code consume, then
+persists an in-flight operation. Auth revocation blocks new claims and waits
+for accepted claims to complete; uncertain completion remains
+pending/unavailable. GIS verifies the Auth receipt and checks the handoff's
+challenge, nonce, app/environment, redirect/PKCE and device-key tuple against
+the persisted GIS challenge. It then locks the challenge and atomically writes
+a `pending` binding, consumes the challenge and adds the durable completion
+outbox row. A deterministic app/environment or already-linked-subject denial
+consumes the challenge and queues a failed Auth completion; transient database
+errors leave the accepted claim recoverable. Unique challenge/JTI/operation
+constraints prevent duplicate creation. Exact retries require the same
+canonical body and device proof and
+reuse the saved handoff/claim; changed input conflicts. A background worker
+retries Auth completion until receipt; only after that receipt does GIS promote
+the binding to `active`. Uncertain completion returns retryable unavailable
+and cannot activate the binding. Revoke waits for
+execution permits and accepted handoff claims to drain (4.25s target, 5s hard
+bound); uncertain completion cannot return success. Restore/relink needs fresh
+proof/consent and a new GIS binding UUID. The challenge producer is wired to
+T14 approval; Gateway does not yet publish these APIs. The T16 Auth-to-Messaging
+execution-permit aggregator and broader selected-profile privacy fanout remain
+open dependencies.
+
+Owner revocation is `DELETE /api/v1/game-integrations/bindings/{binding_id}`
+with a regular bearer, `Idempotency-Key` UUID and strict
+`{"expected_revision":n}` body. GIS checks the Auth-selected account, moves
+the binding to `revoking` to deny new permits, and drains issued permits before
+it calls Auth's private mTLS `/handoffs/revoke` using the binding's stable
+challenge operation ID. Auth blocks new handoff claims and acknowledges
+`revoked` only after accepted claims complete. Either drain can remain pending;
+GIS returns retryable unavailable and the caller retries with the same
+idempotency key. Gateway publication remains pending.
+
+T16's binding proof does not authorize a target chat. For T15 message writes,
+GIS checks the signed exact `(application_id, environment_id, binding_id,
+chat_id)` tuple against GIS-owned app-linked chat and active participant state;
+it does not impose a global one-chat-per-binding rule. T30/T31 owns mapping
+provisioning. The separate T51 event recipient has no chat/session selector,
+so it must resolve exactly one eligible app-linked chat and fail closed on zero
+or multiple candidates before creating an outbox row. No implicit primary chat
+or cross-service database read is allowed. A GIS-to-Chat call must use a
+recipient-specific signed service principal bound to the exact RPC/request
+hash and TLS identity; raw `x-voice-profile-id` or nonempty internal-caller
+headers are not authorization. T31 owns that Chat trust path and any managed
+game RPC needed to enforce it.
+
+Auth requests a bounded message permit at
+`POST /internal/v1/game-integrations/bindings/{binding_id}/execution-permits`
+with exact JSON `{"operation_id":"<canonical UUID>"}` and the raw compact
+Auth device assertion in `X-Voice-Device-Authority`. Auth must validate that
+assertion with its dedicated principal keyset before forwarding it. GIS parses
+the exact assertion claims, verifies their identity against its stored binding,
+and authenticates Auth's private call with workload proof v2. It requires one
+each of `X-Voice-Workload: auth`, `X-Voice-Workload-Version: 2`, timestamp,
+nonce, signature, content type and device assertion headers. The UTF-8 HMAC
+input is exactly
+`v2\n{METHOD}\n{escaped_path}\n{timestamp}\n{nonce}\n{lowercase_sha256_of_exact_body}\n{lowercase_sha256_of_exact_assertion_header_bytes}`.
+The timestamp uses the existing ±30 second bound, the Redis nonce lifetime is
+60 seconds, and missing key, replay, substitution or malformed bytes fail
+closed. Successful issuance returns `200` for both first issue and exact
+retries. The permit response contains only `permit_id`, `binding_id`,
+`application_id`, `environment_id`, `binding_revision`, `assertion_jti`,
+`operation_id` and RFC3339 UTC `expires_at`; Auth composes its own identity and
+authority fields. Response HMAC uses the existing v1 status/path/timestamp/
+nonce/exact-body format, with timestamp and nonce echoed and `no-store` set.
+
+GIS serializes new permit issue with the binding row lock and persists each
+operation/permit, assertion JTI and exact assertion hash. An exact operation
+and assertion retry returns the saved permit without extending its expiry; a
+different assertion under the same operation ID conflicts. New permits are
+denied once a binding enters `revoking`. Expiry is no later than
+`min(database_now + 3750ms, assertion.exp)`. Auth sends an idempotent completion
+receipt at
+`POST /internal/v1/game-integrations/execution-permits/{permit_id}/completion`
+with exact `{"operation_id":"<UUID>","outcome":"committed|aborted"}`;
+the response body is exactly the receipt fields `permit_id`, `operation_id`,
+`outcome`, and `status:"completed"`, signed with the v1 workload response
+proof. An identical outcome retry returns the receipt; divergent operation or
+outcome conflicts. A completion arriving after expiry plus 250ms is rejected.
+
+GIS revocation is a service seam, not a public player route. It CAS-transitions
+`active` to `revoking` and increments the GIS revision, which immediately
+prevents fresh permits. A successful revoke response is returned only after
+every issued permit has a committed/aborted receipt or has expired plus the
+500ms drain margin, then state becomes `revoked`. The request is bounded to
+4.25 seconds; on timeout it leaves the binding `revoking` and the same
+operation ID resumes the drain. Unknown completion therefore holds revocation
+pending until the fixed lease expires. There is no shared permit cache. This
+producer slice does not implement the Auth assertion signer/JWKS, Auth-owned
+binding reference/aggregator, or the future GIS challenge/exchange writer;
+T15 and binding-exchange consumers remain fail-closed until those pieces land.
+
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint
 exists, no production credential is issued. This gate is an implementation

@@ -76,6 +76,99 @@ class SdkGameIntegrationPolicyClientTest {
   }
 
   @Test
+  void resolvesPersistedBindingChallengeOverAuthenticatedExactPathAndResponse() throws Exception {
+    UUID challenge = UUID.fromString("30000000-0000-4000-8000-000000000003");
+    UUID device = UUID.fromString("40000000-0000-4000-8000-000000000004");
+    UUID sourceAccount = UUID.fromString("50000000-0000-4000-8000-000000000005");
+    UUID sourceActor = UUID.fromString("60000000-0000-4000-8000-000000000006");
+    UUID targetAccount = UUID.fromString("70000000-0000-4000-8000-000000000007");
+    UUID targetProfile = UUID.fromString("80000000-0000-4000-8000-000000000008");
+    String path = "/internal/v1/bindings/challenges/" + challenge;
+    String body = "{\"challenge_id\":\"" + challenge + "\",\"nonce\":\"" + "n".repeat(43)
+        + "\",\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"provider\":\"google\",\"redirect_uri_sha256\":\"" + "a".repeat(64)
+        + "\",\"pkce_challenge\":\"" + "p".repeat(43) + "\",\"device_key_id\":\"" + device
+        + "\",\"device_key_thumbprint\":\"" + "t".repeat(43) + "\",\"operation_id\":\""
+        + UUID.randomUUID() + "\",\"expires_at\":\"2026-09-26T12:39:56Z\",\"status\":\"pending\",\"source_account_id\":\""
+        + sourceAccount + "\",\"source_actor_id\":\"" + sourceActor + "\",\"source_device_id\":\"" + device
+        + "\",\"source_generation\":1,\"target_account_id\":\"" + targetAccount
+        + "\",\"target_profile_id\":\"" + targetProfile
+        + "\",\"profile_revision\":3,\"consent_revision\":4,\"policy_revision\":5,\"scopes\":[\"game.chat.read\"]}";
+    AtomicReference<String> authenticatedPath = new AtomicReference<>();
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      authenticatedPath.set(exchange.getRequestURI().getRawPath());
+      assertThat(exchange.getRequestMethod()).isEqualTo("GET");
+      assertThat(exchange.getRequestHeaders().getFirst("X-Voice-Workload")).isEqualTo("auth");
+      assertThat(exchange.getRequestHeaders().getFirst("X-Voice-Signature"))
+          .isEqualTo(requestSignature(path, timestamp, nonce));
+      respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+    });
+
+    var resolved = client(baseUrl()).resolveBindingChallenge(challenge);
+
+    assertThat(authenticatedPath.get()).isEqualTo(path);
+    assertThat(resolved.challengeId()).isEqualTo(challenge);
+    assertThat(resolved.applicationId()).isEqualTo(APP);
+    assertThat(resolved.provider()).isEqualTo("google");
+  }
+
+  @Test
+  void createsConsentBoundChallengeWithSignedExactBodyAndVerifiesReturnedGISFacts() throws Exception {
+    UUID device = UUID.fromString("40000000-0000-4000-8000-000000000004");
+    UUID sourceAccount = UUID.fromString("50000000-0000-4000-8000-000000000005");
+    UUID sourceActor = UUID.fromString("60000000-0000-4000-8000-000000000006");
+    UUID targetAccount = UUID.fromString("70000000-0000-4000-8000-000000000007");
+    UUID targetProfile = UUID.fromString("80000000-0000-4000-8000-000000000008");
+    UUID operation = UUID.fromString("90000000-0000-4000-8000-000000000009");
+    UUID challenge = UUID.fromString("a0000000-0000-4000-8000-00000000000a");
+    String path = "/internal/v1/bindings/challenges";
+    String body = "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"provider\":\"google\",\"redirect_uri_sha256\":\"" + "a".repeat(64)
+        + "\",\"pkce_challenge\":\"" + "p".repeat(43) + "\",\"device_key_id\":\"" + device
+        + "\",\"device_key_thumbprint\":\"" + "t".repeat(43) + "\",\"operation_id\":\"" + operation
+        + "\",\"expires_at\":\"2026-09-26T12:38:56Z\",\"source_account_id\":\"" + sourceAccount
+        + "\",\"source_actor_id\":\"" + sourceActor + "\",\"source_device_id\":\"" + device
+        + "\",\"source_generation\":2,\"target_account_id\":\"" + targetAccount
+        + "\",\"target_profile_id\":\"" + targetProfile
+        + "\",\"profile_revision\":11,\"consent_revision\":12,\"policy_revision\":7,\"scopes\":[\"game.chat.read\",\"game.chat.send\"]}";
+    String responseBody = "{\"challenge_id\":\"" + challenge + "\",\"nonce\":\"" + "n".repeat(43)
+        + "\",\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"provider\":\"google\",\"redirect_uri_sha256\":\"" + "a".repeat(64)
+        + "\",\"pkce_challenge\":\"" + "p".repeat(43) + "\",\"device_key_id\":\"" + device
+        + "\",\"device_key_thumbprint\":\"" + "t".repeat(43) + "\",\"operation_id\":\"" + operation
+        + "\",\"expires_at\":\"2026-09-26T12:38:56Z\",\"status\":\"pending\",\"source_account_id\":\""
+        + sourceAccount + "\",\"source_actor_id\":\"" + sourceActor + "\",\"source_device_id\":\"" + device
+        + "\",\"source_generation\":2,\"target_account_id\":\"" + targetAccount
+        + "\",\"target_profile_id\":\"" + targetProfile
+        + "\",\"profile_revision\":11,\"consent_revision\":12,\"policy_revision\":7,\"scopes\":[\"game.chat.read\",\"game.chat.send\"]}";
+    AtomicReference<String> received = new AtomicReference<>();
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      String sent = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+      received.set(sent);
+      assertThat(exchange.getRequestMethod()).isEqualTo("POST");
+      assertThat(exchange.getRequestURI().getRawPath()).isEqualTo(path);
+      assertThat(exchange.getRequestHeaders().getFirst("X-Voice-Workload")).isEqualTo("auth");
+      assertThat(exchange.getRequestHeaders().getFirst("X-Voice-Signature")).isEqualTo(bodyRequestSignature("POST", path, timestamp, nonce, sent));
+      respond(exchange, 200, responseBody, timestamp, nonce, responseSignature(path, timestamp, nonce, responseBody));
+    });
+
+    var created = client(baseUrl()).createBindingChallenge(new SdkBindingChallengeAuthority.CreateRequest(APP, ENV,
+        "google", "a".repeat(64), "p".repeat(43), device, "t".repeat(43), operation,
+        Instant.parse("2026-09-26T12:38:56Z"), sourceAccount, sourceActor, device, 2, targetAccount, targetProfile,
+        11, 12, 7, List.of("game.chat.read", "game.chat.send")));
+
+    assertThat(received.get()).isEqualTo(body);
+    assertThat(created.challengeId()).isEqualTo(challenge);
+    assertThat(created.sourceAccountId()).isEqualTo(sourceAccount);
+    assertThat(created.targetProfileId()).isEqualTo(targetProfile);
+    assertThat(created.scopes()).containsExactly("game.chat.read", "game.chat.send");
+  }
+
+  @Test
   void rejectsResponseSignatureThatDoesNotBindExactBodyBytes() throws Exception {
     start(exchange -> {
       String path = exchange.getRequestURI().getRawPath();
@@ -253,6 +346,11 @@ class SdkGameIntegrationPolicyClientTest {
     String emptyHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest());
     String message = "v1\nGET\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + emptyHash;
     return hmac(message);
+  }
+
+  private static String bodyRequestSignature(String method, String path, String timestamp, String nonce, String body) throws Exception {
+    String bodyHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body.getBytes(StandardCharsets.UTF_8)));
+    return hmac("v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + bodyHash);
   }
 
   private static String responseSignature(String path, String timestamp, String nonce, String body) throws Exception {

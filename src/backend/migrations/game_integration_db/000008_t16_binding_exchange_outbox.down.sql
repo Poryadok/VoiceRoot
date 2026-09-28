@@ -1,0 +1,2 @@
+DROP TABLE player_binding_completion_outbox;
+DROP TABLE player_binding_exchange_operations;

@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 public class SdkGameIntegrationPolicyConfiguration {
   @Bean
   @ConditionalOnMissingBean(SdkAuthorizationPolicy.class)
-  SdkAuthorizationPolicy gameIntegrationSdkAuthorizationPolicy(
+  SdkGameIntegrationPolicyClient gameIntegrationSdkAuthorizationPolicy(
       @Value("${auth.sdk-authorization.game-integration-base-url:}") String baseUrl,
       @Value("${GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64:}") String keyBase64,
       @Value("${auth.sdk-authorization.allow-internal-http:false}") boolean allowInternalHttp,

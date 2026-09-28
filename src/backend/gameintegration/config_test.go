@@ -52,6 +52,10 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = "short"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64")
+	values["GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64"] = ""
+	values["GIS_AUTH_GAME_BINDING_BASE_URL"] = "https://auth:9443"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "must be configured together")
 }
 
 func TestLoadConfigRequiresBotProofURLAndDedicatedKeyTogether(t *testing.T) {

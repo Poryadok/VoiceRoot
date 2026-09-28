@@ -289,7 +289,33 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T16** `D: T14,T15` Implement limited delegated grants, binding/authority
   reads, selected profile/alias serialization, direct-call scope checks and
   account/profile/app/device revocation epochs. Verify hidden profiles cannot
-  leak via roster, cards, search or presence.
+  leak via roster, cards, search or presence. **Partial producer slice:** GIS
+  has durable binding state, an Auth-workload-protected owner read, and a short
+  operation-scoped permit ledger with revoking/drain semantics. Auth now has a
+  dedicated handoff signer, opt-in private mTLS claim/completion routes, and a
+  transactional claim ledger that rechecks grant/profile/policy/device
+  authority and records idempotent GIS completion receipts. Auth now reads the
+  persisted GIS challenge over WorkloadProof and consumes
+  a challenge-pinned T14 approval code only on private GIS mTLS exchange; its
+  PostgreSQL proof covers current device/profile/policy checks, exact JWS replay
+  and handoff PoP pinning. GIS also has a strict Auth mTLS exchange client.
+  GIS now has a regular-bearer exchange route that persists the canonical
+  operation before Auth calls, online-claims the Auth handoff, atomically
+  creates a pending binding plus completion outbox, and activates only after
+  Auth completion receipt; focused handler and PostgreSQL lifecycle tests pass.
+  T14 `approve` now creates the persisted challenge through the private Auth
+  WorkloadProof route, after current source/profile/policy validation. GIS
+  exact-operation replay returns the original challenge without extending its
+  expiry; Auth exact approval retry returns the same encrypted one-use code and
+  challenge receipt only while unconsumed/unexpired. Focused PostgreSQL tests
+  cover exact retry, changed-profile conflict and consumed-code rejection.
+  Gateway does not yet publish the API. T16 remains open: Auth→Messaging
+  execution-permit aggregation/direct-scope checks and broader PostgreSQL
+  concurrency/replay and revoke-drain timing tests. Selected-profile/alias fanout and hidden-profile non-leak across
+  roster/cards/search/presence belong to the separately named consumer task;
+  Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Keep
+  downstream message writes fail-closed until their
+  producer and consumer checks are implemented.
 - [ ] **T17** `D: T13–T16` Implement durable sdk→new-permanent conversion:
   operation/status, source proof, registration, preview/consent, authority
   freeze, owner receipts, grant recompute, new credentials, retired source
