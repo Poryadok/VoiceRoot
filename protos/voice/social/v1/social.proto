@@ -123,6 +123,8 @@ message ListFavoritesRequest {}
 // Account-level block: applies to all profiles of the peer account. Body: blocked party's account UUID (auth_db.accounts.id); blocker from request context.
 message BlockAccountRequest {
   string blocked_account_id = 1;
+  // Profile the blocker actually saw. Optional for older clients.
+  string blocked_profile_id = 2;
 }
 
 message UnblockAccountRequest {
@@ -141,6 +143,11 @@ message BlockedList {
 message BlockedAccount {
   string blocked_account_id = 1;
   google.protobuf.Timestamp created_at = 2;
+  // Snapshot of the selected profile at block time. Empty for legacy blocks.
+  string blocked_profile_id = 3;
+  string display_name = 4;
+  string username = 5;
+  string discriminator = 6;
 }
 
 message IsBlockedRequest {

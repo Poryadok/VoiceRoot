@@ -89,7 +89,32 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	if err != nil {
 		return nil, err
 	}
-	err = s.Blocks.BlockAccountAndSeverFriendships(ctx, blocker, blocked, blockerProfiles, blockedProfiles)
+	var selectedProfileID uuid.UUID
+	var selectedProfile *BlockedProfile
+	if req.GetBlockedProfileId() != "" {
+		selectedProfileID, err = parseUUIDField("blocked_profile_id", req.GetBlockedProfileId())
+		if err != nil {
+			return nil, err
+		}
+		if s.BlockedProfiles == nil {
+			return nil, status.Error(codes.FailedPrecondition, "blocked profile resolution not configured")
+		}
+		profile, lookupErr := s.BlockedProfiles.Profile(ctx, selectedProfileID)
+		if lookupErr != nil {
+			if st, ok := status.FromError(lookupErr); ok {
+				return nil, status.Error(st.Code(), "blocked profile lookup failed")
+			}
+			return nil, status.Error(codes.Unavailable, "blocked profile lookup unavailable")
+		}
+		if profile.AccountID == uuid.Nil {
+			return nil, status.Error(codes.FailedPrecondition, "blocked profile has invalid account")
+		}
+		if profile.AccountID != blocked {
+			return nil, status.Error(codes.InvalidArgument, "blocked_profile_id does not belong to blocked_account_id")
+		}
+		selectedProfile = &profile
+	}
+	err = s.Blocks.BlockAccountAndSeverFriendshipsWithProfile(ctx, blocker, blocked, blockerProfiles, blockedProfiles, selectedProfileID, selectedProfile)
 	switch {
 	case err == nil:
 		if s.Events != nil {
@@ -178,8 +203,16 @@ func (s *SocialGRPC) ListBlocked(ctx context.Context, req *socialv1.ListBlockedR
 	out := make([]*socialv1.BlockedAccount, 0, len(rows))
 	var next string
 	for i, r := range rows {
+		profileID := ""
+		if r.BlockedProfileID != uuid.Nil {
+			profileID = r.BlockedProfileID.String()
+		}
 		out = append(out, &socialv1.BlockedAccount{
 			BlockedAccountId: r.BlockedAccountID.String(),
+			BlockedProfileId: profileID,
+			DisplayName:      r.DisplayName,
+			Username:         r.Username,
+			Discriminator:    r.Discriminator,
 			CreatedAt:        timestamppb.New(r.CreatedAt.UTC()),
 		})
 		if hasMore && i == len(rows)-1 {

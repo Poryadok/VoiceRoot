@@ -1322,6 +1322,12 @@ abstract class AppLocalizations {
   /// **'Could not load messages'**
   String get chatRoomLoadError;
 
+  /// No description provided for @chatBlockedAccountsSendDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages are disabled between these accounts'**
+  String get chatBlockedAccountsSendDisabled;
+
   /// No description provided for @chatRoomPermissionDenied.
   ///
   /// In en, this message translates to:

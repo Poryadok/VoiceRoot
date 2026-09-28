@@ -2,6 +2,7 @@ package testsocial
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -40,13 +41,17 @@ func TestNewBufconnClient_BlockAccount_CascadesFixtureProfiles(t *testing.T) {
 	ctx := context.Background()
 	root := socialRepoRoot(t)
 	pool := integrationtest.StartPostgres(t, ctx, "socialdb", filepath.Join(root, "src", "backend", "migrations", "social_db", "000001_init.up.sql"))
+	identityMigration, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "social_db", "000003_blocked_profile_identity.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(identityMigration))
+	require.NoError(t, err)
 
 	blockerAccount := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	blockedAccount := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 	blockerProfile := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	blockedProfile := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
 
-	_, err := pool.Exec(ctx, `
+	_, err = pool.Exec(ctx, `
 		INSERT INTO friendships (id, requester_profile_id, target_profile_id, status, created_at, updated_at)
 		VALUES ($1, $2, $3, 'accepted', now(), now())`, uuid.New(), blockerProfile, blockedProfile)
 	require.NoError(t, err)

@@ -652,9 +652,19 @@ class _BlockedTab extends ConsumerWidget {
           itemCount: data.blocked.length,
           itemBuilder: (context, index) {
             final entry = data.blocked[index];
+            final handle = entry.handle;
             return ListTile(
               leading: const Icon(Icons.block),
-              title: Text(entry.blockedAccountId),
+              title: Text(
+                entry.displayName.isNotEmpty
+                    ? entry.displayName
+                    : handle.isNotEmpty
+                    ? handle
+                    : l10n.socialProfileUnavailable,
+              ),
+              subtitle: entry.displayName.isNotEmpty && handle.isNotEmpty
+                  ? Text(handle)
+                  : null,
               trailing: TextButton(
                 key: SocialPanel.unblockButtonKey(entry.blockedAccountId),
                 onPressed: () async {

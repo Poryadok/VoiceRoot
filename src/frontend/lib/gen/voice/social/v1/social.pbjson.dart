@@ -362,13 +362,21 @@ const BlockAccountRequest$json = {
       '5': 9,
       '10': 'blockedAccountId'
     },
+    {
+      '1': 'blocked_profile_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'blockedProfileId'
+    },
   ],
 };
 
 /// Descriptor for `BlockAccountRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List blockAccountRequestDescriptor = $convert.base64Decode(
     'ChNCbG9ja0FjY291bnRSZXF1ZXN0EiwKEmJsb2NrZWRfYWNjb3VudF9pZBgBIAEoCVIQYmxvY2'
-    'tlZEFjY291bnRJZA==');
+    'tlZEFjY291bnRJZBIsChJibG9ja2VkX3Byb2ZpbGVfaWQYAiABKAlSEGJsb2NrZWRQcm9maWxl'
+    'SWQ=');
 
 @$core.Deprecated('Use unblockAccountRequestDescriptor instead')
 const UnblockAccountRequest$json = {
@@ -449,6 +457,16 @@ const BlockedAccount$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'createdAt'
     },
+    {
+      '1': 'blocked_profile_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'blockedProfileId'
+    },
+    {'1': 'display_name', '3': 4, '4': 1, '5': 9, '10': 'displayName'},
+    {'1': 'username', '3': 5, '4': 1, '5': 9, '10': 'username'},
+    {'1': 'discriminator', '3': 6, '4': 1, '5': 9, '10': 'discriminator'},
   ],
 };
 
@@ -456,7 +474,9 @@ const BlockedAccount$json = {
 final $typed_data.Uint8List blockedAccountDescriptor = $convert.base64Decode(
     'Cg5CbG9ja2VkQWNjb3VudBIsChJibG9ja2VkX2FjY291bnRfaWQYASABKAlSEGJsb2NrZWRBY2'
     'NvdW50SWQSOQoKY3JlYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBS'
-    'CWNyZWF0ZWRBdA==');
+    'CWNyZWF0ZWRBdBIsChJibG9ja2VkX3Byb2ZpbGVfaWQYAyABKAlSEGJsb2NrZWRQcm9maWxlSW'
+    'QSIQoMZGlzcGxheV9uYW1lGAQgASgJUgtkaXNwbGF5TmFtZRIaCgh1c2VybmFtZRgFIAEoCVII'
+    'dXNlcm5hbWUSJAoNZGlzY3JpbWluYXRvchgGIAEoCVINZGlzY3JpbWluYXRvcg==');
 
 @$core.Deprecated('Use isBlockedRequestDescriptor instead')
 const IsBlockedRequest$json = {
