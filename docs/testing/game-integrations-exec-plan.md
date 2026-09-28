@@ -290,11 +290,13 @@ contracts land before consumers; activation lands after all consumers.
     ticket, nonce/freshness/replay and issuer/audience checks, app/env
     uniqueness, configured cap, device/session/revoke lifecycle, and current
     signed GIS policy admission. On `7dd013ce551867074ab148dabaedfd30c1f83478`,
-    focused Auth identity/conversion verifier, controller, configuration and
-    PostgreSQL suites passed 169 tests with 0 failures/errors/skips. This is
+    focused Auth identity/conversion suites passed 169 tests and the full Auth
+    Maven suite passed 890 tests, both with 0 failures/errors/skips. This is
     fake-provider development evidence only. Keep parent T13 open until the
     separately required real-Google exact-release proof and production
-    admission gates pass; those were not run in this environment.
+    admission gates pass; those were not run in this environment. Surefire
+    emitted a post-test fork-JVM cleanup warning after `System.exit(0)`; Maven
+    still exited 0 with BUILD SUCCESS.
 - [x] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
   GAME-AUTH-01 foundation in Java: `sdk-account` schema/principal, paired Google
   OIDC and app/env game-ticket verification, challenge/device proof, replay and
