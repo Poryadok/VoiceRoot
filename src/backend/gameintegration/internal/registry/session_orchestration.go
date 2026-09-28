@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
