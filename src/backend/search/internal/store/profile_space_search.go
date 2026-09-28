@@ -57,7 +57,7 @@ func (s *ProfileSpaceSearchStore) DeleteProfile(ctx context.Context, profileID u
 	return err
 }
 
-func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUID, query string, excludeAccounts []uuid.UUID, limit int) ([]ProfileHit, error) {
+func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, viewerAccount uuid.UUID, query string, excludeAccounts []uuid.UUID, limit int) ([]ProfileHit, error) {
 	if s == nil || s.Pool == nil {
 		return nil, fmt.Errorf("profile search store unavailable")
 	}
@@ -69,7 +69,7 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 		limit = defaultPageSize
 	}
 	pat := "%" + escapeLikePattern(query) + "%"
-	args := []any{pat}
+	args := []any{pat, viewerAccount}
 	excludeSQL := ""
 	if len(excludeAccounts) > 0 {
 		args = append(args, excludeAccounts)
@@ -82,6 +82,7 @@ func (s *ProfileSpaceSearchStore) SearchProfiles(ctx context.Context, _ uuid.UUI
 		WHERE generation=(SELECT active_generation FROM search_user_profile_generation_route WHERE singleton=true)
 		AND tombstoned_at IS NULL
 		AND (username ILIKE $1 ESCAPE '\' OR display_name ILIKE $1 ESCAPE '\')
+		AND account_id <> $2
 		%s
 		ORDER BY (CASE WHEN verification_type <> 'none' AND verification_type <> '' THEN 0 ELSE 1 END),
 		         username_lower ASC, discriminator ASC, profile_id ASC
