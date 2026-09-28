@@ -490,6 +490,19 @@ The v1 request body is compact JWS ASCII with media type
 `application/vnd.voice.game-message+jws;version=1`; its payload is strict
 UTF-8 JSON without BOM, canonicalized using RFC 8785 JCS. Protected header is
 exactly `{"alg":"ES256","kid":"<key_id UUID>","typ":"voice.game-message+jws"}`.
+Messaging owns the internal receiving RPC `ApplyGameMessage` with
+`ApplyGameMessageRequest.compact_jws` and
+`ApplyGameMessageRequest.device_authority_assertion`. The first field carries
+the HTTP body bytes as ASCII without JSON wrapping; the second carries the
+`X-Voice-Device-Authority` compact JWS unchanged. The authenticated Gateway
+service is the only caller. This typed internal ingress is additive; existing
+player-facing REST send/edit/delete routes remain unchanged until their T20
+consumer is implemented. The RPC accepts no caller-supplied profile, sender,
+actor, or chat-authority fields. Messaging derives profile and chat
+permissions from current Auth binding and Chat policy; while the T16 binding
+producer is unavailable, new operations fail closed.
+`ApplyGameMessageResponse.message` contains the ordinary Messaging projection
+after the revision transaction commits.
 JWS signs the ASCII `BASE64URL(protected-header) + "." + BASE64URL(canonical
 payload)` input from RFC 7515. The payload contains exactly these required
 fields:
@@ -545,8 +558,8 @@ Its RFC 8785 payload has exactly `version:1`, `operation:"moderator_delete"`,
 `previous_revision_hash`, `action_id`, `reason_class`, and `issued_at`. The
 revision is next and contiguous; `previous_revision_hash` is SHA-256 of the
 preceding compact JWS ASCII bytes. `reason_class` is one of `moderation` or
-`system_retention`; unknown values fail closed. Messaging generates
-`action_id` and uses it as the operation/dedupe ID. Reuse of its action or
+`system_retention`; unknown values fail closed. The authenticated moderation
+caller supplies a stable `action_id`, which Messaging uses as the operation/dedupe ID. Reuse of that action or
 chat/message/revision tuple returns the identical stored tombstone; different
 bytes conflict. Messaging signs only after its owning authorization checks
 and atomically commits the tombstone with deletion. The signature covers every
@@ -579,7 +592,10 @@ inside the device-signed payload. Each ID is a canonical UUID, revision and
 length are non-negative exact JSON integers, and digest is lowercase SHA-256
 hex. File remains authoritative for the exact immutable object metadata,
 access and retention; the receiver compares every listed value to File before
-display. With no attachments, both fields are `null`. A message is rejected if
+display. File IDs name immutable source objects and are never reused, so v1
+assigns each source object `object_revision: 1`; scan outcomes and derived
+thumbnail/conversion locations do not create a new source revision. With no
+attachments, both fields are `null`. A message is rejected if
 File cannot provide and later verify this immutable provenance; a client must
 not display unverified bytes as authenticated. A changed manifest requires a
 signed edit revision. This establishes object provenance, not that a node
@@ -598,7 +614,10 @@ For lifecycle routes, `POST /api/v1/auth/sdk/device-keys/challenges` accepts
 purpose `rotate|recover`, new public JWK containing only `kty:"EC"`,
 `crv:"P-256"`, `x`, and `y`, and, for recovery,
 `replaces_device_id`; it returns one-use challenge ID/nonce with five-minute
-expiry bound to the current app/env/binding. `POST
+expiry bound to the current app/env and (for rotation) SDK identity/device.
+Rotate challenge creation requires the current SDK session bearer; recovery
+challenge creation accepts app/env and the named replaced device without old
+key possession. `POST
 /api/v1/auth/sdk/device-keys/rotate` requires that challenge, fresh proof of
 the same current app-scoped identity, possession proof from the current key,
 new-key proof and an idempotency UUID. `POST
@@ -614,12 +633,58 @@ Recovery registers a new device/key and revokes every active generation for
 only the named replaced device. Other devices remain active. Identical request
 ID and bytes return the saved result; changed bytes conflict.
 
+Explicit revoke uses `DELETE /api/v1/auth/sdk/devices/{device_id}` with a fresh
+independent provider identity token and a compact ES256 device-key proof. The
+revoke proof uses the same exact protected header as a current-key lifecycle
+proof and an RFC 8785 payload containing exactly `version:1`, `purpose:"revoke"`,
+`audience:"voice.auth.device-key"`, `request_id`, `application_id`,
+`environment_id`, `device_id`, `key_id`, `key_thumbprint`, and `issued_at`
+(Unix milliseconds). The provider token must resolve to the exact app/env
+identity bound to that device and must be issued within the preceding 300
+seconds and remain unexpired. Auth consumes the request ID and original request
+bytes atomically with device/key revocation; exact replay returns the saved
+receipt and changed bytes conflict.
+
+Lifecycle key proofs are compact JWS with protected header exactly
+`{"alg":"ES256","kid":"<current key UUID>","typ":"voice.game-device-key-proof+jws"}`
+for `purpose="rotate_current"`, and exactly
+`{"alg":"ES256","typ":"voice.game-device-key-proof+jws"}` for a new-key
+proof. A proof payload is strict canonical RFC 8785 UTF-8 JSON with no unknown
+fields. The current-key payload is exactly `version:1`,
+`purpose:"rotate_current"`, `audience:"voice.auth.device-key"`, `request_id`,
+`challenge_id`, `nonce`, `application_id`, `environment_id`, `device_id`,
+`key_id`, `key_thumbprint`, `new_key_thumbprint`, and `issued_at` (Unix
+milliseconds). The replacement-key payload for rotation is exactly `version:1`,
+`purpose:"rotate_new"`, `audience:"voice.auth.device-key"`, `request_id`,
+`challenge_id`, `nonce`, `application_id`, `environment_id`, `device_id`,
+`key_thumbprint`, and `issued_at`. Recovery uses the same fields with
+`purpose:"recover_new"` and `replaces_device_id` instead of `device_id`. The
+`key_thumbprint` is RFC 7638 thumbprint of the key signing that proof; the
+current-key proof's `new_key_thumbprint` is the challenged replacement key.
+Challenge ID, nonce,
+app/env, request ID and thumbprint must match the stored one-use challenge and
+request. `issued_at` must be within ±30 seconds of Auth time. The independent
+Google OIDC proof uses the stored challenge nonce and configured app audience
+and must resolve to the same app/environment/issuer/subject identity. The
+idempotency key is the `request_id`; Auth retains original request body bytes
+and immutable result so same-ID/same-byte replay is read-only and same-ID
+changed bytes conflict.
+
 An ordinary rotation requires the new public JWK and a fresh five-minute Auth
 challenge, independent user proof for the same app-scoped identity, and
 possession proof signed by the current key. The replacement becomes active
 atomically; the old key remains admissible for new operations only while
 `now < old.not_after`, where `old.not_after` is exactly replacement commit time
 plus 600 seconds. At `now >= not_after`, it is rejected for new admission.
+Every newly active key has a fixed 90-day validity: `not_after` is exactly
+`not_before + 90 days` in Unix milliseconds. Auth permits rotation only before
+that deadline and assigns the replacement its own 90-day validity. There is no
+expiry grace period; at or after the deadline, Auth refuses new status
+assertions and receivers reject new operations for that key. The client must
+renew by ordinary rotation before expiry. If renewal is missed, the player must
+complete recovery with fresh independent identity proof and a new-key proof;
+the expired key is not accepted for possession. This keeps the assertion's
+`not_after` claim finite and makes the rotation deadline measurable.
 Rotation, revoke and recovery are Auth-owned and return only public key
 metadata, never private material or player bearer credentials. After expiry or
 explicit revoke, a public key remains available for historical signature
@@ -639,6 +704,11 @@ milliseconds, within ±30 seconds of Auth time). The request JWS uses ES256 and 
 Auth derives account/actor/binding from its current grant, verifies key
 possession, serializes issuance with device/binding revocation, and returns an
 Auth principal RS256 compact JWS whose payload is canonical RFC 8785 UTF-8 JSON.
+`binding_id` must come from the current Auth grant produced by T16; Auth fails
+closed when that binding authority is unavailable and never synthesizes a
+binding from account, actor, profile or device IDs. T15 key lifecycle and
+signature verification can be developed before T16, but authority issuance and
+message admission remain gated until the T16 producer is available.
 The request proof payload is canonical RFC 8785 UTF-8 JSON, protected header is
 exactly `{"alg":"ES256","kid":"<device key UUID>","typ":"voice.game-device-authority-request+jws"}`,
 and the JWS signature covers the normal RFC 7515 signing input. The assertion
@@ -690,6 +760,129 @@ assertion. Receivers retain exact idempotency JWS bytes, the verified device
 public key and immutable result receipt for at least the message lifetime plus
 30 days. Exact receipt reads follow the ordering above; an expired operation
 without a retained receipt is rejected for reconciliation, never reapplied.
+
+#### Messaging ingress and T16 execution permit
+
+The additive internal `voice.messaging.v1.MessagingService/ApplyGameMessage`
+RPC carries the exact client `compact_jws` and `device_authority_assertion`.
+It is an internal service method; public Gateway REST exposure is a separate
+T20 consumer. Messaging first checks the durable exact-byte operation receipt.
+For a new operation it verifies the device signature and current Auth
+assertion, then obtains a one-use Auth execution permit bound to that
+assertion's `jti` and the stable message `operation_id`. Auth checks current
+grant/device/account/profile epochs and the fixed
+`voice.game-message` → `game.chat.send` permission, requests a GIS permit for
+the same operation, rechecks its own authorization state, and signs a combined
+permit. Messaging then verifies current app/environment/binding/chat resource
+mapping, current Voice chat membership and every File manifest item, before
+starting the bounded database transaction. Message state, immutable revision,
+exact attachment manifest, exact-byte receipt, and permit-completion outbox
+record commit atomically. Missing Auth, GIS, T30/T31 mapping, Chat, or required
+File authority denies a new write without persistence.
+
+Messaging requests a permit from Auth `POST
+/api/v1/auth/sdk/game-message/execution-permits` using its registered service
+certificate, the raw verified Auth device assertion in
+`X-Voice-Device-Authority`, and exact JSON `{ "operation_id": "<uuid>",
+"request_sha256": "<lowercase hex>" }`. The digest is SHA-256 of the exact
+RFC 8785/JCS `Message.RawPayload` bytes; the durable receipt independently
+pins exact compact JWS bytes. Auth returns strict JSON
+`{ "permit_jws": "<compact JWS>" }`, `application/json`, `Cache-Control:
+no-store`, and no unknown/trailing fields. The Auth-signed JWS uses protected
+`typ=voice.game-message-execution-permit+jwt`, `alg=RS256`, and the dedicated
+Auth principal JWKS `kid`. Its exact claims are `version=1`, `iss=auth`,
+`aud=voice.game-message`, unique permit UUID `jti`, `operation=message.send`,
+`scope=game.chat.send`, `operation_id`, `request_sha256`,
+`application_id`, `environment_id`, `account_id`, `actor_id`, `binding_id`,
+`profile_id`, `device_id`, `key_id`, `device_generation`,
+`authority_revision`, GIS `gis_permit_id` and `binding_revision`,
+`assertion_jti`, `iat_ms`, `expires_at_ms`, and standard `exp=floor(
+expires_at_ms/1000)`. The permit binds the GIS permit ID and binding revision,
+Auth assertion `jti`, operation ID, current Auth authority revision, selected
+Auth profile and identity IDs. The issuer and verifier reject any mismatch;
+the permit has no caller-selected chat/profile or additional scope field. Auth→GIS uses GIS's private
+`POST /internal/v1/game-integrations/bindings/{binding_id}/execution-permits`
+with `{ "operation_id": "<uuid>" }` as its body and the same assertion header.
+The versioned WorkloadProof authenticates method, path, body, time, nonce, and
+SHA-256 of the exact assertion-header bytes; assertion substitution fails
+before GIS permit creation. GIS returns only its-owned binding/app/environment
+IDs, binding revision, permit ID, assertion `jti`, operation ID, and expiry,
+authenticated over the exact response bytes. Auth composes the Auth-owned
+account/actor/profile and authority revision; GIS does not assert them.
+
+GIS permit expiry is at most `min(permit_issued_at + 3750ms, assertion.exp)`.
+There is no permit/assertion cache. Messaging requires a maximum 250ms clock
+uncertainty, checks the permit immediately before transaction start with the
+250ms safety margin, and bounds the transaction to 250ms. It commits the
+permit completion receipt with the message transaction, then reports
+`committed` to Auth/GIS idempotently. A known pre-commit failure reports
+`aborted`; lost or unknown completion remains pending/unavailable and never
+counts as success. An exact retry reuses its operation ID and stored receipt;
+it cannot mint a longer permit for an already completed operation.
+
+Messaging acknowledges completion to Auth with mTLS `POST
+/api/v1/auth/sdk/game-message/execution-permits/{permit_jti}/completion`, exact
+JSON `{ "operation_id": "<uuid>", "outcome": "committed" | "aborted" }`.
+Auth forwards it to GIS using the versioned workload proof. Auth returns exact
+JSON `{ "permit_id": "<uuid>", "operation_id": "<uuid>", "outcome":
+"committed" | "aborted", "status": "completed" }`. Exact retries replay the
+same receipt; a divergent outcome conflicts. The Messaging completion outbox
+retries until acknowledged.
+
+Both owners serialize revocation with permit issuance using
+`active → revoking → revoked`; `revoking` stops new permits. Successful revoke
+waits for all issued permits to be committed/aborted or to expire plus the
+clock and transaction margins. Unknown completion remains pending. With the
+3.75s permit cap, 250ms clock margin, and 250ms transaction limit, the last
+possible commit is no later than 4.25 seconds from revoke request; the
+acceptance test measures request-to-last-commit. Relinking creates a new
+binding ID. The separate T30/T31 producer must prove the exact
+`(application_id, environment_id, binding_id, chat_id)` mapping; T16 binding
+authority and `ChatGuard.EnsureMember` cannot prove that relationship. New
+game-authored writes remain fail-closed until T30/T31 is available.
+
+Author deletion remains the player's signed `operation:"delete"` revision.
+Moderator/system deletion uses a separate protected internal
+`TombstoneGameMessage` RPC with `action_id`, application/environment/chat/message
+identity, and `reason_class` (`moderation` or `system_retention`). Its only
+caller is an authenticated `service:moderation` principal with issuer
+`moderation`, audience `messaging`, exact RPC, request ID, and deterministic
+protobuf request hash. Messaging verifies this principal against the
+moderation service JWKS over mTLS and applies shared replay protection; request
+fields never establish caller identity. There is no current moderation
+consumer for this method.
+
+Messaging signs each accepted moderator action as one immutable terminal
+EdDSA revision with protected type
+`voice.game-message-tombstone+jws`, issuer `messaging`, audience
+`voice.game-message`, `operation:"moderator_delete"`, contiguous revision and
+previous-revision hash, action ID, and reason class. The Ed25519 private key is
+Messaging-owned and must be explicitly provisioned; there is no local/default
+key. Messaging exposes its public-only JWKS at
+`/.well-known/game-tombstone-jwks.json` on a dedicated HTTPS listener
+that requires a trusted client certificate. The exact action body and signed
+envelope are committed with the terminal message state in one transaction.
+An exact action retry returns the stored envelope; reuse of the action ID with
+changed target/reason conflicts. No later edit, create, or delete can extend a
+terminal chain. Missing signing key or moderation principal fails closed
+before persistence.
+
+Messaging key and listener configuration uses `MESSAGING_TOMBSTONE_KEY_ID`,
+`MESSAGING_TOMBSTONE_PRIVATE_KEY_FILE`, `MESSAGING_TOMBSTONE_NOT_BEFORE`,
+`MESSAGING_TOMBSTONE_NOT_AFTER`, `MESSAGING_TOMBSTONE_JWKS_LISTEN`,
+`MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE`,
+`MESSAGING_TOMBSTONE_JWKS_TLS_KEY_FILE`, and
+`MESSAGING_TOMBSTONE_JWKS_CLIENT_CA_FILE`. Moderation principal verification
+requires `MODERATION_PRINCIPAL_JWKS_URL`,
+`MODERATION_PRINCIPAL_JWKS_CA_FILE`,
+`MESSAGING_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_PRINCIPAL_TLS_KEY_FILE`, and
+`MESSAGING_PRINCIPAL_REPLAY_REDIS_URL`. Game-authored message verification
+requires Auth's `AUTH_PRINCIPAL_JWKS_URL`,
+`AUTH_PRINCIPAL_JWKS_CA_FILE`, `MESSAGING_AUTH_PRINCIPAL_TLS_CERT_FILE`, and
+`MESSAGING_AUTH_PRINCIPAL_TLS_KEY_FILE`; T16 authority resolution requires
+`AUTH_BINDING_AUTHORITY_URL`, `AUTH_BINDING_AUTHORITY_CA_FILE`,
+`MESSAGING_AUTH_BINDING_TLS_CERT_FILE`, and
+`MESSAGING_AUTH_BINDING_TLS_KEY_FILE`.
 
 Acceptance mapping: ID14 proves developer/node/bot credentials cannot enroll,
 rotate, recover, or impersonate a player key and positively exercises each

@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -34,7 +35,9 @@ public class SdkIdentityConfiguration {
   @Bean
   @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
   SdkIdentityService sdkIdentityService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager,
-                                      Clock clock, Settings settings, SdkAuthorizationPolicy policies)
+                                      Clock clock, Settings settings, SdkAuthorizationPolicy policies,
+                                      ObjectProvider<AuthUserPrincipalIssuer> statusIssuer,
+                                      ObjectProvider<SdkBindingAuthority> bindingAuthority)
       throws java.text.ParseException {
     Map<String, SdkApplication> admitted = new HashMap<>();
     var audiences = new HashSet<String>();
@@ -47,6 +50,7 @@ public class SdkIdentityConfiguration {
       }
     }
     return new SdkIdentityService(jdbc, new TransactionTemplate(manager),
-        new GoogleOidcProofVerifier(clock, new GoogleJwks(clock)), Map.copyOf(admitted), policies, clock);
+        new GoogleOidcProofVerifier(clock, new GoogleJwks(clock)), Map.copyOf(admitted), policies, clock,
+        statusIssuer.getIfAvailable(), bindingAuthority.getIfAvailable());
   }
 }

@@ -143,6 +143,9 @@ message FileMetadata {
   optional FileLifecycleStatus status_enum = 21;
   optional FileMediaCategory file_type_enum = 22;
   optional FileScanOutcome scan_result_enum = 23;
+  // File IDs address one immutable source object; derived scan/convert fields
+  // do not change its content provenance.
+  uint64 object_revision = 24;
 }
 
 // Selects the stored representation for a presigned file URL.
