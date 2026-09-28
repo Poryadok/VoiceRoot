@@ -483,12 +483,14 @@ class VoiceAuthClient {
     };
   }
 
-  Future<void> markGuestReminderShown({required String authorization}) async {
-    await _gateway.postJson(
+  /// Atomically claims a reminder; false includes already claimed or unavailable.
+  Future<bool> markGuestReminderShown({required String authorization}) async {
+    final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/auth/guest-reminder/mark'),
       authorization: authorization,
       body: const {},
     );
+    return result is GatewayHttpOk;
   }
 
   /// Schedules account deletion (soft delete). Returns null on success (204).

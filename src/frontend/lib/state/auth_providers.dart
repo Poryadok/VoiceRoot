@@ -1187,10 +1187,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<bool> _resolveIsGuest(AuthSession session) async {
-    if (isGuestAccountType(session.accountType)) return true;
-    if (isGuestAccountType(accountTypeFromAccessToken(session.accessToken))) {
-      return true;
-    }
+    final accountType =
+        session.accountType ?? accountTypeFromAccessToken(session.accessToken);
+    if (accountType != null) return isGuestAccountType(accountType);
     final guestPassword = await _guestCredentialsStorage.readPassword();
     return guestPassword != null && guestPassword.isNotEmpty;
   }
