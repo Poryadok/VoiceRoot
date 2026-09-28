@@ -160,7 +160,7 @@ func (c *Clients) createChat(ctx context.Context, owner registry.SessionOwnerReq
 		return registry.SessionOwnerReceipt{}, err
 	}
 	if response.GetRequestHash() != owner.RequestHash {
-		return registry.SessionOwnerReceipt{}, errors.New("Chat receipt request hash mismatch")
+		return registry.SessionOwnerReceipt{}, errors.New("chat receipt request hash mismatch")
 	}
 	return registry.SessionOwnerReceipt{ResourceID: chatID, ReceiptID: receiptID, RequestHash: response.GetRequestHash()}, nil
 }
@@ -189,7 +189,7 @@ func (c *Clients) syncChatRoster(ctx context.Context, owner registry.SessionOwne
 		return registry.SessionOwnerReceipt{}, err
 	}
 	if response.GetRequestHash() != owner.RequestHash {
-		return registry.SessionOwnerReceipt{}, errors.New("Chat roster receipt request hash mismatch")
+		return registry.SessionOwnerReceipt{}, errors.New("chat roster receipt request hash mismatch")
 	}
 	return registry.SessionOwnerReceipt{ResourceID: chatID, ReceiptID: receiptID, RequestHash: response.GetRequestHash()}, nil
 }

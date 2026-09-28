@@ -395,7 +395,7 @@ func (o *SessionOrchestrator) advanceNoOwner(ctx context.Context, op, session uu
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$2,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE operation_id=$1`, op, next)
 	if err != nil {
 		return SessionOperation{}, err
@@ -417,7 +417,7 @@ func (o *SessionOrchestrator) finishActive(ctx context.Context, op, session uuid
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	event := uuid.New()
 	tag, err := tx.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage='active',active_event_id=$2,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE operation_id=$1 AND status='pending'`, op, event)
 	if err != nil {
@@ -521,7 +521,7 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if baseStage == "voice_close_pending" {
 		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$3,voice_close_receipt_id=$4,updated_at=now() WHERE id=$1 AND terminalization_operation_id=$2`, session, op, next, receipt.ReceiptID)
 		if err == nil {

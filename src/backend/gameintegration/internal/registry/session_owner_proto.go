@@ -58,7 +58,7 @@ func BuildSessionOwnerProto(stage string, request SessionOwnerRequest) (proto.Me
 			RosterRevision: uint64(request.RosterRevision), ProfileIds: canonicalProfileIDs(request.Members)}, nil
 	case "terminalize_voice_close":
 		if request.VoiceRoomID == uuid.Nil || request.ChatID == uuid.Nil || request.ChatCreateReceiptID == uuid.Nil {
-			return nil, errors.New("Voice room and Chat receipt are required for close")
+			return nil, errors.New("voice room and chat receipt are required for close")
 		}
 		return &callsv1.CloseGameSessionRoomRequest{OperationId: request.OperationID.String(), ApplicationId: request.ApplicationID.String(),
 			EnvironmentId: request.EnvironmentID.String(), Resource: &callsv1.GameSessionResourceRef{Kind: gameSessionKind(request.Kind), ExternalResourceKey: request.ExternalKey},
