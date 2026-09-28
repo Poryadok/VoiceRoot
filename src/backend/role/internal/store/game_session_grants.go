@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -323,7 +322,7 @@ func lockGrantSession(ctx context.Context, tx pgx.Tx, scope gameSessionGrantScop
 
 func validateGameSessionGrantApply(request GameSessionGrantApply) error {
 	if request.ApplicationID == uuid.Nil || request.EnvironmentID == uuid.Nil || request.SessionID == uuid.Nil ||
-		request.VoiceRoomID == uuid.Nil || request.OperationID == uuid.Nil || request.RosterRevision <= 0 || request.RosterRevision > math.MaxInt64 {
+		request.VoiceRoomID == uuid.Nil || request.OperationID == uuid.Nil || request.RosterRevision <= 0 {
 		return ErrGameSessionGrantInvalid
 	}
 	for index, profileID := range request.ProfileIDs {
