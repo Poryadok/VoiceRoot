@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
@@ -28,13 +29,21 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /** Authenticated, response-verified read of Game Integration's current SDK policy. */
-public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPolicy {
+public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPolicy, SdkBindingChallengeAuthority {
   private static final int MAX_RESPONSE_BYTES = 65_536;
   private static final ObjectMapper JSON = new ObjectMapper()
       .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private static final Set<String> RESPONSE_FIELDS = Set.of("application_id", "environment_id", "revision",
       "display_name", "redirect_uris", "allowed_origins", "providers", "player_scopes");
+  private static final Set<String> BINDING_CHALLENGE_FIELDS = Set.of("challenge_id", "nonce", "application_id",
+      "environment_id", "provider", "redirect_uri_sha256", "pkce_challenge", "device_key_id",
+      "device_key_thumbprint", "operation_id", "expires_at", "status", "source_account_id", "source_actor_id",
+      "source_device_id", "source_generation", "target_account_id", "target_profile_id", "profile_revision",
+      "consent_revision", "policy_revision", "scopes");
+  private static final Set<String> BINDING_CHALLENGE_CREATE_RESPONSE_FIELDS =
+      Set.of("challenge_id", "nonce", "expires_at");
+
 
   private final String configuredBaseUrl;
   private final String configuredKey;
@@ -95,6 +104,174 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
     } catch (Exception invalidOrUnavailable) {
       throw denied();
     }
+  }
+
+  /** Authenticated execution-time read of a GIS-owned immutable binding challenge. */
+  public SdkBindingChallengeAuthority.Challenge resolveBindingChallenge(UUID challengeId) {
+    try {
+      if (challengeId == null || challengeId.equals(new UUID(0, 0)) || clock == null || http == null
+          || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
+      String rawPath = "/internal/v1/bindings/challenges/" + challengeId;
+      URI endpoint = endpointPath(configuredBaseUrl, rawPath, allowInternalHttp);
+      byte[] key = key(configuredKey);
+      String path = endpoint.getRawPath();
+      String timestamp = Long.toString(clock.instant().getEpochSecond());
+      String nonce = UUID.randomUUID().toString();
+      HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(requestTimeout)
+          .header("X-Voice-Workload", "auth").header("X-Voice-Timestamp", timestamp)
+          .header("X-Voice-Nonce", nonce).header("X-Voice-Signature", requestSignature(key, path, timestamp, nonce))
+          .GET().build();
+      HttpResponse<byte[]> response = http.send(request,
+          responseInfo -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      requireHeader(response, "Cache-Control", "no-store");
+      requireHeader(response, "Content-Type", "application/json");
+      requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
+      requireHeader(response, "X-Voice-Response-Nonce", nonce);
+      verifyResponse(key, path, timestamp, nonce, uniqueHeader(response, "X-Voice-Response-Signature"), response.body());
+      return parseBindingChallenge(response.body(), challengeId);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw denied();
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception invalidOrUnavailable) {
+      throw denied();
+    }
+  }
+
+  @Override
+  public SdkBindingChallengeAuthority.Challenge createBindingChallenge(SdkBindingChallengeAuthority.CreateRequest value) {
+    try {
+      requireCreateRequest(value);
+      URI endpoint = endpointPath(configuredBaseUrl, "/internal/v1/bindings/challenges", allowInternalHttp);
+      byte[] key = key(configuredKey);
+      var node = JSON.createObjectNode();
+      node.put("application_id", value.applicationId().toString());
+      node.put("environment_id", value.environmentId().toString());
+      node.put("provider", value.provider());
+      node.put("redirect_uri_sha256", value.redirectUriSha256());
+      node.put("pkce_challenge", value.pkceChallenge());
+      node.put("device_key_id", value.deviceKeyId().toString());
+      node.put("device_key_thumbprint", value.deviceKeyThumbprint());
+      node.put("operation_id", value.operationId().toString());
+      node.put("expires_at", java.time.format.DateTimeFormatter.ISO_INSTANT.format(value.expiresAt()));
+      node.put("source_account_id", value.sourceAccountId().toString());
+      node.put("source_actor_id", value.sourceActorId().toString());
+      node.put("source_device_id", value.sourceDeviceId().toString());
+      node.put("source_generation", value.sourceGeneration());
+      node.put("target_account_id", value.targetAccountId().toString());
+      node.put("target_profile_id", value.targetProfileId().toString());
+      node.put("profile_revision", value.profileRevision());
+      node.put("consent_revision", value.consentRevision());
+      node.put("policy_revision", value.policyRevision());
+      var scopeNode = node.putArray("scopes");
+      value.scopes().forEach(scopeNode::add);
+      byte[] body = JSON.writeValueAsBytes(node);
+      String path = endpoint.getRawPath();
+      String timestamp = Long.toString(clock.instant().getEpochSecond());
+      String nonce = UUID.randomUUID().toString();
+      HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(requestTimeout)
+          .header("X-Voice-Workload", "auth").header("Content-Type", "application/json")
+          .header("X-Voice-Timestamp", timestamp).header("X-Voice-Nonce", nonce)
+          .header("X-Voice-Signature", bodyRequestSignature(key, "POST", path, timestamp, nonce, body))
+          .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+      HttpResponse<byte[]> response = http.send(request, info -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      requireHeader(response, "Cache-Control", "no-store");
+      requireHeader(response, "Content-Type", "application/json");
+      requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
+      requireHeader(response, "X-Voice-Response-Nonce", nonce);
+      verifyResponse(key, path, timestamp, nonce, uniqueHeader(response, "X-Voice-Response-Signature"), response.body());
+      return parseCreatedBindingChallenge(response.body(), value);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw denied();
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception invalidOrUnavailable) {
+      throw denied();
+    }
+  }
+
+  private static URI endpointPath(String rawBaseUrl, String rawPath, boolean allowInternalHttp) {
+    if (rawPath == null || !(rawPath.equals("/internal/v1/bindings/challenges")
+        || rawPath.startsWith("/internal/v1/bindings/challenges/"))
+        || rawPath.contains("?") || rawPath.contains("#")) throw denied();
+    URI base;
+    try { base = URI.create(rawBaseUrl.trim()); }
+    catch (RuntimeException invalid) { throw denied(); }
+    String scheme = base.getScheme();
+    if (base.getHost() == null || base.getRawUserInfo() != null || base.getRawQuery() != null
+        || base.getRawFragment() != null || (base.getRawPath() != null && !base.getRawPath().isEmpty()
+            && !"/".equals(base.getRawPath()))
+        || !("https".equalsIgnoreCase(scheme)
+            || (allowInternalHttp && "http".equalsIgnoreCase(scheme) && isInternalHost(base.getHost())))) throw denied();
+    try { return new URI(scheme.toLowerCase(java.util.Locale.ROOT), null, base.getHost(), base.getPort(), rawPath, null, null); }
+    catch (Exception invalid) { throw denied(); }
+  }
+
+  private static SdkBindingChallengeAuthority.Challenge parseBindingChallenge(byte[] raw, UUID expectedChallenge) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(BINDING_CHALLENGE_FIELDS)) throw denied();
+      UUID challenge = canonicalUuid(text(root, "challenge_id"));
+      UUID app = canonicalUuid(text(root, "application_id"));
+      UUID env = canonicalUuid(text(root, "environment_id"));
+      UUID device = canonicalUuid(text(root, "device_key_id"));
+      UUID operation = canonicalUuid(text(root, "operation_id"));
+      String nonce = text(root, "nonce");
+      String provider = text(root, "provider");
+      String redirectHash = text(root, "redirect_uri_sha256");
+      String pkce = text(root, "pkce_challenge");
+      String thumbprint = text(root, "device_key_thumbprint");
+      Instant expires = Instant.parse(text(root, "expires_at"));
+      String status = text(root, "status");
+      if ((expectedChallenge != null && !expectedChallenge.equals(challenge)) || !nonce.matches("[A-Za-z0-9_-]{43}")
+          || !provider.matches("[a-z][a-z0-9_-]{0,31}") || !redirectHash.matches("[0-9a-f]{64}")
+          || !pkce.matches("[A-Za-z0-9_-]{43}") || !thumbprint.matches("[A-Za-z0-9_-]{43}")
+          || !"pending".equals(status)) throw denied();
+      UUID sourceAccount = canonicalUuid(text(root, "source_account_id"));
+      UUID sourceActor = canonicalUuid(text(root, "source_actor_id"));
+      UUID sourceDevice = canonicalUuid(text(root, "source_device_id"));
+      long sourceGeneration = positiveLong(root, "source_generation");
+      UUID targetAccount = canonicalUuid(text(root, "target_account_id"));
+      UUID targetProfile = canonicalUuid(text(root, "target_profile_id"));
+      long profileRevision = positiveLong(root, "profile_revision");
+      long consentRevision = positiveLong(root, "consent_revision");
+      long policyRevision = positiveLong(root, "policy_revision");
+      List<String> scopes = strings(root, "scopes", false);
+      if (!device.equals(sourceDevice) || scopes.stream().sorted().toList().equals(scopes) == false) throw denied();
+      return new SdkBindingChallengeAuthority.Challenge(challenge, nonce, app, env, provider, redirectHash, pkce, device, thumbprint,
+          operation, expires, status, sourceAccount, sourceActor, sourceDevice, sourceGeneration, targetAccount,
+          targetProfile, profileRevision, consentRevision, policyRevision, scopes);
+    } catch (SdkIdentityDeniedException denied) { throw denied; }
+    catch (Exception malformed) { throw denied(); }
+  }
+
+  private static SdkBindingChallengeAuthority.Challenge parseCreatedBindingChallenge(byte[] raw,
+      SdkBindingChallengeAuthority.CreateRequest expected) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(BINDING_CHALLENGE_CREATE_RESPONSE_FIELDS)) throw denied();
+      UUID challengeId = canonicalUuid(text(root, "challenge_id"));
+      String nonce = text(root, "nonce");
+      Instant expiresAt = Instant.parse(text(root, "expires_at"));
+      if (!nonce.matches("[A-Za-z0-9_-]{43}") || !expiresAt.equals(expected.expiresAt())) throw denied();
+      return new SdkBindingChallengeAuthority.Challenge(challengeId, nonce, expected.applicationId(),
+          expected.environmentId(), expected.provider(), expected.redirectUriSha256(), expected.pkceChallenge(),
+          expected.deviceKeyId(), expected.deviceKeyThumbprint(), expected.operationId(), expiresAt, "pending",
+          expected.sourceAccountId(), expected.sourceActorId(), expected.sourceDeviceId(), expected.sourceGeneration(),
+          expected.targetAccountId(), expected.targetProfileId(), expected.profileRevision(), expected.consentRevision(),
+          expected.policyRevision(), expected.scopes());
+    } catch (SdkIdentityDeniedException denied) { throw denied; }
+    catch (Exception malformed) { throw denied(); }
   }
 
   private static URI endpoint(String rawBaseUrl, UUID environmentId, boolean allowInternalHttp) {
@@ -181,6 +358,26 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
     byte[] emptyDigest = sha256(new byte[0]);
     String message = "v1\nGET\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex(emptyDigest);
     return Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(key, message.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private static String bodyRequestSignature(byte[] key, String method, String path, String timestamp, String nonce, byte[] body) {
+    String message = "v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex(sha256(body));
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(key, message.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private void requireCreateRequest(SdkBindingChallengeAuthority.CreateRequest request) {
+    if (request == null || request.applicationId() == null || request.environmentId() == null
+        || request.deviceKeyId() == null || request.operationId() == null || request.sourceAccountId() == null
+        || request.sourceActorId() == null || request.sourceDeviceId() == null || request.targetAccountId() == null
+        || request.targetProfileId() == null || request.sourceGeneration() <= 0 || request.profileRevision() <= 0
+        || request.consentRevision() <= 0 || request.policyRevision() <= 0 || request.expiresAt() == null
+        || !request.expiresAt().isAfter(clock.instant()) || request.expiresAt().isAfter(clock.instant().plusSeconds(300)) || request.provider() == null
+        || !request.provider().matches("[a-z][a-z0-9_-]{0,31}") || request.redirectUriSha256() == null
+        || !request.redirectUriSha256().matches("[0-9a-f]{64}") || request.pkceChallenge() == null
+        || !request.pkceChallenge().matches("[A-Za-z0-9_-]{43}") || request.deviceKeyThumbprint() == null
+        || !request.deviceKeyThumbprint().matches("[A-Za-z0-9_-]{43}") || !request.deviceKeyId().equals(request.sourceDeviceId())
+        || request.scopes() == null || request.scopes().isEmpty() || request.scopes().size() > 16
+        || !request.scopes().equals(request.scopes().stream().sorted().distinct().toList())) throw denied();
   }
 
   private static void verifyResponse(byte[] key, String path, String timestamp, String nonce,

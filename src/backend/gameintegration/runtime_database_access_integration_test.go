@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -40,6 +41,12 @@ func TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables(t *testing.T) {
 	require.NoError(t, err)
 	_, err = adminPool.Exec(ctx, string(t11Migration))
 	require.NoError(t, err)
+	for _, name := range []string{"000005_t16_player_binding_authority.up.sql", "000006_t16_execution_permits.up.sql"} {
+		migration, readErr := os.ReadFile(filepath.Join(migrationDir, name))
+		require.NoError(t, readErr)
+		_, err = adminPool.Exec(ctx, string(migration))
+		require.NoError(t, err)
+	}
 	_, err = adminPool.Exec(ctx, `CREATE DATABASE auth_db`)
 	require.NoError(t, err)
 
@@ -88,10 +95,26 @@ func TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables(t *testing.T) {
 	require.False(t, canInherit)
 	require.False(t, canBypassRLS)
 	require.False(t, canReplicate)
+	applicationID, environmentID := uuid.New(), uuid.New()
 	_, err = runtimePool.Exec(ctx,
 		`INSERT INTO applications (id, owner_account_id, name, status) VALUES ($1, $2, 'isolation-test', 'draft')`,
-		uuid.New(), uuid.New())
+		applicationID, uuid.New())
 	require.NoError(t, err, "GIS runtime credentials must write GIS-owned registry rows")
+	_, err = runtimePool.Exec(ctx, `INSERT INTO environments (id, application_id, kind, status)
+		VALUES ($1,$2,'sandbox','active')`, environmentID, applicationID)
+	require.NoError(t, err)
+	bindingID := uuid.New()
+	_, err = runtimePool.Exec(ctx, `INSERT INTO player_bindings
+		(binding_id, application_id, environment_id, provider, provider_subject_digest, account_id, actor_id, profile_id, device_id, status, authority_revision)
+		VALUES ($1,$2,$3,'test-provider',$4,$5,$6,$7,$8,'active',1)`, bindingID, applicationID, environmentID,
+		"hmac-sha256-v1:test:"+strings.Repeat("a", 64), uuid.New(), uuid.New(), uuid.New(), uuid.New())
+	require.NoError(t, err, "GIS runtime credentials must write GIS-owned player binding rows")
+	_, err = runtimePool.Exec(ctx, `INSERT INTO player_binding_execution_permits
+		(permit_id, binding_id, operation_id, application_id, environment_id, binding_revision,
+		 assertion_jti, assertion_sha256, expires_at, status)
+		VALUES ($1,$2,$3,$4,$5,1,$6,$7,now()+interval '1 second','issued')`, uuid.New(), bindingID,
+		uuid.New(), applicationID, environmentID, uuid.New(), make([]byte, 32))
+	require.NoError(t, err, "GIS runtime credentials must write GIS-owned permit rows")
 	_, err = adminPool.Exec(ctx, `CREATE TABLE future_registry_rows (id BIGSERIAL PRIMARY KEY)`)
 	require.NoError(t, err)
 	var nextID int64

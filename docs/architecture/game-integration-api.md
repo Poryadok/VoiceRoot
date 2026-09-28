@@ -974,11 +974,11 @@ opaque external IDs, enum strings. Все mutations требуют authorization
 | Method + suffix | Principal | Request → response | Повторы / основные ошибки |
 |---|---|---|---|
 | `GET /capabilities` | Player или service | client platform/version → enabled features, versions, limits | Read; 426 unsupported client |
-| `POST /bindings/challenges` | Game login proof | provider ticket, redirect, PKCE challenge → challenge/authorize URL/expiry | nonce-bound; 400/401/429 |
-| `POST /bindings/exchange` | Code + PKCE | challenge, code, verifier → delegated grant, binding | Одноразовый code; 401 invalid/replayed |
+| `POST /bindings/challenges` | Auth service identity (private; not Gateway-published) | approved T14 challenge tuple → persisted `{challenge_id,nonce,expires_at}` | WorkloadProof v1; operation + exact request replay; changed input 409; expires ≤5m |
+| `POST /bindings/exchange` | Player bearer + one-use Auth code | `{challenge_id,code,code_verifier,device_proof}` → `{operation_id,binding_id,status}` after Auth online claim and durable GIS completion | GIS operation is challenge-bound; exact retry replays; changed body 409; pending/uncertain Auth completion returns retryable 503; Gateway publication is pending |
 | `GET /bindings/me` | Player | — → selected profile, own bindings/scopes | Только собственные; 401 |
 | `GET /bindings/{binding_id}/authority` | Service своей app/env | — → active/revoked, revision, разрешённый character context | Execution-time check, no shared cache beyond authority deadline; 403/503 |
-| `DELETE /bindings/{binding_id}` | Владелец player | expected revision → revocation operation | Идемпотентно; 403/409 |
+| `DELETE /bindings/{binding_id}` | Владелец player | `Idempotency-Key` UUID + `{expected_revision}` → revocation receipt | GIS drains execution permits, then Auth drains accepted claims; exact retry required while pending; 403/409/503; Gateway publication pending |
 | `POST /sessions` | Service | external key, kind, parent party, policy, desired members → operation | Idempotency-Key; 409 mismatch |
 | `PUT /sessions/{id}/roster` | Service | complete snapshot, source revision, bound members → operation | CAS/revision; 409 stale/conflict |
 | `GET /sessions/{id}` | Authorized member/service | — → current state, applied roster revision, resource refs | 404 for inaccessible resources |

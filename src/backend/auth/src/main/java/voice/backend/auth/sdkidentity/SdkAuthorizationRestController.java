@@ -21,7 +21,8 @@ public class SdkAuthorizationRestController {
       @NotNull @Pattern(regexp = "[A-Za-z0-9_-]{43}") String codeChallenge,
       @NotNull @Pattern(regexp = "[A-Za-z0-9_-]{43,128}") String state,
       @NotEmpty @Size(max = 16) Set<@NotBlank @Size(max = 64) String> scopes,
-      @NotBlank @Size(max = 4096) String deviceProof) {
+      @NotBlank @Size(max = 4096) String deviceProof,
+      @com.fasterxml.jackson.annotation.JsonProperty("game_binding") Boolean gameBinding) {
     @com.fasterxml.jackson.annotation.JsonAnySetter
     public void unknown(String name, Object value) { throw new IllegalArgumentException("unknown SDK field"); }
   }
@@ -49,7 +50,7 @@ public class SdkAuthorizationRestController {
       @RequestHeader(value = "Authorization", required = false) String authorization,
       @Valid @RequestBody StartRequest request) {
     return service.start(bearer(authorization), request.deviceProof(), request.idempotencyKey(),
-        request.redirectUri(), request.codeChallenge(), request.state(), request.scopes());
+        request.redirectUri(), request.codeChallenge(), request.state(), request.scopes(), Boolean.TRUE.equals(request.gameBinding()));
   }
 
   @GetMapping("/{requestId}")

@@ -19,6 +19,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -122,6 +123,58 @@ class AuthUserPrincipalIssuerContractTest {
       assertThat(jwk.getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
       assertThat(jwk.isPrivate()).isFalse();
     });
+  }
+
+  @Test
+  void signsAndVerifiesStrictThirtySecondGameBindingHandoffOnDedicatedPrincipalKeyset() throws Exception {
+    RSAKey current = key("current");
+    write(current);
+    write(key("next"));
+    AuthUserPrincipalIssuer issuer = (AuthUserPrincipalIssuer) load("current");
+    var handoff = new AuthUserPrincipalIssuer.GameBindingHandoff(
+        java.util.UUID.fromString("e3eaa96a-0fef-44f0-9a0d-f04d74a1fd71"),
+        java.util.UUID.fromString("671cf221-245f-40bf-adb0-28ed38f0c932"),
+        java.util.UUID.fromString("acfa26aa-3637-4be8-98d2-304cfcbac1bc"), "n".repeat(43),
+        java.util.UUID.fromString("3119a95d-d7e7-40a7-8b2d-a58b6b0e77d2"),
+        java.util.UUID.fromString("2baea249-e4a4-4944-a513-1d9f0895e421"), "a".repeat(64), "p".repeat(43),
+        java.util.UUID.fromString("d33f1445-4a1b-45ee-b718-58d75b1ea8c7"), "k".repeat(43), "google",
+        "hmac-sha256-v1:k1:" + "b".repeat(64),
+        java.util.UUID.fromString("0b258c6c-5d2b-4e50-a2e4-74df88f0015f"),
+        java.util.UUID.fromString("4d1e6aca-a5f0-470d-8c3c-8466ed2462e0"),
+        java.util.UUID.fromString("d33f1445-4a1b-45ee-b718-58d75b1ea8c7"), 3,
+        java.util.UUID.fromString("758c5f92-018d-459a-bb73-c335615f7886"),
+        java.util.UUID.fromString("69d141ba-b84d-46ba-922a-a91c54192504"), 12, 4, 7,
+        List.of("game.chat.send"), NOW.plusSeconds(30));
+
+    String compact = issuer.issueGameBindingHandoff(handoff);
+    SignedJWT token = SignedJWT.parse(compact);
+    var claims = token.getJWTClaimsSet();
+
+    assertThat(token.getHeader().getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
+    assertThat(token.getHeader().getKeyID()).isEqualTo("current");
+    assertThat(token.getHeader().getType().getType()).isEqualTo("voice.game-binding-handoff+jwt");
+    assertThat(token.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+    assertThat(claims.getIssuer()).isEqualTo("auth");
+    assertThat(claims.getAudience()).containsExactly("voice.game-binding");
+    assertThat(claims.getExpirationTime().toInstant()).isEqualTo(NOW.plusSeconds(30));
+    assertThat(claims.getClaim("provider_subject_digest")).isEqualTo(handoff.providerSubjectDigest());
+    assertThat(claims.getClaim("scopes")).isEqualTo(List.of("game.chat.send"));
+    assertThat(claims.getClaims().keySet()).containsExactlyInAnyOrderElementsOf(
+        List.of("iss", "sub", "aud", "iat", "nbf", "exp", "jti", "version", "authorization_request_id",
+            "operation_id", "challenge_id", "challenge_nonce", "application_id", "environment_id",
+            "redirect_uri_sha256", "pkce_challenge", "device_key_id", "device_key_thumbprint", "provider",
+            "provider_subject_digest", "source_account_id", "source_actor_id", "source_device_id", "device_generation",
+            "target_account_id", "target_profile_id", "profile_revision", "consent_revision", "policy_revision", "scopes"));
+    assertThat(issuer.verifyGameBindingHandoff(compact).operationId()).isEqualTo(handoff.operationId());
+    AuthUserPrincipalIssuer laterIssuer = AuthUserPrincipalIssuer.load(keys, "current",
+        Clock.fixed(NOW.plusSeconds(61), ZoneOffset.UTC));
+    assertThatThrownBy(() -> laterIssuer.verifyGameBindingHandoff(compact)).isInstanceOf(IllegalArgumentException.class);
+    assertThat(laterIssuer.verifyGameBindingHandoffForExactReplay(compact).operationId()).isEqualTo(handoff.operationId());
+    String[] segments = compact.split("\\.");
+    String tampered = segments[0] + "." + segments[1] + "." + (segments[2].charAt(0) == 'A' ? "B" : "A")
+        + segments[2].substring(1);
+    assertThatThrownBy(() -> issuer.verifyGameBindingHandoff(tampered))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

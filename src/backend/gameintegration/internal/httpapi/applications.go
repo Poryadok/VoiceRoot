@@ -51,17 +51,19 @@ type DiagnosticsStore interface {
 }
 
 type Handler struct {
-	Tokens           TokenValidator
-	Applications     ApplicationStore
-	Approvals        ApprovalStore
-	Production       ProductionAdmissionStore
-	Credentials      CredentialStore
-	Policies         PolicyStore
-	Installations    InstallationStore
-	Suspensions      SuspensionStore
-	Diagnostics      DiagnosticsStore
-	CredentialKey    []byte
-	OperatorAccounts map[uuid.UUID]struct{}
+	Tokens             TokenValidator
+	Applications       ApplicationStore
+	Approvals          ApprovalStore
+	Production         ProductionAdmissionStore
+	Credentials        CredentialStore
+	Policies           PolicyStore
+	Installations      InstallationStore
+	Suspensions        SuspensionStore
+	Diagnostics        DiagnosticsStore
+	BindingExchanges   http.Handler
+	BindingRevocations http.Handler
+	CredentialKey      []byte
+	OperatorAccounts   map[uuid.UUID]struct{}
 }
 
 func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
@@ -91,6 +93,23 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/v1/game-integrations/bindings/exchange" {
+		if h == nil || h.BindingExchanges == nil {
+			writeError(w, http.StatusServiceUnavailable, "BINDING_EXCHANGE_UNAVAILABLE")
+			return
+		}
+		h.BindingExchanges.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/bindings/") &&
+		!strings.HasSuffix(r.URL.Path, "/exchange") {
+		if h == nil || h.BindingRevocations == nil {
+			writeError(w, http.StatusServiceUnavailable, "BINDING_REVOCATION_UNAVAILABLE")
+			return
+		}
+		h.BindingRevocations.ServeHTTP(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
 		if strings.HasSuffix(r.URL.Path, "/policy") {
 			h.serveSandboxPolicyUpdate(w, r)

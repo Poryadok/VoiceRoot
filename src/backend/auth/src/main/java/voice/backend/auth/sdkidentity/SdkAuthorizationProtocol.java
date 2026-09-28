@@ -20,6 +20,11 @@ public final class SdkAuthorizationProtocol {
 
   public static String requestHash(UUID idempotencyKey, String redirectUri, String codeChallenge,
                                    String state, Set<String> scopes) {
+    return requestHash(idempotencyKey, redirectUri, codeChallenge, state, scopes, null);
+  }
+
+  public static String requestHash(UUID idempotencyKey, String redirectUri, String codeChallenge,
+                                   String state, Set<String> scopes, UUID bindingChallengeId) {
     require(idempotencyKey != null);
     requireRedirect(redirectUri);
     require(base64Url(codeChallenge, 43, 43));
@@ -27,7 +32,7 @@ public final class SdkAuthorizationProtocol {
     requireScopes(scopes);
     String canonical = "voice-sdk-authorization-request-v1\n" + idempotencyKey + "\n"
         + redirectUri + "\n" + codeChallenge + "\n" + state + "\n"
-        + String.join(",", new TreeSet<>(scopes));
+        + String.join(",", new TreeSet<>(scopes)) + (bindingChallengeId == null ? "" : "\n" + bindingChallengeId);
     return HexFormat.of().formatHex(sha256(canonical));
   }
 

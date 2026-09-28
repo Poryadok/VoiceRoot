@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -187,4 +188,35 @@ func setSignedTimestamp(r *http.Request, key []byte, issuedAt time.Time) {
 	nonce := r.Header.Get("X-Voice-Nonce")
 	r.Header.Set("X-Voice-Timestamp", timestamp)
 	r.Header.Set("X-Voice-Signature", workloadSignature(key, r.Method, r.URL.EscapedPath(), timestamp, nonce))
+}
+
+func TestAuthV2WorkloadProofBindsExactBodyAndAssertionHeader(t *testing.T) {
+	now := time.Unix(1790435000, 0)
+	key := []byte("0123456789abcdef0123456789abcdef")
+	assertion := []byte("assertion bytes A")
+	body := []byte(`{"operation_id":"00000000-0000-4000-8000-000000000001"}`)
+	verifier := WorkloadVerifier{Key: key, Now: func() time.Time { return now }, Nonces: &nonceMemory{}}
+	request := func(nonce string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/internal/v1/game-integrations/bindings/00000000-0000-4000-8000-000000000002/execution-permits", bytes.NewReader(body))
+		r.Header.Set("X-Voice-Device-Authority", string(assertion))
+		SignAssertionBoundWorkloadRequest(r, key, now, nonce, body, assertion)
+		return r
+	}
+	r := request(uuid.NewString())
+	r.Header.Set("X-Voice-Device-Authority", "assertion bytes B")
+	_, err := verifier.VerifyAssertionBound(r)
+	require.ErrorIs(t, err, ErrInvalidWorkloadProof, "a swapped assertion must fail before the service store is reached")
+
+	r = request(uuid.NewString())
+	r.Body = io.NopCloser(bytes.NewReader(append(append([]byte(nil), body...), ' ')))
+	_, err = verifier.VerifyAssertionBound(r)
+	require.ErrorIs(t, err, ErrInvalidWorkloadProof, "exact body bytes are part of the HMAC")
+
+	r = request(uuid.NewString())
+	verified, err := verifier.VerifyAssertionBound(r)
+	require.NoError(t, err)
+	require.Equal(t, assertion, verified)
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	_, err = verifier.VerifyAssertionBound(r)
+	require.ErrorIs(t, err, ErrInvalidWorkloadProof, "nonce replays are rejected")
 }

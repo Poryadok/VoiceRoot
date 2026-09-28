@@ -65,10 +65,30 @@ func main() {
 	api := httpapi.NewHandler(authorizer, applications)
 	api.OperatorAccounts = cfg.OperatorAccounts
 	api.CredentialKey = cfg.CredentialKey
+	api.BindingExchanges = &httpapi.BindingExchangeHandler{Tokens: authorizer, Store: applications, Auth: cfg.AuthBindingClient}
+	api.BindingRevocations = &httpapi.BindingRevocationHandler{Tokens: authorizer, Store: applications, Auth: cfg.AuthBindingClient}
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	defer stopWorkers()
+	if cfg.AuthBindingClient != nil {
+		go httpapi.RunBindingCompletionOutbox(workerCtx, applications, cfg.AuthBindingClient)
+	}
 	mux.Handle("/api/v1/game-integrations/", api)
 	mux.Handle("/internal/v1/authorizations/environments/", httpapi.NewInternalPolicyHandler(
 		httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
 			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications))
+	mux.Handle("/internal/v1/bindings/", httpapi.NewInternalBindingAuthorityHandler(
+		httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications))
+	mux.Handle("/internal/v1/bindings/challenges/", httpapi.NewInternalBindingChallengeHandler(
+		httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications))
+	mux.Handle("/internal/v1/bindings/challenges", &httpapi.InternalBindingChallengeCreateHandler{
+		Verifier: httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,
+			Nonces: httpapi.RedisNonceStore{Client: redisClient}}, Store: applications})
+	permitHandler := httpapi.NewInternalExecutionPermitHandler(httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey,
+		Now: time.Now, Nonces: httpapi.RedisNonceStore{Client: redisClient}}, applications, applications)
+	mux.Handle("/internal/v1/game-integrations/bindings/", permitHandler)
+	mux.Handle("/internal/v1/game-integrations/execution-permits/", permitHandler)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "gameintegration", "status": "ok"})

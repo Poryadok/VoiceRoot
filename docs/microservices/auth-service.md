@@ -57,6 +57,110 @@ loaded. The Auth signer, dedicated JWKS endpoint and TLS User eligibility client
 are implemented with focused Auth tests. This does not claim deployment,
 operational key-rotation proof or provider acceptance.
 
+### T16 GIS binding challenge and handoff (partial implementation)
+
+T14 `start` records a binding intent and stable operation ID. T14 `approve`
+revalidates source device/session, policy, and the selected regular target
+profile, then creates the GIS challenge with private WorkloadProof v1
+`POST /internal/v1/bindings/challenges`. The challenge binds the approved
+identity/profile/revision/scope/consent/policy tuple, redirect hash, PKCE,
+device key, and operation. It is created only after profile selection and
+consent; no provider subject or token is sent to GIS at this point. GIS returns
+the persisted challenge ID, nonce and expiry. Auth pins those values to the
+approval receipt before returning the code response.
+
+For an exact retry after a lost approval response, Auth returns the same
+one-use code and challenge receipt only while the same source session/device
+is current and the code is unexpired and unconsumed. The code is encrypted
+with AES-256-GCM in the approval receipt and is never stored in plaintext.
+`AUTH_GAME_BINDING_APPROVAL_CODE_KEY_B64` must provide the dedicated 32-byte
+key; there is no default and it must not reuse Auth principal, device, or GIS
+workload-proof keys. A changed target/profile conflicts, while an expired or
+consumed receipt cannot authorize a retry.
+
+GIS first reads the persisted challenge through Auth's existing
+`SdkGameIntegrationPolicyClient`: private GET
+`/internal/v1/bindings/challenges/{challenge_id}`, authenticated with the GIS
+WorkloadProof v1 request/response HMAC and replay nonce. Its strict response
+contains exactly `challenge_id`, `nonce`, `application_id`, `environment_id`,
+`provider`, `redirect_uri_sha256`, `pkce_challenge`, `device_key_id`,
+`device_key_thumbprint`, `operation_id`, `expires_at`, and `status`. Auth accepts
+only the canonical requested UUID, a live `pending` challenge, and exact
+app/environment/redirect/PKCE/device matches.
+
+The browser-visible T14 approval code is consumed only at private GIS-authenticated
+`POST /internal/v1/auth/game-bindings/handoffs/exchange`, with exact JSON
+`challenge_id`, `operation_id`, `code`, `code_verifier`, and `device_proof`.
+The device proof is the existing `voice-sdk-code-v1` proof over authorization
+request ID, code hash and verifier hash. Auth locks and revalidates the current
+SDK device/session, T14 approval, policy, target regular account and selected
+profile revision, then atomically consumes the code and stores the linked-session
+consent revision and exact handoff JWS receipt. Response is exactly
+`{"handoff_jws":"<compact JWS>"}`, `application/json`, `no-store`; the JWS is
+delivery-only and never returned through the browser exchange. Public T14
+`/exchange` rejects authorizations carrying a GIS challenge. An identical
+challenge/operation/code/verifier/device-proof retry returns the stored JWS
+without extending its original expiry; changed tuple conflicts.
+
+Auth's dedicated mTLS connector uses
+`voice.auth.game-binding.mtls.port`, `.server-cert-file`, `.server-key-file`,
+`.client-ca-file`, and `.allowed-client-uri-san`, with environment bindings
+`AUTH_GAME_BINDING_MTLS_PORT`, `_SERVER_CERT_FILE`, `_SERVER_KEY_FILE`,
+`_CLIENT_CA_FILE`, and `_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it;
+enabling requires all TLS files and the exact GIS URI SAN. Partial configuration,
+untrusted client certificates, or a mismatched URI SAN fail closed. This private
+listener is not Gateway-published and has no plaintext fallback.
+
+Provider subjects are HMAC-SHA-256 digested in Auth with a dedicated 32-byte
+standard-base64 key. Configure both
+`voice.auth.game-binding.subject-digest.kid` /
+`AUTH_GAME_BINDING_SUBJECT_DIGEST_KID` and
+`voice.auth.game-binding.subject-digest.key-base64` /
+`AUTH_GAME_BINDING_SUBJECT_DIGEST_KEY_B64`. Key ID is 1–32 URL-safe characters;
+key bytes must be canonical standard Base64, exactly 32 bytes and nonzero. Do
+not reuse Auth principal, client-token or device keys. The output is
+`hmac-sha256-v1:{kid}:{lowercase hex}` over a version prefix and length-framed
+provider, issuer, application ID, environment ID and verified provider subject.
+Missing digest key keeps this exchange unavailable; raw subjects never enter GIS.
+
+The existing T14 device proof is the handoff proof of possession. At exchange,
+Auth verifies the `voice-sdk-code-v1` signature and atomically stores the
+lowercase SHA-256 of the exact proof bytes against the handoff JTI, operation,
+challenge and registered device. GIS forwards those same proof bytes in its
+private online claim. Auth requires the persisted digest and tuple before
+accepting a new claim, and still rechecks current consent, profile, policy,
+source session and device state. Exact claim retries require identical proof
+bytes; changed bytes conflict. No Auth JWS is exposed to the SDK to obtain a
+second signature.
+
+Auth exposes private `POST /internal/v1/auth/game-bindings/handoffs/claim`,
+`POST /internal/v1/auth/game-bindings/handoffs/completion`, and
+`POST /internal/v1/auth/game-bindings/handoffs/revoke` on a dedicated,
+opt-in mTLS connector; these routes are not Gateway routes. The GIS client
+certificate must chain to the configured client CA and contain the exact
+configured URI SAN. The connector is disabled by default, rejects partial TLS
+configuration, and has no plaintext fallback. Claim JSON is exactly
+`operation_id`, `request_sha256`, `handoff_jws`, and `device_proof`; completion
+JSON is exactly `claim_id`, `operation_id`, `outcome`, and optional
+`binding_id`. Responses use the GIS typed receipt shape and `Cache-Control:
+no-store`.
+
+The claim ledger verifies the dedicated Auth handoff signature, locks the SDK
+identity and consent grant, rechecks current app/environment, device,
+ownership generation, target account epoch, selected profile and policy
+revisions, and verifies device proof over the assertion JTI, operation ID and
+request hash before persisting the claim. Exact operation/JTI/hash replay
+returns the saved receipt; changed tuples conflict. Completion is
+transactional and idempotent for the same terminal outcome and GIS binding ID.
+Revoke names the stable challenge operation ID; it moves the grant to
+`revoking` before checking accepted claims, denies new claims, and returns
+`revoking` until every accepted claim has a durable success/failure receipt. A
+retry with the same operation ID returns `revoked` only after the claim ledger
+drains. This slice has focused controller, issuer and PostgreSQL claim/revoke
+tests. GIS exchange operation/outbox and T14 challenge creation now have
+focused handler and database lifecycle tests. Broader concurrency/replay tests
+and the Auth-to-Messaging permit aggregator remain open.
+
 ### Subscription claims (A7 accepted target; not implemented)
 
 Auth consumes the complete revisioned personal

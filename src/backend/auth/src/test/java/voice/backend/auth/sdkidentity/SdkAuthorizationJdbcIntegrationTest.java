@@ -42,6 +42,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -174,6 +176,88 @@ class SdkAuthorizationJdbcIntegrationTest {
     assertThat(checked.accessToken()).isNull();
     verify(auth, never()).issueOAuthAccessToken(anyString(), anyString());
     verify(auth, never()).issueOAuthAccessToken(anyString(), anyString(), any(PreparedSessionEpoch.class));
+  }
+
+  @Test
+  void bindingExchangeConsumesTheT14CodeOnceAndReplaysOnlyWithTheRegisteredDeviceProof() throws Exception {
+    UUID challengeId = UUID.randomUUID();
+    UUID authorizationKey = UUID.randomUUID();
+    UUID operationId = authorizationKey;
+    AtomicReference<SdkBindingChallengeAuthority.Challenge> savedChallenge = new AtomicReference<>();
+    var challengeAuthority = new SdkBindingChallengeAuthority() {
+      @Override public Challenge resolveBindingChallenge(UUID ignored) {
+        var result = savedChallenge.get();
+        if (result == null || !result.challengeId().equals(ignored)) throw new SdkIdentityDeniedException();
+        return result;
+      }
+      @Override public Challenge createBindingChallenge(CreateRequest input) {
+        var result = new Challenge(challengeId, "n".repeat(43), input.applicationId(), input.environmentId(), input.provider(),
+            input.redirectUriSha256(), input.pkceChallenge(), input.deviceKeyId(), input.deviceKeyThumbprint(),
+            input.operationId(), input.expiresAt(), "pending", input.sourceAccountId(), input.sourceActorId(),
+            input.sourceDeviceId(), input.sourceGeneration(), input.targetAccountId(), input.targetProfileId(),
+            input.profileRevision(), input.consentRevision(), input.policyRevision(), input.scopes());
+        savedChallenge.set(result);
+        return result;
+      }
+    };
+    var issuer = principalIssuer(CLOCK);
+    var service = authorizationForBinding(CLOCK, challengeAuthority, issuer);
+    String codeChallenge = pkce(VERIFIER);
+    String requestHash = hash("voice-sdk-authorization-request-v1\n" + authorizationKey + "\n" + REDIRECT
+        + "\n" + codeChallenge + "\n" + STATE + "\n" + String.join(",", SCOPES.stream().sorted().toList())
+        + "\n" + authorizationKey);
+    var request = service.start(source.accessToken(), proof(device,
+        "voice-sdk-authorize-v1\n" + hash(source.accessToken()) + "\n" + requestHash), authorizationKey, REDIRECT,
+        codeChallenge, STATE, SCOPES, true);
+    var approval = service.approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3);
+    assertThat(approval.gameBindingChallengeId()).isEqualTo(challengeId);
+    assertThat(approval.gameBindingNonce()).isEqualTo("n".repeat(43));
+    var approvalRetry = service.approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3);
+    assertThat(approvalRetry).isEqualTo(approval).as("lost HTTP response retry returns the exact code/challenge receipt");
+    assertThatThrownBy(() -> service.approve(request.requestId(), VOICE_BEARER, primaryProfile, 3))
+        .isInstanceOf(SdkAuthorizationConflictException.class);
+    String deviceProof = proof(device, "voice-sdk-code-v1\n" + request.requestId() + "\n"
+        + hash(approval.code()) + "\n" + hash(VERIFIER));
+
+    String handoff = service.exchangeGameBinding(challengeId, operationId, approval.code(), VERIFIER, deviceProof);
+    assertThatThrownBy(() -> service.approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3))
+        .isInstanceOf(SdkAuthorizationConflictException.class).as("consumed approval receipt cannot reauthorize");
+    var verified = issuer.verifyGameBindingHandoff(handoff);
+    assertThat(verified.challengeId()).isEqualTo(challengeId);
+    assertThat(verified.operationId()).isEqualTo(operationId);
+    assertThat(verified.targetProfileId()).isEqualTo(secondaryProfile);
+    assertThat(verified.scopes()).containsExactlyElementsOf(SCOPES.stream().sorted().toList());
+    assertThat(verified.providerSubjectDigest()).matches("hmac-sha256-v1:digest-2026:[0-9a-f]{64}");
+    assertThat(service.exchangeGameBinding(challengeId, operationId, approval.code(), VERIFIER, deviceProof))
+        .isEqualTo(handoff);
+    var authClaims = new AuthGameBindingHandoffService(jdbc,
+        new TransactionTemplate(new DataSourceTransactionManager(database)), issuer,
+        (application, environment) -> app.equals(application) && env.equals(environment) ? policy.get() : null,
+        (account, selected) -> targetAccount.equals(account) && secondaryProfile.equals(selected) ? profile.get() : null,
+        identity(CLOCK), blacklist, CLOCK);
+    String mutationHash = hash("exact canonical GIS binding operation");
+    var claim = authClaims.claim(handoff, deviceProof, operationId, mutationHash);
+    assertThat(claim.operationId()).isEqualTo(operationId);
+    assertThat(authClaims.claim(handoff, deviceProof, operationId, mutationHash)).isEqualTo(claim);
+    assertThatThrownBy(() -> authClaims.claim(handoff, "changed-proof", operationId, mutationHash))
+        .isInstanceOf(SdkAuthorizationConflictException.class);
+    assertThatThrownBy(() -> service.exchange(request.requestId(), approval.code(), REDIRECT, VERIFIER, deviceProof))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_binding_handoff_issuances WHERE operation_id=:id",
+        Map.of("id", operationId), Long.class)).isEqualTo(1L);
+
+    var pendingRevoke = authClaims.revoke(operationId);
+    assertThat(pendingRevoke.status()).isEqualTo("revoking");
+    assertThat(authClaims.claim(handoff, deviceProof, operationId, mutationHash))
+        .as("exact accepted-operation retry remains idempotent while revoke blocks new claims")
+        .isEqualTo(claim);
+    UUID bindingId = UUID.randomUUID();
+    authClaims.complete(claim.claimId(), operationId, "succeeded", bindingId);
+    var revoked = authClaims.revoke(operationId);
+    assertThat(revoked.status()).isEqualTo("revoked");
+    assertThat(jdbc.queryForObject("SELECT game_binding_status FROM sdk_authorizations WHERE request_id=:id",
+        Map.of("id", request.requestId()), String.class)).isEqualTo("revoked");
+    assertThatThrownBy(() -> authClaims.revoke(UUID.randomUUID())).isInstanceOf(SdkIdentityDeniedException.class);
   }
 
   @Test
@@ -556,6 +640,36 @@ class SdkAuthorizationJdbcIntegrationTest {
           return targetAccount.equals(account) && secondaryProfile.equals(selected) ? profile.get() : null;
         },
         blacklist, clock);
+  }
+
+  private SdkAuthorizationService authorizationForBinding(Clock clock,
+      SdkBindingChallengeAuthority challenges, AuthUserPrincipalIssuer issuer) {
+    var dataSource = dataSource();
+    return new SdkAuthorizationService(new NamedParameterJdbcTemplate(dataSource),
+        new TransactionTemplate(new DataSourceTransactionManager(dataSource)), identity(clock), auth,
+        (application, environment) -> app.equals(application) && env.equals(environment) ? policy.get() : null,
+        (account, selected) -> {
+          if (profileFailure.get() != null) throw profileFailure.get();
+          return targetAccount.equals(account) && secondaryProfile.equals(selected) ? profile.get() : null;
+        }, blacklist, clock, challenges, issuer,
+        new AuthGameBindingSubjectDigest("digest-2026",
+            "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.US_ASCII)),
+        new AuthGameBindingApprovalCodeVault("abcdef0123456789abcdef0123456789".getBytes(StandardCharsets.US_ASCII)));
+  }
+
+  private AuthUserPrincipalIssuer principalIssuer(Clock clock) throws Exception {
+    Path directory = Files.createTempDirectory("voice-auth-game-binding-principal-");
+    RSAKey current = new RSAKeyGenerator(2048).keyID("current").generate();
+    RSAKey next = new RSAKeyGenerator(2048).keyID("next").generate();
+    Files.writeString(directory.resolve("current.pem"), privateKeyPem(current));
+    Files.writeString(directory.resolve("next.pem"), privateKeyPem(next));
+    return AuthUserPrincipalIssuer.load(directory, current.getKeyID(), clock);
+  }
+
+  private static String privateKeyPem(RSAKey key) throws Exception {
+    return "-----BEGIN PRIVATE KEY-----\n"
+        + Base64.getMimeEncoder(64, new byte[] {'\n'}).encodeToString(key.toPrivateKey().getEncoded())
+        + "\n-----END PRIVATE KEY-----\n";
   }
 
   private SdkAuthorizationService.AuthorizationRequest start(SdkAuthorizationService service, UUID key,

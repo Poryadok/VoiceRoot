@@ -6,21 +6,23 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"voice/backend/gameintegration/internal/authbinding"
 	"voice/backend/gameintegration/internal/botproof"
 )
 
 type config struct {
-	ListenAddr       string
-	DatabaseURL      string
-	RedisAddr        string
-	JWKSURL          string
-	JWTIssuer        string
-	JWTAudience      string
-	OperatorAccounts map[uuid.UUID]struct{}
-	CredentialKey    []byte
-	AuthWorkloadKey  []byte
-	BotAuthorityURL  string
-	BotWorkloadKey   []byte
+	ListenAddr        string
+	DatabaseURL       string
+	RedisAddr         string
+	JWKSURL           string
+	JWTIssuer         string
+	JWTAudience       string
+	OperatorAccounts  map[uuid.UUID]struct{}
+	CredentialKey     []byte
+	AuthWorkloadKey   []byte
+	BotAuthorityURL   string
+	BotWorkloadKey    []byte
+	AuthBindingClient *authbinding.Client
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -86,6 +88,29 @@ func loadConfig(getenv func(string) string) (config, error) {
 	c.BotWorkloadKey = key
 	if (c.BotAuthorityURL == "") != (len(c.BotWorkloadKey) == 0) {
 		return config{}, fmt.Errorf("BOT_INTERNAL_URL and GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64 must be configured together")
+	}
+	authBindingValues := []struct{ name, value string }{
+		{"GIS_AUTH_GAME_BINDING_BASE_URL", strings.TrimSpace(getenv("GIS_AUTH_GAME_BINDING_BASE_URL"))},
+		{"GIS_AUTH_GAME_BINDING_CA_FILE", strings.TrimSpace(getenv("GIS_AUTH_GAME_BINDING_CA_FILE"))},
+		{"GIS_AUTH_GAME_BINDING_CLIENT_CERT_FILE", strings.TrimSpace(getenv("GIS_AUTH_GAME_BINDING_CLIENT_CERT_FILE"))},
+		{"GIS_AUTH_GAME_BINDING_CLIENT_KEY_FILE", strings.TrimSpace(getenv("GIS_AUTH_GAME_BINDING_CLIENT_KEY_FILE"))},
+	}
+	configured := 0
+	for _, field := range authBindingValues {
+		if field.value != "" {
+			configured++
+		}
+	}
+	if configured != 0 && configured != len(authBindingValues) {
+		return config{}, fmt.Errorf("GIS_AUTH_GAME_BINDING_BASE_URL, CA, client cert and client key must be configured together")
+	}
+	if configured == len(authBindingValues) {
+		client, err := authbinding.NewClient(authBindingValues[0].value, authBindingValues[1].value,
+			authBindingValues[2].value, authBindingValues[3].value)
+		if err != nil {
+			return config{}, fmt.Errorf("invalid GIS Auth game-binding client configuration")
+		}
+		c.AuthBindingClient = client
 	}
 	return c, nil
 }

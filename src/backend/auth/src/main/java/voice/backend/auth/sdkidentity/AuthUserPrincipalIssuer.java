@@ -3,8 +3,8 @@ package voice.backend.auth.sdkidentity;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.JWSObject;
 import com.nimbusds.jose.JOSEObjectType;
+import com.nimbusds.jose.JWSObject;
 import com.nimbusds.jose.Payload;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.JWK;
@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -45,6 +46,30 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
   private final List<RSAKey> keys;
   private final RSAKey active;
   private final Clock clock;
+
+  public record GameBindingHandoff(UUID authorizationRequestId, UUID operationId, UUID challengeId,
+      String challengeNonce, UUID applicationId, UUID environmentId, String redirectUriSha256,
+      String pkceChallenge, UUID deviceKeyId, String deviceKeyThumbprint, String provider,
+      String providerSubjectDigest, UUID sourceAccountId, UUID sourceActorId, UUID sourceDeviceId,
+      long deviceGeneration, UUID targetAccountId, UUID targetProfileId, long profileRevision,
+      long consentRevision, long policyRevision, List<String> scopes, Instant expiresAt) {}
+
+  public record VerifiedGameBindingHandoff(UUID authorizationRequestId, UUID operationId, UUID challengeId,
+      String challengeNonce, UUID applicationId, UUID environmentId, String redirectUriSha256,
+      String pkceChallenge, UUID deviceKeyId, String deviceKeyThumbprint, String provider,
+      String providerSubjectDigest, UUID sourceAccountId, UUID sourceActorId, UUID sourceDeviceId,
+      long deviceGeneration, UUID targetAccountId, UUID targetProfileId, long profileRevision,
+      long consentRevision, long policyRevision, List<String> scopes, UUID assertionJti,
+      Instant issuedAt, Instant expiresAt) {}
+
+  private static final Set<String> HANDOFF_CLAIMS = Set.of("iss", "sub", "aud", "iat", "nbf", "exp", "jti",
+      "version", "authorization_request_id", "operation_id", "challenge_id", "challenge_nonce",
+      "application_id", "environment_id", "redirect_uri_sha256", "pkce_challenge", "device_key_id",
+      "device_key_thumbprint", "provider", "provider_subject_digest", "source_account_id", "source_actor_id",
+      "source_device_id", "device_generation", "target_account_id", "target_profile_id", "profile_revision",
+      "consent_revision", "policy_revision", "scopes");
+  private static final String GAME_BINDING_HANDOFF_TYP = "voice.game-binding-handoff+jwt";
+  private static final String GAME_BINDING_SUBJECT_DIGEST = "hmac-sha256-v1:[A-Za-z0-9_-]{1,32}:[0-9a-f]{64}";
 
   private AuthUserPrincipalIssuer(List<RSAKey> keys, RSAKey active, Clock clock) {
     this.keys = keys;
@@ -94,6 +119,104 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
       return jwt.serialize();
     } catch (JOSEException failure) {
       throw new IllegalStateException("unable to sign Auth principal", failure);
+    }
+  }
+
+  public String issueGameBindingHandoff(GameBindingHandoff handoff) {
+    validateHandoff(handoff);
+    Instant now = clock.instant();
+    Instant expires = handoff.expiresAt().isBefore(now.plusSeconds(MAX_LIFETIME_SECONDS))
+        ? handoff.expiresAt() : now.plusSeconds(MAX_LIFETIME_SECONDS);
+    if (!expires.isAfter(now)) throw new IllegalArgumentException("game-binding handoff is expired");
+    JWTClaimsSet claims = new JWTClaimsSet.Builder().issuer(ISSUER).subject(SUBJECT).audience("voice.game-binding")
+        .claim("version", 1).claim("authorization_request_id", handoff.authorizationRequestId().toString())
+        .claim("operation_id", handoff.operationId().toString()).claim("challenge_id", handoff.challengeId().toString())
+        .claim("challenge_nonce", handoff.challengeNonce()).claim("application_id", handoff.applicationId().toString())
+        .claim("environment_id", handoff.environmentId().toString())
+        .claim("redirect_uri_sha256", handoff.redirectUriSha256()).claim("pkce_challenge", handoff.pkceChallenge())
+        .claim("device_key_id", handoff.deviceKeyId().toString()).claim("device_key_thumbprint", handoff.deviceKeyThumbprint())
+        .claim("provider", handoff.provider()).claim("provider_subject_digest", handoff.providerSubjectDigest())
+        .claim("source_account_id", handoff.sourceAccountId().toString()).claim("source_actor_id", handoff.sourceActorId().toString())
+        .claim("source_device_id", handoff.sourceDeviceId().toString()).claim("device_generation", handoff.deviceGeneration())
+        .claim("target_account_id", handoff.targetAccountId().toString()).claim("target_profile_id", handoff.targetProfileId().toString())
+        .claim("profile_revision", handoff.profileRevision()).claim("consent_revision", handoff.consentRevision())
+        .claim("policy_revision", handoff.policyRevision()).claim("scopes", handoff.scopes())
+        .issueTime(Date.from(now)).notBeforeTime(Date.from(now)).expirationTime(Date.from(expires))
+        .jwtID(UUID.randomUUID().toString()).build();
+    return sign(claims, GAME_BINDING_HANDOFF_TYP);
+  }
+
+  public VerifiedGameBindingHandoff verifyGameBindingHandoff(String compact) {
+    return verifyGameBindingHandoff(compact, false);
+  }
+
+  /** Verify signature and immutable claims for a receipt lookup; freshness is required before a new claim. */
+  public VerifiedGameBindingHandoff verifyGameBindingHandoffForExactReplay(String compact) {
+    return verifyGameBindingHandoff(compact, true);
+  }
+
+  private VerifiedGameBindingHandoff verifyGameBindingHandoff(String compact, boolean existingReceiptLookup) {
+    try {
+      if (compact == null || compact.isBlank() || compact.length() > 16_384) throw new IllegalArgumentException();
+      SignedJWT jwt = SignedJWT.parse(compact);
+      if (!JWSAlgorithm.RS256.equals(jwt.getHeader().getAlgorithm())
+          || !GAME_BINDING_HANDOFF_TYP.equals(jwt.getHeader().getType().getType())
+          || jwt.getHeader().getCriticalParams() != null || jwt.getHeader().getJWK() != null
+          || jwt.getHeader().getJWKURL() != null || jwt.getHeader().getX509CertURL() != null) {
+        throw new IllegalArgumentException();
+      }
+      RSAKey key = keys.stream().filter(candidate -> candidate.getKeyID().equals(jwt.getHeader().getKeyID()))
+          .findFirst().orElseThrow(IllegalArgumentException::new);
+      if (!jwt.verify(new com.nimbusds.jose.crypto.RSASSAVerifier(key.toPublicJWK()))) throw new IllegalArgumentException();
+      JWTClaimsSet claims = jwt.getJWTClaimsSet();
+      if (!claims.getClaims().keySet().equals(HANDOFF_CLAIMS) || !ISSUER.equals(claims.getIssuer())
+          || !SUBJECT.equals(claims.getSubject()) || !claims.getAudience().equals(List.of("voice.game-binding"))
+          || !positiveVersion(claims.getClaim("version"))) throw new IllegalArgumentException();
+      Instant issuedAt = claims.getIssueTime().toInstant();
+      Instant expiresAt = claims.getExpirationTime().toInstant();
+      Instant now = clock.instant();
+      if (claims.getNotBeforeTime() == null || !claims.getNotBeforeTime().toInstant().equals(issuedAt)
+          || issuedAt.isAfter(now.plusSeconds(2))
+          || (!existingReceiptLookup && (issuedAt.isBefore(now.minusSeconds(30)) || !expiresAt.isAfter(now)))
+          || !expiresAt.isAfter(issuedAt) || expiresAt.isAfter(issuedAt.plusSeconds(MAX_LIFETIME_SECONDS))) {
+        throw new IllegalArgumentException();
+      }
+      UUID assertionJti = canonicalUuid(claims.getJWTID());
+      List<String> scopes = claims.getStringListClaim("scopes");
+      if (scopes == null || scopes.isEmpty() || !scopes.equals(scopes.stream().distinct().sorted().toList())
+          || scopes.stream().anyMatch(scope -> !scope.matches("game\\.[a-z][a-z0-9.]{0,63}"))) {
+        throw new IllegalArgumentException();
+      }
+      VerifiedGameBindingHandoff result = new VerifiedGameBindingHandoff(
+          claimUuid(claims, "authorization_request_id"), claimUuid(claims, "operation_id"),
+          claimUuid(claims, "challenge_id"), claimText(claims, "challenge_nonce"),
+          claimUuid(claims, "application_id"), claimUuid(claims, "environment_id"), claimText(claims, "redirect_uri_sha256"),
+          claimText(claims, "pkce_challenge"), claimUuid(claims, "device_key_id"), claimText(claims, "device_key_thumbprint"),
+          claimText(claims, "provider"), claimText(claims, "provider_subject_digest"), claimUuid(claims, "source_account_id"),
+          claimUuid(claims, "source_actor_id"), claimUuid(claims, "source_device_id"),
+          positiveLong(claims, "device_generation"), claimUuid(claims, "target_account_id"), claimUuid(claims, "target_profile_id"),
+          positiveLong(claims, "profile_revision"), positiveLong(claims, "consent_revision"),
+          positiveLong(claims, "policy_revision"), List.copyOf(scopes), assertionJti, issuedAt, expiresAt);
+      validateHandoff(new GameBindingHandoff(result.authorizationRequestId(), result.operationId(), result.challengeId(),
+          result.challengeNonce(), result.applicationId(), result.environmentId(), result.redirectUriSha256(),
+          result.pkceChallenge(), result.deviceKeyId(), result.deviceKeyThumbprint(), result.provider(),
+          result.providerSubjectDigest(), result.sourceAccountId(), result.sourceActorId(), result.sourceDeviceId(),
+          result.deviceGeneration(), result.targetAccountId(), result.targetProfileId(), result.profileRevision(),
+          result.consentRevision(), result.policyRevision(), result.scopes(), result.expiresAt()));
+      return result;
+    } catch (Exception invalid) {
+      throw new IllegalArgumentException("invalid game-binding handoff", invalid);
+    }
+  }
+
+  private String sign(JWTClaimsSet claims, String typ) {
+    SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).type(new JOSEObjectType(typ))
+        .keyID(active.getKeyID()).build(), claims);
+    try {
+      jwt.sign(new RSASSASigner(active.toPrivateKey()));
+      return jwt.serialize();
+    } catch (JOSEException failure) {
+      throw new IllegalStateException("unable to sign Auth game-binding handoff", failure);
     }
   }
 
@@ -149,6 +272,53 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     } catch (JOSEException failure) {
       throw new IllegalStateException("unable to sign Auth device status", failure);
     }
+  }
+
+  private static void validateHandoff(GameBindingHandoff value) {
+    if (value == null || value.authorizationRequestId() == null || value.operationId() == null || value.challengeId() == null
+        || value.applicationId() == null || value.environmentId() == null || value.deviceKeyId() == null
+        || value.sourceAccountId() == null || value.sourceActorId() == null || value.sourceDeviceId() == null
+        || value.targetAccountId() == null || value.targetProfileId() == null || value.deviceGeneration() <= 0
+        || value.profileRevision() <= 0 || value.consentRevision() <= 0 || value.policyRevision() <= 0
+        || value.expiresAt() == null || value.challengeNonce() == null || !value.challengeNonce().matches("[A-Za-z0-9_-]{43}")
+        || value.redirectUriSha256() == null || !value.redirectUriSha256().matches("[0-9a-f]{64}")
+        || value.pkceChallenge() == null || !value.pkceChallenge().matches("[A-Za-z0-9_-]{43}")
+        || value.deviceKeyThumbprint() == null || !value.deviceKeyThumbprint().matches("[A-Za-z0-9_-]{43}")
+        || value.provider() == null || !value.provider().matches("[a-z][a-z0-9_-]{0,31}")
+        || value.providerSubjectDigest() == null || !value.providerSubjectDigest().matches(GAME_BINDING_SUBJECT_DIGEST)
+        || value.scopes() == null || value.scopes().isEmpty()
+        || !value.scopes().equals(value.scopes().stream().distinct().sorted().toList())
+        || value.scopes().stream().anyMatch(scope -> scope == null || !scope.matches("game\\.[a-z][a-z0-9.]{0,63}"))) {
+      throw new IllegalArgumentException("invalid game-binding handoff claims");
+    }
+  }
+
+  private static UUID claimUuid(JWTClaimsSet claims, String name) throws Exception {
+    return canonicalUuid(claims.getStringClaim(name));
+  }
+
+  private static UUID canonicalUuid(String value) {
+    UUID id = UUID.fromString(value);
+    if (id.equals(new UUID(0, 0)) || !id.toString().equals(value)) throw new IllegalArgumentException();
+    return id;
+  }
+
+  private static String claimText(JWTClaimsSet claims, String name) throws Exception {
+    String value = claims.getStringClaim(name);
+    if (value == null || value.isBlank()) throw new IllegalArgumentException();
+    return value;
+  }
+
+  private static long positiveLong(JWTClaimsSet claims, String name) throws Exception {
+    Object value = claims.getClaim(name);
+    if (!(value instanceof Number number) || number.longValue() <= 0 || number.doubleValue() != number.longValue()) {
+      throw new IllegalArgumentException();
+    }
+    return number.longValue();
+  }
+
+  private static boolean positiveVersion(Object value) {
+    return value instanceof Number number && number.longValue() == 1 && number.doubleValue() == 1;
   }
 
   private static Long number(Object value) {

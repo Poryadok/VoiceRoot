@@ -75,13 +75,13 @@ class SdkAuthorizationRestControllerTest {
 
   @Test
   void startForwardsSdkBearerAndExactSignedRequestFields() throws Exception {
-    when(service.start(any(), any(), any(), any(), any(), any(), any())).thenReturn(
+    when(service.start(any(), any(), any(), any(), any(), any(), any(), anyBoolean())).thenReturn(
         new SdkAuthorizationService.AuthorizationRequest(REQUEST, 7, EXPIRES, "Example Game", SCOPES));
     mvc.perform(postJson(ROOT, start()).header("Authorization", "Bearer sdk-token"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.requestId").value(REQUEST.toString()))
         .andExpect(jsonPath("$.policyRevision").value(7))
         .andExpect(jsonPath("$.displayName").value("Example Game"));
-    verify(service).start("sdk-token", "signed-device-proof", KEY, REDIRECT, CHALLENGE, STATE, SCOPES);
+    verify(service).start("sdk-token", "signed-device-proof", KEY, REDIRECT, CHALLENGE, STATE, SCOPES, false);
   }
 
   @Test
@@ -152,7 +152,7 @@ class SdkAuthorizationRestControllerTest {
 
   @Test
   void identityDenialsAcrossRoutesUseSameCoarseResponse() throws Exception {
-    when(service.start(any(), any(), any(), any(), any(), any(), any())).thenThrow(new SdkIdentityDeniedException());
+    when(service.start(any(), any(), any(), any(), any(), any(), any(), anyBoolean())).thenThrow(new SdkIdentityDeniedException());
     when(service.approve(any(), any(), any(), anyLong())).thenThrow(new SdkIdentityDeniedException());
     when(service.exchange(any(), any(), any(), any(), any())).thenThrow(new SdkIdentityDeniedException());
     when(service.linkedSession(any(), any())).thenThrow(new SdkIdentityDeniedException());
@@ -169,7 +169,7 @@ class SdkAuthorizationRestControllerTest {
 
   @Test
   void changedIdempotencyBodyReturnsConflict() throws Exception {
-    when(service.start(any(), any(), any(), any(), any(), any(), any()))
+    when(service.start(any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
         .thenThrow(new SdkAuthorizationConflictException());
     mvc.perform(postJson(ROOT, start()).header("Authorization", "Bearer sdk-token"))
         .andExpect(status().isConflict());

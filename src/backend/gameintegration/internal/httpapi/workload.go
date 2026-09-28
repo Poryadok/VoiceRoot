@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +40,54 @@ func workloadSignature(key []byte, method, path, timestamp, nonce string) string
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(workloadMessage(method, path, timestamp, nonce)))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func bodyWorkloadMessage(method, path, timestamp, nonce string, body []byte) string {
+	digest := sha256.Sum256(body)
+	return "v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex.EncodeToString(digest[:])
+}
+
+func bodyWorkloadSignature(key []byte, method, path, timestamp, nonce string, body []byte) string {
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(bodyWorkloadMessage(method, path, timestamp, nonce, body)))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// SignBodyWorkloadRequest is the test/controlled-client counterpart for
+// authenticated internal POSTs that have a request body but no device assertion.
+func SignBodyWorkloadRequest(r *http.Request, key []byte, now time.Time, nonce string, body []byte) {
+	timestamp := strconv.FormatInt(now.Unix(), 10)
+	r.Header.Set("X-Voice-Workload", "auth")
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Voice-Timestamp", timestamp)
+	r.Header.Set("X-Voice-Nonce", nonce)
+	r.Header.Set("X-Voice-Signature", bodyWorkloadSignature(key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body))
+}
+
+func assertionBoundWorkloadMessage(method, path, timestamp, nonce string, body, assertion []byte) string {
+	bodyDigest := sha256.Sum256(body)
+	assertionDigest := sha256.Sum256(assertion)
+	return "v2\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" +
+		hex.EncodeToString(bodyDigest[:]) + "\n" + hex.EncodeToString(assertionDigest[:])
+}
+
+func assertionBoundWorkloadSignature(key []byte, method, path, timestamp, nonce string, body, assertion []byte) string {
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(assertionBoundWorkloadMessage(method, path, timestamp, nonce, body, assertion)))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// SignAssertionBoundWorkloadRequest is the test/controlled-client counterpart
+// for Auth→GIS authority calls. Version 2 additionally binds the exact raw Auth
+// assertion header while leaving the established v1 Bot proof unchanged.
+func SignAssertionBoundWorkloadRequest(r *http.Request, key []byte, now time.Time, nonce string, body, assertion []byte) {
+	timestamp := strconv.FormatInt(now.Unix(), 10)
+	r.Header.Set("X-Voice-Workload", "auth")
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Voice-Workload-Version", "2")
+	r.Header.Set("X-Voice-Timestamp", timestamp)
+	r.Header.Set("X-Voice-Nonce", nonce)
+	r.Header.Set("X-Voice-Signature", assertionBoundWorkloadSignature(key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body, assertion))
 }
 
 // responseSignature binds a successful policy body to the authenticated request.
@@ -105,4 +154,125 @@ func (v WorkloadVerifier) Verify(r *http.Request) error {
 		return ErrInvalidWorkloadProof
 	}
 	return nil
+}
+
+// VerifyAssertionBound authenticates an Auth POST and binds both its exact
+// body bytes and raw device-authority assertion header to the HMAC proof.
+func (v WorkloadVerifier) VerifyAssertionBound(r *http.Request) ([]byte, error) {
+	if len(v.Key) != 32 || v.Nonces == nil || v.Now == nil {
+		return nil, ErrWorkloadUnavailable
+	}
+	if r == nil || r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.EscapedPath() != r.URL.Path ||
+		r.Header.Get("X-Voice-Workload") != "auth" || r.Header.Get("X-Voice-Workload-Version") != "2" {
+		return nil, ErrInvalidWorkloadProof
+	}
+	for _, name := range []string{"X-Voice-Workload", "X-Voice-Workload-Version", "X-Voice-Timestamp", "X-Voice-Nonce", "X-Voice-Signature", "X-Voice-Device-Authority"} {
+		if len(r.Header.Values(name)) != 1 {
+			return nil, ErrInvalidWorkloadProof
+		}
+	}
+	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
+		return nil, ErrInvalidWorkloadProof
+	}
+	assertion := []byte(r.Header.Get("X-Voice-Device-Authority"))
+	if len(assertion) == 0 || len(assertion) > 16<<10 {
+		return nil, ErrInvalidWorkloadProof
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 2<<10))
+	if err != nil {
+		return nil, ErrInvalidWorkloadProof
+	}
+	r.Body = io.NopCloser(strings.NewReader(string(body)))
+	if r.ContentLength >= 0 && int64(len(body)) != r.ContentLength {
+		return nil, ErrInvalidWorkloadProof
+	}
+	timestamp := r.Header.Get("X-Voice-Timestamp")
+	seconds, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil || strconv.FormatInt(seconds, 10) != timestamp {
+		return nil, ErrInvalidWorkloadProof
+	}
+	now := v.Now()
+	issued := time.Unix(seconds, 0)
+	if issued.Before(now.Add(-30*time.Second)) || issued.After(now.Add(30*time.Second)) {
+		return nil, ErrInvalidWorkloadProof
+	}
+	nonce := r.Header.Get("X-Voice-Nonce")
+	parsedNonce, err := uuid.Parse(nonce)
+	if err != nil || parsedNonce == uuid.Nil || parsedNonce.String() != nonce {
+		return nil, ErrInvalidWorkloadProof
+	}
+	signature := r.Header.Get("X-Voice-Signature")
+	if len(signature) != 43 || strings.ContainsAny(signature, "= \t\r\n") {
+		return nil, ErrInvalidWorkloadProof
+	}
+	expected := assertionBoundWorkloadSignature(v.Key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body, assertion)
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		return nil, ErrInvalidWorkloadProof
+	}
+	used, err := v.Nonces.Use(r.Context(), nonce, 60*time.Second)
+	if err != nil {
+		return nil, ErrWorkloadUnavailable
+	}
+	if !used {
+		return nil, ErrInvalidWorkloadProof
+	}
+	return assertion, nil
+}
+
+// VerifyBody authenticates an internal JSON POST using the established v1
+// principal/path/body/timestamp/nonce HMAC inputs and Redis replay guard.
+func (v WorkloadVerifier) VerifyBody(r *http.Request) ([]byte, error) {
+	if len(v.Key) != 32 || v.Nonces == nil || v.Now == nil {
+		return nil, ErrWorkloadUnavailable
+	}
+	if r == nil || r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.EscapedPath() != r.URL.Path || r.Header.Get("X-Voice-Workload") != "auth" {
+		return nil, ErrInvalidWorkloadProof
+	}
+	for _, name := range []string{"X-Voice-Workload", "X-Voice-Timestamp", "X-Voice-Nonce", "X-Voice-Signature"} {
+		if len(r.Header.Values(name)) != 1 {
+			return nil, ErrInvalidWorkloadProof
+		}
+	}
+	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
+		return nil, ErrInvalidWorkloadProof
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 2<<10))
+	if err != nil {
+		return nil, ErrInvalidWorkloadProof
+	}
+	r.Body = io.NopCloser(strings.NewReader(string(body)))
+	if r.ContentLength >= 0 && int64(len(body)) != r.ContentLength {
+		return nil, ErrInvalidWorkloadProof
+	}
+	timestamp := r.Header.Get("X-Voice-Timestamp")
+	seconds, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil || strconv.FormatInt(seconds, 10) != timestamp {
+		return nil, ErrInvalidWorkloadProof
+	}
+	now := v.Now()
+	issued := time.Unix(seconds, 0)
+	if issued.Before(now.Add(-30*time.Second)) || issued.After(now.Add(30*time.Second)) {
+		return nil, ErrInvalidWorkloadProof
+	}
+	nonce := r.Header.Get("X-Voice-Nonce")
+	parsedNonce, err := uuid.Parse(nonce)
+	if err != nil || parsedNonce == uuid.Nil || parsedNonce.String() != nonce {
+		return nil, ErrInvalidWorkloadProof
+	}
+	signature := r.Header.Get("X-Voice-Signature")
+	if len(signature) != 43 || strings.ContainsAny(signature, "= \t\r\n") {
+		return nil, ErrInvalidWorkloadProof
+	}
+	expected := bodyWorkloadSignature(v.Key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body)
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		return nil, ErrInvalidWorkloadProof
+	}
+	used, err := v.Nonces.Use(r.Context(), nonce, 60*time.Second)
+	if err != nil {
+		return nil, ErrWorkloadUnavailable
+	}
+	if !used {
+		return nil, ErrInvalidWorkloadProof
+	}
+	return body, nil
 }
