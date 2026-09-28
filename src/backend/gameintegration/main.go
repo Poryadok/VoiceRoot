@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -98,10 +99,35 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(mux, metrics), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
+	servers := []*http.Server{server}
+	var privateListener net.Listener
+	if cfg.MessagingListenAddr != "" {
+		privateMux := http.NewServeMux()
+		privateMux.Handle("/internal/v1/game-integrations/resource-mappings/authorize-chat",
+			httpapi.NewInternalResourceMappingAuthorizationHandler(httpapi.WorkloadVerifier{
+				Key: cfg.MessagingWorkloadKey, PreviousKey: cfg.MessagingPreviousWorkloadKey,
+				PreviousKeyUntil: cfg.MessagingPreviousKeyUntil, Principal: "messaging", Now: time.Now,
+				Nonces: httpapi.RedisNonceStore{Client: redisClient},
+			}, applications))
+		privateServer, listener, err := newMessagingPrivateServer(cfg, privateMux)
+		if err != nil {
+			log.Fatal(err)
+		}
+		privateListener = listener
+		servers = append(servers, privateServer)
+	}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	errorsCh := make(chan error, 1)
-	go func() { errorsCh <- server.ListenAndServe() }()
+	errorsCh := make(chan error, len(servers))
+	for index, current := range servers {
+		go func(index int, current *http.Server) {
+			if index == 1 {
+				errorsCh <- current.Serve(privateListener)
+			} else {
+				errorsCh <- current.ListenAndServe()
+			}
+		}(index, current)
+	}
 	select {
 	case err := <-errorsCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -110,8 +136,10 @@ func main() {
 	case <-stop:
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Fatal(err)
+		for _, current := range servers {
+			if err := current.Shutdown(shutdownCtx); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
