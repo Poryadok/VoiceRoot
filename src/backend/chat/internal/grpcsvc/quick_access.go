@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -91,7 +92,27 @@ func (s *ChatGRPC) AddQuickAccess(ctx context.Context, req *chatv1.AddQuickAcces
 	if req.SortOrder != nil {
 		sortOrder = req.SortOrder
 	}
-	if err := s.DM.AddQuickAccess(ctx, profileID, chatID, sortOrder); err != nil {
+	if req.GetReplaceChatId() != "" && sortOrder != nil {
+		return nil, status.Error(codes.InvalidArgument, "sort_order cannot be set with replace_chat_id")
+	}
+	var addErr error
+	if req.GetReplaceChatId() != "" {
+		replacedChatID, err := parseUUIDField("replace_chat_id", req.GetReplaceChatId())
+		if err != nil {
+			return nil, err
+		}
+		addErr = s.DM.ReplaceQuickAccess(ctx, profileID, chatID, replacedChatID)
+	} else {
+		addErr = s.DM.AddQuickAccess(ctx, profileID, chatID, sortOrder)
+	}
+	if err := addErr; err != nil {
+		if errors.Is(err, store.ErrQuickAccessReplaceSlotNotFound) {
+			return nil, status.Error(codes.FailedPrecondition, "quick access replacement slot changed")
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, status.Error(codes.AlreadyExists, "chat already in quick access")
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "chat not found")
 		}

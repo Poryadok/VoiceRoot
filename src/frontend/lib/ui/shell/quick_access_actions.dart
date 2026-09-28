@@ -7,6 +7,7 @@ import '../../state/chat_navigation_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/folder_pin_providers.dart';
 import 'quick_access_replace_sheet.dart';
+
 /// Add [chatId] to Quick Access; opens replace picker at 15/15 limit.
 Future<void> addChatToQuickAccess(
   BuildContext context,
@@ -26,33 +27,21 @@ Future<void> addChatToQuickAccess(
 
   if (qaList.items.any((item) => item.chatId == chatId)) return;
 
-  Future<bool> addAfterRemove(String? removeChatId) async {
-    if (removeChatId != null) {
-      final removeResult = await client.removeQuickAccess(
-        authorization: auth,
-        chatId: removeChatId,
-      );
-      if (!context.mounted) return false;
-      if (removeResult case ChatsApiFailure(:final message)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
-        return false;
-      }
-    }
-
+  Future<bool> addAfterReplace(String replaceChatId) async {
     final addResult = await client.addQuickAccess(
       authorization: auth,
       chatId: chatId,
+      replaceChatId: replaceChatId,
     );
     if (!context.mounted) return false;
     switch (addResult) {
       case ChatsApiOk<void>():
         return true;
       case ChatsApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ref.invalidate(quickAccessListProvider);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
         return false;
     }
   }
@@ -64,7 +53,7 @@ Future<void> addChatToQuickAccess(
       items: qaList.items,
     );
     if (replaceId == null || !context.mounted) return;
-    if (await addAfterRemove(replaceId)) {
+    if (await addAfterReplace(replaceId)) {
       invalidateChatNavigationData(ref);
     }
     return;
@@ -78,22 +67,32 @@ Future<void> addChatToQuickAccess(
   switch (addResult) {
     case ChatsApiOk<void>():
       invalidateChatNavigationData(ref);
-    case ChatsApiFailure(:final errorCode):
+    case ChatsApiFailure(:final errorCode, :final message):
       if (errorCode == 'failed_precondition') {
-        final refreshed = await ref.read(quickAccessListProvider.future);
+        QuickAccessListData refreshed;
+        try {
+          ref.invalidate(quickAccessListProvider);
+          refreshed = await ref.read(quickAccessListProvider.future);
+        } catch (_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+          return;
+        }
         if (!context.mounted) return;
         final replaceId = await QuickAccessReplaceSheet.show(
           context,
           items: refreshed.items,
         );
         if (replaceId == null || !context.mounted) return;
-        if (await addAfterRemove(replaceId)) {
+        if (await addAfterReplace(replaceId)) {
           invalidateChatNavigationData(ref);
         }
-      } else if (addResult case ChatsApiFailure(:final message)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
   }
 }

@@ -10,9 +10,9 @@ import (
 
 type recordingQuickAccess struct {
 	chatv1.UnimplementedChatServiceServer
-	listLast   bool
-	addLast    *chatv1.AddQuickAccessRequest
-	removeLast *chatv1.RemoveQuickAccessRequest
+	listLast    bool
+	addLast     *chatv1.AddQuickAccessRequest
+	removeLast  *chatv1.RemoveQuickAccessRequest
 	reorderLast *chatv1.ReorderQuickAccessRequest
 }
 
@@ -68,6 +68,16 @@ func TestTranscodeChatsQuickAccess(t *testing.T) {
 	}
 	if grpcRec.addLast == nil || grpcRec.addLast.GetChatId() != "chat-1" {
 		t.Fatalf("AddQuickAccess request = %+v", grpcRec.addLast)
+	}
+
+	replaceResp := performRequest(h, http.MethodPost, "/api/v1/chats/quick-access", `{"chat_id":"chat-2","replace_chat_id":"chat-1"}`, map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	if replaceResp.Code != http.StatusNoContent {
+		t.Fatalf("replace status = %d, want %d; body=%q", replaceResp.Code, http.StatusNoContent, replaceResp.Body.String())
+	}
+	if grpcRec.addLast == nil || grpcRec.addLast.GetChatId() != "chat-2" || grpcRec.addLast.GetReplaceChatId() != "chat-1" {
+		t.Fatalf("AddQuickAccess replacement request = %+v", grpcRec.addLast)
 	}
 
 	removeResp := performRequest(h, http.MethodDelete, "/api/v1/chats/quick-access/chat-1", "", map[string]string{

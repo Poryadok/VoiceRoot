@@ -154,7 +154,7 @@ Rail **всегда виден**, не скрывается при открыт�
 | Аспект | Контракт |
 |--------|----------|
 | **Limit** | 15 `chat_id` per `profile_id`; archived reject |
-| **Add at limit** | ctx «В избранное» при 15/15 → **replace picker**: список текущих QA-слотов + «Выберите, что заменить»; atomic `RemoveQuickAccess` + `AddQuickAccess` |
+| **Add at limit** | ctx «В избранное» при 15/15 → **replace picker**: список текущих QA-слотов + «Выберите, что заменить»; `AddQuickAccess(replace_chat_id=<selected chat>)` атомарно заменяет слот с сохранением порядка, при ошибке исходный слот остаётся |
 | **Server at-limit error** | `AddQuickAccess` без предварительного remove → `FAILED_PRECONDITION` — **server safety net**, не UX ошибка; клиент **обязан** открыть replace picker (§1.1c #6), не показывать hard-error toast |
 | **Drag reorder** | Desktop: drag row в rail zone. Mobile: long-press + drag в drawer QA list (§1.1c #5) |
 | **Cross-device order** | Server SoT — `ReorderQuickAccess`; клиент применяет порядок после sync |

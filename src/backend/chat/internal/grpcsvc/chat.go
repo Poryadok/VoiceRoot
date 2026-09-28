@@ -86,6 +86,7 @@ type DMStore interface {
 	IsMemberDeletedForSelf(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)
 	ListQuickAccess(ctx context.Context, profileID uuid.UUID) ([]store.QuickAccessRow, error)
 	AddQuickAccess(ctx context.Context, profileID, chatID uuid.UUID, sortOrder *int32) error
+	ReplaceQuickAccess(ctx context.Context, profileID, chatID, replacedChatID uuid.UUID) error
 	RemoveQuickAccess(ctx context.Context, profileID, chatID uuid.UUID) error
 	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
 	ListFolders(ctx context.Context, profileID uuid.UUID) ([]store.FolderRow, error)

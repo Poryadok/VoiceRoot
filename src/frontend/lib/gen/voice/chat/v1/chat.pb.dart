@@ -1767,10 +1767,12 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
   factory AddQuickAccessRequest({
     $core.String? chatId,
     $core.int? sortOrder,
+    $core.String? replaceChatId,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
     if (sortOrder != null) result.sortOrder = sortOrder;
+    if (replaceChatId != null) result.replaceChatId = replaceChatId;
     return result;
   }
 
@@ -1789,6 +1791,7 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'chatId')
     ..aI(2, _omitFieldNames ? '' : 'sortOrder')
+    ..aOS(3, _omitFieldNames ? '' : 'replaceChatId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1828,6 +1831,16 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
   $core.bool hasSortOrder() => $_has(1);
   @$pb.TagNumber(2)
   void clearSortOrder() => $_clearField(2);
+
+  /// Replaces this existing quick-access chat atomically when set.
+  @$pb.TagNumber(3)
+  $core.String get replaceChatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set replaceChatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReplaceChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReplaceChatId() => $_clearField(3);
 }
 
 class RemoveQuickAccessRequest extends $pb.GeneratedMessage {
