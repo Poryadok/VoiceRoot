@@ -19,10 +19,11 @@ import (
 )
 
 type socialUserPrincipalCapture struct {
-	metadata metadata.MD
-	request  proto.Message
-	account  uuid.UUID
-	profile  uuid.UUID
+	metadata        metadata.MD
+	request         proto.Message
+	account         uuid.UUID
+	profile         uuid.UUID
+	profileResponse *userv1.Profile
 }
 
 func (c *socialUserPrincipalCapture) Invoke(ctx context.Context, _ string, req, reply any, _ ...grpc.CallOption) error {
@@ -32,7 +33,10 @@ func (c *socialUserPrincipalCapture) Invoke(ctx context.Context, _ string, req, 
 	case *userv1.ListProfileIDsForAccountResponse:
 		out.ProfileIds = []string{c.profile.String()}
 	case *userv1.GetProfileResponse:
-		out.Profile = &userv1.Profile{Id: c.profile.String(), AccountId: c.account.String()}
+		out.Profile = &userv1.Profile{Id: c.profile.String(), AccountId: c.account.String(), DisplayName: "Known", Username: "known", Discriminator: "1234"}
+		if c.profileResponse != nil {
+			out.Profile = c.profileResponse
+		}
 	}
 	return nil
 }
@@ -75,6 +79,17 @@ func TestSocialUserLookupAdaptersUseFreshBoundPrincipal(t *testing.T) {
 				return err
 			},
 		},
+		{
+			rpc: userv1.UserService_GetProfile_FullMethodName,
+			call: func() error {
+				got, err := (&GRPCProfileAccounts{Client: client, Issuer: issuer}).Profile(poisoned, profileID)
+				require.Equal(t, accountID, got.AccountID)
+				require.Equal(t, "Known", got.DisplayName)
+				require.Equal(t, "known", got.Username)
+				require.Equal(t, "1234", got.Discriminator)
+				return err
+			},
+		},
 	}
 	for _, lookup := range lookups {
 		require.NoError(t, lookup.call())
@@ -94,6 +109,24 @@ func TestSocialUserLookupAdaptersFailClosedWithoutSigner(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	_, err = (&GRPCProfileAccounts{Client: client}).AccountIDByProfileID(context.Background(), uuid.New())
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = (&GRPCProfileAccounts{Client: client}).Profile(context.Background(), uuid.New())
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestBlockedProfileLookupRejectsMalformedIdentity(t *testing.T) {
+	issuer, _ := testSocialIssuer(t)
+	profileID := uuid.New()
+	for name, returned := range map[string]*userv1.Profile{
+		"wrong profile":   {Id: uuid.New().String(), AccountId: uuid.New().String()},
+		"invalid account": {Id: profileID.String(), AccountId: "not-a-uuid"},
+		"nil account":     {Id: profileID.String(), AccountId: uuid.Nil.String()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			capture := &socialUserPrincipalCapture{profileResponse: returned}
+			_, err := (&GRPCProfileAccounts{Client: userv1.NewUserServiceClient(capture), Issuer: issuer}).Profile(context.Background(), profileID)
+			require.Equal(t, codes.Internal, status.Code(err))
+		})
+	}
 }
 
 func verifySocialLookupPrincipal(t *testing.T, key *rsa.PublicKey, md principal.TransportMetadata, rpc, hash string) {

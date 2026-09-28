@@ -346,8 +346,7 @@ public class AuthRestController {
     return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
   }
 
-  @ExceptionHandler({org.springframework.web.bind.MethodArgumentNotValidException.class,
-      org.springframework.http.converter.HttpMessageNotReadableException.class})
+  @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
   public ResponseEntity<Map<String, String>> invalidRequest() {
     // Registration intent is a capability; never log rejected JSON or credential values.
     return ResponseEntity.badRequest().body(Map.of("error", "validation_failed"));

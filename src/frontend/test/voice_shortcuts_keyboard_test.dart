@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -26,6 +27,137 @@ import 'support/fake_voice_api_clients.dart';
 // focus trap wiring, and text-scale layout smoke at ×1.5 (see chat_text_scale_test.dart).
 
 void main() {
+  testWidgets('R and E shortcuts are ignored while text input is focused', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final outsideFocus = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(outsideFocus.dispose);
+    final container = await _pumpShortcuts(
+      tester,
+      child: Column(
+        children: [
+          Focus(
+            focusNode: outsideFocus,
+            child: const SizedBox(width: 20, height: 20),
+          ),
+          TextField(
+            key: const ValueKey('editable-input'),
+            controller: controller,
+          ),
+        ],
+      ),
+    );
+    addTearDown(container.dispose);
+
+    const message = VoiceMessage(
+      id: 'msg-1',
+      chatId: 'chat-a',
+      senderProfileId: 'peer',
+      content: 'hello',
+    );
+    // Drive Flutter's key routing: these activate the global actions before
+    // the editor is focused.
+    outsideFocus.requestFocus();
+    await tester.pump();
+    // Let the room controller's initial activation finish before seeding it.
+    final roomSubscription = container.listen(
+      chatRoomControllerProvider('chat-a'),
+      (_, _) {},
+    );
+    addTearDown(roomSubscription.close);
+    await tester.pump(const Duration(milliseconds: 1));
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+    container.read(chatRoomControllerProvider('chat-a').notifier).state =
+        const ChatRoomState(messages: [message]);
+    container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
+    expect(outsideFocus.hasFocus, isTrue);
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyR, character: 'r'),
+      isTrue,
+    );
+    expect(container.read(chatReplyTargetProvider('chat-a')), message);
+    container.read(chatReplyTargetProvider('chat-a').notifier).state = null;
+
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyE,
+      character: 'e',
+      physicalKey: PhysicalKeyboardKey.keyE,
+    );
+    expect(
+      container.read(chatMessageReactionRequestProvider('chat-a')),
+      'msg-1',
+    );
+    container
+            .read(chatMessageReactionRequestProvider('chat-a').notifier)
+            .state =
+        null;
+
+    await tester.tap(find.byKey(const ValueKey('editable-input')));
+    await tester.pump();
+    expect(
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.keyR,
+        character: 'r',
+        physicalKey: PhysicalKeyboardKey.keyR,
+      ),
+      isFalse,
+    );
+    expect(
+      await tester.sendKeyEvent(
+        LogicalKeyboardKey.keyE,
+        character: 'e',
+        physicalKey: PhysicalKeyboardKey.keyE,
+      ),
+      isFalse,
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyR,
+      character: 'R',
+      physicalKey: PhysicalKeyboardKey.keyR,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    // Model the Flutter KeyEvent after web conversion, not a browser event:
+    // Flutter 3.41.7's LocaleKeymap maps non-ASCII key values at physical
+    // KeyE/KeyR to logical keyE/keyR, while preserving the output character.
+    // Caps Lock changes the character without changing the logical key.
+    await tester.sendKeyEvent(LogicalKeyboardKey.capsLock);
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyE,
+      character: 'У',
+      physicalKey: PhysicalKeyboardKey.keyE,
+    );
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyR,
+      character: 'К',
+      physicalKey: PhysicalKeyboardKey.keyR,
+    );
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyE,
+      character: 'E',
+      physicalKey: PhysicalKeyboardKey.keyE,
+    );
+    await tester.sendKeyEvent(
+      LogicalKeyboardKey.keyR,
+      character: 'R',
+      physicalKey: PhysicalKeyboardKey.keyR,
+    );
+
+    expect(container.read(chatReplyTargetProvider('chat-a')), isNull);
+    expect(
+      container.read(chatMessageReactionRequestProvider('chat-a')),
+      isNull,
+    );
+
+    // WidgetTester routes physical keys but does not synthesize the platform
+    // text-input commit for printable keys. Verify the focused TextInputClient
+    // still accepts ordinary text through Flutter's text-input channel.
+    tester.testTextInput.updateEditingValue(const TextEditingValue(text: 'er'));
+    expect(controller.text, 'er');
+  });
+
   testWidgets('Ctrl+K focuses global search', (tester) async {
     final container = await _pumpShortcuts(tester);
     addTearDown(container.dispose);
@@ -96,9 +228,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          home: VoiceShortcuts(
-            child: const SizedBox.expand(),
-          ),
+          home: VoiceShortcuts(child: const SizedBox.expand()),
         ),
       ),
     );
@@ -186,8 +316,18 @@ void main() {
         .read(chatRoomControllerProvider('chat-a').notifier)
         .state = ChatRoomState(
       messages: const [
-        VoiceMessage(id: 'msg-1', chatId: 'chat-a', senderProfileId: 'p1', content: 'a'),
-        VoiceMessage(id: 'msg-2', chatId: 'chat-a', senderProfileId: 'p1', content: 'b'),
+        VoiceMessage(
+          id: 'msg-1',
+          chatId: 'chat-a',
+          senderProfileId: 'p1',
+          content: 'a',
+        ),
+        VoiceMessage(
+          id: 'msg-2',
+          chatId: 'chat-a',
+          senderProfileId: 'p1',
+          content: 'b',
+        ),
       ],
     );
 
@@ -238,8 +378,9 @@ void main() {
     addTearDown(container.dispose);
 
     container.read(selectedChatIdProvider.notifier).state = 'chat-a';
-    container.read(chatRoomControllerProvider('chat-a').notifier).state =
-        const ChatRoomState(
+    container
+        .read(chatRoomControllerProvider('chat-a').notifier)
+        .state = const ChatRoomState(
       messages: [
         VoiceMessage(
           id: 'msg-1',
@@ -279,11 +420,14 @@ void _invokeNextUnreadChat(ProviderContainer container) {
 
 /// Mirrors [_OpenMessageMenuIntent] action wiring in [VoiceShortcuts].
 void _invokeOpenMessageMenu(ProviderContainer container) {
-  container.read(chatMessageKeyboardProvider.notifier).openContextMenuOnSelected();
+  container
+      .read(chatMessageKeyboardProvider.notifier)
+      .openContextMenuOnSelected();
 }
 
 Future<ProviderContainer> _pumpShortcuts(
   WidgetTester tester, {
+  Widget child = const SizedBox.expand(),
   List<ChatListItem> seedChatList = const [
     ChatListItem(
       chat: VoiceChat(
@@ -310,9 +454,7 @@ Future<ProviderContainer> _pumpShortcuts(
         ],
       ),
       child: MaterialApp(
-        home: VoiceShortcuts(
-          child: const SizedBox.expand(),
-        ),
+        home: VoiceShortcuts(child: Scaffold(body: child)),
       ),
     ),
   );

@@ -1063,6 +1063,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         () => _defaultPickChatAttachment(imagesOnly: imagesOnly);
     final picked = await picker();
     if (picked == null || !mounted || _isDmPeerDeleted()) return;
+    final mimeType = _attachmentMimeType(picked.contentType, picked.name);
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     setState(() => _uploadingAttachment = true);
@@ -1097,7 +1098,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       final ticket = await files.requestUpload(
         authorization: auth,
         originalName: picked.name,
-        mimeType: picked.contentType,
+        mimeType: mimeType,
         sizeBytes: uploadBytes.length,
         chatId: widget.chatId,
         chatType: chatType,
@@ -1108,7 +1109,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       final put = await files.putBytes(
         uploadUrl: ticket.data.presignedPutUrl,
         bytes: uploadBytes,
-        mimeType: picked.contentType,
+        mimeType: mimeType,
       );
       if (!mounted || _isDmPeerDeleted()) return;
       if (put is! FilesApiOk<void>) return;
@@ -1657,9 +1658,21 @@ Future<ChatAttachmentFile?> _defaultPickChatAttachment({
   final bytes = await file.readAsBytes();
   return ChatAttachmentFile(
     bytes: bytes,
-    contentType: file.mimeType ?? _contentTypeFromName(file.name),
+    contentType: _attachmentMimeType(file.mimeType, file.name),
     name: file.name,
   );
+}
+
+String _attachmentMimeType(String? mimeType, String name) {
+  final selectedType = mimeType?.trim().toLowerCase();
+  // Until animated GIF processing is available, preserve the original bytes.
+  if (selectedType != null &&
+      selectedType.split(';').first.trim() == 'image/gif') {
+    return 'application/octet-stream';
+  }
+  return selectedType == null || selectedType.isEmpty
+      ? _contentTypeFromName(name)
+      : selectedType;
 }
 
 String _contentTypeFromName(String name) {
@@ -1667,6 +1680,8 @@ String _contentTypeFromName(String name) {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.mov')) return 'video/quicktime';
   if (lower.endsWith('.pdf')) return 'application/pdf';
   return 'application/octet-stream';
 }

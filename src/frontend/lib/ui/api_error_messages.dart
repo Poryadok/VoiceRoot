@@ -131,6 +131,11 @@ String chatRoomErrorMessage(
   if (isBackendUnavailable(statusCode)) {
     return l10n.backendUnavailable;
   }
+  if (raw.toLowerCase().contains(
+    'cannot send messages between blocked accounts',
+  )) {
+    return l10n.chatBlockedAccountsSendDisabled;
+  }
   final privacyMessage = privacyActionErrorMessage(l10n, raw);
   if (privacyMessage != raw) {
     return l10n.chatRoomError(privacyMessage);
