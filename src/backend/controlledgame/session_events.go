@@ -101,7 +101,7 @@ func (client *SessionEventClient) PollOnce(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("claim GIS session event: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusNoContent {
 		if _, err = io.Copy(io.Discard, io.LimitReader(response.Body, 1)); err != nil {
 			return false, err
@@ -194,7 +194,7 @@ func (client *SessionEventClient) sendSessionEventAck(ctx context.Context, base 
 	if err != nil {
 		return fmt.Errorf("ACK GIS session event: %w", err)
 	}
-	defer ackResponse.Body.Close()
+	defer func() { _ = ackResponse.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(ackResponse.Body, 4096))
 	switch ackResponse.StatusCode {
 	case http.StatusOK:

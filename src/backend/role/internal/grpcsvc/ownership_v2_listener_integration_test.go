@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -50,7 +51,7 @@ func TestOwnershipTransferV2_ProtectedListenerMigrationBackedRestart(t *testing.
 
 	firstRuntime, err := principalruntime.New(context.Background(), fixture.config)
 	require.NoError(t, err)
-	firstClient, firstStop := startOwnershipV2ProtectedServer(t, firstRuntime, fixture.roots, &RoleGRPC{Store: roleStore})
+	firstClient, firstStop := startOwnershipV2ProtectedServer(t, firstRuntime, fixture.roots, fixture.clientCert, &RoleGRPC{Store: roleStore})
 	prepareContext, prepareToken := ownershipV2SignedContext(t, fixture.key, rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName, "prepare-before-restart", prepare)
 	prepared, err := firstClient.PrepareOwnershipTransfer(prepareContext, prepare)
 	require.NoError(t, err)
@@ -61,7 +62,7 @@ func TestOwnershipTransferV2_ProtectedListenerMigrationBackedRestart(t *testing.
 	secondRuntime, err := principalruntime.New(context.Background(), fixture.config)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, secondRuntime.Close()) })
-	secondClient, secondStop := startOwnershipV2ProtectedServer(t, secondRuntime, fixture.roots, &RoleGRPC{Store: roleStore})
+	secondClient, secondStop := startOwnershipV2ProtectedServer(t, secondRuntime, fixture.roots, fixture.clientCert, &RoleGRPC{Store: roleStore})
 	defer secondStop()
 	replayed := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+prepareToken, "x-request-id", "prepare-before-restart"))
 	_, err = secondClient.PrepareOwnershipTransfer(replayed, prepare)
@@ -82,9 +83,10 @@ func TestOwnershipTransferV2_ProtectedListenerMigrationBackedRestart(t *testing.
 }
 
 type ownershipV2RuntimeFixture struct {
-	config principalruntime.Config
-	roots  *x509.CertPool
-	key    *rsa.PrivateKey
+	config     principalruntime.Config
+	roots      *x509.CertPool
+	clientCert tls.Certificate
+	key        *rsa.PrivateKey
 }
 
 func newOwnershipV2RuntimeFixture(t *testing.T) ownershipV2RuntimeFixture {
@@ -101,27 +103,67 @@ func newOwnershipV2RuntimeFixture(t *testing.T) ownershipV2RuntimeFixture {
 	}))
 	t.Cleanup(jwks.Close)
 	dir := t.TempDir()
-	certFile, keyFile := filepath.Join(dir, "tls.crt"), filepath.Join(dir, "tls.key")
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: jwks.TLS.Certificates[0].Certificate[0]})
-	require.NoError(t, os.WriteFile(certFile, certPEM, 0o600))
-	keyDER, err := x509.MarshalPKCS8PrivateKey(jwks.TLS.Certificates[0].PrivateKey)
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600))
+	now := time.Now()
+	caTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "role principal test CA"},
+		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), IsCA: true,
+		BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+	clientCAPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+
+	issueLeaf := func(serial int64, commonName string, usage x509.ExtKeyUsage, dnsNames []string, ips []net.IP) ([]byte, *rsa.PrivateKey) {
+		key, keyErr := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, keyErr)
+		template := &x509.Certificate{
+			SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: commonName},
+			NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+			KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{usage},
+			DNSNames: dnsNames, IPAddresses: ips,
+		}
+		der, certErr := x509.CreateCertificate(rand.Reader, template, caTemplate, &key.PublicKey, caKey)
+		require.NoError(t, certErr)
+		return der, key
+	}
+	serverDER, serverKey := issueLeaf(2, "role principal test server", x509.ExtKeyUsageServerAuth,
+		[]string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")})
+	clientDER, clientKey := issueLeaf(3, "role principal test client", x509.ExtKeyUsageClientAuth, nil, nil)
+	serverCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER})
+	serverKeyDER, err := x509.MarshalPKCS8PrivateKey(serverKey)
+	require.NoError(t, err)
+	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: serverKeyDER})
+	clientKeyDER, err := x509.MarshalPKCS8PrivateKey(clientKey)
+	require.NoError(t, err)
+	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER})
+	clientChainPEM := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), clientCAPEM...)
+	clientCert, err := tls.X509KeyPair(clientChainPEM, clientKeyPEM)
+	require.NoError(t, err)
+	serverCertFile, serverKeyFile := filepath.Join(dir, "server.crt"), filepath.Join(dir, "server.key")
+	clientCAFile, jwksCAFile := filepath.Join(dir, "client-ca.crt"), filepath.Join(dir, "jwks-ca.crt")
+	require.NoError(t, os.WriteFile(serverCertFile, serverCertPEM, 0o600))
+	require.NoError(t, os.WriteFile(serverKeyFile, serverKeyPEM, 0o600))
+	require.NoError(t, os.WriteFile(clientCAFile, clientCAPEM, 0o600))
+	jwksCAPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: jwks.TLS.Certificates[0].Certificate[0]})
+	require.NoError(t, os.WriteFile(jwksCAFile, jwksCAPEM, 0o600))
 	replay := miniredis.RunT(t)
 	roots := x509.NewCertPool()
-	require.True(t, roots.AppendCertsFromPEM(certPEM))
+	require.True(t, roots.AppendCertsFromPEM(clientCAPEM))
 	return ownershipV2RuntimeFixture{
 		config: principalruntime.Config{
-			JWKSURLs: map[string]string{"space": jwks.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
-			UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
-			TLSCertFile: certFile, TLSKeyFile: keyFile, ListenAddr: "127.0.0.1:0",
+			JWKSURLs: map[string]string{"space": jwks.URL, "gameintegration": jwks.URL, "voice": jwks.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
+			UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: jwksCAFile,
+			TLSCertFile: serverCertFile, TLSKeyFile: serverKeyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
 		},
-		roots: roots,
-		key:   current,
+		roots:      roots,
+		clientCert: clientCert,
+		key:        current,
 	}
 }
 
-func startOwnershipV2ProtectedServer(t *testing.T, runtime *principalruntime.Runtime, roots *x509.CertPool, service rolev1.RoleServiceServer) (rolev1.RoleServiceClient, func()) {
+func startOwnershipV2ProtectedServer(t *testing.T, runtime *principalruntime.Runtime, roots *x509.CertPool, clientCert tls.Certificate, service rolev1.RoleServiceServer) (rolev1.RoleServiceClient, func()) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -129,7 +171,7 @@ func startOwnershipV2ProtectedServer(t *testing.T, runtime *principalruntime.Run
 	rolev1.RegisterRoleServiceServer(server, service)
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
-	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots})))
+	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{clientCert}})))
 	require.NoError(t, err)
 	stop := func() {
 		require.NoError(t, conn.Close())

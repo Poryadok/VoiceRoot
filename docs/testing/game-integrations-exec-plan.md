@@ -504,8 +504,16 @@ contracts land before consumers; activation lands after all consumers.
     the same stage and stable owner request while per-stage delays followed
     1/2/4/8/16/30/30s, resetting after stage success. Focused evidence is in
     `session_retry_bounds_integration_test.go`.
-  - [ ] Authenticated consumer inbox integration and the remaining restart
-    fault matrix still need acceptance.
+  - [x] Authenticated consumer inbox and HTTPS restart/fault matrix passed on
+    2026-09-28 in hosted run `36481450312` at exact PR head
+    `a15fefc6d41e27534996f8dceb049ea47566d463`: scoped app/environment claims,
+    lost claim response and GIS restart with an active lease, expired lease
+    reclaim with identical bytes, receiver transaction rollback, commit-before-
+    ACK lease expiry, GIS and receiver-process restart, lost committed ACK
+    response, and exact ACK replay with one inbox/effect row. Sanitized IDs,
+    event/payload hash, lease IDs, and row-count evidence are recorded in
+    `tmp/slave-driver/game-integrations-2026-09-27/STATE.md`; unique Compose
+    cleanup passed. Other SE02 lifecycle requirements remain tracked above.
 - [ ] **T32** `D: T31` Implement stable party/match lifecycle, host transfer,
   explicit close, late join and roster freshness under the frozen contracts: a
   complete roster lease is 60s from GIS DB commit; retries do not renew; host

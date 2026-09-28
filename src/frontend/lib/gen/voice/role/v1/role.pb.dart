@@ -4750,6 +4750,672 @@ class RetireSpaceResponse extends $pb.GeneratedMessage {
   RetireSpaceReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// A complete snapshot. profile_ids is canonical lowercase UUID text, sorted
+/// ascending and unique. A successful receipt means the snapshot is durable.
+class ApplyGameSessionGrantsRequest extends $pb.GeneratedMessage {
+  factory ApplyGameSessionGrantsRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? sessionId,
+    $core.String? voiceRoomId,
+    $core.String? operationId,
+    $fixnum.Int64? rosterRevision,
+    $core.Iterable<$core.String>? profileIds,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (sessionId != null) result.sessionId = sessionId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (operationId != null) result.operationId = operationId;
+    if (rosterRevision != null) result.rosterRevision = rosterRevision;
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    return result;
+  }
+
+  ApplyGameSessionGrantsRequest._();
+
+  factory ApplyGameSessionGrantsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyGameSessionGrantsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyGameSessionGrantsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'sessionId')
+    ..aOS(4, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'rosterRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..pPS(7, _omitFieldNames ? '' : 'profileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameSessionGrantsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameSessionGrantsRequest copyWith(
+          void Function(ApplyGameSessionGrantsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyGameSessionGrantsRequest))
+          as ApplyGameSessionGrantsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameSessionGrantsRequest create() =>
+      ApplyGameSessionGrantsRequest._();
+  @$core.override
+  ApplyGameSessionGrantsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameSessionGrantsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyGameSessionGrantsRequest>(create);
+  static ApplyGameSessionGrantsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sessionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sessionId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSessionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSessionId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get voiceRoomId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set voiceRoomId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasVoiceRoomId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearVoiceRoomId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get rosterRevision => $_getI64(5);
+  @$pb.TagNumber(6)
+  set rosterRevision($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRosterRevision() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRosterRevision() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<$core.String> get profileIds => $_getList(6);
+}
+
+/// Revoke is terminal for this app/environment/session tuple. It only removes
+/// GIS-managed VOICE_JOIN grants and cannot mutate ordinary Role assignments.
+class RevokeGameSessionGrantsRequest extends $pb.GeneratedMessage {
+  factory RevokeGameSessionGrantsRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? sessionId,
+    $core.String? operationId,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (sessionId != null) result.sessionId = sessionId;
+    if (operationId != null) result.operationId = operationId;
+    return result;
+  }
+
+  RevokeGameSessionGrantsRequest._();
+
+  factory RevokeGameSessionGrantsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeGameSessionGrantsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeGameSessionGrantsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'sessionId')
+    ..aOS(4, _omitFieldNames ? '' : 'operationId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeGameSessionGrantsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeGameSessionGrantsRequest copyWith(
+          void Function(RevokeGameSessionGrantsRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RevokeGameSessionGrantsRequest))
+          as RevokeGameSessionGrantsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeGameSessionGrantsRequest create() =>
+      RevokeGameSessionGrantsRequest._();
+  @$core.override
+  RevokeGameSessionGrantsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeGameSessionGrantsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeGameSessionGrantsRequest>(create);
+  static RevokeGameSessionGrantsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sessionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sessionId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSessionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSessionId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get operationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set operationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperationId() => $_clearField(4);
+}
+
+/// Voice asks about the authenticated profile and exact managed session room.
+class CheckGameSessionGrantRequest extends $pb.GeneratedMessage {
+  factory CheckGameSessionGrantRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? sessionId,
+    $core.String? voiceRoomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (sessionId != null) result.sessionId = sessionId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  CheckGameSessionGrantRequest._();
+
+  factory CheckGameSessionGrantRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckGameSessionGrantRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckGameSessionGrantRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'sessionId')
+    ..aOS(4, _omitFieldNames ? '' : 'voiceRoomId')
+    ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckGameSessionGrantRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckGameSessionGrantRequest copyWith(
+          void Function(CheckGameSessionGrantRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CheckGameSessionGrantRequest))
+          as CheckGameSessionGrantRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckGameSessionGrantRequest create() =>
+      CheckGameSessionGrantRequest._();
+  @$core.override
+  CheckGameSessionGrantRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckGameSessionGrantRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CheckGameSessionGrantRequest>(create);
+  static CheckGameSessionGrantRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sessionId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sessionId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSessionId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSessionId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get voiceRoomId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set voiceRoomId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasVoiceRoomId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearVoiceRoomId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get profileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set profileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProfileId() => $_clearField(5);
+}
+
+/// Immutable evidence returned after the Role transaction commits. Hashes are
+/// raw 32-byte SHA-256 values. Replayed operations return their original receipt.
+class GameSessionGrantReceipt extends $pb.GeneratedMessage {
+  factory GameSessionGrantReceipt({
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? sessionId,
+    $core.List<$core.int>? requestSha256,
+    $fixnum.Int64? rosterRevision,
+    $core.List<$core.int>? appliedProfileSetSha256,
+    GameSessionGrantOutcome? outcome,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (sessionId != null) result.sessionId = sessionId;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (rosterRevision != null) result.rosterRevision = rosterRevision;
+    if (appliedProfileSetSha256 != null)
+      result.appliedProfileSetSha256 = appliedProfileSetSha256;
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  GameSessionGrantReceipt._();
+
+  factory GameSessionGrantReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GameSessionGrantReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GameSessionGrantReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(4, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(5, _omitFieldNames ? '' : 'sessionId')
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..a<$fixnum.Int64>(
+        7, _omitFieldNames ? '' : 'rosterRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'appliedProfileSetSha256', $pb.PbFieldType.OY)
+    ..aE<GameSessionGrantOutcome>(9, _omitFieldNames ? '' : 'outcome',
+        enumValues: GameSessionGrantOutcome.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GameSessionGrantReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GameSessionGrantReceipt copyWith(
+          void Function(GameSessionGrantReceipt) updates) =>
+      super.copyWith((message) => updates(message as GameSessionGrantReceipt))
+          as GameSessionGrantReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GameSessionGrantReceipt create() => GameSessionGrantReceipt._();
+  @$core.override
+  GameSessionGrantReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GameSessionGrantReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GameSessionGrantReceipt>(create);
+  static GameSessionGrantReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get applicationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set applicationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasApplicationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearApplicationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get environmentId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set environmentId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasEnvironmentId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearEnvironmentId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get sessionId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set sessionId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSessionId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSessionId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get requestSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRequestSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRequestSha256() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get rosterRevision => $_getI64(6);
+  @$pb.TagNumber(7)
+  set rosterRevision($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasRosterRevision() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearRosterRevision() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get appliedProfileSetSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set appliedProfileSetSha256($core.List<$core.int> value) =>
+      $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAppliedProfileSetSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAppliedProfileSetSha256() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  GameSessionGrantOutcome get outcome => $_getN(8);
+  @$pb.TagNumber(9)
+  set outcome(GameSessionGrantOutcome value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasOutcome() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearOutcome() => $_clearField(9);
+}
+
+class ApplyGameSessionGrantsResponse extends $pb.GeneratedMessage {
+  factory ApplyGameSessionGrantsResponse({
+    GameSessionGrantReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ApplyGameSessionGrantsResponse._();
+
+  factory ApplyGameSessionGrantsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyGameSessionGrantsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyGameSessionGrantsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<GameSessionGrantReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: GameSessionGrantReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameSessionGrantsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyGameSessionGrantsResponse copyWith(
+          void Function(ApplyGameSessionGrantsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyGameSessionGrantsResponse))
+          as ApplyGameSessionGrantsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameSessionGrantsResponse create() =>
+      ApplyGameSessionGrantsResponse._();
+  @$core.override
+  ApplyGameSessionGrantsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyGameSessionGrantsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyGameSessionGrantsResponse>(create);
+  static ApplyGameSessionGrantsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  GameSessionGrantReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(GameSessionGrantReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  GameSessionGrantReceipt ensureReceipt() => $_ensure(0);
+}
+
+class RevokeGameSessionGrantsResponse extends $pb.GeneratedMessage {
+  factory RevokeGameSessionGrantsResponse({
+    GameSessionGrantReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  RevokeGameSessionGrantsResponse._();
+
+  factory RevokeGameSessionGrantsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RevokeGameSessionGrantsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RevokeGameSessionGrantsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOM<GameSessionGrantReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: GameSessionGrantReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeGameSessionGrantsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RevokeGameSessionGrantsResponse copyWith(
+          void Function(RevokeGameSessionGrantsResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RevokeGameSessionGrantsResponse))
+          as RevokeGameSessionGrantsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RevokeGameSessionGrantsResponse create() =>
+      RevokeGameSessionGrantsResponse._();
+  @$core.override
+  RevokeGameSessionGrantsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RevokeGameSessionGrantsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RevokeGameSessionGrantsResponse>(
+          create);
+  static RevokeGameSessionGrantsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  GameSessionGrantReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(GameSessionGrantReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  GameSessionGrantReceipt ensureReceipt() => $_ensure(0);
+}
+
+class CheckGameSessionGrantResponse extends $pb.GeneratedMessage {
+  factory CheckGameSessionGrantResponse({
+    $core.bool? allowed,
+  }) {
+    final result = create();
+    if (allowed != null) result.allowed = allowed;
+    return result;
+  }
+
+  CheckGameSessionGrantResponse._();
+
+  factory CheckGameSessionGrantResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckGameSessionGrantResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckGameSessionGrantResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.role.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'allowed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckGameSessionGrantResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckGameSessionGrantResponse copyWith(
+          void Function(CheckGameSessionGrantResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CheckGameSessionGrantResponse))
+          as CheckGameSessionGrantResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckGameSessionGrantResponse create() =>
+      CheckGameSessionGrantResponse._();
+  @$core.override
+  CheckGameSessionGrantResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckGameSessionGrantResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CheckGameSessionGrantResponse>(create);
+  static CheckGameSessionGrantResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get allowed => $_getBF(0);
+  @$pb.TagNumber(1)
+  set allowed($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAllowed() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAllowed() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

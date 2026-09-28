@@ -164,6 +164,8 @@ const ProvisionManagedChatResponse$json = {
   '2': [
     {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
     {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
+    {'1': 'receipt_id', '3': 3, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 4, '4': 1, '5': 9, '10': 'requestHash'},
   ],
 };
 
@@ -171,7 +173,8 @@ const ProvisionManagedChatResponse$json = {
 final $typed_data.Uint8List provisionManagedChatResponseDescriptor =
     $convert.base64Decode(
         'ChxQcm92aXNpb25NYW5hZ2VkQ2hhdFJlc3BvbnNlEhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZB'
-        'IaCghyZXBsYXllZBgCIAEoCFIIcmVwbGF5ZWQ=');
+        'IaCghyZXBsYXllZBgCIAEoCFIIcmVwbGF5ZWQSHQoKcmVjZWlwdF9pZBgDIAEoCVIJcmVjZWlw'
+        'dElkEiEKDHJlcXVlc3RfaGFzaBgEIAEoCVILcmVxdWVzdEhhc2g=');
 
 @$core.Deprecated('Use syncManagedChatMembersRequestDescriptor instead')
 const SyncManagedChatMembersRequest$json = {
@@ -198,6 +201,8 @@ const SyncManagedChatMembersResponse$json = {
   '2': [
     {'1': 'profile_ids', '3': 1, '4': 3, '5': 9, '10': 'profileIds'},
     {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
+    {'1': 'receipt_id', '3': 3, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 4, '4': 1, '5': 9, '10': 'requestHash'},
   ],
 };
 
@@ -205,7 +210,8 @@ const SyncManagedChatMembersResponse$json = {
 final $typed_data.Uint8List syncManagedChatMembersResponseDescriptor =
     $convert.base64Decode(
         'Ch5TeW5jTWFuYWdlZENoYXRNZW1iZXJzUmVzcG9uc2USHwoLcHJvZmlsZV9pZHMYASADKAlSCn'
-        'Byb2ZpbGVJZHMSGgoIcmVwbGF5ZWQYAiABKAhSCHJlcGxheWVk');
+        'Byb2ZpbGVJZHMSGgoIcmVwbGF5ZWQYAiABKAhSCHJlcGxheWVkEh0KCnJlY2VpcHRfaWQYAyAB'
+        'KAlSCXJlY2VpcHRJZBIhCgxyZXF1ZXN0X2hhc2gYBCABKAlSC3JlcXVlc3RIYXNo');
 
 @$core.Deprecated('Use createDMRequestDescriptor instead')
 const CreateDMRequest$json = {

@@ -318,9 +318,13 @@ identity-provider calls. The workflow compiles one test binary into the
 per-run state volume before any claim lease is created, verifies that binary
 exists, then invokes the same binary in each fresh receiver container. This
 keeps the immediate post-restart lease assertion independent of cold Go module
-downloads or compilation time. Run the workflow with `workflow_dispatch` on the
-exact T31 branch or let matching pull request paths trigger it; keep SE02 open
-until that hosted run passes. Its Compose graph includes File and MinIO through
+downloads or compilation time. Hosted run `36481450312` passed on PR #550 head
+`a15fefc6d41e27534996f8dceb049ea47566d463`; its sanitized application,
+environment, event, lease, payload hash, rollback, and ACK replay evidence is
+recorded in `tmp/slave-driver/game-integrations-2026-09-27/STATE.md`. The run
+proves this HTTPS consumer/restart matrix, while the other SE02 lifecycle
+assertions remain governed by their focused tests and acceptance entries. Its
+Compose graph includes File and MinIO through
 Gateway dependencies, so CI reads the repository's pinned MinIO images from
 GHCR using the job-scoped `packages: read` permission; no additional registry
 secret is required.

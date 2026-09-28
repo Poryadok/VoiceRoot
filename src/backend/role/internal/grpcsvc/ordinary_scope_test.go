@@ -219,9 +219,14 @@ func TestOrdinaryHandlerFences(t *testing.T) {
 		covered[tc.name] = true
 	}
 	excluded := map[string]bool{"ApplyOwnershipTransfer": true, "CompensateOwnershipTransfer": true, "GetOwnershipTransferCapabilities": true, "PrepareOwnershipTransfer": true, "FinalizeOwnershipTransfer": true, "AbortOwnershipTransfer": true, "ApplySpaceLifecycleFence": true, "RetireSpace": true}
+	trustedServiceMethods := map[string]bool{
+		"ApplyGameSessionGrants":  true,
+		"RevokeGameSessionGrants": true,
+		"CheckGameSessionGrant":   true,
+	}
 	trustedUnregistered := map[string]bool{"ResolveVoiceRoomGrants": true}
 	for _, method := range rolev1.RoleService_ServiceDesc.Methods {
-		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
+		require.True(t, covered[method.MethodName] || excluded[method.MethodName] || trustedServiceMethods[method.MethodName] || trustedUnregistered[method.MethodName], method.MethodName)
 	}
 	f := newOrdinaryHandlerFixture(t, ctx, pool)
 	prepareOrdinaryHandlerFixture(t, ctx, pool, f)
