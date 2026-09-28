@@ -84,4 +84,36 @@ void main() {
     ]);
     expect(claims.where((claimed) => claimed), hasLength(1));
   });
+
+  test(
+    'server claim still displays when local timestamp write fails',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'voice.auth.guest_reminder_first_entry.guest-acct-3': true,
+      });
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      const accountId = 'guest-acct-3';
+      await guestStorage.markNicknameCompleted(accountId);
+      final client = authClient();
+      final controller = GuestSaveAccountReminderController(
+        guestStorage: guestStorage,
+        authClient: client,
+        persistLastShown: (_, _) async =>
+            throw StateError('local storage unavailable'),
+      );
+
+      expect(
+        await controller.showAndMark(accountId, authorization: 'Bearer guest'),
+        isTrue,
+      );
+      final reloaded = GuestSaveAccountReminderController(
+        guestStorage: guestStorage,
+        authClient: client,
+      );
+      expect(
+        await reloaded.showAndMark(accountId, authorization: 'Bearer guest'),
+        isFalse,
+      );
+    },
+  );
 }

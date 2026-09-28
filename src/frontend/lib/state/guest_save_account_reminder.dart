@@ -37,13 +37,18 @@ class GuestSaveAccountReminderController {
     required GuestCredentialsStorage guestStorage,
     VoiceAuthClient? authClient,
     SharedPreferences? prefs,
+    Future<void> Function(String accountId, int shownAtMillis)?
+    persistLastShown,
   }) : _guestStorage = guestStorage,
        _authClient = authClient,
-       _prefs = prefs;
+       _prefs = prefs,
+       _persistLastShown = persistLastShown;
 
   final GuestCredentialsStorage _guestStorage;
   final VoiceAuthClient? _authClient;
   SharedPreferences? _prefs;
+  final Future<void> Function(String accountId, int shownAtMillis)?
+  _persistLastShown;
 
   static const _lastShownKeyPrefix = 'voice.auth.guest_reminder_shown.';
   static const _firstEntryDonePrefix = 'voice.auth.guest_reminder_first_entry.';
@@ -108,11 +113,14 @@ class GuestSaveAccountReminderController {
       return false;
     }
     try {
-      final prefs = await _preferences();
-      await prefs.setInt(
-        '$_lastShownKeyPrefix$accountId',
-        DateTime.now().millisecondsSinceEpoch,
-      );
+      final shownAtMillis = DateTime.now().millisecondsSinceEpoch;
+      final persistLastShown = _persistLastShown;
+      if (persistLastShown != null) {
+        await persistLastShown(accountId, shownAtMillis);
+      } else {
+        final prefs = await _preferences();
+        await prefs.setInt('$_lastShownKeyPrefix$accountId', shownAtMillis);
+      }
     } catch (_) {
       // The server owns the claim; local persistence is only a fast path.
     }
