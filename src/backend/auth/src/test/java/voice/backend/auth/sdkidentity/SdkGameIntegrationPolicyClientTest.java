@@ -161,6 +161,127 @@ class SdkGameIntegrationPolicyClientTest {
   }
 
   @Test
+  void issuesExecutionPermitWithVersionTwoAssertionBoundSigningVectorAndStrictResponse() throws Exception {
+    UUID binding = UUID.fromString("30000000-0000-4000-8000-000000000003");
+    UUID operation = UUID.fromString("40000000-0000-4000-8000-000000000004");
+    UUID permit = UUID.fromString("50000000-0000-4000-8000-000000000005");
+    UUID assertionId = UUID.fromString("60000000-0000-4000-8000-000000000006");
+    String assertion = compactAssertion(assertionId);
+    String path = "/internal/v1/game-integrations/bindings/" + binding + "/execution-permits";
+    String body = "{\"operation_id\":\"" + operation + "\"}";
+    String responseBody = "{\"permit_id\":\"" + permit + "\",\"binding_id\":\"" + binding
+        + "\",\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"binding_revision\":7,\"assertion_jti\":\"" + assertionId
+        + "\",\"operation_id\":\"" + operation + "\",\"expires_at\":\"2026-09-26T12:34:58Z\"}";
+    AtomicReference<String> received = new AtomicReference<>();
+    AtomicReference<String> requestNonce = new AtomicReference<>();
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      requestNonce.set(nonce);
+      String sentBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+      received.set(exchange.getRequestMethod() + "\n" + exchange.getRequestURI().getRawPath() + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Workload") + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Workload-Version") + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Device-Authority") + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Signature") + "\n" + sentBody);
+      respond(exchange, 200, responseBody, timestamp, nonce, responseSignature(path, timestamp, nonce, responseBody));
+    });
+
+    var issued = client(baseUrl()).issue(binding, operation, assertion);
+
+    String[] request = received.get().split("\n", -1);
+    assertThat(request[0]).isEqualTo("POST");
+    assertThat(request[1]).isEqualTo(path);
+    assertThat(request[2]).isEqualTo("auth");
+    assertThat(request[3]).isEqualTo("2");
+    assertThat(request[4]).isEqualTo(assertion);
+    assertThat(request[5]).isEqualTo(executionPermitRequestSignature(path,
+        Long.toString(CLOCK.instant().getEpochSecond()), requestNonce.get(), body, assertion));
+    assertThat(request[6]).isEqualTo(body);
+    assertThat(issued.permitId()).isEqualTo(permit);
+    assertThat(issued.bindingId()).isEqualTo(binding);
+    assertThat(issued.operationId()).isEqualTo(operation);
+    assertThat(issued.assertionJti()).isEqualTo(assertionId);
+  }
+
+  @Test
+  void completionUsesExactV1BodySignatureAndRejectsDivergentOrUnknownReceiptFields() throws Exception {
+    UUID permit = UUID.fromString("50000000-0000-4000-8000-000000000005");
+    UUID operation = UUID.fromString("40000000-0000-4000-8000-000000000004");
+    String path = "/internal/v1/game-integrations/execution-permits/" + permit + "/completion";
+    String body = "{\"operation_id\":\"" + operation + "\",\"outcome\":\"committed\"}";
+    String responseBody = "{\"permit_id\":\"" + permit + "\",\"operation_id\":\"" + operation
+        + "\",\"outcome\":\"committed\",\"status\":\"completed\"}";
+    AtomicReference<String> received = new AtomicReference<>();
+    AtomicReference<String> requestNonce = new AtomicReference<>();
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      requestNonce.set(nonce);
+      String sentBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+      received.set(exchange.getRequestMethod() + "\n" + exchange.getRequestURI().getRawPath() + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Workload") + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Signature") + "\n" + sentBody);
+      respond(exchange, 200, responseBody, timestamp, nonce, responseSignature(path, timestamp, nonce, responseBody));
+    });
+
+    var completion = client(baseUrl()).complete(permit, operation, "committed");
+
+    String[] request = received.get().split("\n", -1);
+    assertThat(request[0]).isEqualTo("POST");
+    assertThat(request[1]).isEqualTo(path);
+    assertThat(request[2]).isEqualTo("auth");
+    assertThat(request[3]).isEqualTo(bodyRequestSignature("POST", path,
+        Long.toString(CLOCK.instant().getEpochSecond()), requestNonce.get(), body));
+    assertThat(request[4]).isEqualTo(body);
+    assertThat(completion.permitId()).isEqualTo(permit);
+    assertThat(completion.operationId()).isEqualTo(operation);
+    assertThat(completion.outcome()).isEqualTo("committed");
+
+    stopServer();
+    server = null;
+    String extraFieldReceipt = responseBody.substring(0, responseBody.length() - 1) + ",\"extra\":true}";
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      respond(exchange, 200, extraFieldReceipt, timestamp, nonce,
+          responseSignature(path, timestamp, nonce, extraFieldReceipt));
+    });
+    assertThatThrownBy(() -> client(baseUrl()).complete(permit, operation, "committed"))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+  }
+
+  @Test
+  void rejectsSignedExecutionPermitWithUnknownFieldWrongOperationOrExpiryOutsideWindow() throws Exception {
+    UUID binding = UUID.fromString("30000000-0000-4000-8000-000000000003");
+    UUID operation = UUID.fromString("40000000-0000-4000-8000-000000000004");
+    UUID assertionId = UUID.fromString("60000000-0000-4000-8000-000000000006");
+    UUID permit = UUID.fromString("50000000-0000-4000-8000-000000000005");
+    String assertion = compactAssertion(assertionId);
+    String path = "/internal/v1/game-integrations/bindings/" + binding + "/execution-permits";
+    List<String> invalidReceipts = List.of(
+        executionPermitReceipt(permit, binding, operation, assertionId, "2026-09-26T12:34:58Z")
+            .replace("}", ",\"unexpected\":true}"),
+        executionPermitReceipt(permit, binding, UUID.fromString("70000000-0000-4000-8000-000000000007"), assertionId,
+            "2026-09-26T12:34:58Z"),
+        executionPermitReceipt(permit, binding, operation, assertionId, "2026-09-26T12:34:56.500Z"),
+        executionPermitReceipt(permit, binding, operation, assertionId, "2026-09-26T12:35:00.751Z"));
+
+    for (String body : invalidReceipts) {
+      start(exchange -> {
+        String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+        String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+        respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+      });
+      assertThatThrownBy(() -> client(baseUrl()).issue(binding, operation, assertion))
+          .isInstanceOf(SdkIdentityDeniedException.class);
+      stopServer();
+      server = null;
+    }
+  }
+
+  @Test
   void rejectsResponseSignatureThatDoesNotBindExactBodyBytes() throws Exception {
     start(exchange -> {
       String path = exchange.getRequestURI().getRawPath();
@@ -343,6 +464,30 @@ class SdkGameIntegrationPolicyClientTest {
   private static String bodyRequestSignature(String method, String path, String timestamp, String nonce, String body) throws Exception {
     String bodyHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body.getBytes(StandardCharsets.UTF_8)));
     return hmac("v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + bodyHash);
+  }
+
+  private static String executionPermitRequestSignature(String path, String timestamp, String nonce,
+      String body, String assertion) throws Exception {
+    String bodyHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+        .digest(body.getBytes(StandardCharsets.UTF_8)));
+    String assertionHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+        .digest(assertion.getBytes(StandardCharsets.UTF_8)));
+    return hmac("v2\nPOST\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + bodyHash + "\n" + assertionHash);
+  }
+
+  private static String compactAssertion(UUID jti) {
+    Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+    String header = encoder.encodeToString("{\"alg\":\"RS256\"}".getBytes(StandardCharsets.UTF_8));
+    String payload = encoder.encodeToString(("{\"jti\":\"" + jti + "\"}").getBytes(StandardCharsets.UTF_8));
+    return header + "." + payload + ".AA";
+  }
+
+  private static String executionPermitReceipt(UUID permit, UUID binding, UUID operation, UUID assertionId,
+      String expiresAt) {
+    return "{\"permit_id\":\"" + permit + "\",\"binding_id\":\"" + binding
+        + "\",\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"binding_revision\":7,\"assertion_jti\":\"" + assertionId
+        + "\",\"operation_id\":\"" + operation + "\",\"expires_at\":\"" + expiresAt + "\"}";
   }
 
   private static String responseSignature(String path, String timestamp, String nonce, String body) throws Exception {

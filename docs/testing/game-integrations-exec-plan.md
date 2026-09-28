@@ -318,9 +318,18 @@ contracts land before consumers; activation lands after all consumers.
   expiry; Auth exact approval retry returns the same encrypted one-use code and
   challenge receipt only while unconsumed/unexpired. Focused PostgreSQL tests
   cover exact retry, changed-profile conflict and consumed-code rejection.
-  Gateway does not yet publish the API. T16 remains open: Auth→Messaging
-  execution-permit aggregation/direct-scope checks and broader PostgreSQL
-  concurrency/replay and revoke-drain timing tests. Selected-profile/alias fanout and hidden-profile non-leak across
+  Gateway does not yet publish the API. The T16 Auth→Messaging execution-
+  permit bridge is implemented on the feature integration branch: Auth issues
+  and completes the short-lived permit; Messaging verifies it, checks the GIS
+  app/environment/binding/chat mapping before permit issuance, and atomically
+  stores the message receipt with the completion outbox. Messaging uses the
+  private GIS lookup over mTLS plus WorkloadProof v1, verifies the response
+  with the request's same key, enforces a 2-second timeout, and fails closed
+  when the complete client configuration or mapping authority is unavailable.
+  Scoped Auth and Messaging tests, including an ApplyGameMessage-through-client
+  mTLS allow/deny test with local PostgreSQL, pass. T16 remains open for broader
+  PostgreSQL concurrency/replay and revoke-drain timing evidence, independent
+  direct-call scope checks and selected-profile policy surfaces. Selected-profile/alias fanout and hidden-profile non-leak across
   roster/cards/search/presence belong to the separately named consumer task;
   Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Keep
   downstream message writes fail-closed until their

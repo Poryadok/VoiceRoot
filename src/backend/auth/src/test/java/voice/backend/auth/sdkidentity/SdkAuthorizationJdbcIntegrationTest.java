@@ -23,6 +23,7 @@ import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,6 +42,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -180,6 +182,10 @@ class SdkAuthorizationJdbcIntegrationTest {
 
   @Test
   void bindingExchangeConsumesTheT14CodeOnceAndReplaysOnlyWithTheRegisteredDeviceProof() throws Exception {
+    Set<String> executionScopes = new java.util.HashSet<>(SCOPES);
+    executionScopes.add("game.chat.send");
+    policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), executionScopes,
+        Set.of("google")));
     UUID challengeId = UUID.randomUUID();
     UUID authorizationKey = UUID.randomUUID();
     UUID operationId = authorizationKey;
@@ -204,11 +210,11 @@ class SdkAuthorizationJdbcIntegrationTest {
     var service = authorizationForBinding(CLOCK, challengeAuthority, issuer);
     String codeChallenge = pkce(VERIFIER);
     String requestHash = hash("voice-sdk-authorization-request-v1\n" + authorizationKey + "\n" + REDIRECT
-        + "\n" + codeChallenge + "\n" + STATE + "\n" + String.join(",", SCOPES.stream().sorted().toList())
+        + "\n" + codeChallenge + "\n" + STATE + "\n" + String.join(",", executionScopes.stream().sorted().toList())
         + "\n" + authorizationKey);
     var request = service.start(source.accessToken(), proof(device,
         "voice-sdk-authorize-v1\n" + hash(source.accessToken()) + "\n" + requestHash), authorizationKey, REDIRECT,
-        codeChallenge, STATE, SCOPES, true);
+        codeChallenge, STATE, executionScopes, true);
     var approval = service.approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3);
     assertThat(approval.gameBindingChallengeId()).isEqualTo(challengeId);
     assertThat(approval.gameBindingNonce()).isEqualTo("n".repeat(43));
@@ -226,7 +232,7 @@ class SdkAuthorizationJdbcIntegrationTest {
     assertThat(verified.challengeId()).isEqualTo(challengeId);
     assertThat(verified.operationId()).isEqualTo(operationId);
     assertThat(verified.targetProfileId()).isEqualTo(secondaryProfile);
-    assertThat(verified.scopes()).containsExactlyElementsOf(SCOPES.stream().sorted().toList());
+    assertThat(verified.scopes()).containsExactlyElementsOf(executionScopes.stream().sorted().toList());
     assertThat(verified.providerSubjectDigest()).matches("hmac-sha256-v1:digest-2026:[0-9a-f]{64}");
     assertThat(service.exchangeGameBinding(challengeId, operationId, approval.code(), VERIFIER, deviceProof))
         .isEqualTo(handoff);
@@ -246,15 +252,149 @@ class SdkAuthorizationJdbcIntegrationTest {
     assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_binding_handoff_issuances WHERE operation_id=:id",
         Map.of("id", operationId), Long.class)).isEqualTo(1L);
 
-    var pendingRevoke = authClaims.revoke(operationId);
-    assertThat(pendingRevoke.status()).isEqualTo("revoking");
-    assertThat(authClaims.claim(handoff, deviceProof, operationId, mutationHash))
-        .as("exact accepted-operation retry remains idempotent while revoke blocks new claims")
-        .isEqualTo(claim);
     UUID bindingId = UUID.randomUUID();
     authClaims.complete(claim.claimId(), operationId, "succeeded", bindingId);
-    var revoked = authClaims.revoke(operationId);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_grants WHERE binding_id=:binding",
+        Map.of("binding", bindingId), Long.class)).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("SELECT status FROM sdk_game_message_grants WHERE binding_id=:binding",
+        Map.of("binding", bindingId), String.class)).isEqualTo("active");
+    long deviceAuthorityRevision = jdbc.queryForObject("SELECT authority_revision FROM sdk_devices WHERE device_id=:id",
+        Map.of("id", source.deviceId()), Long.class);
+    Timestamp keyExpiry = jdbc.queryForObject("SELECT not_after FROM sdk_device_keys WHERE key_id=:id",
+        Map.of("id", source.keyId()), Timestamp.class);
+    var deviceClaims = new java.util.TreeMap<String, Object>();
+    deviceClaims.put("version", 1L); deviceClaims.put("iss", "auth"); deviceClaims.put("aud", "voice.game-message");
+    deviceClaims.put("jti", UUID.randomUUID().toString()); deviceClaims.put("application_id", app.toString());
+    deviceClaims.put("environment_id", env.toString()); deviceClaims.put("account_id", source.accountId().toString());
+    deviceClaims.put("actor_id", source.actorId().toString()); deviceClaims.put("binding_id", bindingId.toString());
+    deviceClaims.put("device_id", source.deviceId().toString()); deviceClaims.put("key_id", source.keyId().toString());
+    deviceClaims.put("public_jwk", device.toPublicJWK().toJSONObject());
+    deviceClaims.put("key_thumbprint", device.computeThumbprint().toString());
+    deviceClaims.put("device_generation", source.deviceGeneration());
+    deviceClaims.put("authority_revision", deviceAuthorityRevision); deviceClaims.put("status", "active");
+    deviceClaims.put("not_after", keyExpiry.toInstant().toEpochMilli()); deviceClaims.put("iat", NOW.toEpochMilli());
+    deviceClaims.put("exp", NOW.plusSeconds(4).toEpochMilli());
+    String deviceAssertion = issuer.issueDeviceStatus(deviceClaims);
+    var verifiedDevice = issuer.verifyDeviceStatusAssertion(deviceAssertion);
+    jdbc.update("""
+        INSERT INTO sdk_device_authority_issues(request_id,request_bytes,session_token_hash,assertion,device_id,key_id,issued_at,expires_at)
+        VALUES (:id,:bytes,:session,:assertion,:device,:key,:issued,:expires)
+        """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+            .addValue("id", UUID.randomUUID()).addValue("bytes", "permit-authority-request".getBytes(StandardCharsets.US_ASCII))
+            .addValue("session", hash(source.accessToken())).addValue("assertion", deviceAssertion)
+            .addValue("device", source.deviceId()).addValue("key", source.keyId()).addValue("issued", Timestamp.from(NOW))
+            .addValue("expires", Timestamp.from(NOW.plusSeconds(4))));
+    var currentDeviceAuthority = jdbc.queryForMap("""
+        SELECT s.token_hash IS NOT NULL AS session_found, i.status AS identity_status,
+               x.device_id=s.device_id AS issue_device_matches, x.key_id=k.key_id AS issue_key_matches,
+               d.revoked_at IS NULL AS device_live, k.revoked_at IS NULL AS key_not_revoked,
+               i.actor_id, i.application_id, i.environment_id,
+               i.ownership_generation, d.authority_revision, k.generation, k.key_thumbprint,
+               k.status, k.not_before<=:now AS key_started, k.not_after>:now AS key_live,
+               x.expires_at>:now AS assertion_live
+        FROM sdk_device_authority_issues x
+        LEFT JOIN sdk_sessions s ON s.token_hash=x.session_token_hash
+        LEFT JOIN sdk_identities i ON i.account_id=s.account_id
+        LEFT JOIN sdk_devices d ON d.device_id=s.device_id
+        LEFT JOIN sdk_device_keys k ON k.device_id=d.device_id AND k.key_id=x.key_id
+        WHERE x.assertion=:assertion
+        """, Map.of("now", Timestamp.from(NOW), "assertion", deviceAssertion));
+    assertThat(currentDeviceAuthority.get("session_found")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("identity_status")).isEqualTo("active");
+    assertThat(currentDeviceAuthority.get("issue_device_matches")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("issue_key_matches")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("device_live")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("key_not_revoked")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("actor_id")).isEqualTo(verifiedDevice.actorId());
+    assertThat(currentDeviceAuthority.get("application_id")).isEqualTo(app);
+    assertThat(currentDeviceAuthority.get("environment_id")).isEqualTo(env);
+    assertThat(((Number) currentDeviceAuthority.get("ownership_generation")).longValue()).isEqualTo(verifiedDevice.deviceGeneration());
+    assertThat(((Number) currentDeviceAuthority.get("authority_revision")).longValue()).isEqualTo(verifiedDevice.authorityRevision());
+    assertThat(((Number) currentDeviceAuthority.get("generation")).longValue()).isEqualTo(verifiedDevice.deviceGeneration());
+    assertThat(currentDeviceAuthority.get("key_thumbprint")).isEqualTo(verifiedDevice.keyThumbprint());
+    assertThat(currentDeviceAuthority.get("status")).isIn("active", "overlap");
+    assertThat(currentDeviceAuthority.get("key_started")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("key_live")).isEqualTo(true);
+    assertThat(currentDeviceAuthority.get("assertion_live")).isEqualTo(true);
+    UUID messageOperation = UUID.randomUUID();
+    String messageHash = hash("canonical message payload");
+    AtomicReference<Instant> gisPermitExpiry = new AtomicReference<>(NOW.plusMillis(3000));
+    CountDownLatch gisIssueEntered = new CountDownLatch(1);
+    CountDownLatch allowGisIssueToFinish = new CountDownLatch(1);
+    SdkGameIntegrationExecutionPermitAuthority gisAuthority = new SdkGameIntegrationExecutionPermitAuthority() {
+      @Override public Permit issue(UUID binding, UUID operation, String assertion) {
+        if (operation.equals(messageOperation)) {
+          gisIssueEntered.countDown();
+          try {
+            if (!allowGisIssueToFinish.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("GIS issue test gate timed out");
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("GIS issue test gate interrupted", interrupted);
+          }
+        }
+        return new Permit(UUID.fromString("eb4ac69b-8ebd-45f7-9b5b-3947912a85b1"), binding, app, env, 9,
+            verifiedDevice.jti(), operation, gisPermitExpiry.get());
+      }
+      @Override public Completion complete(UUID permit, UUID operation, String outcome) {
+        return new Completion(permit, operation, outcome, "completed");
+      }
+    };
+    var executionPermits = new AuthGameMessageExecutionPermitService(jdbc,
+        new TransactionTemplate(new DataSourceTransactionManager(database)), issuer,
+        (application, environment) -> policy.get(), (account, selected) -> profile.get(), gisAuthority, CLOCK);
+    for (Instant invalidExpiry : List.of(NOW.plusMillis(500), NOW.plusMillis(3751))) {
+      gisPermitExpiry.set(invalidExpiry);
+      UUID rejectedOperation = UUID.randomUUID();
+      assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, rejectedOperation, messageHash))
+          .isInstanceOf(SdkIdentityDeniedException.class)
+          .as("Auth must reject GIS permits outside the 500 ms to 3750 ms accepted window");
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
+          Map.of("operation", rejectedOperation), Long.class)).isZero();
+    }
+    gisPermitExpiry.set(NOW.plusMillis(3000));
+    var raceWorkers = Executors.newFixedThreadPool(2);
+    AuthGameMessageExecutionPermitService.Permit issuedPermit;
+    AuthGameBindingHandoffService.RevocationReceipt concurrentRevoke;
+    CountDownLatch revokeStarted = new CountDownLatch(1);
+    try {
+      var permitFuture = raceWorkers.submit(() -> executionPermits.issue(deviceAssertion, messageOperation, messageHash));
+      assertThat(gisIssueEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      var revokeFuture = raceWorkers.submit(() -> {
+        revokeStarted.countDown();
+        return authClaims.revoke(operationId);
+      });
+      assertThat(revokeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      allowGisIssueToFinish.countDown();
+      issuedPermit = permitFuture.get(10, TimeUnit.SECONDS);
+      concurrentRevoke = revokeFuture.get(10, TimeUnit.SECONDS);
+    } finally {
+      allowGisIssueToFinish.countDown();
+      raceWorkers.shutdownNow();
+    }
+    assertThat(concurrentRevoke.status()).isEqualTo("revoking")
+        .as("revoke waits for the permit transaction, then drains its admitted operation");
+    var signedPermit = SignedJWT.parse(issuedPermit.permitJws());
+    UUID permitJti = UUID.fromString(signedPermit.getJWTClaimsSet().getJWTID());
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("scope")).isEqualTo("game.chat.send");
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("profile_id")).isEqualTo(secondaryProfile.toString());
+    assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit);
+    assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, messageOperation, hash("changed payload")))
+        .isInstanceOf(SdkAuthorizationConflictException.class);
+    var revoked = concurrentRevoke;
+    assertThat(revoked.status()).isEqualTo("revoking");
+    assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit)
+        .as("exact operation replay returns the immutable permit while revoke fences new issue");
+    assertThat(executionPermits.complete(permitJti, messageOperation, "committed").status()).isEqualTo("completed");
+    assertThat(executionPermits.complete(permitJti, messageOperation, "committed").status()).isEqualTo("completed");
+    revoked = authClaims.revoke(operationId);
     assertThat(revoked.status()).isEqualTo("revoked");
+    assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit)
+        .as("exact permit replay remains stable after revoke");
+    assertThat(authClaims.claim(handoff, deviceProof, operationId, mutationHash))
+        .as("exact accepted-operation replay remains idempotent after revoke")
+        .isEqualTo(claim);
+    assertThat(jdbc.queryForObject("SELECT status FROM sdk_game_message_grants WHERE binding_id=:binding",
+        Map.of("binding", bindingId), String.class)).isEqualTo("revoked");
     assertThat(jdbc.queryForObject("SELECT game_binding_status FROM sdk_authorizations WHERE request_id=:id",
         Map.of("id", request.requestId()), String.class)).isEqualTo("revoked");
     assertThatThrownBy(() -> authClaims.revoke(UUID.randomUUID())).isInstanceOf(SdkIdentityDeniedException.class);

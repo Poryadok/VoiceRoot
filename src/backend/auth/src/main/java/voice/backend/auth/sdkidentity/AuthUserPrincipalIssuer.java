@@ -62,6 +62,10 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
       long consentRevision, long policyRevision, List<String> scopes, UUID assertionJti,
       Instant issuedAt, Instant expiresAt) {}
 
+  public record VerifiedDeviceStatus(UUID jti, UUID applicationId, UUID environmentId, UUID accountId, UUID actorId,
+      UUID bindingId, UUID deviceId, UUID keyId, String publicJwk, String keyThumbprint, long deviceGeneration,
+      long authorityRevision, long issuedAtMs, long expiresAtMs, long notAfterMs) {}
+
   private static final Set<String> HANDOFF_CLAIMS = Set.of("iss", "sub", "aud", "iat", "nbf", "exp", "jti",
       "version", "authorization_request_id", "operation_id", "challenge_id", "challenge_nonce",
       "application_id", "environment_id", "redirect_uri_sha256", "pkce_challenge", "device_key_id",
@@ -69,6 +73,11 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
       "source_device_id", "device_generation", "target_account_id", "target_profile_id", "profile_revision",
       "consent_revision", "policy_revision", "scopes");
   private static final String GAME_BINDING_HANDOFF_TYP = "voice.game-binding-handoff+jwt";
+  private static final String GAME_MESSAGE_EXECUTION_PERMIT_TYP = "voice.game-message-execution-permit+jwt";
+  private static final Set<String> GAME_MESSAGE_EXECUTION_PERMIT_CLAIMS = Set.of("iss", "aud", "jti", "version",
+      "operation", "scope", "operation_id", "request_sha256", "application_id", "environment_id", "account_id",
+      "actor_id", "binding_id", "profile_id", "device_id", "key_id", "device_generation", "authority_revision",
+      "gis_permit_id", "binding_revision", "assertion_jti", "iat_ms", "expires_at_ms", "exp");
   private static final String GAME_BINDING_SUBJECT_DIGEST = "hmac-sha256-v1:[A-Za-z0-9_-]{1,32}:[0-9a-f]{64}";
 
   private AuthUserPrincipalIssuer(List<RSAKey> keys, RSAKey active, Clock clock) {
@@ -274,6 +283,94 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     }
   }
 
+  /** Verifies a raw Auth device-status assertion against the dedicated principal keyset. */
+  public VerifiedDeviceStatus verifyDeviceStatusAssertion(String compact) {
+    try {
+      if (compact == null || compact.isBlank() || compact.length() > 16_384) throw new IllegalArgumentException();
+      JWSObject jwt = JWSObject.parse(compact);
+      var header = jwt.getHeader();
+      if (!JWSAlgorithm.RS256.equals(header.getAlgorithm())
+          || !"voice.game-device-status+jwt".equals(header.getType().toString())
+          || !header.toJSONObject().keySet().equals(Set.of("alg", "kid", "typ"))) throw new IllegalArgumentException();
+      RSAKey key = keys.stream().filter(candidate -> candidate.getKeyID().equals(header.getKeyID()))
+          .findFirst().orElseThrow(IllegalArgumentException::new);
+      if (!jwt.verify(new com.nimbusds.jose.crypto.RSASSAVerifier(key.toPublicJWK()))) throw new IllegalArgumentException();
+      String payload = new String(jwt.getPayload().toBytes(), java.nio.charset.StandardCharsets.UTF_8);
+      Map<String, Object> claims = JSONObjectUtils.parse(payload);
+      Set<String> expected = Set.of("version", "iss", "aud", "jti", "application_id", "environment_id", "account_id",
+          "actor_id", "binding_id", "device_id", "key_id", "public_jwk", "key_thumbprint", "device_generation",
+          "authority_revision", "status", "not_after", "iat", "exp");
+      if (!claims.keySet().equals(expected) || !canonicalJson(claims).equals(payload)
+          || !positiveVersion(claims.get("version")) || !ISSUER.equals(claims.get("iss"))
+          || !"voice.game-message".equals(claims.get("aud")) || !"active".equals(claims.get("status"))) {
+        throw new IllegalArgumentException();
+      }
+      UUID jti = canonicalUuid((String) claims.get("jti"));
+      UUID app = canonicalUuid((String) claims.get("application_id"));
+      UUID env = canonicalUuid((String) claims.get("environment_id"));
+      UUID account = canonicalUuid((String) claims.get("account_id"));
+      UUID actor = canonicalUuid((String) claims.get("actor_id"));
+      UUID binding = canonicalUuid((String) claims.get("binding_id"));
+      UUID device = canonicalUuid((String) claims.get("device_id"));
+      UUID keyId = canonicalUuid((String) claims.get("key_id"));
+      long generation = positiveLongValue(claims.get("device_generation"));
+      long revision = positiveLongValue(claims.get("authority_revision"));
+      long issued = positiveLongValue(claims.get("iat"));
+      long expires = positiveLongValue(claims.get("exp"));
+      long notAfter = positiveLongValue(claims.get("not_after"));
+      Object thumbprint = claims.get("key_thumbprint");
+      if (!(thumbprint instanceof String thumb) || !thumb.matches("[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException();
+      if (!(claims.get("public_jwk") instanceof Map<?, ?> rawJwk)) throw new IllegalArgumentException();
+      @SuppressWarnings("unchecked") Map<String, Object> jwk = (Map<String, Object>) rawJwk;
+      ECKey deviceKey = ECKey.parse(jwk);
+      if (!Curve.P_256.equals(deviceKey.getCurve()) || deviceKey.isPrivate()
+          || !thumb.equals(deviceKey.computeThumbprint().toString())
+          || !jwk.keySet().equals(Set.of("kty", "crv", "x", "y"))) throw new IllegalArgumentException();
+      long now = clock.instant().toEpochMilli();
+      if (issued > now + 250 || issued < now - 4000 || expires <= now + 250 || expires <= issued
+          || expires - issued > 4000 || expires > notAfter || notAfter <= now || generation <= 0 || revision <= 0) {
+        throw new IllegalArgumentException();
+      }
+      return new VerifiedDeviceStatus(jti, app, env, account, actor, binding, device, keyId,
+          JSONObjectUtils.toJSONString(jwk), thumb, generation, revision, issued, expires, notAfter);
+    } catch (Exception invalid) {
+      throw new IllegalArgumentException("invalid Auth device status assertion", invalid);
+    }
+  }
+
+  /** Signs exactly the frozen Auth-owned game-message execution permit claims. */
+  public String issueGameMessageExecutionPermit(Map<String, Object> claims) {
+    long now = clock.instant().toEpochMilli();
+    if (claims == null || !claims.keySet().equals(GAME_MESSAGE_EXECUTION_PERMIT_CLAIMS)
+        || !Long.valueOf(1).equals(number(claims.get("version")))
+        || !"auth".equals(claims.get("iss")) || !"voice.game-message".equals(claims.get("aud"))
+        || !"message.send".equals(claims.get("operation")) || !"game.chat.send".equals(claims.get("scope"))) {
+      throw new IllegalArgumentException("invalid game-message execution permit claims");
+    }
+    for (String field : List.of("jti", "operation_id", "application_id", "environment_id", "account_id", "actor_id",
+        "binding_id", "profile_id", "device_id", "key_id", "gis_permit_id", "assertion_jti")) {
+      if (!isUuid(claims.get(field))) throw new IllegalArgumentException("invalid game-message execution permit claims");
+    }
+    Object digest = claims.get("request_sha256");
+    if (!(digest instanceof String value) || !value.matches("[0-9a-f]{64}")
+        || !isPositive(number(claims.get("device_generation")))
+        || !isPositive(number(claims.get("authority_revision")))
+        || !isPositive(number(claims.get("binding_revision")))) {
+      throw new IllegalArgumentException("invalid game-message execution permit claims");
+    }
+    Long issuedAt = number(claims.get("iat_ms"));
+    Long expiresAt = number(claims.get("expires_at_ms"));
+    Long expiration = number(claims.get("exp"));
+    if (issuedAt == null || expiresAt == null || expiration == null || issuedAt != now
+        || expiresAt <= issuedAt || expiresAt - issuedAt > 3750
+        || expiration != Math.floorDiv(expiresAt, 1000)) {
+      throw new IllegalArgumentException("invalid game-message execution permit lifetime");
+    }
+    var jwtClaims = new JWTClaimsSet.Builder();
+    claims.forEach(jwtClaims::claim);
+    return sign(jwtClaims.build(), GAME_MESSAGE_EXECUTION_PERMIT_TYP);
+  }
+
   private static void validateHandoff(GameBindingHandoff value) {
     if (value == null || value.authorizationRequestId() == null || value.operationId() == null || value.challengeId() == null
         || value.applicationId() == null || value.environmentId() == null || value.deviceKeyId() == null
@@ -319,6 +416,12 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
 
   private static boolean positiveVersion(Object value) {
     return value instanceof Number number && number.longValue() == 1 && number.doubleValue() == 1;
+  }
+
+  private static long positiveLongValue(Object value) {
+    if (!(value instanceof Number number) || number.longValue() <= 0
+        || number.doubleValue() != number.longValue()) throw new IllegalArgumentException();
+    return number.longValue();
   }
 
   private static Long number(Object value) {

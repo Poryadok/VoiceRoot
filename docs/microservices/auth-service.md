@@ -161,6 +161,76 @@ tests. GIS exchange operation/outbox and T14 challenge creation now have
 focused handler and database lifecycle tests. Broader concurrency/replay tests
 and the Auth-to-Messaging permit aggregator remain open.
 
+### T16 Auth-to-Messaging execution permits
+
+Auth exposes `POST /api/v1/auth/sdk/game-message/execution-permits` and
+`POST /api/v1/auth/sdk/game-message/execution-permits/{permit_jti}/completion`
+only to the registered Messaging workload over mandatory mTLS. The issue
+request contains only the stable `operation_id` and SHA-256 of exact canonical
+message payload bytes; `X-Voice-Device-Authority` is the original compact Auth
+device assertion. Auth returns strict `{ "permit_jws": "..." }` JSON with
+`no-store`. Completion returns the exact GIS receipt fields. These are
+service-to-service routes, not player/Gateway routes.
+
+For a new permit, Auth resolves exactly one persisted SDK authorization row in
+`sdk_authorizations`, joined to its `sdk_linked_sessions` handoff receipt by
+request ID and matching `game_binding_consent_revision`/`consent_revision`.
+The linked-session expiry bounds only handoff delivery and replay; it is not the
+duration of the send grant. The authorization transaction row's `expires_at`
+is not a grant expiry and must not be used to extend or revoke the grant.
+
+When Auth accepts the handoff claim and the player binding becomes active, it
+creates a separate durable Auth-owned `sdk_game_message_grants` row keyed by
+`(application_id, environment_id, target_account_id, target_profile_id)` and
+bound to that binding ID. It stores the exact consent revision, canonical
+scopes and policy/profile revisions, with lifecycle `active`, `revoking`, or
+`revoked`. This grant has no implicit time-to-live: its lifetime source is the
+persisted grant lifecycle. It is valid until an explicit binding/grant revoke
+or a current account, profile, policy, or binding authority transition makes
+it unusable. Reauthorization after revoke creates a new binding and grant
+revision; it never revives the old grant. Auth serializes revoke and permit
+admission on this grant row. Revoke changes it to `revoking` before waiting for
+admitted operations to complete or expire, then marks it `revoked`; while
+revoking, no new permit is admitted.
+
+Auth derives `profile_id` only from the stored authorization's selected
+`target_profile_id` (and its persisted profile-alias selection where
+applicable), never from a request or device assertion. Send scope authority
+comes from the durable grant's consented `scopes` and consent revision,
+intersected with current application/environment policy and current Auth
+account, device, session and binding state. The source SDK principal is the
+standalone `sdk_identities` row; its account ID is not a regular `accounts`
+row. Auth checks that SDK identity's active status and its current session and
+device/key authority. The selected target account is independently checked
+against `accounts.status` and `session_epoch`. An active `game_binding_status`
+proves only that the player binding is active; it does not prove
+`game.chat.send` consent. Auth requires the canonical `game.chat.send` grant
+in persisted consent and current policy, and requires consent, scope, profile
+and policy revisions to remain current. A current SDK authorization row is
+used only to resolve the handoff receipt/consent tuple and must be consumed;
+its short transaction expiry does not bound or extend the durable grant. Auth
+also checks the target account epoch and current User profile eligibility and
+revision. Missing, stale, revoked, expired, ambiguous or mismatched
+consent/profile/binding/policy authority denies the request. Device
+registration, revocation and proof of possession remain independent request
+authority and do not change the durable grant key.
+
+Auth verifies the device-status assertion with its dedicated principal keyset,
+then calls GIS's exact
+`POST /internal/v1/game-integrations/bindings/{binding_id}/execution-permits`
+using WorkloadProof v2 and the same assertion bytes. GIS serializes issue with
+binding revocation, returns the persisted permit for an exact retry, and denies
+new permits after `revoking`. Auth validates the GIS response proof and tuple,
+re-reads consent, account/device/profile/policy/binding authority under the same
+Auth serialization lock, and signs only if every revision remains current.
+The exact Auth JWT header/claim set, GIS request/response proof, 3750 ms maximum
+permit lifetime, Messaging's 250 ms clock margin/transaction budget, and
+4.25-second revoke ceiling are frozen in the
+[game-message API contract](../architecture/game-integration-api.md#messaging-ingress-and-t16-execution-permit).
+An exact retry reuses GIS's permit and returns the same Auth permit; changed
+operation/request digest or divergent completion conflicts. GIS or Auth
+completion uncertainty remains pending.
+
 ### Subscription claims (A7 accepted target; not implemented)
 
 Auth consumes the complete revisioned personal

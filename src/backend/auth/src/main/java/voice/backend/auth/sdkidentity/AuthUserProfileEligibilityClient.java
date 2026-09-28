@@ -40,6 +40,15 @@ public final class AuthUserProfileEligibilityClient implements SdkProfileEligibi
 
   @Override
   public Profile inspect(UUID accountId, UUID profileId) {
+    return inspect(accountId, profileId, deadline);
+  }
+
+  @Override
+  public Profile inspectForExecutionPermit(UUID accountId, UUID profileId) {
+    return inspect(accountId, profileId, Duration.ofMillis(250));
+  }
+
+  private Profile inspect(UUID accountId, UUID profileId, Duration callDeadline) {
     try {
       if (accountId == null || profileId == null) throw denied();
       GetSdkProfileEligibilityRequest request = GetSdkProfileEligibilityRequest.newBuilder()
@@ -49,7 +58,7 @@ public final class AuthUserProfileEligibilityClient implements SdkProfileEligibi
       Metadata headers = new Metadata();
       headers.put(AUTHORIZATION, "Bearer " + token);
       headers.put(REQUEST_ID, requestId);
-      GetSdkProfileEligibilityResponse response = stub.withDeadlineAfter(deadline.toNanos(), TimeUnit.NANOSECONDS)
+      GetSdkProfileEligibilityResponse response = stub.withDeadlineAfter(callDeadline.toNanos(), TimeUnit.NANOSECONDS)
           .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers)).getSdkProfileEligibility(request);
       UUID returnedAccount = canonicalUuid(response.getAccountId());
       UUID returnedProfile = canonicalUuid(response.getProfileId());

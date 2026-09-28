@@ -101,6 +101,20 @@ func loadGameMessageExecutionPermitClient() (*s2s.GameMessageExecutionPermitClie
 	return s2s.NewGameMessageExecutionPermitClient(config)
 }
 
+func loadGameResourceMappingAuthorizationClient() (*s2s.GameResourceMappingAuthorizationClient, error) {
+	config := s2s.GameResourceMappingAuthorizationConfig{
+		Endpoint:          strings.TrimSpace(os.Getenv("GAME_INTEGRATION_MESSAGING_RESOURCE_MAPPING_URL")),
+		TLSCertFile:       strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_TLS_CERT_FILE")),
+		TLSKeyFile:        strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_TLS_KEY_FILE")),
+		CAFile:            strings.TrimSpace(os.Getenv("GAME_INTEGRATION_MESSAGING_CA_FILE")),
+		WorkloadKeyBase64: strings.TrimSpace(os.Getenv("GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64")),
+	}
+	if config.Endpoint == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" && config.WorkloadKeyBase64 == "" {
+		return nil, nil
+	}
+	return s2s.NewGameResourceMappingAuthorizationClient(config)
+}
+
 func startGameTombstoneJWKS(source *s2s.GameTombstoneKeySource) (*http.Server, error) {
 	address := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_LISTEN"))
 	certFile := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE"))
@@ -208,6 +222,13 @@ func main() {
 		}
 		if gameExecutionPermits != nil {
 			defer gameExecutionPermits.Close()
+		}
+		gameResourceMappings, err := loadGameResourceMappingAuthorizationClient()
+		if err != nil {
+			log.Fatalf("game integration resource mapping client: %v", err)
+		}
+		if gameResourceMappings != nil {
+			defer gameResourceMappings.Close()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -444,10 +465,12 @@ func main() {
 		var gameMessages grpcsvc.GameMessageProcessor
 		var gameMessagePermitProcessor *grpcsvc.VerifiedGameMessageProcessor
 		if gameAuthKeys != nil && gameExecutionPermits != nil && chatGuard != nil {
-			gameMessagePermitProcessor = &grpcsvc.VerifiedGameMessageProcessor{Store: &store.MessagesStore{Pool: pool}, AuthKeys: gameAuthKeys, Permits: gameExecutionPermits, Bindings: &grpcsvc.AuthBackedGameBindingAuthority{Chats: chatGuard}, Files: gameFiles}
+			gameMessagePermitProcessor = &grpcsvc.VerifiedGameMessageProcessor{Store: &store.MessagesStore{Pool: pool}, AuthKeys: gameAuthKeys, Permits: gameExecutionPermits, Bindings: &grpcsvc.AuthBackedGameBindingAuthority{Chats: chatGuard, ResourceMappings: gameResourceMappings}, Files: gameFiles}
 			gameMessages = gameMessagePermitProcessor
 			go gameMessagePermitProcessor.RunGameMessagePermitCompletionDispatcher(context.Background(), logger)
-			logger.Warn("ApplyGameMessage new writes remain fail-closed until the T30/T31 app/environment/binding-to-chat resource mapping is available; exact receipts remain readable")
+			if gameResourceMappings == nil {
+				logger.Warn("ApplyGameMessage new writes remain fail-closed until the GIS app/environment/binding-to-chat resource mapping client is configured; exact receipts remain readable")
+			}
 		} else {
 			logger.Warn("ApplyGameMessage is fail-closed because Auth status keys, T16 execution-permit authority, or Chat membership authority is unavailable; exact receipts remain readable when storage is available")
 		}

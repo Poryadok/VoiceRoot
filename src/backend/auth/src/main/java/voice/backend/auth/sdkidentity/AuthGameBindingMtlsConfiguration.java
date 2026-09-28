@@ -28,9 +28,15 @@ public class AuthGameBindingMtlsConfiguration {
   private static final String SERVER_KEY = "AUTH_GAME_BINDING_MTLS_SERVER_KEY_FILE";
   private static final String CLIENT_CA = "AUTH_GAME_BINDING_MTLS_CLIENT_CA_FILE";
   private static final String CLIENT_SAN = "AUTH_GAME_BINDING_MTLS_ALLOWED_CLIENT_URI_SAN";
+  private static final String MESSAGING_CLIENT_SAN = "AUTH_GAME_MESSAGE_EXECUTION_PERMIT_ALLOWED_CLIENT_URI_SAN";
 
   record Settings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
-                  Path clientCaFile, String allowedClientUriSan) {}
+                  Path clientCaFile, String allowedClientUriSan, String allowedMessagingClientUriSan) {
+    Settings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile, Path clientCaFile,
+        String allowedClientUriSan) {
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, allowedClientUriSan, "");
+    }
+  }
 
   static Settings settings(Environment environment) {
     String rawPort = property(environment, "voice.auth.game-binding.mtls.port", PORT);
@@ -38,22 +44,24 @@ public class AuthGameBindingMtlsConfiguration {
     String key = property(environment, "voice.auth.game-binding.mtls.server-key-file", SERVER_KEY);
     String ca = property(environment, "voice.auth.game-binding.mtls.client-ca-file", CLIENT_CA);
     String san = property(environment, "voice.auth.game-binding.mtls.allowed-client-uri-san", CLIENT_SAN);
-    boolean configured = List.of(cert, key, ca, san).stream().anyMatch(value -> !value.isBlank());
+    String messagingSan = property(environment, "voice.auth.game-message.mtls.allowed-client-uri-san", MESSAGING_CLIENT_SAN);
+    boolean configured = List.of(cert, key, ca, san, messagingSan).stream().anyMatch(value -> !value.isBlank());
     if (rawPort == null || rawPort.isBlank()) {
       if (configured) throw invalid();
-      return new Settings(false, 0, null, null, null, null);
+      return new Settings(false, 0, null, null, null, null, null);
     }
     final int port;
     try { port = Integer.parseInt(rawPort); }
     catch (NumberFormatException malformed) { throw invalid(); }
-    if (port == 0 && !configured) return new Settings(false, 0, null, null, null, null);
+    if (port == 0 && !configured) return new Settings(false, 0, null, null, null, null, null);
     if (port < 1 || port > 65535 || cert.isBlank() || key.isBlank() || ca.isBlank()
         || !validUriSan(san)) throw invalid();
     Path certPath = readableFile(cert);
     Path keyPath = readableFile(key);
     Path caPath = readableFile(ca);
     validateCertificateMaterial(certPath, keyPath, caPath);
-    return new Settings(true, port, certPath, keyPath, caPath, san);
+    if (!messagingSan.isBlank() && !validUriSan(messagingSan)) throw invalid();
+    return new Settings(true, port, certPath, keyPath, caPath, san, messagingSan);
   }
 
   private static boolean validUriSan(String san) {
@@ -69,7 +77,8 @@ public class AuthGameBindingMtlsConfiguration {
   AuthGameBindingMtlsSettings authGameBindingMtlsSettings(Environment environment) {
     Settings settings = settings(environment);
     return new AuthGameBindingMtlsSettings(settings.enabled(), settings.port(), settings.serverCertFile(),
-        settings.serverKeyFile(), settings.clientCaFile(), settings.allowedClientUriSan());
+        settings.serverKeyFile(), settings.clientCaFile(), settings.allowedClientUriSan(),
+        settings.allowedMessagingClientUriSan());
   }
 
   @Bean
@@ -102,6 +111,17 @@ public class AuthGameBindingMtlsConfiguration {
     registration.setFilter(new AuthGameBindingClientIdentityFilter(settings));
     registration.addUrlPatterns("/internal/v1/auth/game-bindings/handoffs/*");
     registration.setOrder(Integer.MIN_VALUE + 32);
+    return registration;
+  }
+
+  @Bean
+  FilterRegistrationBean<AuthGameMessagePermitClientIdentityFilter> authGameMessagePermitClientIdentityFilter(
+      AuthGameBindingMtlsSettings settings) {
+    FilterRegistrationBean<AuthGameMessagePermitClientIdentityFilter> registration = new FilterRegistrationBean<>();
+    registration.setFilter(new AuthGameMessagePermitClientIdentityFilter(settings));
+    registration.addUrlPatterns("/api/v1/auth/sdk/game-message/execution-permits",
+        "/api/v1/auth/sdk/game-message/execution-permits/*");
+    registration.setOrder(Integer.MIN_VALUE + 33);
     return registration;
   }
 
@@ -152,5 +172,11 @@ public class AuthGameBindingMtlsConfiguration {
   }
 
   record AuthGameBindingMtlsSettings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
-                                     Path clientCaFile, String allowedClientUriSan) {}
+                                     Path clientCaFile, String allowedClientUriSan,
+                                     String allowedMessagingClientUriSan) {
+    AuthGameBindingMtlsSettings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
+        Path clientCaFile, String allowedClientUriSan) {
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, allowedClientUriSan, "");
+    }
+  }
 }

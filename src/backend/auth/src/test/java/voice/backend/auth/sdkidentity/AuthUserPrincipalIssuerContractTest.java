@@ -45,7 +45,7 @@ class AuthUserPrincipalIssuerContractTest {
     write(current);
     write(next);
 
-    Object issuer = load("current");
+    AuthUserPrincipalIssuer issuer = (AuthUserPrincipalIssuer) load("current");
     SignedJWT token = SignedJWT.parse((String) invoke(issuer, "issue",
         new Class<?>[] {String.class, String.class, String.class}, RPC, REQUEST_ID, REQUEST_HASH));
     var claims = token.getJWTClaimsSet();
@@ -72,7 +72,7 @@ class AuthUserPrincipalIssuerContractTest {
     RSAKey current = key("current");
     write(current);
     write(key("next"));
-    Object issuer = load("current");
+    AuthUserPrincipalIssuer issuer = (AuthUserPrincipalIssuer) load("current");
     ECKey deviceKey = new ECKeyGenerator(Curve.P_256).generate();
     Map<String, Object> claims = new LinkedHashMap<>();
     claims.put("version", 1L);
@@ -95,7 +95,7 @@ class AuthUserPrincipalIssuerContractTest {
     claims.put("iat", NOW.toEpochMilli());
     claims.put("exp", NOW.plusSeconds(4).toEpochMilli());
 
-    String compact = (String) invoke(issuer, "issueDeviceStatus", new Class<?>[] {Map.class}, claims);
+    String compact = issuer.issueDeviceStatus(claims);
     SignedJWT token = SignedJWT.parse(compact);
 
     assertThat(token.getHeader().getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
@@ -105,6 +105,13 @@ class AuthUserPrincipalIssuerContractTest {
     String payload = new String(token.getPayload().toBytes(), java.nio.charset.StandardCharsets.UTF_8);
     assertThat(com.nimbusds.jose.util.JSONObjectUtils.parse(payload)).containsAllEntriesOf(claims);
     assertThat(payload).startsWith("{\"account_id\":");
+    assertThat(issuer.verifyDeviceStatusAssertion(compact).jti()).isEqualTo(java.util.UUID.fromString(
+        "d5d5e77a-4725-4528-954e-145d1edfa33f"));
+    String[] segments = compact.split("\\.");
+    String tampered = segments[0] + "." + segments[1] + "." + (segments[2].charAt(0) == 'A' ? "B" : "A")
+        + segments[2].substring(1);
+    assertThatThrownBy(() -> issuer.verifyDeviceStatusAssertion(tampered))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
@@ -174,6 +181,59 @@ class AuthUserPrincipalIssuerContractTest {
     String tampered = segments[0] + "." + segments[1] + "." + (segments[2].charAt(0) == 'A' ? "B" : "A")
         + segments[2].substring(1);
     assertThatThrownBy(() -> issuer.verifyGameBindingHandoff(tampered))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void signsOnlyTheFrozenShortLivedGameMessageExecutionPermitClaims() throws Exception {
+    RSAKey current = key("current");
+    write(current);
+    write(key("next"));
+    AuthUserPrincipalIssuer issuer = (AuthUserPrincipalIssuer) load("current");
+    Map<String, Object> claims = new LinkedHashMap<>();
+    claims.put("version", 1L);
+    claims.put("iss", "auth");
+    claims.put("aud", "voice.game-message");
+    claims.put("jti", "9d9d59df-5416-48de-9ef8-c18f7f076121");
+    claims.put("operation", "message.send");
+    claims.put("scope", "game.chat.send");
+    claims.put("operation_id", "29db4ec1-05a1-4f6c-87f9-93fc47d7b897");
+    claims.put("request_sha256", "a".repeat(64));
+    claims.put("application_id", "3119a95d-d7e7-40a7-8b2d-a58b6b0e77d2");
+    claims.put("environment_id", "2baea249-e4a4-4944-a513-1d9f0895e421");
+    claims.put("account_id", "0b258c6c-5d2b-4e50-a2e4-74df88f0015f");
+    claims.put("actor_id", "4d1e6aca-a5f0-470d-8c3c-8466ed2462e0");
+    claims.put("binding_id", "758c5f92-018d-459a-bb73-c335615f7886");
+    claims.put("profile_id", "69d141ba-b84d-46ba-922a-a91c54192504");
+    claims.put("device_id", "d33f1445-4a1b-45ee-b718-58d75b1ea8c7");
+    claims.put("key_id", "e3eaa96a-0fef-44f0-9a0d-f04d74a1fd71");
+    claims.put("device_generation", 3L);
+    claims.put("authority_revision", 4L);
+    claims.put("gis_permit_id", "acfa26aa-3637-4be8-98d2-304cfcbac1bc");
+    claims.put("binding_revision", 8L);
+    claims.put("assertion_jti", "671cf221-245f-40bf-adb0-28ed38f0c932");
+    claims.put("iat_ms", NOW.toEpochMilli());
+    claims.put("expires_at_ms", NOW.plusMillis(3750).toEpochMilli());
+    claims.put("exp", NOW.plusMillis(3750).getEpochSecond());
+
+    String compact = issuer.issueGameMessageExecutionPermit(claims);
+    SignedJWT jwt = SignedJWT.parse(compact);
+    assertThat(jwt.getHeader().getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
+    assertThat(jwt.getHeader().getKeyID()).isEqualTo("current");
+    assertThat(jwt.getHeader().getType().getType()).isEqualTo("voice.game-message-execution-permit+jwt");
+    assertThat(jwt.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+    assertThat(jwt.getJWTClaimsSet().getClaims().keySet()).containsExactlyInAnyOrderElementsOf(claims.keySet());
+    assertThat(jwt.getJWTClaimsSet().getIssuer()).isEqualTo("auth");
+    assertThat(jwt.getJWTClaimsSet().getAudience()).containsExactly("voice.game-message");
+    for (String name : claims.keySet()) {
+      if (!List.of("aud", "exp").contains(name)) {
+        assertThat(jwt.getJWTClaimsSet().getClaim(name)).isEqualTo(claims.get(name));
+      }
+    }
+    assertThat(jwt.getJWTClaimsSet().getExpirationTime().toInstant().getEpochSecond())
+        .isEqualTo(NOW.plusMillis(3750).getEpochSecond());
+    claims.put("unreviewed_scope", "game.chat.send");
+    assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(claims))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
