@@ -339,11 +339,27 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 		var receipt SessionOwnerReceipt
 		receipt, err = call(ctx, req)
 		if err == nil {
-			if receipt.ResourceID == uuid.Nil || receipt.ReceiptID == uuid.Nil || receipt.RequestHash != req.RequestHash {
+			if receipt.ResourceID == uuid.Nil || receipt.ReceiptID == uuid.Nil || receipt.RequestHash != req.RequestHash ||
+				(ownerStage == "chat_create" && receipt.ReceiptID != req.OperationID) {
 				err = errors.New("invalid owner receipt")
 			} else {
 				if err = o.Store.saveOwnerReceipt(ctx, operationID, req.OperationID, ownerStage, requestHashBytes, receipt); err == nil {
-					err = o.recordResource(ctx, operationID, sessionID, ownerStage, leaseOwner, receipt)
+					if ownerStage == "chat_create" {
+						_, err = o.Store.CreateResourceMapping(ctx, ResourceMappingInput{
+							ApplicationID:   app,
+							EnvironmentID:   env,
+							OperationID:     deterministicOwnerID(app, env, sessionID, "chat_mapping", ""),
+							ResourceKind:    "chat",
+							ExternalKey:     external,
+							ResourceID:      receipt.ResourceID,
+							ChatID:          receipt.ResourceID,
+							ChatOperationID: req.OperationID,
+							ChatRequestHash: req.RequestHash,
+						})
+					}
+					if err == nil {
+						err = o.recordResource(ctx, operationID, sessionID, ownerStage, leaseOwner, receipt)
+					}
 				}
 			}
 		}
