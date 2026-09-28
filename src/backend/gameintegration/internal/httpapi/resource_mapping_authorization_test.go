@@ -74,6 +74,7 @@ func TestMessagingResourceMappingAuthorizationFailsClosedOnIdentityOrBody(t *tes
 		{name: "missing mTLS identity", mutate: func(*http.Request) {}, status: http.StatusUnauthorized},
 		{name: "wrong URI SAN", mutate: func(r *http.Request) { r.TLS = verifiedTLSState("spiffe://voice/service/auth") }, status: http.StatusUnauthorized},
 		{name: "extra body field", body: []byte(`{"application_id":"` + app.String() + `","environment_id":"` + env.String() + `","binding_id":"` + binding.String() + `","chat_id":"` + chat.String() + `","external_key":"leak"}`), mutate: func(r *http.Request) { r.TLS = messagingVerifiedTLSState() }, status: http.StatusBadRequest},
+		{name: "duplicate tuple field", body: []byte(`{"application_id":"` + uuid.NewString() + `","application_id":"` + app.String() + `","environment_id":"` + env.String() + `","binding_id":"` + binding.String() + `","chat_id":"` + chat.String() + `"}`), mutate: func(r *http.Request) { r.TLS = messagingVerifiedTLSState() }, status: http.StatusBadRequest},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			requestBody := body

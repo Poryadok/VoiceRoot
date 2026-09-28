@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -64,6 +65,10 @@ func (h *InternalResourceMappingAuthorizationHandler) ServeHTTP(w http.ResponseW
 		writeError(w, http.StatusUnauthorized, "INVALID_WORKLOAD_PROOF")
 		return
 	}
+	if err := rejectDuplicateJSONObjectKeys(body); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_RESOURCE_MAPPING_REQUEST")
+		return
+	}
 	var input authorizeResourceMappingRequest
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
 	decoder.DisallowUnknownFields()
@@ -107,6 +112,50 @@ func (h *InternalResourceMappingAuthorizationHandler) ServeHTTP(w http.ResponseW
 		r.URL.EscapedPath(), timestamp, nonce, responseBody))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(responseBody)
+}
+
+func rejectDuplicateJSONObjectKeys(body []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	opening, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if delimiter, ok := opening.(json.Delim); !ok || delimiter != '{' {
+		return errors.New("request must be a JSON object")
+	}
+	seen := make(map[string]struct{})
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return errors.New("request object key must be a string")
+		}
+		if _, exists := seen[key]; exists {
+			return errors.New("duplicate request object key")
+		}
+		seen[key] = struct{}{}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if delimiter, ok := closing.(json.Delim); !ok || delimiter != '}' {
+		return errors.New("request object is not closed")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		if err == nil {
+			return errors.New("trailing JSON value")
+		}
+		return err
+	}
+	return nil
 }
 
 func parseCanonicalUUID(value string) (uuid.UUID, bool) {
