@@ -298,17 +298,27 @@ verification-stub APIs, admits two sandbox app environments, issues explicit
 Gateway. It rebuilds Gateway from the T31 worktree before session requests, then
 rebuilds only GIS after the operator account is known. The controlled receiver
 uses a separate Compose PostgreSQL instance and reaches GIS only through a test
-TLS ingress with trusted CA and hostname validation. The runner proves foreign
-app/environment isolation, a lost claim response after GIS lease commit, and
-lease persistence across GIS restart followed by expiry/reclaim with identical
-bytes. It forces a receiver effect insert failure and verifies the receiver
+TLS ingress with trusted CA and hostname validation. Before any claim lease,
+the workflow builds one test executable into the per-run state volume, checks
+that it exists, and invokes that same executable in every fresh receiver
+container. The runner proves foreign app/environment isolation and a lost claim
+response after GIS commits the lease; the receiver harness captures the
+response body/headers before dropping them, checkpoints the bytes/hash/lease,
+and confirms an immediate follow-up claim is held. After GIS restart, the next
+process claims before reading the checkpoint or receiver database and confirms
+the lease persisted; it then waits for expiry and reclaims identical bytes. It
+forces a receiver effect insert failure and verifies the receiver
 transaction rolls back both inbox and effect without sending ACK. It then
 commits the effect, delays ACK until the claim lease expires, and verifies GIS
 returns 409 while the receiver retains one effect and a pending ACK. GIS and
 the receiver restart with that pending ACK; a fresh process reclaims the event,
 GIS commits the ACK, and the runner loses the response. A final fresh process
 proves exact ACK replay with one inbox row and one effect row. It makes no real
-identity-provider calls. Run the workflow with `workflow_dispatch` on the
+identity-provider calls. The workflow compiles one test binary into the
+per-run state volume before any claim lease is created, verifies that binary
+exists, then invokes the same binary in each fresh receiver container. This
+keeps the immediate post-restart lease assertion independent of cold Go module
+downloads or compilation time. Run the workflow with `workflow_dispatch` on the
 exact T31 branch or let matching pull request paths trigger it; keep SE02 open
 until that hosted run passes. Its Compose graph includes File and MinIO through
 Gateway dependencies, so CI reads the repository's pinned MinIO images from

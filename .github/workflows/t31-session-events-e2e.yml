@@ -145,6 +145,20 @@ jobs:
             --state-dir tmp/t31-session-event-e2e/state \
             --result tmp/t31-session-event-e2e/bootstrap-result.json
 
+      - name: Build the controlledgame runner before creating a claim lease
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app \
+            -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.t31-session-events-e2e.yml \
+            -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
+            t31-session-event-runner go test -c \
+            -o /run/t31-state/t31-session-event-e2e.test \
+            -run '^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' .
+          test -x tmp/t31-session-event-e2e/state/t31-session-event-e2e.test
+
       - name: Claim active event before GIS restart
         shell: bash
         run: |
@@ -153,8 +167,10 @@ jobs:
             --env-file tmp/t31-session-event-e2e/compose.env --profile app \
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
-            -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
-            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
+            t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
+            -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
+            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Restart GIS while the claim lease is active
         shell: bash
@@ -176,7 +192,9 @@ jobs:
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
-            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
+            -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
+            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Restart GIS after receiver commit, before receiver ACK
         shell: bash
@@ -198,7 +216,9 @@ jobs:
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
-            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
+            -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
+            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Start another receiver process and replay exact ACK
         shell: bash
@@ -209,7 +229,9 @@ jobs:
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
-            t31-session-event-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
+            -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
+            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Save sanitized T31 acceptance evidence
         if: always()

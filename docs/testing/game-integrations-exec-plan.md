@@ -468,22 +468,25 @@ contracts land before consumers; activation lands after all consumers.
       fixtures, starts the app-profile owner graph and independent receiver DB,
       rebuilds Gateway from the exact worktree before bootstrap, then explicitly
       rebuilds/recreates only GIS with the operator allowlist. It bootstraps
-      verified sandbox identities through public APIs and runs the
-      controlledgame Compose test in four one-shot receiver processes. The
-      first process loses the claim response after GIS commits its lease and
-      proves a follow-up claim remains held; it then waits for expiry and
-      records the byte-identical event checkpoint before GIS restarts. The
-      second process proves the active lease survived restart, reclaims after
-      expiry, forces a receiver effect insert failure and confirms both inbox
-      and effect rolled back with no ACK, then commits the effect and delays
-      ACK until GIS returns 409 for the expired lease. GIS restarts while the
-      receiver has a durable pending ACK. The third process reclaims with the
-      already committed effect, GIS commits the ACK, and the runner loses that
-      response. A fourth process proves exact ACK replay without a duplicate
-      effect. No provider secrets are configured. The workflow saves only
-      sanitized acceptance IDs/hashes/leases and tears down its unique Compose
-      project. A passing hosted run is required before closing the HTTPS
-      acceptance gate.
+      verified sandbox identities through public APIs. Before any claim, it
+      builds one executable test binary into the per-run state volume and
+      verifies the file; all four one-shot receiver processes invoke that same
+      binary, so cold Go compilation cannot consume a claim lease. The first
+      process loses the claim response after GIS commits its lease, persists
+      the intercepted response's event bytes/hash/lease checkpoint, confirms
+      an immediate follow-up claim is still held, and exits with that lease
+      active. GIS restarts; the second process's first operation is an HTTPS
+      claim before state-file or receiver-DB reads and proves the active lease
+      survived. It then waits for expiry, reclaims identical bytes, forces a
+      receiver effect insert failure and confirms both inbox and effect rolled
+      back with no ACK, then commits the effect and delays ACK until GIS returns
+      409 for the expired lease. GIS restarts while the receiver has a durable
+      pending ACK. The third process reclaims with the already committed
+      effect, GIS commits the ACK, and the runner loses that response. A fourth
+      process proves exact ACK replay without a duplicate effect. No provider
+      secrets are configured. The workflow saves only sanitized acceptance
+      IDs/hashes/leases and tears down its unique Compose project. A passing
+      hosted run is required before closing the HTTPS acceptance gate.
   - [x] Historical pre-HTTPS T31 Compose evidence on the exact base above:
     public app/environment/credential bootstrap; Party then parented Match
     activation after Chat, roster, Voice, and Role receipts; two stable

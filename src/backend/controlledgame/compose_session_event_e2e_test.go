@@ -50,6 +50,14 @@ func TestT31ComposeHTTPSClaimInboxEffectAckReclaim(t *testing.T) {
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots}}
 	defer transport.CloseIdleConnections()
 	httpClient := &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	statePath := requireT31Env(t, "T31_ACCEPTANCE_STATE_FILE")
+	phase := requireT31Env(t, "T31_ACCEPTANCE_PHASE")
+	if phase == "reclaim-and-commit-before-ack" {
+		stillLeased := t31Claim(t, ctx, httpClient, baseURL, credential)
+		require.Equal(t, http.StatusNoContent, stillLeased.StatusCode, "GIS restart must preserve the active durable lease")
+		require.NoError(t, stillLeased.Body.Close())
+		t.Logf("GIS restart with active lease: claim_status=%d event_id=%s", stillLeased.StatusCode, eventID)
+	}
 
 	pool, err := pgxpool.New(ctx, databaseURL)
 	require.NoError(t, err)
@@ -57,8 +65,7 @@ func TestT31ComposeHTTPSClaimInboxEffectAckReclaim(t *testing.T) {
 	require.NoError(t, pool.Ping(ctx))
 	store, err := OpenPostgresStore(ctx, pool, time.Now)
 	require.NoError(t, err)
-	statePath := requireT31Env(t, "T31_ACCEPTANCE_STATE_FILE")
-	switch requireT31Env(t, "T31_ACCEPTANCE_PHASE") {
+	switch phase {
 	case "claim-before-gis-restart":
 		t31RunInitialClaimPhase(t, ctx, httpClient, baseURL, statePath, applicationID, environmentID,
 			otherApplicationID, otherEnvironmentID, eventID, credential, otherCredential)
@@ -99,27 +106,23 @@ func t31RunInitialClaimPhase(t *testing.T, ctx context.Context, client *http.Cli
 	_, err := t31ClaimAttempt(t, ctx, &http.Client{Transport: claimDropper, Timeout: 10 * time.Second}, baseURL, credential)
 	require.Error(t, err, "the claim response is intentionally lost after GIS commits the lease")
 	require.EqualValues(t, 1, claimDropper.claimResponses.Load())
-	leaseHeld := t31Claim(t, ctx, client, baseURL, credential)
-	require.Equal(t, http.StatusNoContent, leaseHeld.StatusCode, "the lost response must not undo the committed claim")
-	require.NoError(t, leaseHeld.Body.Close())
-	t.Logf("injected claim timeout: upstream_claim_responses=%d followup_status=%d lease_stays_committed=true",
-		claimDropper.claimResponses.Load(), leaseHeld.StatusCode)
-
-	first := t31ClaimUntilAvailable(t, ctx, client, baseURL, credential, 50*time.Second)
-	require.Equal(t, http.StatusOK, first.StatusCode)
-	body, err := io.ReadAll(first.Body)
-	require.NoError(t, err)
-	require.NoError(t, first.Body.Close())
-	claim, err := parseSessionEventClaim(first.Header, body, applicationID, environmentID)
+	require.NotNil(t, claimDropper.captured, "the test transport captures the response before dropping it")
+	claim, err := parseSessionEventClaim(claimDropper.captured.Header, claimDropper.captured.Body, applicationID, environmentID)
 	require.NoError(t, err)
 	require.Equal(t, eventID, claim.EventID)
 	require.Equal(t, eventID.String(), claim.Event.EventID)
+	require.NoError(t, writeT31ClaimCheckpoint(statePath, claim, claimDropper.captured.Body))
+	leaseHeld := t31Claim(t, ctx, client, baseURL, credential)
+	require.Equal(t, http.StatusNoContent, leaseHeld.StatusCode, "the lost response must not undo the committed claim")
+	require.NoError(t, leaseHeld.Body.Close())
+	t.Logf("injected claim timeout: upstream_claim_responses=%d followup_status=%d event_id=%s payload_sha256=%x lease_id=%s lease_expires_at=%s lease_stays_committed=true",
+		claimDropper.claimResponses.Load(), leaseHeld.StatusCode, claim.EventID, claim.PayloadSHA256,
+		claim.LeaseID, claim.LeaseExpiresAt.UTC().Format(time.RFC3339Nano))
 	require.NotEqual(t, applicationID, otherApplicationID)
 	require.NotEqual(t, environmentID, otherEnvironmentID)
-	require.NoError(t, writeT31ClaimCheckpoint(statePath, claim, body))
-	t.Logf("pre-restart HTTPS claim: status=%d event_id=%s payload_sha256=%x lease_id=%s lease_expires_at=%s body_bytes=%d",
-		first.StatusCode, claim.EventID, claim.PayloadSHA256, claim.LeaseID,
-		claim.LeaseExpiresAt.UTC().Format(time.RFC3339Nano), len(body))
+	t.Logf("pre-restart HTTPS claim checkpoint: event_id=%s payload_sha256=%x lease_id=%s lease_expires_at=%s body_bytes=%d",
+		claim.EventID, claim.PayloadSHA256, claim.LeaseID,
+		claim.LeaseExpiresAt.UTC().Format(time.RFC3339Nano), len(claimDropper.captured.Body))
 }
 
 func t31RunReclaimAndCommitPhase(t *testing.T, ctx context.Context, client *http.Client, baseURL, statePath string,
@@ -128,12 +131,8 @@ func t31RunReclaimAndCommitPhase(t *testing.T, ctx context.Context, client *http
 	checkpoint, err := readT31ClaimCheckpoint(statePath)
 	require.NoError(t, err)
 	require.Equal(t, eventID.String(), checkpoint.EventID)
-
-	stillLeased := t31Claim(t, ctx, client, baseURL, credential)
-	require.Equal(t, http.StatusNoContent, stillLeased.StatusCode, "GIS restart must preserve the active durable lease")
-	require.NoError(t, stillLeased.Body.Close())
-	t.Logf("GIS restart with active lease: claim_status=%d event_id=%s lease_id=%s expires_at=%s",
-		stillLeased.StatusCode, checkpoint.EventID, checkpoint.LeaseID, checkpoint.LeaseExpiresAt.UTC().Format(time.RFC3339Nano))
+	t.Logf("persisted lease checkpoint after GIS restart: event_id=%s lease_id=%s expires_at=%s",
+		checkpoint.EventID, checkpoint.LeaseID, checkpoint.LeaseExpiresAt.UTC().Format(time.RFC3339Nano))
 	waitT31LeaseExpiry(t, ctx, checkpoint.LeaseExpiresAt)
 
 	response := t31Claim(t, ctx, client, baseURL, credential)
@@ -274,27 +273,6 @@ func t31ClaimAttempt(t *testing.T, ctx context.Context, client *http.Client, bas
 	return &t31ObservedResponse{StatusCode: response.StatusCode, Header: response.Header.Clone(), Body: response.Body}, nil
 }
 
-func t31ClaimUntilAvailable(t *testing.T, ctx context.Context, client *http.Client, baseURL, credential string, maximum time.Duration) *t31ObservedResponse {
-	t.Helper()
-	deadline := time.Now().Add(maximum)
-	for time.Now().Before(deadline) {
-		response := t31Claim(t, ctx, client, baseURL, credential)
-		if response.StatusCode != http.StatusNoContent {
-			require.Equal(t, http.StatusOK, response.StatusCode)
-			return response
-		}
-		require.Equal(t, "1", response.Header.Get("Retry-After"))
-		require.NoError(t, response.Body.Close())
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case <-time.After(time.Second):
-		}
-	}
-	t.Fatal("GIS did not make the timed-out claim available after lease expiry")
-	return nil
-}
-
 type t31DropFirstAckResponse struct {
 	next         http.RoundTripper
 	dropped      atomic.Bool
@@ -305,6 +283,12 @@ type t31DropFirstClaimResponse struct {
 	next           http.RoundTripper
 	claimResponses atomic.Int32
 	dropped        atomic.Bool
+	captured       *t31CapturedClaimResponse
+}
+
+type t31CapturedClaimResponse struct {
+	Header http.Header
+	Body   []byte
 }
 
 func (transport *t31DropFirstClaimResponse) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -313,10 +297,19 @@ func (transport *t31DropFirstClaimResponse) RoundTrip(request *http.Request) (*h
 		return response, err
 	}
 	transport.claimResponses.Add(1)
-	if transport.dropped.CompareAndSwap(false, true) {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
 		_ = response.Body.Close()
+		return nil, err
+	}
+	if err := response.Body.Close(); err != nil {
+		return nil, err
+	}
+	if transport.dropped.CompareAndSwap(false, true) {
+		transport.captured = &t31CapturedClaimResponse{Header: response.Header.Clone(), Body: body}
 		return nil, errors.New("injected lost claim response after lease commit")
 	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
 	return response, nil
 }
 
