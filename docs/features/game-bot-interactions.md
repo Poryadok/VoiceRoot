@@ -1,6 +1,6 @@
 # Игровые события и команды через ботов
 
-**Proposed target + source audit, 2026-09-26, baseline `77ec7240a`.**
+**Proposed target. Source audit refreshed 2026-09-28 at `b894441983b81fdce2964159bed9a123689b07e3`.**
 [Общий продукт](game-integrations.md), [Bot v1](bots.md),
 [Bot Service](../microservices/bot-service.md),
 [Game API](../architecture/game-integration-api.md).
@@ -19,44 +19,38 @@ interaction backend игры; бот отвечает. Игровая логик
 
 ## Проверка текущей реализации
 
-| Capability | Доказательство в baseline | Практическое ограничение |
+Таблица и seven-gap audit ниже перепроверены на указанном source target; в
+частности, durable slash webhook slice из GAME-BOT-01 уже присутствует здесь.
+Это source/test review, не запуск тестов и не live E2E.
+
+| Capability | Текущее evidence | Практическое ограничение |
 |---|---|---|
-| Game → chat | [Gateway](../../src/backend/gateway/transcode_bots.go), route `POST /api/v1/bots/me/messages`; [SendMessage](../../src/backend/bot/internal/grpcsvc/interaction.go) | Bot Token и whitelist; send-scope enforcement имеет gap ниже; только текст |
-| Player → game | `ExecuteSlashInteraction` в том же interaction.go; [proto](../../protos/voice/bot/v1/bot.proto) | Передаются invoker profile, chat, options; права на персонажа проверяет игра |
+| Game → chat | [Gateway](../../src/backend/gateway/transcode_bots.go), route `POST /api/v1/bots/me/messages`; [SendMessage](../../src/backend/bot/internal/grpcsvc/interaction.go), [ordinary send scope test](../../src/backend/bot/internal/grpcsvc/interaction_scope_thread_test.go) | Bot Token и chat whitelist; только текст в текущем message API |
+| Player → game | `ExecuteSlashInteraction` в [interaction.go](../../src/backend/bot/internal/grpcsvc/interaction.go); [proto](../../protos/voice/bot/v1/bot.proto); [durable acceptance tests](../../src/backend/bot/internal/grpcsvc/interaction_durable_test.go) | Slash acceptance/outbox is durable; права на персонажа проверяет игра, а RPC retry ещё не имеет client-supplied invocation ID |
 | Slash UI | [chat panel](../../src/frontend/lib/ui/chat/chat_room_panel.dart), [providers](../../src/frontend/lib/state/bot_providers.dart) | Menu/options, ephemeral/deferred path; не доказательство rich cards |
-| Webhook | [deliver.go](../../src/backend/bot/internal/webhook/deliver.go) | HMAC, 3s attempt timeout, retry 408/429/5xx; default 3 попытки всего (2 повтора), не durable promise |
-| Deferred reply | [deferred tests](../../src/backend/bot/internal/grpcsvc/interaction_deferred_chat_type_test.go) | Привязка к исходному destination; durable deferred не равен durable execution команды |
-| Polling | [PollEvents](../../src/backend/bot/internal/grpcsvc/bot.go), Gateway `/api/v1/bots/me/interactions/poll` | Cursor не используется; delivered отмечается после stream.Send, до ACK обработки игрой |
-| Обычные message.sent events | [message delivery store](../../src/backend/bot/internal/store/message_delivery.go), [consumer](../../src/backend/bot/internal/consumer/message_events.go) | Recipient outbox и dedupe `(bot_id,message_id)`; отдельный путь, не гарантия slash |
-| Cards/buttons | Send/Edit schema в bot.proto и response payload | Нет component/action contracts; нужны Messaging + Realtime + Flutter изменения |
+| Webhook slash delivery | [outbox worker](../../src/backend/bot/internal/grpcsvc/interaction_outbox.go), [delivery](../../src/backend/bot/internal/webhook/deliver.go), [restart/fencing tests](../../src/backend/bot/internal/grpcsvc/interaction_durable_test.go) | Lease/backoff survives process restart; webhook can repeat after remote side effect before receipt, so game must deduplicate stable `interaction_token` |
+| Deferred reply | [deferred tests](../../src/backend/bot/internal/grpcsvc/interaction_deferred_chat_type_test.go), [authority/recovery tests](../../src/backend/bot/internal/grpcsvc/interaction_authority_test.go) | Recovery is bound to bot/interaction destination; durable slash enqueue does not make the game-side command effect exactly-once |
+| Polling | [PollEvents](../../src/backend/bot/internal/grpcsvc/bot.go), Gateway `/api/v1/bots/me/interactions/poll`; [polling tests](../../src/backend/bot/internal/grpcsvc/bot_c_test.go) | Dev opt-in only; event is marked delivered after `stream.Send`, with no explicit game ACK/opaque cursor |
+| Ordinary `message.sent` events | [message delivery store](../../src/backend/bot/internal/store/message_delivery.go), [consumer](../../src/backend/bot/internal/consumer/message_events.go), [scope/revocation tests](../../src/backend/bot/internal/consumer/message_events_test.go) | Recipient delivery now checks `TEXT_CHAT_READ_HISTORY`; this event outbox is separate from slash command delivery |
+| Cards/buttons | Send/Edit schema в [bot.proto](../../protos/voice/bot/v1/bot.proto) и response payload | Executable component/action path ещё отсутствует; нужны Messaging + Realtime + Flutter изменения |
 | Proactive DM | `DM_SEND requires interaction context` в SendMessage | Opt-in DM — post-v1 в bots.md; общий флаг согласия сейчас не включает эту возможность |
-| Message idempotency | `postMessage` vs `postInteractionMessage` в interaction.go | Обычная отправка не передаёт стабильный client message ID; deferred выводит его из bot/token |
+| Message idempotency and thread | [postMessage](../../src/backend/bot/internal/grpcsvc/interaction.go), [scope/thread tests](../../src/backend/bot/internal/grpcsvc/interaction_scope_thread_test.go) | Thread parent and send scope are propagated/checked; ordinary send still has no client-supplied stable message ID |
 
-### Обнаруженные gaps перед pilot с реальными игровыми последствиями
+### Статусы семи gaps из исходного source audit
 
-1. Slash path игнорирует ошибку `EnqueueEvent`, а webhook запускается goroutine с
-   process-local ожиданием. Нельзя обещать восстановление каждой команды после
-   crash. Нужны durable acceptance и outbox worker.
-2. Polling подтверждает доставку раньше обработки получателем; потеря HTTP-ответа
-   может оставить команду без обработки. Текущий polling — только local dev;
-   production polling требует leased delivery + explicit ACK, если будет включён.
-3. `ExecuteSlashInteraction` сам не доказывает membership вызывающего профиля;
-   whitelist бота недостаточен для user authorization. End-to-end проверка доступа
-   нужна на каждом публичном пути, включая прямые обращения и revoked membership.
-4. `CompleteInteraction` использует Hub до bot-bound SQL lookup deferred fallback.
-   В целевом контракте credential/token/destination должны проверяться одинаково
-   на live и recovery путях, до side effect.
-5. Выбор recipients обычных сообщений в `QueueMessageRecipients` не доказывает
-   требуемый read scope. Game adapter получает commands по умолчанию; чтение всей
-   переписки требует отдельного разрешения и end-to-end enforcement.
-6. `thread_parent_id` существует в proto, но обычный `postMessage` не передаёт его
-   дальше в Messaging. Threaded replies нельзя рекламировать как проверенный путь.
-7. SendBotMessage без interaction token проверяет whitelist, но `postMessage`
-   не проверяет `TEXT_CHAT_SEND_MESSAGES`. До production game notifications нужен
-   одинаковый send-scope enforcement на обычном, deferred и recovery путях.
+| Исходный gap | Состояние на текущем target |
+|---|---|
+| Durable slash acceptance и crash recovery | Закрыт для slash webhook enqueue/delivery: [restart test](../../src/backend/bot/internal/grpcsvc/interaction_durable_test.go) и [outbox fencing tests](../../src/backend/bot/internal/grpcsvc/interaction_outbox_fencing_test.go). Игра всё ещё должна дедуплицировать повторный webhook; результат remote side effect нельзя атомарно зафиксировать в Bot. |
+| Polling ACK и crash recovery | Остаётся ограниченным dev path: stream send считается доставкой; явного game ACK/opaque cursor нет. Не является production reliable mode. |
+| Slash membership/scope checks | Проверяются fail-closed перед slash admission/discovery; evidence: [membership tests](../../src/backend/bot/internal/grpcsvc/interaction_membership_test.go) и [scope/thread tests](../../src/backend/bot/internal/grpcsvc/interaction_scope_thread_test.go). Не расширяйте этот вывод на независимые новые game endpoints без их собственных checks. |
+| `CompleteInteraction` bot/token/destination authority | Текущий live/recovery boundary покрыт [authority tests](../../src/backend/bot/internal/grpcsvc/interaction_authority_test.go), включая чужой bot и восстановление deferred ответа. |
+| Read-history scope для обычных message events | Проверяется при выборе и повторной доставке recipients; evidence: [message delivery tests](../../src/backend/bot/internal/consumer/message_events_test.go). |
+| `thread_parent_id` propagation | Обычный и deferred путь имеют тесты propagation в [scope/thread tests](../../src/backend/bot/internal/grpcsvc/interaction_scope_thread_test.go). |
+| `TEXT_CHAT_SEND_MESSAGES` для обычного Bot send | Проверяется на ordinary send path в [scope/thread tests](../../src/backend/bot/internal/grpcsvc/interaction_scope_thread_test.go). |
 
-В baseline docs-only change исправления не входили. Они перечислены как
-activation gates, а не обходятся повышенными правами бота.
+Здесь закрытие gap означает только source/test coverage в названном Bot path.
+Оно не включает rich cards/actions, подписанные game events, production polling,
+game-side idempotency или полный game Bot pilot.
 
 ### Реализованный Bot slice после baseline audit
 
