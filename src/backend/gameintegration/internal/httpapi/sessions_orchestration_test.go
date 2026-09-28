@@ -14,16 +14,6 @@ import (
 	"voice/backend/gameintegration/internal/registry"
 )
 
-type sessionCredentialVerifier interface {
-	VerifyGameServer(*http.Request) (registry.SessionPrincipal, error)
-}
-
-type sessionRouteOrchestrator interface {
-	CreateSession(context.Context, registry.SessionPrincipal, registry.CreateSessionInput) (registry.SessionOperation, error)
-	GetOperation(context.Context, registry.SessionPrincipal, uuid.UUID) (registry.SessionOperation, error)
-	CloseSession(context.Context, registry.SessionPrincipal, uuid.UUID, uuid.UUID) (registry.SessionOperation, error)
-}
-
 type sessionServerValidator struct {
 	principal registry.SessionPrincipal
 }

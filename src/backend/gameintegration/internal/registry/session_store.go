@@ -141,23 +141,6 @@ func (s *Store) saveOwnerReceipt(ctx context.Context, op, ownerOp uuid.UUID, sta
 	return err
 }
 
-func (s *Store) updateStage(ctx context.Context, op, owner uuid.UUID, next string) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE gis_session_operations SET stage=$3,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_owner=$2`, op, owner, next)
-	return err
-}
-
-func (s *Store) getSession(ctx context.Context, p SessionPrincipal, id uuid.UUID) (uuid.UUID, string, []uuid.UUID, uuid.UUID, error) {
-	var app uuid.UUID
-	var status string
-	var members []uuid.UUID
-	var op uuid.UUID
-	err := s.Pool.QueryRow(ctx, `SELECT s.application_id,s.session_status,s.members,o.operation_id FROM gis_sessions s JOIN gis_session_operations o ON o.session_id=s.id AND o.operation_kind='create' WHERE s.id=$1 AND s.application_id=$2 AND s.environment_id=$3 ORDER BY o.created_at LIMIT 1`, id, p.ApplicationID, p.EnvironmentID).Scan(&app, &status, &members, &op)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, "", nil, uuid.Nil, ErrSessionNotFound
-	}
-	return app, status, members, op, err
-}
-
 func (s *Store) due(ctx context.Context) ([]uuid.UUID, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT operation_id FROM gis_session_operations WHERE status='pending' AND next_attempt_at<=now() AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 50`)
 	if err != nil {

@@ -38,20 +38,20 @@ func BuildSessionOwnerProto(stage string, request SessionOwnerRequest) (proto.Me
 			OperationId: request.OperationID.String(), ExternalChatKey: request.ExternalKey, Name: request.DisplayName}, nil
 	case "chat_roster":
 		if request.ChatID == uuid.Nil {
-			return nil, errors.New("Chat ID is required for roster sync")
+			return nil, errors.New("chat ID is required for roster sync")
 		}
 		return &chatv1.SyncManagedChatMembersRequest{ApplicationId: request.ApplicationID.String(), EnvironmentId: request.EnvironmentID.String(),
 			OperationId: request.OperationID.String(), ChatId: request.ChatID.String(), ProfileIds: canonicalProfileIDs(request.Members)}, nil
 	case "voice_provision":
 		if request.ChatID == uuid.Nil || request.ChatCreateReceiptID == uuid.Nil {
-			return nil, errors.New("Chat identity and receipt are required for Voice")
+			return nil, errors.New("chat identity and receipt are required for voice")
 		}
 		return &callsv1.ProvisionGameSessionRoomRequest{OperationId: request.OperationID.String(), ApplicationId: request.ApplicationID.String(),
 			EnvironmentId: request.EnvironmentID.String(), Resource: &callsv1.GameSessionResourceRef{Kind: gameSessionKind(request.Kind), ExternalResourceKey: request.ExternalKey},
 			ChatId: request.ChatID.String(), ChatCreationOperationId: request.ChatCreateReceiptID.String(), SessionId: request.SessionID.String()}, nil
 	case "role_apply":
 		if request.VoiceRoomID == uuid.Nil || request.RosterRevision <= 0 {
-			return nil, errors.New("Voice room and roster revision are required for Role")
+			return nil, errors.New("voice room and roster revision are required for role")
 		}
 		return &rolev1.ApplyGameSessionGrantsRequest{ApplicationId: request.ApplicationID.String(), EnvironmentId: request.EnvironmentID.String(),
 			SessionId: request.SessionID.String(), VoiceRoomId: request.VoiceRoomID.String(), OperationId: request.OperationID.String(),

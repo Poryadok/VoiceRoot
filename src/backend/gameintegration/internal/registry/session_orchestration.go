@@ -132,7 +132,7 @@ func (o *SessionOrchestrator) CloseSession(ctx context.Context, p SessionPrincip
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var oldHash []byte
 	var oldSession uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT request_hash,session_id FROM gis_session_operations WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, p.ApplicationID, p.EnvironmentID, operationID).Scan(&oldHash, &oldSession)
@@ -219,7 +219,7 @@ func (o *SessionOrchestrator) FailSession(ctx context.Context, p SessionPrincipa
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var status string
 	var winner *uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT session_status,terminalization_operation_id FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3 FOR UPDATE`, sessionID, p.ApplicationID, p.EnvironmentID).Scan(&status, &winner)
@@ -290,7 +290,7 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 	if kind == "close" {
 		return SessionOperation{}, errors.New("close operation stage mismatch")
 	}
-	ownerStage := stage
+	var ownerStage string
 	discriminator := ""
 	if stage == "roster_ready" || stage == "voice_ready" {
 		discriminator = fmt.Sprint(revision)
@@ -361,7 +361,7 @@ func (o *SessionOrchestrator) recordResource(ctx context.Context, op, session uu
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var next string
 	switch stage {
 	case "chat_create":
@@ -472,21 +472,22 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 		return o.coalesceOperation(ctx, op, session)
 	}
 	var adapter func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
-	ownerStage, next := stage, ""
+	var ownerStage, next string
 	failureTerminalization := strings.HasPrefix(stage, "failure_")
 	baseStage := strings.TrimPrefix(stage, "failure_")
-	if baseStage == "voice_close_pending" {
+	switch baseStage {
+	case "voice_close_pending":
 		adapter = o.Owners.CloseVoice
 		ownerStage = "terminalize_voice_close"
 		next = "role_revoke_pending"
 		if failureTerminalization {
 			next = "failure_role_revoke_pending"
 		}
-	} else if baseStage == "role_revoke_pending" {
+	case "role_revoke_pending":
 		adapter = o.Owners.RevokeRoleGrants
 		ownerStage = "terminalize_role_revoke"
 		next = "closed"
-	} else {
+	default:
 		return SessionOperation{}, fmt.Errorf("unknown terminal stage %s", stage)
 	}
 	req.OperationID = deterministicOwnerID(app, env, session, ownerStage, terminal.String())
@@ -641,4 +642,3 @@ func deterministicOwnerID(app, env, session uuid.UUID, stage, discriminator stri
 	return uuid.NewSHA1(sessionURLNamespace, []byte(name))
 }
 func safeOwnerError(error) string { return "OWNER_UNAVAILABLE" }
-func _unusedHash()                { _ = sha1.Size }

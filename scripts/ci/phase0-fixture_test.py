@@ -122,7 +122,13 @@ class FixtureTests(unittest.TestCase):
                 self.assertIn("TLS Web Client Authentication", eku)
                 self.assertNotIn("TLS Web Server Authentication", eku)
                 subject = self.openssl("x509", "-in", cert, "-noout", "-subject")
-                self.assertIn(f"CN={service}", subject)
+                # OpenSSL 3.4 formats this as ``subject=CN = service`` while
+                # older releases commonly emit ``subject=CN=service``.
+                normalized_subject = re.sub(r"\s+", "", subject).removeprefix("subject=")
+                self.assertRegex(
+                    normalized_subject,
+                    rf"(?:^|[,/])CN={re.escape(service)}(?:$|[,/])",
+                )
 
     def test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice(self):
         ca = self.dest / "ca/gameintegration-client-ca.crt"
