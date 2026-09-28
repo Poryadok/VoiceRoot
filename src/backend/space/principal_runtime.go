@@ -18,7 +18,7 @@ func ownershipRoleTLSFromEnv() (*tls.Config, error) {
 	certificate := strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_CERT_FILE"))
 	key := strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_KEY_FILE"))
 	if certificate == "" || key == "" {
-		return nil, fmt.Errorf("Space Role client certificate and key are required for mutual TLS")
+		return nil, fmt.Errorf("space Role client certificate and key are required for mutual TLS")
 	}
 	identity, err := tls.LoadX509KeyPair(certificate, key)
 	if err != nil {
