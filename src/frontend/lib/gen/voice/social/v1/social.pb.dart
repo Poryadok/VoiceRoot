@@ -1151,9 +1151,11 @@ class ListFavoritesRequest extends $pb.GeneratedMessage {
 class BlockAccountRequest extends $pb.GeneratedMessage {
   factory BlockAccountRequest({
     $core.String? blockedAccountId,
+    $core.String? blockedProfileId,
   }) {
     final result = create();
     if (blockedAccountId != null) result.blockedAccountId = blockedAccountId;
+    if (blockedProfileId != null) result.blockedProfileId = blockedProfileId;
     return result;
   }
 
@@ -1172,6 +1174,7 @@ class BlockAccountRequest extends $pb.GeneratedMessage {
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'blockedAccountId')
+    ..aOS(2, _omitFieldNames ? '' : 'blockedProfileId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1201,6 +1204,16 @@ class BlockAccountRequest extends $pb.GeneratedMessage {
   $core.bool hasBlockedAccountId() => $_has(0);
   @$pb.TagNumber(1)
   void clearBlockedAccountId() => $_clearField(1);
+
+  /// Profile the blocker actually saw. Optional for older clients.
+  @$pb.TagNumber(2)
+  $core.String get blockedProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set blockedProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBlockedProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBlockedProfileId() => $_clearField(2);
 }
 
 class UnblockAccountRequest extends $pb.GeneratedMessage {
@@ -1383,10 +1396,18 @@ class BlockedAccount extends $pb.GeneratedMessage {
   factory BlockedAccount({
     $core.String? blockedAccountId,
     $2.Timestamp? createdAt,
+    $core.String? blockedProfileId,
+    $core.String? displayName,
+    $core.String? username,
+    $core.String? discriminator,
   }) {
     final result = create();
     if (blockedAccountId != null) result.blockedAccountId = blockedAccountId;
     if (createdAt != null) result.createdAt = createdAt;
+    if (blockedProfileId != null) result.blockedProfileId = blockedProfileId;
+    if (displayName != null) result.displayName = displayName;
+    if (username != null) result.username = username;
+    if (discriminator != null) result.discriminator = discriminator;
     return result;
   }
 
@@ -1407,6 +1428,10 @@ class BlockedAccount extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'blockedAccountId')
     ..aOM<$2.Timestamp>(2, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $2.Timestamp.create)
+    ..aOS(3, _omitFieldNames ? '' : 'blockedProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'displayName')
+    ..aOS(5, _omitFieldNames ? '' : 'username')
+    ..aOS(6, _omitFieldNames ? '' : 'discriminator')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1447,6 +1472,43 @@ class BlockedAccount extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(2);
   @$pb.TagNumber(2)
   $2.Timestamp ensureCreatedAt() => $_ensure(1);
+
+  /// Snapshot of the selected profile at block time. Empty for legacy blocks.
+  @$pb.TagNumber(3)
+  $core.String get blockedProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set blockedProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBlockedProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBlockedProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get displayName => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set displayName($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDisplayName() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDisplayName() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get username => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set username($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasUsername() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearUsername() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get discriminator => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set discriminator($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasDiscriminator() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearDiscriminator() => $_clearField(6);
 }
 
 class IsBlockedRequest extends $pb.GeneratedMessage {

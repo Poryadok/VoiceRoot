@@ -282,7 +282,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
     final err = await ref
         .read(socialActionsProvider)
-        .blockAccount(profile.accountId);
+        .blockAccount(profile.accountId, blockedProfileId: profile.id);
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(

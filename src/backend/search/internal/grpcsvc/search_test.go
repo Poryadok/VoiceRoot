@@ -24,7 +24,7 @@ import (
 )
 
 func ctxWithProfile(profileID uuid.UUID) context.Context {
-	return metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-voice-profile-id", profileID.String()))
+	return ctxWithProfileAndAccount(profileID, uuid.New())
 }
 
 func ctxWithProfileAndAccount(profileID, accountID uuid.UUID) context.Context {
@@ -227,6 +227,54 @@ func TestSearchGlobal_ExcludesBlockedUsers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{visibleProfile.String()}, resp.GetGlobalSearchResults().GetProfileIds())
 	require.Contains(t, profiles.lastExcludeAccounts, blockedAccount)
+}
+
+func TestSearchGlobal_ExcludesAllProfilesOfViewerAccount(t *testing.T) {
+	t.Parallel()
+	viewerProfile := uuid.New()
+	viewerAccount := uuid.New()
+	siblingProfile := uuid.New()
+	foreignProfile := uuid.New()
+	profiles := &stubProfileSearch{hits: []ProfileSearchHit{
+		{ProfileID: viewerProfile, AccountID: viewerAccount},
+		{ProfileID: siblingProfile, AccountID: viewerAccount},
+		{ProfileID: foreignProfile, AccountID: uuid.New()},
+	}}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{Profiles: profiles})
+
+	resp, err := client.SearchGlobal(ctxWithProfileAndAccount(viewerProfile, viewerAccount), &searchv1.SearchGlobalRequest{
+		Query: "shared", Page: &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{foreignProfile.String()}, resp.GetGlobalSearchResults().GetProfileIds())
+}
+
+func TestSearchUsers_ExcludesAllProfilesOfViewerAccount(t *testing.T) {
+	t.Parallel()
+	viewerProfile := uuid.New()
+	viewerAccount := uuid.New()
+	foreignProfile := uuid.New()
+	profiles := &stubProfileSearch{hits: []ProfileSearchHit{
+		{ProfileID: uuid.New(), AccountID: viewerAccount},
+		{ProfileID: foreignProfile, AccountID: uuid.New()},
+	}}
+	client := startSearchGRPCTestServer(t, &SearchGRPC{Profiles: profiles})
+
+	resp, err := client.SearchUsers(ctxWithProfileAndAccount(viewerProfile, viewerAccount), &searchv1.SearchUsersRequest{
+		Query: "shared", Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{foreignProfile.String()}, resp.GetUserSearchResults().GetProfileIds())
+}
+
+func TestProfileSearchQueries_RequireViewerAccount(t *testing.T) {
+	t.Parallel()
+	client := startSearchGRPCTestServer(t, &SearchGRPC{Profiles: &stubProfileSearch{}})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-voice-profile-id", uuid.NewString()))
+	_, globalErr := client.SearchGlobal(ctx, &searchv1.SearchGlobalRequest{Query: "shared"})
+	require.Equal(t, codes.Unauthenticated, status.Code(globalErr))
+	_, usersErr := client.SearchUsers(ctx, &searchv1.SearchUsersRequest{Query: "shared"})
+	require.Equal(t, codes.Unauthenticated, status.Code(usersErr))
 }
 
 func TestSearchUsers_EmptyQuery_InvalidArgument(t *testing.T) {
@@ -447,11 +495,12 @@ func TestSearchGlobal_FiltersByAllowFriendRequestsAudience(t *testing.T) {
 	require.Equal(t, []string{openTarget.String()}, resp.GetGlobalSearchResults().GetProfileIds())
 }
 
-func TestSearchUsers_OwnProfileAlwaysVisible(t *testing.T) {
+func TestSearchUsers_OwnProfileExcludedRegardlessOfPrivacy(t *testing.T) {
 	t.Parallel()
 	viewer := uuid.New()
+	account := uuid.New()
 	profiles := &stubProfileSearch{
-		hits: []ProfileSearchHit{{ProfileID: viewer, AccountID: uuid.New()}},
+		hits: []ProfileSearchHit{{ProfileID: viewer, AccountID: account}},
 	}
 	disc := &stubDiscoverability{
 		audienceByProfile: map[uuid.UUID]privacy.Audience{
@@ -464,9 +513,9 @@ func TestSearchUsers_OwnProfileAlwaysVisible(t *testing.T) {
 		Social:          disc,
 		SpaceMembers:    disc,
 	})
-	resp, err := client.SearchUsers(ctxWithProfile(viewer), &searchv1.SearchUsersRequest{Query: "me"})
+	resp, err := client.SearchUsers(ctxWithProfileAndAccount(viewer, account), &searchv1.SearchUsersRequest{Query: "me"})
 	require.NoError(t, err)
-	require.Equal(t, []string{viewer.String()}, resp.GetUserSearchResults().GetProfileIds())
+	require.Empty(t, resp.GetUserSearchResults().GetProfileIds())
 }
 
 func TestSearchGlobal_QueryTooLong_InvalidArgument(t *testing.T) {

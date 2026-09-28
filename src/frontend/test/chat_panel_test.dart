@@ -769,6 +769,184 @@ void main() {
     );
   });
 
+  for (final testCase in [
+    (
+      label: 'empty PDF MIME',
+      contentType: '',
+      name: 'report.pdf',
+      expectedMime: 'application/pdf',
+      expectedFileType: 'document',
+    ),
+    (
+      label: 'whitespace PDF MIME',
+      contentType: '  \t  ',
+      name: 'report.pdf',
+      expectedMime: 'application/pdf',
+      expectedFileType: 'document',
+    ),
+    (
+      label: 'unknown extension with empty MIME',
+      contentType: '',
+      name: 'payload.unknownextension',
+      expectedMime: 'application/octet-stream',
+      expectedFileType: 'other',
+    ),
+    (
+      label: 'empty GIF MIME as generic storage',
+      contentType: '',
+      name: 'animation.gif',
+      expectedMime: 'application/octet-stream',
+      expectedFileType: 'other',
+    ),
+    (
+      label: 'supplied GIF MIME as generic storage',
+      contentType: 'image/gif',
+      name: 'animation.gif',
+      expectedMime: 'application/octet-stream',
+      expectedFileType: 'other',
+    ),
+    (
+      label: 'empty MP4 MIME',
+      contentType: '',
+      name: 'clip.mp4',
+      expectedMime: 'video/mp4',
+      expectedFileType: 'video',
+    ),
+    (
+      label: 'empty MOV MIME',
+      contentType: '',
+      name: 'clip.mov',
+      expectedMime: 'video/quicktime',
+      expectedFileType: 'video',
+    ),
+    (
+      label: 'supplied PDF MIME with unknown extension',
+      contentType: 'application/pdf',
+      name: 'report.bin',
+      expectedMime: 'application/pdf',
+      expectedFileType: 'document',
+    ),
+  ]) {
+    testWidgets('ChatRoomPanel uploads ${testCase.label} and links the file', (
+      tester,
+    ) async {
+      Map<String, dynamic>? uploadBody;
+      String? putContentType;
+      var confirmed = false;
+      var sentAttachment = false;
+      const fileId = 'file-fallback-mime';
+
+      await tester.pumpWidget(
+        chatTestApp(
+          home: ChatRoomPanel(
+            chatId: 'chat-abc',
+            attachmentPicker: () async => ChatAttachmentFile(
+              bytes: Uint8List.fromList([1, 2, 3]),
+              contentType: testCase.contentType,
+              name: testCase.name,
+            ),
+          ),
+          client: MockClient((req) async {
+            if (req.url.path == '/api/v1/messages') {
+              return http.Response(
+                jsonEncode({
+                  'message_list': {'messages': []},
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/files/upload') {
+              uploadBody = jsonDecode(req.body) as Map<String, dynamic>;
+              if ((uploadBody!['mime_type'] as String? ?? '').trim().isEmpty) {
+                return http.Response(
+                  jsonEncode({'message': 'mime_type is required'}),
+                  400,
+                );
+              }
+              return http.Response(
+                jsonEncode({
+                  'upload_response': {
+                    'file_id': fileId,
+                    'presigned_put_url': 'https://r2.example/upload',
+                    'r2_key': 'attachments/$fileId/${testCase.name}',
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.method == 'PUT' &&
+                req.url.toString() == 'https://r2.example/upload') {
+              putContentType = req.headers['Content-Type'];
+              expect(req.bodyBytes, [1, 2, 3]);
+              return http.Response('', 200);
+            }
+            if (req.url.path == '/api/v1/files/$fileId/confirm') {
+              final body = jsonDecode(req.body) as Map<String, dynamic>;
+              expect(
+                body['sha256_hash'],
+                '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+              );
+              confirmed = true;
+              return http.Response(
+                jsonEncode({
+                  'file_metadata': {
+                    'id': fileId,
+                    'file_type': testCase.expectedFileType,
+                    'status': 'ready',
+                    'original_name': testCase.name,
+                    'r2_key': 'attachments/$fileId/${testCase.name}',
+                    'size_bytes': 3,
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/messages/send') {
+              final body = jsonDecode(req.body) as Map<String, dynamic>;
+              final attachments =
+                  jsonDecode(body['attachments_json'] as String)
+                      as List<dynamic>;
+              expect(attachments.single, containsPair('file_id', fileId));
+              sentAttachment = true;
+              return http.Response(
+                jsonEncode({
+                  'message': {
+                    'id': 'msg-file',
+                    'chat': {'id': 'chat-abc'},
+                    'sender_profile_id': 'profile-test',
+                    'content': '',
+                    'attachments_json': body['attachments_json'],
+                    'created_at': '2024-01-01T00:00:00Z',
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/messages/read') {
+              return http.Response('{}', 200);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('composer_attach_document')));
+      await tester.pumpAndSettle();
+
+      expect(uploadBody, containsPair('mime_type', testCase.expectedMime));
+      expect(putContentType, testCase.expectedMime);
+      expect(confirmed, isTrue);
+      expect(sentAttachment, isTrue);
+      expect(
+        find.byKey(ChatRoomPanel.attachmentPreviewKey(fileId)),
+        findsOneWidget,
+      );
+    });
+  }
+
   testWidgets('ChatRoomPanel blocks an infected attachment before sending', (
     tester,
   ) async {

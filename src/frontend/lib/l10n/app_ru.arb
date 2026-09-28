@@ -335,6 +335,7 @@
     }
   },
   "chatRoomLoadError": "Не удалось загрузить сообщения",
+  "chatBlockedAccountsSendDisabled": "Сообщения между этими аккаунтами недоступны",
   "chatRoomPermissionDenied": "У вас нет права просматривать этот чат",
   "chatRealtimeConnected": "Онлайн",
   "chatRealtimeConnecting": "Подключение…",
