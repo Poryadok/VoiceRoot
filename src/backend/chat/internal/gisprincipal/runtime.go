@@ -58,7 +58,7 @@ func ConfigFromEnv() (Config, bool, error) {
 		return Config{}, false, nil
 	}
 	if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.ReplayAddr == "" {
-		return Config{}, true, errors.New("Chat GIS principal configuration is incomplete")
+		return Config{}, true, errors.New("chat GIS principal configuration is incomplete")
 	}
 	return cfg, true, nil
 }
@@ -84,11 +84,11 @@ func unavailable(err error) error         { return &unavailableError{err: err} }
 
 func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.ReplayAddr == "" {
-		return nil, errors.New("Chat GIS principal configuration is incomplete")
+		return nil, errors.New("chat GIS principal configuration is incomplete")
 	}
 	jwksURL, err := url.Parse(cfg.JWKSURL)
 	if err != nil || jwksURL.Scheme != "https" || jwksURL.Host == "" || jwksURL.User != nil || jwksURL.Fragment != "" {
-		return nil, errors.New("Chat GIS principal JWKS URL must be an HTTPS endpoint")
+		return nil, errors.New("chat GIS principal JWKS URL must be an HTTPS endpoint")
 	}
 	serverTLS, err := loadServerTLS(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.ClientCAFile)
 	if err != nil {
@@ -102,15 +102,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.JWKSCAFile != "" {
 		pem, err := os.ReadFile(cfg.JWKSCAFile)
 		if err != nil {
-			return nil, fmt.Errorf("Chat GIS JWKS CA: %w", err)
+			return nil, fmt.Errorf("chat GIS JWKS CA: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(pem) {
-			return nil, errors.New("Chat GIS JWKS CA contains no certificates")
+			return nil, errors.New("chat GIS JWKS CA contains no certificates")
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("JWKS redirects forbidden") }}
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("jwks redirects forbidden") }}
 	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{
 		Fetch: func(ctx context.Context, issuer string) ([]byte, error) {
 			if issuer != Issuer {
@@ -124,7 +124,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			if err != nil {
 				return nil, unavailable(err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
 					return nil, unavailable(fmt.Errorf("principal JWKS returned HTTP %d", resp.StatusCode))
@@ -184,15 +184,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 func loadServerTLS(certFile, keyFile, clientCAFile string) (*tls.Config, error) {
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Chat GIS TLS certificate: %w", err)
+		return nil, fmt.Errorf("chat GIS TLS certificate: %w", err)
 	}
 	clientCAPEM, err := os.ReadFile(clientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Chat GIS client CA: %w", err)
+		return nil, fmt.Errorf("chat GIS client CA: %w", err)
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Chat GIS client CA contains no certificates")
+		return nil, errors.New("chat GIS client CA contains no certificates")
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}, nil
 }

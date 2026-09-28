@@ -34,7 +34,7 @@ type ManagedChatCreate struct {
 }
 
 type ManagedChatCreateResult struct {
-	Chat     *ChatRow
+	ChatID   uuid.UUID
 	Replayed bool
 }
 
@@ -78,17 +78,10 @@ func (s *DMStore) ProvisionManagedChat(ctx context.Context, request ManagedChatC
 	if saved, exists, err := readManagedOperation(ctx, tx, request.ApplicationID, request.EnvironmentID, request.OperationID, "create", request.RequestHash); err != nil {
 		return ManagedChatCreateResult{}, err
 	} else if exists {
-		chat, err := managedChatByID(ctx, tx, saved.ChatID)
-		if err != nil {
-			return ManagedChatCreateResult{}, err
-		}
-		if chat == nil || chat.ManagedByApplicationID == nil || *chat.ManagedByApplicationID != request.ApplicationID || chat.ManagedEnvironmentID == nil || *chat.ManagedEnvironmentID != request.EnvironmentID {
-			return ManagedChatCreateResult{}, ErrManagedOperationConflict
-		}
 		if err := tx.Commit(ctx); err != nil {
 			return ManagedChatCreateResult{}, err
 		}
-		return ManagedChatCreateResult{Chat: chat, Replayed: true}, nil
+		return ManagedChatCreateResult{ChatID: saved.ChatID, Replayed: true}, nil
 	}
 	resourceLock := request.ApplicationID.String() + "/" + request.EnvironmentID.String() + "/" + request.ExternalKey
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 31421))`, resourceLock); err != nil {
@@ -130,7 +123,7 @@ RETURNING id, created_at, updated_at
 	if err := tx.Commit(ctx); err != nil {
 		return ManagedChatCreateResult{}, err
 	}
-	return ManagedChatCreateResult{Chat: chat}, nil
+	return ManagedChatCreateResult{ChatID: chat.ID}, nil
 }
 
 func managedString(value *string) string {
@@ -191,11 +184,11 @@ func (s *DMStore) SyncManagedChatMembers(ctx context.Context, request ManagedCha
 	if err != nil {
 		return ManagedChatMemberSyncResult{}, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1`, request.ChatID); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND NOT (profile_id = ANY($2::uuid[]))`, request.ChatID, request.ProfileIDs); err != nil {
 		return ManagedChatMemberSyncResult{}, err
 	}
 	for _, profileID := range request.ProfileIDs {
-		if _, err := tx.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket) VALUES ($1, $2, 'member', 'main')`, request.ChatID, profileID); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role, inbox_bucket) VALUES ($1, $2, 'member', 'main') ON CONFLICT (chat_id, profile_id) DO UPDATE SET role = 'member'`, request.ChatID, profileID); err != nil {
 			return ManagedChatMemberSyncResult{}, err
 		}
 	}
@@ -253,11 +246,6 @@ func saveManagedOperation(ctx context.Context, tx pgx.Tx, applicationID, environ
 
 type managedChatQuery interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
-}
-
-func managedChatByID(ctx context.Context, q managedChatQuery, chatID uuid.UUID) (*ChatRow, error) {
-	return scanChatRow(q.QueryRow(ctx, `SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, managed_by_application_id, managed_environment_id, slow_mode_seconds,
-       last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests FROM chats WHERE id=$1`, chatID))
 }
 
 func managedChatByExternalKey(ctx context.Context, q managedChatQuery, applicationID, environmentID uuid.UUID, externalKey string) (*ChatRow, error) {

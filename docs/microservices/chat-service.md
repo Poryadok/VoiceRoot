@@ -143,10 +143,12 @@ dedicated port, secret mounts, or GIS-only network policy, so they leave this
 listener disabled.
 
 `managed_chat_operations` stores the exact app/environment/operation ID,
-method, request hash, chat ID, and immutable JSON receipt. Request replay with
-the same hash returns that receipt; a different method or hash conflicts.
-Roster synchronization atomically replaces membership and gives all members
-the `member` role. Managed resources and receipts currently have no retention
+method, request hash, chat ID, and immutable JSON receipt. Create responses
+contain only the immutable chat ID; mutable chat projections are read through
+Chat's ordinary API. Request replay with the same hash returns that receipt; a
+different method or hash conflicts. Roster synchronization atomically diffs
+membership, gives all members the `member` role, and preserves per-member state
+for retained members. Managed resources and receipts currently have no retention
 or retirement policy; product and T31 orchestration work must define one before
 application/environment deletion can safely remove them.
 

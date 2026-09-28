@@ -162,14 +162,7 @@ final $typed_data.Uint8List provisionManagedChatRequestDescriptor = $convert.bas
 const ProvisionManagedChatResponse$json = {
   '1': 'ProvisionManagedChatResponse',
   '2': [
-    {
-      '1': 'chat',
-      '3': 1,
-      '4': 1,
-      '5': 11,
-      '6': '.voice.chat.v1.Chat',
-      '10': 'chat'
-    },
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
     {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
   ],
 };
@@ -177,8 +170,8 @@ const ProvisionManagedChatResponse$json = {
 /// Descriptor for `ProvisionManagedChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List provisionManagedChatResponseDescriptor =
     $convert.base64Decode(
-        'ChxQcm92aXNpb25NYW5hZ2VkQ2hhdFJlc3BvbnNlEicKBGNoYXQYASABKAsyEy52b2ljZS5jaG'
-        'F0LnYxLkNoYXRSBGNoYXQSGgoIcmVwbGF5ZWQYAiABKAhSCHJlcGxheWVk');
+        'ChxQcm92aXNpb25NYW5hZ2VkQ2hhdFJlc3BvbnNlEhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZB'
+        'IaCghyZXBsYXllZBgCIAEoCFIIcmVwbGF5ZWQ=');
 
 @$core.Deprecated('Use syncManagedChatMembersRequestDescriptor instead')
 const SyncManagedChatMembersRequest$json = {

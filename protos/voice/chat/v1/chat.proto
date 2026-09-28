@@ -120,7 +120,7 @@ message ProvisionManagedChatRequest {
   optional string topic = 6;
 }
 message ProvisionManagedChatResponse {
-  Chat chat = 1;
+  string chat_id = 1;
   bool replayed = 2;
 }
 message SyncManagedChatMembersRequest {

@@ -96,11 +96,14 @@ provisioning, grants/entitlements, compensation, or reconciliation.
 - [x] RED store tests reproduced before implementation; recipient/runtime
   negative tests cover replay, wrong RPC/request ID/hash, raw headers, partial
   configuration, HTTP JWKS downgrade, and client-certificate requirement.
-- [x] Chat managed resource, atomic member replacement, operation receipts,
+- [x] Chat managed resource, atomic roster reconciliation that preserves
+  retained-member state, immutable create ID receipt, operation receipts,
   and ordinary player mutation guards implemented.
 - [x] Request-bound verifier and isolated mTLS listener wired in Chat main;
   staging/production secret/port/network-policy wiring remains open.
-- [x] Docs and focused verification complete: Chat grpcsvc/store and
-  gisprincipal tests, Chat main compile, Buf Go/Dart generation parity, and
-  buf lint/format checks.
-- [ ] Final source review and handoff evidence.
+- [x] Docs and focused verification complete: Chat grpcsvc/store suite passed
+  before reviewer fixes; current recipient/store regression tests and grpcsvc
+  test compilation pass; Buf Go/Dart generation, Go mirror, breaking, lint, and
+  format checks pass.
+- [x] Final source review and handoff evidence recorded in PR #533; current
+  review fixes are pending push and CI/reviewer recheck.

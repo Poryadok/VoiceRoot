@@ -320,7 +320,7 @@ func (x *ProvisionManagedChatRequest) GetTopic() string {
 
 type ProvisionManagedChatResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chat          *Chat                  `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	Replayed      bool                   `protobuf:"varint,2,opt,name=replayed,proto3" json:"replayed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -356,11 +356,11 @@ func (*ProvisionManagedChatResponse) Descriptor() ([]byte, []int) {
 	return file_voice_chat_v1_chat_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ProvisionManagedChatResponse) GetChat() *Chat {
+func (x *ProvisionManagedChatResponse) GetChatId() string {
 	if x != nil {
-		return x.Chat
+		return x.ChatId
 	}
-	return nil
+	return ""
 }
 
 func (x *ProvisionManagedChatResponse) GetReplayed() bool {
@@ -5286,12 +5286,11 @@ var file_voice_chat_v1_chat_proto_rawDesc = string([]byte{
 	0x74, 0x4b, 0x65, 0x79, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x05, 0x20, 0x01,
 	0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x19, 0x0a, 0x05, 0x74, 0x6f, 0x70, 0x69,
 	0x63, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x05, 0x74, 0x6f, 0x70, 0x69, 0x63,
-	0x88, 0x01, 0x01, 0x42, 0x08, 0x0a, 0x06, 0x5f, 0x74, 0x6f, 0x70, 0x69, 0x63, 0x22, 0x63, 0x0a,
+	0x88, 0x01, 0x01, 0x42, 0x08, 0x0a, 0x06, 0x5f, 0x74, 0x6f, 0x70, 0x69, 0x63, 0x22, 0x53, 0x0a,
 	0x1c, 0x50, 0x72, 0x6f, 0x76, 0x69, 0x73, 0x69, 0x6f, 0x6e, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65,
-	0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x27, 0x0a,
-	0x04, 0x63, 0x68, 0x61, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x76, 0x6f,
-	0x69, 0x63, 0x65, 0x2e, 0x63, 0x68, 0x61, 0x74, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x68, 0x61, 0x74,
-	0x52, 0x04, 0x63, 0x68, 0x61, 0x74, 0x12, 0x1a, 0x0a, 0x08, 0x72, 0x65, 0x70, 0x6c, 0x61, 0x79,
+	0x64, 0x43, 0x68, 0x61, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x17, 0x0a,
+	0x07, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06,
+	0x63, 0x68, 0x61, 0x74, 0x49, 0x64, 0x12, 0x1a, 0x0a, 0x08, 0x72, 0x65, 0x70, 0x6c, 0x61, 0x79,
 	0x65, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x08, 0x72, 0x65, 0x70, 0x6c, 0x61, 0x79,
 	0x65, 0x64, 0x22, 0xca, 0x01, 0x0a, 0x1d, 0x53, 0x79, 0x6e, 0x63, 0x4d, 0x61, 0x6e, 0x61, 0x67,
 	0x65, 0x64, 0x43, 0x68, 0x61, 0x74, 0x4d, 0x65, 0x6d, 0x62, 0x65, 0x72, 0x73, 0x52, 0x65, 0x71,
@@ -6273,137 +6272,136 @@ var file_voice_chat_v1_chat_proto_depIdxs = []int32{
 	101, // 1: voice.chat.v1.Chat.last_message_at:type_name -> google.protobuf.Timestamp
 	101, // 2: voice.chat.v1.Chat.created_at:type_name -> google.protobuf.Timestamp
 	101, // 3: voice.chat.v1.Chat.updated_at:type_name -> google.protobuf.Timestamp
-	1,   // 4: voice.chat.v1.ProvisionManagedChatResponse.chat:type_name -> voice.chat.v1.Chat
-	0,   // 5: voice.chat.v1.CreateChatRequest.type:type_name -> voice.chat.v1.ChatType
-	102, // 6: voice.chat.v1.ListMembersRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	19,  // 7: voice.chat.v1.MemberList.members:type_name -> voice.chat.v1.ChatMember
-	101, // 8: voice.chat.v1.ChatMember.joined_at:type_name -> google.protobuf.Timestamp
-	101, // 9: voice.chat.v1.ChatMember.muted_until:type_name -> google.protobuf.Timestamp
-	102, // 10: voice.chat.v1.ListChatsRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	1,   // 11: voice.chat.v1.ChatListItem.chat:type_name -> voice.chat.v1.Chat
-	21,  // 12: voice.chat.v1.ChatList.items:type_name -> voice.chat.v1.ChatListItem
-	1,   // 13: voice.chat.v1.QuickAccessItem.chat:type_name -> voice.chat.v1.Chat
-	24,  // 14: voice.chat.v1.ListQuickAccessResponse.items:type_name -> voice.chat.v1.QuickAccessItem
-	32,  // 15: voice.chat.v1.FolderList.folders:type_name -> voice.chat.v1.Folder
-	101, // 16: voice.chat.v1.MuteChatRequest.muted_until:type_name -> google.protobuf.Timestamp
-	45,  // 17: voice.chat.v1.StickerPack.stickers:type_name -> voice.chat.v1.Sticker
-	46,  // 18: voice.chat.v1.ListInstalledStickerPacksResponse.packs:type_name -> voice.chat.v1.StickerPack
-	46,  // 19: voice.chat.v1.GetStickerPackResponse.pack:type_name -> voice.chat.v1.StickerPack
-	46,  // 20: voice.chat.v1.InstallStickerPackResponse.pack:type_name -> voice.chat.v1.StickerPack
-	102, // 21: voice.chat.v1.ListDMReceiptVisibilityTargetsRequest.page:type_name -> voice.common.v1.CursorPageRequest
-	58,  // 22: voice.chat.v1.ListDMReceiptVisibilityTargetsResponse.targets:type_name -> voice.chat.v1.DMReceiptVisibilityTarget
-	0,   // 23: voice.chat.v1.ChatRef.type:type_name -> voice.chat.v1.ChatType
-	1,   // 24: voice.chat.v1.CreateDMResponse.chat:type_name -> voice.chat.v1.Chat
-	1,   // 25: voice.chat.v1.GetDMResponse.chat:type_name -> voice.chat.v1.Chat
-	1,   // 26: voice.chat.v1.CreateChatResponse.chat:type_name -> voice.chat.v1.Chat
-	1,   // 27: voice.chat.v1.UpdateChatResponse.chat:type_name -> voice.chat.v1.Chat
-	18,  // 28: voice.chat.v1.ListMembersResponse.member_list:type_name -> voice.chat.v1.MemberList
-	22,  // 29: voice.chat.v1.ListChatsResponse.chat_list:type_name -> voice.chat.v1.ChatList
-	1,   // 30: voice.chat.v1.GetChatResponse.chat:type_name -> voice.chat.v1.Chat
-	31,  // 31: voice.chat.v1.ListFoldersResponse.folder_list:type_name -> voice.chat.v1.FolderList
-	32,  // 32: voice.chat.v1.CreateFolderResponse.folder:type_name -> voice.chat.v1.Folder
-	32,  // 33: voice.chat.v1.UpdateFolderResponse.folder:type_name -> voice.chat.v1.Folder
-	103, // 34: voice.chat.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
-	104, // 35: voice.chat.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
-	105, // 36: voice.chat.v1.PurgeSpaceRequest.purge:type_name -> voice.common.v1.SpacePurgeRequest
-	106, // 37: voice.chat.v1.PurgeSpaceResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
-	107, // 38: voice.chat.v1.SpacePurgeManifestPage.manifest:type_name -> voice.common.v1.ManifestBinding
-	108, // 39: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.applied_state:type_name -> voice.common.v1.LifecycleFenceState
-	107, // 40: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.chat_manifest:type_name -> voice.common.v1.ManifestBinding
-	101, // 41: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.applied_at:type_name -> google.protobuf.Timestamp
-	98,  // 42: voice.chat.v1.PrepareSpaceDeletionManifestResponse.receipt:type_name -> voice.chat.v1.PrepareSpaceDeletionManifestReceipt
-	96,  // 43: voice.chat.v1.GetSpacePurgeManifestPageResponse.page:type_name -> voice.chat.v1.SpacePurgeManifestPage
-	6,   // 44: voice.chat.v1.ChatService.CreateDM:input_type -> voice.chat.v1.CreateDMRequest
-	7,   // 45: voice.chat.v1.ChatService.GetDM:input_type -> voice.chat.v1.GetDMRequest
-	8,   // 46: voice.chat.v1.ChatService.CreateChat:input_type -> voice.chat.v1.CreateChatRequest
-	9,   // 47: voice.chat.v1.ChatService.UpdateChat:input_type -> voice.chat.v1.UpdateChatRequest
-	10,  // 48: voice.chat.v1.ChatService.DeleteChat:input_type -> voice.chat.v1.DeleteChatRequest
-	11,  // 49: voice.chat.v1.ChatService.AddMembers:input_type -> voice.chat.v1.AddMembersRequest
-	12,  // 50: voice.chat.v1.ChatService.RemoveMember:input_type -> voice.chat.v1.RemoveMemberRequest
-	13,  // 51: voice.chat.v1.ChatService.LeaveChat:input_type -> voice.chat.v1.LeaveChatRequest
-	14,  // 52: voice.chat.v1.ChatService.SetGroupMemberRole:input_type -> voice.chat.v1.SetGroupMemberRoleRequest
-	15,  // 53: voice.chat.v1.ChatService.TransferGroupOwnership:input_type -> voice.chat.v1.TransferGroupOwnershipRequest
-	17,  // 54: voice.chat.v1.ChatService.ListMembers:input_type -> voice.chat.v1.ListMembersRequest
-	20,  // 55: voice.chat.v1.ChatService.ListChats:input_type -> voice.chat.v1.ListChatsRequest
-	23,  // 56: voice.chat.v1.ChatService.GetChat:input_type -> voice.chat.v1.GetChatRequest
-	25,  // 57: voice.chat.v1.ChatService.ListQuickAccess:input_type -> voice.chat.v1.ListQuickAccessRequest
-	27,  // 58: voice.chat.v1.ChatService.AddQuickAccess:input_type -> voice.chat.v1.AddQuickAccessRequest
-	28,  // 59: voice.chat.v1.ChatService.RemoveQuickAccess:input_type -> voice.chat.v1.RemoveQuickAccessRequest
-	29,  // 60: voice.chat.v1.ChatService.ReorderQuickAccess:input_type -> voice.chat.v1.ReorderQuickAccessRequest
-	30,  // 61: voice.chat.v1.ChatService.ListFolders:input_type -> voice.chat.v1.ListFoldersRequest
-	33,  // 62: voice.chat.v1.ChatService.CreateFolder:input_type -> voice.chat.v1.CreateFolderRequest
-	34,  // 63: voice.chat.v1.ChatService.UpdateFolder:input_type -> voice.chat.v1.UpdateFolderRequest
-	35,  // 64: voice.chat.v1.ChatService.DeleteFolder:input_type -> voice.chat.v1.DeleteFolderRequest
-	36,  // 65: voice.chat.v1.ChatService.AddChatToFolder:input_type -> voice.chat.v1.AddChatToFolderRequest
-	37,  // 66: voice.chat.v1.ChatService.RemoveChatFromFolder:input_type -> voice.chat.v1.RemoveChatFromFolderRequest
-	38,  // 67: voice.chat.v1.ChatService.ReorderFolderChats:input_type -> voice.chat.v1.ReorderFolderChatsRequest
-	39,  // 68: voice.chat.v1.ChatService.PinChatInFolder:input_type -> voice.chat.v1.PinChatInFolderRequest
-	40,  // 69: voice.chat.v1.ChatService.UnpinChatInFolder:input_type -> voice.chat.v1.UnpinChatInFolderRequest
-	41,  // 70: voice.chat.v1.ChatService.AcceptDMRequest:input_type -> voice.chat.v1.AcceptDMRequestRequest
-	42,  // 71: voice.chat.v1.ChatService.DeclineDMRequest:input_type -> voice.chat.v1.DeclineDMRequestRequest
-	43,  // 72: voice.chat.v1.ChatService.MuteChat:input_type -> voice.chat.v1.MuteChatRequest
-	44,  // 73: voice.chat.v1.ChatService.ArchiveChat:input_type -> voice.chat.v1.ArchiveChatRequest
-	47,  // 74: voice.chat.v1.ChatService.ListInstalledStickerPacks:input_type -> voice.chat.v1.ListInstalledStickerPacksRequest
-	49,  // 75: voice.chat.v1.ChatService.GetStickerPack:input_type -> voice.chat.v1.GetStickerPackRequest
-	51,  // 76: voice.chat.v1.ChatService.InstallStickerPack:input_type -> voice.chat.v1.InstallStickerPackRequest
-	53,  // 77: voice.chat.v1.ChatService.UninstallStickerPack:input_type -> voice.chat.v1.UninstallStickerPackRequest
-	55,  // 78: voice.chat.v1.ChatService.EnableChatE2E:input_type -> voice.chat.v1.EnableChatE2ERequest
-	56,  // 79: voice.chat.v1.ChatService.DisableChatE2E:input_type -> voice.chat.v1.DisableChatE2ERequest
-	57,  // 80: voice.chat.v1.ChatService.ListDMReceiptVisibilityTargets:input_type -> voice.chat.v1.ListDMReceiptVisibilityTargetsRequest
-	91,  // 81: voice.chat.v1.ChatService.ApplySpaceLifecycleFence:input_type -> voice.chat.v1.ApplySpaceLifecycleFenceRequest
-	93,  // 82: voice.chat.v1.ChatService.PurgeSpace:input_type -> voice.chat.v1.PurgeSpaceRequest
-	97,  // 83: voice.chat.v1.ChatService.PrepareSpaceDeletionManifest:input_type -> voice.chat.v1.PrepareSpaceDeletionManifestRequest
-	95,  // 84: voice.chat.v1.ChatService.GetSpacePurgeManifestPage:input_type -> voice.chat.v1.GetSpacePurgeManifestPageRequest
-	2,   // 85: voice.chat.v1.GameIntegrationChatService.ProvisionManagedChat:input_type -> voice.chat.v1.ProvisionManagedChatRequest
-	4,   // 86: voice.chat.v1.GameIntegrationChatService.SyncManagedChatMembers:input_type -> voice.chat.v1.SyncManagedChatMembersRequest
-	61,  // 87: voice.chat.v1.ChatService.CreateDM:output_type -> voice.chat.v1.CreateDMResponse
-	62,  // 88: voice.chat.v1.ChatService.GetDM:output_type -> voice.chat.v1.GetDMResponse
-	63,  // 89: voice.chat.v1.ChatService.CreateChat:output_type -> voice.chat.v1.CreateChatResponse
-	64,  // 90: voice.chat.v1.ChatService.UpdateChat:output_type -> voice.chat.v1.UpdateChatResponse
-	65,  // 91: voice.chat.v1.ChatService.DeleteChat:output_type -> voice.chat.v1.DeleteChatResponse
-	66,  // 92: voice.chat.v1.ChatService.AddMembers:output_type -> voice.chat.v1.AddMembersResponse
-	67,  // 93: voice.chat.v1.ChatService.RemoveMember:output_type -> voice.chat.v1.RemoveMemberResponse
-	68,  // 94: voice.chat.v1.ChatService.LeaveChat:output_type -> voice.chat.v1.LeaveChatResponse
-	69,  // 95: voice.chat.v1.ChatService.SetGroupMemberRole:output_type -> voice.chat.v1.SetGroupMemberRoleResponse
-	16,  // 96: voice.chat.v1.ChatService.TransferGroupOwnership:output_type -> voice.chat.v1.TransferGroupOwnershipResponse
-	70,  // 97: voice.chat.v1.ChatService.ListMembers:output_type -> voice.chat.v1.ListMembersResponse
-	71,  // 98: voice.chat.v1.ChatService.ListChats:output_type -> voice.chat.v1.ListChatsResponse
-	72,  // 99: voice.chat.v1.ChatService.GetChat:output_type -> voice.chat.v1.GetChatResponse
-	26,  // 100: voice.chat.v1.ChatService.ListQuickAccess:output_type -> voice.chat.v1.ListQuickAccessResponse
-	73,  // 101: voice.chat.v1.ChatService.AddQuickAccess:output_type -> voice.chat.v1.AddQuickAccessResponse
-	74,  // 102: voice.chat.v1.ChatService.RemoveQuickAccess:output_type -> voice.chat.v1.RemoveQuickAccessResponse
-	75,  // 103: voice.chat.v1.ChatService.ReorderQuickAccess:output_type -> voice.chat.v1.ReorderQuickAccessResponse
-	76,  // 104: voice.chat.v1.ChatService.ListFolders:output_type -> voice.chat.v1.ListFoldersResponse
-	77,  // 105: voice.chat.v1.ChatService.CreateFolder:output_type -> voice.chat.v1.CreateFolderResponse
-	78,  // 106: voice.chat.v1.ChatService.UpdateFolder:output_type -> voice.chat.v1.UpdateFolderResponse
-	79,  // 107: voice.chat.v1.ChatService.DeleteFolder:output_type -> voice.chat.v1.DeleteFolderResponse
-	80,  // 108: voice.chat.v1.ChatService.AddChatToFolder:output_type -> voice.chat.v1.AddChatToFolderResponse
-	81,  // 109: voice.chat.v1.ChatService.RemoveChatFromFolder:output_type -> voice.chat.v1.RemoveChatFromFolderResponse
-	82,  // 110: voice.chat.v1.ChatService.ReorderFolderChats:output_type -> voice.chat.v1.ReorderFolderChatsResponse
-	83,  // 111: voice.chat.v1.ChatService.PinChatInFolder:output_type -> voice.chat.v1.PinChatInFolderResponse
-	84,  // 112: voice.chat.v1.ChatService.UnpinChatInFolder:output_type -> voice.chat.v1.UnpinChatInFolderResponse
-	85,  // 113: voice.chat.v1.ChatService.AcceptDMRequest:output_type -> voice.chat.v1.AcceptDMRequestResponse
-	86,  // 114: voice.chat.v1.ChatService.DeclineDMRequest:output_type -> voice.chat.v1.DeclineDMRequestResponse
-	87,  // 115: voice.chat.v1.ChatService.MuteChat:output_type -> voice.chat.v1.MuteChatResponse
-	88,  // 116: voice.chat.v1.ChatService.ArchiveChat:output_type -> voice.chat.v1.ArchiveChatResponse
-	48,  // 117: voice.chat.v1.ChatService.ListInstalledStickerPacks:output_type -> voice.chat.v1.ListInstalledStickerPacksResponse
-	50,  // 118: voice.chat.v1.ChatService.GetStickerPack:output_type -> voice.chat.v1.GetStickerPackResponse
-	52,  // 119: voice.chat.v1.ChatService.InstallStickerPack:output_type -> voice.chat.v1.InstallStickerPackResponse
-	54,  // 120: voice.chat.v1.ChatService.UninstallStickerPack:output_type -> voice.chat.v1.UninstallStickerPackResponse
-	89,  // 121: voice.chat.v1.ChatService.EnableChatE2E:output_type -> voice.chat.v1.EnableChatE2EResponse
-	90,  // 122: voice.chat.v1.ChatService.DisableChatE2E:output_type -> voice.chat.v1.DisableChatE2EResponse
-	59,  // 123: voice.chat.v1.ChatService.ListDMReceiptVisibilityTargets:output_type -> voice.chat.v1.ListDMReceiptVisibilityTargetsResponse
-	92,  // 124: voice.chat.v1.ChatService.ApplySpaceLifecycleFence:output_type -> voice.chat.v1.ApplySpaceLifecycleFenceResponse
-	94,  // 125: voice.chat.v1.ChatService.PurgeSpace:output_type -> voice.chat.v1.PurgeSpaceResponse
-	99,  // 126: voice.chat.v1.ChatService.PrepareSpaceDeletionManifest:output_type -> voice.chat.v1.PrepareSpaceDeletionManifestResponse
-	100, // 127: voice.chat.v1.ChatService.GetSpacePurgeManifestPage:output_type -> voice.chat.v1.GetSpacePurgeManifestPageResponse
-	3,   // 128: voice.chat.v1.GameIntegrationChatService.ProvisionManagedChat:output_type -> voice.chat.v1.ProvisionManagedChatResponse
-	5,   // 129: voice.chat.v1.GameIntegrationChatService.SyncManagedChatMembers:output_type -> voice.chat.v1.SyncManagedChatMembersResponse
-	87,  // [87:130] is the sub-list for method output_type
-	44,  // [44:87] is the sub-list for method input_type
-	44,  // [44:44] is the sub-list for extension type_name
-	44,  // [44:44] is the sub-list for extension extendee
-	0,   // [0:44] is the sub-list for field type_name
+	0,   // 4: voice.chat.v1.CreateChatRequest.type:type_name -> voice.chat.v1.ChatType
+	102, // 5: voice.chat.v1.ListMembersRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	19,  // 6: voice.chat.v1.MemberList.members:type_name -> voice.chat.v1.ChatMember
+	101, // 7: voice.chat.v1.ChatMember.joined_at:type_name -> google.protobuf.Timestamp
+	101, // 8: voice.chat.v1.ChatMember.muted_until:type_name -> google.protobuf.Timestamp
+	102, // 9: voice.chat.v1.ListChatsRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	1,   // 10: voice.chat.v1.ChatListItem.chat:type_name -> voice.chat.v1.Chat
+	21,  // 11: voice.chat.v1.ChatList.items:type_name -> voice.chat.v1.ChatListItem
+	1,   // 12: voice.chat.v1.QuickAccessItem.chat:type_name -> voice.chat.v1.Chat
+	24,  // 13: voice.chat.v1.ListQuickAccessResponse.items:type_name -> voice.chat.v1.QuickAccessItem
+	32,  // 14: voice.chat.v1.FolderList.folders:type_name -> voice.chat.v1.Folder
+	101, // 15: voice.chat.v1.MuteChatRequest.muted_until:type_name -> google.protobuf.Timestamp
+	45,  // 16: voice.chat.v1.StickerPack.stickers:type_name -> voice.chat.v1.Sticker
+	46,  // 17: voice.chat.v1.ListInstalledStickerPacksResponse.packs:type_name -> voice.chat.v1.StickerPack
+	46,  // 18: voice.chat.v1.GetStickerPackResponse.pack:type_name -> voice.chat.v1.StickerPack
+	46,  // 19: voice.chat.v1.InstallStickerPackResponse.pack:type_name -> voice.chat.v1.StickerPack
+	102, // 20: voice.chat.v1.ListDMReceiptVisibilityTargetsRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	58,  // 21: voice.chat.v1.ListDMReceiptVisibilityTargetsResponse.targets:type_name -> voice.chat.v1.DMReceiptVisibilityTarget
+	0,   // 22: voice.chat.v1.ChatRef.type:type_name -> voice.chat.v1.ChatType
+	1,   // 23: voice.chat.v1.CreateDMResponse.chat:type_name -> voice.chat.v1.Chat
+	1,   // 24: voice.chat.v1.GetDMResponse.chat:type_name -> voice.chat.v1.Chat
+	1,   // 25: voice.chat.v1.CreateChatResponse.chat:type_name -> voice.chat.v1.Chat
+	1,   // 26: voice.chat.v1.UpdateChatResponse.chat:type_name -> voice.chat.v1.Chat
+	18,  // 27: voice.chat.v1.ListMembersResponse.member_list:type_name -> voice.chat.v1.MemberList
+	22,  // 28: voice.chat.v1.ListChatsResponse.chat_list:type_name -> voice.chat.v1.ChatList
+	1,   // 29: voice.chat.v1.GetChatResponse.chat:type_name -> voice.chat.v1.Chat
+	31,  // 30: voice.chat.v1.ListFoldersResponse.folder_list:type_name -> voice.chat.v1.FolderList
+	32,  // 31: voice.chat.v1.CreateFolderResponse.folder:type_name -> voice.chat.v1.Folder
+	32,  // 32: voice.chat.v1.UpdateFolderResponse.folder:type_name -> voice.chat.v1.Folder
+	103, // 33: voice.chat.v1.ApplySpaceLifecycleFenceRequest.fence:type_name -> voice.common.v1.SpaceLifecycleFenceRequest
+	104, // 34: voice.chat.v1.ApplySpaceLifecycleFenceResponse.receipt:type_name -> voice.common.v1.SpaceLifecycleFenceReceipt
+	105, // 35: voice.chat.v1.PurgeSpaceRequest.purge:type_name -> voice.common.v1.SpacePurgeRequest
+	106, // 36: voice.chat.v1.PurgeSpaceResponse.receipt:type_name -> voice.common.v1.SpacePurgeReceipt
+	107, // 37: voice.chat.v1.SpacePurgeManifestPage.manifest:type_name -> voice.common.v1.ManifestBinding
+	108, // 38: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.applied_state:type_name -> voice.common.v1.LifecycleFenceState
+	107, // 39: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.chat_manifest:type_name -> voice.common.v1.ManifestBinding
+	101, // 40: voice.chat.v1.PrepareSpaceDeletionManifestReceipt.applied_at:type_name -> google.protobuf.Timestamp
+	98,  // 41: voice.chat.v1.PrepareSpaceDeletionManifestResponse.receipt:type_name -> voice.chat.v1.PrepareSpaceDeletionManifestReceipt
+	96,  // 42: voice.chat.v1.GetSpacePurgeManifestPageResponse.page:type_name -> voice.chat.v1.SpacePurgeManifestPage
+	6,   // 43: voice.chat.v1.ChatService.CreateDM:input_type -> voice.chat.v1.CreateDMRequest
+	7,   // 44: voice.chat.v1.ChatService.GetDM:input_type -> voice.chat.v1.GetDMRequest
+	8,   // 45: voice.chat.v1.ChatService.CreateChat:input_type -> voice.chat.v1.CreateChatRequest
+	9,   // 46: voice.chat.v1.ChatService.UpdateChat:input_type -> voice.chat.v1.UpdateChatRequest
+	10,  // 47: voice.chat.v1.ChatService.DeleteChat:input_type -> voice.chat.v1.DeleteChatRequest
+	11,  // 48: voice.chat.v1.ChatService.AddMembers:input_type -> voice.chat.v1.AddMembersRequest
+	12,  // 49: voice.chat.v1.ChatService.RemoveMember:input_type -> voice.chat.v1.RemoveMemberRequest
+	13,  // 50: voice.chat.v1.ChatService.LeaveChat:input_type -> voice.chat.v1.LeaveChatRequest
+	14,  // 51: voice.chat.v1.ChatService.SetGroupMemberRole:input_type -> voice.chat.v1.SetGroupMemberRoleRequest
+	15,  // 52: voice.chat.v1.ChatService.TransferGroupOwnership:input_type -> voice.chat.v1.TransferGroupOwnershipRequest
+	17,  // 53: voice.chat.v1.ChatService.ListMembers:input_type -> voice.chat.v1.ListMembersRequest
+	20,  // 54: voice.chat.v1.ChatService.ListChats:input_type -> voice.chat.v1.ListChatsRequest
+	23,  // 55: voice.chat.v1.ChatService.GetChat:input_type -> voice.chat.v1.GetChatRequest
+	25,  // 56: voice.chat.v1.ChatService.ListQuickAccess:input_type -> voice.chat.v1.ListQuickAccessRequest
+	27,  // 57: voice.chat.v1.ChatService.AddQuickAccess:input_type -> voice.chat.v1.AddQuickAccessRequest
+	28,  // 58: voice.chat.v1.ChatService.RemoveQuickAccess:input_type -> voice.chat.v1.RemoveQuickAccessRequest
+	29,  // 59: voice.chat.v1.ChatService.ReorderQuickAccess:input_type -> voice.chat.v1.ReorderQuickAccessRequest
+	30,  // 60: voice.chat.v1.ChatService.ListFolders:input_type -> voice.chat.v1.ListFoldersRequest
+	33,  // 61: voice.chat.v1.ChatService.CreateFolder:input_type -> voice.chat.v1.CreateFolderRequest
+	34,  // 62: voice.chat.v1.ChatService.UpdateFolder:input_type -> voice.chat.v1.UpdateFolderRequest
+	35,  // 63: voice.chat.v1.ChatService.DeleteFolder:input_type -> voice.chat.v1.DeleteFolderRequest
+	36,  // 64: voice.chat.v1.ChatService.AddChatToFolder:input_type -> voice.chat.v1.AddChatToFolderRequest
+	37,  // 65: voice.chat.v1.ChatService.RemoveChatFromFolder:input_type -> voice.chat.v1.RemoveChatFromFolderRequest
+	38,  // 66: voice.chat.v1.ChatService.ReorderFolderChats:input_type -> voice.chat.v1.ReorderFolderChatsRequest
+	39,  // 67: voice.chat.v1.ChatService.PinChatInFolder:input_type -> voice.chat.v1.PinChatInFolderRequest
+	40,  // 68: voice.chat.v1.ChatService.UnpinChatInFolder:input_type -> voice.chat.v1.UnpinChatInFolderRequest
+	41,  // 69: voice.chat.v1.ChatService.AcceptDMRequest:input_type -> voice.chat.v1.AcceptDMRequestRequest
+	42,  // 70: voice.chat.v1.ChatService.DeclineDMRequest:input_type -> voice.chat.v1.DeclineDMRequestRequest
+	43,  // 71: voice.chat.v1.ChatService.MuteChat:input_type -> voice.chat.v1.MuteChatRequest
+	44,  // 72: voice.chat.v1.ChatService.ArchiveChat:input_type -> voice.chat.v1.ArchiveChatRequest
+	47,  // 73: voice.chat.v1.ChatService.ListInstalledStickerPacks:input_type -> voice.chat.v1.ListInstalledStickerPacksRequest
+	49,  // 74: voice.chat.v1.ChatService.GetStickerPack:input_type -> voice.chat.v1.GetStickerPackRequest
+	51,  // 75: voice.chat.v1.ChatService.InstallStickerPack:input_type -> voice.chat.v1.InstallStickerPackRequest
+	53,  // 76: voice.chat.v1.ChatService.UninstallStickerPack:input_type -> voice.chat.v1.UninstallStickerPackRequest
+	55,  // 77: voice.chat.v1.ChatService.EnableChatE2E:input_type -> voice.chat.v1.EnableChatE2ERequest
+	56,  // 78: voice.chat.v1.ChatService.DisableChatE2E:input_type -> voice.chat.v1.DisableChatE2ERequest
+	57,  // 79: voice.chat.v1.ChatService.ListDMReceiptVisibilityTargets:input_type -> voice.chat.v1.ListDMReceiptVisibilityTargetsRequest
+	91,  // 80: voice.chat.v1.ChatService.ApplySpaceLifecycleFence:input_type -> voice.chat.v1.ApplySpaceLifecycleFenceRequest
+	93,  // 81: voice.chat.v1.ChatService.PurgeSpace:input_type -> voice.chat.v1.PurgeSpaceRequest
+	97,  // 82: voice.chat.v1.ChatService.PrepareSpaceDeletionManifest:input_type -> voice.chat.v1.PrepareSpaceDeletionManifestRequest
+	95,  // 83: voice.chat.v1.ChatService.GetSpacePurgeManifestPage:input_type -> voice.chat.v1.GetSpacePurgeManifestPageRequest
+	2,   // 84: voice.chat.v1.GameIntegrationChatService.ProvisionManagedChat:input_type -> voice.chat.v1.ProvisionManagedChatRequest
+	4,   // 85: voice.chat.v1.GameIntegrationChatService.SyncManagedChatMembers:input_type -> voice.chat.v1.SyncManagedChatMembersRequest
+	61,  // 86: voice.chat.v1.ChatService.CreateDM:output_type -> voice.chat.v1.CreateDMResponse
+	62,  // 87: voice.chat.v1.ChatService.GetDM:output_type -> voice.chat.v1.GetDMResponse
+	63,  // 88: voice.chat.v1.ChatService.CreateChat:output_type -> voice.chat.v1.CreateChatResponse
+	64,  // 89: voice.chat.v1.ChatService.UpdateChat:output_type -> voice.chat.v1.UpdateChatResponse
+	65,  // 90: voice.chat.v1.ChatService.DeleteChat:output_type -> voice.chat.v1.DeleteChatResponse
+	66,  // 91: voice.chat.v1.ChatService.AddMembers:output_type -> voice.chat.v1.AddMembersResponse
+	67,  // 92: voice.chat.v1.ChatService.RemoveMember:output_type -> voice.chat.v1.RemoveMemberResponse
+	68,  // 93: voice.chat.v1.ChatService.LeaveChat:output_type -> voice.chat.v1.LeaveChatResponse
+	69,  // 94: voice.chat.v1.ChatService.SetGroupMemberRole:output_type -> voice.chat.v1.SetGroupMemberRoleResponse
+	16,  // 95: voice.chat.v1.ChatService.TransferGroupOwnership:output_type -> voice.chat.v1.TransferGroupOwnershipResponse
+	70,  // 96: voice.chat.v1.ChatService.ListMembers:output_type -> voice.chat.v1.ListMembersResponse
+	71,  // 97: voice.chat.v1.ChatService.ListChats:output_type -> voice.chat.v1.ListChatsResponse
+	72,  // 98: voice.chat.v1.ChatService.GetChat:output_type -> voice.chat.v1.GetChatResponse
+	26,  // 99: voice.chat.v1.ChatService.ListQuickAccess:output_type -> voice.chat.v1.ListQuickAccessResponse
+	73,  // 100: voice.chat.v1.ChatService.AddQuickAccess:output_type -> voice.chat.v1.AddQuickAccessResponse
+	74,  // 101: voice.chat.v1.ChatService.RemoveQuickAccess:output_type -> voice.chat.v1.RemoveQuickAccessResponse
+	75,  // 102: voice.chat.v1.ChatService.ReorderQuickAccess:output_type -> voice.chat.v1.ReorderQuickAccessResponse
+	76,  // 103: voice.chat.v1.ChatService.ListFolders:output_type -> voice.chat.v1.ListFoldersResponse
+	77,  // 104: voice.chat.v1.ChatService.CreateFolder:output_type -> voice.chat.v1.CreateFolderResponse
+	78,  // 105: voice.chat.v1.ChatService.UpdateFolder:output_type -> voice.chat.v1.UpdateFolderResponse
+	79,  // 106: voice.chat.v1.ChatService.DeleteFolder:output_type -> voice.chat.v1.DeleteFolderResponse
+	80,  // 107: voice.chat.v1.ChatService.AddChatToFolder:output_type -> voice.chat.v1.AddChatToFolderResponse
+	81,  // 108: voice.chat.v1.ChatService.RemoveChatFromFolder:output_type -> voice.chat.v1.RemoveChatFromFolderResponse
+	82,  // 109: voice.chat.v1.ChatService.ReorderFolderChats:output_type -> voice.chat.v1.ReorderFolderChatsResponse
+	83,  // 110: voice.chat.v1.ChatService.PinChatInFolder:output_type -> voice.chat.v1.PinChatInFolderResponse
+	84,  // 111: voice.chat.v1.ChatService.UnpinChatInFolder:output_type -> voice.chat.v1.UnpinChatInFolderResponse
+	85,  // 112: voice.chat.v1.ChatService.AcceptDMRequest:output_type -> voice.chat.v1.AcceptDMRequestResponse
+	86,  // 113: voice.chat.v1.ChatService.DeclineDMRequest:output_type -> voice.chat.v1.DeclineDMRequestResponse
+	87,  // 114: voice.chat.v1.ChatService.MuteChat:output_type -> voice.chat.v1.MuteChatResponse
+	88,  // 115: voice.chat.v1.ChatService.ArchiveChat:output_type -> voice.chat.v1.ArchiveChatResponse
+	48,  // 116: voice.chat.v1.ChatService.ListInstalledStickerPacks:output_type -> voice.chat.v1.ListInstalledStickerPacksResponse
+	50,  // 117: voice.chat.v1.ChatService.GetStickerPack:output_type -> voice.chat.v1.GetStickerPackResponse
+	52,  // 118: voice.chat.v1.ChatService.InstallStickerPack:output_type -> voice.chat.v1.InstallStickerPackResponse
+	54,  // 119: voice.chat.v1.ChatService.UninstallStickerPack:output_type -> voice.chat.v1.UninstallStickerPackResponse
+	89,  // 120: voice.chat.v1.ChatService.EnableChatE2E:output_type -> voice.chat.v1.EnableChatE2EResponse
+	90,  // 121: voice.chat.v1.ChatService.DisableChatE2E:output_type -> voice.chat.v1.DisableChatE2EResponse
+	59,  // 122: voice.chat.v1.ChatService.ListDMReceiptVisibilityTargets:output_type -> voice.chat.v1.ListDMReceiptVisibilityTargetsResponse
+	92,  // 123: voice.chat.v1.ChatService.ApplySpaceLifecycleFence:output_type -> voice.chat.v1.ApplySpaceLifecycleFenceResponse
+	94,  // 124: voice.chat.v1.ChatService.PurgeSpace:output_type -> voice.chat.v1.PurgeSpaceResponse
+	99,  // 125: voice.chat.v1.ChatService.PrepareSpaceDeletionManifest:output_type -> voice.chat.v1.PrepareSpaceDeletionManifestResponse
+	100, // 126: voice.chat.v1.ChatService.GetSpacePurgeManifestPage:output_type -> voice.chat.v1.GetSpacePurgeManifestPageResponse
+	3,   // 127: voice.chat.v1.GameIntegrationChatService.ProvisionManagedChat:output_type -> voice.chat.v1.ProvisionManagedChatResponse
+	5,   // 128: voice.chat.v1.GameIntegrationChatService.SyncManagedChatMembers:output_type -> voice.chat.v1.SyncManagedChatMembersResponse
+	86,  // [86:129] is the sub-list for method output_type
+	43,  // [43:86] is the sub-list for method input_type
+	43,  // [43:43] is the sub-list for extension type_name
+	43,  // [43:43] is the sub-list for extension extendee
+	0,   // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_voice_chat_v1_chat_proto_init() }

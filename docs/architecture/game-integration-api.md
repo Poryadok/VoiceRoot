@@ -72,10 +72,13 @@ the listener remains disabled there until those deployment changes ship.
 and environment. It has no human creator, owner, or administrator. The unique
 `(application_id, environment_id, external_chat_key)` mapping and durable
 operation receipt are stored by Chat in the same transaction as resource
-creation. Repeating an operation UUID and request hash returns the same chat;
-reusing that UUID with another RPC or hash conflicts. `SyncManagedChatMembers`
-replaces the desired roster atomically and assigns every profile `member` role.
-Its persisted receipt makes a retry return the original roster result. Normal
+creation. Repeating an operation UUID and request hash returns the same
+immutable chat ID receipt; callers fetch mutable chat fields through Chat's
+ordinary read API. Reusing an operation ID with another RPC or hash conflicts.
+`SyncManagedChatMembers` reconciles the desired roster atomically and assigns
+every profile `member` role. Retained members keep their joined time, mute,
+archive, inbox, and other per-member state. Its persisted receipt makes a retry
+return the original roster result. Normal
 player `AddMembers`, `RemoveMember`, `LeaveChat`, group role, ownership transfer,
 and chat update paths cannot mutate a managed roster or promote a player to
 owner/admin; only the two exact GIS methods can change it.

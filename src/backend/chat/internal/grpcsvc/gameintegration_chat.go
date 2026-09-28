@@ -39,7 +39,7 @@ func (s *GameIntegrationChatGRPC) ProvisionManagedChat(ctx context.Context, req 
 	if err != nil {
 		return nil, managedChatStatus(err)
 	}
-	return &chatv1.ProvisionManagedChatResponse{Chat: chatRowToProto(result.Chat), Replayed: result.Replayed}, nil
+	return &chatv1.ProvisionManagedChatResponse{ChatId: result.ChatID.String(), Replayed: result.Replayed}, nil
 }
 
 func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, req *chatv1.SyncManagedChatMembersRequest) (*chatv1.SyncManagedChatMembersResponse, error) {

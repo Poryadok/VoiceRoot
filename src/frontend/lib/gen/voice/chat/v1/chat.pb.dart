@@ -378,11 +378,11 @@ class ProvisionManagedChatRequest extends $pb.GeneratedMessage {
 
 class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
   factory ProvisionManagedChatResponse({
-    Chat? chat,
+    $core.String? chatId,
     $core.bool? replayed,
   }) {
     final result = create();
-    if (chat != null) result.chat = chat;
+    if (chatId != null) result.chatId = chatId;
     if (replayed != null) result.replayed = replayed;
     return result;
   }
@@ -400,7 +400,7 @@ class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ProvisionManagedChatResponse',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
       createEmptyInstance: create)
-    ..aOM<Chat>(1, _omitFieldNames ? '' : 'chat', subBuilder: Chat.create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
     ..aOB(2, _omitFieldNames ? '' : 'replayed')
     ..hasRequiredFields = false;
 
@@ -427,15 +427,13 @@ class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
   static ProvisionManagedChatResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
-  Chat get chat => $_getN(0);
+  $core.String get chatId => $_getSZ(0);
   @$pb.TagNumber(1)
-  set chat(Chat value) => $_setField(1, value);
+  set chatId($core.String value) => $_setString(0, value);
   @$pb.TagNumber(1)
-  $core.bool hasChat() => $_has(0);
+  $core.bool hasChatId() => $_has(0);
   @$pb.TagNumber(1)
-  void clearChat() => $_clearField(1);
-  @$pb.TagNumber(1)
-  Chat ensureChat() => $_ensure(0);
+  void clearChatId() => $_clearField(1);
 
   @$pb.TagNumber(2)
   $core.bool get replayed => $_getBF(1);
