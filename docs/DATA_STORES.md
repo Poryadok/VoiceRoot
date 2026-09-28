@@ -147,6 +147,16 @@ Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_redis_divergences`. PostgreSQL is the sole durable lifecycle
 source. Divergence incidents are orthogonal evidence: completed receipts do not
 regress, and Redis orphans remain representable without an operation row.
+
+Migration `000004_game_session_rooms` adds ownerless `GAME_SESSION` rooms and
+`voice_game_session_operations`. The latter stores the application/environment
+resource mapping, deterministic request hash, Chat ID and Chat creation operation
+ID, Voice room/receipt IDs and serialized immutable response. A transaction
+creates the room and receipt together. Operation retries return the stored
+response; operation/input divergence and attempts to remap one external resource
+conflict. The Chat operation ID is the identity of Chat's durable create receipt;
+there is no cross-service foreign key. A `GAME_SESSION` room cannot have an
+owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
 

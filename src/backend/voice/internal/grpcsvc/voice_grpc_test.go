@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/voice/internal/gameprovision"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
@@ -39,12 +40,25 @@ type createCountingCallStore struct {
 
 type allowAllChatMembers struct{}
 
+type denyChatMembers struct{}
+
+type fixtureManagedGameSessionRooms struct{ room gameprovision.Room }
+
 func (allowAllChatMembers) EnsureMember(context.Context, string, string) error {
 	return nil
 }
 
 func (allowAllChatMembers) EnsureDirectChat(context.Context, string) error {
 	return nil
+}
+
+func (denyChatMembers) EnsureMember(context.Context, string, string) error { return ErrNotChatMember }
+
+func (f fixtureManagedGameSessionRooms) GetRoom(_ context.Context, roomID string) (gameprovision.Room, error) {
+	if f.room.RoomID != roomID {
+		return gameprovision.Room{}, gameprovision.ErrNotFound
+	}
+	return f.room, nil
 }
 
 func (s *createCountingCallStore) CreateCall(ctx context.Context, call voicestore.Call) (voicestore.Call, error) {
@@ -148,6 +162,33 @@ func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC
 	svc := newTestVoiceService(now, events)
 	svc.ChatMembers = &mapChatMembers{members: members}
 	return svc
+}
+
+func TestVoiceGRPC_ManagedGameSessionUsesLiveUserAdmissionForJoinAndToken(t *testing.T) {
+	now := time.Now().UTC()
+	room := gameprovision.Room{RoomID: "managed-room-1", ChatID: "chat-managed", LiveKitRoomName: "voice-game-session-managed-room-1", CreatedAt: now}
+	service := newTestVoiceService(now, &recordingEvents{})
+	service.ManagedGameSessionRooms = fixtureManagedGameSessionRooms{room: room}
+	joined, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
+	require.NoError(t, err)
+	require.Equal(t, room.RoomID, joined.CallSession.RoomId)
+	require.Equal(t, room.ChatID, joined.CallSession.GetLinkedChat().GetId())
+	require.Equal(t, callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE, joined.CallSession.GetRoomTypeEnum())
+	require.Empty(t, joined.CallSession.InitiatorProfileId, "GIS provisioning does not synthesize an owner/player")
+
+	token, err := service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: room.RoomID})
+	require.NoError(t, err)
+	require.NotEmpty(t, token.Jwt)
+
+	service.ChatMembers = denyChatMembers{}
+	_, err = service.JoinCall(voiceTestCtx("profile-outsider"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = service.GetJoinToken(voiceTestCtx("profile-outsider"), &callsv1.GetJoinTokenRequest{RoomId: room.RoomID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "token issuance independently rechecks current Chat admission")
+
+	service.ChatMembers = nil
+	_, err = service.JoinCall(voiceTestCtx("profile-unverified"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "managed room admission fails closed without Chat membership service")
 }
 
 func TestVoiceGRPCStartAcceptTokenStateAndEnd(t *testing.T) {

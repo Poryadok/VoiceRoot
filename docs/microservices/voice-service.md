@@ -102,6 +102,40 @@ owner ID, creation operation, manifest hash, creation receipt ID and Chat creati
 receipt ID together with its Chat UUID. No ordinary resource can be relabelled
 as a match resource by updating these fields.
 
+### T31 managed game-session rooms
+
+`000004_game_session_rooms` adds `GAME_SESSION`, a `group_voice` room with a
+NULL `owner_id`. This purpose is separate from `MATCH_SQUAD`, whose owner remains
+required. GIS identity and player profiles never become room owners. Each managed
+room binds the authenticated application/environment, exact external resource
+kind/key, Chat ID and Chat creation operation ID to one Voice operation, request
+hash, Voice creation receipt and immutable response. The Chat creation operation
+ID identifies Chat's durable creation receipt; Voice does not infer or create a
+Chat resource.
+
+The optional private listener is enabled only by a complete
+`VOICE_GAME_PRINCIPAL_*` configuration. Startup fails if TLS server identity,
+dedicated client CA, HTTPS GIS JWKS, replay Redis, Voice DB, or migration 4 is
+unavailable. It requires verified mTLS and exposes only
+`GameSessionProvisioningService/ProvisionGameSessionRoom`. The request's
+`operation_id` is the `x-request-id`; its service principal must have exact
+issuer `gameintegration`, audience `voice`, exact RPC and deterministic
+protobuf request hash. A JTI can authorize only one attempt.
+
+Room, resource mapping and immutable Voice receipt are committed in one
+PostgreSQL transaction. The same operation and deterministic input returns the
+stored original response after process restart; changed input or a second
+operation for the same application/environment/resource conflicts. Provisioning
+does not add members, issue media tokens or authorize admission. Players continue
+through the existing user-authorized Voice path, which checks current Chat
+membership/admission before token issuance. On a Voice call-store cache miss,
+Voice rebuilds an ownerless managed-room projection from the durable mapping,
+then checks live Chat membership before adding the authenticated profile. This
+lets an active managed room recover after Redis loss without an invented
+initiator. Managed rooms do not occupy the ordinary active-Chat-call index, stay
+active when the last player leaves, and cannot be ended through player `EndCall`;
+the GIS provisioning endpoint does not expose lifecycle mutation methods.
+
 Memberships record the verified `account_id`, positive `session_epoch` and
 `JOINING|JOINED|RECONNECTING|LEAVING|LEFT|EJECTED` state. `RECONNECTING` alone has
 `reconnect_started_at` and `reconnect_deadline`, with a positive interval no longer
