@@ -37,6 +37,43 @@ service principal may supply the Bot-owned sender identity; public game
 credentials and GIS are not message senders. The RPC must retain normal
 membership, Space permission, moderation, block, content and expiry checks.
 
+## Game SDK message ingress (T15/T16)
+
+`MessagingService.ApplyGameMessage` accepts the signed SDK message and Auth
+device-authority assertion only from the verified Gateway service principal.
+For a new operation, Messaging checks the current GIS app/environment/binding/
+chat mapping before asking Auth for a short-lived execution permit. It then
+checks Chat membership using the permit profile, verifies File attachment
+provenance, and atomically commits the message receipt, message revision and
+permit-completion outbox. Exact retained receipt retries are resolved before
+fresh authority or GIS calls; changed operation content conflicts. Auth permits
+expire after at most 3,750 ms (also capped by the device assertion expiry);
+Messaging reserves a 250 ms clock margin and caps its atomic transaction at
+250 ms. An admitted operation completes within that permit window while revoke
+fences new issuance.
+
+The mapping client calls GIS's private
+`POST /internal/v1/game-integrations/resource-mappings/authorize-chat` route
+over a dedicated HTTPS listener. Its JSON request contains exactly the UUID
+fields `application_id`, `environment_id`, `binding_id` and `chat_id`. The
+Messaging client authenticates with its mTLS URI SAN
+`spiffe://voice/service/messaging` and WorkloadProof v1 request proof; GIS's
+signed response is verified with the same workload key used for that request.
+The client pins the configured GIS CA and endpoint hostname, has a 2-second
+request timeout, and fails closed on transport, TLS, signature, response-shape,
+or mapping-deny errors. `mapping_revision` is required and positive on allow.
+
+Configure the client with all five values:
+`GAME_INTEGRATION_MESSAGING_RESOURCE_MAPPING_URL`,
+`MESSAGING_GAME_INTEGRATION_TLS_CERT_FILE`,
+`MESSAGING_GAME_INTEGRATION_TLS_KEY_FILE`,
+`GAME_INTEGRATION_MESSAGING_CA_FILE`, and
+`GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64`. If every value is absent,
+Messaging starts without the optional client and game message writes remain
+fail-closed before permit issuance. Partial configuration, an invalid client
+certificate/SPIFFE identity, or an invalid key fails service startup; it never
+enables a pass-through mapping decision.
+
 ## API (gRPC)
 
 Источник истины по RPC и сообщениям: [protos/voice/messaging/v1/messaging.proto](../../protos/voice/messaging/v1/messaging.proto). Ниже — краткая схема для навигации по документу (имена типов как в репозитории).

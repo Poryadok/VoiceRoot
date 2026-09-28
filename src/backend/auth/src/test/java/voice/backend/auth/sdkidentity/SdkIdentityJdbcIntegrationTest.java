@@ -87,7 +87,8 @@ class SdkIdentityJdbcIntegrationTest {
   @BeforeEach
   void initialize() throws Exception {
     jdbc = new NamedParameterJdbcTemplate(source());
-    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_device_authority_issues,sdk_game_binding_handoff_claims,"
+    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_game_message_execution_permits,sdk_game_message_grants,"
+        + "sdk_device_authority_issues,sdk_game_binding_handoff_claims,"
         + "sdk_game_binding_handoff_issuances,"
         + "sdk_registration_intents,sdk_conversion_operations,"
         + "sdk_linked_sessions,sdk_authorizations,sdk_device_key_operations,sdk_sessions,"

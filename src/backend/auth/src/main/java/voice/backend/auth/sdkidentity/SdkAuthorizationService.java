@@ -319,11 +319,7 @@ public class SdkAuthorizationService {
           """, Map.of("now", Timestamp.from(now), "id", requestId)) != 1) throw denied();
       String linkedToken = randomToken();
       Instant expires = earlier(now.plusSeconds(300), row.time("approval_expires_at"));
-      Long revision = jdbc.queryForObject("""
-          INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at) VALUES (:hash,:id,:expires)
-          RETURNING consent_revision
-          """, Map.of("hash", SdkIdentityService.hash(linkedToken), "id", requestId,
-              "expires", Timestamp.from(expires)), Long.class);
+      Long revision = insertLinkedSession(row, linkedToken, expires);
       return linked(row, revision, linkedToken, expires);
     });
   }
@@ -389,11 +385,7 @@ public class SdkAuthorizationService {
           row.id("application_id"), row.id("environment_id"), sourceSubject);
       UUID actorId = jdbc.queryForObject("SELECT actor_id FROM sdk_identities WHERE account_id=:id",
           Map.of("id", row.id("source_account_id")), UUID.class);
-      Long consentRevision = jdbc.queryForObject("""
-          INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at)
-          VALUES (:hash,:id,:expires) RETURNING consent_revision
-          """, Map.of("hash", SdkIdentityService.hash(randomToken()), "id", requestId,
-              "expires", Timestamp.from(expires)), Long.class);
+      Long consentRevision = insertLinkedSession(row, randomToken(), expires);
       String handoff = principalIssuer.issueGameBindingHandoff(new AuthUserPrincipalIssuer.GameBindingHandoff(
           requestId, operationId, challengeId, challenge.nonce(), row.id("application_id"), row.id("environment_id"),
           SdkIdentityService.hash(row.text("redirect_uri")), row.text("code_challenge"), row.id("device_id"),
@@ -548,6 +540,25 @@ public class SdkAuthorizationService {
     return new LinkedSession(row.id("source_account_id"), row.id("target_account_id"), row.id("target_profile_id"),
         row.id("device_id"), row.id("application_id"), row.id("environment_id"), row.scopes(), revision,
         row.number("policy_revision"), token, expires);
+  }
+
+  private Long insertLinkedSession(Row row, String token, Instant expires) {
+    MapSqlParameterSource values = new MapSqlParameterSource().addValue("hash", SdkIdentityService.hash(token))
+        .addValue("id", row.id("request_id")).addValue("expires", Timestamp.from(expires));
+    Object consentRevision = row.values().get("game_binding_consent_revision");
+    if (consentRevision == null) {
+      if (Boolean.TRUE.equals(row.values().get("game_binding_intent"))) throw denied();
+      return jdbc.queryForObject("""
+          INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at) VALUES (:hash,:id,:expires)
+          RETURNING consent_revision
+          """, values, Long.class);
+    }
+    values.addValue("consentRevision", ((Number) consentRevision).longValue());
+    return jdbc.queryForObject("""
+        INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at,consent_revision)
+        VALUES (:hash,:id,:expires,:consentRevision)
+        RETURNING consent_revision
+        """, values, Long.class);
   }
 
   private void fresh(Instant expires) { if (expires == null || !expires.isAfter(clock.instant())) throw denied(); }

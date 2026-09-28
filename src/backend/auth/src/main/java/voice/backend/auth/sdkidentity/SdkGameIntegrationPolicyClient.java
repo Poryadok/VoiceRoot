@@ -29,8 +29,10 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /** Authenticated, response-verified read of Game Integration's current SDK policy. */
-public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPolicy, SdkBindingChallengeAuthority {
+public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPolicy, SdkBindingChallengeAuthority,
+    SdkGameIntegrationExecutionPermitAuthority {
   private static final int MAX_RESPONSE_BYTES = 65_536;
+  private static final Duration EXECUTION_PERMIT_TIMEOUT = Duration.ofSeconds(1);
   private static final ObjectMapper JSON = new ObjectMapper()
       .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
@@ -43,6 +45,9 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       "consent_revision", "policy_revision", "scopes");
   private static final Set<String> BINDING_CHALLENGE_CREATE_RESPONSE_FIELDS =
       Set.of("challenge_id", "nonce", "expires_at");
+  private static final Set<String> EXECUTION_PERMIT_FIELDS = Set.of("permit_id", "binding_id", "application_id",
+      "environment_id", "binding_revision", "assertion_jti", "operation_id", "expires_at");
+  private static final Set<String> EXECUTION_COMPLETION_FIELDS = Set.of("permit_id", "operation_id", "outcome", "status");
 
 
   private final String configuredBaseUrl;
@@ -70,6 +75,15 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
 
   @Override
   public Policy resolve(UUID applicationId, UUID environmentId) {
+    return resolve(applicationId, environmentId, requestTimeout);
+  }
+
+  @Override
+  public Policy resolveForExecutionPermit(UUID applicationId, UUID environmentId) {
+    return resolve(applicationId, environmentId, Duration.ofMillis(250));
+  }
+
+  private Policy resolve(UUID applicationId, UUID environmentId, Duration callTimeout) {
     try {
       if (applicationId == null || environmentId == null || clock == null || http == null
           || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
@@ -79,7 +93,7 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
       String timestamp = Long.toString(clock.instant().getEpochSecond());
       String nonce = UUID.randomUUID().toString();
       HttpRequest request = HttpRequest.newBuilder(endpoint)
-          .timeout(requestTimeout)
+          .timeout(callTimeout)
           .header("X-Voice-Workload", "auth")
           .header("X-Voice-Timestamp", timestamp)
           .header("X-Voice-Nonce", nonce)
@@ -194,9 +208,145 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
     }
   }
 
+  @Override
+  public SdkGameIntegrationExecutionPermitAuthority.Permit issue(UUID bindingId, UUID operationId,
+      String deviceAuthorityAssertion) {
+    try {
+      if (bindingId == null || operationId == null || deviceAuthorityAssertion == null
+          || deviceAuthorityAssertion.isBlank() || deviceAuthorityAssertion.length() > 16_384 || clock == null
+          || http == null || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
+      String rawPath = "/internal/v1/game-integrations/bindings/" + bindingId + "/execution-permits";
+      URI endpoint = endpointPath(configuredBaseUrl, rawPath, allowInternalHttp);
+      byte[] key = key(configuredKey);
+      var node = JSON.createObjectNode().put("operation_id", operationId.toString());
+      byte[] body = JSON.writeValueAsBytes(node);
+      String path = endpoint.getRawPath();
+      String timestamp = Long.toString(clock.instant().getEpochSecond());
+      String nonce = UUID.randomUUID().toString();
+      String signature = executionPermitRequestSignature(key, path, timestamp, nonce, body, deviceAuthorityAssertion);
+      HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(EXECUTION_PERMIT_TIMEOUT)
+          .header("X-Voice-Workload", "auth").header("X-Voice-Workload-Version", "2")
+          .header("X-Voice-Timestamp", timestamp).header("X-Voice-Nonce", nonce)
+          .header("X-Voice-Signature", signature).header("Content-Type", "application/json")
+          .header("X-Voice-Device-Authority", deviceAuthorityAssertion)
+          .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+      HttpResponse<byte[]> response = http.send(request, info -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      verifySignedResponse(response, path, timestamp, nonce, key);
+      return parseExecutionPermit(response.body(), bindingId, operationId, deviceAuthorityAssertion, clock.instant());
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw denied();
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception invalidOrUnavailable) {
+      throw denied();
+    }
+  }
+
+  @Override
+  public SdkGameIntegrationExecutionPermitAuthority.Completion complete(UUID permitId, UUID operationId, String outcome) {
+    try {
+      if (permitId == null || operationId == null || !Set.of("committed", "aborted").contains(outcome)
+          || clock == null || http == null || requestTimeout == null || requestTimeout.isZero()
+          || requestTimeout.isNegative()) throw denied();
+      String rawPath = "/internal/v1/game-integrations/execution-permits/" + permitId + "/completion";
+      URI endpoint = endpointPath(configuredBaseUrl, rawPath, allowInternalHttp);
+      byte[] key = key(configuredKey);
+      var node = JSON.createObjectNode().put("operation_id", operationId.toString()).put("outcome", outcome);
+      byte[] body = JSON.writeValueAsBytes(node);
+      String path = endpoint.getRawPath();
+      String timestamp = Long.toString(clock.instant().getEpochSecond());
+      String nonce = UUID.randomUUID().toString();
+      HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(EXECUTION_PERMIT_TIMEOUT)
+          .header("X-Voice-Workload", "auth").header("X-Voice-Timestamp", timestamp)
+          .header("X-Voice-Nonce", nonce)
+          .header("X-Voice-Signature", bodyRequestSignature(key, "POST", path, timestamp, nonce, body))
+          .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+      HttpResponse<byte[]> response = http.send(request, info -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      verifySignedResponse(response, path, timestamp, nonce, key);
+      return parseExecutionCompletion(response.body(), permitId, operationId, outcome);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw denied();
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception invalidOrUnavailable) {
+      throw denied();
+    }
+  }
+
+  private void verifySignedResponse(HttpResponse<byte[]> response, String path, String timestamp, String nonce, byte[] key) {
+    requireHeader(response, "Cache-Control", "no-store");
+    requireHeader(response, "Content-Type", "application/json");
+    requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
+    requireHeader(response, "X-Voice-Response-Nonce", nonce);
+    verifyResponse(key, path, timestamp, nonce, uniqueHeader(response, "X-Voice-Response-Signature"), response.body());
+  }
+
+  private static SdkGameIntegrationExecutionPermitAuthority.Permit parseExecutionPermit(byte[] raw, UUID bindingId,
+      UUID operationId, String assertion, Instant now) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(EXECUTION_PERMIT_FIELDS)) throw denied();
+      UUID permit = canonicalUuid(text(root, "permit_id"));
+      UUID binding = canonicalUuid(text(root, "binding_id"));
+      UUID app = canonicalUuid(text(root, "application_id"));
+      UUID env = canonicalUuid(text(root, "environment_id"));
+      long revision = positiveLong(root, "binding_revision");
+      UUID assertionJti = assertionJti(assertion);
+      if (!binding.equals(bindingId) || !operationId.equals(canonicalUuid(text(root, "operation_id")))
+          || !assertionJti.equals(canonicalUuid(text(root, "assertion_jti")))) throw denied();
+      Instant expires = Instant.parse(text(root, "expires_at"));
+      if (!expires.isAfter(now.plusMillis(500)) || expires.isAfter(now.plusMillis(3750))) throw denied();
+      return new SdkGameIntegrationExecutionPermitAuthority.Permit(permit, binding, app, env, revision,
+          assertionJti, operationId, expires);
+    } catch (SdkIdentityDeniedException denied) { throw denied; }
+    catch (Exception malformed) { throw denied(); }
+  }
+
+  private static SdkGameIntegrationExecutionPermitAuthority.Completion parseExecutionCompletion(byte[] raw,
+      UUID permitId, UUID operationId, String outcome) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(EXECUTION_COMPLETION_FIELDS)) throw denied();
+      UUID permit = canonicalUuid(text(root, "permit_id"));
+      UUID operation = canonicalUuid(text(root, "operation_id"));
+      String resultOutcome = text(root, "outcome");
+      String status = text(root, "status");
+      if (!permitId.equals(permit) || !operationId.equals(operation) || !outcome.equals(resultOutcome)
+          || !"completed".equals(status)) throw denied();
+      return new SdkGameIntegrationExecutionPermitAuthority.Completion(permit, operation, resultOutcome, status);
+    } catch (SdkIdentityDeniedException denied) { throw denied; }
+    catch (Exception malformed) { throw denied(); }
+  }
+
+  private static UUID assertionJti(String compact) {
+    try {
+      JsonNode claims = JSON.readTree(com.nimbusds.jose.JWSObject.parse(compact).getPayload().toBytes());
+      return canonicalUuid(text(claims, "jti"));
+    } catch (Exception invalid) { throw denied(); }
+  }
+
+  private static String executionPermitRequestSignature(byte[] key, String path, String timestamp, String nonce,
+      byte[] body, String assertion) {
+    String message = "v2\nPOST\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex(sha256(body))
+        + "\n" + hex(sha256(assertion.getBytes(StandardCharsets.UTF_8)));
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(key, message.getBytes(StandardCharsets.UTF_8)));
+  }
+
   private static URI endpointPath(String rawBaseUrl, String rawPath, boolean allowInternalHttp) {
     if (rawPath == null || !(rawPath.equals("/internal/v1/bindings/challenges")
-        || rawPath.startsWith("/internal/v1/bindings/challenges/"))
+        || rawPath.startsWith("/internal/v1/bindings/challenges/")
+        || rawPath.matches("/internal/v1/game-integrations/bindings/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/execution-permits")
+        || rawPath.matches("/internal/v1/game-integrations/execution-permits/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/completion"))
         || rawPath.contains("?") || rawPath.contains("#")) throw denied();
     URI base;
     try { base = URI.create(rawBaseUrl.trim()); }

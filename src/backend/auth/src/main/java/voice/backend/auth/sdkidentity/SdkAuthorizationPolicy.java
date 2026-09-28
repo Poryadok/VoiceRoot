@@ -10,6 +10,11 @@ import java.util.UUID;
 public interface SdkAuthorizationPolicy {
   Policy resolve(UUID applicationId, UUID environmentId);
 
+  /** Short-deadline variant used while serializing message-permit issue with revoke. */
+  default Policy resolveForExecutionPermit(UUID applicationId, UUID environmentId) {
+    return resolve(applicationId, environmentId);
+  }
+
   record Policy(UUID applicationId, UUID environmentId, long revision, String displayName,
                 Set<String> redirectUris, Set<String> playerScopes, Set<String> providers) {
     public Policy {

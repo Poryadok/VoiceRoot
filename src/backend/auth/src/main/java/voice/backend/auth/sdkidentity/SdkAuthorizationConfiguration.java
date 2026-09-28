@@ -35,4 +35,13 @@ public class SdkAuthorizationConfiguration {
     return new AuthGameBindingHandoffService(jdbc, new TransactionTemplate(manager), issuer, policies, profiles,
         identity, blacklist, clock);
   }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
+  AuthGameMessageExecutionPermitService authGameMessageExecutionPermitService(NamedParameterJdbcTemplate jdbc,
+      PlatformTransactionManager manager, AuthUserPrincipalIssuer issuer, SdkAuthorizationPolicy policies,
+      SdkProfileEligibility profiles, SdkGameIntegrationExecutionPermitAuthority gis, Clock clock) {
+    return new AuthGameMessageExecutionPermitService(jdbc, new TransactionTemplate(manager), issuer, policies,
+        profiles, gis, clock);
+  }
 }

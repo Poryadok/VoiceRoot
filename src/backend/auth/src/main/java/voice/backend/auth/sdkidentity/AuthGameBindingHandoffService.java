@@ -141,6 +141,31 @@ public class AuthGameBindingHandoffService {
               AND (game_binding_id IS NULL OR game_binding_id=:binding)
             """, Map.of("binding", bindingId, "request", requestId));
         if (changed != 1) throw denied();
+        var authority = jdbc.queryForList("""
+            SELECT a.application_id,a.environment_id,a.target_account_id,a.target_profile_id,a.target_epoch,a.scopes,
+                   a.policy_revision,a.profile_revision,a.game_binding_authority_revision,
+                   a.game_binding_status,s.consent_revision
+            FROM sdk_authorizations a JOIN sdk_linked_sessions s ON s.request_id=a.request_id
+            WHERE a.request_id=:request FOR UPDATE OF a,s
+            """, Map.of("request", requestId));
+        if (authority.size() != 1) throw denied();
+        Map<String, Object> grant = authority.getFirst();
+        if ("active".equals(grant.get("game_binding_status"))) {
+          Instant now = clock.instant();
+          jdbc.update("""
+              INSERT INTO sdk_game_message_grants(grant_id,authorization_request_id,application_id,environment_id,
+                target_account_id,target_profile_id,target_epoch,binding_id,consent_revision,scopes,policy_revision,profile_revision,
+                status,authority_revision,created_at,updated_at)
+              VALUES (:id,:request,:app,:env,:account,:profile,:epoch,:binding,:consent,:scopes,:policy,:profileRevision,
+                'active',1,:now,:now)
+              """, new MapSqlParameterSource().addValue("id", UUID.randomUUID()).addValue("request", requestId)
+                  .addValue("app", grant.get("application_id")).addValue("env", grant.get("environment_id"))
+                  .addValue("account", grant.get("target_account_id")).addValue("profile", grant.get("target_profile_id"))
+                  .addValue("epoch", grant.get("target_epoch"))
+                  .addValue("binding", bindingId).addValue("consent", grant.get("consent_revision"))
+                  .addValue("scopes", grant.get("scopes")).addValue("policy", grant.get("policy_revision"))
+                  .addValue("profileRevision", grant.get("profile_revision")).addValue("now", Timestamp.from(now)));
+        }
       }
       jdbc.update("""
           UPDATE sdk_game_binding_handoff_claims SET state=:state,result_binding_id=:binding,result_sha256=:hash,
@@ -181,18 +206,47 @@ public class AuthGameBindingHandoffService {
       } else if (!"revoking".equals(bindingStatus)) {
         throw conflict();
       }
+      List<Map<String, Object>> gameGrants = jdbc.queryForList("""
+          SELECT grant_id,status,authority_revision FROM sdk_game_message_grants
+          WHERE authorization_request_id=:request FOR UPDATE
+          """, Map.of("request", requestId));
+      for (Map<String, Object> gameGrant : gameGrants) {
+        UUID grantId = (UUID) gameGrant.get("grant_id");
+        String grantStatus = (String) gameGrant.get("status");
+        if ("active".equals(grantStatus)) {
+          jdbc.update("""
+              UPDATE sdk_game_message_grants SET status='revoking',authority_revision=authority_revision+1,updated_at=:now
+              WHERE grant_id=:grant AND status='active'
+              """, Map.of("now", Timestamp.from(clock.instant()), "grant", grantId));
+        } else if (!"revoking".equals(grantStatus) && !"revoked".equals(grantStatus)) throw conflict();
+      }
       Long outstanding = jdbc.queryForObject("""
           SELECT count(*) FROM sdk_game_binding_handoff_claims
           WHERE authorization_request_id=:request AND state='claimed'
           """, Map.of("request", requestId), Long.class);
       if (outstanding == null) throw denied();
       if (outstanding > 0) return new RevocationReceipt(operationId, "revoking", revision);
+      boolean permitsDraining = false;
+      for (Map<String, Object> gameGrant : gameGrants) {
+        UUID grantId = (UUID) gameGrant.get("grant_id");
+        Long permits = jdbc.queryForObject("""
+            SELECT count(*) FROM sdk_game_message_execution_permits
+            WHERE grant_id=:grant AND completion_outcome IS NULL AND expires_at_ms > :drainDeadline
+            """, Map.of("grant", grantId, "drainDeadline", clock.instant().toEpochMilli() - 500), Long.class);
+        if (permits == null) throw denied();
+        if (permits > 0) permitsDraining = true;
+      }
+      if (permitsDraining) return new RevocationReceipt(operationId, "revoking", revision);
       int changed = jdbc.update("""
           UPDATE sdk_authorizations SET game_binding_status='revoked',
             game_binding_authority_revision=game_binding_authority_revision+1
           WHERE request_id=:request AND game_binding_operation_id=:operation AND game_binding_status='revoking'
           """, Map.of("request", requestId, "operation", operationId));
       if (changed != 1) throw conflict();
+      jdbc.update("""
+          UPDATE sdk_game_message_grants SET status='revoked',authority_revision=authority_revision+1,updated_at=:now
+          WHERE authorization_request_id=:request AND status='revoking'
+          """, Map.of("now", Timestamp.from(clock.instant()), "request", requestId));
       return new RevocationReceipt(operationId, "revoked", revision + 1);
     });
   }
