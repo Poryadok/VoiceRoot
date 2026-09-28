@@ -561,6 +561,28 @@ and denials for absent, malformed, wrong-issuer/audience/RPC/request/hash,
 replayed and expired proof; verify mismatched profile IDs and zero/stale
 revisions also deny. Do not use key values in the evidence.
 
+## Messaging game-signature runtime
+
+These settings enable the protected T15 ingress. Incomplete key or transport
+configuration fails startup; when an entire provider set is absent, its new
+write route remains fail-closed. Secret files are mounted read-only and never
+logged.
+
+| Holder | Setting | Contract |
+|---|---|---|
+| Messaging | `MESSAGING_TOMBSTONE_KEY_ID`, `MESSAGING_TOMBSTONE_PRIVATE_KEY_FILE`, `MESSAGING_TOMBSTONE_NOT_BEFORE`, `MESSAGING_TOMBSTONE_NOT_AFTER` | Ed25519 PKCS#8 signer and explicit exclusive validity window for moderation tombstones. |
+| Messaging | `MESSAGING_TOMBSTONE_JWKS_LISTEN` | Dedicated HTTPS listener for Messaging's public-only tombstone JWKS. |
+| Messaging | `MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE`, `MESSAGING_TOMBSTONE_JWKS_TLS_KEY_FILE`, `MESSAGING_TOMBSTONE_JWKS_CLIENT_CA_FILE` | Server identity and CA for mandatory client-certificate verification on tombstone JWKS reads. |
+| Messaging | `MODERATION_PRINCIPAL_JWKS_URL`, `MODERATION_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS moderation principal keyset URL and trust CA. |
+| Messaging | `GATEWAY_PRINCIPAL_JWKS_URL`, `GATEWAY_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS Gateway principal keyset URL and trust CA for `ApplyGameMessage`. |
+| Messaging | `MESSAGING_GATEWAY_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_GATEWAY_PRINCIPAL_TLS_KEY_FILE`, `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Messaging mTLS client identity and shared replay store for exact Gateway service-principal verification. |
+| Messaging | `MESSAGING_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_PRINCIPAL_TLS_KEY_FILE` | Messaging client identity for moderation JWKS mTLS. |
+| Messaging | `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Shared Redis for atomic moderation service-principal replay rejection. |
+| Messaging | `AUTH_PRINCIPAL_JWKS_URL`, `AUTH_PRINCIPAL_JWKS_CA_FILE` | Fixed Auth device-status keyset URL and trust CA. |
+| Messaging | `MESSAGING_AUTH_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_AUTH_PRINCIPAL_TLS_KEY_FILE` | Messaging client identity for Auth status JWKS mTLS; snapshots older than four seconds are refreshed or denied. |
+| Messaging | `AUTH_GAME_MESSAGE_EXECUTION_PERMIT_URL`, `AUTH_GAME_MESSAGE_EXECUTION_PERMIT_CA_FILE` | Deployment-pinned HTTPS Auth execution-permit endpoint and trust CA. |
+| Messaging | `MESSAGING_AUTH_EXECUTION_PERMIT_TLS_CERT_FILE`, `MESSAGING_AUTH_EXECUTION_PERMIT_TLS_KEY_FILE` | Messaging client identity for Auth execution-permit mTLS. |
+
 ## Social privacy principals
 
 The standard local/CI Compose app generates its own 30-day credentials through

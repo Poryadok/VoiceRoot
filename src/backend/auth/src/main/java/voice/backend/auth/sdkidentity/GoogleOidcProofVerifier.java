@@ -26,9 +26,18 @@ public final class GoogleOidcProofVerifier {
   }
 
   public VerifiedProviderSubject verify(String token, String audience, String nonce) {
+    return verify(token, audience, nonce, false);
+  }
+
+  /** Verifies a fresh independent identity token for Auth operations whose contract does not use a nonce challenge. */
+  public VerifiedProviderSubject verifyFresh(String token, String audience) {
+    return verify(token, audience, null, true);
+  }
+
+  private VerifiedProviderSubject verify(String token, String audience, String nonce, boolean allowNoNonce) {
     try {
       require(token != null && token.length() <= MAX_TOKEN_LENGTH && !token.isBlank());
-      require(audience != null && !audience.isBlank() && nonce != null && !nonce.isBlank());
+      require(audience != null && !audience.isBlank() && (allowNoNonce || nonce != null && !nonce.isBlank()));
       SignedJWT jwt = SignedJWT.parse(token);
       JWSHeader header = jwt.getHeader();
       require(JWSAlgorithm.RS256.equals(header.getAlgorithm()));
@@ -51,7 +60,7 @@ public final class GoogleOidcProofVerifier {
       require(claims.getAudience() != null && claims.getAudience().size() == 1
           && audience.equals(claims.getAudience().getFirst()));
       require(!claims.getClaims().containsKey("azp") || audience.equals(claims.getClaim("azp")));
-      require(nonce.equals(claims.getClaim("nonce")));
+      if (!allowNoNonce) require(nonce.equals(claims.getClaim("nonce")));
       require(claims.getSubject() != null && !claims.getSubject().isBlank() && claims.getSubject().length() <= 255);
       require(claims.getIssueTime() != null && claims.getExpirationTime() != null);
       Instant now = clock.instant();

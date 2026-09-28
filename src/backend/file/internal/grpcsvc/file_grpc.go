@@ -962,6 +962,7 @@ func shouldScan(originalName, mimeType string) bool {
 func fileRowToProto(row store.FileRow) *filev1.FileMetadata {
 	meta := &filev1.FileMetadata{
 		Id:                row.ID.String(),
+		ObjectRevision:    1,
 		UploaderProfileId: row.UploaderProfileID.String(),
 		OriginalName:      row.OriginalName,
 		MimeType:          row.MimeType,
