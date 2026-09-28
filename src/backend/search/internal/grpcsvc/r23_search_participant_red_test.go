@@ -740,7 +740,7 @@ func r23AssertSearchFixtureVisible(t *testing.T, fixture r23SearchFixture) {
 
 func r23AssertSearchFixtureFrozen(t *testing.T, fixture r23SearchFixture) {
 	t.Helper()
-	ctx := metadata.NewIncomingContext(fixture.ctx, metadata.Pairs("x-voice-profile-id", uuid.NewString()))
+	ctx := metadata.NewIncomingContext(fixture.ctx, metadata.Pairs("x-voice-profile-id", uuid.NewString(), "x-voice-user-id", uuid.NewString()))
 	_, err := fixture.first.SearchInChat(ctx, &searchv1.SearchInChatRequest{Chat: &chatv1.ChatRef{Id: fixture.targetChat.String()}, Query: "needle"})
 	require.Equal(t, codes.Unavailable, status.Code(err), "FROZEN denies target Space/chat/message projection reads")
 	control, err := fixture.first.SearchInChat(ctx, &searchv1.SearchInChatRequest{Chat: &chatv1.ChatRef{Id: fixture.controlChat.String()}, Query: "needle"})
