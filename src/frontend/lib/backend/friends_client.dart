@@ -100,11 +100,25 @@ class BlockedEntry {
   final String username;
   final String discriminator;
 
-  String get handle => username.isEmpty
+  static final RegExp _uuidPattern = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+
+  static bool _isUsableIdentity(String value) {
+    final candidate = value.trim();
+    return candidate.isNotEmpty && !_uuidPattern.hasMatch(candidate);
+  }
+
+  String get safeDisplayName => _isUsableIdentity(displayName)
+      ? displayName.trim()
+      : '';
+
+  String get handle => !_isUsableIdentity(username)
       ? ''
       : discriminator.isEmpty
-      ? '@$username'
-      : '@$username#$discriminator';
+      ? '@${username.trim()}'
+      : '@${username.trim()}#$discriminator';
 }
 
 class BlockedListData {

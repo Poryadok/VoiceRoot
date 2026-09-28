@@ -753,7 +753,8 @@ void main() {
                   'blocked': [
                     {
                       'blocked_account_id': 'acc-blocked',
-                      'blocked_profile_id': '00000000-0000-4000-8000-000000000002',
+                      'blocked_profile_id':
+                          '00000000-0000-4000-8000-000000000002',
                       'display_name': 'Xronos+1',
                       'username': 'xronos',
                       'discriminator': '0001',
@@ -815,6 +816,83 @@ void main() {
       find.byKey(SocialPanel.unblockButtonKey('acc-blocked')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('blocked tab never uses an ID-shaped snapshot as its label', (
+    tester,
+  ) async {
+    const blockedId = '00000000-0000-4000-8000-000000000001';
+    const selectedProfileId = '00000000-0000-4000-8000-000000000002';
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks') {
+            return http.Response(
+              jsonEncode({
+                'blocked_list': {
+                  'blocked': [
+                    {
+                      'blocked_account_id': blockedId,
+                      'blocked_profile_id': selectedProfileId,
+                      'display_name': blockedId,
+                      'username': 'known',
+                      'discriminator': '0001',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('@known#0001'), findsOneWidget);
+    expect(find.textContaining(blockedId), findsNothing);
+    expect(find.textContaining(selectedProfileId), findsNothing);
+    expect(find.byKey(SocialPanel.unblockButtonKey(blockedId)), findsOneWidget);
+  });
+
+  testWidgets('blocked tab uses neutral text when snapshot names are IDs', (
+    tester,
+  ) async {
+    const blockedId = '00000000-0000-4000-8000-000000000001';
+    const profileId = '00000000-0000-4000-8000-000000000002';
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks') {
+            return http.Response(
+              jsonEncode({
+                'blocked_list': {
+                  'blocked': [
+                    {
+                      'blocked_account_id': blockedId,
+                      'blocked_profile_id': profileId,
+                      'display_name': profileId,
+                      'username': blockedId,
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('User unavailable'), findsOneWidget);
+    expect(find.textContaining(blockedId), findsNothing);
+    expect(find.textContaining(profileId), findsNothing);
+    expect(find.byKey(SocialPanel.unblockButtonKey(blockedId)), findsOneWidget);
   });
 
   testWidgets('outgoing declined request shows declined label', (tester) async {
