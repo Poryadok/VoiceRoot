@@ -210,7 +210,7 @@ func TestGameMessageProcessorFailsClosedForMissingT16BindingAndFileProof(t *test
 	processor.Bindings = allowGameBinding{profile: profile}
 	_, err = processor.ProcessGameMessage(ctx, attachmentJWS, attachmentAuthority)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "File attachment provenance")
+	require.Contains(t, err.Error(), "file attachment provenance")
 
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM game_message_revisions WHERE message_id = ANY($1::uuid[])`, []uuid.UUID{textMessage.MessageID}).Scan(&count))
