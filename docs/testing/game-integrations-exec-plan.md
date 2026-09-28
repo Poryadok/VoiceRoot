@@ -75,17 +75,57 @@ contracts land before consumers; activation lands after all consumers.
 
 ### P0 — base, queue, decisions, contract seams
 
-- [ ] **T00** `D: —` Recheck local/remote branch heads, dirty files, open PRs and
-  active worktrees; identify overlapping A1/Auth/Voice/Space/Bot ownership.
-  Record exact implementation base SHA; keep root `master` WIP separate.
-- [ ] **T01** `D: T00` Update PLAN with the owner's parallel game sprint decision
-  and federation activation scope while retaining A1's current status and
-  gates. Track the hard merge/staging hold until A1 acceptance, plus a separate
-  game integration queue and rollback owner.
-- [ ] **T02** `D: T00` Re-audit source at exact base: Bot seven source gaps,
-  Auth guest conversion, Chat/Space lifecycle, Voice admission/media, current
-  Federation scaffold/protos, Gateway routing, Flutter surfaces. Mark each
-  capability existing/partial/absent with file+test evidence.
+- [x] **T00** `D: —` Rechecked the current feature target, exact implementation
+  base, dirty root checkout, open game PR and active worktrees. The target for
+  this isolated Auth slice is `codex/game-sdk-federation-docs` at
+  `7dd013ce551867074ab148dabaedfd30c1f83478`; root `master` contains separate
+  dirty user WIP and was not changed. PR #550 (`codex/t31-gis-orchestration-red`)
+  remains active on the same feature base; its owner worktree has changes only
+  in T31 orchestration/acceptance paths, and no ExecPlan diff. The Auth owner
+  uses an isolated Treehouse slot. This inventory is time-scoped to that SHA.
+- [x] **T01** `D: T00` The owner-authorized parallel game sprint decision and
+  federation activation scope are recorded in [PLAN](../PLAN.md), retaining
+  A1's status and gates, with a separate game queue and rollback owner and a
+  hard hold on master merge/staging until A1 acceptance. Recorded in PR #552,
+  now included in implementation base `7dd013ce551867074ab148dabaedfd30c1f83478`.
+- [x] **T02** `D: T00` Re-audited exact base
+  `7dd013ce551867074ab148dabaedfd30c1f83478`; evidence is source/test presence,
+  not a claim that every listed suite ran on this SHA. The seven capability
+  areas are partial, not absent end-to-end:
+  - Bot proof exists in `src/backend/bot/internal/gameintegrationproof/handler.go`
+    with `handler_test.go`; durable event/command/result completion remains
+    open under T50/T51 and must not be inferred from this proof helper.
+  - Auth identity/conversion groundwork exists in
+    `src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/` and
+    `src/backend/auth/src/test/java/voice/backend/auth/sdkidentity/` including
+    `GoogleOidcProofVerifierTest`, `SdkIdentityJdbcIntegrationTest`, and
+    `SdkConversionJdbcIntegrationTest`; account conversion/authority receipts
+    and live provider acceptance are not complete.
+  - Chat/Space managed-chat groundwork is in
+    `src/backend/chat/internal/grpcsvc/gameintegration_chat.go` and
+    `src/backend/chat/internal/store/managed_chats_integration_test.go`;
+    full game roster/roles and lifecycle vertical remains open.
+  - Voice game principal/session scaffolding is in
+    `src/backend/voice/internal/gameprincipal/` and
+    `src/backend/voice/internal/grpcsvc/game_session_provisioning.go`, with
+    `interceptor_test.go`, `game_session_contract_test.go`, and
+    `gameprovision/store_integration_test.go`; native media/revoke acceptance
+    remains open.
+  - Federation authority and store scaffold are in
+    `src/backend/federation/{authority.go,api.go,store.go}` with
+    `authority_test.go` and `store_integration_test.go`; node consumers,
+    provisioning and media enforcement remain open.
+  - Gateway SDK route classification exists in
+    `src/backend/gateway/sdk_authorization_routes.go` with
+    `sdk_authorization_routes_test.go`; routes remain gated from public
+    activation.
+  - Flutter SDK authorization client/state/UI exist in
+    `src/frontend/lib/backend/sdk_authorization_client.dart`,
+    `src/frontend/lib/state/sdk_authorization_providers.dart`, and
+    `src/frontend/lib/ui/sdk/sdk_authorization_screens.dart`, with
+    `src/frontend/test/sdk_authorization_client_test.dart` and
+    `sdk_authorization_widget_test.dart`; this is authorization UI, not a full
+    game-integrations client.
 - [ ] **T03** `D: T01,T02` Choose technical defaults for G01–G13 and Q01–Q12
   in owning docs before dependent implementation; assign every value/algorithm,
   test and consumer. The owner has delegated these choices; escalate only a
@@ -117,13 +157,24 @@ contracts land before consumers; activation lands after all consumers.
     Google OIDC + separate app/env game ticket, nonce/freshness, device proof,
     configured app/env admission, and no Gateway publication. This closes no
     conversion, transfer/recovery, or cross-service G01 decision.
+  - [x] T03-AUTH-LIFECYCLE: the Auth identity/conversion defaults for Q03,
+    Q07, Q08 and Q10 are recorded in the same owning API contract: no inferred
+    subject transfer; one private app-scoped actor before conversion; explicit
+    target profile and no profile-limit bypass; source Voice session fenced
+    before conversion with target conflict/handoff; non-expiring pseudonymous
+    anti-resurrection tombstone floor. Their owning-service runtime and restore
+    acceptance remain open; this closes only the decision prerequisites for
+    the Auth identity/conversion consumers (T13, T17–T19).
   - [ ] Remaining G/Q decisions and their tests/consumers are still open.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
   - [x] T04-AUTH: the Auth-only provider/ticket issuers, audiences, key sources,
     proof binding, storage boundary, freshness and replay rules are frozen in
-    GAME-AUTH-01 for T13a. The service/bot/node trust matrix and runtime
+    GAME-AUTH-01 for T13a. Google proof and app/env game-ticket proof are
+    independent; neither a developer credential nor `guest` conversion can
+    establish player identity. T13a verifier, SQL and route tests exercise the
+    bounded rules. The service/bot/node trust matrix and broader runtime
     negative-case suite remain open.
 - [ ] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
   selected profile/alias, character, app/env/installation, binding, party,
@@ -139,7 +190,7 @@ contracts land before consumers; activation lands after all consumers.
     response fields, device proof bytes, credential semantics and denial policy
     are frozen in GAME-AUTH-01 for T13a. Gateway/OpenAPI publication, other
     resource APIs, generated contracts and executable compatibility checks
-    remain open.
+    remain open. Auth routes are still opt-in and unpublished from Gateway.
   - [ ] Other OpenAPI/proto/resource contracts and executable compatibility
     tests remain open; this docs decision does not claim routes are implemented.
 - [x] **T07a** `D: T03,T06` Build controlled backend in a separate test-only Go
@@ -234,6 +285,16 @@ contracts land before consumers; activation lands after all consumers.
   issuer/audience/nonce/replay checks, admission cap and app/env-scoped account
   uniqueness. Never route via `guest`/`ConvertGuest`. Parent remains open for
   the full identity vertical and its broader acceptance.
+  - [x] T13-DEV: exact-base Auth implementation has a distinct `sdk-account`
+    principal/schema, fixed-Google OIDC verifier plus separate app/env game
+    ticket, nonce/freshness/replay and issuer/audience checks, app/env
+    uniqueness, configured cap, device/session/revoke lifecycle, and current
+    signed GIS policy admission. On `7dd013ce551867074ab148dabaedfd30c1f83478`,
+    focused Auth identity/conversion verifier, controller, configuration and
+    PostgreSQL suites passed 169 tests with 0 failures/errors/skips. This is
+    fake-provider development evidence only. Keep parent T13 open until the
+    separately required real-Google exact-release proof and production
+    admission gates pass; those were not run in this environment.
 - [x] **T13a** `D: T03-AUTH,T04-AUTH,T06-AUTH` Implement the bounded Auth-only
   GAME-AUTH-01 foundation in Java: `sdk-account` schema/principal, paired Google
   OIDC and app/env game-ticket verification, challenge/device proof, replay and
@@ -550,8 +611,9 @@ test assertion, not just prose.
   including the API-created empty-database bootstrap and SQL-backed registry
   lifecycle. The previous Windows Testcontainers attempt failed before
   assertions and is superseded by this successful GIS run.
-- [ ] T00–T94 implementation and acceptance remain open. Update each check as
-  work lands; do not infer completion from this planning pass.
+- [ ] The unified sprint remains open: T00–T94 implementation and acceptance
+  gates are not complete. T00–T02 above record only the audited base/scope and
+  do not imply the sprint or any downstream vertical is accepted.
 
 ## Decisions
 
@@ -592,8 +654,9 @@ test assertion, not just prose.
   the required cross-service write boundary without changing global `PUBLIC`
   connection ACLs. T11's parent lifecycle remains open for its own remaining
   acceptance and production-admission work.
-- Bot audit was source-only at `77ec7240a`, not a current-code or live proof.
-  T02 rechecks all gaps; T50 closes those that remain.
+- T02's Bot evidence is a current-source proof-helper/test pair at the recorded
+  implementation base, not a durable delivery acceptance. T50/T51 retain the
+  remaining event/command work and its runtime gates.
 - The current Federation service has a bounded HTTPS authority foundation and
   service-owned schema, but `federation_db` is not provisioned and there is no
   Voice Node consumer, owning-service snapshot publisher, or media enforcement.

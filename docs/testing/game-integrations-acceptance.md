@@ -100,6 +100,18 @@ reported 32 passed; full `rtk mvn -B test` reported 816 passed, zero failures,
 errors, or skips. This is local Auth implementation evidence only. It does not
 pass the disposable clean-start gate or real-Google provider gate below.
 
+The identity lifecycle suites were rechecked on feature base
+`7dd013ce551867074ab148dabaedfd30c1f83478` with the focused command selecting
+`GoogleOidcProofVerifierTest`, `GoogleJwksTest`, `SdkIdentityRestControllerTest`,
+`SdkIdentityConfigurationTest`, `SdkIdentityJdbcIntegrationTest`,
+`SdkConversionProofsTest`, `SdkConversionRestControllerTest`,
+`SdkConversionConfigurationTest`, and `SdkConversionJdbcIntegrationTest`.
+Maven reported 169 tests, zero failures/errors/skips. This verifies deterministic
+provider fixtures and Auth-owned database/controller behavior for this exact
+feature SHA; it is not a real Google login, clean-start proof, owner-receipt
+conversion, or production-admission result. The real-Google gate below remains
+OPEN / NOT RUN.
+
 Run both enrollment paths from disposable state. The developer path starts with
 an empty `game_integration_db`, runs the service-owned migration, creates a
 regular Voice account through the supported Auth test/bootstrap surface, creates
