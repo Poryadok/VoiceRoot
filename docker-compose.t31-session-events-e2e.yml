@@ -72,3 +72,37 @@ services:
         condition: service_healthy
       t31-session-event-receiver-db:
         condition: service_healthy
+
+  t30-chat-retry-runner:
+    build:
+      context: ./src/backend
+      dockerfile: gameintegration/Dockerfile.acceptance
+    command:
+      - go
+      - test
+      - -count=1
+      - -run
+      - ^TestT30ComposeChatProvisionLostResponseRetriesRealReceipt$$
+      - ./internal/sessionowners
+    environment:
+      VOICE_T30_COMPOSE_CHAT_RETRY: "1"
+      DATABASE_URL: postgres://gameintegration_runtime:${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}@postgres:5432/game_integration_db?sslmode=disable
+      CHAT_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/chat_db?sslmode=disable
+      GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/gameintegration/current.pem
+      GAME_INTEGRATION_PRINCIPAL_KID: current
+      GIS_CHAT_GRPC_ADDR: chat:9091
+      GIS_CHAT_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_CHAT_CLIENT_CERT_FILE: /run/phase0/gameintegration-chat-client.crt
+      GIS_CHAT_CLIENT_KEY_FILE: /run/phase0/gameintegration-chat-client.key
+      T31_APPLICATION_ID: ${T31_APPLICATION_ID:?bootstrap an app/environment before running T30 receipt acceptance}
+      T31_ENVIRONMENT_ID: ${T31_ENVIRONMENT_ID:?bootstrap an app/environment before running T30 receipt acceptance}
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gameintegration/current.pem:/run/phase0/gameintegration/current.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-chat-client.crt:/run/phase0/gameintegration-chat-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-chat-client.key:/run/phase0/gameintegration-chat-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+    depends_on:
+      gameintegration:
+        condition: service_healthy
+      chat:
+        condition: service_healthy

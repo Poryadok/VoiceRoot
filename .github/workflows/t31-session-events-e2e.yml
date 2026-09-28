@@ -117,7 +117,7 @@ jobs:
             -f docker-compose.yml -f docker-compose.phase0.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" up -d --build --wait \
-            gateway t31-session-event-receiver-db
+            gateway chat gameintegration t31-session-event-receiver-db
 
       - name: Rebuild Gateway from this T31 worktree
         run: |
@@ -144,6 +144,17 @@ jobs:
             --tls-dir tmp/t31-session-event-e2e/tls \
             --state-dir tmp/t31-session-event-e2e/state \
             --result tmp/t31-session-event-e2e/bootstrap-result.json
+
+      - name: Prove GIS retries a committed Chat receipt after response loss
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file tmp/phase0-t31-ci-fixture/fixture.env \
+            --env-file tmp/t31-session-event-e2e/compose.env --profile app \
+            -f docker-compose.yml -f docker-compose.phase0.yml \
+            -f docker-compose.t31-session-events-e2e.yml \
+            -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
+            t30-chat-retry-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
 
       - name: Build the controlledgame runner before creating a claim lease
         shell: bash

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"voice/backend/pkg/principal"
 )
 
 type sessionOwnerScript struct {
@@ -41,7 +44,12 @@ func (s *sessionOwnerScript) result(stage string, request SessionOwnerRequest) (
 	if receipt, committed := s.receipts[key]; committed {
 		return receipt, nil
 	}
-	receipt := SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: uuid.New(), RequestHash: request.RequestHash}
+	receiptID := uuid.New()
+	if stage == "chat_create" {
+		// ProvisionManagedChat defines receipt_id as the durable operation UUID.
+		receiptID = request.OperationID
+	}
+	receipt := SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: receiptID, RequestHash: request.RequestHash}
 	s.receipts[key] = receipt
 	s.sideEffects[key]++
 	if s.loseNextReply[stage] {
@@ -269,6 +277,145 @@ func TestParentedChildKeepsPartyChatAndReceiptsAfterClose(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", partyAfterClose.SessionStatus)
 	require.Equal(t, party.ChatID, partyAfterClose.ChatID)
+}
+
+func TestSessionOrchestratorPersistsChatMappingOnlyAfterUncertainCreateRetry(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	app, env := createBindingTestEnvironment(t, ctx, store)
+	owners := newSessionOwnerScript()
+	owners.loseNextReply["chat_create"] = true
+	principalContext := SessionPrincipal{ApplicationID: app, EnvironmentID: env, Scopes: []string{"game.sessions.manage"}}
+	orchestrator := NewSessionOrchestrator(store, owners.adapters())
+	request := CreateSessionInput{
+		OperationID: uuid.New(), Kind: "match", ExternalKey: "t30-chat-retry", DisplayName: "T30 retry",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{uuid.New()},
+	}
+	accepted, err := orchestrator.CreateSession(ctx, principalContext, request)
+	require.NoError(t, err)
+
+	_, err = orchestrator.AdvanceOne(ctx, accepted.OperationID)
+	require.Error(t, err, "Chat committed once but its response was lost")
+	require.Len(t, owners.calls["chat_create"], 1)
+	firstRequest := owners.calls["chat_create"][0]
+	ownerKey := sessionOwnerEffectKey{operationID: firstRequest.OperationID, requestHash: firstRequest.RequestHash}
+	require.Equal(t, 1, owners.sideEffects[ownerKey], "the lost response follows one durable Chat effect")
+	firstReceipt := owners.receipts[ownerKey]
+	require.NotZero(t, firstReceipt.ResourceID)
+	require.NotZero(t, firstReceipt.ReceiptID)
+	require.Equal(t, firstRequest.OperationID, firstReceipt.ReceiptID, "Chat receipt ID is its durable operation UUID")
+
+	pending, err := orchestrator.GetOperation(ctx, principalContext, accepted.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", pending.Status)
+	require.Equal(t, "provisioning", pending.SessionStatus)
+	require.Equal(t, "accepted", pending.Stage)
+	require.Empty(t, pending.ChatID)
+	require.Empty(t, pending.ChatCreateReceiptID)
+	require.Empty(t, pending.ActiveEventID)
+	var mappings, mappingOperations, ownerReceipts, outboxEvents int
+	mappingOperationID := deterministicOwnerID(app, env, accepted.SessionID, "chat_mapping", "")
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND external_key=$3`, app, env, request.ExternalKey).Scan(&mappings))
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_operations WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, app, env, mappingOperationID).Scan(&mappingOperations))
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts WHERE operation_id=$1 AND stage='chat_create'`, accepted.OperationID).Scan(&ownerReceipts))
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_outbox WHERE session_id=$1`, accepted.SessionID).Scan(&outboxEvents))
+	require.Zero(t, mappings)
+	require.Zero(t, mappingOperations)
+	require.Zero(t, ownerReceipts, "GIS must not persist an unobserved Chat receipt before reconciling the owner reply")
+	require.Zero(t, outboxEvents)
+
+	advanced, err := orchestrator.AdvanceOne(ctx, accepted.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, "chat_ready", advanced.Stage)
+	require.Len(t, owners.calls["chat_create"], 2)
+	retryRequest := owners.calls["chat_create"][1]
+	require.Equal(t, firstRequest.OperationID, retryRequest.OperationID, "retry uses the deterministic Chat operation ID")
+	require.Equal(t, firstRequest.RequestHash, retryRequest.RequestHash, "retry preserves the full protobuf request hash")
+	firstBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(firstRequest.Proto)
+	require.NoError(t, err)
+	retryBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(retryRequest.Proto)
+	require.NoError(t, err)
+	require.Equal(t, firstBytes, retryBytes, "uncertain Chat RPC retry must use byte-identical full request bytes")
+	computedHash, err := principal.RequestHash(firstRequest.Proto)
+	require.NoError(t, err)
+	require.Equal(t, firstRequest.RequestHash, computedHash)
+	require.Equal(t, 1, owners.sideEffects[ownerKey], "retry reconciles the durable receipt without repeating Chat creation")
+
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND external_key=$3`, app, env, request.ExternalKey).Scan(&mappings))
+	require.Equal(t, 1, mappings)
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_operations WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, app, env, mappingOperationID).Scan(&mappingOperations))
+	require.Equal(t, 1, mappingOperations)
+	requestHashBytes, err := principalHashBytes(firstRequest.RequestHash)
+	require.NoError(t, err)
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts WHERE operation_id=$1 AND stage='chat_create' AND owner_operation_id=$2 AND owner_request_hash=$3 AND resource_id=$4 AND receipt_id=$5`, accepted.OperationID, firstRequest.OperationID, requestHashBytes, firstReceipt.ResourceID, firstReceipt.ReceiptID).Scan(&ownerReceipts))
+	require.Equal(t, 1, ownerReceipts)
+	var mappedResource, mappedChat, mappedChatOperation uuid.UUID
+	var mappedHash string
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT resource_id,chat_id,chat_operation_id,chat_request_hash FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND external_key=$3`, app, env, request.ExternalKey).Scan(&mappedResource, &mappedChat, &mappedChatOperation, &mappedHash))
+	require.Equal(t, firstReceipt.ResourceID, mappedResource)
+	require.Equal(t, firstReceipt.ResourceID, mappedChat)
+	require.Equal(t, firstRequest.OperationID, mappedChatOperation)
+	require.Equal(t, firstRequest.RequestHash, mappedHash)
+	require.Equal(t, firstReceipt.ResourceID, advanced.ChatID)
+	require.Equal(t, firstReceipt.ReceiptID, advanced.ChatCreateReceiptID)
+	require.Empty(t, advanced.ActiveEventID)
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_outbox WHERE session_id=$1`, accepted.SessionID).Scan(&outboxEvents))
+	require.Zero(t, outboxEvents, "the active event remains fenced until every owner receipt is persisted")
+}
+
+func TestSessionOrchestratorRejectsUnprovenChatReceiptBeforeMapping(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		receipt func(SessionOwnerRequest) SessionOwnerReceipt
+	}{
+		{name: "missing receipt ID", receipt: func(in SessionOwnerRequest) SessionOwnerReceipt {
+			return SessionOwnerReceipt{ResourceID: uuid.New(), RequestHash: in.RequestHash}
+		}},
+		{name: "mismatched receipt ID", receipt: func(in SessionOwnerRequest) SessionOwnerReceipt {
+			return SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: uuid.New(), RequestHash: in.RequestHash}
+		}},
+		{name: "empty request hash", receipt: func(_ SessionOwnerRequest) SessionOwnerReceipt {
+			return SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: uuid.New()}
+		}},
+		{name: "mismatched request hash", receipt: func(_ SessionOwnerRequest) SessionOwnerReceipt {
+			return SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: uuid.New(), RequestHash: "sha256:" + strings.Repeat("0", 64)}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, ctx := startT31SessionStore(t)
+			app, env := createBindingTestEnvironment(t, ctx, store)
+			owners := newSessionOwnerScript()
+			adapters := owners.adapters()
+			adapters.CreateChat = func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
+				owners.calls["chat_create"] = append(owners.calls["chat_create"], in)
+				return tc.receipt(in), nil
+			}
+			principalContext := SessionPrincipal{ApplicationID: app, EnvironmentID: env, Scopes: []string{"game.sessions.manage"}}
+			orchestrator := NewSessionOrchestrator(store, adapters)
+			request := CreateSessionInput{OperationID: uuid.New(), Kind: "match", ExternalKey: "t30-invalid-chat-receipt", DisplayName: "Invalid receipt", RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{uuid.New()}}
+			accepted, err := orchestrator.CreateSession(ctx, principalContext, request)
+			require.NoError(t, err)
+			_, err = orchestrator.AdvanceOne(ctx, accepted.OperationID)
+			require.Error(t, err)
+			pending, err := orchestrator.GetOperation(ctx, principalContext, accepted.OperationID)
+			require.NoError(t, err)
+			require.Equal(t, "pending", pending.Status)
+			require.Equal(t, "provisioning", pending.SessionStatus)
+			require.Equal(t, "accepted", pending.Stage)
+			require.Empty(t, pending.ChatID)
+			require.Empty(t, pending.ChatCreateReceiptID)
+			require.Empty(t, pending.ActiveEventID)
+			var count int
+			require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND external_key=$3`, app, env, request.ExternalKey).Scan(&count))
+			require.Zero(t, count)
+			mappingOperationID := deterministicOwnerID(app, env, accepted.SessionID, "chat_mapping", "")
+			require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_operations WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, app, env, mappingOperationID).Scan(&count))
+			require.Zero(t, count)
+			require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts WHERE operation_id=$1 AND stage='chat_create'`, accepted.OperationID).Scan(&count))
+			require.Zero(t, count)
+			require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_outbox WHERE session_id=$1`, accepted.SessionID).Scan(&count))
+			require.Zero(t, count)
+		})
+	}
 }
 
 func advanceSessionUntil(t *testing.T, ctx context.Context, orchestrator *SessionOrchestrator, principal SessionPrincipal, operationID uuid.UUID, sessionStatus string) {
