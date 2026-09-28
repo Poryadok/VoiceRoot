@@ -20,6 +20,12 @@ import (
 
 var ErrConflict = errors.New("game session provisioning conflict")
 var ErrInvalidRequest = errors.New("invalid game session provisioning request")
+var ErrNotFound = errors.New("managed game session room not found")
+
+type Room struct {
+	RoomID, ChatID, LiveKitRoomName string
+	CreatedAt                       time.Time
+}
 
 type PostgresStore struct{ pool *pgxpool.Pool }
 
@@ -40,6 +46,28 @@ AND (SELECT count(*) FROM information_schema.columns WHERE table_schema=current_
 		return errors.New("voice game session schema is missing")
 	}
 	return nil
+}
+
+func (s *PostgresStore) GetRoom(ctx context.Context, roomID string) (Room, error) {
+	if s == nil || s.pool == nil {
+		return Room{}, errors.New("game session store unavailable")
+	}
+	id, err := uuid.Parse(roomID)
+	if err != nil || id == uuid.Nil || id.String() != roomID {
+		return Room{}, ErrNotFound
+	}
+	var room Room
+	err = s.pool.QueryRow(ctx, `SELECT r.room_id::text,r.chat_id::text,r.livekit_room_name,r.created_at
+FROM voice_game_session_operations o
+JOIN voice_room_instances r ON r.room_id=o.room_id
+WHERE r.room_id=$1 AND r.purpose='GAME_SESSION' AND r.state='active'`, id).Scan(&room.RoomID, &room.ChatID, &room.LiveKitRoomName, &room.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Room{}, ErrNotFound
+	}
+	if err != nil {
+		return Room{}, err
+	}
+	return room, nil
 }
 
 func (s *PostgresStore) Provision(ctx context.Context, req *callsv1.ProvisionGameSessionRoomRequest) (*callsv1.ProvisionGameSessionRoomResponse, error) {

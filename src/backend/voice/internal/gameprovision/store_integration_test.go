@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
-	"voice/backend/pkg/integrationtest"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/integrationtest"
 )
 
 func TestPostgresGameSessionProvisioning_ExactReplayAndConflict(t *testing.T) {
@@ -35,6 +35,12 @@ func TestPostgresGameSessionProvisioning_ExactReplayAndConflict(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originalBytes, replayedBytes, "fresh store recovery returns the immutable response bytes")
 
+	room, err := restarted.GetRoom(ctx, original.RoomId)
+	require.NoError(t, err, "a fresh Voice store resolves the stable room mapping for user admission")
+	require.Equal(t, original.RoomId, room.RoomID)
+	require.Equal(t, request.ChatId, room.ChatID)
+	require.Equal(t, original.LivekitRoomName, room.LiveKitRoomName)
+
 	changed := proto.Clone(request).(*callsv1.ProvisionGameSessionRoomRequest)
 	changed.ChatId = uuid.NewString()
 	_, err = restarted.Provision(ctx, changed)
@@ -50,6 +56,21 @@ func TestPostgresGameSessionProvisioning_ExactReplayAndConflict(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_game_session_operations`).Scan(&receipts))
 	require.Equal(t, 1, rooms)
 	require.Equal(t, 1, receipts)
+}
+
+func TestPostgresGameSessionProvisioning_RoomLookupRequiresManagedRoom(t *testing.T) {
+	ctx := context.Background()
+	pool := startGameSessionPostgres(t, ctx)
+	store := NewPostgresStore(pool)
+	response, err := store.Provision(ctx, validProvisionRequest())
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `UPDATE voice_room_instances SET state='closed',closed_at=now() WHERE room_id=$1`, uuid.MustParse(response.RoomId))
+	require.NoError(t, err)
+	_, err = store.GetRoom(ctx, response.RoomId)
+	require.ErrorIs(t, err, ErrNotFound, "closed managed rooms cannot be admitted")
+	_, err = store.GetRoom(ctx, uuid.NewString())
+	require.ErrorIs(t, err, ErrNotFound, "unmapped rooms cannot be admitted")
 }
 
 func TestPostgresGameSessionProvisioning_RoomReceiptAndMappingRollbackTogether(t *testing.T) {
@@ -106,7 +127,7 @@ func validProvisionRequest() *callsv1.ProvisionGameSessionRoomRequest {
 	return &callsv1.ProvisionGameSessionRoomRequest{
 		OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(),
 		Resource: &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "realm:match/opaque-key"},
-		ChatId: uuid.NewString(), ChatCreationOperationId: uuid.NewString(),
+		ChatId:   uuid.NewString(), ChatCreationOperationId: uuid.NewString(),
 	}
 }
 

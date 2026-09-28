@@ -43,6 +43,36 @@ class VoiceSessionKind extends $pb.ProtobufEnum {
   const VoiceSessionKind._(super.value, super.name);
 }
 
+class GameSessionResourceKind extends $pb.ProtobufEnum {
+  static const GameSessionResourceKind GAME_SESSION_RESOURCE_KIND_UNSPECIFIED =
+      GameSessionResourceKind._(
+          0, _omitEnumNames ? '' : 'GAME_SESSION_RESOURCE_KIND_UNSPECIFIED');
+  static const GameSessionResourceKind GAME_SESSION_RESOURCE_KIND_PARTY =
+      GameSessionResourceKind._(
+          1, _omitEnumNames ? '' : 'GAME_SESSION_RESOURCE_KIND_PARTY');
+  static const GameSessionResourceKind GAME_SESSION_RESOURCE_KIND_MATCH =
+      GameSessionResourceKind._(
+          2, _omitEnumNames ? '' : 'GAME_SESSION_RESOURCE_KIND_MATCH');
+  static const GameSessionResourceKind
+      GAME_SESSION_RESOURCE_KIND_FLEET_SESSION = GameSessionResourceKind._(
+          3, _omitEnumNames ? '' : 'GAME_SESSION_RESOURCE_KIND_FLEET_SESSION');
+
+  static const $core.List<GameSessionResourceKind> values =
+      <GameSessionResourceKind>[
+    GAME_SESSION_RESOURCE_KIND_UNSPECIFIED,
+    GAME_SESSION_RESOURCE_KIND_PARTY,
+    GAME_SESSION_RESOURCE_KIND_MATCH,
+    GAME_SESSION_RESOURCE_KIND_FLEET_SESSION,
+  ];
+
+  static final $core.List<GameSessionResourceKind?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static GameSessionResourceKind? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const GameSessionResourceKind._(super.value, super.name);
+}
+
 class CallMediaKind extends $pb.ProtobufEnum {
   static const CallMediaKind CALL_MEDIA_KIND_UNSPECIFIED =
       CallMediaKind._(0, _omitEnumNames ? '' : 'CALL_MEDIA_KIND_UNSPECIFIED');

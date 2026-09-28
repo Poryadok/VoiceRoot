@@ -12,6 +12,10 @@ import (
 	"voice/backend/voice/internal/gameprovision"
 )
 
+type ManagedGameSessionRoomLookup interface {
+	GetRoom(context.Context, string) (gameprovision.Room, error)
+}
+
 type GameSessionProvisioner interface {
 	Provision(context.Context, *callsv1.ProvisionGameSessionRoomRequest) (*callsv1.ProvisionGameSessionRoomResponse, error)
 }

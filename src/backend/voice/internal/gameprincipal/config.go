@@ -1,7 +1,6 @@
 package gameprincipal
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -104,12 +103,4 @@ func (c Config) Validate() error {
 		return errors.New("invalid GIS principal JWKS URL")
 	}
 	return nil
-}
-
-func singleIssuerJWKS(raw string) (string, error) {
-	var endpoints map[string]string
-	if err := json.Unmarshal([]byte(raw), &endpoints); err != nil || len(endpoints) != 1 || strings.TrimSpace(endpoints["gameintegration"]) == "" {
-		return "", errors.New("GIS principal JWKS configuration must contain only gameintegration")
-	}
-	return strings.TrimSpace(endpoints["gameintegration"]), nil
 }

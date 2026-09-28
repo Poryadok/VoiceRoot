@@ -20,6 +20,65 @@ import 'calls.pb.dart' as $0;
 
 export 'calls.pb.dart';
 
+/// GIS-only room provisioning. Register this service only on the private listener.
+@$pb.GrpcServiceName('voice.calls.v1.GameSessionProvisioningService')
+class GameSessionProvisioningServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  GameSessionProvisioningServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  $grpc.ResponseFuture<$0.ProvisionGameSessionRoomResponse>
+      provisionGameSessionRoom(
+    $0.ProvisionGameSessionRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$provisionGameSessionRoom, request,
+        options: options);
+  }
+
+  // method descriptors
+
+  static final _$provisionGameSessionRoom = $grpc.ClientMethod<
+          $0.ProvisionGameSessionRoomRequest,
+          $0.ProvisionGameSessionRoomResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom',
+      ($0.ProvisionGameSessionRoomRequest value) => value.writeToBuffer(),
+      $0.ProvisionGameSessionRoomResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.calls.v1.GameSessionProvisioningService')
+abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.calls.v1.GameSessionProvisioningService';
+
+  GameSessionProvisioningServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ProvisionGameSessionRoomRequest,
+            $0.ProvisionGameSessionRoomResponse>(
+        'ProvisionGameSessionRoom',
+        provisionGameSessionRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ProvisionGameSessionRoomRequest.fromBuffer(value),
+        ($0.ProvisionGameSessionRoomResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.ProvisionGameSessionRoomResponse>
+      provisionGameSessionRoom_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ProvisionGameSessionRoomRequest> $request) async {
+    return provisionGameSessionRoom($call, await $request);
+  }
+
+  $async.Future<$0.ProvisionGameSessionRoomResponse> provisionGameSessionRoom(
+      $grpc.ServiceCall call, $0.ProvisionGameSessionRoomRequest request);
+}
+
 /// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 /// Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')

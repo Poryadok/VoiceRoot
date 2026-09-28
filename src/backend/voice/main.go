@@ -74,6 +74,7 @@ func main() {
 	var gamePrincipalRuntime *gameprincipal.Runtime
 	var gameProvisionServer *grpc.Server
 	var gameProvisionListener net.Listener
+	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
 	if gamePrincipalEnabled {
 		gamePrincipalRuntime, err = gameprincipal.New(runCtx, gamePrincipalConfig)
 		if err != nil {
@@ -93,6 +94,7 @@ func main() {
 		if err := gameStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice GIS database schema: %v", err)
 		}
+		managedGameSessionRooms = gameStore
 		gameProvisionListener, err = net.Listen("tcp", gamePrincipalConfig.ListenAddr)
 		if err != nil {
 			log.Fatalf("voice GIS listener: %v", err)
@@ -105,6 +107,20 @@ func main() {
 				logger.Error("GIS room provisioning listener stopped", slog.String("error", serveErr.Error()))
 			}
 		}()
+	} else if dsn := strings.TrimSpace(os.Getenv("VOICE_DATABASE_URL")); dsn != "" {
+		pool, poolErr := voicepostgres.NewPool(runCtx, dsn)
+		if poolErr != nil {
+			logger.Warn("managed game session lookup unavailable", slog.String("error", poolErr.Error()))
+		} else {
+			gameStore := gameprovision.NewPostgresStore(pool)
+			if schemaErr := gameStore.CheckSchema(runCtx); schemaErr != nil {
+				pool.Close()
+				logger.Warn("managed game session lookup schema unavailable", slog.String("error", schemaErr.Error()))
+			} else {
+				defer pool.Close()
+				managedGameSessionRooms = gameStore
+			}
+		}
 	}
 
 	var callStore voicestore.CallStore
@@ -195,6 +211,7 @@ func main() {
 	tokenTTL := time.Hour
 	voiceSvc := &grpcsvc.VoiceGRPC{
 		Calls:                   callStore,
+		ManagedGameSessionRooms: managedGameSessionRooms,
 		ChatMembers:             chatMembers,
 		SpaceMembers:            spaceMembers,
 		VoiceRoomAccessResolver: voiceRoomAccessResolver,

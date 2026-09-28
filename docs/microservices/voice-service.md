@@ -128,7 +128,13 @@ stored original response after process restart; changed input or a second
 operation for the same application/environment/resource conflicts. Provisioning
 does not add members, issue media tokens or authorize admission. Players continue
 through the existing user-authorized Voice path, which checks current Chat
-membership/admission before token issuance.
+membership/admission before token issuance. On a Voice call-store cache miss,
+Voice rebuilds an ownerless managed-room projection from the durable mapping,
+then checks live Chat membership before adding the authenticated profile. This
+lets an active managed room recover after Redis loss without an invented
+initiator. Managed rooms do not occupy the ordinary active-Chat-call index, stay
+active when the last player leaves, and cannot be ended through player `EndCall`;
+the GIS provisioning endpoint does not expose lifecycle mutation methods.
 
 Memberships record the verified `account_id`, positive `session_epoch` and
 `JOINING|JOINED|RECONNECTING|LEAVING|LEFT|EJECTED` state. `RECONNECTING` alone has
