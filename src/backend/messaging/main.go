@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"log/slog"
@@ -21,6 +23,8 @@ import (
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
 	"voice/backend/messaging/internal/messageevents"
+	"voice/backend/messaging/internal/principalgrpc"
+	"voice/backend/messaging/internal/principalruntime"
 	"voice/backend/messaging/internal/s2s"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/grpcclient"
@@ -39,6 +43,85 @@ import (
 )
 
 const serviceName = "messaging"
+
+func loadGameTombstoneKeys() (*s2s.GameTombstoneKeySource, error) {
+	config := s2s.GameTombstoneKeyConfig{
+		KeyID:          strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_KEY_ID")),
+		PrivateKeyFile: strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_PRIVATE_KEY_FILE")),
+		NotBefore:      strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_NOT_BEFORE")),
+		NotAfter:       strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_NOT_AFTER")),
+	}
+	if config.KeyID == "" && config.PrivateKeyFile == "" && config.NotBefore == "" && config.NotAfter == "" {
+		return nil, nil
+	}
+	return s2s.LoadGameTombstoneKeySource(config)
+}
+
+func loadModerationPrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("MODERATION_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("MODERATION_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" && config.RedisURL == "" {
+		return nil, nil
+	}
+	return principalruntime.New(ctx, config)
+}
+
+func loadGameAuthKeys() (*s2s.GameAuthKeys, error) {
+	config := s2s.GameAuthKeysConfig{JWKSURL: strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_JWKS_URL")), TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_PRINCIPAL_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_PRINCIPAL_TLS_KEY_FILE")), CAFile: strings.TrimSpace(os.Getenv("AUTH_PRINCIPAL_JWKS_CA_FILE"))}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return s2s.NewGameAuthKeys(config)
+}
+
+func loadGameMessageExecutionPermitClient() (*s2s.GameMessageExecutionPermitClient, error) {
+	config := s2s.GameMessageExecutionPermitConfig{Endpoint: strings.TrimSpace(os.Getenv("AUTH_GAME_MESSAGE_EXECUTION_PERMIT_URL")), TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_EXECUTION_PERMIT_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("MESSAGING_AUTH_EXECUTION_PERMIT_TLS_KEY_FILE")), CAFile: strings.TrimSpace(os.Getenv("AUTH_GAME_MESSAGE_EXECUTION_PERMIT_CA_FILE"))}
+	if config.Endpoint == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return s2s.NewGameMessageExecutionPermitClient(config)
+}
+
+func startGameTombstoneJWKS(source *s2s.GameTombstoneKeySource) (*http.Server, error) {
+	address := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_LISTEN"))
+	certFile := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE"))
+	keyFile := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_TLS_KEY_FILE"))
+	caFile := strings.TrimSpace(os.Getenv("MESSAGING_TOMBSTONE_JWKS_CLIENT_CA_FILE"))
+	if source == nil && address == "" && certFile == "" && keyFile == "" && caFile == "" {
+		return nil, nil
+	}
+	if source == nil || address == "" || certFile == "" || keyFile == "" || caFile == "" {
+		return nil, fmt.Errorf("tombstone JWKS requires a signing key, dedicated listener, server certificate, and client CA")
+	}
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("tombstone JWKS server certificate: %w", err)
+	}
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("tombstone JWKS client CA: %w", err)
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("tombstone JWKS client CA contains no certificates")
+	}
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("tombstone JWKS listen: %w", err)
+	}
+	server := &http.Server{Handler: source.JWKSHandler(), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}}
+	go func() {
+		if err := server.ServeTLS(listener, "", ""); err != nil && err != http.ErrServerClosed {
+			log.Printf("tombstone JWKS server exited: %v", err)
+		}
+	}()
+	return server, nil
+}
 
 func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 	conn.Connect()
@@ -71,6 +154,38 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	if dbURL != "" {
+		tombstoneKeys, err := loadGameTombstoneKeys()
+		if err != nil {
+			log.Fatalf("messaging tombstone key configuration: %v", err)
+		}
+		jwksServer, err := startGameTombstoneJWKS(tombstoneKeys)
+		if err != nil {
+			log.Fatalf("messaging tombstone JWKS configuration: %v", err)
+		}
+		if jwksServer != nil {
+			defer func() { _ = jwksServer.Close() }()
+		}
+		moderationPrincipal, err := loadModerationPrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("moderation principal runtime: %v", err)
+		}
+		if moderationPrincipal != nil {
+			defer func() { _ = moderationPrincipal.Close() }()
+		}
+		gameAuthKeys, err := loadGameAuthKeys()
+		if err != nil {
+			log.Fatalf("game Auth key client: %v", err)
+		}
+		if gameAuthKeys != nil {
+			defer gameAuthKeys.Close()
+		}
+		gameExecutionPermits, err := loadGameMessageExecutionPermitClient()
+		if err != nil {
+			log.Fatalf("game Auth execution permit client: %v", err)
+		}
+		if gameExecutionPermits != nil {
+			defer gameExecutionPermits.Close()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
 		cancel()
@@ -78,6 +193,12 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		var tombstoneProcessor grpcsvc.GameTombstoneProcessor
+		if tombstoneKeys != nil && moderationPrincipal != nil {
+			tombstoneProcessor = &grpcsvc.VerifiedGameTombstoneProcessor{Store: &store.MessagesStore{Pool: pool}, Keys: tombstoneKeys}
+		} else {
+			logger.Warn("game tombstone RPC is fail-closed because its signing key or moderation principal runtime is not configured")
+		}
 
 		var chatMetaPool *pgxpool.Pool
 		if chatDB := strings.TrimSpace(os.Getenv("CHAT_DATABASE_URL")); chatDB != "" {
@@ -215,6 +336,7 @@ func main() {
 		}
 
 		var files grpcsvc.FileMetadataLookup
+		var gameFiles grpcsvc.GameAttachmentManifestVerifier
 		if fileAddr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); fileAddr != "" {
 			fconn, err := grpc.NewClient(grpcclient.DialTarget(fileAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -227,7 +349,9 @@ func main() {
 				log.Fatalf("file grpc dial: %v", err)
 			}
 			waitCancel()
-			files = s2s.NewFileGRPCMetadata(filev1.NewFileServiceClient(fconn))
+			fileClient := filev1.NewFileServiceClient(fconn)
+			files = s2s.NewFileGRPCMetadata(fileClient)
+			gameFiles = &s2s.GameAttachmentManifestVerifier{Client: fileClient}
 		}
 
 		var msgEvents messageevents.MessageEventsPublisher
@@ -284,15 +408,27 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), grpc.ChainUnaryInterceptor(principalgrpc.TombstoneUnaryInterceptor(moderationPrincipal)))...)
 		var chatThreadPolicy *store.SQLChatThreadPolicy
 		if chatMetaPool != nil {
 			chatThreadPolicy = &store.SQLChatThreadPolicy{Pool: chatMetaPool}
 		} else {
 			logger.Warn("CHAT_DATABASE_URL not set; thread policy checks disabled")
 		}
+		var gameMessages grpcsvc.GameMessageProcessor
+		var gameMessagePermitProcessor *grpcsvc.VerifiedGameMessageProcessor
+		if gameAuthKeys != nil && gameExecutionPermits != nil && chatGuard != nil {
+			gameMessagePermitProcessor = &grpcsvc.VerifiedGameMessageProcessor{Store: &store.MessagesStore{Pool: pool}, AuthKeys: gameAuthKeys, Permits: gameExecutionPermits, Bindings: &grpcsvc.AuthBackedGameBindingAuthority{Chats: chatGuard}, Files: gameFiles}
+			gameMessages = gameMessagePermitProcessor
+			go gameMessagePermitProcessor.RunGameMessagePermitCompletionDispatcher(context.Background(), logger)
+			logger.Warn("ApplyGameMessage new writes remain fail-closed until the T30/T31 app/environment/binding-to-chat resource mapping is available; exact receipts remain readable")
+		} else {
+			logger.Warn("ApplyGameMessage is fail-closed because Auth status keys, T16 execution-permit authority, or Chat membership authority is unavailable; exact receipts remain readable when storage is available")
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
 			Messages:          &store.MessagesStore{Pool: pool},
+			GameMessages:      gameMessages,
+			GameTombstones:    tombstoneProcessor,
 			Reactions:         &store.ReactionsStore{Pool: pool},
 			Pins:              &store.PinsStore{Pool: pool},
 			SharedMedia:       &store.SharedMediaStore{Pool: pool},

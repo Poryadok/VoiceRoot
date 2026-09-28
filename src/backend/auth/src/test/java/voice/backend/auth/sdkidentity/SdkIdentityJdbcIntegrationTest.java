@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.JWSObject;
+import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.Payload;
 import com.nimbusds.jose.crypto.ECDSASigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
@@ -31,6 +32,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -85,8 +87,9 @@ class SdkIdentityJdbcIntegrationTest {
   @BeforeEach
   void initialize() throws Exception {
     jdbc = new NamedParameterJdbcTemplate(source());
-    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_registration_intents,sdk_conversion_operations,"
-        + "sdk_linked_sessions,sdk_authorizations,sdk_sessions,sdk_devices,sdk_challenges,sdk_identities");
+    jdbc.getJdbcTemplate().execute("TRUNCATE sdk_device_authority_issues,sdk_registration_intents,sdk_conversion_operations,"
+        + "sdk_linked_sessions,sdk_authorizations,sdk_device_key_operations,sdk_sessions,"
+        + "sdk_device_keys,sdk_devices,sdk_challenges,sdk_identities");
     applications = new HashMap<>();
     admit(app, env, client);
     policies = (application, environment) -> activePolicy(application, environment);
@@ -107,6 +110,8 @@ class SdkIdentityJdbcIntegrationTest {
     assertThat(session.accountId()).isNotNull();
     assertThat(session.actorId()).isNotNull().isNotEqualTo(session.accountId());
     assertThat(session.deviceId()).isNotNull();
+    assertThat(session.keyId()).isNotNull();
+    assertThat(session.deviceGeneration()).isEqualTo(1L);
     assertThat(session.applicationId()).isEqualTo(app);
     assertThat(session.environmentId()).isEqualTo(env);
     assertThat(session.gameSubject()).isEqualTo("external-game-player");
@@ -116,6 +121,20 @@ class SdkIdentityJdbcIntegrationTest {
     assertThat(count("accounts")).isZero();
     assertThat(count("sdk_identities")).isEqualTo(1);
     assertThat(count("sdk_devices")).isEqualTo(1);
+    var enrolledKey = jdbc.queryForMap("SELECT key_id,generation,application_id,environment_id,public_jwk,"
+        + "key_thumbprint,status,not_before,not_after,revoked_at FROM sdk_device_keys", Map.of());
+    assertThat(enrolledKey.get("key_id")).isNotNull();
+    assertThat(enrolledKey.get("key_id")).isEqualTo(session.keyId());
+    assertThat(enrolledKey.get("generation")).isEqualTo(1L);
+    assertThat(enrolledKey.get("application_id")).isEqualTo(app);
+    assertThat(enrolledKey.get("environment_id")).isEqualTo(env);
+    assertThat(enrolledKey.get("public_jwk")).isEqualTo(device.toPublicJWK().toJSONString());
+    assertThat(enrolledKey.get("key_thumbprint")).isEqualTo(device.computeThumbprint().toString());
+    assertThat(enrolledKey.get("status")).isEqualTo("active");
+    assertThat(enrolledKey.get("not_before")).isEqualTo(java.sql.Timestamp.from(NOW));
+    assertThat(enrolledKey.get("not_after")).isEqualTo(
+        java.sql.Timestamp.from(NOW.plus(java.time.Duration.ofDays(90))));
+    assertThat(enrolledKey.get("revoked_at")).isNull();
     String persisted = jdbc.queryForObject(
         "SELECT row_to_json(s)::text FROM sdk_sessions s", Map.of(), String.class);
     assertThat(persisted).doesNotContain(session.accessToken(), provider, ticket);
@@ -136,6 +155,322 @@ class SdkIdentityJdbcIntegrationTest {
     assertThat(verified.accessToken()).isNull();
     assertThat(service(NOW).session(session.accessToken(), sessionProof(device, session)))
         .isEqualTo(verified);
+  }
+
+  @Test
+  void initialEnrollmentRejectsCallerSelectedKeyIdAndUnknownJwkMembers() throws Exception {
+    var callerKid = new com.nimbusds.jose.jwk.ECKey.Builder(device.toPublicJWK())
+        .keyID(UUID.randomUUID().toString()).build();
+    assertThatThrownBy(() -> service(NOW).challenge(app, env, callerKid.toJSONString()))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    var unknownMember = new java.util.LinkedHashMap<>(device.toPublicJWK().toJSONObject());
+    unknownMember.put("x-voice-untrusted", "ignored");
+    assertThatThrownBy(() -> service(NOW).challenge(app, env,
+        com.nimbusds.jose.util.JSONObjectUtils.toJSONString(unknownMember)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(count("sdk_challenges")).isZero();
+  }
+
+  @Test
+  void newDeviceKeyExpiresAtNinetyDaysAndCannotAuthorizeAtTheBoundary() throws Exception {
+    var current = new AtomicReference<>(NOW);
+    var service = service(new MutableClock(current, ZoneOffset.UTC));
+    var session = exchange(service, app, env, client, device);
+    current.set(NOW.plus(java.time.Duration.ofDays(90)).minusMillis(1));
+    var beforeExpiry = challenge(service, app, env, device);
+    var accepted = service.exchange(beforeExpiry.challengeId(), providerAt(beforeExpiry, client, current.get()),
+        gameTicketAt(beforeExpiry, app, env, subjectHash(), current.get()), enroll(device, beforeExpiry));
+    assertThat(accepted.keyId()).isEqualTo(session.keyId());
+    current.set(NOW.plus(java.time.Duration.ofDays(90)));
+    var atExpiry = challenge(service, app, env, device);
+    assertThatThrownBy(() -> service.exchange(atExpiry.challengeId(), providerAt(atExpiry, client, current.get()),
+        gameTicketAt(atExpiry, app, env, subjectHash(), current.get()), enroll(device, atExpiry)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+  }
+
+  @Test
+  void lifecycleChallengesArePurposeBoundAndCannotBeUsedForInitialEnrollment() throws Exception {
+    var session = exchange(service(NOW), app, env, client, device);
+    var replacement = new ECKeyGenerator(Curve.P_256).generate();
+    var rotate = service(NOW).deviceKeyChallenge("rotate", app, env, session.accessToken(), null,
+        replacement.toPublicJWK().toJSONString());
+    assertThat(rotate.purpose()).isEqualTo("rotate");
+    assertThat(rotate.deviceId()).isEqualTo(session.deviceId());
+    assertThat(rotate.replacesDeviceId()).isNull();
+    assertThat(rotate.expiresAt()).isEqualTo(NOW.plusSeconds(300));
+    var recover = service(NOW).deviceKeyChallenge("recover", app, env, null, session.deviceId(),
+        replacement.toPublicJWK().toJSONString());
+    assertThat(recover.purpose()).isEqualTo("recover");
+    assertThat(recover.deviceId()).isNull();
+    assertThat(recover.replacesDeviceId()).isEqualTo(session.deviceId());
+    assertThatThrownBy(() -> service(NOW).exchange(rotate.challengeId(), "bad", "bad", "bad"))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+  }
+
+  @Test
+  void rotationAtomicallyAssignsNextKeyAndStoresExactIdempotentResult() throws Exception {
+    var service = service(NOW);
+    var original = exchange(service, app, env, client, device);
+    var replacement = new ECKeyGenerator(Curve.P_256).generate();
+    var challenge = service.deviceKeyChallenge("rotate", app, env, original.accessToken(), null,
+        replacement.toPublicJWK().toJSONString());
+    UUID requestId = UUID.randomUUID();
+    String thumbprint = replacement.computeThumbprint().toString();
+    var currentProof = lifecycleProof(device, original.keyId(), lifecycleClaims("rotate_current", requestId,
+        challenge, original.deviceId(), original.keyId(), device.computeThumbprint().toString(), thumbprint, NOW));
+    var newProof = lifecycleProof(replacement, null, lifecycleClaims("rotate_new", requestId,
+        challenge, original.deviceId(), null, thumbprint, thumbprint, NOW));
+    byte[] requestBytes = (challenge.challengeId() + "|" + requestId + "|rotate").getBytes(StandardCharsets.UTF_8);
+
+    var result = service.rotate(challenge.challengeId(), provider(challenge, client), currentProof,
+        newProof, requestId, requestBytes);
+    assertThat(result.deviceId()).isEqualTo(original.deviceId());
+    assertThat(result.keyId()).isNotEqualTo(original.keyId());
+    assertThat(result.generation()).isEqualTo(2L);
+    assertThat(result.authorityRevision()).isEqualTo(2L);
+    var oldKey = jdbc.queryForMap("SELECT status,not_after FROM sdk_device_keys WHERE key_id=:id",
+        Map.of("id", original.keyId()));
+    assertThat(oldKey.get("status")).isEqualTo("overlap");
+    assertThat(oldKey.get("not_after")).isEqualTo(java.sql.Timestamp.from(NOW.plusSeconds(600)));
+    String independentProof = provider(challenge, client);
+    var start = new CyclicBarrier(8);
+    var workers = Executors.newFixedThreadPool(8);
+    try {
+      List<Callable<SdkIdentityService.DeviceKeyResult>> tasks = new ArrayList<>();
+      for (int i = 0; i < 8; i++) {
+        tasks.add(() -> {
+          start.await(10, TimeUnit.SECONDS);
+          return service(NOW).rotate(challenge.challengeId(), independentProof, currentProof,
+              newProof, requestId, requestBytes);
+        });
+      }
+      for (var future : workers.invokeAll(tasks, 30, TimeUnit.SECONDS)) {
+        assertThat(future.isCancelled()).isFalse();
+        assertThat(future.get()).isEqualTo(result);
+      }
+    } finally {
+      workers.shutdownNow();
+      assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
+    assertThatThrownBy(() -> service.rotate(challenge.challengeId(), "expired-proof", "expired-proof",
+        "expired-proof", requestId, (challenge.challengeId() + "changed").getBytes(StandardCharsets.UTF_8)))
+        .isInstanceOf(SdkDeviceKeyConflictException.class);
+    assertThat(count("sdk_device_key_operations")).isEqualTo(1);
+  }
+
+  @Test
+  void recoveryReplacesOnlyNamedLostDeviceAndConcurrentRetriesReturnOneReceipt() throws Exception {
+    var service = service(NOW);
+    var lost = exchange(service, app, env, client, device);
+    var survivorKey = new ECKeyGenerator(Curve.P_256).generate();
+    var survivor = exchange(service, app, env, client, survivorKey);
+    var recoveredKey = new ECKeyGenerator(Curve.P_256).generate();
+    var challenge = service.deviceKeyChallenge("recover", app, env, null, lost.deviceId(),
+        recoveredKey.toPublicJWK().toJSONString());
+    UUID requestId = UUID.randomUUID();
+    String thumbprint = recoveredKey.computeThumbprint().toString();
+    String newProof = lifecycleProof(recoveredKey, null, lifecycleClaims("recover_new", requestId,
+        challenge, null, null, thumbprint, null, NOW));
+    String providerToken = provider(challenge, client);
+    byte[] requestBytes = (challenge.challengeId() + "|" + requestId + "|recover")
+        .getBytes(StandardCharsets.UTF_8);
+    var result = service.recover(challenge.challengeId(), providerToken, newProof, requestId, requestBytes);
+    assertThat(result.deviceId()).isNotEqualTo(lost.deviceId()).isNotEqualTo(survivor.deviceId());
+    assertThat(result.generation()).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_device_keys WHERE device_id=:device "
+        + "AND status='revoked'", Map.of("device", lost.deviceId()), Long.class)).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_device_keys WHERE device_id=:device "
+        + "AND status='active'", Map.of("device", survivor.deviceId()), Long.class)).isEqualTo(1L);
+    assertThat(service.session(survivor.accessToken(), sessionProof(survivorKey, survivor)).deviceId())
+        .isEqualTo(survivor.deviceId());
+    assertThatThrownBy(() -> service.session(lost.accessToken(), sessionProof(device, lost)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThatThrownBy(() -> service.deviceKeyChallenge("rotate", app, env, lost.accessToken(), null,
+        recoveredKey.toPublicJWK().toJSONString())).isInstanceOf(SdkIdentityDeniedException.class);
+
+    var start = new CyclicBarrier(8);
+    var workers = Executors.newFixedThreadPool(8);
+    try {
+      List<Callable<SdkIdentityService.DeviceKeyResult>> tasks = new ArrayList<>();
+      for (int i = 0; i < 8; i++) {
+        tasks.add(() -> {
+          start.await(10, TimeUnit.SECONDS);
+          return service(NOW).recover(challenge.challengeId(), "expired-proof", "expired-proof",
+              requestId, requestBytes);
+        });
+      }
+      for (var future : workers.invokeAll(tasks, 30, TimeUnit.SECONDS)) {
+        assertThat(future.isCancelled()).isFalse();
+        assertThat(future.get()).isEqualTo(result);
+      }
+    } finally {
+      workers.shutdownNow();
+      assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
+    assertThat(count("sdk_device_key_operations")).isEqualTo(1);
+    assertThat(count("sdk_devices")).isEqualTo(3);
+  }
+
+  @Test
+  void explicitRevokeUsesFreshIdentityAndCurrentKeyProofAndStopsAuthImmediately() throws Exception {
+    var service = service(NOW);
+    var enrollment = challenge(service, app, env, device);
+    var session = service.exchange(enrollment.challengeId(), provider(enrollment, client),
+        gameTicket(enrollment, app, env, subjectHash()), enroll(device, enrollment));
+    UUID requestId = UUID.randomUUID();
+    var claims = new java.util.TreeMap<String, Object>();
+    claims.put("version", 1L);
+    claims.put("purpose", "revoke");
+    claims.put("audience", "voice.auth.device-key");
+    claims.put("request_id", requestId.toString());
+    claims.put("application_id", app.toString());
+    claims.put("environment_id", env.toString());
+    claims.put("device_id", session.deviceId().toString());
+    claims.put("key_id", session.keyId().toString());
+    claims.put("key_thumbprint", device.computeThumbprint().toString());
+    claims.put("issued_at", NOW.toEpochMilli());
+    String proof = lifecycleProof(device, session.keyId(), claims);
+    byte[] requestBytes = (session.deviceId() + "|" + requestId + "|revoke")
+        .getBytes(StandardCharsets.UTF_8);
+
+    var result = service.revokeDevice(session.deviceId(), provider(enrollment, client), proof,
+        requestId, requestBytes);
+    assertThat(result.deviceId()).isEqualTo(session.deviceId());
+    assertThat(result.keyId()).isEqualTo(session.keyId());
+    assertThat(result.authorityRevision()).isEqualTo(2L);
+    assertThat(jdbc.queryForObject("SELECT status FROM sdk_device_keys WHERE key_id=:id",
+        Map.of("id", session.keyId()), String.class)).isEqualTo("revoked");
+    assertThat(jdbc.queryForObject("SELECT not_after FROM sdk_device_keys WHERE key_id=:id",
+        Map.of("id", session.keyId()), java.sql.Timestamp.class)).isEqualTo(java.sql.Timestamp.from(NOW));
+    assertThatThrownBy(() -> service.session(session.accessToken(), sessionProof(device, session)))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(service.revokeDevice(session.deviceId(), "expired", "expired", requestId, requestBytes))
+        .isEqualTo(result);
+    assertThatThrownBy(() -> service.revokeDevice(session.deviceId(), "expired", "expired", requestId,
+        (session.deviceId() + "changed").getBytes(StandardCharsets.UTF_8)))
+        .isInstanceOf(SdkDeviceKeyConflictException.class);
+  }
+
+  @Test
+  void deviceAuthorityUsesCurrentKeyAndBindingAndCapsAssertionAtKeyExpiry() throws Exception {
+    var enrollmentService = service(NOW);
+    var enrollment = challenge(enrollmentService, app, env, device);
+    var session = enrollmentService.exchange(enrollment.challengeId(), provider(enrollment, client),
+        gameTicket(enrollment, app, env, subjectHash()), enroll(device, enrollment));
+    jdbc.update("UPDATE sdk_device_keys SET not_after=:deadline WHERE key_id=:key",
+        Map.of("deadline", java.sql.Timestamp.from(NOW.plusSeconds(2)), "key", session.keyId()));
+    var requestId = UUID.randomUUID();
+    byte[] request = deviceAuthorityProof(device, session, requestId, NOW).getBytes(StandardCharsets.US_ASCII);
+    var signedClaims = new AtomicReference<Map<String, Object>>();
+    SdkDeviceStatusIssuer signer = claims -> { signedClaims.set(Map.copyOf(claims)); return "saved-assertion"; };
+
+    assertThatThrownBy(() -> service(Clock.fixed(NOW, ZoneOffset.UTC), signer, null)
+        .deviceAuthority(session.accessToken(), new String(request, StandardCharsets.US_ASCII), request))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+
+    var binding = new SdkBindingAuthority.Binding(session.actorId(), UUID.randomUUID());
+    SdkBindingAuthority authority = (application, environment, account) -> {
+      assertThat(application).isEqualTo(app);
+      assertThat(environment).isEqualTo(env);
+      assertThat(account).isEqualTo(session.accountId());
+      return java.util.Optional.of(binding);
+    };
+    var service = service(Clock.fixed(NOW, ZoneOffset.UTC), signer, authority);
+    assertThat(service.deviceAuthority(session.accessToken(), new String(request, StandardCharsets.US_ASCII), request))
+        .isEqualTo("saved-assertion");
+    assertThatThrownBy(() -> service.deviceAuthority("A".repeat(43),
+        new String(request, StandardCharsets.US_ASCII), request)).isInstanceOf(SdkIdentityDeniedException.class);
+    assertThat(signedClaims.get()).containsEntry("binding_id", binding.bindingId().toString())
+        .containsEntry("actor_id", binding.actorId().toString())
+        .containsEntry("key_id", session.keyId().toString())
+        .containsEntry("authority_revision", 1L)
+        .containsEntry("exp", NOW.plusSeconds(2).toEpochMilli());
+    assertThat(service.deviceAuthority(session.accessToken(), new String(request, StandardCharsets.US_ASCII), request))
+        .isEqualTo("saved-assertion");
+    assertThat(count("sdk_device_authority_issues")).isEqualTo(1);
+
+    var revokeClaims = new java.util.TreeMap<String, Object>();
+    revokeClaims.put("version", 1L);
+    revokeClaims.put("purpose", "revoke");
+    revokeClaims.put("audience", "voice.auth.device-key");
+    UUID revokeId = UUID.randomUUID();
+    revokeClaims.put("request_id", revokeId.toString());
+    revokeClaims.put("application_id", app.toString());
+    revokeClaims.put("environment_id", env.toString());
+    revokeClaims.put("device_id", session.deviceId().toString());
+    revokeClaims.put("key_id", session.keyId().toString());
+    revokeClaims.put("key_thumbprint", device.computeThumbprint().toString());
+    revokeClaims.put("issued_at", NOW.toEpochMilli());
+    String revokeProof = lifecycleProof(device, session.keyId(), revokeClaims);
+    enrollmentService.revokeDevice(session.deviceId(), provider(enrollment, client), revokeProof,
+        revokeId, "revoke".getBytes(StandardCharsets.US_ASCII));
+    assertThat(service.deviceAuthority(session.accessToken(), new String(request, StandardCharsets.US_ASCII), request))
+        .isEqualTo("saved-assertion");
+    UUID freshRequestId = UUID.randomUUID();
+    byte[] freshRequest = deviceAuthorityProof(device, session, freshRequestId, NOW)
+        .getBytes(StandardCharsets.US_ASCII);
+    assertThatThrownBy(() -> service.deviceAuthority(session.accessToken(),
+        new String(freshRequest, StandardCharsets.US_ASCII), freshRequest))
+        .isInstanceOf(SdkIdentityDeniedException.class);
+  }
+
+  @Test
+  void concurrentRevokeWaitsForInFlightAssertionAndPreventsAnyLaterAssertion() throws Exception {
+    var base = service(NOW);
+    var enrollment = challenge(base, app, env, device);
+    var session = base.exchange(enrollment.challengeId(), provider(enrollment, client),
+        gameTicket(enrollment, app, env, subjectHash()), enroll(device, enrollment));
+    UUID assertionId = UUID.randomUUID();
+    byte[] request = deviceAuthorityProof(device, session, assertionId, NOW).getBytes(StandardCharsets.US_ASCII);
+    CountDownLatch signerEntered = new CountDownLatch(1);
+    CountDownLatch allowSignerCommit = new CountDownLatch(1);
+    SdkDeviceStatusIssuer blockingSigner = claims -> {
+      signerEntered.countDown();
+      try {
+        if (!allowSignerCommit.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("signer gate timeout");
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(interrupted);
+      }
+      return "assertion-issued-before-revoke";
+    };
+    SdkBindingAuthority binding = (application, environment, account) -> java.util.Optional.of(
+        new SdkBindingAuthority.Binding(session.actorId(), UUID.randomUUID()));
+    var issuerService = service(Clock.fixed(NOW, ZoneOffset.UTC), blockingSigner, binding);
+    var workers = Executors.newFixedThreadPool(2);
+    try {
+      var assertionFuture = workers.submit(() -> issuerService.deviceAuthority(session.accessToken(),
+          new String(request, StandardCharsets.US_ASCII), request));
+      assertThat(signerEntered.await(10, TimeUnit.SECONDS)).isTrue();
+      var revokeId = UUID.randomUUID();
+      var revokeClaims = new java.util.TreeMap<String, Object>();
+      revokeClaims.put("version", 1L);
+      revokeClaims.put("purpose", "revoke");
+      revokeClaims.put("audience", "voice.auth.device-key");
+      revokeClaims.put("request_id", revokeId.toString());
+      revokeClaims.put("application_id", app.toString());
+      revokeClaims.put("environment_id", env.toString());
+      revokeClaims.put("device_id", session.deviceId().toString());
+      revokeClaims.put("key_id", session.keyId().toString());
+      revokeClaims.put("key_thumbprint", device.computeThumbprint().toString());
+      revokeClaims.put("issued_at", NOW.toEpochMilli());
+      String revokeProof = lifecycleProof(device, session.keyId(), revokeClaims);
+      var revokeFuture = workers.submit(() -> base.revokeDevice(session.deviceId(), provider(enrollment, client),
+          revokeProof, revokeId, "concurrent-revoke".getBytes(StandardCharsets.US_ASCII)));
+      allowSignerCommit.countDown();
+      assertThat(assertionFuture.get(10, TimeUnit.SECONDS)).isEqualTo("assertion-issued-before-revoke");
+      assertThat(revokeFuture.get(10, TimeUnit.SECONDS).authorityRevision()).isEqualTo(2L);
+      assertThat(issuerService.deviceAuthority(session.accessToken(), new String(request, StandardCharsets.US_ASCII),
+          request)).isEqualTo("assertion-issued-before-revoke");
+      UUID laterId = UUID.randomUUID();
+      byte[] later = deviceAuthorityProof(device, session, laterId, NOW).getBytes(StandardCharsets.US_ASCII);
+      assertThatThrownBy(() -> issuerService.deviceAuthority(session.accessToken(),
+          new String(later, StandardCharsets.US_ASCII), later)).isInstanceOf(SdkIdentityDeniedException.class);
+    } finally {
+      allowSignerCommit.countDown();
+      workers.shutdownNow();
+      assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
   }
 
   @Test
@@ -301,6 +636,10 @@ class SdkIdentityJdbcIntegrationTest {
     var other = exchange(service(NOW), app, env, client, otherDevice);
     service(NOW).revoke(first.accessToken(), proof(device,
         "voice-sdk-revoke-v1\n" + sha256(first.accessToken())));
+    assertThat(jdbc.queryForObject("SELECT status FROM sdk_device_keys WHERE device_id=:device",
+        Map.of("device", first.deviceId()), String.class)).isEqualTo("revoked");
+    assertThat(jdbc.queryForObject("SELECT authority_revision FROM sdk_devices WHERE device_id=:device",
+        Map.of("device", first.deviceId()), Long.class)).isEqualTo(2L);
     for (var revoked : List.of(first, second)) {
       assertThatThrownBy(() -> service(NOW).session(revoked.accessToken(), sessionProof(device, revoked)))
           .isInstanceOf(SdkIdentityDeniedException.class);
@@ -641,6 +980,15 @@ class SdkIdentityJdbcIntegrationTest {
         applications, policies, clock);
   }
 
+  private SdkIdentityService service(Clock clock, SdkDeviceStatusIssuer signer, SdkBindingAuthority binding) {
+    var source = source();
+    return new SdkIdentityService(new NamedParameterJdbcTemplate(source),
+        new TransactionTemplate(new DataSourceTransactionManager(source)),
+        new GoogleOidcProofVerifier(clock,
+            kid -> googleKey.getKeyID().equals(kid) ? googleKey.toPublicJWK() : null),
+        applications, policies, clock, signer, binding);
+  }
+
   private static SdkAuthorizationPolicy.Policy activePolicy(UUID application, UUID environment) {
     return activePolicy(application, environment, 1);
   }
@@ -678,12 +1026,26 @@ class SdkIdentityJdbcIntegrationTest {
         .expirationTime(Date.from(NOW.plusSeconds(300))).build(), googleKey);
   }
 
+  private String providerAt(SdkIdentityService.Challenge challenge, String audience, Instant now) throws Exception {
+    return signed(new JWTClaimsSet.Builder().issuer(ISSUER).subject(SUBJECT).audience(audience)
+        .claim("nonce", challenge.nonce()).issueTime(Date.from(now))
+        .expirationTime(Date.from(now.plusSeconds(300))).build(), googleKey);
+  }
+
   private String gameTicket(SdkIdentityService.Challenge challenge, UUID application,
       UUID environment, String subjectHash) throws Exception {
     return signed(new JWTClaimsSet.Builder().issuer("game:" + application + ":" + environment)
         .subject("external-game-player").audience("voice:sdk-enroll")
         .claim("nonce", challenge.nonce()).claim("independent_subject_hash", subjectHash)
         .issueTime(Date.from(NOW)).expirationTime(Date.from(NOW.plusSeconds(300))).build(), gameKey);
+  }
+
+  private String gameTicketAt(SdkIdentityService.Challenge challenge, UUID application,
+      UUID environment, String subjectHash, Instant now) throws Exception {
+    return signed(new JWTClaimsSet.Builder().issuer("game:" + application + ":" + environment)
+        .subject("external-game-player").audience("voice:sdk-enroll")
+        .claim("nonce", challenge.nonce()).claim("independent_subject_hash", subjectHash)
+        .issueTime(Date.from(now)).expirationTime(Date.from(now.plusSeconds(300))).build(), gameKey);
   }
 
   private String signed(JWTClaimsSet claims, RSAKey key) throws Exception {
@@ -704,6 +1066,55 @@ class SdkIdentityJdbcIntegrationTest {
     var jws = new JWSObject(new JWSHeader(JWSAlgorithm.ES256), new Payload(payload));
     jws.sign(new ECDSASigner(key));
     return jws.serialize();
+  }
+
+  private String lifecycleProof(ECKey key, UUID kid, Map<String, Object> claims) throws Exception {
+    var builder = new JWSHeader.Builder(JWSAlgorithm.ES256)
+        .type(new JOSEObjectType("voice.game-device-key-proof+jws"));
+    if (kid != null) builder.keyID(kid.toString());
+    var canonical = new java.util.TreeMap<>(claims);
+    var jws = new JWSObject(builder.build(), new Payload(
+        com.nimbusds.jose.util.JSONObjectUtils.toJSONString(canonical)));
+    jws.sign(new ECDSASigner(key));
+    return jws.serialize();
+  }
+
+  private String deviceAuthorityProof(ECKey key, SdkIdentityService.Session session, UUID requestId,
+      Instant now) throws Exception {
+    var claims = new java.util.TreeMap<String, Object>();
+    claims.put("version", 1L);
+    claims.put("audience", "voice.game-message");
+    claims.put("request_id", requestId.toString());
+    claims.put("application_id", session.applicationId().toString());
+    claims.put("environment_id", session.environmentId().toString());
+    claims.put("device_id", session.deviceId().toString());
+    claims.put("issued_at", now.toEpochMilli());
+    var jws = new JWSObject(new JWSHeader.Builder(JWSAlgorithm.ES256)
+        .keyID(session.keyId().toString()).type(new JOSEObjectType("voice.game-device-authority-request+jws"))
+        .build(), new Payload(com.nimbusds.jose.util.JSONObjectUtils.toJSONString(claims)));
+    jws.sign(new ECDSASigner(key));
+    return jws.serialize();
+  }
+
+  private Map<String, Object> lifecycleClaims(String purpose, UUID requestId,
+      SdkIdentityService.Challenge challenge, UUID deviceId, UUID keyId, String keyThumbprint,
+      String newKeyThumbprint, Instant now) {
+    var claims = new java.util.TreeMap<String, Object>();
+    claims.put("version", 1L);
+    claims.put("purpose", purpose);
+    claims.put("audience", "voice.auth.device-key");
+    claims.put("request_id", requestId.toString());
+    claims.put("challenge_id", challenge.challengeId().toString());
+    claims.put("nonce", challenge.nonce());
+    claims.put("application_id", app.toString());
+    claims.put("environment_id", env.toString());
+    if ("recover_new".equals(purpose)) claims.put("replaces_device_id", challenge.replacesDeviceId().toString());
+    else claims.put("device_id", deviceId.toString());
+    if (keyId != null) claims.put("key_id", keyId.toString());
+    claims.put("key_thumbprint", keyThumbprint);
+    if ("rotate_current".equals(purpose)) claims.put("new_key_thumbprint", newKeyThumbprint);
+    claims.put("issued_at", now.toEpochMilli());
+    return claims;
   }
 
   private String subjectHash() throws Exception {

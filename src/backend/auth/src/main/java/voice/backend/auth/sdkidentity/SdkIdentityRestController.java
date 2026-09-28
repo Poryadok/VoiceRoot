@@ -4,6 +4,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonFactory;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,6 +19,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/auth/sdk")
 @ConditionalOnProperty(prefix = "auth.sdk-identity", name = "enabled", havingValue = "true")
 public class SdkIdentityRestController {
+  private static final ObjectMapper LIFECYCLE_JSON = new ObjectMapper(
+      JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
+      .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
   private final SdkIdentityService service;
 
   public SdkIdentityRestController(SdkIdentityService service) { this.service = service; }
@@ -35,6 +42,18 @@ public class SdkIdentityRestController {
     @com.fasterxml.jackson.annotation.JsonAnySetter
     public void unknown(String name, Object value) { throw new IllegalArgumentException("unknown SDK field"); }
   }
+  public record DeviceKeyChallengeRequest(@NotBlank String purpose, @NotNull UUID applicationId,
+      @NotNull UUID environmentId, @NotBlank @Size(max = 2048) String publicJwk, UUID replacesDeviceId) {
+    @com.fasterxml.jackson.annotation.JsonAnySetter
+    public void unknown(String name, Object value) { throw new IllegalArgumentException("unknown SDK field"); }
+  }
+  public record DeviceKeyRotateRequest(@NotNull UUID challengeId, @NotBlank @Size(max = 16384) String providerToken,
+      @NotBlank @Size(max = 4096) String currentKeyProof, @NotBlank @Size(max = 4096) String newKeyProof,
+      @NotNull UUID requestId) {}
+  public record DeviceKeyRecoverRequest(@NotNull UUID challengeId, @NotBlank @Size(max = 16384) String providerToken,
+      @NotBlank @Size(max = 4096) String newKeyProof, @NotNull UUID requestId) {}
+  public record DeviceKeyRevokeRequest(@NotBlank @Size(max = 16384) String providerToken,
+      @NotBlank @Size(max = 4096) String currentKeyProof, @NotNull UUID requestId) {}
 
   @PostMapping("/challenges")
   public SdkIdentityService.Challenge challenge(@Valid @RequestBody ChallengeRequest request) {
@@ -61,9 +80,67 @@ public class SdkIdentityRestController {
     return ResponseEntity.noContent().build();
   }
 
+  @PostMapping("/device-keys/challenges")
+  public SdkIdentityService.Challenge deviceKeyChallenge(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @Valid @RequestBody DeviceKeyChallengeRequest request) {
+    if ("rotate".equals(request.purpose())) {
+      return service.deviceKeyChallenge("rotate", request.applicationId(), request.environmentId(),
+          bearer(authorization), null, request.publicJwk());
+    }
+    if ("recover".equals(request.purpose()) && authorization == null) {
+      return service.deviceKeyChallenge("recover", request.applicationId(), request.environmentId(),
+          null, request.replacesDeviceId(), request.publicJwk());
+    }
+    throw new SdkIdentityDeniedException();
+  }
+
+  @PostMapping("/device-keys/rotate")
+  public SdkIdentityService.DeviceKeyResult rotate(@RequestBody byte[] rawBody) {
+    DeviceKeyRotateRequest request = lifecycleRequest(rawBody, DeviceKeyRotateRequest.class);
+    return service.rotate(request.challengeId(), request.providerToken(), request.currentKeyProof(),
+        request.newKeyProof(), request.requestId(), rawBody);
+  }
+
+  @PostMapping("/device-keys/recover")
+  public SdkIdentityService.DeviceKeyResult recover(@RequestBody byte[] rawBody) {
+    DeviceKeyRecoverRequest request = lifecycleRequest(rawBody, DeviceKeyRecoverRequest.class);
+    return service.recover(request.challengeId(), request.providerToken(), request.newKeyProof(),
+        request.requestId(), rawBody);
+  }
+
+  @DeleteMapping("/devices/{deviceId}")
+  public SdkIdentityService.DeviceKeyResult revokeDevice(@PathVariable UUID deviceId,
+      @RequestBody byte[] rawBody) {
+    DeviceKeyRevokeRequest request = lifecycleRequest(rawBody, DeviceKeyRevokeRequest.class);
+    return service.revokeDevice(deviceId, request.providerToken(), request.currentKeyProof(),
+        request.requestId(), rawBody);
+  }
+
+  @PostMapping(value = "/device-authority", consumes = "text/plain", produces = "application/jwt")
+  public ResponseEntity<String> deviceAuthority(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @RequestBody byte[] rawProof) {
+    if (rawProof == null || rawProof.length == 0 || rawProof.length > 4096) {
+      throw new SdkIdentityDeniedException();
+    }
+    String proof = new String(rawProof, java.nio.charset.StandardCharsets.US_ASCII);
+    if (!java.util.Arrays.equals(rawProof, proof.getBytes(java.nio.charset.StandardCharsets.US_ASCII))) {
+      throw new SdkIdentityDeniedException();
+    }
+    String assertion = service.deviceAuthority(bearer(authorization), proof, rawProof);
+    return ResponseEntity.ok().contentType(org.springframework.http.MediaType.valueOf("application/jwt"))
+        .body(assertion);
+  }
+
   @ExceptionHandler(SdkIdentityDeniedException.class)
   public ResponseEntity<Map<String, String>> denied() {
     return ResponseEntity.status(401).body(Map.of("error", "invalid_sdk_identity"));
+  }
+
+  @ExceptionHandler(SdkDeviceKeyConflictException.class)
+  public ResponseEntity<Map<String, String>> lifecycleConflict() {
+    return ResponseEntity.status(409).body(Map.of("error", "device_key_request_conflict"));
   }
 
   @ExceptionHandler({org.springframework.web.bind.MethodArgumentNotValidException.class,
@@ -78,5 +155,11 @@ public class SdkIdentityRestController {
       throw new SdkIdentityDeniedException();
     }
     return header.substring(7);
+  }
+
+  private static <T> T lifecycleRequest(byte[] body, Class<T> type) {
+    if (body == null || body.length == 0 || body.length > 65536) throw new SdkIdentityDeniedException();
+    try { return LIFECYCLE_JSON.readValue(body, type); }
+    catch (Exception invalid) { throw new SdkIdentityDeniedException(); }
   }
 }

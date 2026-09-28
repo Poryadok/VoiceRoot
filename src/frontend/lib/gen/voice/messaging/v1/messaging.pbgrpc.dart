@@ -44,6 +44,25 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$sendMessage, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:gateway
+  /// T15 internal ingress: the exact device-signed compact JWS and Auth
+  /// assertion are forwarded unchanged; sender/profile/chat authority is
+  /// derived by Messaging from Auth binding and chat policy.
+  $grpc.ResponseFuture<$0.ApplyGameMessageResponse> applyGameMessage(
+    $0.ApplyGameMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyGameMessage, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:moderation
+  $grpc.ResponseFuture<$0.TombstoneGameMessageResponse> tombstoneGameMessage(
+    $0.TombstoneGameMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$tombstoneGameMessage, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.EditMessageResponse> editMessage(
     $0.EditMessageRequest request, {
     $grpc.CallOptions? options,
@@ -259,6 +278,16 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/SendMessage',
           ($0.SendMessageRequest value) => value.writeToBuffer(),
           $0.SendMessageResponse.fromBuffer);
+  static final _$applyGameMessage = $grpc.ClientMethod<
+          $0.ApplyGameMessageRequest, $0.ApplyGameMessageResponse>(
+      '/voice.messaging.v1.MessagingService/ApplyGameMessage',
+      ($0.ApplyGameMessageRequest value) => value.writeToBuffer(),
+      $0.ApplyGameMessageResponse.fromBuffer);
+  static final _$tombstoneGameMessage = $grpc.ClientMethod<
+          $0.TombstoneGameMessageRequest, $0.TombstoneGameMessageResponse>(
+      '/voice.messaging.v1.MessagingService/TombstoneGameMessage',
+      ($0.TombstoneGameMessageRequest value) => value.writeToBuffer(),
+      $0.TombstoneGameMessageResponse.fromBuffer);
   static final _$editMessage =
       $grpc.ClientMethod<$0.EditMessageRequest, $0.EditMessageResponse>(
           '/voice.messaging.v1.MessagingService/EditMessage',
@@ -414,6 +443,24 @@ abstract class MessagingServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.SendMessageRequest.fromBuffer(value),
             ($0.SendMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyGameMessageRequest,
+            $0.ApplyGameMessageResponse>(
+        'ApplyGameMessage',
+        applyGameMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyGameMessageRequest.fromBuffer(value),
+        ($0.ApplyGameMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.TombstoneGameMessageRequest,
+            $0.TombstoneGameMessageResponse>(
+        'TombstoneGameMessage',
+        tombstoneGameMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.TombstoneGameMessageRequest.fromBuffer(value),
+        ($0.TombstoneGameMessageResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.EditMessageRequest, $0.EditMessageResponse>(
             'EditMessage',
@@ -660,6 +707,24 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.SendMessageResponse> sendMessage(
       $grpc.ServiceCall call, $0.SendMessageRequest request);
+
+  $async.Future<$0.ApplyGameMessageResponse> applyGameMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyGameMessageRequest> $request) async {
+    return applyGameMessage($call, await $request);
+  }
+
+  $async.Future<$0.ApplyGameMessageResponse> applyGameMessage(
+      $grpc.ServiceCall call, $0.ApplyGameMessageRequest request);
+
+  $async.Future<$0.TombstoneGameMessageResponse> tombstoneGameMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.TombstoneGameMessageRequest> $request) async {
+    return tombstoneGameMessage($call, await $request);
+  }
+
+  $async.Future<$0.TombstoneGameMessageResponse> tombstoneGameMessage(
+      $grpc.ServiceCall call, $0.TombstoneGameMessageRequest request);
 
   $async.Future<$0.EditMessageResponse> editMessage_Pre($grpc.ServiceCall $call,
       $async.Future<$0.EditMessageRequest> $request) async {

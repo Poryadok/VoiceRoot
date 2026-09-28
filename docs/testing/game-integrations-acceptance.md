@@ -231,7 +231,12 @@ ID, with no token, provider claim or private-key bytes.
 | ID12 | Crash/timeout/retry на каждой стадии конвертации | Та же durable operation, доступный status, recovery; нет дублей, потери audit или оживления старых tokens/actions |
 | ID13 | Unlink после конвертации, старый provider ticket/token | Retired identity не восстанавливается автоматически; последующий вход следует утверждённой G01 policy |
 | ID14 | Developer service/node/bot credential пытается выпустить player token, enroll/replace/recover device key или отправить за игрока; положительная enrollment/recovery | Отказать первой группе; enroll/replace/recover проходят только с независимым Auth proof и possession нового/current ключа по lifecycle policy; recovery отзывает только указанное lost device, не прочие устройства |
-| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth status assertion/outage fail closed, admission закрывается ≤4.25s от revoke commit; old key принимается до, но отвергается ровно на `not_after = rotation_commit + 600s`, historical verification сохраняется; explicit revoke немедленно останавливает выдачу Auth assertions, а node cutoff соблюдает тот же предел 4.25s |
+| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth/GIS execution permit fail closed, same-operation retry не продлевает expiry, а unknown completion не считается успехом; revocation race tests prove `active→revoking→revoked`, no new permit in revoking, and successful revoke waits through commit/abort/expiry; permit `exp = min(issued+3750ms, assertion.exp)`, max clock margin 250ms and transaction 250ms; measured request-to-last-commit ≤4.25s; every current key expires at `not_before + 90 days`; rotation only before expiry, replacement gets its own 90-day validity, old key has 600s overlap; overlap equality and 90-day expiry equality reject new operations while retaining historical verification; missed renewal has no grace and requires fresh independent recovery proof; Auth cannot issue an assertion or admit a new message without T16 binding authority; new message writes also remain fail-closed without T30/T31 exact app/env/binding/chat mapping |
+
+The internal ingress contract is protobuf `MessagingService.ApplyGameMessage`:
+it carries the exact compact JWS body and separate Auth assertion, without
+caller-supplied profile or sender authority. Generated Go and Dart descriptors
+must stay in sync; public REST wiring remains a later T20 consumer.
 | ID16 | SDK-клиент подписывает сообщение по вызову кода игры; нода скрывает предыдущую версию/сообщение | Гарантия ограничена авторизованным клиентом; подпись доказывает происхождение наблюдаемого payload, но не физическое намерение человека и не полноту истории; rollback/equivocation обнаруживаются только при наличии prior evidence/comparison |
 | FED-AUTH | Нода A вызывает чужой Space/RPC, выбирает внутренний NATS subject или использует истёкший/отозванный grant | Reject; нет доступа к master NATS, нет подделки user authorship; active stream revoke проверен |
 | FED-BUNDLE | Чистый хост, единый node config, установка/регистрация bundle | По одному экземпляру нужных компонентов; два Space, SDK/messenger content и media работают; внутренние порты/credentials изолированы |
@@ -340,6 +345,19 @@ acceptance начинает с 000001 schema, сохраняет старое op
 события с provenance `system` и result `success`. Тестовая operator approval
 не является Google или иным live provider proof; отправка callback команд
 остаётся T15 scope.
+
+### T15 runtime prerequisite: app-scoped chat mapping
+
+Messaging must resolve an active Auth binding/profile and separately obtain an
+authoritative T30/T31 mapping for the exact `(application_id, environment_id,
+binding_id, chat_id)` before accepting a new signed message. Auth's T16 binding
+authority proves the current grant/profile and the operation-specific
+`game.chat.send` authorization; it has no chat identifier. `ChatGuard.EnsureMember`
+proves profile membership only and is not evidence that the chat is linked to
+that app/environment/binding. Until the T30/T31 producer is available, the
+resource-mapping dependency is absent and new game-authored writes fail closed;
+tests with a synthetic mapping fixture prove only the consumer seam, not that
+the prerequisite has shipped. Receipt-first exact retries remain readable.
 
 ## 4. Как запускать проверки при реализации
 
