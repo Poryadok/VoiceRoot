@@ -195,8 +195,8 @@ func TestProvisionedManagedGameSessionClosePersistsReceiptAndFencesActiveMedia(t
 	request := &callsv1.ProvisionGameSessionRoomRequest{
 		OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(),
 		SessionId: uuid.NewString(),
-		Resource: &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "realm:match/close-test"},
-		ChatId:   uuid.NewString(), ChatCreationOperationId: uuid.NewString(),
+		Resource:  &callsv1.GameSessionResourceRef{Kind: callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_MATCH, ExternalResourceKey: "realm:match/close-test"},
+		ChatId:    uuid.NewString(), ChatCreationOperationId: uuid.NewString(),
 	}
 	provisioned, err := rooms.Provision(ctx, request)
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestProvisionedManagedGameSessionClosePersistsReceiptAndFencesActiveMedia(t
 	closeRequest := &callsv1.CloseGameSessionRoomRequest{
 		OperationId: uuid.NewString(), ApplicationId: request.ApplicationId, EnvironmentId: request.EnvironmentId,
 		SessionId: request.SessionId,
-		Resource: request.Resource, ChatId: request.ChatId, ChatCreationOperationId: request.ChatCreationOperationId,
+		Resource:  request.Resource, ChatId: request.ChatId, ChatCreationOperationId: request.ChatCreationOperationId,
 	}
 
 	receipt, err := rooms.CloseGameSessionRoom(ctx, closeRequest, fencer)
@@ -242,10 +242,6 @@ func (stub *managedGameSessionGrantStub) CheckGameSessionGrant(context.Context, 
 func installManagedGameSessionGrantChecker(t *testing.T, service *VoiceGRPC, checker managedGameSessionGrantChecker) {
 	t.Helper()
 	service.setManagedGameSessionGrantChecker(checker)
-}
-
-type managedGameSessionMediaFencer interface {
-	FenceManagedGameSession(context.Context, string, string) error
 }
 
 type recordingManagedGameSessionMediaFencer struct {

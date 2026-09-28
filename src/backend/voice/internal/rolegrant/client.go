@@ -60,17 +60,17 @@ type Checker struct {
 
 func NewChecker(client rolev1.RoleServiceClient, issuer *principal.Issuer) (*Checker, error) {
 	if client == nil || issuer == nil {
-		return nil, errors.New("Role client and Voice principal issuer are required")
+		return nil, errors.New("role client and Voice principal issuer are required")
 	}
 	return &Checker{client: client, issuer: issuer}, nil
 }
 
 func New(config Config, issuer *principal.Issuer) (*Checker, *grpc.ClientConn, error) {
 	if issuer == nil {
-		return nil, nil, errors.New("Voice principal issuer is required")
+		return nil, nil, errors.New("voice principal issuer is required")
 	}
 	if strings.TrimSpace(config.Address) == "" {
-		return nil, nil, errors.New("Role gRPC address is required")
+		return nil, nil, errors.New("role gRPC address is required")
 	}
 	caPEM, err := os.ReadFile(config.CAFile)
 	if err != nil {
