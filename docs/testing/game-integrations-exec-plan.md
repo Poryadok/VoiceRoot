@@ -348,9 +348,13 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T31** `D: T30` Orchestrate party/match/fleet: Chat create, Voice room,
   member grants, stage receipts, compensation and reconciliation after each
   crash point. Publish active only after all required resources are ready.
-- [ ] **T32** `D: T31` Distinguish stable party from repeated match, implement
-  host departure/transfer, explicit close, invited late join and bounded
-  roster freshness. A failed match cannot delete shared party chat.
+- [ ] **T32** `D: T31` Implement stable party/match lifecycle, host transfer,
+  explicit close, late join and roster freshness under the frozen contracts: a
+  complete roster lease is 60s from GIS DB commit; retries do not renew; host
+  transfer requires a complete next-revision CAS and existing successor; exact
+  expiry denies admission/reconnect/governed reads+writes and fences Voice/media
+  within 5s. A failed match cannot delete shared party chat. See API/GIS T32
+  contract sections and SE03/SE04/SE07 acceptance. Runtime remains open.
 - [ ] **T33** `D: T31,T32` Implement per-member entitlement intervals for
   since_join/rejoin across message history, search, quotes, threads, files and
   signed download URLs; enforce retention and deletion policy.
@@ -479,8 +483,8 @@ contracts land before consumers; activation lands after all consumers.
 | IDs | Concrete value or rule to freeze | First consumer |
 |---|---|---|
 | G01, Q03, Q07, Q08, Q10 | provider and subject ownership, recovery/retirement, sdk profile/alias and limits, conversion conflicts/history, voice handoff, tombstones | T13–T19 |
-| G02, G03, Q01, Q09 | alt-rank merge rule, protected Owner recovery, entitlement intervals/rejoin, block/report in shared chat | T33,T37–T39 |
-| G04, G09 | retention and retry windows, roster source freshness and fail-closed policy | T30–T39 |
+| G02, G03, Q01, Q09 | alt-rank merge rule, protected Owner recovery, Q01 frozen by T32 as immutable `created_at` inside membership interval `[joined_at, revoked_at)`; rejoin opens a new interval with no gap access; block/report in shared chat | T32–T33,T37–T39; SE04 |
+| G04, G09 | G04 frozen by T32: match access ends exclusively at close+30d; terminal receipts retry for 30d; non-content external-key tombstone persists. G09 frozen by T32: complete accepted roster lease is 60s from GIS DB commit; exact retry inert, stale lower rev no-op, same-rev changed body conflicts, incomplete/failed fetch is never empty, expiry fails closed with ≤5s media fence. | T30–T39; SE03/SE07 |
 | G05, G06, Q11 | `/api/v1` and Federation `/v1`; proposed 12-month v1 support after successor-major GA; GIS-owned store; distinct Voice app owner/operator; Google OIDC; clean DB/host bootstrap and negative cases | T06,T10–T14,T70,T76; acceptance Q11 |
 | G07, Q12 | Quotas and supported host/runtime; provisional capacity/RPO/RTO plus restore/load harness | T08,T11–T12,T76,T93; proposals remain unmeasured |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |

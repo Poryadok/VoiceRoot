@@ -445,6 +445,50 @@ that security test uses a SQL fixture for a production environment the current
 API cannot create, and is intentionally excluded from Q11 clean-start. It is not
 evidence of production admission.
 
-This contract is subordinate to the game integration feature and API canon;
-later sections will add sessions, managed grants, bot and node-facing operations
-with their own tests and migration revisions.
+This contract is subordinate to the game integration feature and API canon.
+The T32 section below freezes session/roster behavior; runtime implementation,
+managed grants, bot and node-facing operations remain separate work with their
+own tests and migration revisions.
+
+## T32: session lifecycle and roster authority
+
+GIS owns stable app/environment external-resource mappings, session operation
+receipts, accepted roster revisions, and lease deadlines. A party mapping is
+stable across its matches; each match has its own key and may reference the
+party. Closing/failing a match does not retire the party key or delete shared
+Chat resources. A purged key retains a non-content tombstone and cannot
+silently recreate a resource. GIS invokes Chat/Voice owner APIs and never
+writes their databases directly.
+
+Roster authority belongs to the authenticated app/environment game backend or
+managed broker. GIS accepts complete snapshots only, verifies page/checksum
+completeness, and applies revision comparison atomically in its database:
+lower revision is stale no-op; same revision and same body replays the saved
+receipt without lease renewal; same revision and changed body conflicts; only
+a complete higher revision changes desired state and renews the lease. The
+lease deadline is GIS database commit time plus exactly 60 seconds. Partial
+snapshots, failed fetches, and transport-level empty responses cannot revoke
+members; revocation requires a complete higher-revision empty roster or
+explicit tombstone. Retries do not renew the lease.
+
+At the exact lease deadline, new admission, reconnect, and governed reads/writes
+fail closed. Voice owns media admission/ejection and fences active media within
+the existing five-second revocation bound. Host transfer requires an
+authenticated complete next-revision CAS whose successor is already in the
+roster. GIS atomically changes session-control authority only; it never changes
+Voice roles or Voice Owner. Client host claims are rejected. If the departing
+host has no successor, its control is revoked immediately and the session
+closes at lease expiry.
+
+Chat enforces `since_join` using immutable message `created_at` and membership
+interval `[joined_at, revoked_at)`, with rejoin opening a new interval and no
+gap access. The same entitlement applies to history, search, quotes/thread
+context, attachment metadata, and fetch-time download authorization. Match
+history access expires exclusively at close plus 30 days. Terminal operation
+receipts remain retryable for 30 days; after purge, the non-content external-key
+tombstone persists without expiry and prevents silent resource recreation.
+Keep-group includes only consenting participants and never copies the match
+transcript. Chat owns
+content, membership, and retention; GIS orchestrates via owner APIs.
+Acceptance boundaries are SE03/SE04/SE07. Runtime code and exact-SHA evidence
+remain open.

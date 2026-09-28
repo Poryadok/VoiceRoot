@@ -288,11 +288,11 @@ must stay in sync; public REST wiring remains a later T20 consumer.
 | FED-UPGRADE | Restart, upgrade, component failure и backup/restore единого bundle | Проверенные migrations/recovery/readiness, сохранённые service boundaries и lifecycle fences; maintenance явно виден, нет обещания HA/zero downtime |
 | SE01 | Повтор CreateSession, потеря ответа, restart orchestrator | Одна session/группа/комната и прежний operation result |
 | SE02 | Crash после Chat create до Voice ready | Reconcile достраивает либо безопасно убирает owned resources |
-| SE03 | Три матча одной party | Общая разрешённая party-группа, независимые match lifecycles |
-| SE04 | В session добавлен поздний участник | Не видит историю до allowed boundary при since_join policy |
+| SE03 | Три матча одной party, повтор CreateSession и закрытие одного матча | Все три match IDs ссылаются на одну стабильную party-группу; одинаковый повтор возвращает прежний результат; failed/closed match не закрывает и не удаляет общий party-чат. Match-scoped история доступна до `closed_at + 30 days - 1 tick`, но недоступна в точке `closed_at + 30 days`. Терминальный operation receipt точно повторяется до границы `terminal_at + 30 days`; после неё оставшийся не содержащий контент tombstone не позволяет заново создать ресурс по прежнему ключу. |
+| SE04 | Поздний участник, выход и повторное вступление | Для каждого контента проверяется `joined_at <= created_at < revoked_at`; на границах `joined_at` включён, `revoked_at` исключён. Rejoin открывает новый интервал и не возвращает gap/старую историю. Поверхности: history, search, quote/thread preview, attachment metadata и download fetch. Скачивание, разрешённое при выдаче URL, отзывается при fetch после `revoked_at`. |
 | SE05 | User удалён/забанен во время разговора | Нет REST/history/WS/file/media доступа после установленного bound |
 | SE06 | Сохранение группы после матча | Только согласившиеся; история не переслана новым людям |
-| SE07 | Host меняется или уходит | Ни server secret, ни ложный roster не возникают; lifecycle deterministic |
+| SE07 | Host меняется/уходит и backend перестаёт обновлять roster | Только полный аутентифицированный roster следующей revision с successor, уже состоящим в roster, атомарно передаёт host control; старый host теряет control сразу, client claim и Voice Owner/role mutation отклоняются. Удаление host без successor отзывает его control сразу; сессия закрывается при `lease_expires_at`. Lease валиден непосредственно до 60s от GIS commit и истекает ровно в этой точке: после неё admission/reconnect/governed reads+writes запрещены, active Voice/media fenced не позднее +5s. Exact duplicate той же revision/body не продлевает lease; lower revision stale no-op; equal revision with changed body конфликтует; partial/failed fetch не пустой roster. |
 | SDK01 | Unity/Unreal packaged build, два устройства | Двусторонний реальный звук + persisted text |
 | SDK02 | Permission denied, hotplug, suspend, Bluetooth change | Честные states; нет unmute, crash или зависшего capture |
 | SDK03 | Packet loss/WS restart/истёк token | Bounded backoff; scoped snapshots + per-chat history, без дублей |
@@ -454,16 +454,23 @@ acceptance Q01–Q12 перечислены в [design audit](game-integrations-
 | G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof, Auth challenge/exchange/session/revoke, cap 1,000 identities per app/env и 10 active devices per identity. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a детерминированно проверяется на fake provider fixtures; полный GI7 требует также отдельных real-Google и clean-start gates выше плюс conversion ID07–ID13 |
 | G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
 | G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery; roster не обходит Voice ban |
-| G04 | Retention, history boundary, idempotency/result retention | Match since_join, explicit keep-group; сроки и retry budgets утвердить до хранения pilot data |
+| G04 | Match-scoped history access expires exclusively at `closed_at + 30 days`; an explicit keep-group includes only consenting participants and never copies the match transcript. Terminal operation receipts remain retryable for 30 days after terminal state; after receipt purge, retain a non-content tombstone for the external resource key with no expiry, so retry cannot silently recreate it. A shared party chat is not retired by closing one match and remains governed by Chat/party lifecycle. | SE03/SE04 boundary checks; exact retry just before receipt expiry, tombstone denial at/after expiry; no content returned at match expiry |
 | G05 | Current contracts are Voice Game API `/api/v1` and Federation authority `/v1`; proposed support is current v1 until a successor major is generally available, then 12 months | GI4 old/new client-server conformance and exact-version manifest; support proposal is not runtime proof; engine versions/assets remain separate |
 | G06 | Отдельный Go Game Integration Service и собственное `game_integration_db` приняты; app owner, operator approval, API bootstrap and credential lifecycle are frozen in the service contract | Clean empty-DB bootstrap and scoped credential lifecycle via API; no direct SQL/portal; run Q11 acceptance before enabling |
 | G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
 | G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |
-| G09 | Roster freshness и доступ при падении game backend | Bounded source lease, fail closed для managed доступа; конкретный срок перед GI5 |
+| G09 | A complete accepted roster has a 60-second lease from its GIS DB commit. Exact same-revision/same-body retry is inert and does not renew; lower revision is stale no-op; same revision with different body conflicts. Incomplete or failed fetch is never empty. At exact lease expiry deny new admission/reconnect and governed reads/writes; fence active Voice/media within the existing ≤5-second revoke bound. Old-snapshot retries never renew. | SE07 expiry boundary; assert no access at `lease_expires_at`, active media fenced at/before `lease_expires_at + 5s`; only a complete higher revision renews |
 | G10 | Node data loss/export/migration/backup и erasure terms | Один immutable home в GI6; отдельный migration protocol и operator responsibility |
 | G11 | Приняты отдельный consent по категориям, quiet hours и отсутствие дублей; открыты routing/coalescing details | Mobile delivery только после mobile gate; смена получателя consent Q02 |
 | G12 | Приняты выбранное игровое имя/app attribution и приватность скрытых профилей | Определить app-visible alias/profile serialization и лимиты Q07, rank/history Q01/G02 |
 | G13 | Admission/revoke и completion после unlink | Online admission сериализован с revoke; зафиксировать start/completion bounds, in-flight UX и reconciliation до GI2 |
+
+T32 contract propagation is complete after PR #536 merged: the frozen session
+resource, roster, idempotency and retention rules are recorded in
+`docs/architecture/game-integration-api.md` and
+`docs/microservices/game-integration-service.md`; T32 and the G04/G09/Q01
+decision checklist are updated in `docs/testing/game-integrations-exec-plan.md`.
+Runtime behavior and exact-SHA acceptance remain open under T32–T34.
 
 ## 6. Release evidence и rollout
 
