@@ -78,7 +78,7 @@ func New(config Config, issuer *principal.Issuer) (*Checker, *grpc.ClientConn, e
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, nil, errors.New("Role TLS CA contains no certificates")
+		return nil, nil, errors.New("role TLS CA contains no certificates")
 	}
 	clientCert, err := tls.LoadX509KeyPair(config.ClientCertFile, config.ClientKeyFile)
 	if err != nil {
