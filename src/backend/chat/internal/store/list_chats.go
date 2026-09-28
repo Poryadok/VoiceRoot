@@ -257,7 +257,8 @@ LIMIT $3`
 func scanListChatPageRows(rows pgx.Rows) ([]*ChatRow, error) {
 	var out []*ChatRow
 	for rows.Next() {
-		var id, creator uuid.UUID
+		var id uuid.UUID
+		var creator sql.NullString
 		var chatType string
 		var spaceID *uuid.UUID
 		var name, avatarURL, topic sql.NullString
@@ -280,7 +281,7 @@ func scanListChatPageRows(rows pgx.Rows) ([]*ChatRow, error) {
 			ID:                id,
 			Type:              chatType,
 			SpaceID:           spaceID,
-			CreatorProfileID:  creator,
+			CreatorProfileID:  nullableCreatorProfileID(creator),
 			CreatedAt:         createdAt.UTC(),
 			UpdatedAt:         updatedAt.UTC(),
 			LastMessageAt:     lm,
@@ -338,7 +339,8 @@ ORDER BY sort_at DESC, c.id DESC
 
 	var out []*ChatRow
 	for rows.Next() {
-		var id, creator uuid.UUID
+		var id uuid.UUID
+		var creator sql.NullString
 		var chatType string
 		var spaceID *uuid.UUID
 		var name, avatarURL, topic sql.NullString
@@ -360,7 +362,7 @@ ORDER BY sort_at DESC, c.id DESC
 			ID:                id,
 			Type:              chatType,
 			SpaceID:           spaceID,
-			CreatorProfileID:  creator,
+			CreatorProfileID:  nullableCreatorProfileID(creator),
 			CreatedAt:         createdAt.UTC(),
 			UpdatedAt:         updatedAt.UTC(),
 			LastMessageAt:     lm,

@@ -206,7 +206,7 @@ func (s *DMStore) FindChatByID(ctx context.Context, chatID uuid.UUID) (*ChatRow,
 		return nil, errors.New("dm store: pool not configured")
 	}
 	return scanChatRow(s.Pool.QueryRow(ctx, `
-SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
+SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, managed_by_application_id, managed_environment_id, slow_mode_seconds,
        last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 FROM chats
 WHERE id = $1
@@ -214,15 +214,15 @@ WHERE id = $1
 }
 
 func scanChatRow(row pgx.Row) (*ChatRow, error) {
-	var id, creator uuid.UUID
+	var id uuid.UUID
 	var chatType string
-	var spaceID sql.NullString
+	var spaceID, creator, applicationID, environmentID sql.NullString
 	var name, avatarURL, topic sql.NullString
 	var slowMode int32
 	var lastMsg sql.NullTime
 	var createdAt, updatedAt time.Time
 	var threadsEnabled, allowUserMainFeed, e2eEnabled, allowGuests bool
-	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &slowMode,
+	err := row.Scan(&id, &chatType, &spaceID, &name, &avatarURL, &topic, &creator, &applicationID, &environmentID, &slowMode,
 		&lastMsg, &createdAt, &updatedAt, &threadsEnabled, &allowUserMainFeed, &e2eEnabled, &allowGuests)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -233,7 +233,6 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 	r := &ChatRow{
 		ID:                id,
 		Type:              chatType,
-		CreatorProfileID:  creator,
 		SlowModeSeconds:   slowMode,
 		CreatedAt:         createdAt.UTC(),
 		UpdatedAt:         updatedAt.UTC(),
@@ -241,6 +240,21 @@ func scanChatRow(row pgx.Row) (*ChatRow, error) {
 		AllowUserMainFeed: allowUserMainFeed,
 		E2EEnabled:        e2eEnabled,
 		AllowGuests:       allowGuests,
+	}
+	if creator.Valid {
+		if value, parseErr := uuid.Parse(creator.String); parseErr == nil {
+			r.CreatorProfileID = value
+		}
+	}
+	if applicationID.Valid {
+		if value, parseErr := uuid.Parse(applicationID.String); parseErr == nil {
+			r.ManagedByApplicationID = &value
+		}
+	}
+	if environmentID.Valid {
+		if value, parseErr := uuid.Parse(environmentID.String); parseErr == nil {
+			r.ManagedEnvironmentID = &value
+		}
 	}
 	if spaceID.Valid {
 		if sid, perr := uuid.Parse(spaceID.String); perr == nil {
@@ -330,13 +344,16 @@ func (s *DMStore) AddGroupMembersWithGuestAdmission(ctx context.Context, chatID 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var chatType string
-	var allowGuests bool
-	err = tx.QueryRow(ctx, `SELECT type, allow_guests FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &allowGuests)
+	var allowGuests, managed bool
+	err = tx.QueryRow(ctx, `SELECT type, allow_guests, managed_by_application_id IS NOT NULL FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &allowGuests, &managed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, pgx.ErrNoRows
 	}
 	if err != nil {
 		return nil, err
+	}
+	if managed {
+		return nil, ErrManagedChatPrincipalRequired
 	}
 	if chatType != "group" && chatType != "channel" {
 		return nil, fmt.Errorf("add members only supported for group or channel chats")
@@ -400,6 +417,13 @@ func (s *DMStore) RemoveGroupMember(ctx context.Context, chatID, profileID uuid.
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
 	}
+	var managed bool
+	if err := s.Pool.QueryRow(ctx, `SELECT managed_by_application_id IS NOT NULL FROM chats WHERE id=$1`, chatID).Scan(&managed); err != nil {
+		return err
+	}
+	if managed {
+		return ErrManagedChatPrincipalRequired
+	}
 	role, err := s.GetMemberRole(ctx, chatID, profileID)
 	if err != nil {
 		return err
@@ -420,7 +444,7 @@ func (s *DMStore) RemoveGroupMember(ctx context.Context, chatID, profileID uuid.
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
 USING chats c
-WHERE m.chat_id = c.id AND c.type = 'group'
+	WHERE m.chat_id = c.id AND c.type = 'group' AND c.managed_by_application_id IS NULL
   AND m.chat_id = $1 AND m.profile_id = $2
 `, chatID, profileID)
 	if err != nil {
@@ -449,8 +473,12 @@ func (s *DMStore) RemoveStandaloneGroupMember(ctx context.Context, chatID, actor
 
 	var chatType string
 	var spaceID *uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT type, space_id FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID); err != nil {
+	var managed bool
+	if err := tx.QueryRow(ctx, `SELECT type, space_id, managed_by_application_id IS NOT NULL FROM chats WHERE id = $1 FOR UPDATE`, chatID).Scan(&chatType, &spaceID, &managed); err != nil {
 		return err
+	}
+	if managed {
+		return ErrManagedChatPrincipalRequired
 	}
 	if (chatType != "group" && chatType != "channel") || spaceID != nil {
 		return ErrRoleChangeInvalid
@@ -512,6 +540,14 @@ func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUI
 	if s == nil || s.Pool == nil {
 		return errors.New("dm store: pool not configured")
 	}
+	var managed bool
+	err := s.Pool.QueryRow(ctx, `SELECT managed_by_application_id IS NOT NULL FROM chats WHERE id=$1`, chatID).Scan(&managed)
+	if err != nil {
+		return err
+	}
+	if managed {
+		return ErrManagedChatPrincipalRequired
+	}
 	role, err := s.GetMemberRole(ctx, chatID, profileID)
 	if err != nil {
 		return err
@@ -538,7 +574,7 @@ func (s *DMStore) LeaveGroupChat(ctx context.Context, chatID, profileID uuid.UUI
 	ct, err := s.Pool.Exec(ctx, `
 DELETE FROM chat_members m
 USING chats c
-WHERE m.chat_id = c.id AND c.type IN ('group', 'channel') AND c.space_id IS NULL
+WHERE m.chat_id = c.id AND c.type IN ('group', 'channel') AND c.space_id IS NULL AND c.managed_by_application_id IS NULL
   AND m.chat_id = $1 AND m.profile_id = $2
 `, chatID, profileID)
 	if err != nil {
@@ -734,8 +770,8 @@ func (s *DMStore) UpdateGroupChat(ctx context.Context, chatID uuid.UUID, name, a
 	q := fmt.Sprintf(`
 UPDATE chats
 SET %s
-WHERE id = $%d AND type IN ('group', 'channel')
-RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, slow_mode_seconds,
+WHERE id = $%d AND type IN ('group', 'channel') AND managed_by_application_id IS NULL
+RETURNING id, type, space_id, name, avatar_url, topic, creator_profile_id, managed_by_application_id, managed_environment_id, slow_mode_seconds,
           last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 `, strings.Join(sets, ", "), argN)
 	return scanChatRow(s.Pool.QueryRow(ctx, q, args...))

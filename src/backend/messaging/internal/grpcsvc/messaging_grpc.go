@@ -38,11 +38,18 @@ const (
 // MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	Messages    *store.MessagesStore
-	Reactions   *store.ReactionsStore
-	Pins        *store.PinsStore
-	SharedMedia *store.SharedMediaStore
-	ChatGuard   ChatGuard
+	Messages *store.MessagesStore
+	// GameMessages owns strict JWS/Auth assertion verification, T16 binding and
+	// chat authorization, File provenance checks, then the receipt transaction.
+	// Missing authority dependencies leave this deliberately nil and fail closed.
+	GameMessages GameMessageProcessor
+	// GameTombstones is populated only when Messaging's service-owned signing
+	// key is configured; the RPC also requires a verified moderation principal.
+	GameTombstones GameTombstoneProcessor
+	Reactions      *store.ReactionsStore
+	Pins           *store.PinsStore
+	SharedMedia    *store.SharedMediaStore
+	ChatGuard      ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks       AccountPairBlockChecker
 	UserProfiles ProfileAccountLookup

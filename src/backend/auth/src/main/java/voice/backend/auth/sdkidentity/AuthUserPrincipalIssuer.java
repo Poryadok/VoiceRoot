@@ -4,9 +4,13 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.JOSEObjectType;
+import com.nimbusds.jose.JWSObject;
+import com.nimbusds.jose.Payload;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.ECKey;
+import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.util.JSONObjectUtils;
@@ -29,10 +33,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /** Dedicated RS256 workload credentials for request-bound Auth-to-User calls. */
-public final class AuthUserPrincipalIssuer {
+public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
   private static final String ELIGIBILITY_RPC = "/voice.user.v1.UserService/GetSdkProfileEligibility";
   private static final String ISSUER = "auth";
   private static final String SUBJECT = "service:auth";
@@ -215,6 +220,60 @@ public final class AuthUserPrincipalIssuer {
     }
   }
 
+  /** Signs Auth's short-lived, canonical device authority assertion. */
+  @Override public String issueDeviceStatus(Map<String, Object> claims) {
+    java.util.Set<String> expected = java.util.Set.of("version", "iss", "aud", "jti", "application_id",
+        "environment_id", "account_id", "actor_id", "binding_id", "device_id", "key_id", "public_jwk",
+        "key_thumbprint", "device_generation", "authority_revision", "status", "not_after", "iat", "exp");
+    if (claims == null || !claims.keySet().equals(expected)
+        || !Long.valueOf(1).equals(number(claims.get("version")))
+        || !"auth".equals(claims.get("iss")) || !"voice.game-message".equals(claims.get("aud"))
+        || !"active".equals(claims.get("status")) || !isUuid(claims.get("jti"))
+        || !(claims.get("public_jwk") instanceof Map<?, ?>)
+        || !isPositive(number(claims.get("device_generation")))
+        || !isPositive(number(claims.get("authority_revision")))) {
+      throw new IllegalArgumentException("invalid device status assertion claims");
+    }
+    for (String field : List.of("application_id", "environment_id", "account_id", "actor_id", "binding_id",
+        "device_id", "key_id")) {
+      if (!isUuid(claims.get(field))) throw new IllegalArgumentException("invalid device status assertion claims");
+    }
+    Object thumbprint = claims.get("key_thumbprint");
+    if (!(thumbprint instanceof String value) || !value.matches("[A-Za-z0-9_-]{43}")) {
+      throw new IllegalArgumentException("invalid device status assertion claims");
+    }
+    try {
+      @SuppressWarnings("unchecked") Map<String, Object> jwk = (Map<String, Object>) claims.get("public_jwk");
+      ECKey deviceKey = ECKey.parse(jwk);
+      if (!Curve.P_256.equals(deviceKey.getCurve()) || deviceKey.isPrivate()
+          || !value.equals(deviceKey.computeThumbprint().toString())
+          || !jwk.keySet().equals(java.util.Set.of("kty", "crv", "x", "y"))) {
+        throw new IllegalArgumentException("invalid device status assertion key");
+      }
+    } catch (Exception invalid) {
+      if (invalid instanceof IllegalArgumentException argument) throw argument;
+      throw new IllegalArgumentException("invalid device status assertion key", invalid);
+    }
+    Long issuedAt = number(claims.get("iat"));
+    Long expiresAt = number(claims.get("exp"));
+    Long notAfter = number(claims.get("not_after"));
+    long now = clock.instant().toEpochMilli();
+    if (issuedAt == null || expiresAt == null || notAfter == null || issuedAt != now
+        || expiresAt <= issuedAt || expiresAt - issuedAt > 4000 || expiresAt > notAfter) {
+      throw new IllegalArgumentException("invalid device status assertion lifetime");
+    }
+    JWSObject jwt = new JWSObject(
+        new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(active.getKeyID())
+            .type(new JOSEObjectType("voice.game-device-status+jwt")).build(),
+        new Payload(canonicalJson(claims)));
+    try {
+      jwt.sign(new RSASSASigner(active.toPrivateKey()));
+      return jwt.serialize();
+    } catch (JOSEException failure) {
+      throw new IllegalStateException("unable to sign Auth device status", failure);
+    }
+  }
+
   private static void validateHandoff(GameBindingHandoff value) {
     if (value == null || value.authorizationRequestId() == null || value.operationId() == null || value.challengeId() == null
         || value.applicationId() == null || value.environmentId() == null || value.deviceKeyId() == null
@@ -260,6 +319,44 @@ public final class AuthUserPrincipalIssuer {
 
   private static boolean positiveVersion(Object value) {
     return value instanceof Number number && number.longValue() == 1 && number.doubleValue() == 1;
+  }
+
+  private static Long number(Object value) {
+    return value instanceof Long number ? number : null;
+  }
+
+  private static boolean isPositive(Long value) { return value != null && value > 0; }
+
+  private static boolean isUuid(Object value) {
+    if (!(value instanceof String text)) return false;
+    try { return UUID.fromString(text).toString().equals(text); }
+    catch (IllegalArgumentException invalid) { return false; }
+  }
+
+  private static String canonicalJson(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      TreeMap<String, Object> sorted = new TreeMap<>();
+      map.forEach((key, item) -> {
+        if (!(key instanceof String name)) throw new IllegalArgumentException("invalid JCS object key");
+        sorted.put(name, canonicalValue(item));
+      });
+      return JSONObjectUtils.toJSONString(sorted);
+    }
+    throw new IllegalArgumentException("device status payload must be an object");
+  }
+
+  private static Object canonicalValue(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      TreeMap<String, Object> sorted = new TreeMap<>();
+      map.forEach((key, item) -> {
+        if (!(key instanceof String name)) throw new IllegalArgumentException("invalid JCS object key");
+        sorted.put(name, canonicalValue(item));
+      });
+      return sorted;
+    }
+    if (value instanceof String || value instanceof Long || value instanceof Integer || value instanceof Boolean
+        || value == null) return value;
+    throw new IllegalArgumentException("invalid JCS value");
   }
 
   public String jwksJson() {

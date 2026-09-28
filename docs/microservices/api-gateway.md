@@ -62,6 +62,26 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 /ws                      → Realtime Service (WebSocket upgrade; `Authorization` или `?ticket=`)
 ```
 
+### T14 SDK authorization routes
+
+Gateway applies a route-specific principal policy to the Auth consumer routes.
+Auth remains authoritative for authorization state, device possession, code,
+redirect, PKCE, linked-credential validity, consent and profile eligibility.
+
+| Method and route | Gateway principal | Rate limit |
+|---|---|---|
+| `POST /api/v1/auth/sdk/authorizations` | Verified Voice access JWT with `account_type=sdk-account` | `AuthOAuth`: 30 requests / 15 min, keyed by account |
+| `GET /api/v1/auth/sdk/authorizations/{requestId}` | Verified current regular Voice access JWT | `AuthOAuth`: 30 requests / 15 min, keyed by account |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/approve` | Verified current regular Voice access JWT | `AuthOAuth`: 30 requests / 15 min, keyed by account |
+| `POST /api/v1/auth/sdk/authorizations/{requestId}/exchange` | No Gateway JWT; Auth validates code, exact redirect, PKCE verifier and device proof | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
+| `POST /api/v1/auth/sdk/authorizations/linked-session` | Exactly one Bearer credential, forwarded for Auth linked-credential validation | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
+
+The `AuthOAuth` group is the existing Gateway OAuth limit and is applied to all
+five routes by the T20 Gateway slice. SDK creation, consent view, and approval
+use the verified account key. Code exchange and opaque linked-session use the
+trusted-client-IP key. This is the derived T20 rate-limit decision; Auth still
+validates every authorization proof and linked credential.
+
 **WebSocket auth:** нативные клиенты — `Authorization: Bearer` на upgrade. Браузер — `POST /api/v1/realtime/ws-ticket` (JWT только в REST), затем `/ws?ticket=…` (opaque, single-use, Redis TTL ~60s). Legacy `?access_token=` на `/ws` поддерживается для совместимости; web-клиент не использует. См. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md).
 
 

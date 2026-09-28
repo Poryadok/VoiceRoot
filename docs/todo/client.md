@@ -45,8 +45,11 @@ _Пока пусто — критичные клиентские блокеры 
   signing of the exact payload bytes. Private keys must remain non-exportable.
   GAME-AUTH-02 defines no deny endpoint, so Cancel currently abandons the local
   screen and lets the Auth request expire; no remote denial is claimed.
-  Gateway route/principal/scopes/rate-limit publication and T20 integration
-  remain downstream. GIS active binding/T16, direct Voice-only first-login
+  Gateway Auth route/principal publication is implemented by the initial T20
+  Auth-consumer slice; broader route scopes, public-client conformance and T20
+  integration remain downstream. Consent and linked-session rate quotas still
+  use the existing AuthOAuth limit by the derived T20 decision. GIS active
+  binding/T16, direct Voice-only first-login
   variant, device-code flow, and live Google/Q11 provider proof remain open.
   The client does not enumerate profiles beyond the authenticated user's own
   `/api/v1/users/profiles` response and requires a deliberate eligible-profile

@@ -8,6 +8,9 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
+import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.SignedJWT;
 import java.nio.file.Files;
@@ -17,6 +20,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,6 +65,46 @@ class AuthUserPrincipalIssuerContractTest {
     assertThat(claims.getExpirationTime().toInstant()).isEqualTo(NOW.plusSeconds(30));
     assertThat(claims.getJWTID()).isNotBlank();
     assertThat(claims.getClaims()).doesNotContainKeys("account_id", "profile_id", "session_epoch");
+  }
+
+  @Test
+  void signsCanonicalDeviceStatusAssertionsWithFourSecondMaximumAndExactClaimSet() throws Exception {
+    RSAKey current = key("current");
+    write(current);
+    write(key("next"));
+    Object issuer = load("current");
+    ECKey deviceKey = new ECKeyGenerator(Curve.P_256).generate();
+    Map<String, Object> claims = new LinkedHashMap<>();
+    claims.put("version", 1L);
+    claims.put("iss", "auth");
+    claims.put("aud", "voice.game-message");
+    claims.put("jti", "d5d5e77a-4725-4528-954e-145d1edfa33f");
+    claims.put("application_id", "11111111-1111-4111-8111-111111111111");
+    claims.put("environment_id", "22222222-2222-4222-8222-222222222222");
+    claims.put("account_id", "33333333-3333-4333-8333-333333333333");
+    claims.put("actor_id", "44444444-4444-4444-8444-444444444444");
+    claims.put("binding_id", "55555555-5555-4555-8555-555555555555");
+    claims.put("device_id", "66666666-6666-4666-8666-666666666666");
+    claims.put("key_id", "77777777-7777-4777-8777-777777777777");
+    claims.put("public_jwk", deviceKey.toPublicJWK().toJSONObject());
+    claims.put("key_thumbprint", deviceKey.computeThumbprint().toString());
+    claims.put("device_generation", 1L);
+    claims.put("authority_revision", 2L);
+    claims.put("status", "active");
+    claims.put("not_after", NOW.plusSeconds(90L * 24 * 60 * 60).toEpochMilli());
+    claims.put("iat", NOW.toEpochMilli());
+    claims.put("exp", NOW.plusSeconds(4).toEpochMilli());
+
+    String compact = (String) invoke(issuer, "issueDeviceStatus", new Class<?>[] {Map.class}, claims);
+    SignedJWT token = SignedJWT.parse(compact);
+
+    assertThat(token.getHeader().getAlgorithm()).isEqualTo(JWSAlgorithm.RS256);
+    assertThat(token.getHeader().getKeyID()).isEqualTo("current");
+    assertThat(token.getHeader().getType().toString()).isEqualTo("voice.game-device-status+jwt");
+    assertThat(token.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+    String payload = new String(token.getPayload().toBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(com.nimbusds.jose.util.JSONObjectUtils.parse(payload)).containsAllEntriesOf(claims);
+    assertThat(payload).startsWith("{\"account_id\":");
   }
 
   @Test

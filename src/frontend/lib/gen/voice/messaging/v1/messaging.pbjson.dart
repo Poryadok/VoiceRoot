@@ -261,6 +261,90 @@ final $typed_data.Uint8List sendMessageRequestDescriptor = $convert.base64Decode
     'ZXNzYWdlX2lkQhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9tZXNzYWdlX2tpbmRCEQoPX3Bvc3'
     'RlZF9hc19jaGF0QgkKB19pc19lMmVCDwoNX2NvbnRlbnRfdHlwZQ==');
 
+@$core.Deprecated('Use applyGameMessageRequestDescriptor instead')
+const ApplyGameMessageRequest$json = {
+  '1': 'ApplyGameMessageRequest',
+  '2': [
+    {'1': 'compact_jws', '3': 1, '4': 1, '5': 9, '10': 'compactJws'},
+    {
+      '1': 'device_authority_assertion',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'deviceAuthorityAssertion'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyGameMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameMessageRequestDescriptor = $convert.base64Decode(
+    'ChdBcHBseUdhbWVNZXNzYWdlUmVxdWVzdBIfCgtjb21wYWN0X2p3cxgBIAEoCVIKY29tcGFjdE'
+    'p3cxI8ChpkZXZpY2VfYXV0aG9yaXR5X2Fzc2VydGlvbhgCIAEoCVIYZGV2aWNlQXV0aG9yaXR5'
+    'QXNzZXJ0aW9u');
+
+@$core.Deprecated('Use applyGameMessageResponseDescriptor instead')
+const ApplyGameMessageResponse$json = {
+  '1': 'ApplyGameMessageResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyGameMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChhBcHBseUdhbWVNZXNzYWdlUmVzcG9uc2USNQoHbWVzc2FnZRgBIAEoCzIbLnZvaWNlLm1lc3'
+        'NhZ2luZy52MS5NZXNzYWdlUgdtZXNzYWdl');
+
+@$core.Deprecated('Use tombstoneGameMessageRequestDescriptor instead')
+const TombstoneGameMessageRequest$json = {
+  '1': 'TombstoneGameMessageRequest',
+  '2': [
+    {'1': 'action_id', '3': 1, '4': 1, '5': 9, '10': 'actionId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'message_id', '3': 3, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'reason_class', '3': 4, '4': 1, '5': 9, '10': 'reasonClass'},
+    {'1': 'application_id', '3': 5, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 6, '4': 1, '5': 9, '10': 'environmentId'},
+  ],
+};
+
+/// Descriptor for `TombstoneGameMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List tombstoneGameMessageRequestDescriptor = $convert.base64Decode(
+    'ChtUb21ic3RvbmVHYW1lTWVzc2FnZVJlcXVlc3QSGwoJYWN0aW9uX2lkGAEgASgJUghhY3Rpb2'
+    '5JZBIXCgdjaGF0X2lkGAIgASgJUgZjaGF0SWQSHQoKbWVzc2FnZV9pZBgDIAEoCVIJbWVzc2Fn'
+    'ZUlkEiEKDHJlYXNvbl9jbGFzcxgEIAEoCVILcmVhc29uQ2xhc3MSJQoOYXBwbGljYXRpb25faW'
+    'QYBSABKAlSDWFwcGxpY2F0aW9uSWQSJQoOZW52aXJvbm1lbnRfaWQYBiABKAlSDWVudmlyb25t'
+    'ZW50SWQ=');
+
+@$core.Deprecated('Use tombstoneGameMessageResponseDescriptor instead')
+const TombstoneGameMessageResponse$json = {
+  '1': 'TombstoneGameMessageResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `TombstoneGameMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List tombstoneGameMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChxUb21ic3RvbmVHYW1lTWVzc2FnZVJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS'
+        '5tZXNzYWdpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+
 @$core.Deprecated('Use scheduledMessagePayloadDescriptor instead')
 const ScheduledMessagePayload$json = {
   '1': 'ScheduledMessagePayload',

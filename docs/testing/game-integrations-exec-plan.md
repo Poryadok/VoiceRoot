@@ -283,9 +283,18 @@ contracts land before consumers; activation lands after all consumers.
   key lifecycle, RFC 8785/JWS v1 message bytes, Auth RS256 status assertions,
   Messaging EdDSA tombstones, revision chain, File manifest and exact-receipt
   ordering from the API contract. Decision gate (enrollment/recovery/rotation/
-  revoke, receiver verification, fail-closed clock/outage behavior and ≤5s
+  revoke, receiver verification, fail-closed clock/outage behavior and ≤4.25s
   node revoke ceiling) is closed; runtime, conformance vectors and measured
-  revoke propagation remain open.
+  revoke propagation remain open. Auth authority issuance also consumes the
+  T16 Auth/GIS execution-permit producer and must fail closed until it is available; never
+  synthesize `binding_id` from another identifier. Messaging must additionally
+  consume the T30/T31 exact app/environment/binding/chat resource mapping;
+  Auth binding authority and Chat membership alone cannot prove that link, so
+  game-authored writes remain fail-closed until that producer ships. Each
+  message requires a permit capped at `min(issued_at + 3750ms, assertion.exp)`;
+  Messaging enforces a 250ms transaction maximum plus 250ms clock margin and
+  records completion atomically with the message receipt. Auth/GIS revoke
+  succeeds only after issued permits drain; unknown completion remains pending.
 - [ ] **T16** `D: T14,T15` Implement limited delegated grants, binding/authority
   reads, selected profile/alias serialization, direct-call scope checks and
   account/profile/app/device revocation epochs. Verify hidden profiles cannot

@@ -107,6 +107,33 @@ authority. Contract and RED evidence:
 
 Продуктовая аналитика дополнительно консьюмит subject’ы вида `analytics.*` (см. раздел «Аналитика» в [MICROSERVICES.md](MICROSERVICES.md)).
 
+## Game integrations: T05 data ownership boundary (target)
+
+This section records the storage and service-owner seam consumed by T30/T31
+session provisioning and T15 mapping authorization. It adds no public Gateway
+route and does not claim runtime implementation. T05 remains open behind the
+relevant T03 defaults and the T04 cross-service trust matrix.
+
+| Data / action | Authority and writer | Consumer rule |
+|---|---|---|
+| Account, SDK identity, provider proof, device keys | Auth | GIS carries logical references; only Auth issues account/identity authority and owns device-key lifecycle. |
+| Profile, alias source, privacy | User | GIS binds the explicitly selected profile. User privacy remains authoritative; G12/Q07 alias serialization is open. |
+| Application/environment/installation/binding/character mapping | GIS (`game_integration_db`) | IDs and opaque external values are scoped to the GIS application/environment; GIS does not read another service database. |
+| Desired external membership/rank grant | GIS intent; Role effective permission | Keep reasons separate; effective access remains Role-owned and cannot bypass Voice bans or protected Space ownership. |
+| Session/resource mapping and operation | GIS coordinator; Chat/Voice/Space domain owners | GIS stores resource UUID references, operation hash/stages, and retired-key fences. Each callee commits/reconciles its own side effect and receipt. Retired external keys are never silently reused. |
+| Message/history | Messaging | `chat_id` is the Chat-owned `chat_db.chats.id`; T15 authorizes its explicit signed target against exact app/environment/binding/chat authority. |
+
+T51 has a separate binding-addressed event recipient that must resolve to one
+message chat. This target model does not assert one global chat per binding; the
+session-selection rule for that recipient remains open in the T51/API contract.
+T15's explicit `chat_id` is validated as the requested exact target, not replaced
+by a GIS-selected chat. Relevant development evidence is GI0 contract alignment,
+SE01–SE03 for session idempotency/recovery/party-vs-match ownership, and BOT05
+for foreign/inactive binding or unlinked-chat denial. Those acceptance rows are
+target evidence, not completed test claims. T03/T04, G04 retention, G09
+freshness, and G12 alias/privacy remain open; staging and live-provider evidence
+are separate gates.
+
 ## A2 Space target routes
 
 Canonical route/schema/ACL/error/retry table:
