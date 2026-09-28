@@ -6,19 +6,25 @@ import 'package:voice_frontend/state/guest_save_account_reminder.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('first entry after nickname suppresses banner; second shows', () async {
-    SharedPreferences.setMockInitialValues({});
-    final guestStorage = InMemoryGuestCredentialsStorage();
-    const accountId = 'guest-acct-1';
-    await guestStorage.markNicknameCompleted(accountId);
-    final controller = GuestSaveAccountReminderController(
-      guestStorage: guestStorage,
-    );
+  test(
+    'first entry is quiet and a shown reminder stays suppressed on re-entry',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final guestStorage = InMemoryGuestCredentialsStorage();
+      const accountId = 'guest-acct-1';
+      await guestStorage.markNicknameCompleted(accountId);
+      final controller = GuestSaveAccountReminderController(
+        guestStorage: guestStorage,
+      );
 
-    expect(await controller.shouldShow(accountId), isFalse);
-    expect(await controller.shouldShow(accountId), isTrue);
+      expect(await controller.shouldShow(accountId), isFalse);
+      expect(await controller.showAndMark(accountId), isTrue);
+      expect(await controller.showAndMark(accountId), isFalse);
 
-    await controller.markShown(accountId);
-    expect(await controller.shouldShow(accountId), isFalse);
-  });
+      final reloaded = GuestSaveAccountReminderController(
+        guestStorage: guestStorage,
+      );
+      expect(await reloaded.showAndMark(accountId), isFalse);
+    },
+  );
 }

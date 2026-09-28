@@ -14,7 +14,9 @@ final guestSaveAccountReminderProvider =
     });
 
 /// Whether the save-account banner should show for a returning guest (max 1×/day).
-final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((ref) async {
+final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((
+  ref,
+) async {
   final auth = ref.watch(authControllerProvider);
   if (!auth.isGuest || auth.needsGuestNickname || auth.session == null) {
     return false;
@@ -27,7 +29,7 @@ final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((ref) async
   }
   return ref
       .read(guestSaveAccountReminderProvider)
-      .shouldShow(accountId, authorization: auth.session!.authorizationHeader);
+      .showAndMark(accountId, authorization: auth.session!.authorizationHeader);
 });
 
 class GuestSaveAccountReminderController {
@@ -61,15 +63,23 @@ class GuestSaveAccountReminderController {
       return false;
     }
 
-    final server = await _serverShouldShow(authorization);
-    if (server != null) {
-      return server;
-    }
-
     final lastMs = prefs.getInt('$_lastShownKeyPrefix$accountId');
-    if (lastMs == null) return true;
-    final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
-    return DateTime.now().difference(last).inHours >= 24;
+    if (lastMs != null) {
+      final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      if (DateTime.now().difference(last) < const Duration(hours: 24)) {
+        return false;
+      }
+    }
+    return await _serverShouldShow(authorization) ?? true;
+  }
+
+  /// Claims the display before the banner is exposed so re-entry cannot repeat it.
+  Future<bool> showAndMark(String accountId, {String? authorization}) async {
+    if (!await shouldShow(accountId, authorization: authorization)) {
+      return false;
+    }
+    await markShown(accountId, authorization: authorization);
+    return true;
   }
 
   Future<bool?> _serverShouldShow(String? authorization) async {
@@ -78,7 +88,9 @@ class GuestSaveAccountReminderController {
       return null;
     }
     try {
-      return await client.getGuestReminderShouldShow(authorization: authorization);
+      return await client.getGuestReminderShouldShow(
+        authorization: authorization,
+      );
     } catch (_) {
       return null;
     }

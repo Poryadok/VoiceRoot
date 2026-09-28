@@ -161,6 +161,45 @@ void main() {
     expect(state.session?.activeProfileId, 'prof-1');
   });
 
+  test('regular session ignores a stale local guest password', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/refresh') {
+        return http.Response(
+          jsonEncode({
+            'session': {
+              ...(sessionJson()['session'] as Map<String, dynamic>),
+              'account_type': 'regular',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+    final storage = InMemoryAuthSessionStorage();
+    await storage.write(
+      const AuthSession(
+        accessToken: 'old-access',
+        refreshToken: 'refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      ),
+    );
+    final guestStorage = InMemoryGuestCredentialsStorage();
+    await guestStorage.writePassword('stale-guest-password');
+    final container = buildContainer(
+      mock: mock,
+      storage: storage,
+      guestStorage: guestStorage,
+    );
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.notifier).restore();
+
+    expect(container.read(authControllerProvider).isGuest, isFalse);
+  });
+
   test('logout clears recovered email verification state', () async {
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
