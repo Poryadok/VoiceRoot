@@ -134,6 +134,79 @@ final $typed_data.Uint8List chatDescriptor = $convert.base64Decode(
     'EoCFILYWxsb3dHdWVzdHNCCwoJX3NwYWNlX2lkQgcKBV9uYW1lQg0KC19hdmF0YXJfdXJsQggK'
     'Bl90b3BpY0ISChBfbGFzdF9tZXNzYWdlX2F0');
 
+@$core.Deprecated('Use provisionManagedChatRequestDescriptor instead')
+const ProvisionManagedChatRequest$json = {
+  '1': 'ProvisionManagedChatRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'external_chat_key', '3': 4, '4': 1, '5': 9, '10': 'externalChatKey'},
+    {'1': 'name', '3': 5, '4': 1, '5': 9, '10': 'name'},
+    {'1': 'topic', '3': 6, '4': 1, '5': 9, '9': 0, '10': 'topic', '17': true},
+  ],
+  '8': [
+    {'1': '_topic'},
+  ],
+};
+
+/// Descriptor for `ProvisionManagedChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List provisionManagedChatRequestDescriptor = $convert.base64Decode(
+    'ChtQcm92aXNpb25NYW5hZ2VkQ2hhdFJlcXVlc3QSJQoOYXBwbGljYXRpb25faWQYASABKAlSDW'
+    'FwcGxpY2F0aW9uSWQSJQoOZW52aXJvbm1lbnRfaWQYAiABKAlSDWVudmlyb25tZW50SWQSIQoM'
+    'b3BlcmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBIqChFleHRlcm5hbF9jaGF0X2tleRgEIA'
+    'EoCVIPZXh0ZXJuYWxDaGF0S2V5EhIKBG5hbWUYBSABKAlSBG5hbWUSGQoFdG9waWMYBiABKAlI'
+    'AFIFdG9waWOIAQFCCAoGX3RvcGlj');
+
+@$core.Deprecated('Use provisionManagedChatResponseDescriptor instead')
+const ProvisionManagedChatResponse$json = {
+  '1': 'ProvisionManagedChatResponse',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `ProvisionManagedChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List provisionManagedChatResponseDescriptor =
+    $convert.base64Decode(
+        'ChxQcm92aXNpb25NYW5hZ2VkQ2hhdFJlc3BvbnNlEhcKB2NoYXRfaWQYASABKAlSBmNoYXRJZB'
+        'IaCghyZXBsYXllZBgCIAEoCFIIcmVwbGF5ZWQ=');
+
+@$core.Deprecated('Use syncManagedChatMembersRequestDescriptor instead')
+const SyncManagedChatMembersRequest$json = {
+  '1': 'SyncManagedChatMembersRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 4, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'profile_ids', '3': 5, '4': 3, '5': 9, '10': 'profileIds'},
+  ],
+};
+
+/// Descriptor for `SyncManagedChatMembersRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List syncManagedChatMembersRequestDescriptor = $convert.base64Decode(
+    'Ch1TeW5jTWFuYWdlZENoYXRNZW1iZXJzUmVxdWVzdBIlCg5hcHBsaWNhdGlvbl9pZBgBIAEoCV'
+    'INYXBwbGljYXRpb25JZBIlCg5lbnZpcm9ubWVudF9pZBgCIAEoCVINZW52aXJvbm1lbnRJZBIh'
+    'CgxvcGVyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEhcKB2NoYXRfaWQYBCABKAlSBmNoYX'
+    'RJZBIfCgtwcm9maWxlX2lkcxgFIAMoCVIKcHJvZmlsZUlkcw==');
+
+@$core.Deprecated('Use syncManagedChatMembersResponseDescriptor instead')
+const SyncManagedChatMembersResponse$json = {
+  '1': 'SyncManagedChatMembersResponse',
+  '2': [
+    {'1': 'profile_ids', '3': 1, '4': 3, '5': 9, '10': 'profileIds'},
+    {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `SyncManagedChatMembersResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List syncManagedChatMembersResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5TeW5jTWFuYWdlZENoYXRNZW1iZXJzUmVzcG9uc2USHwoLcHJvZmlsZV9pZHMYASADKAlSCn'
+        'Byb2ZpbGVJZHMSGgoIcmVwbGF5ZWQYAiABKAhSCHJlcGxheWVk');
+
 @$core.Deprecated('Use createDMRequestDescriptor instead')
 const CreateDMRequest$json = {
   '1': 'CreateDMRequest',

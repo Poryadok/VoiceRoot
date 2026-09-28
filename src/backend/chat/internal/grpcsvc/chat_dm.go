@@ -128,7 +128,7 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 	out := &chatv1.Chat{
 		Id:                r.ID.String(),
 		Type:              chatType,
-		CreatorProfileId:  r.CreatorProfileID.String(),
+		CreatorProfileId:  managedCreatorProfileID(r),
 		SlowModeSeconds:   r.SlowModeSeconds,
 		CreatedAt:         timestamppb.New(r.CreatedAt),
 		UpdatedAt:         timestamppb.New(r.UpdatedAt),
@@ -154,4 +154,11 @@ func chatRowToProto(r *store.ChatRow) *chatv1.Chat {
 		out.LastMessageAt = timestamppb.New(*r.LastMessageAt)
 	}
 	return out
+}
+
+func managedCreatorProfileID(row *store.ChatRow) string {
+	if row.CreatorProfileID == uuid.Nil {
+		return ""
+	}
+	return row.CreatorProfileID.String()
 }

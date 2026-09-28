@@ -13,24 +13,37 @@ import (
 
 // ChatRow is a persisted chat row from chat_db.chats.
 type ChatRow struct {
-	ID                uuid.UUID
-	Type              string // dm | group | channel
-	SpaceID           *uuid.UUID
-	Name              *string
-	AvatarURL         *string
-	Topic             *string
-	CreatorProfileID  uuid.UUID
-	SlowModeSeconds   int32
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	LastMessageAt     *time.Time
-	InboxBucket       string
-	ThreadsEnabled    bool
-	AllowUserMainFeed bool
-	E2EEnabled        bool
-	AllowGuests       bool
+	ID                     uuid.UUID
+	Type                   string // dm | group | channel
+	SpaceID                *uuid.UUID
+	Name                   *string
+	AvatarURL              *string
+	Topic                  *string
+	CreatorProfileID       uuid.UUID
+	ManagedByApplicationID *uuid.UUID
+	ManagedEnvironmentID   *uuid.UUID
+	SlowModeSeconds        int32
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+	LastMessageAt          *time.Time
+	InboxBucket            string
+	ThreadsEnabled         bool
+	AllowUserMainFeed      bool
+	E2EEnabled             bool
+	AllowGuests            bool
 	// IsPinned is populated only for folder-scoped ListChats results.
 	IsPinned bool
+}
+
+func nullableCreatorProfileID(value sql.NullString) uuid.UUID {
+	if !value.Valid {
+		return uuid.Nil
+	}
+	parsed, err := uuid.Parse(value.String)
+	if err != nil {
+		return uuid.Nil
+	}
+	return parsed
 }
 
 // DMStore persists DM chats and membership (app stack).

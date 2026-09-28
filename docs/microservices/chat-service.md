@@ -116,6 +116,42 @@ message ChatListItem {
 
 ## Модель данных
 
+### GIS application-managed group chats (T31 recipient slice)
+
+Chat owns the `chats`, `chat_members`, and `managed_chat_operations` rows. A
+managed chat is a standalone `group` whose `creator_profile_id` is NULL and
+whose `managed_by_application_id`, `managed_environment_id`, and
+`external_chat_key` are all set. The application/environment is the resource
+owner; no profile receives `owner` or `admin` role. The external key is unique
+within that application and environment.
+
+GIS mutations use the separate `GameIntegrationChatService` with only
+`ProvisionManagedChat` and `SyncManagedChatMembers` allowlisted, on the
+dedicated mTLS listener. Each request carries a UUID `operation_id`. The
+recipient verifies the `gameintegration` service principal for audience
+`chat`, the exact full RPC, `x-request-id == operation_id`, and deterministic
+protobuf SHA-256 request hash; JTI replay protection is Redis-backed. Player
+roster methods reject managed chats. The GIS surface is not registered on the
+ordinary player listener. Runtime configuration is all-or-nothing; its
+environment variables are `CHAT_GIS_GRPC_LISTEN`, `CHAT_GIS_TLS_CERT_FILE`,
+`CHAT_GIS_TLS_KEY_FILE`, `CHAT_GIS_CLIENT_CA_FILE`,
+`GAME_INTEGRATION_PRINCIPAL_JWKS_URL`, optional
+`GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE`, and
+`GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_ADDR` plus optional password.
+Current staging/production deployment manifests do not yet configure the
+dedicated port, secret mounts, or GIS-only network policy, so they leave this
+listener disabled.
+
+`managed_chat_operations` stores the exact app/environment/operation ID,
+method, request hash, chat ID, and immutable JSON receipt. Create responses
+contain only the immutable chat ID; mutable chat projections are read through
+Chat's ordinary API. Request replay with the same hash returns that receipt; a
+different method or hash conflicts. Roster synchronization atomically diffs
+membership, gives all members the `member` role, and preserves per-member state
+for retained members. Managed resources and receipts currently have no retention
+or retirement policy; product and T31 orchestration work must define one before
+application/environment deletion can safely remove them.
+
 ```
 chats
 ├── id (UUID)
