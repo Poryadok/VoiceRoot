@@ -979,8 +979,8 @@ opaque external IDs, enum strings. Все mutations требуют authorization
 | `GET /bindings/me` | Player | — → selected profile, own bindings/scopes | Только собственные; 401 |
 | `GET /bindings/{binding_id}/authority` | Service своей app/env | — → active/revoked, revision, разрешённый character context | Execution-time check, no shared cache beyond authority deadline; 403/503 |
 | `DELETE /bindings/{binding_id}` | Владелец player | `Idempotency-Key` UUID + `{expected_revision}` → revocation receipt | GIS drains execution permits, then Auth drains accepted claims; exact retry required while pending; 403/409/503; Gateway publication pending |
-| `POST /sessions` | Service | external key, kind, parent party, policy, desired members → operation | Idempotency-Key; 409 mismatch |
-| `PUT /sessions/{id}/roster` | Service | complete snapshot, source revision, bound members → operation | CAS/revision; 409 stale/conflict |
+| `POST /sessions` | Authenticated app/env backend or broker | external key, kind, parent party, policy, desired members → operation | Idempotency-Key; stable party mapping; 409 mismatch |
+| `PUT /sessions/{id}/roster` | Authenticated app/env backend or broker | complete snapshot, source revision, bound members, optional host → operation | Complete-snapshot CAS; 60s lease from GIS DB commit; 409 stale/conflict |
 | `GET /sessions/{id}` | Authorized member/service | — → current state, applied roster revision, resource refs | 404 for inaccessible resources |
 | `POST /sessions/{id}/join-grants` | Player | device instance, expected binding revision → bounded chat/media capability | Current admission; 403/409/503 |
 | `POST /sessions/{id}/close` | Service | reason, expected revision → operation | Stable terminal state; 409 |
@@ -1758,3 +1758,47 @@ secret provisioning are implemented and accepted. A pending environment never
 expires or activates implicitly; retries use the original idempotency key.
 Suspending/restoring the application never changes pending to active. Retire,
 restore, and pending-admission cancellation are not part of this staged slice.
+
+## T32: party/match lifecycle, roster lease and host authority
+
+A party has one stable external-resource mapping across its matches. Every
+match has its own external key and may reference that party as parent. Closing
+or failing a match never retires the party mapping or deletes its shared Chat
+resource. After purge, an external resource key remains tombstoned without
+content; it cannot silently create a new resource.
+
+Only the authenticated app/environment game backend or its managed broker may
+submit a roster. A complete accepted roster carries a source revision and a
+server-computed lease deadline exactly 60 seconds after the GIS database commit.
+A lower revision is a stale no-op. An exact same-revision/same-body retry
+returns its saved receipt and does not renew the lease. Same revision with a
+different body conflicts. Only a complete higher revision renews the lease.
+Incomplete pages, failed fetches, and transport-level empty responses never
+mean an empty roster; removal requires a complete higher-revision empty roster
+or explicit tombstone. Retries never extend a lease.
+
+At `lease_expires_at`, GIS fails closed for new admission, reconnect, and
+governed reads/writes. Active Voice/media access is fenced within the existing
+five-second revocation bound. Host transfer is accepted only in a complete
+next-revision roster CAS, with the successor already present in that roster.
+The host-control change is atomic and does not change Voice roles or Voice
+Owner. Client host claims are rejected. If a departing host has no successor,
+host control is revoked immediately and the session closes at lease expiry.
+
+For `since_join`, entitlement is based on immutable message `created_at` in
+the member's interval `[joined_at, revoked_at)`. Rejoin opens a new interval
+and does not restore access during gaps or earlier intervals. Apply the same
+filter to history, search, quotes/thread context, attachment metadata, and
+download authorization at fetch time. Match-scoped history access ends
+exclusively at `closed_at + 30 days`. Terminal operation receipts remain
+retryable for 30 days after the terminal transition. After receipt purge, retain
+a non-content external-key tombstone without expiry so retry cannot silently
+recreate the resource. A keep-group operation includes only consenting
+participants and never copies the match transcript. Chat owns
+membership, message content, and retention; GIS coordinates through owner APIs
+and has no direct SQL access to Chat.
+
+SE03/SE04/SE07 in
+[Game Integrations acceptance](../testing/game-integrations-acceptance.md)
+are the normative boundary assertions. Runtime implementation and exact-SHA
+evidence remain open under T32–T34.
