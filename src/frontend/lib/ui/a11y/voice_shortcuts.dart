@@ -84,13 +84,13 @@ class VoiceShortcuts extends ConsumerWidget {
               return null;
             },
           ),
-          _ReplyMessageIntent: CallbackAction<_ReplyMessageIntent>(
+          _ReplyMessageIntent: _MessageShortcutAction<_ReplyMessageIntent>(
             onInvoke: (_) {
               ref.read(chatMessageKeyboardProvider.notifier).replyToSelected();
               return null;
             },
           ),
-          _ReactMessageIntent: CallbackAction<_ReactMessageIntent>(
+          _ReactMessageIntent: _MessageShortcutAction<_ReactMessageIntent>(
             onInvoke: (_) {
               ref.read(chatMessageKeyboardProvider.notifier).reactToSelected();
               return null;
@@ -129,6 +129,17 @@ class VoiceShortcuts extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Leaves printable message shortcuts to the focused editor.
+class _MessageShortcutAction<T extends Intent> extends CallbackAction<T> {
+  _MessageShortcutAction({required super.onInvoke});
+
+  @override
+  bool isEnabled(T intent) {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    return focusedContext?.findAncestorStateOfType<EditableTextState>() == null;
   }
 }
 

@@ -18,6 +18,7 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/chat/chat_message_list.dart';
 import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
@@ -211,6 +212,100 @@ void main() {
     expect(find.byKey(const Key('chat_room_mention_button')), findsNothing);
     expect(find.byIcon(Icons.alternate_email), findsNothing);
   });
+
+  testWidgets('blocked DM send keeps draft and shows neutral error', (
+    tester,
+  ) async {
+    var sendCalls = 0;
+    late _EmptyRoomController room;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/messages/send') {
+                sendCalls++;
+                return http.Response(
+                  jsonEncode({
+                    'error_code': 'permission_denied',
+                    'message': 'cannot send messages between blocked accounts',
+                  }),
+                  403,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          chatListControllerProvider.overrideWith(_BlockedDmChatListController.new),
+          chatListProvider.overrideWith(
+            (ref) async => const ChatListData(items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-abc',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'prof-test',
+                ),
+                dmPeerProfileId: 'peer-1',
+              ),
+            ]),
+          ),
+          chatRoomControllerProvider(
+            'chat-abc',
+          ).overrideWith((ref) {
+            room = _EmptyRoomController(ref, 'chat-abc');
+            return room;
+          }),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(ChatRoomPanel.inputKey),
+      'Draft stays here',
+    );
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pumpAndSettle();
+
+    final input = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.inputKey),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(sendCalls, 1);
+    expect(input.controller?.text, 'Draft stays here');
+    expect(
+      find.text('Messages are disabled between these accounts'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('cannot send messages between blocked accounts'),
+      findsNothing,
+    );
+    expect(room.state.messages, isEmpty);
+    expect(find.byType(ChatMessageBubbleTile), findsNothing);
+    expect(find.byKey(ChatRoomPanel.messagesKey), findsNothing);
+  });
 }
 
 class _EmptyRoomController extends ChatRoomController {
@@ -225,6 +320,27 @@ class _EmptyRoomController extends ChatRoomController {
 class _LoadingRoomController extends ChatRoomController {
   _LoadingRoomController(super.ref, super.chatId) : super() {
     state = const ChatRoomState(isLoading: true);
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _BlockedDmChatListController extends ChatListController {
+  _BlockedDmChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-abc',
+            type: 'CHAT_TYPE_DM',
+            creatorProfileId: 'prof-test',
+          ),
+          dmPeerProfileId: 'peer-1',
+        ),
+      ],
+    );
   }
 
   @override

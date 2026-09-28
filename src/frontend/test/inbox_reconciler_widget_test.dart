@@ -327,11 +327,61 @@ void main() {
     await tester.pumpWidget(_chatListApp(chats: chats, inbox: 'requests'));
     await tester.pumpAndSettle();
 
+    chats.enqueueAcceptedDmSnapshot('request-action');
     await tester.tap(find.text('Accept'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatListBody.tileKey('request-action')), findsNothing);
     expect(chats.acceptedChatIds, ['request-action']);
+  });
+
+  testWidgets('accepted request appears in recipient main conversations', (
+    tester,
+  ) async {
+    final chats = _MutationChatsFake();
+    chats.enqueue(
+      const InboxChatPageScript(
+        inbox: 'main',
+        cursor: null,
+        result: ChatsApiOk(ChatListData(items: [])),
+      ),
+    );
+    chats.enqueue(
+      InboxChatPageScript(
+        inbox: 'requests',
+        cursor: null,
+        result: ChatsApiOk(
+          ChatListData(
+            items: [inboxChatItem('accepted-dm', inbox: 'requests')],
+          ),
+        ),
+      ),
+    );
+    chats.enqueue(
+      const InboxChatPageScript(
+        inbox: 'archive',
+        cursor: null,
+        result: ChatsApiOk(ChatListData(items: [])),
+      ),
+    );
+    await tester.pumpWidget(_chatListApp(chats: chats, inbox: 'requests'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatListBody.tileKey('accepted-dm')), findsOneWidget);
+    chats.enqueueAcceptedDmSnapshot('accepted-dm');
+
+    expect(chats.pendingScripts, 5);
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListBody)),
+    );
+    container.read(chatInboxProvider.notifier).state = 'main';
+    await tester.pumpAndSettle();
+
+    expect(chats.acceptedChatIds, ['accepted-dm']);
+    expect(find.byKey(ChatListBody.tileKey('accepted-dm')), findsOneWidget);
+    expect(chats.unmatchedCalls, isEmpty);
   });
 
   testWidgets(
@@ -1015,6 +1065,36 @@ class _MutationChatsFake extends InboxReconcilerChatsFake {
   final acceptedChatIds = <String>[];
   final unarchivedChatIds = <String>[];
   Completer<ChatsApiResult<void>>? deferredAccept;
+
+  void enqueueAcceptedDmSnapshot(String chatId) {
+    // Legacy chat-list refresh and the authoritative three-scope snapshot
+    // both read main; requests is read by both as well.
+    for (var i = 0; i < 2; i++) {
+      enqueue(
+        InboxChatPageScript(
+          inbox: 'main',
+          cursor: null,
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem(chatId, inbox: 'main')]),
+          ),
+        ),
+      );
+      enqueue(
+        const InboxChatPageScript(
+          inbox: 'requests',
+          cursor: null,
+          result: ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    enqueue(
+      const InboxChatPageScript(
+        inbox: 'archive',
+        cursor: null,
+        result: ChatsApiOk(ChatListData(items: [])),
+      ),
+    );
+  }
 
   @override
   Future<ChatsApiResult<void>> acceptDmRequest({

@@ -15,6 +15,7 @@
 - Методы добавления: по username, телефону, QR-коду, из пространства, из истории ММ
 - Синхронизация телефонных контактов
 - Блокировка **аккаунта** (все профили заблокированной стороны): в gRPC — `BlockAccount` / `UnblockAccount`, в теле запроса — `blocked_account_id` (= `accounts.id`), блокирующий — из контекста аутентификации (см. [DATA_MODEL.md](../DATA_MODEL.md))
+- Для отображения списка блокировок `BlockAccount` может передать `blocked_profile_id` — именно открытый пользователем профиль. Social до записи проверяет через User, что этот профиль принадлежит `blocked_account_id`, и сохраняет полученные от User `display_name`, `username`, `discriminator` как снимок. `ListBlocked` возвращает снимок вместе с `blocked_account_id`; `UnblockAccount` использует только ID аккаунта. Social не выбирает другой профиль аккаунта. У старых блокировок без ID профиля поля снимка пусты.
 - Friends-of-friends (1 уровень глубины) для приватности
 
 ## API (gRPC)
@@ -77,6 +78,8 @@ blocks
 ├── id (UUID)
 ├── blocker_account_id (UUID, logical ref → auth_db.accounts.id) -- блокировка на уровне аккаунта
 ├── blocked_account_id (UUID, logical ref → auth_db.accounts.id)
+├── blocked_profile_id (UUID, nullable; профиль, который блокирующий видел)
+├── blocked_display_name / blocked_username / blocked_discriminator (nullable snapshot)
 ├── created_at
 └── UNIQUE(blocker_account_id, blocked_account_id)
 ```
@@ -99,6 +102,8 @@ blocks
 ├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
 ├── blocker_account_id UUID NOT NULL -- logical ref → auth_db.accounts.id
 ├── blocked_account_id UUID NOT NULL -- logical ref → auth_db.accounts.id
+├── blocked_profile_id UUID NULL -- added by migration 000003
+├── blocked_display_name, blocked_username, blocked_discriminator TEXT NULL -- added by migration 000003
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 

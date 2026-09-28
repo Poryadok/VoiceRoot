@@ -86,9 +86,39 @@ class FavoritesListData {
 }
 
 class BlockedEntry {
-  const BlockedEntry({required this.blockedAccountId});
+  const BlockedEntry({
+    required this.blockedAccountId,
+    this.blockedProfileId = '',
+    this.displayName = '',
+    this.username = '',
+    this.discriminator = '',
+  });
 
   final String blockedAccountId;
+  final String blockedProfileId;
+  final String displayName;
+  final String username;
+  final String discriminator;
+
+  static final RegExp _uuidPattern = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+
+  static bool _isUsableIdentity(String value) {
+    final candidate = value.trim();
+    return candidate.isNotEmpty && !_uuidPattern.hasMatch(candidate);
+  }
+
+  String get safeDisplayName => _isUsableIdentity(displayName)
+      ? displayName.trim()
+      : '';
+
+  String get handle => !_isUsableIdentity(username)
+      ? ''
+      : discriminator.isEmpty
+      ? '@${username.trim()}'
+      : '@${username.trim()}#$discriminator';
 }
 
 class BlockedListData {
@@ -226,11 +256,16 @@ class VoiceFriendsClient {
   Future<FriendsApiResult<void>> blockAccount({
     required String authorization,
     required String blockedAccountId,
+    String? blockedProfileId,
   }) async {
     final result = await _gateway.postEmpty(
       uri: _gateway.resolve('/api/v1/friends/blocks'),
       authorization: authorization,
-      jsonBody: {'blocked_account_id': blockedAccountId},
+      jsonBody: {
+        'blocked_account_id': blockedAccountId,
+        if (blockedProfileId != null && blockedProfileId.isNotEmpty)
+          'blocked_profile_id': blockedProfileId,
+      },
     );
     return _mapEmpty(result);
   }
@@ -385,6 +420,16 @@ class VoiceFriendsClient {
                 item['blocked_account_id'] as String? ??
                 item['blockedAccountId'] as String? ??
                 '',
+            blockedProfileId:
+                item['blocked_profile_id'] as String? ??
+                item['blockedProfileId'] as String? ??
+                '',
+            displayName:
+                item['display_name'] as String? ??
+                item['displayName'] as String? ??
+                '',
+            username: item['username'] as String? ?? '',
+            discriminator: item['discriminator'] as String? ?? '',
           ),
     ].where((b) => b.blockedAccountId.isNotEmpty).toList(growable: false);
     return BlockedListData(

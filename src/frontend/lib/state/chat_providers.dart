@@ -465,10 +465,15 @@ class ChatListController extends StateNotifier<ChatListState> {
         .read(voiceChatsClientProvider)
         .acceptDmRequest(authorization: auth, chatId: chatId);
     if (!mounted) return kChatActionStaleContext;
-    return switch (result) {
-      ChatsApiOk<void>() => _afterRequestAction(chatId, profileId, auth),
-      ChatsApiFailure(:final message) => message,
-    };
+    switch (result) {
+      case ChatsApiOk<void>():
+        final reconciler = _ref.read(inboxReconcilerProvider.notifier);
+        final error = _afterRequestAction(chatId, profileId, auth);
+        if (error == null) unawaited(reconciler.reconcile());
+        return error;
+      case ChatsApiFailure(:final message):
+        return message;
+    }
   }
 
   Future<String?> declineRequest(String chatId) async {

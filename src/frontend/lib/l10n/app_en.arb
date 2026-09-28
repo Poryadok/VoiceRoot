@@ -372,6 +372,7 @@
     }
   },
   "chatRoomLoadError": "Could not load messages",
+  "chatBlockedAccountsSendDisabled": "Messages are disabled between these accounts",
   "chatRoomPermissionDenied": "You do not have permission to view this chat",
   "chatRealtimeConnected": "Live",
   "chatRealtimeConnecting": "Connecting…",

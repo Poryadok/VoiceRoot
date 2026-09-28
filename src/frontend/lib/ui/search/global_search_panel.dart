@@ -38,6 +38,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   final Map<String, VoiceProfile> _profiles = {};
   bool _loading = false;
   String? _errorMessage;
+  int _queryGeneration = 0;
 
   @override
   void initState() {
@@ -53,9 +54,24 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     super.dispose();
   }
 
+  void _onQueryChanged(String query) {
+    _queryGeneration++;
+    _debouncer?.schedule(query);
+    setState(() {
+      _results = null;
+      _profiles.clear();
+      _loading = false;
+      _errorMessage = null;
+    });
+  }
+
   Future<void> _runSearch(String query) async {
-    final authorization =
-        ref.read(authControllerProvider).session?.authorizationHeader;
+    if (query != _controller.text || query.trim().isEmpty) return;
+    final generation = _queryGeneration;
+    final authorization = ref
+        .read(authControllerProvider)
+        .session
+        ?.authorizationHeader;
     if (authorization == null) return;
     setState(() => _loading = true);
     final client = ref.read(voiceSearchClientProvider);
@@ -63,7 +79,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
       authorization: authorization,
       query: query,
     );
-    if (!mounted) return;
+    if (!mounted || generation != _queryGeneration) return;
     if (result is SearchApiOk<GlobalSearchData>) {
       final profiles = <String, VoiceProfile>{};
       final usersClient = ref.read(voiceUsersClientProvider);
@@ -72,6 +88,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           authorization: authorization,
           profileId: profileId,
         );
+        if (!mounted || generation != _queryGeneration) return;
         if (profileResult is UsersApiOk<VoiceProfile>) {
           profiles[profileId] = profileResult.data;
         }
@@ -150,9 +167,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                 label: _profiles[profileId]?.displayName ?? profileId,
                 radius: 18,
               ),
-              title: Text(
-                _profiles[profileId]?.displayName ?? profileId,
-              ),
+              title: Text(_profiles[profileId]?.displayName ?? profileId),
             ),
         const SizedBox(height: 12),
         _SectionHeader(
@@ -186,8 +201,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                 final chatId = hit.chatId.isNotEmpty
                     ? hit.chatId
                     : (_results!.matchedChatIds.isNotEmpty
-                        ? _results!.matchedChatIds.first
-                        : null);
+                          ? _results!.matchedChatIds.first
+                          : null);
                 if (chatId != null) {
                   ref.read(selectedChatIdProvider.notifier).state = chatId;
                 }
@@ -216,7 +231,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
               prefixIcon: const Icon(Icons.search),
               isDense: true,
             ),
-            onChanged: _debouncer?.schedule,
+            onChanged: _onQueryChanged,
           ),
         ),
         if (_loading)
@@ -262,10 +277,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall,
-      ),
+      child: Text(title, style: Theme.of(context).textTheme.titleSmall),
     );
   }
 }
