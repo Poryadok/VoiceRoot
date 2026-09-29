@@ -5,9 +5,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/load-staging-domains.sh
 source "${ROOT}/scripts/staging/load-staging-domains.sh"
+# shellcheck source=scripts/staging/nats-bootstrap-policy.sh
+source "${ROOT}/scripts/staging/nats-bootstrap-policy.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+[ "${NS}" = voice-staging ] || { echo 'ERROR: staging NATS bootstrap is restricted to voice-staging' >&2; exit 1; }
 NATS_STORAGE_CLASS="${VOICE_NATS_STORAGE_CLASS:?VOICE_NATS_STORAGE_CLASS must be set from the reviewed staging preflight}"
 NATS_STORAGE_SIZE="${VOICE_NATS_STORAGE_SIZE:?VOICE_NATS_STORAGE_SIZE must be set from the reviewed staging capacity evidence}"
 MINIO_IMAGE="${VOICE_MINIO_IMAGE:-ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0}"
@@ -18,6 +21,7 @@ MINIO_STORAGE_SIZE="${VOICE_MINIO_STORAGE_SIZE:-20Gi}"
 clean_install_mode=false
 clean_install_bootstrap=false
 clean_install_mode_value=""
+nats_service_selector=""
 fresh_install="${VOICE_NATS_FRESH_INSTALL:-false}"
 VOICE_NATS_PRESERVE_SERVICE_SELECTOR=false
 case "${fresh_install}" in
@@ -58,6 +62,7 @@ if [ -n "${clean_install_state_json}" ] && [ "${clean_install_state_json}" != nu
       echo 'ERROR: cannot safely preserve the live voice-nats Service selector; refusing staging infra apply' >&2
       exit 1
     fi
+    nats_service_selector="$(kubectl get service voice-nats -n "${NS}" -o jsonpath='{.spec.selector.app}')"
     VOICE_NATS_PRESERVE_SERVICE_SELECTOR=true
   fi
 elif [ "${fresh_install}" = true ]; then
@@ -173,12 +178,22 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
   bash "${ROOT}/scripts/staging/filter-staging-infra-source-nats.sh" | \
   kubectl apply -f -
 
+run_nats_realtime_preflight() {
+  # Probe with the new Realtime image and its existing leaf credential before
+  # apply-app-manifests can scale Auth down or replace any application pod.
+  kubectl delete job voice-nats-realtime-permissions-preflight -n "${NS}" --ignore-not-found
+  render "${ROOT}/deploy/templates/nats-realtime-permissions-preflight.yaml" | \
+    sed "s|__NAMESPACE__|${NS}|g" | kubectl apply -f -
+  kubectl wait --for=condition=complete job/voice-nats-realtime-permissions-preflight -n "${NS}" --timeout=210s
+}
+
 run_nats_bootstrap_jobs() {
   for bootstrap in realtime notification search analytics-chat; do
     kubectl delete job "voice-nats-${bootstrap}-bootstrap" -n "${NS}" --ignore-not-found
     sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-${bootstrap}-bootstrap.yaml" | kubectl apply -f -
     kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap" -n "${NS}" --timeout=120s
   done
+  run_nats_realtime_preflight
 }
 
 # Promote only when both the manual reset marker and explicit clean-install
@@ -189,6 +204,11 @@ if [ "${clean_install_mode}" = true ]; then
   if [ "${clean_install_bootstrap}" = true ]; then
     run_nats_bootstrap_jobs
   fi
+elif nats_bootstrap_on_active_pvc "${clean_install_mode_value}" "${nats_service_selector}" "${fresh_install}"; then
+  # The already-accepted PVC hub is live. Refresh fixed durables before the app
+  # tier can bind new consumers; bootstrap validates existing state in place.
+  kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
+  run_nats_bootstrap_jobs
 elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
   NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
@@ -196,7 +216,8 @@ elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
   run_nats_bootstrap_jobs
 else
-  echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
+  echo 'ERROR: NATS bootstrap deferred: PVC hub is not active and accepted; refusing app rollout.' >&2
+  exit 1
 fi
 
 # Bucket Jobs have immutable pod templates. Replace only the known previous

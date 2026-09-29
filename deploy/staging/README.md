@@ -15,6 +15,8 @@ Auto **Staging deploy** uses CI **`head_sha`** and optional **`stack.lock.yaml`*
 
 **`DEPLOY_MODE`:** `full` (infra + migrations + ordered rollout) | `app-only` (migrations + app manifests + subset rollout) | `images-only` (selective image update only).
 
+An ordinary data-preserving `full` deploy reconciles the fixed NATS consumers on the accepted PVC-backed hub and checks the new Realtime image with its existing NATS leaf credential before any application rollout. Newly added consumer grants must first be activated in the externally managed bootstrap and Realtime credentials according to [`deploy/nats/acl-intent.yaml`](../nats/acl-intent.yaml); this deploy does not reissue credentials. If bootstrap or the bind-only Realtime permission check fails, the deploy stops before `apply-app-manifests.sh` can scale Auth. Keep `VOICE_NATS_FRESH_INSTALL=false` for this path; no NATS stream, PVC, or namespace reset is needed.
+
 If GHCR packages are private, create a `docker-registry` secret in `voice-staging` and set `VOICE_IMAGE_PULL_SECRET` when running `render-and-apply.sh` (patches all Deployments).
 
 Optional: `VOICE_APPLY_OBSERVABILITY=true` runs [`scripts/staging/apply-observability.sh`](../scripts/staging/apply-observability.sh) after app tier (not raw `kubectl apply -f deploy/observability/`). Standalone workflow: [`.github/workflows/staging-observability-deploy.yml`](../.github/workflows/staging-observability-deploy.yml).

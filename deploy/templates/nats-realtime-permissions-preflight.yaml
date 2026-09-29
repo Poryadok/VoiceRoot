@@ -1,0 +1,40 @@
+# Staging-only, bind-only check using the exact Realtime image and leaf route.
+# The service credential is mounted only into the leaf, never the app container.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: voice-nats-realtime-permissions-preflight
+  namespace: __NAMESPACE__
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app: voice-nats-realtime-permissions-preflight}
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: nats-leaf
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          restartPolicy: Always
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/realtime.creds, subPath: realtime.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      containers:
+        - name: realtime-preflight
+          image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
+          env:
+            - {name: REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT, value: "true"}
+            - {name: REALTIME_INSTANCE_ID, value: "realtime-1"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials, defaultMode: 0400, items: [{key: realtime.creds, path: realtime.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls, items: [{key: ca.crt, path: ca.crt}]}
