@@ -124,7 +124,7 @@ func (s *testGamePermitIssuer) Issue(_ context.Context, authority gameprotocol.D
 	return input + "." + base64.RawURLEncoding.EncodeToString(signature), nil
 }
 
-func (s *testGamePermitIssuer) Complete(_ context.Context, _, _ uuid.UUID, outcome string) error {
+func (s *testGamePermitIssuer) Complete(_ context.Context, _, _, _ uuid.UUID, outcome string) error {
 	if s.completeFailures > 0 {
 		s.completeFailures--
 		return errors.New("controlled completion outage")

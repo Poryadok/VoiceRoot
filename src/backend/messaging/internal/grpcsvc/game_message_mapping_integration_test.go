@@ -171,8 +171,8 @@ func (p *recordingGamePermitIssuer) Issue(ctx context.Context, authority gamepro
 	*p.events = append(*p.events, "permit")
 	return p.inner.Issue(ctx, authority, operation, body)
 }
-func (p *recordingGamePermitIssuer) Complete(ctx context.Context, permit, operation uuid.UUID, outcome string) error {
-	return p.inner.Complete(ctx, permit, operation, outcome)
+func (p *recordingGamePermitIssuer) Complete(ctx context.Context, permit, gisPermit, operation uuid.UUID, outcome string) error {
+	return p.inner.Complete(ctx, permit, gisPermit, operation, outcome)
 }
 
 type recordingGameChatGuard struct {

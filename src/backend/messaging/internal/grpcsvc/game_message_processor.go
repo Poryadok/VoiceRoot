@@ -31,7 +31,7 @@ type GameBindingAuthority interface {
 
 type GameMessageExecutionPermitIssuer interface {
 	Issue(context.Context, gameprotocol.DeviceAuthority, uuid.UUID, []byte) (string, error)
-	Complete(context.Context, uuid.UUID, uuid.UUID, string) error
+	Complete(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) error
 }
 
 // GameAppChatResourceAuthority is supplied by the T30/T31 resource-mapping
@@ -176,7 +176,7 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 		if err := p.Store.RecordAbortedGameMessagePermit(ctx, completion); err != nil {
 			// The permit is short lived; if the local outbox cannot be committed,
 			// try to abort remotely and let GIS expiry remain the final fence.
-			_ = p.Permits.Complete(ctx, permit.ID, permit.OperationID, "aborted")
+			_ = p.Permits.Complete(ctx, permit.ID, permit.GISPermitID, permit.OperationID, "aborted")
 			return
 		}
 		_ = p.dispatchGamePermitCompletion(ctx, completion)
@@ -244,7 +244,7 @@ func (p *VerifiedGameMessageProcessor) dispatchGamePermitCompletion(ctx context.
 	if p == nil || p.Store == nil || p.Permits == nil {
 		return errors.New("game execution permit completion dispatcher unavailable")
 	}
-	if err := p.Permits.Complete(ctx, completion.PermitID, completion.OperationID, completion.Outcome); err != nil {
+	if err := p.Permits.Complete(ctx, completion.PermitID, completion.GISPermitID, completion.OperationID, completion.Outcome); err != nil {
 		return err
 	}
 	return p.Store.MarkGameMessagePermitCompletion(ctx, completion)

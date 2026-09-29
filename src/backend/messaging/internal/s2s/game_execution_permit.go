@@ -117,12 +117,12 @@ func (c *GameMessageExecutionPermitClient) Issue(ctx context.Context, authority 
 	return record.PermitJWS, nil
 }
 
-func (c *GameMessageExecutionPermitClient) Complete(ctx context.Context, permitID, operationID uuid.UUID, outcome string) error {
-	if c == nil || c.endpoint == nil || c.client == nil || permitID == uuid.Nil || operationID == uuid.Nil || (outcome != "committed" && outcome != "aborted") {
+func (c *GameMessageExecutionPermitClient) Complete(ctx context.Context, permitJTI, gisPermitID, operationID uuid.UUID, outcome string) error {
+	if c == nil || c.endpoint == nil || c.client == nil || permitJTI == uuid.Nil || gisPermitID == uuid.Nil || operationID == uuid.Nil || (outcome != "committed" && outcome != "aborted") {
 		return errors.New("auth execution permit completion is unavailable or invalid")
 	}
 	target := *c.endpoint
-	target.Path = gameMessageExecutionPermitPath + "/" + permitID.String() + "/completion"
+	target.Path = gameMessageExecutionPermitPath + "/" + permitJTI.String() + "/completion"
 	body, err := json.Marshal(gameMessageExecutionPermitCompletionRequest{OperationID: operationID.String(), Outcome: outcome})
 	if err != nil {
 		return errors.New("auth execution permit completion could not be encoded")
@@ -146,7 +146,7 @@ func (c *GameMessageExecutionPermitClient) Complete(ctx context.Context, permitI
 		return errors.New("auth execution permit completion response headers are invalid")
 	}
 	var receipt gameMessageExecutionPermitCompletionResponse
-	if err := decodeStrictJSONBody(response.Body, 4*1024, &receipt, "permit_id", "operation_id", "outcome", "status"); err != nil || receipt.Status != "completed" || receipt.Outcome != outcome || !canonicalIDEqual(receipt.PermitID, permitID) || !canonicalIDEqual(receipt.OperationID, operationID) {
+	if err := decodeStrictJSONBody(response.Body, 4*1024, &receipt, "permit_id", "operation_id", "outcome", "status"); err != nil || receipt.Status != "completed" || receipt.Outcome != outcome || !canonicalIDEqual(receipt.PermitID, gisPermitID) || !canonicalIDEqual(receipt.OperationID, operationID) {
 		return errors.New("auth execution permit completion receipt is malformed or mismatched")
 	}
 	return nil
