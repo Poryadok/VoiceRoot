@@ -146,12 +146,12 @@ func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (
 	if err != nil {
 		return liveACLFail("leaf_sub_failed")
 	}
-	defer leafSub.Unsubscribe()
+	defer func() { _ = leafSub.Unsubscribe() }()
 	hubSub, err := hubRT.SubscribeSync(deliver)
 	if err != nil {
 		return liveACLFail("hub_sub_failed")
 	}
-	defer hubSub.Unsubscribe()
+	defer func() { _ = hubSub.Unsubscribe() }()
 	if err := leafRT.FlushTimeout(liveACLProofTimeout); err != nil {
 		return liveACLFail("leaf_sub_failed")
 	}
@@ -231,7 +231,7 @@ func requireDeniedAdjacentSUB(nc *nats.Conn, subject string) error {
 		}
 		return liveACLFail("adjacent_sub_unproven")
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 	if err := nc.FlushTimeout(liveACLProofTimeout); err != nil {
 		return liveACLFail("adjacent_sub_unproven")
 	}
@@ -257,7 +257,7 @@ func requireDeniedConsumerCREATE(nc *nats.Conn, subject string) error {
 	if err != nil {
 		return liveACLFail("consumer_create_unproven")
 	}
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 	if err := nc.FlushTimeout(liveACLProofTimeout); err != nil {
 		return liveACLFail("consumer_create_unproven")
 	}
