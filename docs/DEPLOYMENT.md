@@ -706,4 +706,6 @@ Rotation runbook:
 
 See [Object storage operations](OBJECT_STORAGE.md) for the self-hosted MinIO
 default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
-optional S3-provider migration procedure.
+optional S3-provider migration procedure. Its browser-facing signed URL contract
+uses the existing Gateway HTTPS host and bucket-specific MinIO ingress routes;
+the full staging rollout applies both the ingress and Web-origin CORS setting.

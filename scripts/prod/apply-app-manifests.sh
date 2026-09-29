@@ -9,11 +9,13 @@ source "${ROOT}/scripts/prod/load-prod-domains.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:?VOICE_IMAGE_REGISTRY required}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
+S3_SIGNING_ENDPOINT="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRESS_HOST:-${VOICE_GATEWAY_INGRESS_HOST}}}"
 
 render() {
   sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
       -e "s|IMAGE_PLACEHOLDER|${REGISTRY}/gateway:${TAG}|g" \
+      -e "s|__S3_SIGNING_ENDPOINT__|${S3_SIGNING_ENDPOINT}|g" \
       "$1"
 }
 

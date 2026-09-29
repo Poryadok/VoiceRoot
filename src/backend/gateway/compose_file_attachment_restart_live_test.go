@@ -167,6 +167,7 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	downloaded, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.True(t, resp.StatusCode >= 200 && resp.StatusCode < 300, "download status=%d", resp.StatusCode)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"), "MinIO must honor the signed response override so edge caches cannot outlive access")
 	sum := sha256.Sum256(downloaded)
 	require.Equal(t, state.SHA256, hex.EncodeToString(sum[:]), "download must retain original SHA-256")
 	require.Equal(t, state.Content, string(downloaded), "download must retain exact deterministic bytes")

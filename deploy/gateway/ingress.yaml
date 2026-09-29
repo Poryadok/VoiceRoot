@@ -21,6 +21,20 @@ spec:
     - host: __INGRESS_HOST__
       http:
         paths:
+          - path: /__FILE_BUCKET__
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-minio
+                port:
+                  number: 9000
+          - path: /__AVATAR_BUCKET__
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-minio
+                port:
+                  number: 9000
           - path: /
             pathType: Prefix
             backend:
@@ -45,6 +59,20 @@ spec:
     - host: __INGRESS_HOST__
       http:
         paths:
+          - path: /__FILE_BUCKET__
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-minio
+                port:
+                  number: 9000
+          - path: /__AVATAR_BUCKET__
+            pathType: Prefix
+            backend:
+              service:
+                name: voice-minio
+                port:
+                  number: 9000
           - path: /
             pathType: Prefix
             backend:
