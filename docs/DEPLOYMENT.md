@@ -595,9 +595,11 @@ The reviewed grants and issuer contract are in
 trusted Linux host from the exact release SHA; the issuer writes a protected
 four-Secret `secrets.json` restore List plus a separate operator/APP/SYS seed
 backup. The disposable fixture is not staging or production issuance material.
-Do not issue or store this material under the shared staging `pmd` UID;
+Do not issue or persist signing seeds under the shared staging `pmd` UID;
 perform issuance on an isolated trusted Linux runner and transport the restore
-List by secret-manager stdin, with signing seeds backed up separately.
+List by secret-manager stdin, with signing seeds backed up separately. The
+existing staging runner briefly decodes the uploaded restore List into a
+mode-0600 temporary file during the authorized rotation and deletes it on exit.
 
 Staging and production use an operator-signed APP account for JetStream and a
 distinct SYS account with no JetStream entitlement. The hub resolves both JWTs
@@ -631,7 +633,59 @@ account was observed with 566 consumers, exceeding the issued APP account's
 512-consumer limit. Inventory and classify legacy dynamic consumers and prove
 state-preserving migration of the eight existing stream messages before
 cutover. Do not silently increase the limit, discard consumer state, or start
-the JWT hub on empty storage.
+the JWT hub on empty storage during an ordinary migration.
+
+For the explicitly authorized staging-only **NATS root rotation**, the owner
+accepts an outage and loss of staging NATS streams, consumers, and messages.
+That maintenance operation must leave the namespace and all non-NATS resources
+and PVCs intact. Stop all 18 actual NATS leaf Deployments before changing the
+single PVC-backed hub; retain the previous NATS PVC and four Secrets for
+rollback, create a new NATS-only PVC and four immutable generation-named
+Secrets, and keep the existing `voice-nats` Service/DNS and TLS server name.
+Recreate all four fixed bootstrap Jobs and run the Realtime credential preflight
+against the new broker before restarting leaves in dependency order. Normal
+staging deploys must reject an in-progress rotation and use the active
+generation after cutover. This exception does not authorize a namespace reset
+or production rotation.
+
+Run this operation only after the rotation PR is merged and its exact `master`
+CI is green. In the protected local `.local/staging-nats` directory, use the
+already issued `staging-nats-secret.yaml` (the fixed-name JSON List) and
+`scripts/staging/prepare-nats-rotation-bundle.py GENERATION INPUT OUTPUT` to
+create the immutable, generation-named List. Keep both Lists and all three
+signing seeds in that protected, gitignored directory; never put a seed in a
+Kubernetes Secret or GitHub Environment. Choose a new token matching
+`rYYYYMMDD` followed by at most eight lowercase letters or digits. The
+packager refuses an existing output file and validates all four Secret names,
+namespace, keys and encodings before writing a mode-0600 file.
+
+Upload **only** the new versioned List as gzip+base64 to GitHub repository
+**Settings → Environments → staging → Environment secrets** under
+`STAGING_NATS_ROTATION_SECRETS_B64`. Base64 is transport encoding, not
+encryption; do not print the encoded bundle in a terminal or CI log. Keep the
+legacy `STAGING_NATS_SECRETS_B64` unchanged for rollback. Do not update app,
+Auth, Postgres, MinIO or another namespace's secrets. The trusted staging
+runner must be the existing `self-hosted`, `Linux`, `X64`, `voice-staging`
+runner. Its manual [Staging NATS root rotation](../.github/workflows/staging-nats-root-rotation.yml)
+workflow accepts `activate` plus that exact generation token, or `rollback`
+with an empty token. Its `voice-staging-maintenance` concurrency group prevents
+ordinary staging deploy from overlapping a rotation. The script derives the
+new PVC class/size from the current NATS PVC and the Realtime preflight image
+from the currently deployed Realtime workload; it does not touch another PVC.
+It writes the `rotating` marker before any Secret/PVC create, and only writes
+`active` after all four bootstrap Jobs, Realtime preflight and 18 leaf rollouts
+succeed. A failed run remains fail-closed at `rotating`; dispatch `rollback`
+to restore the retained generation before resuming ordinary deploys. Keep the
+old NATS PVC and Secrets until the replacement has passed NATS and HTTP smoke.
+
+After activation, verify the marker is `active` with the requested generation,
+`voice-nats` still selects `voice-nats-pvc-candidate`, the candidate hub mounts
+the new PVC/operator/TLS Secrets, all 18 leaves mount new service credentials
+and TLS CA, the four generation-annotated bootstrap Jobs and Realtime preflight
+are complete, and a staging smoke passes. The next ordinary `full`, `app-only`
+or `images-only` deploy reads that marker and must keep the active Secret/PVC
+references. A manual `rollback` keeps both generations' assets so a later
+attempt remains reviewable; it never deletes a PVC or Secret.
 
 When the owner explicitly authorizes a destructive staging reset, the manual
 `Staging deploy` workflow supports a separate clean-install path. It verifies

@@ -97,12 +97,16 @@ permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: voice-staging-maintenance
+  cancel-in-progress: false
+
 jobs:
   deploy:
     if: github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true)
     # Home staging: set STAGING_RUNNER_LABELS=["self-hosted","Linux","X64","voice-staging"]
     # and install the runner on the k3s node (scripts/staging/setup-github-runner.sh).
-    runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
+    runs-on: [self-hosted, Linux, X64, voice-staging]
     environment: staging
     steps:
       - name: Download exact staging source archive
@@ -239,6 +243,20 @@ jobs:
           STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
         run: bash scripts/staging/configure-kubectl-ci.sh
 
+      - name: Reject deployment during NATS root rotation
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+        run: bash scripts/staging/nats-generation.sh --check
+
+      - name: Verify NATS ACL proof before staging mutation
+        if: inputs.deploy_mode == 'full'
+        env:
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+        run: |
+          set -euo pipefail
+          expected="$(sha256sum deploy/nats/acl-intent.yaml | cut -d' ' -f1)"
+          test -n "${VOICE_NATS_ACL_PROOF_SHA:-}" && test "${VOICE_NATS_ACL_PROOF_SHA}" = "$expected"
+
       - name: Verify staging images in GHCR
         id: verify_image
         run: |
@@ -285,6 +303,12 @@ jobs:
           VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
           STAGING_NATS_SECRETS_B64: ${{ secrets.STAGING_NATS_SECRETS_B64 }}
         run: bash scripts/staging/restore-nats-secrets.sh
+
+      - name: Restore active NATS generation secrets
+        env:
+          VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+        run: bash scripts/staging/restore-nats-generation.sh
 
       - name: Ensure User search cursor key
         env:

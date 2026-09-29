@@ -50,12 +50,12 @@ check_bundle() {
   [[ "$(wc -c <"$bundle")" -le 1048576 ]] || fail 'bundle is too large'
   jq -e --arg gen "$generation" '
     def encoded: type == "string" and length > 0 and test("^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$");
-    def exact($base; $keys):
+    def exact($base; $wanted):
       .apiVersion == "v1" and .kind == "Secret" and .type == "Opaque" and
       .immutable == true and (keys | sort) == ["apiVersion","data","immutable","kind","metadata","type"] and
       (.metadata | keys | sort) == ["name","namespace"] and
       .metadata.name == ($base + "-" + $gen) and .metadata.namespace == "voice-staging" and
-      (.data | type == "object" and (keys | sort) == ($keys | sort) and all(.[]; encoded));
+      (.data | type == "object" and (keys | sort) == ($wanted | sort) and all(.[]; encoded));
     .apiVersion == "v1" and .kind == "List" and (keys | sort) == ["apiVersion","items","kind"] and
     (.items | type == "array" and length == 4) and
     ([.items[].metadata.name] | sort) == (["voice-nats-operator","voice-nats-hub-tls","voice-nats-bootstrap-credentials","voice-nats-service-credentials"] | map(. + "-" + $gen) | sort) and
@@ -158,6 +158,15 @@ check_workloads() {
   done
 }
 
+prepare_realtime_image() {
+  local realtime image
+  realtime="$(read_required deployment voice-realtime)"
+  image="$(jq -er '[.spec.template.spec.containers[]? | select(.name == "realtime") | .image] | if length == 1 then .[0] else empty end' <<<"$realtime")" || fail 'cannot resolve deployed Realtime image'
+  [[ "$image" =~ ^ghcr\.io/[a-z0-9._/-]+/realtime:[a-f0-9]{40}$ ]] || fail 'deployed Realtime image is not an immutable GHCR SHA tag'
+  ROTATION_IMAGE_REGISTRY="${image%/realtime:*}"
+  ROTATION_IMAGE_TAG="${image##*:}"
+}
+
 marker_state() {
   local marker
   if marker="$(read_optional configmap voice-nats-generation)"; then
@@ -206,11 +215,13 @@ EOF
 }
 
 patch_hub() {
-  local generation="$1" json patch
+  local generation="$1" json patch rv
   json="$(read_required deployment voice-nats-pvc-candidate)"
-  patch="$(jq -cn --argjson pod "$json" --arg pvc "$(ref voice-nats-jsdata "$generation")" --arg op "$(ref voice-nats-operator "$generation")" --arg tls "$(ref voice-nats-hub-tls "$generation")" --arg gen "$generation" '
-    [ {op:"add",path:"/spec/strategy",value:{type:"Recreate"}},
-      {op:"add",path:"/spec/template/metadata/annotations",value: (($pod.spec.template.metadata.annotations // {}) + {"voice.dev/nats-generation":$gen})} ] +
+  rv="$(jq -er '.metadata.resourceVersion | select(type == "string" and test("^[0-9]+$"))' <<<"$json")" || fail 'candidate hub has no resourceVersion'
+  patch="$(jq -cn --argjson pod "$json" --arg rv "$rv" --arg pvc "$(ref voice-nats-jsdata "$generation")" --arg op "$(ref voice-nats-operator "$generation")" --arg tls "$(ref voice-nats-hub-tls "$generation")" --arg gen "$generation" '
+    [ {op:"test",path:"/metadata/resourceVersion",value:$rv},
+      {op:"add",path:"/spec/strategy",value:{type:"Recreate"}},
+      {op:"add",path:"/spec/template/metadata/annotations",value: (($pod.spec.template.metadata.annotations // {}) + {"voice.io/nats-generation":$gen})} ] +
     [ $pod.spec.template.spec.volumes | to_entries[] | select(.value.name == "jsdata" or .value.name == "nats-resolver-input" or .value.name == "nats-operator-jwt" or .value.name == "nats-hub-tls") |
       {op:"replace",path:("/spec/template/spec/volumes/" + (.key|tostring) + (if .value.name == "jsdata" then "/persistentVolumeClaim/claimName" else "/secret/secretName" end)),
        value:(if .value.name == "jsdata" then $pvc elif .value.name == "nats-hub-tls" then $tls else $op end)} ]
@@ -219,11 +230,13 @@ patch_hub() {
 }
 
 patch_leaf() {
-  local service="$1" generation="$2" json patch
+  local service="$1" generation="$2" json patch rv
   json="$(read_required deployment "voice-${service}")"
-  patch="$(jq -cn --argjson pod "$json" --arg creds "$(ref voice-nats-service-credentials "$generation")" --arg tls "$(ref voice-nats-hub-tls "$generation")" --arg gen "$generation" '
-    [ {op:"add",path:"/spec/strategy",value:{type:"Recreate"}},
-      {op:"add",path:"/spec/template/metadata/annotations",value:(($pod.spec.template.metadata.annotations // {}) + {"voice.dev/nats-generation":$gen})} ] +
+  rv="$(jq -er '.metadata.resourceVersion | select(type == "string" and test("^[0-9]+$"))' <<<"$json")" || fail "${service} leaf has no resourceVersion"
+  patch="$(jq -cn --argjson pod "$json" --arg rv "$rv" --arg creds "$(ref voice-nats-service-credentials "$generation")" --arg tls "$(ref voice-nats-hub-tls "$generation")" --arg gen "$generation" '
+    [ {op:"test",path:"/metadata/resourceVersion",value:$rv},
+      {op:"add",path:"/spec/strategy",value:{type:"Recreate"}},
+      {op:"add",path:"/spec/template/metadata/annotations",value:(($pod.spec.template.metadata.annotations // {}) + {"voice.io/nats-generation":$gen})} ] +
     [ $pod.spec.template.spec.volumes | to_entries[] | select(.value.name == "nats-service-creds" or .value.name == "nats-hub-tls") |
       {op:"replace",path:("/spec/template/spec/volumes/" + (.key|tostring) + "/secret/secretName"),value:(if .value.name == "nats-service-creds" then $creds else $tls end)} ]
   ')" || fail "cannot prepare leaf patch for ${service}"
@@ -267,7 +280,7 @@ start_leaves() {
 }
 
 set_marker() {
-  local phase="$1" generation="$2" previous="$3"
+  local phase="$1" generation="$2" previous="$3" patch
   if [[ "$MARKER_PHASE" == absent ]]; then
     cat <<EOF | kubectl create -f - >/dev/null
 apiVersion: v1
@@ -280,15 +293,26 @@ data:
   generation: ${generation}
   previousGeneration: ${previous}
 EOF
-    MARKER_PHASE="$phase"
   else
-    kubectl patch configmap voice-nats-generation -n "$NS" --type=merge \
-      -p "$(jq -cn --arg phase "$phase" --arg gen "$generation" --arg prev "$previous" '{data:{phase:$phase,generation:$gen,previousGeneration:$prev}}')" >/dev/null
+    # Compare-and-swap the state observed by this process. A concurrent
+    # operator cannot silently overwrite an activation or rollback marker.
+    patch="$(jq -cn --arg oldPhase "$MARKER_PHASE" --arg oldGen "$MARKER_GENERATION" --arg oldPrev "$MARKER_PREVIOUS" --arg phase "$phase" --arg gen "$generation" --arg prev "$previous" '
+      [{op:"test",path:"/data/phase",value:$oldPhase},
+       {op:"test",path:"/data/generation",value:$oldGen},
+       {op:"test",path:"/data/previousGeneration",value:$oldPrev},
+       {op:"replace",path:"/data/phase",value:$phase},
+       {op:"replace",path:"/data/generation",value:$gen},
+       {op:"replace",path:"/data/previousGeneration",value:$prev}]
+    ')" || fail 'cannot prepare generation marker transition'
+    kubectl patch configmap voice-nats-generation -n "$NS" --type=json -p "$patch" >/dev/null || fail 'generation marker changed concurrently'
   fi
+  MARKER_PHASE="$phase"
+  MARKER_GENERATION="$generation"
+  MARKER_PREVIOUS="$previous"
 }
 
 render_job() {
-  local file="$1" generation="$2" registry="${VOICE_IMAGE_REGISTRY:-}" tag="${VOICE_IMAGE_TAG:-}"
+  local file="$1" generation="$2" registry="${ROTATION_IMAGE_REGISTRY:-}" tag="${ROTATION_IMAGE_TAG:-}"
   [[ "$registry" =~ ^[A-Za-z0-9./:_-]+$ && "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || fail 'VOICE_IMAGE_REGISTRY and VOICE_IMAGE_TAG are required and must be safe template tokens'
   sed -e "s|__NAMESPACE__|${NS}|g" \
       -e "s|__IMAGE_REGISTRY__|${registry}|g" -e "s|__IMAGE_TAG__|${tag}|g" \
@@ -297,7 +321,7 @@ render_job() {
       -e "s|voice-nats-hub-tls|$(ref voice-nats-hub-tls "$generation")|g" "$file" |
     awk -v generation="$generation" '
       /^kind: / {job=($2 == "Job")}
-      job && /^  namespace: / {print; print "  annotations:"; print "    voice.dev/nats-generation: " generation; job=0; next}
+      job && /^  namespace: / {print; print "  annotations:"; print "    voice.io/nats-generation: " generation; job=0; next}
       {print}
     '
 }
@@ -331,12 +355,16 @@ main() {
       check_no_second_hub
       check_secret_set "$source" source
       check_secret_set "$target" target
-      class="${VOICE_NATS_STORAGE_CLASS:-}" size="${VOICE_NATS_STORAGE_SIZE:-}"
-      [[ "$class" =~ ^[a-z0-9][a-z0-9.-]*$ && "$size" =~ ^[1-9][0-9]*(Mi|Gi|Ti)$ ]] || fail 'approved NATS storage class and size are required'
       pvc="$(read_required pvc "$(ref voice-nats-jsdata "$source")")"
+      class="$(jq -er '.spec.storageClassName' <<<"$pvc")" || fail 'source PVC has no storage class'
+      size="$(jq -er '.spec.resources.requests.storage' <<<"$pvc")" || fail 'source PVC has no storage size'
+      [[ "$class" =~ ^[a-z0-9][a-z0-9.-]*$ && "$size" =~ ^[1-9][0-9]*(Mi|Gi|Ti)$ ]] || fail 'source PVC storage class or size is unsafe'
+      [[ -z "${VOICE_NATS_STORAGE_CLASS:-}" || "$class" == "$VOICE_NATS_STORAGE_CLASS" ]] || fail 'source PVC class differs from approved input'
+      [[ -z "${VOICE_NATS_STORAGE_SIZE:-}" || "$size" == "$VOICE_NATS_STORAGE_SIZE" ]] || fail 'source PVC size differs from approved input'
       check_source_pvc "$pvc" "$(ref voice-nats-jsdata "$source")" "$class" "$size"
       if read_optional pvc "$(ref voice-nats-jsdata "$target")" >/dev/null; then fail 'target PVC already exists'; fi
       check_workloads "$source"
+      prepare_realtime_image
       kubectl create -n "$NS" --dry-run=server -o name -f "$bundle" >/dev/null 2>&1 || fail 'target Secrets rejected by API dry-run'
       prepare_pvc "$target" "$class" "$size" | kubectl create -n "$NS" --dry-run=server -o name -f - >/dev/null 2>&1 || fail 'target PVC rejected by API dry-run'
       set_marker rotating "$target" "$source"
@@ -363,15 +391,21 @@ main() {
       check_selector
       check_no_second_hub
       check_secret_set "$source" source
-      read_required pvc "$(ref voice-nats-jsdata "$source")" >/dev/null
-      check_secret_set "$target" source
-      read_required pvc "$(ref voice-nats-jsdata "$target")" >/dev/null
+      pvc="$(read_required pvc "$(ref voice-nats-jsdata "$source")")"
+      class="$(jq -er '.spec.storageClassName' <<<"$pvc")" || fail 'retained PVC has no storage class'
+      size="$(jq -er '.spec.resources.requests.storage' <<<"$pvc")" || fail 'retained PVC has no storage size'
+      [[ "$class" =~ ^[a-z0-9][a-z0-9.-]*$ && "$size" =~ ^[1-9][0-9]*(Mi|Gi|Ti)$ ]] || fail 'retained PVC storage contract is unsafe'
+      check_source_pvc "$pvc" "$(ref voice-nats-jsdata "$source")" "$class" "$size"
+      # A failed activation may stop immediately after writing the rotating
+      # marker, before either target resource exists. Retained source assets
+      # alone are sufficient to restore the previous generation.
       # The active marker proves the target is fully converged. Interrupted
       # activation may have mixed refs, so only the fixed workload identities
       # are required before forcing every reference back to the retained set.
       for old in voice-nats-pvc-candidate "${LEAVES[@]/#/voice-}"; do
         read_required deployment "$old" >/dev/null
       done
+      prepare_realtime_image
       set_marker rotating "$target" "$source"
       stop_leaves
       stop_hub

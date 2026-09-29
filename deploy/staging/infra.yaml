@@ -258,6 +258,8 @@ metadata:
   namespace: voice-staging
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels: {app: voice-nats-pvc-candidate}
   template:

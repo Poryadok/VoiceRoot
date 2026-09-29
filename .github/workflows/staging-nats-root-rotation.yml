@@ -178,12 +178,14 @@ jobs:
           cp -a -- "$tmp/source/." "$workspace/"
           echo 'STAGING_SOURCE_ARCHIVE=PASS'
 
-      - name: Verify source commit and namespace
+      - name: Verify source context and namespace
         shell: bash
         run: |
           set +x
           set -euo pipefail
-          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" || "$GITHUB_REF" != refs/heads/master ]]; then
+          # The preceding archive step validates the commit's exact Git tree
+          # and removes its temporary .git directory before copying sources.
+          if [[ "$GITHUB_REF" != refs/heads/master || ! -f scripts/staging/rotate-nats-root.sh ]]; then
             echo 'NATS_ROTATION=FAIL_SOURCE_SHA'
             exit 1
           fi
