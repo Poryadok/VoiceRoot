@@ -1,5 +1,10 @@
 # Disposable hosted Linux acceptance fixture for Auth -> GIS -> Messaging.
 services:
+  # GitHub-hosted runners cannot pull the base Compose Quay image anonymously.
+  # Keep the same upstream release while using its public Docker Hub name.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+
   auth:
     environment:
       AUTH_SDK_AUTHORIZATION_ENABLED: "true"
