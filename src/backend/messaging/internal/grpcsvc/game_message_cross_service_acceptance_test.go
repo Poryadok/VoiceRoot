@@ -775,9 +775,7 @@ func t16OwnerAccessToken(t *testing.T, fixture t16AcceptFixture) string {
 	keyPath := requiredT16Env(t, "T16_AUTH_JWT_PRIVATE_KEY_FILE")
 	keyPEM, err := os.ReadFile(keyPath)
 	require.NoError(t, err)
-	block, _ := pem.Decode(keyPEM)
-	require.NotNil(t, block)
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	key, err := parseT16RSAKeyPEM(keyPEM)
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	header, err := json.Marshal(map[string]string{"alg": "RS256", "kid": "local-key", "typ": "JWT"})
@@ -792,6 +790,53 @@ func t16OwnerAccessToken(t *testing.T, fixture t16AcceptFixture) string {
 	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	require.NoError(t, err)
 	return input + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func parseT16RSAKeyPEM(keyPEM []byte) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(keyPEM)
+	if block == nil {
+		return nil, errors.New("missing PEM private key")
+	}
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		return x509.ParsePKCS1PrivateKey(block.Bytes)
+	case "PRIVATE KEY":
+		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		key, ok := parsed.(*rsa.PrivateKey)
+		if !ok {
+			return nil, errors.New("PEM private key is not RSA")
+		}
+		return key, nil
+	default:
+		return nil, errors.New("unsupported PEM private key type")
+	}
+}
+
+func TestT16RSAKeyPEMFormats(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	pkcs1 := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	parsedPKCS1, err := parseT16RSAKeyPEM(pkcs1)
+	require.NoError(t, err)
+	require.Equal(t, key.N, parsedPKCS1.N)
+
+	pkcs8Bytes, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	pkcs8 := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8Bytes})
+	parsedPKCS8, err := parseT16RSAKeyPEM(pkcs8)
+	require.NoError(t, err)
+	require.Equal(t, key.N, parsedPKCS8.N)
+
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	ecdsaPKCS8Bytes, err := x509.MarshalPKCS8PrivateKey(ecdsaKey)
+	require.NoError(t, err)
+	ecdsaPKCS8 := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecdsaPKCS8Bytes})
+	_, err = parseT16RSAKeyPEM(ecdsaPKCS8)
+	require.Error(t, err)
 }
 
 func seedT16ResourceMapping(ctx context.Context, gisDB *pgxpool.Pool, fixture t16AcceptFixture) error {
