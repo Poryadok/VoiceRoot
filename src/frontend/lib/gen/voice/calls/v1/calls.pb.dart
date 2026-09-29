@@ -106,6 +106,7 @@ class ProvisionGameSessionRoomRequest extends $pb.GeneratedMessage {
     GameSessionResourceRef? resource,
     $core.String? chatId,
     $core.String? chatCreationOperationId,
+    $core.String? sessionId,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -115,6 +116,7 @@ class ProvisionGameSessionRoomRequest extends $pb.GeneratedMessage {
     if (chatId != null) result.chatId = chatId;
     if (chatCreationOperationId != null)
       result.chatCreationOperationId = chatCreationOperationId;
+    if (sessionId != null) result.sessionId = sessionId;
     return result;
   }
 
@@ -138,6 +140,7 @@ class ProvisionGameSessionRoomRequest extends $pb.GeneratedMessage {
         subBuilder: GameSessionResourceRef.create)
     ..aOS(5, _omitFieldNames ? '' : 'chatId')
     ..aOS(6, _omitFieldNames ? '' : 'chatCreationOperationId')
+    ..aOS(7, _omitFieldNames ? '' : 'sessionId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -219,6 +222,16 @@ class ProvisionGameSessionRoomRequest extends $pb.GeneratedMessage {
   $core.bool hasChatCreationOperationId() => $_has(5);
   @$pb.TagNumber(6)
   void clearChatCreationOperationId() => $_clearField(6);
+
+  /// GIS session identity used by Role grants and Voice admission checks.
+  @$pb.TagNumber(7)
+  $core.String get sessionId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set sessionId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSessionId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSessionId() => $_clearField(7);
 }
 
 class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
@@ -234,6 +247,7 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
     $core.String? voiceCreationReceiptId,
     $core.List<$core.int>? requestHash,
     $1.Timestamp? createdAt,
+    $core.String? sessionId,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -249,6 +263,7 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
       result.voiceCreationReceiptId = voiceCreationReceiptId;
     if (requestHash != null) result.requestHash = requestHash;
     if (createdAt != null) result.createdAt = createdAt;
+    if (sessionId != null) result.sessionId = sessionId;
     return result;
   }
 
@@ -280,6 +295,7 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
         10, _omitFieldNames ? '' : 'requestHash', $pb.PbFieldType.OY)
     ..aOM<$1.Timestamp>(11, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $1.Timestamp.create)
+    ..aOS(12, _omitFieldNames ? '' : 'sessionId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -407,6 +423,379 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
   void clearCreatedAt() => $_clearField(11);
   @$pb.TagNumber(11)
   $1.Timestamp ensureCreatedAt() => $_ensure(10);
+
+  @$pb.TagNumber(12)
+  $core.String get sessionId => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set sessionId($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasSessionId() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearSessionId() => $_clearField(12);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=deterministic_protobuf_sha256
+class CloseGameSessionRoomRequest extends $pb.GeneratedMessage {
+  factory CloseGameSessionRoomRequest({
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    GameSessionResourceRef? resource,
+    $core.String? chatId,
+    $core.String? chatCreationOperationId,
+    $core.String? sessionId,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (resource != null) result.resource = resource;
+    if (chatId != null) result.chatId = chatId;
+    if (chatCreationOperationId != null)
+      result.chatCreationOperationId = chatCreationOperationId;
+    if (sessionId != null) result.sessionId = sessionId;
+    return result;
+  }
+
+  CloseGameSessionRoomRequest._();
+
+  factory CloseGameSessionRoomRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CloseGameSessionRoomRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CloseGameSessionRoomRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(3, _omitFieldNames ? '' : 'environmentId')
+    ..aOM<GameSessionResourceRef>(4, _omitFieldNames ? '' : 'resource',
+        subBuilder: GameSessionResourceRef.create)
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'chatCreationOperationId')
+    ..aOS(7, _omitFieldNames ? '' : 'sessionId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CloseGameSessionRoomRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CloseGameSessionRoomRequest copyWith(
+          void Function(CloseGameSessionRoomRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CloseGameSessionRoomRequest))
+          as CloseGameSessionRoomRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CloseGameSessionRoomRequest create() =>
+      CloseGameSessionRoomRequest._();
+  @$core.override
+  CloseGameSessionRoomRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CloseGameSessionRoomRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CloseGameSessionRoomRequest>(create);
+  static CloseGameSessionRoomRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get applicationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set applicationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplicationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplicationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get environmentId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set environmentId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEnvironmentId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEnvironmentId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  GameSessionResourceRef get resource => $_getN(3);
+  @$pb.TagNumber(4)
+  set resource(GameSessionResourceRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasResource() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearResource() => $_clearField(4);
+  @$pb.TagNumber(4)
+  GameSessionResourceRef ensureResource() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  /// Chat create receipt identity is its original operation_id.
+  @$pb.TagNumber(6)
+  $core.String get chatCreationOperationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set chatCreationOperationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatCreationOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatCreationOperationId() => $_clearField(6);
+
+  /// Must equal the immutable GIS session identity stored at provisioning.
+  @$pb.TagNumber(7)
+  $core.String get sessionId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set sessionId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSessionId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSessionId() => $_clearField(7);
+}
+
+class CloseGameSessionRoomResponse extends $pb.GeneratedMessage {
+  factory CloseGameSessionRoomResponse({
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    GameSessionResourceRef? resource,
+    $core.String? chatId,
+    $core.String? chatCreationOperationId,
+    $core.String? sessionId,
+    $core.String? roomId,
+    $core.String? status,
+    $core.String? closeReceiptId,
+    $core.List<$core.int>? requestHash,
+    $1.Timestamp? closingAt,
+    $1.Timestamp? mediaFencedAt,
+    $1.Timestamp? closedAt,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (resource != null) result.resource = resource;
+    if (chatId != null) result.chatId = chatId;
+    if (chatCreationOperationId != null)
+      result.chatCreationOperationId = chatCreationOperationId;
+    if (sessionId != null) result.sessionId = sessionId;
+    if (roomId != null) result.roomId = roomId;
+    if (status != null) result.status = status;
+    if (closeReceiptId != null) result.closeReceiptId = closeReceiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    if (closingAt != null) result.closingAt = closingAt;
+    if (mediaFencedAt != null) result.mediaFencedAt = mediaFencedAt;
+    if (closedAt != null) result.closedAt = closedAt;
+    return result;
+  }
+
+  CloseGameSessionRoomResponse._();
+
+  factory CloseGameSessionRoomResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CloseGameSessionRoomResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CloseGameSessionRoomResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(3, _omitFieldNames ? '' : 'environmentId')
+    ..aOM<GameSessionResourceRef>(4, _omitFieldNames ? '' : 'resource',
+        subBuilder: GameSessionResourceRef.create)
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'chatCreationOperationId')
+    ..aOS(7, _omitFieldNames ? '' : 'sessionId')
+    ..aOS(8, _omitFieldNames ? '' : 'roomId')
+    ..aOS(9, _omitFieldNames ? '' : 'status')
+    ..aOS(10, _omitFieldNames ? '' : 'closeReceiptId')
+    ..a<$core.List<$core.int>>(
+        11, _omitFieldNames ? '' : 'requestHash', $pb.PbFieldType.OY)
+    ..aOM<$1.Timestamp>(12, _omitFieldNames ? '' : 'closingAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(13, _omitFieldNames ? '' : 'mediaFencedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'closedAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CloseGameSessionRoomResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CloseGameSessionRoomResponse copyWith(
+          void Function(CloseGameSessionRoomResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CloseGameSessionRoomResponse))
+          as CloseGameSessionRoomResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CloseGameSessionRoomResponse create() =>
+      CloseGameSessionRoomResponse._();
+  @$core.override
+  CloseGameSessionRoomResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CloseGameSessionRoomResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CloseGameSessionRoomResponse>(create);
+  static CloseGameSessionRoomResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get applicationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set applicationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplicationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplicationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get environmentId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set environmentId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEnvironmentId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEnvironmentId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  GameSessionResourceRef get resource => $_getN(3);
+  @$pb.TagNumber(4)
+  set resource(GameSessionResourceRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasResource() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearResource() => $_clearField(4);
+  @$pb.TagNumber(4)
+  GameSessionResourceRef ensureResource() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get chatCreationOperationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set chatCreationOperationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatCreationOperationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatCreationOperationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get sessionId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set sessionId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSessionId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSessionId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get roomId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set roomId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasRoomId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearRoomId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get status => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set status($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasStatus() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearStatus() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.String get closeReceiptId => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set closeReceiptId($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasCloseReceiptId() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearCloseReceiptId() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.List<$core.int> get requestHash => $_getN(10);
+  @$pb.TagNumber(11)
+  set requestHash($core.List<$core.int> value) => $_setBytes(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasRequestHash() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearRequestHash() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $1.Timestamp get closingAt => $_getN(11);
+  @$pb.TagNumber(12)
+  set closingAt($1.Timestamp value) => $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasClosingAt() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearClosingAt() => $_clearField(12);
+  @$pb.TagNumber(12)
+  $1.Timestamp ensureClosingAt() => $_ensure(11);
+
+  @$pb.TagNumber(13)
+  $1.Timestamp get mediaFencedAt => $_getN(12);
+  @$pb.TagNumber(13)
+  set mediaFencedAt($1.Timestamp value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasMediaFencedAt() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearMediaFencedAt() => $_clearField(13);
+  @$pb.TagNumber(13)
+  $1.Timestamp ensureMediaFencedAt() => $_ensure(12);
+
+  @$pb.TagNumber(14)
+  $1.Timestamp get closedAt => $_getN(13);
+  @$pb.TagNumber(14)
+  set closedAt($1.Timestamp value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasClosedAt() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearClosedAt() => $_clearField(14);
+  @$pb.TagNumber(14)
+  $1.Timestamp ensureClosedAt() => $_ensure(13);
 }
 
 class StartCallRequest extends $pb.GeneratedMessage {

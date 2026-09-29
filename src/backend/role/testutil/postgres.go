@@ -41,6 +41,9 @@ func ApplyRoleMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		"000008_member_thread_permissions.up.sql",
 		"000009_ownership_transfer_receipts.up.sql",
 		"000010_ownership_v2.up.sql",
+		"000011_voice_policy_epoch.up.sql",
+		"000012_space_retirement.up.sql",
+		"000013_game_session_grants.up.sql",
 	} {
 		sqlBytes, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)

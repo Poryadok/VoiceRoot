@@ -30,6 +30,7 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		r.Header.Del("Authorization")
 	}
 	publicRoute := isPublicRESTRoute(r.Method, r.URL.Path) ||
+		isGameIntegrationSessionCredentialRoute(r.Method, r.URL.Path) ||
 		(sdkAuthorizationRoute && sdkPolicy.principal == sdkAuthorizationCodeProof)
 	botRoute := isBotTokenRESTRoute(r.URL.Path)
 	if sdkAuthorizationRoute {
@@ -123,7 +124,35 @@ func restNamespace(path string) string {
 		return ""
 	}
 	namespace, _, _ := strings.Cut(rest, "/")
+	switch namespace {
+	case "sessions", "operations", "session-events":
+		return "game-integrations"
+	}
 	return namespace
+}
+
+// isGameIntegrationSessionCredentialRoute exempts only GIS routes authenticated
+// by the app/environment-scoped game service credential. The original path is
+// kept intact when the request is proxied to the game-integrations upstream.
+func isGameIntegrationSessionCredentialRoute(method, path string) bool {
+	segments := strings.Split(path, "/")
+	if len(segments) < 4 || segments[1] != "api" || segments[2] != "v1" {
+		return false
+	}
+	switch {
+	case method == http.MethodPost && len(segments) == 4 && segments[3] == "sessions":
+		return true
+	case method == http.MethodPost && len(segments) == 6 && segments[3] == "sessions" && segments[4] != "" && segments[5] == "close":
+		return true
+	case method == http.MethodGet && len(segments) == 5 && segments[3] == "operations" && segments[4] != "":
+		return true
+	case method == http.MethodPost && len(segments) == 5 && segments[3] == "session-events" && segments[4] == "claim":
+		return true
+	case method == http.MethodPost && len(segments) == 6 && segments[3] == "session-events" && segments[4] != "" && segments[5] == "ack":
+		return true
+	default:
+		return false
+	}
 }
 
 func isPublicRESTNamespace(namespace string) bool {

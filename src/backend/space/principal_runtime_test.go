@@ -1,11 +1,17 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"github.com/stretchr/testify/require"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,11 +23,24 @@ import (
 func TestOwnershipRoleTLSConfigFailsClosed(t *testing.T) {
 	t.Setenv("ROLE_PRINCIPAL_TLS_CA_FILE", "")
 	t.Setenv("ROLE_PRINCIPAL_TLS_SERVER_NAME", "role.internal")
+	t.Setenv("SPACE_ROLE_CLIENT_CERT_FILE", "")
+	t.Setenv("SPACE_ROLE_CLIENT_KEY_FILE", "")
 	config, err := ownershipRoleTLSFromEnv()
+	require.Error(t, err, "private Role listener requires a Space client certificate")
+	require.Nil(t, config)
+
+	certFile, keyFile := writeClientCertificate(t)
+	t.Setenv("SPACE_ROLE_CLIENT_CERT_FILE", certFile)
+	t.Setenv("SPACE_ROLE_CLIENT_KEY_FILE", keyFile)
+	config, err = ownershipRoleTLSFromEnv()
 	require.NoError(t, err)
 	require.False(t, config.InsecureSkipVerify)
 	require.Equal(t, "role.internal", config.ServerName)
 	require.GreaterOrEqual(t, config.MinVersion, uint16(tls.VersionTLS12))
+	require.Len(t, config.Certificates, 1)
+	t.Setenv("SPACE_ROLE_CLIENT_KEY_FILE", keyFile+".missing")
+	_, err = ownershipRoleTLSFromEnv()
+	require.Error(t, err)
 	t.Setenv("ROLE_PRINCIPAL_TLS_CA_FILE", t.TempDir()+"/absent.pem")
 	_, err = ownershipRoleTLSFromEnv()
 	require.Error(t, err)
@@ -66,10 +85,12 @@ func TestSpacePrincipalJWKSRouteIsPublicReadOnlyAndAbsentWhenDisabled(t *testing
 func TestOwnershipRoleTLSConfig_VerifiesRealPeerChainAndHostname(t *testing.T) {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	server.Config.ErrorLog = log.New(io.Discard, "", 0)
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
 	server.StartTLS()
 	defer server.Close()
 	caFile := filepath.Join(t.TempDir(), "trusted-ca.pem")
 	require.NoError(t, os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600))
+	clientCertFile, clientKeyFile := writeClientCertificate(t)
 	for _, tc := range []struct {
 		name, ca, serverName string
 		allowed              bool
@@ -81,6 +102,8 @@ func TestOwnershipRoleTLSConfig_VerifiesRealPeerChainAndHostname(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ROLE_PRINCIPAL_TLS_CA_FILE", tc.ca)
 			t.Setenv("ROLE_PRINCIPAL_TLS_SERVER_NAME", tc.serverName)
+			t.Setenv("SPACE_ROLE_CLIENT_CERT_FILE", clientCertFile)
+			t.Setenv("SPACE_ROLE_CLIENT_KEY_FILE", clientKeyFile)
 			config, err := ownershipRoleTLSFromEnv()
 			require.NoError(t, err)
 			transport := &http.Transport{TLSClientConfig: config}
@@ -96,6 +119,31 @@ func TestOwnershipRoleTLSConfig_VerifiesRealPeerChainAndHostname(t *testing.T) {
 			}
 		})
 	}
+}
+
+func writeClientCertificate(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: "space"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	certFile := filepath.Join(t.TempDir(), "space-client.crt")
+	keyFile := filepath.Join(t.TempDir(), "space-client.key")
+	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600))
+	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER}), 0600))
+	return certFile, keyFile
 }
 
 func TestSpacePrincipalDisabledRetainsHealth(t *testing.T) {

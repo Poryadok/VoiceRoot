@@ -43,6 +43,13 @@ class GameSessionProvisioningServiceClient extends $grpc.Client {
         options: options);
   }
 
+  $grpc.ResponseFuture<$0.CloseGameSessionRoomResponse> closeGameSessionRoom(
+    $0.CloseGameSessionRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$closeGameSessionRoom, request, options: options);
+  }
+
   // method descriptors
 
   static final _$provisionGameSessionRoom = $grpc.ClientMethod<
@@ -51,6 +58,11 @@ class GameSessionProvisioningServiceClient extends $grpc.Client {
       '/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom',
       ($0.ProvisionGameSessionRoomRequest value) => value.writeToBuffer(),
       $0.ProvisionGameSessionRoomResponse.fromBuffer);
+  static final _$closeGameSessionRoom = $grpc.ClientMethod<
+          $0.CloseGameSessionRoomRequest, $0.CloseGameSessionRoomResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/CloseGameSessionRoom',
+      ($0.CloseGameSessionRoomRequest value) => value.writeToBuffer(),
+      $0.CloseGameSessionRoomResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.calls.v1.GameSessionProvisioningService')
@@ -67,6 +79,15 @@ abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ProvisionGameSessionRoomRequest.fromBuffer(value),
         ($0.ProvisionGameSessionRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CloseGameSessionRoomRequest,
+            $0.CloseGameSessionRoomResponse>(
+        'CloseGameSessionRoom',
+        closeGameSessionRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CloseGameSessionRoomRequest.fromBuffer(value),
+        ($0.CloseGameSessionRoomResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.ProvisionGameSessionRoomResponse>
@@ -77,6 +98,15 @@ abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
 
   $async.Future<$0.ProvisionGameSessionRoomResponse> provisionGameSessionRoom(
       $grpc.ServiceCall call, $0.ProvisionGameSessionRoomRequest request);
+
+  $async.Future<$0.CloseGameSessionRoomResponse> closeGameSessionRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CloseGameSessionRoomRequest> $request) async {
+    return closeGameSessionRoom($call, await $request);
+  }
+
+  $async.Future<$0.CloseGameSessionRoomResponse> closeGameSessionRoom(
+      $grpc.ServiceCall call, $0.CloseGameSessionRoomRequest request);
 }
 
 /// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.

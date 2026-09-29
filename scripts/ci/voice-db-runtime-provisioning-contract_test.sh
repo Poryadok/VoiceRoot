@@ -558,6 +558,37 @@ identity_publisher_path_allowed() {
   return 1
 }
 
+t31_runtime_path_allowed() {
+  local path="$1"
+  grep -Fxq -- "${path}" "${ROOT}/scripts/ci/t31-r22-scope-allowlist.txt"
+}
+
+# The T31 cross-service vertical is explicitly approved for its exact paths;
+# this must stay a file-by-file exception, not a directory or suffix pattern.
+for t31_path in \
+  protos/voice/role/v1/role.proto \
+  src/backend/role/internal/store/game_session_grants.go \
+  src/backend/voice/main.go; do
+  t31_runtime_path_allowed "${t31_path}" || {
+    printf 'F13 oracle bug: approved T31 path was rejected: %s\n' "${t31_path}" >&2
+    exit 2
+  }
+done
+for unrelated_path in \
+  src/backend/role/internal/store/unrelated.go \
+  src/backend/role/internal/store/game_session_grants.go.near-match \
+  src/backend/voice/main.go.near-match \
+  protos/voice/role/v1/unrelated.proto; do
+  if t31_runtime_path_allowed "${unrelated_path}"; then
+    printf 'F13 oracle bug: unrelated or near-match T31 path was accepted: %s\n' "${unrelated_path}" >&2
+    exit 2
+  fi
+done
+if grep -Fq -e '*' -e '?' -e '[' -e ']' "${ROOT}/scripts/ci/t31-r22-scope-allowlist.txt"; then
+  printf '%s\n' 'F13 oracle bug: T31 path exception contains a glob' >&2
+  exit 2
+fi
+
 for identity_publisher_path in \
   src/backend/role/internal/roleevents/jetstream.go \
   src/backend/role/internal/roleevents/jetstream_test.go \
@@ -760,6 +791,9 @@ while IFS= read -r file; do
   if r23_contract_path_allowed "${file}"; then
     continue
   fi
+  if t31_runtime_path_allowed "${file}"; then
+    continue
+  fi
   case "${file}" in
     protos/*|*/pb/*|*.pb.go)
       if [[ "${r22_runtime_delta}" == true ]]; then
@@ -795,6 +829,9 @@ while IFS= read -r file; do
 done <"${TMP_DIR}/changed-files"
 
 while IFS= read -r file; do
+  if t31_runtime_path_allowed "${file}"; then
+    continue
+  fi
   case "${file}" in
     src/backend/voice/main.go|src/backend/voice/health.go|src/backend/voice/database.go|src/backend/voice/internal/roomlifecycle/*.go)
       [[ "${file}" == *_test.go ]] && continue

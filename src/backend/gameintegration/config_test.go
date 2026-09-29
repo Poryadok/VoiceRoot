@@ -128,3 +128,38 @@ func TestLoadConfigMessagingPrivateListenerRequiresCompleteMTLSAndRotatingKeys(t
 	_, err = loadConfig(getenv)
 	require.ErrorContains(t, err, "five-minute")
 }
+
+func TestLoadConfigPrincipalJWKSRequiresSignerAndTLSListenerTogether(t *testing.T) {
+	values := map[string]string{
+		"DATABASE_URL":                  "postgres://game@localhost/game_integration_db",
+		"GAME_INTEGRATION_REDIS_ADDR":   "localhost:6379",
+		"GAME_INTEGRATION_JWKS_URL":     "https://auth.example/jwks",
+		"GAME_INTEGRATION_JWT_ISSUER":   "https://auth.example",
+		"GAME_INTEGRATION_JWT_AUDIENCE": "voice",
+	}
+	getenv := func(name string) string { return values[name] }
+	_, err := loadConfig(getenv)
+	require.NoError(t, err)
+
+	values["GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE"] = "/run/secrets/gis.key"
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "principal JWKS")
+
+	values["GAME_INTEGRATION_PRINCIPAL_KID"] = "gis-phase0"
+	values["GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE"] = "/run/secrets/gis-jwks.crt"
+	values["GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE"] = "/run/secrets/gis-jwks-tls.key"
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "next")
+	values["GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE"] = "/run/secrets/gis-next.key"
+	values["GAME_INTEGRATION_PRINCIPAL_NEXT_KID"] = "gis-next"
+	config, err := loadConfig(getenv)
+	require.NoError(t, err)
+	require.Equal(t, ":8443", config.PrincipalJWKSListenAddr)
+	require.Equal(t, values["GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE"], config.PrincipalPrivateKeyFile)
+	require.Equal(t, values["GAME_INTEGRATION_PRINCIPAL_KID"], config.PrincipalKeyID)
+	require.Equal(t, values["GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE"], config.PrincipalNextPrivateKeyFile)
+	require.Equal(t, values["GAME_INTEGRATION_PRINCIPAL_NEXT_KID"], config.PrincipalNextKeyID)
+	values["GAME_INTEGRATION_PRINCIPAL_NEXT_KID"] = values["GAME_INTEGRATION_PRINCIPAL_KID"]
+	_, err = loadConfig(getenv)
+	require.ErrorContains(t, err, "distinct")
+}

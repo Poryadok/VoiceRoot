@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName = "/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom"
+	GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName     = "/voice.calls.v1.GameSessionProvisioningService/CloseGameSessionRoom"
 )
 
 // GameSessionProvisioningServiceClient is the client API for GameSessionProvisioningService service.
@@ -29,6 +30,7 @@ const (
 // GIS-only room provisioning. Register this service only on the private listener.
 type GameSessionProvisioningServiceClient interface {
 	ProvisionGameSessionRoom(ctx context.Context, in *ProvisionGameSessionRoomRequest, opts ...grpc.CallOption) (*ProvisionGameSessionRoomResponse, error)
+	CloseGameSessionRoom(ctx context.Context, in *CloseGameSessionRoomRequest, opts ...grpc.CallOption) (*CloseGameSessionRoomResponse, error)
 }
 
 type gameSessionProvisioningServiceClient struct {
@@ -49,6 +51,16 @@ func (c *gameSessionProvisioningServiceClient) ProvisionGameSessionRoom(ctx cont
 	return out, nil
 }
 
+func (c *gameSessionProvisioningServiceClient) CloseGameSessionRoom(ctx context.Context, in *CloseGameSessionRoomRequest, opts ...grpc.CallOption) (*CloseGameSessionRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseGameSessionRoomResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GameSessionProvisioningServiceServer is the server API for GameSessionProvisioningService service.
 // All implementations must embed UnimplementedGameSessionProvisioningServiceServer
 // for forward compatibility.
@@ -56,6 +68,7 @@ func (c *gameSessionProvisioningServiceClient) ProvisionGameSessionRoom(ctx cont
 // GIS-only room provisioning. Register this service only on the private listener.
 type GameSessionProvisioningServiceServer interface {
 	ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error)
+	CloseGameSessionRoom(context.Context, *CloseGameSessionRoomRequest) (*CloseGameSessionRoomResponse, error)
 	mustEmbedUnimplementedGameSessionProvisioningServiceServer()
 }
 
@@ -68,6 +81,9 @@ type UnimplementedGameSessionProvisioningServiceServer struct{}
 
 func (UnimplementedGameSessionProvisioningServiceServer) ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ProvisionGameSessionRoom not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) CloseGameSessionRoom(context.Context, *CloseGameSessionRoomRequest) (*CloseGameSessionRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseGameSessionRoom not implemented")
 }
 func (UnimplementedGameSessionProvisioningServiceServer) mustEmbedUnimplementedGameSessionProvisioningServiceServer() {
 }
@@ -109,6 +125,24 @@ func _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler(srv interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameSessionProvisioningService_CloseGameSessionRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseGameSessionRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).CloseGameSessionRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).CloseGameSessionRoom(ctx, req.(*CloseGameSessionRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GameSessionProvisioningService_ServiceDesc is the grpc.ServiceDesc for GameSessionProvisioningService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -119,6 +153,10 @@ var GameSessionProvisioningService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ProvisionGameSessionRoom",
 			Handler:    _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler,
+		},
+		{
+			MethodName: "CloseGameSessionRoom",
+			Handler:    _GameSessionProvisioningService_CloseGameSessionRoom_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

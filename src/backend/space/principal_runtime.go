@@ -11,7 +11,21 @@ import (
 )
 
 func ownershipRoleTLSFromEnv() (*tls.Config, error) {
-	return ownershipTLSFromEnv("ROLE_PRINCIPAL_TLS_CA_FILE", "ROLE_PRINCIPAL_TLS_SERVER_NAME", "Role")
+	config, err := ownershipTLSFromEnv("ROLE_PRINCIPAL_TLS_CA_FILE", "ROLE_PRINCIPAL_TLS_SERVER_NAME", "Role")
+	if err != nil {
+		return nil, err
+	}
+	certificate := strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_CERT_FILE"))
+	key := strings.TrimSpace(os.Getenv("SPACE_ROLE_CLIENT_KEY_FILE"))
+	if certificate == "" || key == "" {
+		return nil, fmt.Errorf("space Role client certificate and key are required for mutual TLS")
+	}
+	identity, err := tls.LoadX509KeyPair(certificate, key)
+	if err != nil {
+		return nil, fmt.Errorf("load Space Role client identity: %w", err)
+	}
+	config.Certificates = []tls.Certificate{identity}
+	return config, nil
 }
 
 func ownershipAuthTLSFromEnv() (*tls.Config, error) {

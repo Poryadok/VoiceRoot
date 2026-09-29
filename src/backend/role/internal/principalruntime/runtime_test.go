@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/credentials"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/principal"
 )
@@ -29,11 +31,12 @@ const runtimeHash = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 // Real HTTPS, RSA signatures, and the Redis wire protocol exercise the runtime's
 // dependency wiring without replacing verifier or replay behavior with mocks.
 type runtimeFixture struct {
-	config Config
-	redis  *miniredis.Miniredis
-	key    *rsa.PrivateKey
-	next   *rsa.PrivateKey
-	jwks   *runtimeJWKS
+	config            Config
+	redis             *miniredis.Miniredis
+	key               *rsa.PrivateKey
+	next              *rsa.PrivateKey
+	jwks              *runtimeJWKS
+	clientCertificate tls.Certificate
 }
 
 func newRuntimeFixture(t *testing.T, keyCount int) runtimeFixture {
@@ -67,11 +70,32 @@ func newRuntimeFixture(t *testing.T, keyCount int) runtimeFixture {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600))
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	clientTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(9901), NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, BasicConstraintsValid: true, IsCA: true,
+	}
+	clientDER, err := x509.CreateCertificate(rand.Reader, clientTemplate, clientTemplate, &clientKey.PublicKey, clientKey)
+	require.NoError(t, err)
+	clientCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER})
+	clientKeyDER, err := x509.MarshalPKCS8PrivateKey(clientKey)
+	require.NoError(t, err)
+	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER})
+	clientCAFile := filepath.Join(dir, "role-client-ca.pem")
+	require.NoError(t, os.WriteFile(clientCAFile, clientCertPEM, 0600))
+	clientCertificate, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	require.NoError(t, err)
 	redis := miniredis.RunT(t)
 	return runtimeFixture{config: Config{
-		JWKSURLs: map[string]string{"space": server.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second,
-		ReplayAddr: redis.Addr(), JWKSCAFile: certFile, TLSCertFile: certFile, TLSKeyFile: keyFile, ListenAddr: "127.0.0.1:0",
-	}, redis: redis, key: current, next: next, jwks: jwks}
+		JWKSURLs: map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second,
+		ReplayAddr: redis.Addr(), JWKSCAFile: certFile, TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
+	}, redis: redis, key: current, next: next, jwks: jwks, clientCertificate: clientCertificate}
+}
+
+func runtimeTLSCredentials(f runtimeFixture, roots *x509.CertPool) credentials.TransportCredentials {
+	return credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{f.clientCertificate}})
 }
 
 func issueRuntimeToken(t *testing.T, key *rsa.PrivateKey, issuer, kid, audience, method, requestID, hash string) string {

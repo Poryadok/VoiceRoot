@@ -39,7 +39,8 @@ func (s *GameIntegrationChatGRPC) ProvisionManagedChat(ctx context.Context, req 
 	if err != nil {
 		return nil, managedChatStatus(err)
 	}
-	return &chatv1.ProvisionManagedChatResponse{ChatId: result.ChatID.String(), Replayed: result.Replayed}, nil
+	return &chatv1.ProvisionManagedChatResponse{ChatId: result.ChatID.String(), Replayed: result.Replayed,
+		ReceiptId: result.ReceiptID.String(), RequestHash: result.RequestHash}, nil
 }
 
 func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, req *chatv1.SyncManagedChatMembersRequest) (*chatv1.SyncManagedChatMembersResponse, error) {
@@ -69,7 +70,8 @@ func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, re
 	if err != nil {
 		return nil, managedChatStatus(err)
 	}
-	response := &chatv1.SyncManagedChatMembersResponse{Replayed: result.Replayed, ProfileIds: make([]string, len(result.ProfileIDs))}
+	response := &chatv1.SyncManagedChatMembersResponse{Replayed: result.Replayed, ReceiptId: result.ReceiptID.String(),
+		RequestHash: result.RequestHash, ProfileIds: make([]string, len(result.ProfileIDs))}
 	for i, id := range result.ProfileIDs {
 		response.ProfileIds[i] = id.String()
 	}

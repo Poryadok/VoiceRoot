@@ -3,6 +3,7 @@ module voice/backend/gameintegration
 go 1.26
 
 require (
+	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/prometheus/client_golang v1.20.5
@@ -76,10 +77,15 @@ require (
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/grpc v1.70.0 // indirect
-	google.golang.org/protobuf v1.36.5 // indirect
+	google.golang.org/grpc v1.70.0
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/calls v0.0.0
 	voice.app/voice/chat v0.0.0
+	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/role v0.0.0
+	voice.app/voice/space v0.0.0 // indirect
+	voice.app/voice/story v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg
@@ -87,3 +93,13 @@ replace voice/backend/pkg => ../pkg
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/common => ../user/pb/voice/common
+
+replace voice.app/voice/calls => ../voice/pb/voice/calls
+
+replace voice.app/voice/role => ../role/pb/voice/role
+
+replace voice.app/voice/space => ../voice/pb/voice/space
+
+replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/story => ../voice/pb/voice/story

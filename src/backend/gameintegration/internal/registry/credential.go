@@ -24,7 +24,7 @@ var (
 )
 
 var allowedServiceScopes = []string{
-	"game.commands.read", "game.events.write", "game.roster.write", "game.sessions.write",
+	"game.commands.read", "game.events.write", "game.roster.write", "game.sessions.write", "game.sessions.manage",
 }
 
 type IssueCredentialInput struct {

@@ -21,9 +21,16 @@ import (
 var ErrConflict = errors.New("game session provisioning conflict")
 var ErrInvalidRequest = errors.New("invalid game session provisioning request")
 var ErrNotFound = errors.New("managed game session room not found")
+var ErrFenceTimeout = errors.New("managed game session media fence exceeded five seconds")
+
+type ManagedGameSessionMediaFencer interface {
+	FenceManagedGameSession(context.Context, string, string) error
+}
 
 type Room struct {
 	RoomID, ChatID, LiveKitRoomName string
+	ApplicationID, EnvironmentID    string
+	SessionID                       string
 	CreatedAt                       time.Time
 }
 
@@ -37,6 +44,9 @@ func (s *PostgresStore) CheckSchema(ctx context.Context) error {
 	}
 	var ready bool
 	if err := s.pool.QueryRow(ctx, `SELECT to_regclass('voice_game_session_operations') IS NOT NULL
+AND to_regclass('voice_game_session_closures') IS NOT NULL
+AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+ AND table_name='voice_game_session_operations' AND column_name='session_id')
 AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('voice_room_instances') AND conname='voice_room_instances_purpose_shape')
 AND (SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='voice_room_instances'
      AND column_name = ANY($1::text[])) = 6`, []string{"purpose", "room_type", "chat_id", "owner_id", "creation_operation_id", "chat_creation_receipt_id"}).Scan(&ready); err != nil {
@@ -57,10 +67,37 @@ func (s *PostgresStore) GetRoom(ctx context.Context, roomID string) (Room, error
 		return Room{}, ErrNotFound
 	}
 	var room Room
-	err = s.pool.QueryRow(ctx, `SELECT r.room_id::text,r.chat_id::text,r.livekit_room_name,r.created_at
+	err = s.pool.QueryRow(ctx, `SELECT r.room_id::text,r.chat_id::text,r.livekit_room_name,
+o.application_id::text,o.environment_id::text,o.session_id::text,r.created_at
 FROM voice_game_session_operations o
 JOIN voice_room_instances r ON r.room_id=o.room_id
-WHERE r.room_id=$1 AND r.purpose='GAME_SESSION' AND r.state='active'`, id).Scan(&room.RoomID, &room.ChatID, &room.LiveKitRoomName, &room.CreatedAt)
+WHERE r.room_id=$1 AND r.purpose='GAME_SESSION' AND r.state='active' AND o.session_id IS NOT NULL`, id).Scan(
+		&room.RoomID, &room.ChatID, &room.LiveKitRoomName, &room.ApplicationID, &room.EnvironmentID, &room.SessionID, &room.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Room{}, ErrNotFound
+	}
+	if err != nil {
+		return Room{}, err
+	}
+	return room, nil
+}
+
+// GetRoomForClose resolves the immutable LiveKit room name after the durable
+// owner row has entered CLOSING; it is never an admission projection.
+func (s *PostgresStore) GetRoomForClose(ctx context.Context, roomID string) (Room, error) {
+	if s == nil || s.pool == nil {
+		return Room{}, errors.New("game session store unavailable")
+	}
+	id, err := uuid.Parse(roomID)
+	if err != nil || id == uuid.Nil || id.String() != roomID {
+		return Room{}, ErrNotFound
+	}
+	var room Room
+	err = s.pool.QueryRow(ctx, `SELECT r.room_id::text,r.chat_id::text,r.livekit_room_name,
+o.application_id::text,o.environment_id::text,o.session_id::text,r.created_at
+FROM voice_game_session_operations o JOIN voice_room_instances r ON r.room_id=o.room_id
+WHERE r.room_id=$1 AND r.purpose='GAME_SESSION' AND o.session_id IS NOT NULL`, id).Scan(
+		&room.RoomID, &room.ChatID, &room.LiveKitRoomName, &room.ApplicationID, &room.EnvironmentID, &room.SessionID, &room.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Room{}, ErrNotFound
 	}
@@ -74,7 +111,7 @@ func (s *PostgresStore) Provision(ctx context.Context, req *callsv1.ProvisionGam
 	if s == nil || s.pool == nil {
 		return nil, errors.New("game session store unavailable")
 	}
-	app, env, op, chat, chatOp, err := validate(req)
+	app, env, op, session, chat, chatOp, err := validate(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
 	}
@@ -122,7 +159,7 @@ func (s *PostgresStore) Provision(ctx context.Context, req *callsv1.ProvisionGam
 	roomName := "voice-game-session-" + roomID.String()
 	createdAt := time.Now().UTC()
 	response := &callsv1.ProvisionGameSessionRoomResponse{
-		OperationId: op.String(), ApplicationId: app.String(), EnvironmentId: env.String(),
+		OperationId: op.String(), ApplicationId: app.String(), EnvironmentId: env.String(), SessionId: session.String(),
 		Resource: proto.Clone(req.Resource).(*callsv1.GameSessionResourceRef), ChatId: chat.String(),
 		ChatCreationOperationId: chatOp.String(), RoomId: roomID.String(), LivekitRoomName: roomName,
 		VoiceCreationReceiptId: receiptID.String(), RequestHash: append([]byte(nil), hash[:]...), CreatedAt: timestamppb.New(createdAt),
@@ -139,8 +176,8 @@ VALUES($1,NULL,NULL,$2,'active',0,$3,$3,NULL,'group_voice','GAME_SESSION',$4,NUL
 		return nil, normalizeConflict(err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO voice_game_session_operations
-(operation_id,application_id,environment_id,resource_kind,external_resource_key,request_hash,chat_id,chat_creation_operation_id,room_id,voice_creation_receipt_id,response_bytes,created_at)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, op, app, env, int16(req.Resource.Kind), req.Resource.ExternalResourceKey, hash[:], chat, chatOp, roomID, receiptID, responseBytes, createdAt)
+(operation_id,application_id,environment_id,resource_kind,external_resource_key,request_hash,chat_id,chat_creation_operation_id,room_id,voice_creation_receipt_id,response_bytes,created_at,session_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, op, app, env, int16(req.Resource.Kind), req.Resource.ExternalResourceKey, hash[:], chat, chatOp, roomID, receiptID, responseBytes, createdAt, session)
 	if err != nil {
 		return nil, normalizeConflict(err)
 	}
@@ -150,7 +187,172 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, op, app, env, int16(req.Resourc
 	return response, nil
 }
 
-func validate(req *callsv1.ProvisionGameSessionRoomRequest) (app, env, op, chat, chatOp uuid.UUID, err error) {
+// CloseGameSessionRoom commits CLOSING before fencing media. Only the winning
+// operation may finish the one durable CLOSING -> CLOSED transition.
+func (s *PostgresStore) CloseGameSessionRoom(ctx context.Context, req *callsv1.CloseGameSessionRoomRequest, fencer ManagedGameSessionMediaFencer) (*callsv1.CloseGameSessionRoomResponse, error) {
+	if s == nil || s.pool == nil || fencer == nil {
+		return nil, errors.New("game session close dependencies unavailable")
+	}
+	app, env, op, session, chat, chatOp, err := validateClose(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
+	}
+	requestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal game session close request: %w", err)
+	}
+	hash := sha256.Sum256(requestBytes)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7271843201)`); err != nil {
+		return nil, err
+	}
+	var savedHash, responseBytes []byte
+	var roomID, receiptID uuid.UUID
+	var state string
+	var closingAt time.Time
+	err = tx.QueryRow(ctx, `SELECT request_hash,response_bytes,room_id,close_receipt_id,status,closing_at
+		FROM voice_game_session_closures WHERE operation_id=$1 FOR UPDATE`, op).Scan(
+		&savedHash, &responseBytes, &roomID, &receiptID, &state, &closingAt)
+	if err == nil {
+		if !equalHash(savedHash, hash[:]) {
+			return nil, ErrConflict
+		}
+		if state == "CLOSED" {
+			response := new(callsv1.CloseGameSessionRoomResponse)
+			if err := proto.Unmarshal(responseBytes, response); err != nil {
+				return nil, fmt.Errorf("stored game session close response is corrupt: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return nil, err
+			}
+			return response, nil
+		}
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		err = tx.QueryRow(ctx, `SELECT room_id FROM voice_game_session_operations
+			WHERE application_id=$1 AND environment_id=$2 AND resource_kind=$3 AND external_resource_key=$4
+			AND chat_id=$5 AND chat_creation_operation_id=$6 AND session_id=$7 FOR UPDATE`,
+			app, env, int16(req.Resource.Kind), req.Resource.ExternalResourceKey, chat, chatOp, session).Scan(&roomID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		var otherOperation uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT operation_id FROM voice_game_session_closures WHERE room_id=$1 FOR UPDATE`, roomID).Scan(&otherOperation)
+		if err == nil {
+			return nil, ErrConflict
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		receiptID, closingAt = uuid.New(), time.Now().UTC()
+		_, err = tx.Exec(ctx, `INSERT INTO voice_game_session_closures
+			(operation_id,room_id,request_hash,request_bytes,status,close_receipt_id,closing_at)
+			VALUES($1,$2,$3,$4,'CLOSING',$5,$6)`, op, roomID, hash[:], requestBytes, receiptID, closingAt)
+		if err != nil {
+			return nil, normalizeConflict(err)
+		}
+		command, err := tx.Exec(ctx, `UPDATE voice_room_instances SET state='closing',updated_at=$2
+			WHERE room_id=$1 AND purpose='GAME_SESSION' AND state='active'`, roomID, closingAt)
+		if err != nil || command.RowsAffected() != 1 {
+			if err != nil {
+				return nil, err
+			}
+			return nil, ErrConflict
+		}
+	} else if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	startedFence := time.Now().UTC()
+	if err := fencer.FenceManagedGameSession(ctx, roomID.String(), op.String()); err != nil {
+		return nil, fmt.Errorf("fence managed game session media: %w", err)
+	}
+	mediaFencedAt := time.Now().UTC()
+	if mediaFencedAt.Sub(startedFence) > 5*time.Second {
+		return nil, ErrFenceTimeout
+	}
+	if mediaFencedAt.Before(startedFence) {
+		mediaFencedAt = startedFence
+	}
+	closedAt := time.Now().UTC()
+	response := &callsv1.CloseGameSessionRoomResponse{
+		OperationId: op.String(), ApplicationId: app.String(), EnvironmentId: env.String(),
+		Resource: proto.Clone(req.Resource).(*callsv1.GameSessionResourceRef), ChatId: chat.String(),
+		ChatCreationOperationId: chatOp.String(), SessionId: session.String(), RoomId: roomID.String(),
+		Status: "CLOSED", CloseReceiptId: receiptID.String(), RequestHash: append([]byte(nil), hash[:]...),
+		ClosingAt: timestamppb.New(closingAt), MediaFencedAt: timestamppb.New(mediaFencedAt), ClosedAt: timestamppb.New(closedAt),
+	}
+	responseBytes, err = (proto.MarshalOptions{Deterministic: true}).Marshal(response)
+	if err != nil {
+		return nil, err
+	}
+	finish, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = finish.Rollback(ctx) }()
+	if _, err := finish.Exec(ctx, `SELECT pg_advisory_xact_lock(7271843201)`); err != nil {
+		return nil, err
+	}
+	command, err := finish.Exec(ctx, `UPDATE voice_game_session_closures SET status='CLOSED',media_fenced_at=$2,
+		closed_at=$3,response_bytes=$4 WHERE operation_id=$1 AND status='CLOSING' AND request_hash=$5`,
+		op, mediaFencedAt, closedAt, responseBytes, hash[:])
+	if err != nil || command.RowsAffected() != 1 {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrConflict
+	}
+	command, err = finish.Exec(ctx, `UPDATE voice_room_instances SET state='closed',closed_at=$2,updated_at=$2
+		WHERE room_id=$1 AND state='closing'`, roomID, closedAt)
+	if err != nil || command.RowsAffected() != 1 {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrConflict
+	}
+	if err := finish.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func validateClose(req *callsv1.CloseGameSessionRoomRequest) (app, env, op, session, chat, chatOp uuid.UUID, err error) {
+	if req == nil || req.Resource == nil {
+		return app, env, op, session, chat, chatOp, errors.New("game session close request and resource are required")
+	}
+	for _, item := range []struct {
+		name, value string
+		target      *uuid.UUID
+	}{
+		{"application_id", req.ApplicationId, &app}, {"environment_id", req.EnvironmentId, &env},
+		{"operation_id", req.OperationId, &op}, {"session_id", req.SessionId, &session},
+		{"chat_id", req.ChatId, &chat}, {"chat_creation_operation_id", req.ChatCreationOperationId, &chatOp},
+	} {
+		parsed, parseErr := uuid.Parse(item.value)
+		if parseErr != nil || parsed == uuid.Nil {
+			return app, env, op, session, chat, chatOp, fmt.Errorf("%s must be a non-nil UUID", item.name)
+		}
+		*item.target = parsed
+	}
+	if req.Resource.Kind < callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_PARTY ||
+		req.Resource.Kind > callsv1.GameSessionResourceKind_GAME_SESSION_RESOURCE_KIND_FLEET_SESSION ||
+		len(req.Resource.ExternalResourceKey) == 0 || len(req.Resource.ExternalResourceKey) > 512 {
+		return app, env, op, session, chat, chatOp, errors.New("resource identity is invalid")
+	}
+	return app, env, op, session, chat, chatOp, nil
+}
+
+func validate(req *callsv1.ProvisionGameSessionRoomRequest) (app, env, op, session, chat, chatOp uuid.UUID, err error) {
 	if req == nil || req.Resource == nil {
 		err = errors.New("game session request and resource are required")
 		return
@@ -159,7 +361,7 @@ func validate(req *callsv1.ProvisionGameSessionRoomRequest) (app, env, op, chat,
 		name, value string
 		target      *uuid.UUID
 	}{
-		{"application_id", req.ApplicationId, &app}, {"environment_id", req.EnvironmentId, &env}, {"operation_id", req.OperationId, &op},
+		{"application_id", req.ApplicationId, &app}, {"environment_id", req.EnvironmentId, &env}, {"operation_id", req.OperationId, &op}, {"session_id", req.SessionId, &session},
 		{"chat_id", req.ChatId, &chat}, {"chat_creation_operation_id", req.ChatCreationOperationId, &chatOp},
 	} {
 		parsed, parseErr := uuid.Parse(item.value)

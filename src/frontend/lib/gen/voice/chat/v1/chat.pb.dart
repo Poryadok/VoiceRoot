@@ -380,10 +380,14 @@ class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
   factory ProvisionManagedChatResponse({
     $core.String? chatId,
     $core.bool? replayed,
+    $core.String? receiptId,
+    $core.String? requestHash,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
     if (replayed != null) result.replayed = replayed;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (requestHash != null) result.requestHash = requestHash;
     return result;
   }
 
@@ -402,6 +406,8 @@ class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'chatId')
     ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..aOS(3, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(4, _omitFieldNames ? '' : 'requestHash')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -443,6 +449,25 @@ class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
   $core.bool hasReplayed() => $_has(1);
   @$pb.TagNumber(2)
   void clearReplayed() => $_clearField(2);
+
+  /// Stable managed_chat_operations identity and the exact persisted request hash.
+  @$pb.TagNumber(3)
+  $core.String get receiptId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set receiptId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReceiptId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReceiptId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get requestHash => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set requestHash($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequestHash() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequestHash() => $_clearField(4);
 }
 
 class SyncManagedChatMembersRequest extends $pb.GeneratedMessage {
@@ -548,10 +573,14 @@ class SyncManagedChatMembersResponse extends $pb.GeneratedMessage {
   factory SyncManagedChatMembersResponse({
     $core.Iterable<$core.String>? profileIds,
     $core.bool? replayed,
+    $core.String? receiptId,
+    $core.String? requestHash,
   }) {
     final result = create();
     if (profileIds != null) result.profileIds.addAll(profileIds);
     if (replayed != null) result.replayed = replayed;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (requestHash != null) result.requestHash = requestHash;
     return result;
   }
 
@@ -570,6 +599,8 @@ class SyncManagedChatMembersResponse extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPS(1, _omitFieldNames ? '' : 'profileIds')
     ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..aOS(3, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(4, _omitFieldNames ? '' : 'requestHash')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -605,6 +636,25 @@ class SyncManagedChatMembersResponse extends $pb.GeneratedMessage {
   $core.bool hasReplayed() => $_has(1);
   @$pb.TagNumber(2)
   void clearReplayed() => $_clearField(2);
+
+  /// Stable managed_chat_operations identity and the exact persisted request hash.
+  @$pb.TagNumber(3)
+  $core.String get receiptId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set receiptId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReceiptId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReceiptId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get requestHash => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set requestHash($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequestHash() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequestHash() => $_clearField(4);
 }
 
 class CreateDMRequest extends $pb.GeneratedMessage {

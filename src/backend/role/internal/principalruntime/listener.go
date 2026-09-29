@@ -9,14 +9,14 @@ import (
 	"voice/backend/role/internal/principalgrpc"
 )
 
-// ServerOptions secures the dedicated TLS listener and exposes ownership and
-// permanent-retirement RPCs. The generic Role listener has a separate deny-only interceptor.
+// ServerOptions secures the dedicated mTLS listener and exposes only trusted
+// ownership, retirement, and GIS/Voice game-session grant RPCs.
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.Creds(r.credentials),
 		grpc.ChainUnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			if !isOwnershipMethod(info.FullMethod) {
-				return nil, status.Error(codes.PermissionDenied, "method unavailable on ownership listener")
+			if !isTrustedServiceMethod(info.FullMethod) {
+				return nil, status.Error(codes.PermissionDenied, "method unavailable on trusted-service listener")
 			}
 			return handler(ctx, req)
 		}, principalgrpc.StrictUnaryInterceptor(r), func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

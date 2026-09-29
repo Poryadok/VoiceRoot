@@ -46,6 +46,15 @@ func TestIssueCredentialIsScopedAndRetryStable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, env.ID, principal.EnvironmentID)
 
+	sessionCredential, err := store.IssueCredential(ctx, IssueCredentialInput{OwnerAccountID: owner,
+		ApplicationID: app.ID, EnvironmentID: env.ID, Scopes: []string{"game.sessions.manage"},
+		IdempotencyKey: "session-credential", SecretKey: key})
+	require.NoError(t, err)
+	_, err = store.VerifyCredential(ctx, "vgi1_"+sessionCredential.ID.String()+"_"+sessionCredential.Secret, "game.sessions.manage", key)
+	require.NoError(t, err)
+	_, err = store.VerifyCredential(ctx, "vgi1_"+sessionCredential.ID.String()+"_"+sessionCredential.Secret, "game.events.write", key)
+	require.ErrorIs(t, err, ErrInvalidServiceCredential)
+
 	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_"+first.Secret, "game.roster.write", key)
 	require.ErrorIs(t, err, ErrInvalidServiceCredential)
 	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_wrong", "game.events.write", key)
@@ -63,7 +72,7 @@ func TestIssueCredentialIsScopedAndRetryStable(t *testing.T) {
 	require.ErrorIs(t, err, ErrAdmissionConflict)
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM service_credentials WHERE environment_id=$1`, env.ID).Scan(&count))
-	require.Equal(t, 2, count)
+	require.Equal(t, 3, count)
 	require.NoError(t, store.RevokeCredential(ctx, owner, app.ID, env.ID, first.ID))
 	_, err = store.VerifyCredential(ctx, "vgi1_"+first.ID.String()+"_"+first.Secret, "game.events.write", key)
 	require.ErrorIs(t, err, ErrInvalidServiceCredential)
@@ -76,4 +85,25 @@ func TestCredentialKeyValidation(t *testing.T) {
 		Scopes: []string{"game.events.write"}, IdempotencyKey: "x", SecretKey: []byte("short"),
 	})
 	require.ErrorIs(t, err, ErrInvalidCredentialRequest)
+}
+
+func TestCredentialScopesAreAnExplicitAllowlist(t *testing.T) {
+	input := IssueCredentialInput{
+		OwnerAccountID: uuid.New(), ApplicationID: uuid.New(), EnvironmentID: uuid.New(),
+		Scopes: []string{"game.sessions.manage"}, IdempotencyKey: "manage-only",
+		SecretKey: []byte("0123456789abcdef0123456789abcdef"),
+	}
+	canonical, _, err := canonicalCredentialInput(input)
+	require.NoError(t, err)
+	require.Equal(t, []string{"game.sessions.manage"}, canonical.Scopes)
+
+	for _, scopes := range [][]string{
+		{"game.sessions.admin"},
+		{"game.sessions.manage", "game.sessions.manage"},
+		{"game.sessions.manage", "game.admin"},
+	} {
+		input.Scopes = scopes
+		_, _, err := canonicalCredentialInput(input)
+		require.ErrorIs(t, err, ErrInvalidCredentialRequest, "scopes=%v", scopes)
+	}
 }

@@ -57,6 +57,7 @@ enum VoiceRoomLifecycleOutcome {
 // GIS-only room provisioning. Register this service only on the private listener.
 service GameSessionProvisioningService {
   rpc ProvisionGameSessionRoom(ProvisionGameSessionRoomRequest) returns (ProvisionGameSessionRoomResponse);
+  rpc CloseGameSessionRoom(CloseGameSessionRoomRequest) returns (CloseGameSessionRoomResponse);
 }
 
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
@@ -114,6 +115,8 @@ message ProvisionGameSessionRoomRequest {
   string chat_id = 5;
   // Chat create receipt identity is its original operation_id.
   string chat_creation_operation_id = 6;
+  // GIS session identity used by Role grants and Voice admission checks.
+  string session_id = 7;
 }
 
 message ProvisionGameSessionRoomResponse {
@@ -128,6 +131,38 @@ message ProvisionGameSessionRoomResponse {
   string voice_creation_receipt_id = 9;
   bytes request_hash = 10;
   google.protobuf.Timestamp created_at = 11;
+  string session_id = 12;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message CloseGameSessionRoomRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  // Chat create receipt identity is its original operation_id.
+  string chat_creation_operation_id = 6;
+  // Must equal the immutable GIS session identity stored at provisioning.
+  string session_id = 7;
+}
+
+message CloseGameSessionRoomResponse {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  string chat_creation_operation_id = 6;
+  string session_id = 7;
+  string room_id = 8;
+  string status = 9;
+  string close_receipt_id = 10;
+  bytes request_hash = 11;
+  google.protobuf.Timestamp closing_at = 12;
+  google.protobuf.Timestamp media_fenced_at = 13;
+  google.protobuf.Timestamp closed_at = 14;
 }
 message StartCallRequest {
   string room_type = 1; // call | group_voice | voice_room; prefer room_type_enum when set

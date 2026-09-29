@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,32 @@ var errCommandConflict = errors.New("command conflicts with durable receiver sta
 var errCommandExpired = errors.New("command expired before first admission")
 
 const receiverSchema = `
+CREATE TABLE IF NOT EXISTS session_event_inbox (
+	application_id uuid NOT NULL,
+	environment_id uuid NOT NULL,
+	event_id uuid NOT NULL,
+	payload_sha256 bytea NOT NULL CHECK (octet_length(payload_sha256)=32),
+	payload_bytes bytea NOT NULL,
+	ack_lease_id uuid,
+	acknowledged_at timestamptz,
+	received_at timestamptz NOT NULL,
+	PRIMARY KEY(application_id,environment_id,event_id)
+);
+ALTER TABLE session_event_inbox ADD COLUMN IF NOT EXISTS ack_lease_id uuid;
+ALTER TABLE session_event_inbox ADD COLUMN IF NOT EXISTS acknowledged_at timestamptz;
+CREATE TABLE IF NOT EXISTS session_activation_effects (
+	application_id uuid NOT NULL,
+	environment_id uuid NOT NULL,
+	event_id uuid NOT NULL,
+	session_id uuid NOT NULL,
+	operation_id uuid NOT NULL,
+	kind text NOT NULL CHECK (kind IN ('party','match','fleet')),
+	active_at timestamptz NOT NULL,
+	committed_at timestamptz NOT NULL,
+	PRIMARY KEY(application_id,environment_id,event_id),
+	FOREIGN KEY(application_id,environment_id,event_id)
+		REFERENCES session_event_inbox(application_id,environment_id,event_id)
+);
 CREATE TABLE IF NOT EXISTS command_inbox (
 	command_id UUID PRIMARY KEY,
 	operation_id UUID NOT NULL,
@@ -117,6 +144,116 @@ func OpenPostgresStore(ctx context.Context, pool *pgxpool.Pool, clock func() tim
 		return nil, fmt.Errorf("initialize controlled game receiver schema: %w", err)
 	}
 	return &PostgresStore{pool: pool, clock: clock}, nil
+}
+
+// SessionActiveEvent is the exact seven-field GIS event body accepted by the
+// controlled game receiver. The HTTP client verifies these values against the
+// scoped credential and response headers before calling the store.
+type SessionActiveEvent struct {
+	EventID       string    `json:"event_id"`
+	ApplicationID string    `json:"application_id"`
+	EnvironmentID string    `json:"environment_id"`
+	SessionID     string    `json:"session_id"`
+	OperationID   string    `json:"operation_id"`
+	Kind          string    `json:"kind"`
+	ActiveAt      time.Time `json:"active_at"`
+}
+
+// ConsumeSessionActiveEvent commits immutable inbox identity and the supplied
+// game effect in one independent receiver transaction. Same-digest redelivery
+// is inert; a digest change for the same app/env/event is an integrity error.
+func (store *PostgresStore) ConsumeSessionActiveEvent(ctx context.Context, applicationID, environmentID, eventID uuid.UUID, body, digest []byte, apply func(pgx.Tx) error) (bool, error) {
+	return store.ConsumeSessionActiveEventWithLease(ctx, applicationID, environmentID, eventID, uuid.Nil, body, digest, apply)
+}
+
+// ConsumeSessionActiveEventWithLease also persists the current GIS ACK lease
+// with the effect commit. A restart can then replay an uncertain ACK exactly.
+func (store *PostgresStore) ConsumeSessionActiveEventWithLease(ctx context.Context, applicationID, environmentID, eventID, leaseID uuid.UUID, body, digest []byte, apply func(pgx.Tx) error) (bool, error) {
+	if store == nil || store.pool == nil || store.clock == nil || applicationID == uuid.Nil || environmentID == uuid.Nil ||
+		eventID == uuid.Nil || apply == nil || len(digest) != sha256.Size {
+		return false, errors.New("invalid session active event admission")
+	}
+	bodyDigest := sha256.Sum256(body)
+	if !equalBytes(bodyDigest[:], digest) {
+		return false, errors.New("session active event digest does not match body")
+	}
+	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var ackLease any
+	if leaseID != uuid.Nil {
+		ackLease = leaseID
+	}
+	insert, err := tx.Exec(ctx, `INSERT INTO session_event_inbox(application_id,environment_id,event_id,payload_sha256,payload_bytes,ack_lease_id,received_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(application_id,environment_id,event_id) DO NOTHING`,
+		applicationID, environmentID, eventID, digest, body, ackLease, store.clock().UTC())
+	if err != nil {
+		return false, err
+	}
+	if insert.RowsAffected() == 0 {
+		var savedDigest, savedBody []byte
+		err = tx.QueryRow(ctx, `SELECT payload_sha256,payload_bytes FROM session_event_inbox
+			WHERE application_id=$1 AND environment_id=$2 AND event_id=$3 FOR UPDATE`,
+			applicationID, environmentID, eventID).Scan(&savedDigest, &savedBody)
+		if err != nil {
+			return false, err
+		}
+		if !equalBytes(savedDigest, digest) || !equalBytes(savedBody, body) {
+			return false, errors.New("session active event identity has a different payload digest")
+		}
+		if ackLease != nil {
+			if _, err = tx.Exec(ctx, `UPDATE session_event_inbox SET ack_lease_id=$4,acknowledged_at=NULL
+				WHERE application_id=$1 AND environment_id=$2 AND event_id=$3`, applicationID, environmentID, eventID, leaseID); err != nil {
+				return false, err
+			}
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if err = apply(tx); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+type pendingSessionEventAck struct {
+	applicationID uuid.UUID
+	environmentID uuid.UUID
+	eventID       uuid.UUID
+	leaseID       uuid.UUID
+	digest        []byte
+}
+
+func (store *PostgresStore) pendingSessionEventAcks(ctx context.Context, applicationID, environmentID uuid.UUID) ([]pendingSessionEventAck, error) {
+	rows, err := store.pool.Query(ctx, `SELECT application_id,environment_id,event_id,ack_lease_id,payload_sha256 FROM session_event_inbox
+		WHERE application_id=$1 AND environment_id=$2 AND ack_lease_id IS NOT NULL AND acknowledged_at IS NULL ORDER BY received_at,event_id`, applicationID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var pending []pendingSessionEventAck
+	for rows.Next() {
+		var item pendingSessionEventAck
+		if err := rows.Scan(&item.applicationID, &item.environmentID, &item.eventID, &item.leaseID, &item.digest); err != nil {
+			return nil, err
+		}
+		pending = append(pending, item)
+	}
+	return pending, rows.Err()
+}
+
+func (store *PostgresStore) markSessionEventAcked(ctx context.Context, item pendingSessionEventAck) error {
+	_, err := store.pool.Exec(ctx, `UPDATE session_event_inbox SET acknowledged_at=$6
+		WHERE application_id=$1 AND environment_id=$2 AND event_id=$3 AND ack_lease_id=$4 AND payload_sha256=$5 AND acknowledged_at IS NULL`,
+		item.applicationID, item.environmentID, item.eventID, item.leaseID, item.digest, store.clock().UTC())
+	return err
 }
 
 // accept commits inbox, permit receipt, one-shot effect, immutable result and

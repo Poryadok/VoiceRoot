@@ -79,10 +79,14 @@ func runtimeListenerClient(t *testing.T, address string, transport credentials.T
 	return rolev1.NewRoleServiceClient(conn)
 }
 
+func runtimeTLSCredentialsWithServerName(f runtimeFixture, roots *x509.CertPool, serverName string) credentials.TransportCredentials {
+	return credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName, Certificates: []tls.Certificate{f.clientCertificate}})
+}
+
 func TestRuntimeListenerAuthenticatesBoundV2OwnershipAndRejectsBeforeHandler(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: "space-1", OldOwnerProfileId: "owner-1", NewOwnerProfileId: "owner-2", OperationId: "operation-1"}}
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
@@ -160,8 +164,9 @@ func TestRuntimeListenerRequiresTLSAndVerifiedServerIdentity(t *testing.T) {
 		transport credentials.TransportCredentials
 	}{
 		{"plaintext", insecure.NewCredentials()},
-		{"untrusted_ca", credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: x509.NewCertPool()})},
-		{"wrong_server_identity", credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "wrong.role.internal"})},
+		{"missing_client_certificate", credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots})},
+		{"untrusted_ca", runtimeTLSCredentials(f, x509.NewCertPool())},
+		{"wrong_server_identity", runtimeTLSCredentialsWithServerName(f, roots, "wrong.role.internal")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,7 +195,7 @@ func (s *recordingRoleServer) CompensateOwnershipTransfer(ctx context.Context, _
 func TestRuntimeListenerAuthenticatesBoundV2Abort(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	request := &rolev1.AbortOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2}}
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
@@ -240,7 +245,7 @@ func TestRuntimeListenerDistinguishesUnavailableJWKSFromUntrustedCredentials(t *
 			// Deliberately do not prime: dependency failures must be classified when
 			// no complete trusted last-good set can authenticate the credential.
 			address, recorder, roots := startRuntimeListenerWithRuntime(t, f, runtime)
-			client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+			client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 			request := &rolev1.PrepareOwnershipTransferRequest{Intent: &rolev1.OwnershipTransferIntent{ProtocolVersion: 2, SpaceId: "space-1"}}
 			hash, err := principal.RequestHash(request)
 			require.NoError(t, err)

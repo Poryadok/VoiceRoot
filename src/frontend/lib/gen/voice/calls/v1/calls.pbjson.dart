@@ -175,6 +175,7 @@ const ProvisionGameSessionRoomRequest$json = {
       '5': 9,
       '10': 'chatCreationOperationId'
     },
+    {'1': 'session_id', '3': 7, '4': 1, '5': 9, '10': 'sessionId'},
   ],
 };
 
@@ -185,7 +186,7 @@ final $typed_data.Uint8List provisionGameSessionRoomRequestDescriptor = $convert
     'ZW52aXJvbm1lbnRfaWQYAyABKAlSDWVudmlyb25tZW50SWQSQgoIcmVzb3VyY2UYBCABKAsyJi'
     '52b2ljZS5jYWxscy52MS5HYW1lU2Vzc2lvblJlc291cmNlUmVmUghyZXNvdXJjZRIXCgdjaGF0'
     'X2lkGAUgASgJUgZjaGF0SWQSOwoaY2hhdF9jcmVhdGlvbl9vcGVyYXRpb25faWQYBiABKAlSF2'
-    'NoYXRDcmVhdGlvbk9wZXJhdGlvbklk');
+    'NoYXRDcmVhdGlvbk9wZXJhdGlvbklkEh0KCnNlc3Npb25faWQYByABKAlSCXNlc3Npb25JZA==');
 
 @$core.Deprecated('Use provisionGameSessionRoomResponseDescriptor instead')
 const ProvisionGameSessionRoomResponse$json = {
@@ -228,6 +229,7 @@ const ProvisionGameSessionRoomResponse$json = {
       '6': '.google.protobuf.Timestamp',
       '10': 'createdAt'
     },
+    {'1': 'session_id', '3': 12, '4': 1, '5': 9, '10': 'sessionId'},
   ],
 };
 
@@ -242,7 +244,113 @@ final $typed_data.Uint8List provisionGameSessionRoomResponseDescriptor = $conver
     'ZWtpdF9yb29tX25hbWUYCCABKAlSD2xpdmVraXRSb29tTmFtZRI5Chl2b2ljZV9jcmVhdGlvbl'
     '9yZWNlaXB0X2lkGAkgASgJUhZ2b2ljZUNyZWF0aW9uUmVjZWlwdElkEiEKDHJlcXVlc3RfaGFz'
     'aBgKIAEoDFILcmVxdWVzdEhhc2gSOQoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2'
-    'J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdA==');
+    'J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdBIdCgpzZXNzaW9uX2lkGAwgASgJUglzZXNzaW9uSWQ=');
+
+@$core.Deprecated('Use closeGameSessionRoomRequestDescriptor instead')
+const CloseGameSessionRoomRequest$json = {
+  '1': 'CloseGameSessionRoomRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {
+      '1': 'resource',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.GameSessionResourceRef',
+      '10': 'resource'
+    },
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_creation_operation_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'chatCreationOperationId'
+    },
+    {'1': 'session_id', '3': 7, '4': 1, '5': 9, '10': 'sessionId'},
+  ],
+};
+
+/// Descriptor for `CloseGameSessionRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List closeGameSessionRoomRequestDescriptor = $convert.base64Decode(
+    'ChtDbG9zZUdhbWVTZXNzaW9uUm9vbVJlcXVlc3QSIQoMb3BlcmF0aW9uX2lkGAEgASgJUgtvcG'
+    'VyYXRpb25JZBIlCg5hcHBsaWNhdGlvbl9pZBgCIAEoCVINYXBwbGljYXRpb25JZBIlCg5lbnZp'
+    'cm9ubWVudF9pZBgDIAEoCVINZW52aXJvbm1lbnRJZBJCCghyZXNvdXJjZRgEIAEoCzImLnZvaW'
+    'NlLmNhbGxzLnYxLkdhbWVTZXNzaW9uUmVzb3VyY2VSZWZSCHJlc291cmNlEhcKB2NoYXRfaWQY'
+    'BSABKAlSBmNoYXRJZBI7ChpjaGF0X2NyZWF0aW9uX29wZXJhdGlvbl9pZBgGIAEoCVIXY2hhdE'
+    'NyZWF0aW9uT3BlcmF0aW9uSWQSHQoKc2Vzc2lvbl9pZBgHIAEoCVIJc2Vzc2lvbklk');
+
+@$core.Deprecated('Use closeGameSessionRoomResponseDescriptor instead')
+const CloseGameSessionRoomResponse$json = {
+  '1': 'CloseGameSessionRoomResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {
+      '1': 'resource',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.GameSessionResourceRef',
+      '10': 'resource'
+    },
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_creation_operation_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'chatCreationOperationId'
+    },
+    {'1': 'session_id', '3': 7, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'room_id', '3': 8, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'status', '3': 9, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'close_receipt_id', '3': 10, '4': 1, '5': 9, '10': 'closeReceiptId'},
+    {'1': 'request_hash', '3': 11, '4': 1, '5': 12, '10': 'requestHash'},
+    {
+      '1': 'closing_at',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'closingAt'
+    },
+    {
+      '1': 'media_fenced_at',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'mediaFencedAt'
+    },
+    {
+      '1': 'closed_at',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'closedAt'
+    },
+  ],
+};
+
+/// Descriptor for `CloseGameSessionRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List closeGameSessionRoomResponseDescriptor = $convert.base64Decode(
+    'ChxDbG9zZUdhbWVTZXNzaW9uUm9vbVJlc3BvbnNlEiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3'
+    'BlcmF0aW9uSWQSJQoOYXBwbGljYXRpb25faWQYAiABKAlSDWFwcGxpY2F0aW9uSWQSJQoOZW52'
+    'aXJvbm1lbnRfaWQYAyABKAlSDWVudmlyb25tZW50SWQSQgoIcmVzb3VyY2UYBCABKAsyJi52b2'
+    'ljZS5jYWxscy52MS5HYW1lU2Vzc2lvblJlc291cmNlUmVmUghyZXNvdXJjZRIXCgdjaGF0X2lk'
+    'GAUgASgJUgZjaGF0SWQSOwoaY2hhdF9jcmVhdGlvbl9vcGVyYXRpb25faWQYBiABKAlSF2NoYX'
+    'RDcmVhdGlvbk9wZXJhdGlvbklkEh0KCnNlc3Npb25faWQYByABKAlSCXNlc3Npb25JZBIXCgdy'
+    'b29tX2lkGAggASgJUgZyb29tSWQSFgoGc3RhdHVzGAkgASgJUgZzdGF0dXMSKAoQY2xvc2Vfcm'
+    'VjZWlwdF9pZBgKIAEoCVIOY2xvc2VSZWNlaXB0SWQSIQoMcmVxdWVzdF9oYXNoGAsgASgMUgty'
+    'ZXF1ZXN0SGFzaBI5CgpjbG9zaW5nX2F0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdG'
+    'FtcFIJY2xvc2luZ0F0EkIKD21lZGlhX2ZlbmNlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1'
+    'Zi5UaW1lc3RhbXBSDW1lZGlhRmVuY2VkQXQSNwoJY2xvc2VkX2F0GA4gASgLMhouZ29vZ2xlLn'
+    'Byb3RvYnVmLlRpbWVzdGFtcFIIY2xvc2VkQXQ=');
 
 @$core.Deprecated('Use startCallRequestDescriptor instead')
 const StartCallRequest$json = {

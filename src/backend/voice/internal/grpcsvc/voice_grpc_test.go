@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -166,9 +167,11 @@ func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC
 
 func TestVoiceGRPC_ManagedGameSessionUsesLiveUserAdmissionForJoinAndToken(t *testing.T) {
 	now := time.Now().UTC()
-	room := gameprovision.Room{RoomID: "managed-room-1", ChatID: "chat-managed", LiveKitRoomName: "voice-game-session-managed-room-1", CreatedAt: now}
+	room := gameprovision.Room{RoomID: uuid.NewString(), ChatID: uuid.NewString(), LiveKitRoomName: "voice-game-session-managed-room-1", ApplicationID: uuid.NewString(), EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), CreatedAt: now}
 	service := newTestVoiceService(now, &recordingEvents{})
 	service.ManagedGameSessionRooms = fixtureManagedGameSessionRooms{room: room}
+	grant := &managedGameSessionGrantStub{}
+	service.setManagedGameSessionGrantChecker(grant)
 	joined, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
 	require.NoError(t, err)
 	require.Equal(t, room.RoomID, joined.CallSession.RoomId)
@@ -179,6 +182,13 @@ func TestVoiceGRPC_ManagedGameSessionUsesLiveUserAdmissionForJoinAndToken(t *tes
 	token, err := service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: room.RoomID})
 	require.NoError(t, err)
 	require.NotEmpty(t, token.Jwt)
+
+	grant.err = status.Error(codes.PermissionDenied, "grant revoked")
+	_, err = service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "a denied Role check fences a warm managed CallStore entry")
+	_, err = service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: room.RoomID})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "a denied Role check fences warm token issuance")
+	grant.err = nil
 
 	service.ChatMembers = denyChatMembers{}
 	_, err = service.JoinCall(voiceTestCtx("profile-outsider"), &callsv1.JoinCallRequest{RoomId: room.RoomID})
