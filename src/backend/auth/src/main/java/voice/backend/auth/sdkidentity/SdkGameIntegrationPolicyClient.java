@@ -48,6 +48,8 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
   private static final Set<String> EXECUTION_PERMIT_FIELDS = Set.of("permit_id", "binding_id", "application_id",
       "environment_id", "binding_revision", "assertion_jti", "operation_id", "expires_at");
   private static final Set<String> EXECUTION_COMPLETION_FIELDS = Set.of("permit_id", "operation_id", "outcome", "status");
+  private static final Set<String> BINDING_AUTHORITY_FIELDS = Set.of("application_id", "environment_id", "binding_id",
+      "status", "binding_revision", "character_context");
 
 
   private final String configuredBaseUrl;
@@ -71,6 +73,39 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
     this.clock = clock;
     this.http = http;
     this.requestTimeout = requestTimeout;
+  }
+
+  public record GisBindingAuthority(UUID applicationId, UUID environmentId, UUID bindingId,
+      String status, long bindingRevision) {}
+
+  /** Authenticated execution-time read of GIS-owned binding authority. Character context is never consumed. */
+  public GisBindingAuthority resolveBindingAuthority(UUID bindingId, UUID expectedApplicationId, UUID expectedEnvironmentId) {
+    try {
+      if (bindingId == null || bindingId.equals(new UUID(0, 0)) || expectedApplicationId == null
+          || expectedApplicationId.equals(new UUID(0, 0)) || expectedEnvironmentId == null
+          || expectedEnvironmentId.equals(new UUID(0, 0)) || clock == null || http == null
+          || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
+      String path = "/internal/v1/bindings/" + bindingId + "/authority";
+      URI endpoint = endpointPath(configuredBaseUrl, path, allowInternalHttp);
+      byte[] workloadKey = key(configuredKey);
+      String timestamp = Long.toString(clock.instant().getEpochSecond());
+      String nonce = UUID.randomUUID().toString();
+      HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(requestTimeout)
+          .header("X-Voice-Workload", "auth").header("X-Voice-Timestamp", timestamp)
+          .header("X-Voice-Nonce", nonce).header("X-Voice-Signature", requestSignature(workloadKey, path, timestamp, nonce))
+          .GET().build();
+      HttpResponse<byte[]> response = http.send(request, info -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      if (response.statusCode() != 200) throw denied();
+      verifySignedResponse(response, path, timestamp, nonce, workloadKey);
+      return parseBindingAuthority(response.body(), bindingId, expectedApplicationId, expectedEnvironmentId);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw denied();
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception unavailableOrMalformed) {
+      throw denied();
+    }
   }
 
   @Override
@@ -345,6 +380,7 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
   private static URI endpointPath(String rawBaseUrl, String rawPath, boolean allowInternalHttp) {
     if (rawPath == null || !(rawPath.equals("/internal/v1/bindings/challenges")
         || rawPath.startsWith("/internal/v1/bindings/challenges/")
+        || rawPath.matches("/internal/v1/bindings/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/authority")
         || rawPath.matches("/internal/v1/game-integrations/bindings/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/execution-permits")
         || rawPath.matches("/internal/v1/game-integrations/execution-permits/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/completion"))
         || rawPath.contains("?") || rawPath.contains("#")) throw denied();
@@ -400,6 +436,29 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
           targetProfile, profileRevision, consentRevision, policyRevision, scopes);
     } catch (SdkIdentityDeniedException denied) { throw denied; }
     catch (Exception malformed) { throw denied(); }
+  }
+
+  private static GisBindingAuthority parseBindingAuthority(byte[] raw, UUID expectedBinding,
+      UUID expectedApplication, UUID expectedEnvironment) {
+    try {
+      JsonNode root = JSON.readTree(raw);
+      if (root == null || !root.isObject()) throw denied();
+      Set<String> fields = new HashSet<>();
+      root.fieldNames().forEachRemaining(fields::add);
+      if (!fields.equals(BINDING_AUTHORITY_FIELDS) || !root.has("character_context")) throw denied();
+      UUID application = canonicalUuid(text(root, "application_id"));
+      UUID environment = canonicalUuid(text(root, "environment_id"));
+      UUID binding = canonicalUuid(text(root, "binding_id"));
+      String status = text(root, "status");
+      long revision = positiveLong(root, "binding_revision");
+      if (!expectedApplication.equals(application) || !expectedEnvironment.equals(environment)
+          || !expectedBinding.equals(binding) || !"active".equals(status)) throw denied();
+      return new GisBindingAuthority(application, environment, binding, status, revision);
+    } catch (SdkIdentityDeniedException denied) {
+      throw denied;
+    } catch (Exception malformed) {
+      throw denied();
+    }
   }
 
   private static SdkBindingChallengeAuthority.Challenge parseCreatedBindingChallenge(byte[] raw,

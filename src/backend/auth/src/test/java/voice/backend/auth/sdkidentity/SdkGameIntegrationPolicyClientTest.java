@@ -115,6 +115,67 @@ class SdkGameIntegrationPolicyClientTest {
   }
 
   @Test
+  void resolvesCurrentGISBindingOverSignedExactPathAndChecksAllAuthorityFields() throws Exception {
+    UUID binding = UUID.fromString("30000000-0000-4000-8000-000000000003");
+    String path = "/internal/v1/bindings/" + binding + "/authority";
+    String body = "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"binding_id\":\"" + binding
+        + "\",\"status\":\"active\",\"binding_revision\":7,\"character_context\":[]}\n";
+    AtomicReference<String> received = new AtomicReference<>();
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      received.set(exchange.getRequestMethod() + "\n" + exchange.getRequestURI().getRawPath() + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Workload") + "\n" + timestamp + "\n" + nonce + "\n"
+          + exchange.getRequestHeaders().getFirst("X-Voice-Signature") + "\n" + exchange.getRequestBody().readAllBytes().length);
+      respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+    });
+
+    var authority = client(baseUrl()).resolveBindingAuthority(binding, APP, ENV);
+
+    assertThat(received.get().split("\n")[0]).isEqualTo("GET");
+    String[] request = received.get().split("\n");
+    assertThat(request[1]).isEqualTo(path);
+    assertThat(request[2]).isEqualTo("auth");
+    assertThat(request[5]).isEqualTo(requestSignature(path, request[3], request[4]));
+    assertThat(request[6]).isEqualTo("0");
+    assertThat(authority.applicationId()).isEqualTo(APP);
+    assertThat(authority.environmentId()).isEqualTo(ENV);
+    assertThat(authority.bindingId()).isEqualTo(binding);
+    assertThat(authority.status()).isEqualTo("active");
+    assertThat(authority.bindingRevision()).isEqualTo(7);
+  }
+
+  @Test
+  void currentGISBindingReaderRejectsWrongTupleInactiveRevisionMalformedAndTamperedResponses() throws Exception {
+    UUID binding = UUID.fromString("30000000-0000-4000-8000-000000000003");
+    String path = "/internal/v1/bindings/" + binding + "/authority";
+    List<String> rejected = List.of(
+        "{\"application_id\":\"" + UUID.randomUUID() + "\",\"environment_id\":\"" + ENV + "\",\"binding_id\":\"" + binding + "\",\"status\":\"active\",\"binding_revision\":7,\"character_context\":[]}\n",
+        "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV + "\",\"binding_id\":\"" + binding + "\",\"status\":\"revoking\",\"binding_revision\":7,\"character_context\":[]}\n",
+        "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV + "\",\"binding_id\":\"" + binding + "\",\"status\":\"active\",\"binding_revision\":0,\"character_context\":[]}\n",
+        "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV + "\",\"binding_id\":\"" + binding + "\",\"status\":\"active\",\"binding_revision\":7}\n");
+    for (String body : rejected) {
+      start(exchange -> {
+        String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+        String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+        respond(exchange, 200, body, timestamp, nonce, responseSignature(path, timestamp, nonce, body));
+      });
+      assertBindingDenied(() -> client(baseUrl()).resolveBindingAuthority(binding, APP, ENV));
+      stopServer();
+      server = null;
+    }
+    String valid = "{\"application_id\":\"" + APP + "\",\"environment_id\":\"" + ENV
+        + "\",\"binding_id\":\"" + binding + "\",\"status\":\"active\",\"binding_revision\":7,\"character_context\":[]}\n";
+    start(exchange -> {
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      respond(exchange, 200, valid, timestamp, nonce, "A".repeat(43));
+    });
+    assertBindingDenied(() -> client(baseUrl()).resolveBindingAuthority(binding, APP, ENV));
+  }
+
+  @Test
   void createsConsentBoundChallengeWithSignedExactBodyAndVerifiesReturnedGISFacts() throws Exception {
     UUID device = UUID.fromString("40000000-0000-4000-8000-000000000004");
     UUID sourceAccount = UUID.fromString("50000000-0000-4000-8000-000000000005");
@@ -504,6 +565,11 @@ class SdkGameIntegrationPolicyClientTest {
 
   private static void assertDenied(Resolver resolver) {
     assertThatThrownBy(() -> resolver.resolve(APP, ENV)).isInstanceOf(SdkIdentityDeniedException.class)
+        .hasMessage("invalid_sdk_identity");
+  }
+
+  private static void assertBindingDenied(Runnable resolver) {
+    assertThatThrownBy(resolver::run).isInstanceOf(SdkIdentityDeniedException.class)
         .hasMessage("invalid_sdk_identity");
   }
 

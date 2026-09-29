@@ -278,9 +278,12 @@ ID, with no token, provider claim or private-key bytes.
 #### T14-DEV source and test map
 
 This map records existing development behavior only. It does not mark the
-parent T14 or the complete ID01–ID06 acceptance rows as closed. The exact-head
-Auth, GIS, and Flutter hosted checks for `94dde2986d0024a48c65e77f3e6c98bb175418d6`
-are pending; keep T14-DEV unchecked until all three finish green.
+parent T14 or the complete ID01–ID06 acceptance rows as closed. Exact-head
+hosted CI and Docs link check passed for PR #550 head
+`02b73018a8a94b07556147816bf04c51ad78fc40`, merged as
+`0a9d62994343763f173adcba361730e9c6b3f660`; Auth, GIS binding, Messaging,
+Flutter, and the independent exact-head review were green. This evidence closes
+only T14-DEV; production routes, live providers, and parent T14 remain open.
 Production paths are Auth `src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/SdkAuthorizationService.java`,
 `SdkAuthorizationRestController.java`, and `AuthUserProfileEligibilityClient.java`;
 GIS `src/backend/gameintegration/internal/httpapi/binding_challenge.go`,
@@ -316,7 +319,7 @@ respectively.
 | ID12 | Crash/timeout/retry на каждой стадии конвертации | Та же durable operation, доступный status, recovery; нет дублей, потери audit или оживления старых tokens/actions |
 | ID13 | Unlink после конвертации, старый provider ticket/token | Retired identity не восстанавливается автоматически; последующий вход следует утверждённой G01 policy |
 | ID14 | Developer service/node/bot credential пытается выпустить player token, enroll/replace/recover device key или отправить за игрока; положительная enrollment/recovery | Отказать первой группе; enroll/replace/recover проходят только с независимым Auth proof и possession нового/current ключа по lifecycle policy; recovery отзывает только указанное lost device, не прочие устройства |
-| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth/GIS execution permit fail closed, same-operation retry не продлевает expiry, а unknown completion не считается успехом; revocation race tests prove `active→revoking→revoked`, no new permit in revoking, and successful revoke waits through commit/abort/expiry; permit `exp = min(issued+3750ms, assertion.exp)`, max clock margin 250ms and transaction 250ms; measured request-to-last-commit ≤4.25s; every current key expires at `not_before + 90 days`; rotation only before expiry, replacement gets its own 90-day validity, old key has 600s overlap; overlap equality and 90-day expiry equality reject new operations while retaining historical verification; missed renewal has no grace and requires fresh independent recovery proof; Auth cannot issue an assertion or admit a new message without T16 binding authority; new message writes also remain fail-closed without T30/T31 exact app/env/binding/chat mapping |
+| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth/GIS execution permit fail closed, same-operation retry не продлевает expiry, а unknown completion не считается успехом; revocation race tests prove `active→revoking→revoked`, no new permit in revoking, and successful revoke waits through commit/abort/expiry; permit `exp = min(issued+3750ms, assertion.exp)`, max clock margin 250ms and transaction 250ms; measured durable `revoking` transition-to-last permit commit/abort ≤4.25s, with API request-to-transition reported separately; every current key expires at `not_before + 90 days`; rotation only before expiry, replacement gets its own 90-day validity, old key has 600s overlap; overlap equality and 90-day expiry equality reject new operations while retaining historical verification; missed renewal has no grace and requires fresh independent recovery proof; Auth cannot issue an assertion or admit a new message without T16 binding authority; new message writes also remain fail-closed without T30/T31 exact app/env/binding/chat mapping |
 
 The internal ingress contract is protobuf `MessagingService.ApplyGameMessage`:
 it carries the exact compact JWS body and separate Auth assertion, without
@@ -488,6 +491,70 @@ that app/environment/binding. Until the T30/T31 producer is available, the
 resource-mapping dependency is absent and new game-authored writes fail closed;
 tests with a synthetic mapping fixture prove only the consumer seam, not that
 the prerequisite has shipped. Receipt-first exact retries remain readable.
+
+### T16-DEV cross-service permit acceptance
+
+The hosted Linux Compose gate must exercise the production Auth permit REST
+service and dedicated mTLS listener, GIS private mapping and execution-permit
+handlers with the real registry/PostgreSQL store, and Messaging's production
+`ApplyGameMessage` gRPC path, principal verifier, Auth permit client, GIS
+mapping client, and PostgreSQL receipt/completion transaction. Synthetic
+credentials, principals, account/profile identities, bindings and mapping
+rows are isolated to disposable run databases. No Google or other provider
+credential is used. Only unrelated Chat/File policy dependencies may use
+explicit test adapters; neither the Auth↔GIS permit seam nor GIS mapping
+authority may be mocked.
+
+Auth's real `/api/v1/auth/sdk/device-authority` endpoint must use its required
+production `SdkBindingAuthority` bean to call GIS
+`GET /internal/v1/bindings/{binding_id}/authority` with v1 WorkloadProof and verify
+GIS's exact-byte signed, no-store response. The Compose test obtains the
+assertion from Auth and asserts that the successful request adds exactly one
+GIS workload nonce in shared disposable Redis, proving the live GIS verifier
+and authority handler/store participated. Auth fails closed for no/ambiguous
+active grant, local actor/device mismatch, GIS mismatch/revocation, bad proof,
+or unavailable GIS.
+
+The Auth-signed assertion and exact mapping fixture use the same
+`application_id`, `environment_id`, `binding_id`, and `chat_id`. Missing,
+foreign-app/environment, wrong-binding and wrong-chat mappings must be denied
+before the permit client is called and before any message, revision, receipt,
+or completion row is written. A wrong Gateway issuer/service/RPC/request hash
+must be rejected by the production principal verifier before reaching the
+Messaging processor. A valid exact mapping then causes Auth/GIS permit issue
+and verification, followed by Chat membership, File provenance, and the atomic
+message commit. Chat/File denial after permit issue must persist and dispatch
+`aborted`; mapping denial occurs before any permit call. A successful operation
+has one message commit and one durable completion receipt; a retry after a simulated lost response returns
+the exact retained result without a second message or permit. Exact Auth/GIS
+permit retries return the same receipt without extending expiry, while changed
+operation/assertion/outcome conflicts.
+
+For this owner-revoke scenario, set `t0` to the GIS binding's durable commit
+of `active → revoking`; record endpoint request-to-`t0` and the Auth grant's
+separate `revoking` timestamp. `t1` is the last durable terminal state for
+every permit issued before `t0`: `committed`, `aborted`, or `expired` after the
+fixed 3750ms lease plus 500ms drain margin. Gate `t1 - t0 ≤ 4.25s`. While
+revoking, new permit issue must fail; unknown completion remains nonterminal
+until the expiry transition is durable, and the binding reaches `revoked` only
+after drain. The same retained message operation after revoke/relink returns
+its exact receipt read-only, with no fresh Auth/GIS calls or writes. A distinct
+new operation with old-binding proof is denied once the old binding is
+`revoked`; a permit issued before `t0` may still reach terminal state during
+drain. For
+restore/relink, the proposed provisional developer SLO is ≤5.0s measured
+monotonically from commit of the new binding as active with current Auth
+grant/consent (`t0`) to first accepted operation using a freshly Auth-signed
+assertion for the new binding (`t1`). This is a new sprint target, not a
+previously frozen contract and not derived from revoke timing. All old-binding
+assertions remain denied for new writes. The hosted fixture changes the GIS
+binding ID and authority revision and updates the disposable Auth grant/device
+authority state; it does not claim a public/provider relink lifecycle. The
+test starts its monotonic interval after both stores commit that synthetic
+state and ends when the successful Messaging response arrives, conservatively
+upper-bounding the earlier durable message commit. A synthetic mapping fixture
+proves only the T16 consumer path; T30/T31 mapping production, Gateway
+publication, real-provider approval and production admission remain open.
 
 ## 4. Как запускать проверки при реализации
 

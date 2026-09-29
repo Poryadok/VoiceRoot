@@ -42,7 +42,11 @@ class SdkIdentityConfigurationTest {
 
   @Test void enabledJdbcCreatesWorkingServiceWithNoAdmittedAppsByDefault() {
     context().withPropertyValues("auth.sdk-identity.enabled=true", "auth.persistence=jdbc")
-        .run(ctx -> assertThat(ctx).hasSingleBean(SdkIdentityService.class));
+        .run(ctx -> {
+          assertThat(ctx).hasSingleBean(SdkIdentityService.class);
+          assertThat(ctx).hasSingleBean(SdkBindingAuthority.class);
+          assertThat(ctx.getBean(SdkBindingAuthority.class)).isInstanceOf(JdbcSdkBindingAuthority.class);
+        });
   }
 
   @Test void invalidOperatorProviderConfigurationFailsStartup() {

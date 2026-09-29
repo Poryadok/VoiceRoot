@@ -816,17 +816,24 @@ RPC carries the exact client `compact_jws` and `device_authority_assertion`.
 It is an internal service method; public Gateway REST exposure is a separate
 T20 consumer. Messaging first checks the durable exact-byte operation receipt.
 For a new operation it verifies the device signature and current Auth
-assertion, then obtains a one-use Auth execution permit bound to that
-assertion's `jti` and the stable message `operation_id`. Auth checks current
+assertion, then resolves the exact current GIS app/environment/binding/chat
+mapping over the private mTLS WorkloadProof route. Missing, foreign, stale, or
+altered mapping denies before Messaging requests a permit; no Auth or GIS
+permit is issued and no Chat/File check or message write follows. After mapping
+succeeds, Messaging asks Auth for a one-use execution permit bound to the
+assertion's `jti` and stable message `operation_id`, then verifies that permit.
+Auth checks current
 grant/device/account/profile epochs and the fixed
 `voice.game-message` → `game.chat.send` permission, requests a GIS permit for
 the same operation, rechecks its own authorization state, and signs a combined
-permit. Messaging then verifies current app/environment/binding/chat resource
-mapping, current Voice chat membership and every File manifest item, before
-starting the bounded database transaction. Message state, immutable revision,
-exact attachment manifest, exact-byte receipt, and permit-completion outbox
-record commit atomically. Missing Auth, GIS, T30/T31 mapping, Chat, or required
-File authority denies a new write without persistence.
+permit. Messaging then checks current Voice chat membership and every File
+manifest item before starting the bounded database transaction. A Chat or File
+denial after permit issuance durably records and dispatches an `aborted`
+completion; message state, immutable revision, exact attachment manifest,
+exact-byte receipt, and `committed` permit-completion outbox record commit
+atomically.
+Missing Auth, GIS, T30/T31 mapping, Chat, or required File authority denies a
+new write without persistence.
 
 Messaging requests a permit from Auth `POST
 /api/v1/auth/sdk/game-message/execution-permits` using its registered service
@@ -880,11 +887,30 @@ retries until acknowledged.
 Both owners serialize revocation with permit issuance using
 `active → revoking → revoked`; `revoking` stops new permits. Successful revoke
 waits for all issued permits to be committed/aborted or to expire plus the
-clock and transaction margins. Unknown completion remains pending. With the
-3.75s permit cap, 250ms clock margin, and 250ms transaction limit, the last
-possible commit is no later than 4.25 seconds from revoke request; the
-acceptance test measures request-to-last-commit. Relinking creates a new
-binding ID. The separate T30/T31 producer must prove the exact
+clock and transaction margins. Unknown completion remains pending. For owner
+revoke acceptance, `t0` is the GIS binding's durable `active → revoking`
+commit; endpoint request-to-`t0` and the Auth grant's separate `revoking`
+transition timestamp are recorded separately. `t1` is the last durable
+terminal state for every permit issued before `t0`: `committed`, `aborted`, or
+`expired` after its fixed lease plus the 500ms drain margin. The interval
+`t1 - t0` is at most 4.25 seconds (3750ms maximum lease plus 500ms). An unknown
+completion remains nonterminal until the fixed-expiry path is persisted.
+Relinking creates a new binding ID. An exact retained-message retry after
+revoke/relink returns its immutable receipt read-only without fresh Auth/GIS
+authority calls or writes. A distinct new operation with old-binding proof is
+denied after that binding reaches `revoked`; a pre-`t0` permit may still reach
+its bounded terminal state during drain. The proposed restore
+target is at most 5.0 seconds from `t0` (commit of the new binding as active
+with current Auth grant/consent) to `t1` (first accepted operation with a
+freshly Auth-signed assertion for the new binding), measured monotonically.
+In the hosted consumer harness, `t0` is observed after both disposable service
+stores commit the synthetic relink, and `t1` is conservatively observed when
+the successful Messaging response arrives; this upper-bounds the operation's
+earlier durable commit. The fixture changes the binding ID and authority
+revision and does not claim provider or public relink lifecycle acceptance.
+This is a new provisional developer SLO, not an existing contract or a
+consequence of the revoke bound; all old-binding assertions/proofs remain
+denied for new writes. The separate T30/T31 producer must prove the exact
 `(application_id, environment_id, binding_id, chat_id)` mapping; T16 binding
 authority and `ChatGuard.EnsureMember` cannot prove that relationship. New
 game-authored writes remain fail-closed until T30/T31 is available.

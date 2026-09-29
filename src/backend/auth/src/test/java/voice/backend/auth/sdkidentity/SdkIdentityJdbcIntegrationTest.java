@@ -17,13 +17,20 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -38,6 +45,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -372,10 +381,11 @@ class SdkIdentityJdbcIntegrationTest {
         .isInstanceOf(SdkIdentityDeniedException.class);
 
     var binding = new SdkBindingAuthority.Binding(session.actorId(), UUID.randomUUID());
-    SdkBindingAuthority authority = (application, environment, account) -> {
+    SdkBindingAuthority authority = (application, environment, account, deviceId) -> {
       assertThat(application).isEqualTo(app);
       assertThat(environment).isEqualTo(env);
       assertThat(account).isEqualTo(session.accountId());
+      assertThat(deviceId).isEqualTo(session.deviceId());
       return java.util.Optional.of(binding);
     };
     var service = service(Clock.fixed(NOW, ZoneOffset.UTC), signer, authority);
@@ -437,7 +447,7 @@ class SdkIdentityJdbcIntegrationTest {
       }
       return "assertion-issued-before-revoke";
     };
-    SdkBindingAuthority binding = (application, environment, account) -> java.util.Optional.of(
+    SdkBindingAuthority binding = (application, environment, account, deviceId) -> java.util.Optional.of(
         new SdkBindingAuthority.Binding(session.actorId(), UUID.randomUUID()));
     var issuerService = service(Clock.fixed(NOW, ZoneOffset.UTC), blockingSigner, binding);
     var workers = Executors.newFixedThreadPool(2);
@@ -473,6 +483,99 @@ class SdkIdentityJdbcIntegrationTest {
       allowSignerCommit.countDown();
       workers.shutdownNow();
       assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
+  }
+
+  @Test
+  void gameBindingRevokeFirstDeniesAuthorityAndPersistsNoIssueRow() throws Exception {
+    var session = exchange(service(NOW), app, env, client, device);
+    var authorityFixture = installActiveBindingGrant(session);
+    try (var gis = authorityServer(authorityFixture, false)) {
+      var issuerService = productionAuthorityService(gis);
+      var tx = transactionTemplate();
+      var revokeService = handoffService(tx);
+      CountDownLatch revokeUpdated = new CountDownLatch(1);
+      CountDownLatch allowRevokeCommit = new CountDownLatch(1);
+      java.util.concurrent.atomic.AtomicInteger revokePid = new java.util.concurrent.atomic.AtomicInteger();
+      var workers = Executors.newFixedThreadPool(2);
+      try {
+        var revokeFuture = workers.submit(() -> tx.execute(status -> {
+          revokePid.set(jdbc.getJdbcTemplate().queryForObject("SELECT pg_backend_pid()", Integer.class));
+          var receipt = revokeService.revoke(authorityFixture.bindingOperationId());
+          revokeUpdated.countDown();
+          awaitGate(allowRevokeCommit, "revoke commit gate timed out");
+          return receipt;
+        }));
+        assertThat(revokeUpdated.await(10, TimeUnit.SECONDS)).isTrue();
+        var requestId = UUID.randomUUID();
+        byte[] proof = deviceAuthorityProof(device, session, requestId, NOW).getBytes(StandardCharsets.US_ASCII);
+        var issueFuture = workers.submit(() -> issuerService.deviceAuthority(
+            session.accessToken(), new String(proof, StandardCharsets.US_ASCII), proof));
+        DatabaseLockWait wait = awaitDatabaseLockWait(0, revokePid.get(), "%sdk_identities%", "%");
+        assertThat(wait.waitingPid()).isPositive();
+        assertThat(wait.blockingPid()).isEqualTo(revokePid.get());
+        allowRevokeCommit.countDown();
+        revokeFuture.get(10, TimeUnit.SECONDS);
+        assertThatThrownBy(() -> issueFuture.get(10, TimeUnit.SECONDS))
+            .hasCauseInstanceOf(SdkIdentityDeniedException.class);
+        assertThat(count("sdk_device_authority_issues")).isZero();
+        assertThat(gis.requests()).isZero();
+      } finally {
+        allowRevokeCommit.countDown();
+        workers.shutdownNow();
+        assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+      }
+    }
+  }
+
+  @Test
+  void gameBindingAuthorityIssueFirstCommitsBeforeConcurrentRevoke() throws Exception {
+    var session = exchange(service(NOW), app, env, client, device);
+    var authorityFixture = installActiveBindingGrant(session);
+    try (var gis = authorityServer(authorityFixture, true)) {
+      var issueBackendPid = new java.util.concurrent.atomic.AtomicInteger();
+      var issueTransactionId = new java.util.concurrent.atomic.AtomicReference<Long>();
+      var issuerService = productionAuthorityService(gis, issueBackendPid, issueTransactionId);
+      var tx = transactionTemplate();
+      var revokeService = handoffService(tx);
+      CountDownLatch revokeStarted = new CountDownLatch(1);
+      java.util.concurrent.atomic.AtomicInteger revokePid = new java.util.concurrent.atomic.AtomicInteger();
+      var workers = Executors.newFixedThreadPool(2);
+      try {
+        var requestId = UUID.randomUUID();
+        byte[] proof = deviceAuthorityProof(device, session, requestId, NOW).getBytes(StandardCharsets.US_ASCII);
+        var issueFuture = workers.submit(() -> issuerService.deviceAuthority(
+            session.accessToken(), new String(proof, StandardCharsets.US_ASCII), proof));
+        assertThat(gis.requestSeen().await(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(issueBackendPid.get()).isPositive();
+        assertThat(issueTransactionId.get()).isNotNull().isPositive();
+        assertThat(jdbc.queryForObject("SELECT state FROM pg_stat_activity WHERE pid=:pid",
+            Map.of("pid", issueBackendPid.get()), String.class)).isEqualTo("idle in transaction");
+        var revokeFuture = workers.submit(() -> tx.execute(status -> {
+          revokePid.set(jdbc.getJdbcTemplate().queryForObject("SELECT pg_backend_pid()", Integer.class));
+          revokeStarted.countDown();
+          return revokeService.revoke(authorityFixture.bindingOperationId());
+        }));
+        assertThat(revokeStarted.await(10, TimeUnit.SECONDS)).isTrue();
+        DatabaseLockWait wait = awaitDatabaseLockWait(revokePid.get(), issueBackendPid.get(),
+            "%sdk_identities%", "%sdk_game_message_grants%");
+        assertThat(wait.waitingPid()).isEqualTo(revokePid.get());
+        assertThat(wait.blockingPid()).isEqualTo(issueBackendPid.get());
+        assertThat(gis.isHoldingResponse()).as("GIS remains held while the database lock edge is observed").isTrue();
+        assertThat(jdbc.queryForObject("SELECT state FROM pg_stat_activity WHERE pid=:pid",
+            Map.of("pid", wait.blockingPid()), String.class)).isEqualTo("idle in transaction");
+        assertThat(count("sdk_device_authority_issues")).isZero();
+        gis.releaseResponse();
+        assertThat(issueFuture.get(10, TimeUnit.SECONDS)).isEqualTo("binding-authority-assertion");
+        assertThat(count("sdk_device_authority_issues")).isEqualTo(1);
+        assertThat(revokeFuture.get(10, TimeUnit.SECONDS).status()).isEqualTo("revoked");
+        assertThat(jdbc.queryForObject("SELECT game_binding_status FROM sdk_authorizations WHERE game_binding_operation_id=:id",
+            Map.of("id", authorityFixture.bindingOperationId()), String.class)).isEqualTo("revoked");
+      } finally {
+        gis.releaseResponse();
+        workers.shutdownNow();
+        assertThat(workers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+      }
     }
   }
 
@@ -984,12 +1087,246 @@ class SdkIdentityJdbcIntegrationTest {
   }
 
   private SdkIdentityService service(Clock clock, SdkDeviceStatusIssuer signer, SdkBindingAuthority binding) {
-    var source = source();
-    return new SdkIdentityService(new NamedParameterJdbcTemplate(source),
-        new TransactionTemplate(new DataSourceTransactionManager(source)),
+    var dataSource = jdbc.getJdbcTemplate().getDataSource();
+    return new SdkIdentityService(jdbc,
+        new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
         new GoogleOidcProofVerifier(clock,
             kid -> googleKey.getKeyID().equals(kid) ? googleKey.toPublicJWK() : null),
         applications, policies, clock, signer, binding);
+  }
+
+  private BindingGrantFixture installActiveBindingGrant(SdkIdentityService.Session session) throws Exception {
+    UUID bindingId = UUID.randomUUID();
+    UUID requestId = UUID.randomUUID();
+    UUID challengeId = UUID.randomUUID();
+    UUID bindingOperationId = UUID.randomUUID();
+    UUID targetAccountId = UUID.randomUUID();
+    UUID targetProfileId = UUID.randomUUID();
+    Instant expiry = NOW.plusSeconds(3600);
+    jdbc.getJdbcTemplate().update("INSERT INTO accounts(id,password_hash,type,status) VALUES (?,'synthetic','regular','active')",
+        targetAccountId);
+    jdbc.update("""
+        INSERT INTO sdk_authorizations(request_id,source_account_id,device_id,source_session_hash,source_generation,
+          application_id,environment_id,idempotency_key,request_hash,redirect_uri,code_challenge,client_state,scopes,
+          policy_revision,display_name,expires_at,target_account_id,target_profile_id,target_epoch,profile_revision,
+          consumed_at,game_binding_id,game_binding_status,game_binding_authority_revision,game_binding_challenge_id,
+          game_binding_operation_id,game_binding_intent,game_binding_challenge_nonce)
+        VALUES(:request,:source,:device,:sessionHash,1,:app,:env,:idempotency,repeat('a',64),
+          'https://voice.test/callback',repeat('b',43),'test','game.chat.send',1,'test game',:expires,
+          :targetAccount,:targetProfile,1,1,:now,:binding,'active',1,:challenge,:operation,true,repeat('c',43))
+        """, Map.ofEntries(Map.entry("request", requestId), Map.entry("source", session.accountId()),
+            Map.entry("device", session.deviceId()), Map.entry("sessionHash", sha256(session.accessToken())),
+            Map.entry("app", app), Map.entry("env", env), Map.entry("idempotency", UUID.randomUUID()),
+            Map.entry("expires", java.sql.Timestamp.from(expiry)), Map.entry("targetAccount", targetAccountId),
+            Map.entry("targetProfile", targetProfileId), Map.entry("now", java.sql.Timestamp.from(NOW)),
+            Map.entry("binding", bindingId), Map.entry("challenge", challengeId), Map.entry("operation", bindingOperationId)));
+    String linkedHash = sha256("linked-session:" + requestId);
+    jdbc.update("INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at) VALUES(:hash,:request,:expires)",
+        Map.of("hash", linkedHash, "request", requestId, "expires", java.sql.Timestamp.from(expiry)));
+    Long consentRevision = jdbc.queryForObject("SELECT consent_revision FROM sdk_linked_sessions WHERE request_id=:request",
+        Map.of("request", requestId), Long.class);
+    jdbc.update("UPDATE sdk_authorizations SET game_binding_consent_revision=:consent WHERE request_id=:request",
+        Map.of("consent", consentRevision, "request", requestId));
+    jdbc.update("""
+        INSERT INTO sdk_game_message_grants(grant_id,authorization_request_id,application_id,environment_id,
+          target_account_id,target_profile_id,target_epoch,binding_id,consent_revision,scopes,policy_revision,
+          profile_revision,status,authority_revision,created_at,updated_at)
+        VALUES(:grant,:request,:app,:env,:targetAccount,:targetProfile,1,:binding,:consent,'game.chat.send',1,1,
+          'active',1,:now,:now)
+        """, Map.of("grant", UUID.randomUUID(), "request", requestId, "app", app, "env", env,
+            "targetAccount", targetAccountId, "targetProfile", targetProfileId, "binding", bindingId,
+            "consent", consentRevision, "now", java.sql.Timestamp.from(NOW)));
+    return new BindingGrantFixture(bindingId, bindingOperationId, session.accountId(), session.deviceId(),
+        session.actorId(), app, env);
+  }
+
+  private SdkIdentityService productionAuthorityService(AuthorityHttpFixture gis) {
+    return productionAuthorityService(gis, new java.util.concurrent.atomic.AtomicInteger(),
+        new java.util.concurrent.atomic.AtomicReference<>());
+  }
+
+  private SdkIdentityService productionAuthorityService(AuthorityHttpFixture gis,
+      java.util.concurrent.atomic.AtomicInteger issueBackendPid,
+      java.util.concurrent.atomic.AtomicReference<Long> issueTransactionId) {
+    String key = Base64.getEncoder().encodeToString(AuthorityHttpFixture.WORKLOAD_KEY);
+    var client = new SdkGameIntegrationPolicyClient(gis.baseUrl(), key, true,
+        Clock.fixed(NOW, ZoneOffset.UTC), HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build(),
+        Duration.ofSeconds(30));
+    return service(Clock.fixed(NOW, ZoneOffset.UTC), claims -> "binding-authority-assertion",
+        (application, environment, account, deviceId) -> {
+          issueBackendPid.set(jdbc.getJdbcTemplate().queryForObject("SELECT pg_backend_pid()", Integer.class));
+          issueTransactionId.set(jdbc.getJdbcTemplate().queryForObject("SELECT txid_current()", Long.class));
+          return new JdbcSdkBindingAuthority(jdbc, client)
+              .currentBinding(application, environment, account, deviceId);
+        });
+  }
+
+  private AuthGameBindingHandoffService handoffService(TransactionTemplate tx) {
+    return new AuthGameBindingHandoffService(jdbc, tx, null, null, null, null, null,
+        Clock.fixed(NOW, ZoneOffset.UTC));
+  }
+
+  private TransactionTemplate transactionTemplate() {
+    return new TransactionTemplate(new DataSourceTransactionManager(jdbc.getJdbcTemplate().getDataSource()));
+  }
+
+  private AuthorityHttpFixture authorityServer(BindingGrantFixture binding, boolean blockResponse) throws IOException {
+    return new AuthorityHttpFixture(binding, blockResponse);
+  }
+
+  private static void awaitGate(CountDownLatch gate, String message) {
+    try {
+      if (!gate.await(10, TimeUnit.SECONDS)) throw new IllegalStateException(message);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(message, interrupted);
+    }
+  }
+
+  private DatabaseLockWait awaitDatabaseLockWait(int expectedWaitingPid, int expectedBlockingPid,
+      String waitingQueryPattern, String blockingQueryPattern) {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    List<Map<String, Object>> observed = List.of();
+    while (System.nanoTime() < deadline) {
+      observed = jdbc.queryForList("""
+          SELECT waiting.pid AS waiting_pid, blocking.pid AS blocking_pid,
+                 waiting.wait_event_type, waiting.wait_event, waiting.query AS waiting_query,
+                 blocking.state AS blocking_state, blocking.query AS blocking_query
+          FROM pg_stat_activity waiting
+          CROSS JOIN LATERAL unnest(pg_blocking_pids(waiting.pid)) AS blockers(pid)
+          JOIN pg_stat_activity blocking ON blocking.pid=blockers.pid
+          WHERE waiting.datname=current_database() AND waiting.wait_event_type='Lock'
+          """, Map.of());
+      List<Map<String, Object>> waits = jdbc.queryForList("""
+          SELECT waiting.pid AS waiting_pid, blocking.pid AS blocking_pid
+          FROM pg_stat_activity waiting
+          CROSS JOIN LATERAL unnest(pg_blocking_pids(waiting.pid)) AS blockers(pid)
+          JOIN pg_stat_activity blocking ON blocking.pid=blockers.pid
+          WHERE waiting.datname=current_database() AND waiting.wait_event_type='Lock'
+            AND lower(waiting.query) LIKE :waitingQueryPattern
+            AND lower(blocking.query) LIKE :blockingQueryPattern
+            AND (:waitingPid=0 OR waiting.pid=:waitingPid)
+            AND (:blockerPid=0 OR blocking.pid=:blockerPid)
+          """, Map.of("waitingQueryPattern", waitingQueryPattern,
+              "blockingQueryPattern", blockingQueryPattern,
+              "waitingPid", expectedWaitingPid, "blockerPid", expectedBlockingPid));
+      for (Map<String, Object> wait : waits) {
+        int blocker = ((Number) wait.get("blocking_pid")).intValue();
+        if (expectedBlockingPid == 0 || expectedBlockingPid == blocker) {
+          return new DatabaseLockWait(((Number) wait.get("waiting_pid")).intValue(), blocker);
+        }
+      }
+      try { Thread.sleep(20); }
+      catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new AssertionError("interrupted while observing PostgreSQL lock wait", interrupted);
+      }
+    }
+    throw new AssertionError("competing Auth transaction never reached the expected PostgreSQL lock wait; observed="
+        + observed);
+  }
+
+  private record DatabaseLockWait(int waitingPid, int blockingPid) {}
+
+  private record BindingGrantFixture(UUID bindingId, UUID bindingOperationId, UUID accountId, UUID deviceId,
+      UUID actorId, UUID applicationId, UUID environmentId) {}
+
+  private static final class AuthorityHttpFixture implements AutoCloseable {
+    private static final byte[] WORKLOAD_KEY = "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.US_ASCII);
+    private final HttpServer server;
+    private final BindingGrantFixture binding;
+    private final CountDownLatch requestSeen = new CountDownLatch(1);
+    private final CountDownLatch releaseResponse = new CountDownLatch(1);
+    private final java.util.concurrent.atomic.AtomicInteger requestCount = new java.util.concurrent.atomic.AtomicInteger();
+    private final AtomicBoolean holdingResponse = new AtomicBoolean();
+
+    private AuthorityHttpFixture(BindingGrantFixture binding, boolean blockResponse) throws IOException {
+      this.binding = binding;
+      this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+      this.server.createContext("/internal/v1/bindings/", this::handle);
+      this.server.start();
+      if (!blockResponse) releaseResponse.countDown();
+    }
+
+    String baseUrl() { return "http://127.0.0.1:" + server.getAddress().getPort(); }
+    CountDownLatch requestSeen() { return requestSeen; }
+    int requests() { return requestCount.get(); }
+    void releaseResponse() { releaseResponse.countDown(); }
+    boolean isHoldingResponse() { return holdingResponse.get(); }
+
+    private void handle(HttpExchange exchange) throws IOException {
+      requestCount.incrementAndGet();
+      String path = exchange.getRequestURI().getRawPath();
+      String timestamp = exchange.getRequestHeaders().getFirst("X-Voice-Timestamp");
+      String nonce = exchange.getRequestHeaders().getFirst("X-Voice-Nonce");
+      String requestSignature = exchange.getRequestHeaders().getFirst("X-Voice-Signature");
+      if (!"GET".equals(exchange.getRequestMethod())
+          || !("auth".equals(exchange.getRequestHeaders().getFirst("X-Voice-Workload")))
+          || !path.equals("/internal/v1/bindings/" + binding.bindingId() + "/authority")
+          || timestamp == null || nonce == null || !constantTimeEquals(requestSignature,
+              workloadRequestSignature(path, timestamp, nonce))) {
+        exchange.sendResponseHeaders(401, -1);
+        exchange.close();
+        return;
+      }
+      holdingResponse.set(true);
+      requestSeen.countDown();
+      try {
+        if (!releaseResponse.await(30, TimeUnit.SECONDS)) {
+          exchange.sendResponseHeaders(503, -1);
+          exchange.close();
+          return;
+        }
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        exchange.sendResponseHeaders(503, -1);
+        exchange.close();
+        return;
+      } finally {
+        holdingResponse.set(false);
+      }
+      byte[] body = ("{\"application_id\":\"" + binding.applicationId() + "\",\"environment_id\":\""
+          + binding.environmentId() + "\",\"binding_id\":\"" + binding.bindingId()
+          + "\",\"status\":\"active\",\"binding_revision\":1,\"character_context\":[]}\n")
+          .getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Cache-Control", "no-store");
+      exchange.getResponseHeaders().set("Content-Type", "application/json");
+      exchange.getResponseHeaders().set("X-Voice-Response-Timestamp", timestamp);
+      exchange.getResponseHeaders().set("X-Voice-Response-Nonce", nonce);
+      exchange.getResponseHeaders().set("X-Voice-Response-Signature", responseSignature(path, timestamp, nonce, body));
+      exchange.sendResponseHeaders(200, body.length);
+      exchange.getResponseBody().write(body);
+      exchange.close();
+    }
+
+    @Override public void close() { releaseResponse.countDown(); server.stop(0); }
+
+    private static String workloadRequestSignature(String path, String timestamp, String nonce) {
+      String emptyDigest = HexFormat.of().formatHex(digest(new byte[0]));
+      return hmac("v1\nGET\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + emptyDigest);
+    }
+
+    private static String responseSignature(String path, String timestamp, String nonce, byte[] body) {
+      String digest = HexFormat.of().formatHex(digest(body));
+      return hmac("v1\n200\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + digest);
+    }
+
+    private static String hmac(String message) {
+      try {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(WORKLOAD_KEY, "HmacSHA256"));
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+      } catch (Exception failure) { throw new IllegalStateException(failure); }
+    }
+
+    private static byte[] digest(byte[] value) {
+      try { return MessageDigest.getInstance("SHA-256").digest(value); }
+      catch (Exception failure) { throw new IllegalStateException(failure); }
+    }
+
+    private static boolean constantTimeEquals(String left, String right) {
+      return left != null && MessageDigest.isEqual(left.getBytes(StandardCharsets.US_ASCII), right.getBytes(StandardCharsets.US_ASCII));
+    }
   }
 
   private static SdkAuthorizationPolicy.Policy activePolicy(UUID application, UUID environment) {

@@ -117,11 +117,36 @@ public class AuthGameBindingHandoffService {
     if (claimId == null || operationId == null || !("succeeded".equals(outcome) || "failed".equals(outcome))
         || ("succeeded".equals(outcome) != (bindingId != null))) throw denied();
     return transactions.execute(status -> {
+      // The claim's authorization owner is immutable. Read it without locks,
+      // then take the same identity -> authorization/session -> claim order as
+      // claim() and revoke(), and re-read/revalidate after each lock.
+      var ownerRows = jdbc.queryForList("""
+          SELECT c.authorization_request_id,a.source_account_id
+          FROM sdk_game_binding_handoff_claims c
+          JOIN sdk_authorizations a ON a.request_id=c.authorization_request_id
+          WHERE c.claim_id=:claim
+          """, Map.of("claim", claimId));
+      if (ownerRows.size() != 1 || ownerRows.getFirst().get("source_account_id") == null) throw denied();
+      UUID requestId = (UUID) ownerRows.getFirst().get("authorization_request_id");
+      UUID sourceAccountId = (UUID) ownerRows.getFirst().get("source_account_id");
+      var identities = jdbc.queryForList("""
+          SELECT account_id FROM sdk_identities WHERE account_id=:account FOR UPDATE
+          """, Map.of("account", sourceAccountId));
+      if (identities.size() != 1) throw denied();
+      var authorizationRows = jdbc.queryForList("""
+          SELECT request_id FROM sdk_authorizations WHERE request_id=:request FOR UPDATE
+          """, Map.of("request", requestId));
+      if (authorizationRows.size() != 1) throw denied();
+      var sessionRows = jdbc.queryForList("""
+          SELECT request_id FROM sdk_linked_sessions WHERE request_id=:request FOR UPDATE
+          """, Map.of("request", requestId));
+      if (sessionRows.size() != 1) throw denied();
       var rows = jdbc.queryForList("""
           SELECT * FROM sdk_game_binding_handoff_claims WHERE claim_id=:claim FOR UPDATE
           """, Map.of("claim", claimId));
       if (rows.isEmpty()) throw denied();
       Map<String, Object> row = rows.getFirst();
+      if (!requestId.equals(row.get("authorization_request_id"))) throw denied();
       if (!operationId.equals(row.get("operation_id"))) throw conflict();
       String state = (String) row.get("state");
       if (!"claimed".equals(state)) {
@@ -131,7 +156,6 @@ public class AuthGameBindingHandoffService {
         if (!same) throw conflict();
         return new CompletionReceipt(claimId, operationId, outcome, (UUID) row.get("result_binding_id"), "completed");
       }
-      UUID requestId = (UUID) row.get("authorization_request_id");
       if ("succeeded".equals(outcome)) {
         int changed = jdbc.update("""
             UPDATE sdk_authorizations SET game_binding_id=:binding,
@@ -184,7 +208,19 @@ public class AuthGameBindingHandoffService {
    */
   public RevocationReceipt revoke(UUID operationId) {
     if (operationId == null) throw denied();
+    // source_account_id is immutable for this authorization. Read it before
+    // the transaction so the transaction can acquire the common identity
+    // serialization lock before the authorization and grant rows.
+    List<Map<String, Object>> owners = jdbc.queryForList("""
+        SELECT source_account_id FROM sdk_authorizations WHERE game_binding_operation_id=:operation
+        """, Map.of("operation", operationId));
+    if (owners.size() != 1 || owners.getFirst().get("source_account_id") == null) throw denied();
+    UUID sourceAccountId = (UUID) owners.getFirst().get("source_account_id");
     return transactions.execute(status -> {
+      List<Map<String, Object>> identities = jdbc.queryForList("""
+          SELECT account_id FROM sdk_identities WHERE account_id=:account FOR UPDATE
+          """, Map.of("account", sourceAccountId));
+      if (identities.size() != 1) throw denied();
       var rows = jdbc.queryForList("""
           SELECT request_id, game_binding_status, game_binding_authority_revision
           FROM sdk_authorizations WHERE game_binding_operation_id=:operation FOR UPDATE

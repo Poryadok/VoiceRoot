@@ -131,7 +131,7 @@ public class SdkIdentityService {
         throw new SdkIdentityDeniedException();
       }
       verifyAuthoritySignature(parsed.jws(), publicKey);
-      var binding = bindingAuthority.currentBinding(device.applicationId(), device.environmentId(), device.accountId())
+      var binding = bindingAuthority.currentBinding(device.applicationId(), device.environmentId(), device.accountId(), device.deviceId())
           .orElseThrow(SdkIdentityDeniedException::new);
       if (binding.actorId() == null || binding.bindingId() == null
           || !binding.actorId().equals(device.actorId())) throw new SdkIdentityDeniedException();

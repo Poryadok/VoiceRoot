@@ -342,7 +342,7 @@ contracts land before consumers; activation lands after all consumers.
   error code is introduced. This completes only the Auth→User prerequisite;
   the broader T14 browser/device authorization work and operational rollout
   remain pending.
-  - [ ] **T14-DEV** `D: T13-DEV,T10,T04-AUTH,T06-AUTH` Close the bounded,
+  - [x] **T14-DEV** `D: T13-DEV,T10,T04-AUTH,T06-AUTH` Close the bounded,
     provider-independent development vertical for explicit Voice profile and
     scope consent: Auth authorization request, PKCE callback/exchange and
     returning linked-session; current User profile eligibility/revision check;
@@ -350,12 +350,13 @@ contracts land before consumers; activation lands after all consumers.
     implementation is present at the feature base, with existing Auth, GIS,
     and Flutter test sources mapped in [T14-DEV acceptance](game-integrations-acceptance.md#t14-dev-source-and-test-map).
     Auth's full Maven suite passed 890 tests with 0 failures/errors/skips at
-    `7dd013ce551867074ab148dabaedfd30c1f83478`; the Auth, GIS binding, and
-    Flutter authorization source/test files in this slice are unchanged at
-    feature base `213fd1bae14b0145604953f8f36c90f45a9c350f`. Exact-head hosted
-    Auth/GIS/Flutter checks for `94dde2986d0024a48c65e77f3e6c98bb175418d6`
-    are still pending, so leave this subgate unchecked until all three finish
-    green. This development subgate does not close parent T14, publish Auth
+    `7dd013ce551867074ab148dabaedfd30c1f83478`; the current merged feature
+    tree at `0a9d62994343763f173adcba361730e9c6b3f660` contains the same
+    bounded Auth/GIS/Flutter slice. Exact-head hosted CI and Docs link check
+    passed on PR #550 head `02b73018a8a94b07556147816bf04c51ad78fc40`
+    (merged as this tree); Auth, GIS binding, Messaging, Flutter, and the
+    independent exact-head review were green. This development subgate does
+    not close parent T14, publish Auth
     routes through Gateway, prove real-provider behavior, or pass production
     admission; those gates remain open.
 - [ ] **T15** `D: T13,T14` Implement the frozen Auth-owned ES256/P-256 device
@@ -406,13 +407,36 @@ contracts land before consumers; activation lands after all consumers.
   with the request's same key, enforces a 2-second timeout, and fails closed
   when the complete client configuration or mapping authority is unavailable.
   Scoped Auth and Messaging tests, including an ApplyGameMessage-through-client
-  mTLS allow/deny test with local PostgreSQL, pass. T16 remains open for broader
-  PostgreSQL concurrency/replay and revoke-drain timing evidence, independent
-  direct-call scope checks and selected-profile policy surfaces. Selected-profile/alias fanout and hidden-profile non-leak across
+  mTLS allow/deny test with local PostgreSQL, pass. **T16-DEV still requires a
+  hosted Linux Compose gate** that starts the production Auth and GIS services
+  with disposable PostgreSQL state and invokes Messaging's production gRPC
+  ingress, exact principal verification, permit client, GIS mapping client,
+  and receipt transaction. Synthetic mappings are seeded only in that
+  disposable database and do not close T30/T31 producer gates. It records
+  deny-before-permit/write cases, exact retry after response loss, message and
+  completion receipts, revoke timing from the GIS binding's durable
+  `active → revoking` commit to the last durable terminal state (`committed`,
+  `aborted`, or `expired` after the 500ms drain margin) for every earlier
+  permit. Endpoint request-to-transition and Auth grant's `revoking` timestamp
+  are reported separately. It also covers
+  relink under a fresh binding/assertion, including a read-only exact receipt
+  retry after revoke and a distinct new-operation deny with old proof. Until
+  that hosted run is green, its
+  development proof gate remains open. Restore's ≤5.0s monotonic target is
+  a new provisional developer SLO from activated new binding plus current
+  grant/consent to first accepted fresh-assertion operation; old binding
+  proofs remain denied. T16 parent remains open for broader PostgreSQL
+  concurrency/replay, independent direct-call scope checks and selected-profile
+  policy surfaces. Selected-profile/alias fanout and hidden-profile non-leak across
   roster/cards/search/presence belong to the separately named consumer task;
   Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Keep
   downstream message writes fail-closed until their
   producer and consumer checks are implemented.
+  - [ ] **T16-DEV** `D: T14-DEV,T15` Complete the hosted Linux Compose
+    cross-service acceptance described in [game-integrations acceptance](game-integrations-acceptance.md#t16-dev-cross-service-permit-acceptance).
+    This evidence subgate remains open until the production Auth/GIS services,
+    GIS PostgreSQL handlers/store, and Messaging gRPC path pass and exact-run
+    evidence is recorded; it does not close parent T16 or T30/T31.
 - [ ] **T17** `D: T13–T16` Implement durable sdk→new-permanent conversion:
   operation/status, source proof, registration, preview/consent, authority
   freeze, owner receipts, grant recompute, new credentials, retired source

@@ -37,7 +37,7 @@ public class SdkIdentityConfiguration {
   SdkIdentityService sdkIdentityService(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager manager,
                                       Clock clock, Settings settings, SdkAuthorizationPolicy policies,
                                       ObjectProvider<AuthUserPrincipalIssuer> statusIssuer,
-                                      ObjectProvider<SdkBindingAuthority> bindingAuthority)
+                                      SdkBindingAuthority bindingAuthority)
       throws java.text.ParseException {
     Map<String, SdkApplication> admitted = new HashMap<>();
     var audiences = new HashSet<String>();
@@ -51,6 +51,6 @@ public class SdkIdentityConfiguration {
     }
     return new SdkIdentityService(jdbc, new TransactionTemplate(manager),
         new GoogleOidcProofVerifier(clock, new GoogleJwks(clock)), Map.copyOf(admitted), policies, clock,
-        statusIssuer.getIfAvailable(), bindingAuthority.getIfAvailable());
+        statusIssuer.getIfAvailable(), bindingAuthority);
   }
 }

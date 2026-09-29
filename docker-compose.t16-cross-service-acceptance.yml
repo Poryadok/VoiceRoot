@@ -1,0 +1,58 @@
+# Disposable hosted Linux acceptance fixture for Auth -> GIS -> Messaging.
+services:
+  auth:
+    environment:
+      AUTH_SDK_AUTHORIZATION_ENABLED: "true"
+      AUTH_SDK_AUTHORIZATION_GAME_INTEGRATION_BASE_URL: http://gameintegration:8080
+      AUTH_SDK_AUTHORIZATION_ALLOW_INTERNAL_HTTP: "true"
+      AUTH_SDK_IDENTITY_ENABLED: "true"
+      AUTH_SDK_IDENTITY_APPLICATIONS_0_APPLICATION_ID: "00000000-0000-4000-8000-000000000016"
+      AUTH_SDK_IDENTITY_APPLICATIONS_0_ENVIRONMENT_ID: "00000000-0000-4000-8000-000000000017"
+      AUTH_SDK_IDENTITY_APPLICATIONS_0_CLIENT_ID: voice-t16.synthetic
+      AUTH_SDK_IDENTITY_APPLICATIONS_0_GAME_PUBLIC_JWK: '${T16_GAME_PUBLIC_JWK:?required}'
+      AUTH_PRINCIPAL_SIGNING_KEYS_DIR: /run/t16/auth-principal
+      AUTH_PRINCIPAL_ACTIVE_KID: auth-current
+      AUTH_USER_PRINCIPAL_GRPC_ADDR: user:9091
+      AUTH_USER_PRINCIPAL_TLS_CA_FILE: /run/t16/user-ca/ca.crt
+      AUTH_USER_PRINCIPAL_TLS_SERVER_NAME: user
+      AUTH_GAME_BINDING_MTLS_PORT: "9443"
+      AUTH_GAME_BINDING_MTLS_SERVER_CERT_FILE: /run/t16/auth-server.crt
+      AUTH_GAME_BINDING_MTLS_SERVER_KEY_FILE: /run/t16/auth-server.key
+      AUTH_GAME_BINDING_MTLS_CLIENT_CA_FILE: /run/t16/ca.crt
+      AUTH_GAME_BINDING_MTLS_ALLOWED_CLIENT_URI_SAN: spiffe://voice/service/gameintegration
+      AUTH_GAME_MESSAGE_EXECUTION_PERMIT_ALLOWED_CLIENT_URI_SAN: spiffe://voice/service/messaging
+      GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${T16_AUTH_WORKLOAD_KEY_B64:?required}
+    volumes:
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/auth-principal:/run/t16/auth-principal:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/ca.crt:/run/t16/ca.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-server.crt:/run/t16/auth-server.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-server.key:/run/t16/auth-server.key:ro
+      - social_principal_ca:/run/t16/user-ca:ro
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:19443:9443"
+
+  gameintegration:
+    environment:
+      GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${T16_AUTH_WORKLOAD_KEY_B64:?required}
+      GIS_AUTH_GAME_BINDING_BASE_URL: https://auth:9443
+      GIS_AUTH_GAME_BINDING_CA_FILE: /run/t16/ca.crt
+      GIS_AUTH_GAME_BINDING_CLIENT_CERT_FILE: /run/t16/gameintegration-client.crt
+      GIS_AUTH_GAME_BINDING_CLIENT_KEY_FILE: /run/t16/gameintegration-client.key
+      GAME_INTEGRATION_MESSAGING_LISTEN_ADDR: :8443
+      GAME_INTEGRATION_MESSAGING_TLS_CERT_FILE: /run/t16/gis-server.crt
+      GAME_INTEGRATION_MESSAGING_TLS_KEY_FILE: /run/t16/gis-server.key
+      GAME_INTEGRATION_MESSAGING_CLIENT_CA_FILE: /run/t16/ca.crt
+      GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64: ${T16_MESSAGING_WORKLOAD_KEY_B64:?required}
+    volumes:
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/ca.crt:/run/t16/ca.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/gis-server.crt:/run/t16/gis-server.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/gis-server.key:/run/t16/gis-server.key:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/gameintegration-client.crt:/run/t16/gameintegration-client.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/gameintegration-client.key:/run/t16/gameintegration-client.key:ro
+    ports:
+      - "127.0.0.1:18081:8080"
+      - "127.0.0.1:18443:8443"
+
+volumes:
+  social_principal_ca: {}
