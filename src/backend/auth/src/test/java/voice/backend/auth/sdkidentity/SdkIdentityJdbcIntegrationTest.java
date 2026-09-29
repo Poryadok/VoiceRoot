@@ -647,6 +647,18 @@ class SdkIdentityJdbcIntegrationTest {
   }
 
   @Test
+  void providerEmailAndDisplayClaimsNeverMergeOrSplitSdkAccounts() throws Exception {
+    var sameEmailFirst = exchangeWithProviderClaims("subject-a", "shared@example.test", "Shared Name");
+    var sameEmailSecond = exchangeWithProviderClaims("subject-b", "shared@example.test", "Shared Name");
+    var changedProfileClaims = exchangeWithProviderClaims("subject-a", "renamed@example.test", "Another Name");
+
+    assertThat(sameEmailFirst.accountId()).isNotEqualTo(sameEmailSecond.accountId());
+    assertThat(changedProfileClaims.accountId()).isEqualTo(sameEmailFirst.accountId());
+    assertThat(changedProfileClaims.actorId()).isEqualTo(sameEmailFirst.actorId());
+    assertThat(count("sdk_identities")).isEqualTo(2);
+  }
+
+  @Test
   void developerCredentialAndWrongDeviceKeyCannotIssueSession() throws Exception {
     var challenge = challenge(service(NOW), app, env, device);
     var attacker = new ECKeyGenerator(Curve.P_256).generate();
@@ -1366,6 +1378,18 @@ class SdkIdentityJdbcIntegrationTest {
         .expirationTime(Date.from(NOW.plusSeconds(300))).build(), googleKey);
   }
 
+  private SdkIdentityService.Session exchangeWithProviderClaims(String subject, String email, String name)
+      throws Exception {
+    var service = service(NOW);
+    var challenge = challenge(service, app, env, device);
+    String provider = signed(new JWTClaimsSet.Builder().issuer(ISSUER).subject(subject).audience(client)
+        .claim("nonce", challenge.nonce()).claim("email", email).claim("email_verified", true)
+        .claim("name", name).claim("picture", "https://images.example.test/avatar.png")
+        .issueTime(Date.from(NOW)).expirationTime(Date.from(NOW.plusSeconds(300))).build(), googleKey);
+    return service.exchange(challenge.challengeId(), provider,
+        gameTicket(challenge, app, env, subjectHashFor(subject)), enroll(device, challenge));
+  }
+
   private String providerAt(SdkIdentityService.Challenge challenge, String audience, Instant now) throws Exception {
     return signed(new JWTClaimsSet.Builder().issuer(ISSUER).subject(SUBJECT).audience(audience)
         .claim("nonce", challenge.nonce()).issueTime(Date.from(now))
@@ -1458,7 +1482,11 @@ class SdkIdentityJdbcIntegrationTest {
   }
 
   private String subjectHash() throws Exception {
-    return sha256(ISSUER + "\n" + SUBJECT);
+    return subjectHashFor(SUBJECT);
+  }
+
+  private String subjectHashFor(String subject) throws Exception {
+    return sha256(ISSUER + "\n" + subject);
   }
 
   private String sha256(String value) throws Exception {

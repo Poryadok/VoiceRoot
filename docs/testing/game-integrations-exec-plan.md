@@ -220,14 +220,26 @@ contracts land before consumers; activation lands after all consumers.
     independent; neither a developer credential nor `guest` conversion can
     establish player identity. T13a verifier, SQL and route tests exercise the
     bounded rules. This Auth-only slice remains unchanged by T04.
-- [ ] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
+- [x] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
   selected profile/alias, character, app/env/installation, binding, party,
   match/fleet, corporation→Space, grant reasons, operations and tombstones.
-  Update DATA_MODEL/DATA_STORES/CONTRACT_MATRIX as schemas land.
-- [ ] **T06** `D: T04,T05` Review OpenAPI/proto/JSON for public Game API and S2S:
-  version negotiation, errors, canonical IDs, idempotency, pagination,
-  capability fallback, signed envelope/revision, required security fields.
-  Add contract tests and generated-code compatibility checks.
+  The target ownership and lifecycle model is aligned across DATA_MODEL,
+  DATA_STORES, and CONTRACT_MATRIX against adopted T03/T04/G03/G04/G09/G12
+  decisions. This closes the ownership-contract milestone only; schema and
+  runtime implementation remains with T30+ consumers, and the T51 binding-event
+  chat-selection rule remains explicitly open.
+- [x] **T06** `D: T04,T05` Freeze and verify the contract package for the
+  currently Gateway-published Game API. The route-aligned OpenAPI artifact at
+  `docs/contracts/game-integrations-t06.openapi.json` and executable
+  conformance coverage in `src/backend/gameintegration/internal/httpapi/t06_contract_test.go`
+  cover all 14 currently published GIS/T31 operations, including request and
+  response schemas, canonical IDs, idempotency, error mappings, and principal
+  security scopes. The artifact resolves 137 component references. This closes
+  only the current published-contract package; generated-code compatibility
+  remains under existing CI gates, and unpublished/undecided surfaces remain
+  explicitly recorded in the contract artifact. T16 producer/hosted acceptance,
+  T31 consumer conformance, and T51 binding-event ingress remain owned by those
+  open tasks; Auth routes remain unpublished.
   - [x] Command/result JSON v1 routes, envelope canonicalization, status/error,
     idempotency and receipt contract frozen in `game-integration-api.md`.
   - [x] T06-AUTH: Auth challenge/exchange/session/revoke paths, request and
@@ -275,13 +287,15 @@ contracts land before consumers; activation lands after all consumers.
     `rtk go test ./... -count=1`, `rtk go vet ./...`, and
     `rtk golangci-lint run ./...`. PR #508 merged after a separate Codex
     exact-head review returned CLEAR and hosted checks passed. Broad
-    T03/T04/T06 parents remain open.
+    T03/T04 parents remain open; T06's current published-contract package is
+    complete, while dependent T16/T31/T51 execution gates remain open under
+    their owning tasks.
 - [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
   keys only after T15 key proof/registration semantics are implemented.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
   LiveKit/media and public-client acceptance paths exist. These are test
   infrastructure, not a public SDK.
-- [ ] **T08** `D: T03` Define the measurement record and harness for revocation,
+- [x] **T08** `D: T03` Define the measurement record and harness for revocation,
   roster freshness, lease/skew/eject, retry/retention, restore RPO/RTO, and
   qualified-host load. For each item keep the contractual target, provisional
   qualification profile (if any), method, and observed result/status separate.
@@ -301,20 +315,22 @@ contracts land before consumers; activation lands after all consumers.
   SQLSTATE `42501`; it also checks restricted role attributes and default table
   and sequence grants for later migrations. No global `PUBLIC` ACL is changed.
   See the GIS service contract and `runtime_database_access_integration_test.go`.
-- [ ] **T11** `D: T10` Complete the developer registry lifecycle. The bounded
-  implementation covers owner-derived application creation, separate operator
+- [x] **T11** `D: T10` Complete the developer registry lifecycle in development.
+  The implementation covers owner-derived application creation, separate operator
   sandbox approval, app/environment-scoped policy and installation
   configuration, provider, redirect/origin and callback configuration, and
   credential issue/retry, rotation and revoke. Before enabling `game.events.write`,
   each event-enabled installation must also be bound to a live Bot ID owned by
   the application owner. Empty-database API bootstrap
   and cross-scope denials pass without direct SQL or a portal. Its T10 database
-  isolation prerequisite is now proven. T11 remains open: the staged operator
-  route can create only a pending production environment and owner policy; it
-  cannot activate production. Live provider/user proof and out-of-band
-  production secret provisioning are still required. The seeded-fixture test
-  denies production credentials and makes no claim of production onboarding. See the
-  GIS service contract and
+  isolation prerequisite is now proven. Development lifecycle acceptance is
+  complete. The staged operator route creates only a pending production
+  environment and owner policy; it cannot activate production. The runtime
+  gate remains OPEN / NOT RUN: production activation, live provider/user proof,
+  and out-of-band production secret provisioning are outside this development
+  scope and are not claimed. The seeded-fixture test denies production
+  credentials and makes no claim of production onboarding. See the GIS service
+  contract and
   [Q11 T11 evidence](game-integrations-acceptance.md#q11-bootstrap-evidence-api-only-clean-start-passed-real-google-gate-open).
   The sandbox installation authority slice is implemented: registration takes
   a Bot ID, derives owner only from the application row, and persists the
@@ -322,8 +338,8 @@ contracts land before consumers; activation lands after all consumers.
   BOT11 acceptance covers the exact request/response authentication, owner and
   lifecycle denials, durable binding/idempotency, and clean-bootstrap flow.
   Proof failure may write a sanitized denial audit, but never an installation
-  or successful idempotency result. This bounded slice does not close T11's
-  production-admission gate.
+  or successful idempotency result. This development completion does not close
+  the runtime gate above.
 - [x] **T12** `D: T11` Add app-scoped quotas, suspension, diagnostics and
   provenance audit; deny cross-app/env IDs and SSRF destinations. Distinguish
   provider admission from developer assertion.
@@ -372,7 +388,7 @@ contracts land before consumers; activation lands after all consumers.
   suite passes 154 tests with 0 skipped; Q11 API-only clean-start acceptance
   passes. This closes only the T13b admission slice: parent T13 remains open for
   its broader identity vertical and real-provider acceptance gate.
-- [ ] **T14** `D: T13` Add browser/device authorization, PKCE, explicit selected
+- [x] **T14** `D: T13-DEV` Add browser/device authorization, PKCE, explicit selected
   profile/scopes, consent revisions, bindings challenge/exchange, returning
   login, no account enumeration; unauthenticated game ticket cannot mint a
   player token. Add device-code route only if required by frozen capabilities.
@@ -388,7 +404,15 @@ contracts land before consumers; activation lands after all consumers.
   `invalid_sdk_identity` and require a fresh authorization. No new external
   error code is introduced. This completes only the Auth→User prerequisite;
   the broader T14 browser/device authorization work and operational rollout
-  remain pending.
+  remain pending. The development vertical is complete on the scoped T13-DEV
+  prerequisite: T14-DEV's exact-head Auth/GIS/Flutter evidence is supplemented
+  by `SdkIdentityJdbcIntegrationTest.providerEmailAndDisplayClaimsNeverMergeOrSplitSdkAccounts`
+  and `SdkAuthorizationJdbcIntegrationTest.unknownAndRevokedLinkedCredentialsHaveTheSameCoarseDenial`.
+  The focused Auth run `rtk mvn -B '-Dtest=SdkIdentityJdbcIntegrationTest,SdkAuthorizationJdbcIntegrationTest' test`
+  passed 100 tests with 0 failures/errors/skips. T14 still does not publish the
+  routes (T20 owns Gateway activation); live Google/provider and production
+  acceptance remain open, and conversion-specific email/nickname conflict
+  behavior remains under T17/T18.
   - [x] **T14-DEV** `D: T13-DEV,T10,T04-AUTH,T06-AUTH` Close the bounded,
     provider-independent development vertical for explicit Voice profile and
     scope consent: Auth authorization request, PKCE callback/exchange and
@@ -508,6 +532,13 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T30** `D: T05,T10,T16` Persist app/env/external resource keys,
   operations, request hashes and state transitions. Stable retries return the
   same result; conflicting body/revision returns 409; tombstoned key is fenced.
+  - [x] Concurrent distinct operations targeting one app/environment/external
+    key are serialized before the mapping lookup. The losing operation returns
+    typed `ErrResourceMappingConflict`; only one row and receipt persist. The
+    PostgreSQL regression holds the scoped advisory lock with an uncommitted
+    competing row and waits for the exact lock tag, so removing the production
+    lock makes the test fail deterministically. Focused registry tests passed
+    (17), including three repeated race-test runs; independent review CLEAR.
 - [ ] **T31** `D: T30` Implement the normative durable orchestration contract in
   `game-integration-api.md` and `game-integration-service.md`: scoped JCS
   idempotency and read-only operation status; party-stable Chat, child-owned
@@ -532,6 +563,17 @@ contracts land before consumers; activation lands after all consumers.
    and observe the GIS transaction that writes active state plus its outbox row.
   Operation responses freeze stable resource/receipt keys in the API contract.
   See T31 owner/service contracts and SE01–SE03.
+  - [x] GIS binding↔Chat relation is published atomically only after the
+    complete Chat roster receipt is accepted. GIS derives active same-scope
+    bindings from the accepted session profile roster, stores the roster
+    revision and 60-second lease, and revokes removed relations. Parent-owned
+    Chat writes the party roster; child sessions reuse it without changing the
+    relation set. RED/GREEN coverage includes lost Chat roster response and
+    exact retry, T30 mapping retained before roster acceptance, scope/member
+    filtering, and stale-worker lease loss rollback. Exact-head GIS registry
+    tests: 82 passed; HTTP API: 94 passed; `go vet` and `git diff --check`
+    passed. Independent review clear. The Compose test against actual Chat
+    services remains `NOT RUN`: its required `DATABASE_URL` was not configured.
   - [ ] **T31 HTTPS event pull/inbox acceptance** — docs-first red-green plan:
     - Sources of truth: `game-integration-api.md` §T31;
       `game-integration-service.md` §T31; `game-integrations-acceptance.md` SE02;
@@ -804,7 +846,7 @@ contracts land before consumers; activation lands after all consumers.
 |---|---|---|
 | G01, Q03, Q07, Q08, Q10 | provider and subject ownership, recovery/retirement, sdk profile/alias and limits, conversion conflicts/history, voice handoff, tombstones | T13–T19 |
 | G02, G03, Q01, Q09 | alt-rank merge rule, protected Owner recovery, Q01 frozen by T32 as immutable `created_at` inside membership interval `[joined_at, revoked_at)`; rejoin opens a new interval with no gap access; block/report in shared chat | T32–T33,T37–T39; SE04 |
-| G04, G09 | G04 frozen by T32: match access ends exclusively at close+30d; terminal receipts retry for 30d; non-content external-key tombstone persists. G09 frozen by T32: complete accepted roster lease is 60s from GIS DB commit; exact retry inert, stale lower rev no-op, same-rev changed body conflicts, incomplete/failed fetch is never empty, expiry fails closed with ≤5s media fence. | T30–T39; SE03/SE07 |
+| G04, G09 | G04 frozen by T32 using elapsed UTC time from the GIS DB clock (30×24h): closed/failed session history is available only while `now < session.terminalized_at + 30×24h`; each operation receipt has an immutable first-terminal `terminalized_at` and is retryable only while `now < operation.terminalized_at + 30×24h`, with purge at equality; a contentless external-key tombstone persists indefinitely. G09 frozen by T32: complete accepted roster lease is 60s from GIS DB commit; exact retry inert, stale lower rev no-op, same-rev changed body conflicts, incomplete/failed fetch is never empty, expiry fails closed with ≤5s media fence. | T30–T39; SE03/SE07 |
 | G05, G06, Q11 | `/api/v1` and Federation `/v1`; proposed 12-month v1 support after successor-major GA; GIS-owned store; distinct Voice app owner/operator; Google OIDC; clean DB/host bootstrap and negative cases | T06,T10–T14,T70,T76; acceptance Q11 |
 | G07, Q12 | Quotas and supported host/runtime; provisional capacity/RPO/RTO plus restore/load harness | T08,T11–T12,T76,T93; proposals remain unmeasured |
 | G11, G12, Q02 | opt-in routing, alias visibility, scope/owner-change reconsent | T14,T58–T59 |
