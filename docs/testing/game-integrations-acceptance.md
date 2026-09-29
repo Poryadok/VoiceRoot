@@ -505,6 +505,11 @@ credential is used. Only unrelated Chat/File policy dependencies may use
 explicit test adapters; neither the Auth↔GIS permit seam nor GIS mapping
 authority may be mocked.
 
+The base Compose User service retains its real synthetic-principal gRPC path;
+the T16 overlay replaces only the unrelated MinIO bucket-init dependency with
+a no-op using the already-required Postgres image. This acceptance does not
+exercise avatar uploads or other User object-storage writes.
+
 Auth's real `/api/v1/auth/sdk/device-authority` endpoint must use its required
 production `SdkBindingAuthority` bean to call GIS
 `GET /internal/v1/bindings/{binding_id}/authority` with v1 WorkloadProof and verify

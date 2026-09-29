@@ -1,9 +1,10 @@
 # Disposable hosted Linux acceptance fixture for Auth -> GIS -> Messaging.
 services:
-  # GitHub-hosted runners cannot pull the base Compose Quay image anonymously.
-  # Keep the same upstream release while using its public Docker Hub name.
+  # T16 never exercises User object storage; use the already-required Postgres
+  # image for a no-op completion instead of pulling the unrelated MinIO client.
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "-c", "exit 0"]
 
   auth:
     environment:
