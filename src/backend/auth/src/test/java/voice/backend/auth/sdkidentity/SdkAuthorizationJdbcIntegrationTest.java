@@ -43,6 +43,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -206,7 +208,9 @@ class SdkAuthorizationJdbcIntegrationTest {
         return result;
       }
     };
-    var issuer = principalIssuer(CLOCK);
+    var executionClockNow = new AtomicReference<>(NOW);
+    var executionClock = new MutableClock(executionClockNow, ZoneOffset.UTC);
+    var issuer = principalIssuer(executionClock);
     var service = authorizationForBinding(CLOCK, challengeAuthority, issuer);
     String codeChallenge = pkce(VERIFIER);
     String requestHash = hash("voice-sdk-authorization-request-v1\n" + authorizationKey + "\n" + REDIRECT
@@ -323,6 +327,8 @@ class SdkAuthorizationJdbcIntegrationTest {
     CountDownLatch allowGisIssueToFinish = new CountDownLatch(1);
     CountDownLatch gisCompletionEntered = new CountDownLatch(1);
     CountDownLatch allowGisCompletionToFinish = new CountDownLatch(1);
+    var executionProfileCalls = new AtomicInteger();
+    var advanceClockDuringFinalProfileCheck = new AtomicBoolean(false);
     SdkGameIntegrationExecutionPermitAuthority gisAuthority = new SdkGameIntegrationExecutionPermitAuthority() {
       @Override public Permit issue(UUID binding, UUID operation, String assertion) {
         if (operation.equals(messageOperation)) {
@@ -354,7 +360,13 @@ class SdkAuthorizationJdbcIntegrationTest {
     };
     var executionPermits = new AuthGameMessageExecutionPermitService(jdbc,
         new TransactionTemplate(new DataSourceTransactionManager(database)), issuer,
-        (application, environment) -> policy.get(), (account, selected) -> profile.get(), gisAuthority, CLOCK);
+        (application, environment) -> policy.get(), (account, selected) -> {
+          var eligibleProfile = profile.get();
+          if (advanceClockDuringFinalProfileCheck.get() && executionProfileCalls.incrementAndGet() == 2) {
+            executionClockNow.set(NOW.plusMillis(500));
+          }
+          return eligibleProfile;
+        }, gisAuthority, executionClock);
     for (Instant invalidExpiry : List.of(NOW.plusMillis(500), NOW.plusMillis(3751))) {
       gisPermitExpiry.set(invalidExpiry);
       UUID rejectedOperation = UUID.randomUUID();
@@ -365,6 +377,8 @@ class SdkAuthorizationJdbcIntegrationTest {
           Map.of("operation", rejectedOperation), Long.class)).isZero();
     }
     gisPermitExpiry.set(NOW.plusMillis(3000));
+    executionProfileCalls.set(0);
+    advanceClockDuringFinalProfileCheck.set(true);
     var raceWorkers = Executors.newFixedThreadPool(2);
     AuthGameMessageExecutionPermitService.Permit issuedPermit;
     AuthGameBindingHandoffService.RevocationReceipt concurrentRevoke;
@@ -379,6 +393,7 @@ class SdkAuthorizationJdbcIntegrationTest {
       assertThat(revokeStarted.await(5, TimeUnit.SECONDS)).isTrue();
       allowGisIssueToFinish.countDown();
       issuedPermit = permitFuture.get(10, TimeUnit.SECONDS);
+      advanceClockDuringFinalProfileCheck.set(false);
       concurrentRevoke = revokeFuture.get(10, TimeUnit.SECONDS);
     } finally {
       allowGisIssueToFinish.countDown();
@@ -388,6 +403,8 @@ class SdkAuthorizationJdbcIntegrationTest {
         .as("revoke waits for the permit transaction, then drains its admitted operation");
     var signedPermit = SignedJWT.parse(issuedPermit.permitJws());
     UUID permitJti = UUID.fromString(signedPermit.getJWTClaimsSet().getJWTID());
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("iat_ms")).isEqualTo(NOW.plusMillis(500).toEpochMilli());
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("expires_at_ms")).isEqualTo(NOW.plusMillis(3000).toEpochMilli());
     assertThat(signedPermit.getJWTClaimsSet().getClaim("scope")).isEqualTo("game.chat.send");
     assertThat(signedPermit.getJWTClaimsSet().getClaim("profile_id")).isEqualTo(secondaryProfile.toString());
     assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit);

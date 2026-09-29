@@ -266,6 +266,25 @@ class AuthUserPrincipalIssuerContractTest {
     }
     assertThat(jwt.getJWTClaimsSet().getExpirationTime().toInstant().getEpochSecond())
         .isEqualTo(NOW.plusMillis(3750).getEpochSecond());
+
+    Map<String, Object> lowerBoundary = new LinkedHashMap<>(claims);
+    lowerBoundary.put("iat_ms", NOW.minusMillis(250).toEpochMilli());
+    lowerBoundary.put("expires_at_ms", NOW.plusMillis(3500).toEpochMilli());
+    lowerBoundary.put("exp", NOW.plusMillis(3500).getEpochSecond());
+    issuer.issueGameMessageExecutionPermit(lowerBoundary);
+    Map<String, Object> tooFarFuture = new LinkedHashMap<>(claims);
+    tooFarFuture.put("iat_ms", NOW.plusMillis(1).toEpochMilli());
+    tooFarFuture.put("expires_at_ms", NOW.plusMillis(3751).toEpochMilli());
+    tooFarFuture.put("exp", NOW.plusMillis(3751).getEpochSecond());
+    assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(tooFarFuture))
+        .isInstanceOf(IllegalArgumentException.class);
+    Map<String, Object> tooFarPast = new LinkedHashMap<>(lowerBoundary);
+    tooFarPast.put("iat_ms", NOW.minusMillis(251).toEpochMilli());
+    tooFarPast.put("expires_at_ms", NOW.plusMillis(3499).toEpochMilli());
+    tooFarPast.put("exp", NOW.plusMillis(3499).getEpochSecond());
+    assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(tooFarPast))
+        .isInstanceOf(IllegalArgumentException.class);
+
     claims.put("unreviewed_scope", "game.chat.send");
     assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(claims))
         .isInstanceOf(IllegalArgumentException.class);

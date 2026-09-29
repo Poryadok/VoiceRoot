@@ -362,7 +362,7 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     Long issuedAt = number(claims.get("iat_ms"));
     Long expiresAt = number(claims.get("expires_at_ms"));
     Long expiration = number(claims.get("exp"));
-    if (issuedAt == null || expiresAt == null || expiration == null || issuedAt != now
+    if (issuedAt == null || expiresAt == null || expiration == null || issuedAt > now || issuedAt < now - 250
         || expiresAt <= issuedAt || expiresAt - issuedAt > 3750
         || expiration != Math.floorDiv(expiresAt, 1000)) {
       throw new IllegalArgumentException("invalid game-message execution permit lifetime");

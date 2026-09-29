@@ -83,6 +83,13 @@ public final class AuthGameMessageExecutionPermitService {
       }
       // Re-read every network-backed policy/profile authority after GIS admits; DB rows remain locked.
       requireAuthority(grant, device, assertion, signedAt);
+      // Timestamp the assertion immediately after the final authority check so
+      // its lifetime is measured from the signing boundary, not before remote
+      // policy/profile calls.
+      signedAt = clock.instant();
+      if (!gisPermit.expiresAt().isAfter(signedAt.plusMillis(500))
+          || gisPermit.expiresAt().isAfter(signedAt.plusMillis(3750))
+          || gisPermit.expiresAt().toEpochMilli() > device.expiresAtMs()) throw denied();
       UUID permitJti = UUID.randomUUID();
       long issuedAt = signedAt.toEpochMilli();
       long expiresAt = gisPermit.expiresAt().toEpochMilli();
