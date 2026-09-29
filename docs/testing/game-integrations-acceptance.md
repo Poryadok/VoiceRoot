@@ -275,6 +275,31 @@ attempted direct SQL recovery. Each must fail without minting authority and
 leave an audit event that records actor, target IDs, action, result and request
 ID, with no token, provider claim or private-key bytes.
 
+#### T14-DEV source and test map
+
+This map records existing development behavior only. It does not mark the
+parent T14 or the complete ID01–ID06 acceptance rows as closed. The exact-head
+Auth, GIS, and Flutter hosted checks for `94dde2986d0024a48c65e77f3e6c98bb175418d6`
+are pending; keep T14-DEV unchecked until all three finish green.
+Production paths are Auth `src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/SdkAuthorizationService.java`,
+`SdkAuthorizationRestController.java`, and `AuthUserProfileEligibilityClient.java`;
+GIS `src/backend/gameintegration/internal/httpapi/binding_challenge.go`,
+`binding_exchange.go`, and `binding_authority.go`; and Flutter
+`src/frontend/lib/backend/sdk_authorization_client.dart` and
+`src/frontend/lib/ui/sdk/sdk_authorization_screens.dart`. Test references below
+are under `src/backend/auth/src/test/java/voice/backend/auth/sdkidentity/`,
+`src/backend/gameintegration/internal/httpapi/`, and `src/frontend/test/`,
+respectively.
+
+| ID | T14-DEV behavior and existing evidence | Boundary still open |
+|---|---|---|
+| ID01 | Auth consent binds explicit `profileId`, scopes, and policy revision; User eligibility verifies the selected owner/current state. `SdkAuthorizationJdbcIntegrationTest.browserConsentPreservesExplicitSecondaryProfileAndIssuesOnlyLinkedBootstrap`, `SdkAuthorizationRestControllerTest.approvalForwardsVoiceAuthorizationAndExplicitSelectedProfile`, `AuthUserProfileEligibilityClientContractTest`, and Flutter `sdk_authorization_widget_test.dart` (`requires explicit profile choice before approval`) cover the selected-profile path. | Full identity availability and operational rollout remain under parent T14/T13. |
+| ID02 | Independent proof checks include `GoogleOidcProofVerifierTest.rejectsMissingOrEmptyProofAndExpectedBindings` and `SdkIdentityJdbcIntegrationTest.invalidGameTicketCannotSubstituteForValidatedIndependentProof` / `registryAppOrEnvironmentMismatchDeniesChallengeExchangeAndSession`; T14 request/device/redirect/PKCE checks include `SdkAuthorizationJdbcIntegrationTest.authorizeProofBindsSourceTokenDeviceAndCompleteRequestBody`, `redirectMustMatchExactlyAndUnknownScopesCannotBeRequested`, `wrongPkceDoesNotConsumeCodeAndCorrectVerifierWorksOnce`, and GIS `TestInternalBindingChallengeRequiresAuthProofAndSignsExactPersistedFacts`. | Real Google proof remains OPEN / NOT RUN; no production claim. |
+| ID03 | `SdkAuthorizationJdbcIntegrationTest.concurrentCodeExchangeAcrossServiceInstancesHasExactlyOneWinner` and `bindingExchangeConsumesTheT14CodeOnceAndReplaysOnlyWithTheRegisteredDeviceProof`, plus GIS `TestBindingExchangeHandlerRunsClaimCommitAndCompletionInOrder`, cover one-use exchange and exact replay. Flutter callback/resume retry tests avoid exchanging the callback code again. | The broader conversion crash/recovery acceptance remains ID12/T17. |
+| ID04 | The T14 approval API requires an explicit profile ID and checks exact ownership/current eligibility (`selectedProfileMustHaveExactOwnerAndCurrentEligibility`, `approvalRequiresExactPolicyRevisionAndCannotReissueLostCode`; controller `approvalRequiresExplicitProfileAndPositivePolicyRevision`). T14 accepts no email/nickname as an identity-link key. | No dedicated email/nickname-only merge test was found; this mapping is structural API/ownership evidence, not closure of the full ID04 row. |
+| ID05 | Auth rechecks authority at exchange and linked-session use (`exchangeRechecksCurrentAuthoritiesAfterBrowserApproval`, `issuedLinkedCredentialImmediatelyObservesAuthorityRevocation`); GIS binding authority tests require authenticated Auth workload. | Full unlink/delete/suspension propagation and governed-resource drain remain downstream T16/T20 acceptance. |
+| ID06 | Auth persists the explicit selected profile/revision; Flutter requires an explicit choice before approval and serializes the selected profile in the callback/session path (`browserConsentPreservesExplicitSecondaryProfileAndIssuesOnlyLinkedBootstrap`, `sdk_authorization_widget_test.dart`, `sdk_authorization_client_test.dart`). | The no-second-voice and hidden-profile roster/card/search/presence assertions remain broader T16 acceptance. |
+
 | ID | Given / When | Then / свидетельство |
 |---|---|---|
 | ID01 | Игровой пользователь подключает существующий Voice | Явный профиль/scopes; только выбранная identity доступна игре |
