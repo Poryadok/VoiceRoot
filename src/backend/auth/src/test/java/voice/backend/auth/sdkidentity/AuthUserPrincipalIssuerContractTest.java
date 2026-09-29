@@ -135,6 +135,17 @@ class AuthUserPrincipalIssuerContractTest {
     shortClaims.put("exp", NOW.plusMillis(250).toEpochMilli());
     assertThatThrownBy(() -> issuer.issueDeviceStatus(shortClaims))
         .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> longClaims = new LinkedHashMap<>(claims);
+    longClaims.put("exp", NOW.plusMillis(4001).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(longClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> beyondKeyClaims = new LinkedHashMap<>(claims);
+    beyondKeyClaims.put("exp", NOW.plusSeconds(4).toEpochMilli());
+    beyondKeyClaims.put("not_after", NOW.plusSeconds(3).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(beyondKeyClaims))
+        .hasMessage("invalid device status assertion lifetime");
   }
 
   @Test

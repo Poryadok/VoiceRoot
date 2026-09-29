@@ -65,8 +65,10 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	seedT16GISOwnerSession(t, ctx, fixture)
 	workloadNonceCount := countT16GISWorkloadNonces(t, ctx)
 	assertion := requestT16AuthDeviceAuthority(t, ctx, fixture)
-	require.Equal(t, workloadNonceCount+1, countT16GISWorkloadNonces(t, ctx),
-		"successful Auth device-authority issuance must traverse GIS's production WorkloadProof verifier and authority handler")
+	// Auth admission reads GIS policy once, then its production binding-authority reader
+	// calls GIS once; both requests must traverse the production WorkloadProof verifier.
+	require.Equal(t, workloadNonceCount+2, countT16GISWorkloadNonces(t, ctx),
+		"successful Auth device-authority issuance must traverse GIS's production WorkloadProof verifier for policy and binding authority")
 
 	root := requiredT16Env(t, "T16_FIXTURE_DIR")
 	tlsDir := filepath.Join(root, "tls")
