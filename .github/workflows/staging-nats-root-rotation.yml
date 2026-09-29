@@ -200,6 +200,7 @@ jobs:
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGING_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
         run: |
           set +x
           set -euo pipefail
@@ -210,7 +211,8 @@ jobs:
           registry=ghcr.io/poryadok/voiceroot
           image="$registry/realtime:$GITHUB_SHA"
           docker_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-ghcr.XXXXXX")"
-          trap 'rm -rf -- "$docker_config"' EXIT
+          anonymous_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-anonymous.XXXXXX")"
+          trap 'rm -rf -- "$docker_config" "$anonymous_config"' EXIT
           if ! printf '%s' "$GHCR_TOKEN" | docker --config "$docker_config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1; then
             echo 'NATS_ROTATION=FAIL_GHCR_LOGIN'
             exit 1
@@ -219,6 +221,15 @@ jobs:
           if ! docker --config "$docker_config" manifest inspect "$image" >/dev/null 2>&1; then
             echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_MISSING'
             exit 1
+          fi
+          if docker --config "$anonymous_config" manifest inspect "$image" >/dev/null 2>&1; then
+            printf 'VOICE_NATS_PROOF_IMAGE_PUBLIC=true\n' >>"$GITHUB_ENV"
+          else
+            if [[ ! "$STAGING_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+              echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_PULL_SECRET'
+              exit 1
+            fi
+            printf 'VOICE_NATS_PROOF_IMAGE_PULL_SECRET=%s\n' "$STAGING_IMAGE_PULL_SECRET" >>"$GITHUB_ENV"
           fi
           printf 'VOICE_NATS_PROOF_IMAGE_REGISTRY=%s\n' "$registry" >>"$GITHUB_ENV"
           printf 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$GITHUB_SHA" >>"$GITHUB_ENV"

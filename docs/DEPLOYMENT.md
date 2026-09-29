@@ -674,9 +674,13 @@ new PVC class/size from the current NATS PVC and the Realtime preflight image
 from the currently deployed Realtime workload; it does not touch another PVC.
 For the live ACL proof Job, the workflow instead checks that the Realtime image
 tagged with its exact `master` SHA exists in GHCR before any cluster mutation.
+It checks anonymous pull with a clean Docker configuration. If that fails, the
+staging `VOICE_IMAGE_PULL_SECRET` variable must name a reviewed GHCR registry
+Secret in `voice-staging`; the script verifies that Secret can access the exact
+image and binds it explicitly to the one-shot Job before changing the marker.
 
 Immediately before activation, issue a short-lived `proof.creds` for the new
-APP account on the isolated trusted issuer host and upload its base64 bytes as
+APP account on an isolated trusted Linux issuer host and upload its base64 bytes as
 the staging Environment secret `STAGING_NATS_PROOF_CREDS_B64`. The issuer
 limits its lifetime to at most two hours (60 minutes by default). The rotation
 preflight verifies the credential signature, issuer, exact scoped ACL and at
@@ -696,7 +700,11 @@ script requires the exact sanitized
 verifies deletion of the Job, NetworkPolicy and Secret before restarting any
 leaf or writing `active`. A failure after the cutover begins leaves the marker
 at `rotating` and all 18 leaves stopped; dispatch `rollback` to restore the
-retained generation.
+retained generation. If the runner is lost before its cleanup trap runs,
+rollback identifies only generation-labeled proof resources, verifies their
+names, annotations and namespace, then removes the Job and its Pod before the
+temporary NetworkPolicy and credential Secret. It verifies all are absent
+before changing the hub, leaves, or marker.
 After successful proof and cleanup, set both staging Environment variables
 `VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and
 `VOICE_NATS_ACL_PROOF_GENERATION` (the newly active generation). Ordinary
@@ -714,7 +722,7 @@ and TLS CA, the four generation-annotated bootstrap Jobs and Realtime preflight
 are complete, and a staging smoke passes. The next ordinary `full`, `app-only`
 or `images-only` deploy reads that marker and must keep the active Secret/PVC
 references. A manual `rollback` keeps both generations' assets so a later
-attempt remains reviewable; it never deletes a PVC or Secret.
+attempt remains reviewable; it never deletes a versioned NATS PVC or Secret.
 
 When the owner explicitly authorizes a destructive staging reset, the manual
 `Staging deploy` workflow supports a separate clean-install path. It verifies

@@ -5,6 +5,10 @@ kind: Job
 metadata:
   name: __PROOF_NAME__
   namespace: voice-staging
+  labels:
+    voice.io/nats-proof: "true"
+    voice.io/nats-proof-generation: __GENERATION__
+    voice.io/nats-proof-run: __PROOF_NAME__
   annotations:
     voice.io/nats-generation: __GENERATION__
 spec:
@@ -18,6 +22,7 @@ spec:
         voice.io/nats-proof-run: __PROOF_NAME__
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets: __IMAGE_PULL_SECRETS__
       restartPolicy: Never
       initContainers:
         - name: realtime-leaf

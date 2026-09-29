@@ -5,6 +5,10 @@ kind: NetworkPolicy
 metadata:
   name: __PROOF_NAME__
   namespace: voice-staging
+  labels:
+    voice.io/nats-proof: "true"
+    voice.io/nats-proof-generation: __GENERATION__
+    voice.io/nats-proof-run: __PROOF_NAME__
   annotations:
     voice.io/nats-generation: __GENERATION__
 spec:

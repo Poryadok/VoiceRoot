@@ -167,6 +167,21 @@ prepare_realtime_image() {
   ROTATION_IMAGE_TAG="${image##*:}"
 }
 
+check_proof_image_pull_secret() (
+  local secret_json="$1" scratch image
+  command -v docker >/dev/null 2>&1 || fail 'Docker is required to verify private proof image access'
+  scratch="$(mktemp -d)" || fail 'cannot create protected image pull scratch directory'
+  trap 'rm -f -- "$scratch/config.json"; rmdir -- "$scratch"' EXIT
+  jq -er '.data[".dockerconfigjson"]' <<<"$secret_json" | base64 -d >"$scratch/config.json" 2>/dev/null ||
+    fail 'invalid proof image pull Secret encoding'
+  chmod 600 "$scratch/config.json"
+  jq -e '(.auths["ghcr.io"] // .auths["https://ghcr.io"]) | type == "object"' \
+    "$scratch/config.json" >/dev/null || fail 'proof image pull Secret has no GHCR credentials'
+  image="${VOICE_NATS_PROOF_IMAGE_REGISTRY}/realtime:${VOICE_NATS_PROOF_IMAGE_TAG}"
+  docker --config "$scratch" manifest inspect "$image" >/dev/null 2>&1 ||
+    fail 'Kubernetes proof image pull Secret cannot access exact-master image'
+)
+
 prepare_proof() {
   local generation="$1" bundle="$2" credential="$3" mode size run_id attempt
   [[ -f "$credential" && ! -L "$credential" ]] || fail 'proof credential must be a regular file'
@@ -178,6 +193,20 @@ prepare_proof() {
   [[ "${VOICE_NATS_PROOF_IMAGE_TAG:-}" =~ ^[a-f0-9]{40}$ ]] || fail 'exact-master proof image SHA is required'
   if [[ -n "${GITHUB_SHA:-}" ]]; then
     [[ "$VOICE_NATS_PROOF_IMAGE_TAG" == "${GITHUB_SHA,,}" ]] || fail 'proof image differs from workflow master SHA'
+  fi
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    [[ "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]] ||
+      fail 'invalid proof image pull Secret name'
+    local pull_secret
+    pull_secret="$(read_required secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET")"
+    check_identity "$pull_secret" Secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET"
+    jq -e '.type == "kubernetes.io/dockerconfigjson" and
+      (.data[".dockerconfigjson"] | type == "string" and length > 0)' \
+      <<<"$pull_secret" >/dev/null || fail 'proof image pull Secret has invalid type or data'
+    check_proof_image_pull_secret "$pull_secret"
+  else
+    [[ "${VOICE_NATS_PROOF_IMAGE_PUBLIC:-}" == true ]] ||
+      fail 'anonymous GHCR pull proof or reviewed image pull Secret is required'
   fi
   command -v go >/dev/null 2>&1 || fail 'Go is required for proof credential validation'
   local credential_abs bundle_abs
@@ -209,17 +238,69 @@ render_proof_secret() {
     jq -c --arg gen "$generation" --arg name "$name" '
       .immutable = true |
       .metadata.annotations = ((.metadata.annotations // {}) + {"voice.io/nats-generation":$gen}) |
-      .metadata.labels = ((.metadata.labels // {}) + {"voice.io/nats-proof-run":$name})
+      .metadata.labels = ((.metadata.labels // {}) +
+        {"voice.io/nats-proof":"true", "voice.io/nats-proof-generation":$gen,
+         "voice.io/nats-proof-run":$name})
     '
 }
 
 render_proof_manifest() {
-  local file="$1" name="$2" generation="$3"
+  local file="$1" name="$2" generation="$3" pull_secrets='[]'
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    pull_secrets="[{name: ${VOICE_NATS_PROOF_IMAGE_PULL_SECRET}}]"
+  fi
   sed -e "s|__PROOF_NAME__|${name}|g" \
       -e "s|__GENERATION__|${generation}|g" \
       -e "s|__ACL_SHA__|${PROOF_ACL_SHA}|g" \
       -e "s|__IMAGE_REGISTRY__|${VOICE_NATS_PROOF_IMAGE_REGISTRY}|g" \
-      -e "s|__IMAGE_TAG__|${VOICE_NATS_PROOF_IMAGE_TAG}|g" "$file"
+      -e "s|__IMAGE_TAG__|${VOICE_NATS_PROOF_IMAGE_TAG}|g" \
+      -e "s|__IMAGE_PULL_SECRETS__|${pull_secrets}|g" "$file"
+}
+
+# A lost runner bypasses the EXIT trap. Rollback reclaims only proof resources
+# whose selector, name, generation annotation, and namespace all agree.
+recover_proof_resources() {
+  local generation="$1" selector listing remaining kind resource name
+  selector="voice.io/nats-proof=true,voice.io/nats-proof-generation=${generation}"
+  listing="$(kubectl get jobs,networkpolicies,secrets -n "$NS" -l "$selector" -o json 2>/dev/null)" ||
+    fail 'cannot list interrupted live ACL proof resources'
+  jq -e --arg gen "$generation" --arg ns "$NS" '
+    .apiVersion == "v1" and .kind == "List" and (.items | type == "array") and
+    (.items | all(.[];
+      (.kind == "Job" or .kind == "NetworkPolicy" or .kind == "Secret") and
+      .metadata.namespace == $ns and
+      (.metadata.name | type == "string" and test("^voice-nats-acl-proof-" + $gen + "-[a-z0-9]{1,18}-[0-9]{1,3}$")) and
+      .metadata.labels["voice.io/nats-proof"] == "true" and
+      .metadata.labels["voice.io/nats-proof-generation"] == $gen and
+      .metadata.labels["voice.io/nats-proof-run"] == .metadata.name and
+      .metadata.annotations["voice.io/nats-generation"] == $gen)) and
+    ([.items[] | .kind + "/" + .metadata.name] as $ids |
+      ($ids | length) == ($ids | unique | length))
+  ' <<<"$listing" >/dev/null || fail 'interrupted live ACL proof resources have ambiguous identity'
+  for kind in Job NetworkPolicy Secret; do
+    case "$kind" in
+      Job) resource=job ;;
+      NetworkPolicy) resource=networkpolicy ;;
+      Secret) resource=secret ;;
+    esac
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      if [[ "$kind" == Job ]]; then
+        kubectl delete "$resource" "$name" -n "$NS" --cascade=foreground --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+          fail 'interrupted live ACL proof Job cleanup failed'
+      else
+        kubectl delete "$resource" "$name" -n "$NS" --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+          fail 'interrupted live ACL proof resource cleanup failed'
+      fi
+      if read_optional "$resource" "$name" >/dev/null; then
+        fail 'interrupted live ACL proof resource remains after cleanup'
+      fi
+    done < <(jq -r --arg kind "$kind" '.items[] | select(.kind == $kind) | .metadata.name' <<<"$listing")
+  done
+  remaining="$(kubectl get jobs,networkpolicies,secrets -n "$NS" -l "$selector" -o json 2>/dev/null)" ||
+    fail 'cannot verify interrupted live ACL proof cleanup'
+  jq -e '.apiVersion == "v1" and .kind == "List" and .items == []' \
+    <<<"$remaining" >/dev/null || fail 'interrupted live ACL proof resources remain'
 }
 
 preflight_proof_resources() {
@@ -506,6 +587,7 @@ main() {
       valid_generation "$target" || fail 'legacy generation has no root rotation to roll back'
       [[ "$source" == legacy ]] || valid_generation "$source" || fail 'invalid retained generation'
       [[ "$source" != "$target" ]] || fail 'rollback would be a no-op'
+      recover_proof_resources "$target"
       check_selector
       check_no_second_hub
       check_secret_set "$source" source
