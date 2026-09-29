@@ -26,7 +26,8 @@ for spec in \
   'subscription_events analytics_v2_subscription subscription.>' \
   'moderation_events analytics_v2_moderation moderation.>' \
   'analytics_events analytics_v2_telemetry analytics.>' \
-  'user_events chat_account_deleted user.account_deleted'; do
+  'user_events chat_account_deleted user.account_deleted' \
+  'social_events chat_friend_accepted social.friend_accepted'; do
   set -- $spec
   info="$(compose run --rm --no-deps --entrypoint nats nats-analytics-chat-bootstrap --server nats://nats:4222 req --raw "\$JS.API.CONSUMER.INFO.$1.$2" "")"
   [[ "$(printf '%s' "$info" | jq -r '.config.filter_subject')" == "$3" ]]

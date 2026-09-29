@@ -199,9 +199,6 @@ func (s *SocialGRPC) AcceptFriendInvitation(ctx context.Context, req *socialv1.A
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.Events != nil {
-		_ = s.Events.PublishFriendAccepted(ctx, requester.String(), caller.String())
-	}
 	return &socialv1.AcceptFriendInvitationResponse{}, nil
 }
 
