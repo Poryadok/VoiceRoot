@@ -80,28 +80,40 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	ttl := flags.Duration("ttl", time.Hour, "credential lifetime, at most 2h")
 	minimum := flags.Duration("check-min-validity", 0, "read-only preflight minimum remaining validity")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
-		fmt.Fprintln(stderr, "NATS proof credential arguments are invalid")
+		if _, err := fmt.Fprintln(stderr, "NATS proof credential arguments are invalid"); err != nil {
+			return 1
+		}
 		return 2
 	}
 	opts := proofOptions{Namespace: *namespace, Generation: *generation, AccountSeed: *seed, AccountPublic: *public, Bundle: *bundle, Output: *output, Credential: *credential, TTL: *ttl, MinValidity: *minimum}
 	if *credential != "" || *minimum != 0 {
 		if *credential == "" || *minimum <= 0 || *seed != "" || *public != "" || *output != "" {
-			fmt.Fprintln(stderr, "NATS proof credential preflight arguments are invalid")
+			if _, err := fmt.Fprintln(stderr, "NATS proof credential preflight arguments are invalid"); err != nil {
+				return 1
+			}
 			return 2
 		}
 		if err := checkProofCredential(opts, now); err != nil {
-			fmt.Fprintln(stderr, "NATS proof credential preflight failed; no values printed")
+			if _, writeErr := fmt.Fprintln(stderr, "NATS proof credential preflight failed; no values printed"); writeErr != nil {
+				return 1
+			}
 			return 1
 		}
-		fmt.Fprintln(stdout, "proof_credential_valid=true")
+		if _, err := fmt.Fprintln(stdout, "proof_credential_valid=true"); err != nil {
+			return 1
+		}
 		return 0
 	}
 	expiry, err := issueProofCredential(opts, now)
 	if err != nil {
-		fmt.Fprintln(stderr, "NATS proof credential issuance failed; no values printed")
+		if _, writeErr := fmt.Fprintln(stderr, "NATS proof credential issuance failed; no values printed"); writeErr != nil {
+			return 1
+		}
 		return 1
 	}
-	fmt.Fprintf(stdout, "expires_at=%s\n", expiry.UTC().Format(time.RFC3339))
+	if _, err := fmt.Fprintf(stdout, "expires_at=%s\n", expiry.UTC().Format(time.RFC3339)); err != nil {
+		return 1
+	}
 	return 0
 }
 
