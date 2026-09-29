@@ -1221,7 +1221,7 @@ func postT16AuthDeviceAuthorityBearerResponse(t *testing.T, ctx context.Context,
 
 func assertT16AuthDeviceAuthorityFailsClosed(t *testing.T, ctx context.Context, authDB, gisDB *pgxpool.Pool, fixture t16AcceptFixture) {
 	t.Helper()
-	assertDenied := func(name, proof string, expectedGISNonceDelta int) {
+	assertDenied := func(t *testing.T, name, proof string, expectedGISNonceDelta int) {
 		t.Helper()
 		beforeNonces := countT16GISWorkloadNonces(t, ctx)
 		beforeIssues := countT16DeviceAuthorityIssues(t, ctx, authDB, fixture.deviceID)
@@ -1232,7 +1232,7 @@ func assertT16AuthDeviceAuthorityFailsClosed(t *testing.T, ctx context.Context, 
 	}
 
 	t.Run("device-authority rejects a valid proof bound to a different device", func(t *testing.T) {
-		assertDenied("device mismatch", t16AuthDeviceAuthorityProof(t, fixture, uuid.New()), 0)
+		assertDenied(t, "device mismatch", t16AuthDeviceAuthorityProof(t, fixture, uuid.New()), 0)
 	})
 	t.Run("device-authority rejects a bad signed proof before GIS", func(t *testing.T) {
 		proof := t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID)
@@ -1242,7 +1242,7 @@ func assertT16AuthDeviceAuthorityFailsClosed(t *testing.T, ctx context.Context, 
 		require.NoError(t, err)
 		signature[0] ^= 0x80
 		parts[2] = base64.RawURLEncoding.EncodeToString(signature)
-		assertDenied("bad signature", strings.Join(parts, "."), 0)
+		assertDenied(t, "bad signature", strings.Join(parts, "."), 1)
 	})
 	t.Run("device-authority rejects when there is no active Auth grant", func(t *testing.T) {
 		commandTag, err := authDB.Exec(ctx, `UPDATE sdk_game_message_grants SET status='revoked',authority_revision=authority_revision+1
@@ -1254,7 +1254,7 @@ WHERE binding_id=$1 AND status='active'`, fixture.bindingID)
 WHERE binding_id=$1 AND status='revoked'`, fixture.bindingID)
 			require.NoError(t, restoreErr)
 		})
-		assertDenied("no active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 0)
+		assertDenied(t, "no active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 1)
 	})
 	t.Run("device-authority rejects an ambiguous active Auth grant", func(t *testing.T) {
 		requestID, bindingID, linkedHash, targetProfileID := uuid.New(), uuid.New(), randomT16TokenHash(t), uuid.New()
@@ -1292,7 +1292,7 @@ FROM sdk_game_message_grants WHERE binding_id=$6 AND status='active'`, uuid.New(
 SELECT $1,application_id,environment_id,'google','hmac-sha256-v1:t16-ambiguous:`+strings.Repeat("a", 64)+`',account_id,actor_id,profile_id,device_id,'active',1
 FROM player_bindings WHERE binding_id=$2`, bindingID, fixture.bindingID)
 		require.NoError(t, err)
-		assertDenied("ambiguous active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 0)
+		assertDenied(t, "ambiguous active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 1)
 	})
 	t.Run("device-authority rejects a GIS-revoked binding", func(t *testing.T) {
 		_, err := gisDB.Exec(ctx, `UPDATE player_bindings SET status='revoked',authority_revision=authority_revision+1 WHERE binding_id=$1`, fixture.bindingID)
@@ -1301,7 +1301,7 @@ FROM player_bindings WHERE binding_id=$2`, bindingID, fixture.bindingID)
 			_, restoreErr := gisDB.Exec(ctx, `UPDATE player_bindings SET status='active',authority_revision=1 WHERE binding_id=$1`, fixture.bindingID)
 			require.NoError(t, restoreErr)
 		})
-		assertDenied("GIS binding revoked", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 1)
+		assertDenied(t, "GIS binding revoked", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 2)
 	})
 }
 
