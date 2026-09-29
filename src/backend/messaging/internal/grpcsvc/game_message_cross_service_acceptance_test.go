@@ -64,11 +64,16 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	fixture := seedT16AcceptFixture(t, ctx, authDB, gisDB, userDB, chatDB)
 	seedT16GISOwnerSession(t, ctx, fixture)
 	workloadNonceCount := countT16GISWorkloadNonces(t, ctx)
-	assertion := requestT16AuthDeviceAuthority(t, ctx, fixture)
+	assertion, authorityProof := requestT16AuthDeviceAuthority(t, ctx, fixture)
 	// Auth admission reads GIS policy once, then its production binding-authority reader
 	// calls GIS once; both requests must traverse the production WorkloadProof verifier.
 	require.Equal(t, workloadNonceCount+2, countT16GISWorkloadNonces(t, ctx),
 		"successful Auth device-authority issuance must traverse GIS's production WorkloadProof verifier for policy and binding authority")
+	noncesAfterIssuance := countT16GISWorkloadNonces(t, ctx)
+	require.Equal(t, assertion, replayT16AuthDeviceAuthority(t, ctx, fixture, authorityProof),
+		"exact Auth device-authority proof retry must return the retained assertion")
+	require.Equal(t, noncesAfterIssuance, countT16GISWorkloadNonces(t, ctx),
+		"exact Auth device-authority proof retry must not call GIS again")
 
 	root := requiredT16Env(t, "T16_FIXTURE_DIR")
 	tlsDir := filepath.Join(root, "tls")
@@ -209,7 +214,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	chatFailure := fixture
 	chatFailure.operationID, chatFailure.messageID = uuid.New(), uuid.New()
 	chatFailure.compactMessage = signT16Message(t, chatFailure, fixture.deviceKey, time.Now().UTC())
-	chatAssertion := requestT16AuthDeviceAuthority(t, ctx, chatFailure)
+		chatAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, chatFailure)
 	chatRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: chatFailure.compactMessage, DeviceAuthorityAssertion: chatAssertion}
 	chatHash, err := principal.RequestHash(chatRequest)
 	require.NoError(t, err)
@@ -235,7 +240,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	fileFailure.compactMessage = signT16MessageWithAttachments(t, fileFailure, fixture.deviceKey, time.Now().UTC(), []map[string]any{{
 		"byte_length": 17, "content_sha256": strings.Repeat("a", 64), "file_id": uuid.NewString(), "media_type": "text/plain", "object_revision": 1,
 	}})
-	fileAssertion := requestT16AuthDeviceAuthority(t, ctx, fileFailure)
+		fileAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, fileFailure)
 	fileRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: fileFailure.compactMessage, DeviceAuthorityAssertion: fileAssertion}
 	fileHash, err := principal.RequestHash(fileRequest)
 	require.NoError(t, err)
@@ -255,7 +260,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	revokeRace := fixture
 	revokeRace.operationID, revokeRace.messageID = uuid.New(), uuid.New()
 	revokeRace.compactMessage = signT16Message(t, revokeRace, fixture.deviceKey, time.Now().UTC())
-	revokeAssertion := requestT16AuthDeviceAuthority(t, ctx, revokeRace)
+	revokeAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, revokeRace)
 	revokeRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: revokeRace.compactMessage, DeviceAuthorityAssertion: revokeAssertion}
 	revokeHash, err := principal.RequestHash(revokeRequest)
 	require.NoError(t, err)
@@ -409,7 +414,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	restoreOperation := restored
 	restoreOperation.operationID, restoreOperation.messageID = uuid.New(), uuid.New()
 	restoreOperation.compactMessage = signT16Message(t, restoreOperation, restored.deviceKey, time.Now().UTC())
-	newAuthority := requestT16AuthDeviceAuthority(t, ctx, restoreOperation)
+	newAuthority, _ := requestT16AuthDeviceAuthority(t, ctx, restoreOperation)
 	restoreRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: restoreOperation.compactMessage, DeviceAuthorityAssertion: newAuthority}
 	restoreHash, err := principal.RequestHash(restoreRequest)
 	require.NoError(t, err)
@@ -649,7 +654,7 @@ VALUES($1,$2,$3,$4,1,'active',$5)`, fixture.appID, fixture.envID, fixture.bindin
 	return fixture
 }
 
-func requestT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture) string {
+func requestT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture) (string, string) {
 	t.Helper()
 	now := time.Now().UTC()
 	claims := map[string]any{"version": 1, "audience": "voice.game-message", "request_id": uuid.NewString(),
@@ -659,6 +664,16 @@ func requestT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t1
 	header, err := json.Marshal(map[string]string{"alg": "ES256", "kid": fixture.keyID.String(), "typ": "voice.game-device-authority-request+jws"})
 	require.NoError(t, err)
 	proof := signT16ES256(t, fixture.deviceKey, header, body)
+	return postT16AuthDeviceAuthority(t, ctx, fixture, proof), proof
+}
+
+func replayT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture, proof string) string {
+	t.Helper()
+	return postT16AuthDeviceAuthority(t, ctx, fixture, proof)
+}
+
+func postT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture, proof string) string {
+	t.Helper()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, requiredT16Env(t, "T16_AUTH_BASE_URL")+"/api/v1/auth/sdk/device-authority", strings.NewReader(proof))
 	require.NoError(t, err)
 	request.Header.Set("Authorization", "Bearer "+fixture.sessionToken)
