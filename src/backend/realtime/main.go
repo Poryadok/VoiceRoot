@@ -27,6 +27,9 @@ import (
 const serviceName = "realtime"
 
 func main() {
+	if os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" {
+		os.Exit(runNATSLiveACLProofMain())
+	}
 	logger := initServiceLogger(serviceName)
 	if os.Getenv("REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT") == "true" {
 		if err := preflightFriendRequestConsumer(os.Getenv("NATS_URL"), strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))); err != nil {
