@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	messagingv1 "voice.app/voice/messaging/v1"
 	"voice/backend/messaging/internal/gameprotocol"
@@ -265,8 +266,8 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
 	require.Equal(t, int64(1), mappingAuthority.calls.Load()-mappingCallsBeforePositive,
 		"the exact linked-chat request must traverse GIS mapping authorization exactly once")
-	require.Equal(t, 3, workloadNonceDelta,
-		"positive request should use one GIS mapping proof, one Auth-to-GIS permit issue proof, and one completion proof")
+	require.Equal(t, 5, workloadNonceDelta,
+		"positive request should use one mapping proof, two Auth policy preflight proofs, one permit issue proof, and one completion proof")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
 	var authPermitID, gisPermitID uuid.UUID
@@ -336,9 +337,23 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	})
 	require.NoError(t, err)
 	retryCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+retryPrincipal, "x-request-id", retryID))
+	var authPermitsBeforeRetry, gisPermitsBeforeRetry, permitCompletionsBeforeRetry int
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).Scan(&authPermitsBeforeRetry))
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).Scan(&gisPermitsBeforeRetry))
+	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_execution_permit_completions WHERE operation_id=$1`, fixture.operationID).Scan(&permitCompletionsBeforeRetry))
+	workloadNoncesBeforeMessageRetry := countT16GISWorkloadNonces(t, ctx)
 	retried, err := client.ApplyGameMessage(retryCtx, positiveMappingRequest)
 	require.NoError(t, err)
-	require.Equal(t, response.GetMessage().GetId(), retried.GetMessage().GetId())
+	require.True(t, proto.Equal(response, retried), "exact operation retry must return the complete same durable response")
+	require.Equal(t, workloadNoncesBeforeMessageRetry, countT16GISWorkloadNonces(t, ctx),
+		"exact message retry must not make fresh GIS calls or consume a WorkloadProof nonce")
+	var authPermitsAfterRetry, gisPermitsAfterRetry, permitCompletionsAfterRetry int
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).Scan(&authPermitsAfterRetry))
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).Scan(&gisPermitsAfterRetry))
+	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_execution_permit_completions WHERE operation_id=$1`, fixture.operationID).Scan(&permitCompletionsAfterRetry))
+	require.Equal(t, authPermitsBeforeRetry, authPermitsAfterRetry)
+	require.Equal(t, gisPermitsBeforeRetry, gisPermitsAfterRetry)
+	require.Equal(t, permitCompletionsBeforeRetry, permitCompletionsAfterRetry)
 	var revisions int
 	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_revisions WHERE message_id=$1`, fixture.messageID).Scan(&revisions))
 	require.Equal(t, 1, revisions)

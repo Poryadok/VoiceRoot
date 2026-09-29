@@ -30,7 +30,7 @@ services:
       AUTH_SDK_IDENTITY_APPLICATIONS_0_GAME_PUBLIC_JWK: '${T16_GAME_PUBLIC_JWK:?required}'
       AUTH_PRINCIPAL_SIGNING_KEYS_DIR: /run/t16/auth-principal
       AUTH_PRINCIPAL_ACTIVE_KID: current
-      AUTH_USER_PRINCIPAL_GRPC_ADDR: user:9091
+      AUTH_USER_PRINCIPAL_GRPC_ADDR: user:9094
       AUTH_USER_PRINCIPAL_TLS_CA_FILE: /run/t16/user-ca/ca.crt
       AUTH_USER_PRINCIPAL_TLS_SERVER_NAME: user
       AUTH_GAME_BINDING_MTLS_PORT: "9443"
@@ -74,6 +74,14 @@ services:
     ports:
       - "127.0.0.1:18081:8080"
       - "127.0.0.1:18443:8443"
+
+  user:
+    environment:
+      USER_AUTH_PRINCIPAL_GRPC_LISTEN: :9094
+      USER_AUTH_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      USER_AUTH_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      USER_AUTH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json","search":"https://search:8443/.well-known/jwks.json","auth":"http://auth:8080/api/v1/auth/.well-known/principal-jwks.json"}'
 
 volumes:
   social_principal_ca: {}
