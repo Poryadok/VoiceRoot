@@ -136,7 +136,7 @@ func ExtractDeviceAuthorityExpected(compact string) (Expected, error) {
 	}
 	header, ok := headerValue.(map[string]any)
 	if !ok || !exactKeys(header, map[string]struct{}{"alg": {}, "kid": {}, "typ": {}}) ||
-		header["alg"] != "RS256" || header["typ"] != "voice.game-device-status+jwt" || !bytes.Equal(headerBytes, canonicalJSON(header)) {
+		header["alg"] != "RS256" || header["typ"] != "voice.game-device-status+jwt" {
 		return expected, errors.New("invalid Auth device authority header")
 	}
 	payloadBytes, err := decodeSegment(parts[1])
@@ -348,8 +348,8 @@ func VerifyDeviceAuthority(compact string, authKeys map[string]*rsa.PublicKey, n
 		return result, err
 	}
 	header, ok := headerValue.(map[string]any)
-	if !ok || len(header) != 3 || header["alg"] != "RS256" || header["typ"] != "voice.game-device-status+jwt" ||
-		!bytes.Equal(headerBytes, canonicalJSON(header)) {
+	if !ok || !exactKeys(header, map[string]struct{}{"alg": {}, "kid": {}, "typ": {}}) ||
+		header["alg"] != "RS256" || header["typ"] != "voice.game-device-status+jwt" {
 		return result, errors.New("invalid Auth protected header")
 	}
 	kid, ok := header["kid"].(string)

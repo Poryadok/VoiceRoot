@@ -125,7 +125,11 @@ func TestGameMessageStoreConcurrentExactRetryCommitsOneRevision(t *testing.T) {
 	wg.Wait()
 	close(results)
 	close(errorsCh)
-	require.Empty(t, errorsCh)
+	var concurrentErrors []error
+	for err := range errorsCh {
+		concurrentErrors = append(concurrentErrors, err)
+	}
+	require.Empty(t, concurrentErrors)
 	for row := range results {
 		require.Equal(t, message.MessageID, row.ID)
 	}

@@ -104,11 +104,17 @@ without extending its original expiry; changed tuple conflicts.
 
 Auth's dedicated mTLS connector uses
 `voice.auth.game-binding.mtls.port`, `.server-cert-file`, `.server-key-file`,
-`.client-ca-file`, and `.allowed-client-uri-san`, with environment bindings
+`.client-ca-file`, `.truststore-file`, `.truststore-password`, and
+`.allowed-client-uri-san`, with environment bindings
 `AUTH_GAME_BINDING_MTLS_PORT`, `_SERVER_CERT_FILE`, `_SERVER_KEY_FILE`,
-`_CLIENT_CA_FILE`, and `_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it;
-enabling requires all TLS files and the exact GIS URI SAN. Partial configuration,
-untrusted client certificates, or a mismatched URI SAN fail closed. This private
+`_CLIENT_CA_FILE`, `_TRUSTSTORE_FILE`, `_TRUSTSTORE_PASSWORD`, and
+`_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it; enabling requires all TLS
+files and the exact GIS URI SAN. The PKCS12 JSSE truststore must contain exactly
+the X.509 CA set in `client-ca-file`; the latter also configures Tomcat's
+OpenSSL provider. Configure only the approved GIS and Messaging client CA set,
+and keep the truststore password out of logs. Private route filters require a
+verified peer certificate with the exact route-specific URI SAN; missing or
+untrusted certificates and mismatched URI SANs fail closed. This private
 listener is not Gateway-published and has no plaintext fallback.
 
 Provider subjects are HMAC-SHA-256 digested in Auth with a dedicated 32-byte
@@ -158,8 +164,9 @@ Revoke names the stable challenge operation ID; it moves the grant to
 retry with the same operation ID returns `revoked` only after the claim ledger
 drains. This slice has focused controller, issuer and PostgreSQL claim/revoke
 tests. GIS exchange operation/outbox and T14 challenge creation now have
-focused handler and database lifecycle tests. Broader concurrency/replay tests
-and the Auth-to-Messaging permit aggregator remain open.
+focused handler and database lifecycle tests. The Auth-to-Messaging permit
+aggregator described below is implemented; hosted cross-service replay and
+revoke-drain acceptance remains a separate evidence gate.
 
 ### T16 Auth-to-Messaging execution permits
 
@@ -178,6 +185,20 @@ request ID and matching `game_binding_consent_revision`/`consent_revision`.
 The linked-session expiry bounds only handoff delivery and replay; it is not the
 duration of the send grant. The authorization transaction row's `expires_at`
 is not a grant expiry and must not be used to extend or revoke the grant.
+
+Before issuing `/api/v1/auth/sdk/device-authority`, Auth requires exactly one
+current active grant for the request's application, environment and account;
+it derives the actor from the active Auth SDK identity and the device from the
+authenticated session. The production `SdkBindingAuthority` implementation
+then reads
+`GET /internal/v1/bindings/{binding_id}/authority` from GIS with v1
+WorkloadProof and verifies the exact-byte signed `no-store` response. Auth
+checks the exact application/environment/binding tuple, active GIS status,
+positive binding revision, current consent/revision and local actor/device
+consistency. Missing or ambiguous grants, inactive or mismatched GIS state,
+invalid proof/MAC, malformed response and GIS unavailability all deny
+assertion issuance. `character_context` is checked as part of the strict GIS
+response schema but is not consumed or logged by Auth.
 
 When Auth accepts the handoff claim and the player binding becomes active, it
 creates a separate durable Auth-owned `sdk_game_message_grants` row keyed by
@@ -223,9 +244,13 @@ binding revocation, returns the persisted permit for an exact retry, and denies
 new permits after `revoking`. Auth validates the GIS response proof and tuple,
 re-reads consent, account/device/profile/policy/binding authority under the same
 Auth serialization lock, and signs only if every revision remains current.
-The exact Auth JWT header/claim set, GIS request/response proof, 3750 ms maximum
-permit lifetime, Messaging's 250 ms clock margin/transaction budget, and
-4.25-second revoke ceiling are frozen in the
+The Messaging consumer checks GIS's exact current
+`(application_id, environment_id, binding_id, chat_id)` mapping before it calls
+this Auth permit route. This order prevents a missing or foreign chat link from
+creating either an Auth or GIS execution permit. The exact Auth JWT
+header/claim set, GIS request/response proof, 3750 ms maximum permit lifetime,
+Messaging's 250 ms clock margin/transaction budget, and 4.25-second revoke
+ceiling are frozen in the
 [game-message API contract](../architecture/game-integration-api.md#messaging-ingress-and-t16-execution-permit).
 An exact retry reuses GIS's permit and returns the same Auth permit; changed
 operation/request digest or divergent completion conflicts. GIS or Auth

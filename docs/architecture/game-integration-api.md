@@ -760,8 +760,11 @@ message admission remain gated until the T16 producer is available.
 The request proof payload is canonical RFC 8785 UTF-8 JSON, protected header is
 exactly `{"alg":"ES256","kid":"<device key UUID>","typ":"voice.game-device-authority-request+jws"}`,
 and the JWS signature covers the normal RFC 7515 signing input. The assertion
-protected header is exactly
-`{"alg":"RS256","kid":"<Auth principal key ID>","typ":"voice.game-device-status+jwt"}`.
+protected header contains exactly the members and values
+`{"alg":"RS256","kid":"<Auth principal key ID>","typ":"voice.game-device-status+jwt"}`;
+member order is insignificant, but duplicate or additional members are denied.
+The signature covers the exact encoded header bytes. The assertion payload
+remains canonical JSON.
 Payload fields are exactly `version:1`, `iss:"auth"`,
 `aud:"voice.game-message"`, `jti` (fresh UUID), `application_id`,
 `environment_id`, `account_id`, `actor_id`, `binding_id`, `device_id`,
@@ -816,17 +819,24 @@ RPC carries the exact client `compact_jws` and `device_authority_assertion`.
 It is an internal service method; public Gateway REST exposure is a separate
 T20 consumer. Messaging first checks the durable exact-byte operation receipt.
 For a new operation it verifies the device signature and current Auth
-assertion, then obtains a one-use Auth execution permit bound to that
-assertion's `jti` and the stable message `operation_id`. Auth checks current
+assertion, then resolves the exact current GIS app/environment/binding/chat
+mapping over the private mTLS WorkloadProof route. Missing, foreign, stale, or
+altered mapping denies before Messaging requests a permit; no Auth or GIS
+permit is issued and no Chat/File check or message write follows. After mapping
+succeeds, Messaging asks Auth for a one-use execution permit bound to the
+assertion's `jti` and stable message `operation_id`, then verifies that permit.
+Auth checks current
 grant/device/account/profile epochs and the fixed
 `voice.game-message` → `game.chat.send` permission, requests a GIS permit for
 the same operation, rechecks its own authorization state, and signs a combined
-permit. Messaging then verifies current app/environment/binding/chat resource
-mapping, current Voice chat membership and every File manifest item, before
-starting the bounded database transaction. Message state, immutable revision,
-exact attachment manifest, exact-byte receipt, and permit-completion outbox
-record commit atomically. Missing Auth, GIS, T30/T31 mapping, Chat, or required
-File authority denies a new write without persistence.
+permit. Messaging then checks current Voice chat membership and every File
+manifest item before starting the bounded database transaction. A Chat or File
+denial after permit issuance durably records and dispatches an `aborted`
+completion; message state, immutable revision, exact attachment manifest,
+exact-byte receipt, and `committed` permit-completion outbox record commit
+atomically.
+Missing Auth, GIS, T30/T31 mapping, Chat, or required File authority denies a
+new write without persistence.
 
 Messaging requests a permit from Auth `POST
 /api/v1/auth/sdk/game-message/execution-permits` using its registered service
@@ -838,7 +848,9 @@ pins exact compact JWS bytes. Auth returns strict JSON
 `{ "permit_jws": "<compact JWS>" }`, `application/json`, `Cache-Control:
 no-store`, and no unknown/trailing fields. The Auth-signed JWS uses protected
 `typ=voice.game-message-execution-permit+jwt`, `alg=RS256`, and the dedicated
-Auth principal JWKS `kid`. Its exact claims are `version=1`, `iss=auth`,
+Auth principal JWKS `kid`; the protected header contains exactly `alg`, `kid`,
+and `typ` (member order is insignificant, duplicate/unknown members are denied),
+and its signature covers the exact encoded header bytes. Its exact claims are `version=1`, `iss=auth`,
 `aud=voice.game-message`, unique permit UUID `jti`, `operation=message.send`,
 `scope=game.chat.send`, `operation_id`, `request_sha256`,
 `application_id`, `environment_id`, `account_id`, `actor_id`, `binding_id`,
@@ -874,17 +886,39 @@ JSON `{ "operation_id": "<uuid>", "outcome": "committed" | "aborted" }`.
 Auth forwards it to GIS using the versioned workload proof. Auth returns exact
 JSON `{ "permit_id": "<uuid>", "operation_id": "<uuid>", "outcome":
 "committed" | "aborted", "status": "completed" }`. Exact retries replay the
-same receipt; a divergent outcome conflicts. The Messaging completion outbox
-retries until acknowledged.
+same receipt; a divergent outcome conflicts. `permit_jti` in the Auth route is
+the Auth-signed execution permit's JWS `jti`; response `permit_id` is the
+GIS-owned permit ID bound by the Auth JWS claim `gis_permit_id`. They are
+separate identifiers and callers validate each against its issuing authority.
+The Messaging completion outbox retries until acknowledged.
 
 Both owners serialize revocation with permit issuance using
 `active → revoking → revoked`; `revoking` stops new permits. Successful revoke
 waits for all issued permits to be committed/aborted or to expire plus the
-clock and transaction margins. Unknown completion remains pending. With the
-3.75s permit cap, 250ms clock margin, and 250ms transaction limit, the last
-possible commit is no later than 4.25 seconds from revoke request; the
-acceptance test measures request-to-last-commit. Relinking creates a new
-binding ID. The separate T30/T31 producer must prove the exact
+clock and transaction margins. Unknown completion remains pending. For owner
+revoke acceptance, `t0` is the GIS binding's durable `active → revoking`
+commit; endpoint request-to-`t0` and the Auth grant's separate `revoking`
+transition timestamp are recorded separately. `t1` is the last durable
+terminal state for every permit issued before `t0`: `committed`, `aborted`, or
+`expired` after its fixed lease plus the 500ms drain margin. The interval
+`t1 - t0` is at most 4.25 seconds (3750ms maximum lease plus 500ms). An unknown
+completion remains nonterminal until the fixed-expiry path is persisted.
+Relinking creates a new binding ID. An exact retained-message retry after
+revoke/relink returns its immutable receipt read-only without fresh Auth/GIS
+authority calls or writes. A distinct new operation with old-binding proof is
+denied after that binding reaches `revoked`; a pre-`t0` permit may still reach
+its bounded terminal state during drain. The proposed restore
+target is at most 5.0 seconds from `t0` (commit of the new binding as active
+with current Auth grant/consent) to `t1` (first accepted operation with a
+freshly Auth-signed assertion for the new binding), measured monotonically.
+In the hosted consumer harness, `t0` is observed after both disposable service
+stores commit the synthetic relink, and `t1` is conservatively observed when
+the successful Messaging response arrives; this upper-bounds the operation's
+earlier durable commit. The fixture changes the binding ID and authority
+revision and does not claim provider or public relink lifecycle acceptance.
+This is a new provisional developer SLO, not an existing contract or a
+consequence of the revoke bound; all old-binding assertions/proofs remain
+denied for new writes. The separate T30/T31 producer must prove the exact
 `(application_id, environment_id, binding_id, chat_id)` mapping; T16 binding
 authority and `ChatGuard.EnsureMember` cannot prove that relationship. New
 game-authored writes remain fail-closed until T30/T31 is available.
@@ -1677,6 +1711,90 @@ Portal — будущий инструмент вне спринта; соотв
 status API и серверная авторизация входят в Voice и проверяются test harness.
 Production admission проверяет identity/revoke, mute/report, limits и корректное
 поведение сбоев; конкретные коммерческие условия — G07.
+
+### T03 cross-cutting defaults G02-G12 and Q02-Q12
+
+These defaults close the remaining T03 decision gate. They are protocol and
+policy inputs for T04–T08 and later consumers; they do not claim those
+implementations or live-provider/production gates are complete.
+
+- **G02/Q03 — alternate characters and ownership.** Default to one active
+  character per `(app_id, environment_id, sdk_identity_id)`. An application may
+  enable multiple characters only through an explicit reviewed environment
+  policy. Each character has an independent binding, consent revision, and
+  grants; rank, sanctions, private history, and ownership never transfer or
+  union implicitly. A provider without a signed transfer signal cannot trigger
+  automatic ownership transfer. A new owner starts a new ownership generation
+  and receives no prior private context. Consumers: T17–T19, T37–T39; acceptance
+  Q03 and MMO02 covers same external ID/new owner, hidden alternate, and no
+  inherited history or command authority.
+- **G03/Q09 — owner recovery and complaints.** Loss of the named human Owner or
+  corporation dissolution freezes owner-only mutations and new privileged
+  grants. Recovery requires a Voice operator to verify a named human through
+  the protected account-owner process, record the decision and evidence digest,
+  and create a new owner generation; game leadership and node operators cannot
+  assign Voice ownership. A personal block hides/blocks direct interaction but
+  does not rewrite authoritative membership; a Voice moderation ban remains
+  the access-control authority. Operator complaints use a Voice-owned intake
+  with only IDs, timestamps, and evidence digests by default, not copied chat
+  content. Consumers: T37–T39 and moderation; acceptance Q09/MMO03 covers owner
+  loss, dissolution, shared-space block, blocked bot, and a hostile/unavailable
+  node operator.
+- **Q02/G11 — consent and trusted-recipient changes.** Consent is versioned by
+  account, app, environment, and scope set. Scope expansion, Owner generation
+  change, operator change, or destination/trust-recipient change increments the
+  revision and requires fresh consent; old credentials and grants are revoked
+  immediately. Queued, not-yet-admitted actions are cancelled or revalidated
+  against the new revision. An already admitted action follows G13's immutable
+  permit window only. Notifications are deduplicated by
+  `(recipient_account_id, category, source_event_id)`; quiet-hour delivery is
+  deferred and rechecks current consent and scope at send time. Consumers:
+  T14, T58–T59; acceptance Q02/BOT09 covers scope expansion, ownership/operator
+  change, queued versus admitted work, duplicate source events, and quiet-hour
+  boundaries.
+- **G07/Q12 — quotas and commercial claims.** The implemented GIS registration
+  ceiling remains 120 attempts per application per UTC minute, shared across
+  environments, with the existing 429/Retry-After contract. Other sandbox
+  traffic must use explicit per-app/environment limits and bounded request/body
+  sizes before that capability is enabled; no route is unlimited by default.
+  Production admission, public pricing, and availability/SLA promises remain
+  disabled until T08/T93 measure capacity and costs on the supported host
+  matrix. Consumers: T08, T11–T12, T76, T93; acceptance OPS02/Q12 covers tenant
+  isolation, quota exhaustion, retry timing, and measured load/restore.
+- **G08/Q06 — revocation and control-plane budget.** The canonical Federation
+  timing allocation, stale-authority behavior, 500ms renewal, and reserved
+  priority capacity are in [Federation authority v1](federation-authority-v1.md#g08q06-revoke-budget).
+  Nodes subtract the ≤250ms clock uncertainty from wall-clock expiry before
+  deriving a monotonic deadline, so skew can only deny early; larger uncertainty
+  fails closed immediately.
+  Command execution keeps its stricter 4.25-second permit drain bound above.
+  Consumers: T70–T78/T93; acceptance FED02/FED03/Q06 measures every budget under
+  2x the qualified event/snapshot load and verifies unrelated Spaces remain
+  available.
+- **G10/Q10 — node data, export, restore, and erasure.** A node has one
+  immutable home in v1; there is no online cross-node migration. Node operators
+  own encrypted backup, restore, and hardware-loss handling; Voice owns account,
+  consent, generation, and revocation authority. An owner export contains only
+  app-owned configuration and explicitly exportable app data, never provider
+  secrets, Voice credentials, another user's private profile, or unconsented
+  message history. Restore must merge the current Voice-owned generation,
+  revoke, deletion, and non-expiring external-key tombstone ledger before the
+  node serves traffic. After node loss, resources remain unavailable until
+  same-home restore or explicit retirement. Consumers: T70–T78/T76; acceptance
+  FED06–FED08/Q10 covers export filtering, old-backup restore, deletion, and no
+  resurrection of identities, grants, bindings, or purged resources.
+- **G12/Q07 — profile references and aliases.** Public payloads use an opaque,
+  stable reference scoped to one app/environment; they never expose a global
+  Voice profile ID or infer identity across apps. Display alias is selected by
+  the user, app-approved, NFC-normalized, trimmed of surrounding Unicode
+  whitespace, nonempty and free of control characters, then limited to 64
+  Unicode scalar values after normalization. Avatar and hidden-profile fields
+  are omitted unless separately consented and explicitly allowed by app policy.
+  Profile-cap enforcement is identical during login, conversion, roster, search,
+  cards, and presence; no consumer may create an extra profile to bypass the
+  cap. Consumers: T14, T17–T19, T38–T39; acceptance Q07/ID cases cover full
+  profile cap, hidden profiles, two apps, conversion, alias normalization/length,
+  and payload inspection for cross-app leakage.
 
 ### T12 registry endpoints and security defaults
 

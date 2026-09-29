@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +31,7 @@ type GameBindingAuthority interface {
 
 type GameMessageExecutionPermitIssuer interface {
 	Issue(context.Context, gameprotocol.DeviceAuthority, uuid.UUID, []byte) (string, error)
-	Complete(context.Context, uuid.UUID, uuid.UUID, string) error
+	Complete(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) error
 }
 
 // GameAppChatResourceAuthority is supplied by the T30/T31 resource-mapping
@@ -158,6 +161,9 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 		Device: authority, OperationID: message.OperationID, RequestSHA256: requestDigest, MutationBytes: message.RawPayload,
 	})
 	if err != nil {
+		if os.Getenv("T16_ACCEPTANCE_DIAGNOSTICS") == "1" {
+			slog.Info("T16 Auth execution permit rejected", "stage", executionPermitFailureStage(err))
+		}
 		return nil, errors.New("auth execution permit verification denied")
 	}
 	profileID := permit.ProfileID
@@ -170,7 +176,7 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 		if err := p.Store.RecordAbortedGameMessagePermit(ctx, completion); err != nil {
 			// The permit is short lived; if the local outbox cannot be committed,
 			// try to abort remotely and let GIS expiry remain the final fence.
-			_ = p.Permits.Complete(ctx, permit.ID, permit.OperationID, "aborted")
+			_ = p.Permits.Complete(ctx, permit.ID, permit.GISPermitID, permit.OperationID, "aborted")
 			return
 		}
 		_ = p.dispatchGamePermitCompletion(ctx, completion)
@@ -207,11 +213,38 @@ func (p *VerifiedGameMessageProcessor) ProcessGameMessage(ctx context.Context, c
 	return row, nil
 }
 
+func executionPermitFailureStage(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "key ID") || strings.Contains(message, "signing key"):
+		return "key_id"
+	case strings.Contains(message, "signature"):
+		return "signature"
+	case strings.Contains(message, "protected header"):
+		return "header"
+	case strings.Contains(message, "validity window") || strings.Contains(message, "expired or not yet valid"):
+		return "lifetime"
+	case strings.Contains(message, "digest"):
+		return "request_hash"
+	case strings.Contains(message, "identity, operation, or authority"):
+		return "authority_claims"
+	case strings.Contains(message, "claims"):
+		return "claims"
+	case strings.Contains(message, "input") || strings.Contains(message, "mutation"):
+		return "input"
+	default:
+		return "format"
+	}
+}
+
 func (p *VerifiedGameMessageProcessor) dispatchGamePermitCompletion(ctx context.Context, completion store.GameMessagePermitCompletion) error {
 	if p == nil || p.Store == nil || p.Permits == nil {
 		return errors.New("game execution permit completion dispatcher unavailable")
 	}
-	if err := p.Permits.Complete(ctx, completion.PermitID, completion.OperationID, completion.Outcome); err != nil {
+	if err := p.Permits.Complete(ctx, completion.PermitID, completion.GISPermitID, completion.OperationID, completion.Outcome); err != nil {
 		return err
 	}
 	return p.Store.MarkGameMessagePermitCompletion(ctx, completion)

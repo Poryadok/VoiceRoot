@@ -238,13 +238,28 @@ canonical body and device proof and
 reuse the saved handoff/claim; changed input conflicts. A background worker
 retries Auth completion until receipt; only after that receipt does GIS promote
 the binding to `active`. Uncertain completion returns retryable unavailable
-and cannot activate the binding. Revoke waits for
-execution permits and accepted handoff claims to drain (4.25s target, 5s hard
-bound); uncertain completion cannot return success. Restore/relink needs fresh
-proof/consent and a new GIS binding UUID. The challenge producer is wired to
-T14 approval; Gateway does not yet publish these APIs. The T16 Auth-to-Messaging
-execution-permit aggregator and broader selected-profile privacy fanout remain
-open dependencies.
+and cannot activate the binding. Permit revoke/drain is bounded to 4.25s from
+the GIS binding's durable `active → revoking` commit. The test records the
+endpoint request-to-transition duration and Auth grant's separate `revoking`
+timestamp. For each permit issued before the GIS transition, the terminal
+state at `t1` is `committed`, `aborted`, or `expired` after the 3750ms maximum
+lease plus 500ms drain margin. The enclosing endpoint may return a retryable
+pending result if handoff claims have not drained. Uncertain completion cannot
+return success. Restore/relink needs fresh proof/consent
+and a new GIS binding UUID. The proposed developer restore SLO is ≤5.0s,
+measured monotonically from activation of the new binding plus current Auth
+grant/consent (`t0`) to the first accepted operation using a freshly
+Auth-signed assertion for that binding (`t1`); it is a new provisional target,
+not an existing contract. The hosted consumer harness observes `t0` after
+both disposable stores commit its synthetic relink and conservatively records
+`t1` when the successful Messaging response arrives, which upper-bounds the
+earlier durable operation commit. It changes the binding ID and authority
+revision without claiming provider or public relink lifecycle acceptance.
+Old-binding proof remains denied for new writes.
+The challenge producer is wired to T14 approval; Gateway does not yet publish
+these APIs. The Auth-to-Messaging execution-permit bridge and Messaging
+consumer are implemented, while cross-service Compose acceptance and broader
+selected-profile privacy fanout remain open dependencies.
 
 Owner revocation is `DELETE /api/v1/game-integrations/bindings/{binding_id}`
 with a regular bearer, `Idempotency-Key` UUID and strict
@@ -307,13 +322,22 @@ GIS revocation is a service seam, not a public player route. It CAS-transitions
 `active` to `revoking` and increments the GIS revision, which immediately
 prevents fresh permits. A successful revoke response is returned only after
 every issued permit has a committed/aborted receipt or has expired plus the
-500ms drain margin, then state becomes `revoked`. The request is bounded to
-4.25 seconds; on timeout it leaves the binding `revoking` and the same
-operation ID resumes the drain. Unknown completion therefore holds revocation
-pending until the fixed lease expires. There is no shared permit cache. This
-producer slice does not implement the Auth assertion signer/JWKS, Auth-owned
-binding reference/aggregator, or the future GIS challenge/exchange writer;
-T15 and binding-exchange consumers remain fail-closed until those pieces land.
+500ms drain margin, then state becomes `revoked`. The hosted drain measurement
+uses `t0` at the GIS binding's durable `active → revoking` commit and `t1` at
+the final durable terminal state for every earlier permit: `committed`,
+`aborted`, or `expired` after the 500ms drain margin. `t1 - t0` is bounded to
+4.25 seconds. Endpoint request-to-`t0` and Auth grant's separate `revoking`
+timestamp are recorded separately. On timeout it
+leaves the binding `revoking` and the same operation ID resumes the drain.
+Unknown completion therefore holds revocation pending until the fixed lease
+expires. There is no shared permit cache. Auth
+owns the device assertion/JWKS and grant, links the current binding reference,
+and aggregates the permit issue/completion routes; GIS owns the durable
+binding/permit ledger and verifies Auth's WorkloadProof v2 calls. The T14
+challenge/exchange writer and GIS Auth mTLS client are implemented as bounded
+development paths. The hosted T16 consumer acceptance remains pending; public
+Gateway publication, T30/T31 production mapping provisioning, and production
+admission remain separate open gates.
 
 The operator principal wire and key rotation overlap are fixed in the contract
 PR before the corresponding public endpoint is enabled. Until that endpoint

@@ -16,6 +16,28 @@ import (
 
 var errInvalidDeviceAuthority = errors.New("invalid device authority assertion")
 
+type deviceAuthorityFailure string
+
+const (
+	deviceAuthorityFormat         deviceAuthorityFailure = "format"
+	deviceAuthorityHeader         deviceAuthorityFailure = "header"
+	deviceAuthorityKeyID          deviceAuthorityFailure = "key_id"
+	deviceAuthoritySignature      deviceAuthorityFailure = "signature"
+	deviceAuthorityIssuerAudience deviceAuthorityFailure = "issuer_audience"
+	deviceAuthorityClaims         deviceAuthorityFailure = "claims"
+)
+
+func (e deviceAuthorityFailure) Error() string { return errInvalidDeviceAuthority.Error() }
+func (e deviceAuthorityFailure) Unwrap() error { return errInvalidDeviceAuthority }
+
+func deviceAuthorityFailureStage(err error) string {
+	var failure deviceAuthorityFailure
+	if errors.As(err, &failure) {
+		return string(failure)
+	}
+	return string(deviceAuthorityClaims)
+}
+
 var deviceAssertionFields = map[string]struct{}{
 	"version": {}, "iss": {}, "aud": {}, "jti": {}, "application_id": {}, "environment_id": {},
 	"account_id": {}, "actor_id": {}, "binding_id": {}, "device_id": {}, "key_id": {}, "public_jwk": {},
@@ -26,68 +48,68 @@ var deviceAssertionFields = map[string]struct{}{
 func parseForwardedDeviceAuthority(raw []byte) (registry.GameDeviceAuthorityClaims, error) {
 	var empty registry.GameDeviceAuthorityClaims
 	if len(raw) == 0 || len(raw) > 16<<10 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityFormat
 	}
 	parts := bytes.Split(raw, []byte("."))
 	if len(parts) != 3 || len(parts[0]) == 0 || len(parts[1]) == 0 || len(parts[2]) == 0 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityFormat
 	}
 	headerBytes, err := base64.RawURLEncoding.DecodeString(string(parts[0]))
 	if err != nil || base64.RawURLEncoding.EncodeToString(headerBytes) != string(parts[0]) {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityFormat
 	}
 	header, err := decodeUniqueJSONObject(headerBytes)
 	if err != nil || len(header) != 3 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityHeader
 	}
 	if string(header["alg"]) != `"RS256"` || string(header["typ"]) != `"voice.game-device-status+jwt"` {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityHeader
 	}
-	keyID, err := rawUUID(header["kid"])
-	if err != nil {
-		return empty, errInvalidDeviceAuthority
+	keyID, err := rawString(header["kid"])
+	if err != nil || !validAuthSigningKeyID(keyID) {
+		return empty, deviceAuthorityKeyID
 	}
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(string(parts[1]))
 	if err != nil || base64.RawURLEncoding.EncodeToString(payloadBytes) != string(parts[1]) {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityFormat
 	}
 	payload, err := decodeUniqueJSONObject(payloadBytes)
 	if err != nil || len(payload) != len(deviceAssertionFields) {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	for name := range payload {
 		if _, ok := deviceAssertionFields[name]; !ok {
-			return empty, errInvalidDeviceAuthority
+			return empty, deviceAuthorityClaims
 		}
 	}
 	signatureBytes, err := base64.RawURLEncoding.DecodeString(string(parts[2]))
 	if err != nil || len(signatureBytes) == 0 || base64.RawURLEncoding.EncodeToString(signatureBytes) != string(parts[2]) {
 		// The assertion signature's issuer authentication is the signed Auth
 		// workload proof on this private route; Auth validates it before forwarding.
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthoritySignature
 	}
 	version, err := rawInt64(payload["version"])
 	if err != nil || version != 1 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	issuer, err := rawString(payload["iss"])
-	if err != nil || issuer != "auth" {
-		return empty, errInvalidDeviceAuthority
+	if err != nil {
+		return empty, deviceAuthorityIssuerAudience
 	}
 	audience, err := rawString(payload["aud"])
-	if err != nil || audience != "voice.game-message" {
-		return empty, errInvalidDeviceAuthority
+	if err != nil || issuer != "auth" || audience != "voice.game-message" {
+		return empty, deviceAuthorityIssuerAudience
 	}
 	status, err := rawString(payload["status"])
 	if err != nil || status != "active" {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	thumbprint, err := rawString(payload["key_thumbprint"])
 	if err != nil || thumbprint == "" {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	if _, err := decodeUniqueJSONObject(payload["public_jwk"]); err != nil {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	claims := registry.GameDeviceAuthorityClaims{Issuer: issuer, Audience: audience, Version: version,
 		Status: status}
@@ -99,37 +121,52 @@ func parseForwardedDeviceAuthority(raw []byte) (registry.GameDeviceAuthorityClai
 	} {
 		*target, err = rawUUID(payload[name])
 		if err != nil {
-			return empty, errInvalidDeviceAuthority
+			return empty, deviceAuthorityClaims
 		}
-	}
-	if claims.KeyID != keyID {
-		return empty, errInvalidDeviceAuthority
 	}
 	claims.DeviceGeneration, err = rawInt64(payload["device_generation"])
 	if err != nil || claims.DeviceGeneration <= 0 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	claims.AuthorityRevision, err = rawInt64(payload["authority_revision"])
 	if err != nil || claims.AuthorityRevision <= 0 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	notAfter, err := rawInt64(payload["not_after"])
 	if err != nil || notAfter <= 0 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	issuedAt, err := rawInt64(payload["iat"])
 	if err != nil || issuedAt <= 0 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	expiresAt, err := rawInt64(payload["exp"])
 	if err != nil || expiresAt <= issuedAt || expiresAt > notAfter || expiresAt > issuedAt+4000 {
-		return empty, errInvalidDeviceAuthority
+		return empty, deviceAuthorityClaims
 	}
 	claims.NotAfter = time.UnixMilli(notAfter).UTC()
 	claims.IssuedAt = time.UnixMilli(issuedAt).UTC()
 	claims.ExpiresAt = time.UnixMilli(expiresAt).UTC()
 	claims.AssertionSHA256 = sha256.Sum256(raw)
 	return claims, nil
+}
+
+// The JWS header kid identifies Auth's signing-key rotation slot. The payload
+// key_id is a different UUID identifying the player's device key.
+func validAuthSigningKeyID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for index, character := range value {
+		alphaNumeric := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9'
+		if !alphaNumeric && character != '.' && character != '_' && character != '-' {
+			return false
+		}
+		if index == 0 && !alphaNumeric {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeUniqueJSONObject(raw []byte) (map[string]json.RawMessage, error) {

@@ -134,7 +134,7 @@ operator then creates a synthetic Space placement with
 `POST /v1/nodes/{node}/spaces/{space}` and `{}`. The operator-publisher fixture
 publishes its initial complete allowlist with
 `POST /v1/nodes/{node}/spaces/{space}/snapshot`, revision `1`, one page, and a
-`valid_until` no more than five seconds ahead. Use only synthetic Space, account,
+`valid_until` no more than two seconds ahead. Use only synthetic Space, account,
 profile and resource IDs; the permission may grant `read` for this fixture.
 Federation has no production owning-service snapshot publisher yet, so this
 operator-published snapshot proves only the authority contract. The node then
@@ -143,6 +143,10 @@ gets its signed snapshot at
 revision/hash with a fresh nonce at
 `POST /v1/nodes/{node}/spaces/{space}/lease`, using its node certificate and
 node-scoped bearer. The test must not seed or repair registry rows with SQL.
+Node enforcement subtracts at most 250ms combined clock uncertainty from the
+signed wall-clock deadline before monotonic conversion, fails closed if
+uncertainty exceeds 250ms, and fences active media within 2.75s after the deny
+trigger; the complete revoke-to-eject budget remains at most 5s.
 For every enumerated Federation HTTP denial below, send a canonical
 `X-Request-ID` and verify the response header and append-only Federation audit
 row agree on that ID, the actor certificate fingerprint, target IDs, action,
@@ -203,6 +207,11 @@ retains the SQL-fixture test that denies a production credential; it is not a
 production admission flow. These checks use a fake Voice JWKS and do not claim
 Google provider proof, production admission, or an unmeasured latency or
 restore result.
+
+At feature PR #557 exact head `1c028516d1358b43385d2b7168d616b3b1ccce0b`,
+`rtk make game-integration-bootstrap-acceptance` passed again in 2.603 seconds.
+This reruns the empty-database GIS bootstrap API selector only; it does not
+close T11's production-admission, live-provider, or out-of-band secret gates.
 
 T11 installation binding is asserted separately as BOT11: public registration
 accepts an owner-selected Bot ID but no owner override; GIS derives the owner
@@ -278,9 +287,12 @@ ID, with no token, provider claim or private-key bytes.
 #### T14-DEV source and test map
 
 This map records existing development behavior only. It does not mark the
-parent T14 or the complete ID01–ID06 acceptance rows as closed. The exact-head
-Auth, GIS, and Flutter hosted checks for `94dde2986d0024a48c65e77f3e6c98bb175418d6`
-are pending; keep T14-DEV unchecked until all three finish green.
+parent T14 or the complete ID01–ID06 acceptance rows as closed. Exact-head
+hosted CI and Docs link check passed for PR #550 head
+`02b73018a8a94b07556147816bf04c51ad78fc40`, merged as
+`0a9d62994343763f173adcba361730e9c6b3f660`; Auth, GIS binding, Messaging,
+Flutter, and the independent exact-head review were green. This evidence closes
+only T14-DEV; production routes, live providers, and parent T14 remain open.
 Production paths are Auth `src/backend/auth/src/main/java/voice/backend/auth/sdkidentity/SdkAuthorizationService.java`,
 `SdkAuthorizationRestController.java`, and `AuthUserProfileEligibilityClient.java`;
 GIS `src/backend/gameintegration/internal/httpapi/binding_challenge.go`,
@@ -316,7 +328,7 @@ respectively.
 | ID12 | Crash/timeout/retry на каждой стадии конвертации | Та же durable operation, доступный status, recovery; нет дублей, потери audit или оживления старых tokens/actions |
 | ID13 | Unlink после конвертации, старый provider ticket/token | Retired identity не восстанавливается автоматически; последующий вход следует утверждённой G01 policy |
 | ID14 | Developer service/node/bot credential пытается выпустить player token, enroll/replace/recover device key или отправить за игрока; положительная enrollment/recovery | Отказать первой группе; enroll/replace/recover проходят только с независимым Auth proof и possession нового/current ключа по lifecycle policy; recovery отзывает только указанное lost device, не прочие устройства |
-| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth/GIS execution permit fail closed, same-operation retry не продлевает expiry, а unknown completion не считается успехом; revocation race tests prove `active→revoking→revoked`, no new permit in revoking, and successful revoke waits through commit/abort/expiry; permit `exp = min(issued+3750ms, assertion.exp)`, max clock margin 250ms and transaction 250ms; measured request-to-last-commit ≤4.25s; every current key expires at `not_before + 90 days`; rotation only before expiry, replacement gets its own 90-day validity, old key has 600s overlap; overlap equality and 90-day expiry equality reject new operations while retaining historical verification; missed renewal has no grace and requires fresh independent recovery proof; Auth cannot issue an assertion or admit a new message without T16 binding authority; new message writes also remain fail-closed without T30/T31 exact app/env/binding/chat mapping |
+| ID15 | Подмена actor/chat/body/env/content bytes, duplicate/replay/lost response, stale node authority, edits/deletes/attachments, key lifecycle boundaries | Отказать до эффекта; точный receipt retry после expiry/revoke возвращает прежний результат read-only, иные bytes конфликтуют; проверяются user JWS и полный Messaging tombstone; Auth/GIS execution permit fail closed, same-operation retry не продлевает expiry, а unknown completion не считается успехом; revocation race tests prove `active→revoking→revoked`, no new permit in revoking, and successful revoke waits through commit/abort/expiry; permit `exp = min(issued+3750ms, assertion.exp)`, max clock margin 250ms and transaction 250ms; measured durable `revoking` transition-to-last permit commit/abort ≤4.25s, with API request-to-transition reported separately; every current key expires at `not_before + 90 days`; rotation only before expiry, replacement gets its own 90-day validity, old key has 600s overlap; overlap equality and 90-day expiry equality reject new operations while retaining historical verification; missed renewal has no grace and requires fresh independent recovery proof; Auth cannot issue an assertion or admit a new message without T16 binding authority; new message writes also remain fail-closed without T30/T31 exact app/env/binding/chat mapping |
 
 The internal ingress contract is protobuf `MessagingService.ApplyGameMessage`:
 it carries the exact compact JWS body and separate Auth assertion, without
@@ -489,6 +501,75 @@ resource-mapping dependency is absent and new game-authored writes fail closed;
 tests with a synthetic mapping fixture prove only the consumer seam, not that
 the prerequisite has shipped. Receipt-first exact retries remain readable.
 
+### T16-DEV cross-service permit acceptance
+
+The hosted Linux Compose gate must exercise the production Auth permit REST
+service and dedicated mTLS listener, GIS private mapping and execution-permit
+handlers with the real registry/PostgreSQL store, and Messaging's production
+`ApplyGameMessage` gRPC path, principal verifier, Auth permit client, GIS
+mapping client, and PostgreSQL receipt/completion transaction. Synthetic
+credentials, principals, account/profile identities, bindings and mapping
+rows are isolated to disposable run databases. No Google or other provider
+credential is used. Only unrelated Chat/File policy dependencies may use
+explicit test adapters; neither the Auth↔GIS permit seam nor GIS mapping
+authority may be mocked.
+
+The base Compose User service retains its real synthetic-principal gRPC path;
+the T16 overlay substitutes the unrelated MinIO service and bucket-init with
+no-ops using the already-required Postgres image. This acceptance does not
+exercise avatar uploads or other User object-storage writes.
+
+Auth's real `/api/v1/auth/sdk/device-authority` endpoint must use its required
+production `SdkBindingAuthority` bean to call GIS
+`GET /internal/v1/bindings/{binding_id}/authority` with v1 WorkloadProof and verify
+GIS's exact-byte signed, no-store response. The Compose test obtains the
+assertion from Auth and asserts that the successful request adds exactly one
+GIS workload nonce in shared disposable Redis, proving the live GIS verifier
+and authority handler/store participated. Auth fails closed for no/ambiguous
+active grant, local actor/device mismatch, GIS mismatch/revocation, bad proof,
+or unavailable GIS.
+
+The Auth-signed assertion and exact mapping fixture use the same
+`application_id`, `environment_id`, `binding_id`, and `chat_id`. Missing,
+foreign-app/environment, wrong-binding and wrong-chat mappings must be denied
+before the permit client is called and before any message, revision, receipt,
+or completion row is written. A wrong Gateway issuer/service/RPC/request hash
+must be rejected by the production principal verifier before reaching the
+Messaging processor. A valid exact mapping then causes Auth/GIS permit issue
+and verification, followed by Chat membership, File provenance, and the atomic
+message commit. Chat/File denial after permit issue must persist and dispatch
+`aborted`; mapping denial occurs before any permit call. A successful operation
+has one message commit and one durable completion receipt; a retry after a simulated lost response returns
+the exact retained result without a second message or permit. Exact Auth/GIS
+permit retries return the same receipt without extending expiry, while changed
+operation/assertion/outcome conflicts.
+
+For this owner-revoke scenario, set `t0` to the GIS binding's durable commit
+of `active → revoking`; record endpoint request-to-`t0` and the Auth grant's
+separate `revoking` timestamp. `t1` is the last durable terminal state for
+every permit issued before `t0`: `committed`, `aborted`, or `expired` after the
+fixed 3750ms lease plus 500ms drain margin. Gate `t1 - t0 ≤ 4.25s`. While
+revoking, new permit issue must fail; unknown completion remains nonterminal
+until the expiry transition is durable, and the binding reaches `revoked` only
+after drain. The same retained message operation after revoke/relink returns
+its exact receipt read-only, with no fresh Auth/GIS calls or writes. A distinct
+new operation with old-binding proof is denied once the old binding is
+`revoked`; a permit issued before `t0` may still reach terminal state during
+drain. For
+restore/relink, the proposed provisional developer SLO is ≤5.0s measured
+monotonically from commit of the new binding as active with current Auth
+grant/consent (`t0`) to first accepted operation using a freshly Auth-signed
+assertion for the new binding (`t1`). This is a new sprint target, not a
+previously frozen contract and not derived from revoke timing. All old-binding
+assertions remain denied for new writes. The hosted fixture changes the GIS
+binding ID and authority revision and updates the disposable Auth grant/device
+authority state; it does not claim a public/provider relink lifecycle. The
+test starts its monotonic interval after both stores commit that synthetic
+state and ends when the successful Messaging response arrives, conservatively
+upper-bounding the earlier durable message commit. A synthetic mapping fixture
+proves only the T16 consumer path; T30/T31 mapping production, Gateway
+publication, real-provider approval and production admission remain open.
+
 ## 4. Как запускать проверки при реализации
 
 - Contracts: `rtk buf lint`, `rtk buf format -d --exit-code`, breaking/regeneration
@@ -529,23 +610,24 @@ messenger DAU; чужие SDK case-study uplift не используется к
 Принятые направления отделены от открытых деталей. Владелец согласовал правила
 из [feature canon](../features/game-integrations.md#принятые-владельцем-продуктовые-правила);
 повторное согласование этих направлений не требуется. Остаточные сценарии и
-acceptance Q01–Q12 перечислены в [design audit](game-integrations-design-audit.md).
-Каждый оставшийся выбор фиксируется в owning canon до зависимого кода.
+Acceptance Q01–Q12 are listed in the [design audit](game-integrations-design-audit.md).
+Adopted defaults and consumers are recorded in the owning canon; runtime tests
+remain required before dependent capabilities are enabled.
 
 | ID | Решение | Рекомендуемый старт / gate |
 |---|---|---|
 | G01 | Принят узкий Auth identity contract GAME-AUTH-01 для T13a: отдельный `sdk-account`, независимые Google OIDC + app/env game-ticket proof, Auth challenge/exchange/session/revoke, cap 1,000 identities per app/env и 10 active devices per identity. G01 в целом открыт: остаются межсервисная trust matrix, conversion, conflicts/history, transfer/recovery, Gateway/registry activation и более широкий wire contract. | T13a детерминированно проверяется на fake provider fixtures; полный GI7 требует также отдельных real-Google и clean-start gates выше плюс conversion ID07–ID13 |
-| G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union; открыта concurrent alt policy | Policy per game и ownership generation Q03; скрытые персонажи не раскрываются |
-| G03 | Принят named human Owner по защищённому flow, не автоматический game leader | Остались loss-of-owner/dissolution recovery; roster не обходит Voice ban |
+| G02 | Приняты раздельные reasons/grants и отсутствие implicit privilege union. Default: one active character per app/env/sdk identity; multiple characters require explicit environment policy and independent binding, consent, and grants. Ownership never transfers without an authoritative provider signal. | Q03/MMO02: hidden alternate, same external ID/new owner, and no inherited history or command grants; consumers T17–T19/T37–T39 |
+| G03 | Принят named human Owner, never a game leader. Owner loss/dissolution freezes privileged writes until a Voice operator verifies a named human and records a new owner generation; node operators cannot assign Voice ownership. Personal block does not mutate membership; Voice ban remains authoritative. | Q09/MMO03: owner loss, dissolution, shared-space block, blocked bot, and hostile/unavailable node operator; consumers T37–T39 and moderation |
 | G04 | Match-scoped history access expires exclusively at `closed_at + 30 days`; an explicit keep-group includes only consenting participants and never copies the match transcript. Terminal operation receipts remain retryable for 30 days after terminal state; after receipt purge, retain a non-content tombstone for the external resource key with no expiry, so retry cannot silently recreate it. A shared party chat is not retired by closing one match and remains governed by Chat/party lifecycle. | SE03/SE04 boundary checks; exact retry just before receipt expiry, tombstone denial at/after expiry; no content returned at match expiry |
-| G05 | Current contracts are Voice Game API `/api/v1` and Federation authority `/v1`; proposed support is current v1 until a successor major is generally available, then 12 months | GI4 old/new client-server conformance and exact-version manifest; support proposal is not runtime proof; engine versions/assets remain separate |
+| G05 | Current contracts are Voice Game API `/api/v1` and Federation authority `/v1`; keep v1 supported until a successor major is generally available, then provide a 12-month migration window. | GI4 old/new client-server conformance and exact-version manifest remain runtime gates; the adopted support policy is not compatibility proof; engine versions/assets remain separate |
 | G06 | Отдельный Go Game Integration Service и собственное `game_integration_db` приняты; app owner, operator approval, API bootstrap and credential lifecycle are frozen in the service contract | Clean empty-DB bootstrap and scoped credential lifecycle via API; no direct SQL/portal; run Q11 acceptance before enabling |
-| G07 | Managed/self-hosted pricing, quotas, admission и SLA | Sandbox limits + measured costs; никаких обещаний unlimited/free production заранее |
-| G08 | Authority lease и revocation budget | Сумма propagation/expiry/skew/eject ≤5s; если не доказано, federated voice выключен |
+| G07 | Сохранён GIS registration cap: 120 attempts/application/UTC-minute. Other sandbox capabilities require bounded per-app/env quota and request/body limits before enablement. Production admission, pricing, and SLA stay disabled until T08/T93 measure capacity and costs. | OPS02/Q12 tenant isolation, quota exhaustion/Retry-After, measured load and restore; consumers T08/T11–T12/T76/T93 |
+| G08 | Revoke-to-eject ≤5s: publish a newer revoke revision within 2s or let the last signed validity expire within 2s; subtract ≤250ms clock uncertainty from expiry before monotonic conversion, then fence active media within 2.75s. Command drain retains the stricter 4.25s bound. Stale authority fails closed; a reserved priority lane protects revoke/freeze/lease work. | FED02/FED03/Q06 measure the sub-budgets under 2× qualified event/snapshot load and verify unrelated Spaces remain available; consumers T70–T78/T93 |
 | G09 | A complete accepted roster has a 60-second lease from its GIS DB commit. Exact same-revision/same-body retry is inert and does not renew; lower revision is stale no-op; same revision with different body conflicts. Incomplete or failed fetch is never empty. At exact lease expiry deny new admission/reconnect and governed reads/writes; fence active Voice/media within the existing ≤5-second revoke bound. Old-snapshot retries never renew. | SE07 expiry boundary; assert no access at `lease_expires_at`, active media fenced at/before `lease_expires_at + 5s`; only a complete higher revision renews |
-| G10 | Node data loss/export/migration/backup и erasure terms | Один immutable home в GI6; отдельный migration protocol и operator responsibility |
-| G11 | Приняты отдельный consent по категориям, quiet hours и отсутствие дублей; открыты routing/coalescing details | Mobile delivery только после mobile gate; смена получателя consent Q02 |
-| G12 | Приняты выбранное игровое имя/app attribution и приватность скрытых профилей | Определить app-visible alias/profile serialization и лимиты Q07, rank/history Q01/G02 |
+| G10 | Node home immutable in v1; no online cross-node migration. Operators own encrypted backup/hardware recovery; Voice owns identity, consent, generation and revoke authority. Restore merges current Voice fences before serving. Export excludes secrets and unconsented personal data. | FED06–FED08/Q10 cover export filtering, old-backup restore, deletion, and no identity/grant/resource resurrection; consumers T70–T78/T76 |
+| G11 | Consent is versioned by account/app/env/scope. Scope, Owner, operator, or destination changes revoke old authority and require fresh consent. Notifications dedupe by recipient/category/source event; quiet-hour delivery rechecks consent at send time. | Q02/BOT09 cover trust changes, queued vs admitted work, duplicate events, and quiet-hour boundaries; consumers T14/T58–T59 |
+| G12 | Public payloads use stable opaque app/env profile references, never global Voice profile IDs. Alias is user-selected, app-approved, NFC-normalized, and at most 64 Unicode scalar values; hidden profile fields need separate consent and app policy. Profile caps apply across login, conversion, roster, cards, search, and presence. | Q07/ID cases cover cap, hidden profiles, two apps, conversion, alias normalization/length, and cross-app leak inspection; consumers T14/T17–T19/T38–T39 |
 | G13 | Admission/revoke и completion после unlink | Online admission сериализован с revoke; зафиксировать start/completion bounds, in-flight UX и reconciliation до GI2 |
 
 T32 contract propagation is complete after PR #536 merged: the frozen session

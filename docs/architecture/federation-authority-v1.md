@@ -92,7 +92,7 @@ Space lifecycle, membership, Role overrides, bans, binding/profile/session
 state before producing this projection. Federation cannot write owning stores.
 There is no production owning-service publisher yet: operator fixtures exercise
 the contract only. Payload is bounded at 1 MiB, one complete page. Unknown
-schema/fields fail closed. `valid_until` is within the next five seconds, so a
+schema/fields fail closed. `valid_until` is within the next two seconds, so a
 future publisher must continually refresh with a new revision. Source expiry
 prevents indefinite renewal of stale authority. Same revision/same canonical
 bytes is a no-op; changed bytes, skipped or lower revisions conflict.
@@ -111,11 +111,29 @@ atomic activation. key_id is a lookup hint, never an authority source.
 
 Lease lifetime is min(two seconds, source expiry, credential expiry). ACK must
 name the exact current revision/hash and single-use nonce UUID. Nonce is retained
-through credential expiry; replay cannot renew a lease. There is no heartbeat
-renewal and no expiry grace. Transactions lock node then placement, serializing
-lease issuance with revocation and publication. Consumers must combine wall
-clock deadline with monotonic elapsed time and fail closed on clock uncertainty.
-500ms renewal is a proposed technical default, not a measured acceptance result.
+through credential expiry; replay cannot renew a lease. There is no expiry
+grace. Transactions lock node then placement, serializing lease issuance with
+revocation and publication. The publisher attempts renewal every 500ms; retries
+never slide `valid_until` or extend a lease.
+
+#### G08/Q06 revoke budget
+
+The source publishes a committed newer revoke revision within 2.0 seconds;
+without that update, the last signed snapshot/lease expires within 2.0 seconds
+of the owning-authority mutation because its signed validity is capped at two
+seconds. These are alternate deny paths, not additive delays. Combined
+wall-clock uncertainty is at most 250ms. Nodes subtract that uncertainty from
+the signed wall-clock deadline before converting it to a monotonic deadline, so
+clock skew can only deny early; uncertainty above 250ms fails closed
+immediately. After the deny trigger, the node/SFU enforcement path fences
+active media within 2.75 seconds. The conservative allocation is
+2.0s propagation/validity + 0.25s clock guard + 2.75s enforcement = 5.0s
+maximum revoke-to-eject. Revoke, freeze, and lease-expiry work uses a separately
+bounded priority lane with reserved worker and database capacity; message
+delivery, roster snapshots, and resync cannot starve it. This is an acceptance
+target, not a measured runtime claim. FED02/FED03/Q06 must measure each interval
+under 2x the qualified event/snapshot load and show that unrelated Spaces remain
+available.
 
 ## Storage, runtime and activation
 
@@ -129,4 +147,4 @@ Named activation consumer is future Voice Node policy projection and media
 verifier T72–T74. Live stream, owning-service publisher, player grants, resource
 routing, node stores, lifecycle receipts and bundle are still pending. No media
 capability is advertised. Actual media enforcement must prove the full <=5s
-propagation+lease+skew+eject budget; an ordinary LiveKit JWT is insufficient.
+G08/Q06 budget above; an ordinary LiveKit JWT is insufficient.

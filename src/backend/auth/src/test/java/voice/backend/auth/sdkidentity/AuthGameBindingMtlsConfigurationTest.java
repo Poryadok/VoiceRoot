@@ -3,8 +3,10 @@ package voice.backend.auth.sdkidentity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -50,6 +52,21 @@ class AuthGameBindingMtlsConfigurationTest {
   }
 
   @Test
+  void rejectsJsseTruststoreContainingAuthoritiesOutsideTheConfiguredClientCa() throws Exception {
+    var environment = completeEnvironment();
+    Path truststorePath = Path.of(environment.getProperty("AUTH_GAME_BINDING_MTLS_TRUSTSTORE_FILE"));
+    KeyStore unrelatedTruststore = KeyStore.getInstance("PKCS12");
+    unrelatedTruststore.load(null, "test-password".toCharArray());
+    try (OutputStream output = Files.newOutputStream(truststorePath)) {
+      unrelatedTruststore.store(output, "test-password".toCharArray());
+    }
+
+    assertThatThrownBy(() -> AuthGameBindingMtlsConfiguration.settings(environment))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("matching JSSE truststore/client CA");
+  }
+
+  @Test
   void enablesOnlyWithAllFilesAndExactClientServiceIdentity() throws Exception {
     var settings = AuthGameBindingMtlsConfiguration.settings(completeEnvironment());
 
@@ -59,6 +76,8 @@ class AuthGameBindingMtlsConfigurationTest {
     assertThat(settings.serverCertFile()).isEqualTo(files.resolve("server.pem"));
     assertThat(settings.serverKeyFile()).isEqualTo(files.resolve("server-key.pem"));
     assertThat(settings.clientCaFile()).isEqualTo(files.resolve("client-ca.pem"));
+    assertThat(settings.truststoreFile()).isEqualTo(files.resolve("client-ca.p12"));
+    assertThat(settings.truststorePassword()).isEqualTo("test-password");
   }
 
   @Test
@@ -96,7 +115,7 @@ class AuthGameBindingMtlsConfigurationTest {
     var settings = AuthGameBindingMtlsConfiguration.settings(completeEnvironment());
     var authSettings = new AuthGameBindingMtlsConfiguration.AuthGameBindingMtlsSettings(settings.enabled(),
         settings.port(), settings.serverCertFile(), settings.serverKeyFile(), settings.clientCaFile(),
-        settings.allowedClientUriSan());
+        settings.truststoreFile(), settings.truststorePassword(), settings.allowedClientUriSan(), "");
     var factory = new TomcatServletWebServerFactory();
 
     new AuthGameBindingMtlsConfiguration().authGameBindingMtlsConnector(authSettings).customize(factory);
@@ -110,6 +129,9 @@ class AuthGameBindingMtlsConfigurationTest {
     var ssl = connector.findSslHostConfigs()[0];
     assertThat(ssl.getCertificateVerification()).hasToString("REQUIRED");
     assertThat(ssl.getCaCertificateFile()).isEqualTo(settings.clientCaFile().toString());
+    assertThat(ssl.getTruststoreFile()).isEqualTo(settings.truststoreFile().toString());
+    assertThat(ssl.getTruststoreType()).isEqualTo("PKCS12");
+    assertThat(ssl.getTruststorePassword()).isEqualTo(settings.truststorePassword());
   }
 
   private static X509Certificate certificate(String uriSan) throws Exception {
@@ -122,10 +144,24 @@ class AuthGameBindingMtlsConfigurationTest {
     Path cert = copyFixture("server-cert.pem", "server.pem");
     Path key = copyFixture("server-key.pem", "server-key.pem");
     Path ca = copyFixture("server-cert.pem", "client-ca.pem");
+    Path truststore = files.resolve("client-ca.p12");
+    var certificates = java.security.cert.CertificateFactory.getInstance("X.509");
+    java.security.cert.X509Certificate allowedCa;
+    try (var input = Files.newInputStream(ca)) {
+      allowedCa = (java.security.cert.X509Certificate) certificates.generateCertificate(input);
+    }
+    KeyStore clientTruststore = KeyStore.getInstance("PKCS12");
+    clientTruststore.load(null, "test-password".toCharArray());
+    clientTruststore.setCertificateEntry("allowed-client-ca", allowedCa);
+    try (OutputStream output = Files.newOutputStream(truststore)) {
+      clientTruststore.store(output, "test-password".toCharArray());
+    }
     return new MockEnvironment().withProperty("AUTH_GAME_BINDING_MTLS_PORT", "9443")
         .withProperty("AUTH_GAME_BINDING_MTLS_SERVER_CERT_FILE", cert.toString())
         .withProperty("AUTH_GAME_BINDING_MTLS_SERVER_KEY_FILE", key.toString())
         .withProperty("AUTH_GAME_BINDING_MTLS_CLIENT_CA_FILE", ca.toString())
+        .withProperty("AUTH_GAME_BINDING_MTLS_TRUSTSTORE_FILE", truststore.toString())
+        .withProperty("AUTH_GAME_BINDING_MTLS_TRUSTSTORE_PASSWORD", "test-password")
         .withProperty("AUTH_GAME_BINDING_MTLS_ALLOWED_CLIENT_URI_SAN", CLIENT_ID);
   }
 

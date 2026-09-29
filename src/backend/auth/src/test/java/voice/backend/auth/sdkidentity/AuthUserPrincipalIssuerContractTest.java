@@ -12,17 +12,21 @@ import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jose.util.JSONObjectUtils;
 import com.nimbusds.jwt.SignedJWT;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -112,6 +116,40 @@ class AuthUserPrincipalIssuerContractTest {
         + segments[2].substring(1);
     assertThatThrownBy(() -> issuer.verifyDeviceStatusAssertion(tampered))
         .isInstanceOf(IllegalArgumentException.class);
+
+    Map<String, Object> slightlyDelayedClaims = new LinkedHashMap<>(claims);
+    slightlyDelayedClaims.put("iat", NOW.minusMillis(1).toEpochMilli());
+    slightlyDelayedClaims.put("exp", NOW.plusSeconds(4).minusMillis(1).toEpochMilli());
+    String delayed = issuer.issueDeviceStatus(slightlyDelayedClaims);
+    assertThat(issuer.verifyDeviceStatusAssertion(delayed).issuedAtMs()).isEqualTo(NOW.minusMillis(1).toEpochMilli());
+
+    Map<String, Object> staleClaims = new LinkedHashMap<>(claims);
+    staleClaims.put("iat", NOW.minusMillis(251).toEpochMilli());
+    staleClaims.put("exp", NOW.plusSeconds(4).minusMillis(251).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(staleClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> futureClaims = new LinkedHashMap<>(claims);
+    futureClaims.put("iat", NOW.plusMillis(251).toEpochMilli());
+    futureClaims.put("exp", NOW.plusSeconds(4).plusMillis(251).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(futureClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> shortClaims = new LinkedHashMap<>(claims);
+    shortClaims.put("exp", NOW.plusMillis(250).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(shortClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> longClaims = new LinkedHashMap<>(claims);
+    longClaims.put("exp", NOW.plusMillis(4001).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(longClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> beyondKeyClaims = new LinkedHashMap<>(claims);
+    beyondKeyClaims.put("exp", NOW.plusSeconds(4).toEpochMilli());
+    beyondKeyClaims.put("not_after", NOW.plusSeconds(3).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(beyondKeyClaims))
+        .hasMessage("invalid device status assertion lifetime");
   }
 
   @Test
@@ -222,6 +260,9 @@ class AuthUserPrincipalIssuerContractTest {
     assertThat(jwt.getHeader().getKeyID()).isEqualTo("current");
     assertThat(jwt.getHeader().getType().getType()).isEqualTo("voice.game-message-execution-permit+jwt");
     assertThat(jwt.verify(new RSASSAVerifier(current.toPublicJWK()))).isTrue();
+    String encodedPayload = compact.split("\\.")[1];
+    String rawPayload = new String(Base64.getUrlDecoder().decode(encodedPayload), StandardCharsets.UTF_8);
+    assertThat(rawPayload).isEqualTo(JSONObjectUtils.toJSONString(new TreeMap<>(claims)));
     assertThat(jwt.getJWTClaimsSet().getClaims().keySet()).containsExactlyInAnyOrderElementsOf(claims.keySet());
     assertThat(jwt.getJWTClaimsSet().getIssuer()).isEqualTo("auth");
     assertThat(jwt.getJWTClaimsSet().getAudience()).containsExactly("voice.game-message");
@@ -232,6 +273,25 @@ class AuthUserPrincipalIssuerContractTest {
     }
     assertThat(jwt.getJWTClaimsSet().getExpirationTime().toInstant().getEpochSecond())
         .isEqualTo(NOW.plusMillis(3750).getEpochSecond());
+
+    Map<String, Object> lowerBoundary = new LinkedHashMap<>(claims);
+    lowerBoundary.put("iat_ms", NOW.minusMillis(250).toEpochMilli());
+    lowerBoundary.put("expires_at_ms", NOW.plusMillis(3500).toEpochMilli());
+    lowerBoundary.put("exp", NOW.plusMillis(3500).getEpochSecond());
+    issuer.issueGameMessageExecutionPermit(lowerBoundary);
+    Map<String, Object> tooFarFuture = new LinkedHashMap<>(claims);
+    tooFarFuture.put("iat_ms", NOW.plusMillis(1).toEpochMilli());
+    tooFarFuture.put("expires_at_ms", NOW.plusMillis(3751).toEpochMilli());
+    tooFarFuture.put("exp", NOW.plusMillis(3751).getEpochSecond());
+    assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(tooFarFuture))
+        .isInstanceOf(IllegalArgumentException.class);
+    Map<String, Object> tooFarPast = new LinkedHashMap<>(lowerBoundary);
+    tooFarPast.put("iat_ms", NOW.minusMillis(251).toEpochMilli());
+    tooFarPast.put("expires_at_ms", NOW.plusMillis(3499).toEpochMilli());
+    tooFarPast.put("exp", NOW.plusMillis(3499).getEpochSecond());
+    assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(tooFarPast))
+        .isInstanceOf(IllegalArgumentException.class);
+
     claims.put("unreviewed_scope", "game.chat.send");
     assertThatThrownBy(() -> issuer.issueGameMessageExecutionPermit(claims))
         .isInstanceOf(IllegalArgumentException.class);

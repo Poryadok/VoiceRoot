@@ -124,7 +124,7 @@ func (s *testGamePermitIssuer) Issue(_ context.Context, authority gameprotocol.D
 	return input + "." + base64.RawURLEncoding.EncodeToString(signature), nil
 }
 
-func (s *testGamePermitIssuer) Complete(_ context.Context, _, _ uuid.UUID, outcome string) error {
+func (s *testGamePermitIssuer) Complete(_ context.Context, _, _, _ uuid.UUID, outcome string) error {
 	if s.completeFailures > 0 {
 		s.completeFailures--
 		return errors.New("controlled completion outage")
@@ -363,6 +363,10 @@ func expiredSignedCreate(t *testing.T) (string, gameprotocol.Message) {
 }
 
 func freshSignedCreate(t *testing.T, now time.Time, withAttachment bool) (string, gameprotocol.Message, string, *rsa.PrivateKey) {
+	return freshSignedCreateWithAuthKey(t, now, withAttachment, nil)
+}
+
+func freshSignedCreateWithAuthKey(t *testing.T, now time.Time, withAttachment bool, authPrivate *rsa.PrivateKey) (string, gameprotocol.Message, string, *rsa.PrivateKey) {
 	t.Helper()
 	deviceKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -420,8 +424,10 @@ func freshSignedCreate(t *testing.T, now time.Time, withAttachment bool) (string
 		"key_thumbprint": thumb, "device_generation": 1, "authority_revision": 1, "status": "active",
 		"not_after": notAfter.UnixMilli(), "iat": now.UnixMilli(), "exp": now.Add(4 * time.Second).UnixMilli(),
 	}
-	authPrivate, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	if authPrivate == nil {
+		authPrivate, err = rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+	}
 	authHeader, err := json.Marshal(map[string]any{"alg": "RS256", "kid": authKeyID, "typ": "voice.game-device-status+jwt"})
 	require.NoError(t, err)
 	authPayload, err := json.Marshal(assertionClaims)

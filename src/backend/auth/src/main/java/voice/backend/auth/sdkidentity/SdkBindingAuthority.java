@@ -6,7 +6,7 @@ import java.util.UUID;
 /** T16-owned source of the current player binding; absence must deny assertion issuance. */
 @FunctionalInterface
 public interface SdkBindingAuthority {
-  Optional<Binding> currentBinding(UUID applicationId, UUID environmentId, UUID accountId);
+  Optional<Binding> currentBinding(UUID applicationId, UUID environmentId, UUID accountId, UUID deviceId);
 
   record Binding(UUID actorId, UUID bindingId) {}
 }

@@ -43,6 +43,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -206,7 +208,9 @@ class SdkAuthorizationJdbcIntegrationTest {
         return result;
       }
     };
-    var issuer = principalIssuer(CLOCK);
+    var executionClockNow = new AtomicReference<>(NOW);
+    var executionClock = new MutableClock(executionClockNow, ZoneOffset.UTC);
+    var issuer = principalIssuer(executionClock);
     var service = authorizationForBinding(CLOCK, challengeAuthority, issuer);
     String codeChallenge = pkce(VERIFIER);
     String requestHash = hash("voice-sdk-authorization-request-v1\n" + authorizationKey + "\n" + REDIRECT
@@ -321,6 +325,10 @@ class SdkAuthorizationJdbcIntegrationTest {
     AtomicReference<Instant> gisPermitExpiry = new AtomicReference<>(NOW.plusMillis(3000));
     CountDownLatch gisIssueEntered = new CountDownLatch(1);
     CountDownLatch allowGisIssueToFinish = new CountDownLatch(1);
+    CountDownLatch gisCompletionEntered = new CountDownLatch(1);
+    CountDownLatch allowGisCompletionToFinish = new CountDownLatch(1);
+    var executionProfileCalls = new AtomicInteger();
+    var advanceClockDuringFinalProfileCheck = new AtomicBoolean(false);
     SdkGameIntegrationExecutionPermitAuthority gisAuthority = new SdkGameIntegrationExecutionPermitAuthority() {
       @Override public Permit issue(UUID binding, UUID operation, String assertion) {
         if (operation.equals(messageOperation)) {
@@ -336,12 +344,29 @@ class SdkAuthorizationJdbcIntegrationTest {
             verifiedDevice.jti(), operation, gisPermitExpiry.get());
       }
       @Override public Completion complete(UUID permit, UUID operation, String outcome) {
+        if (operation.equals(messageOperation)) {
+          gisCompletionEntered.countDown();
+          try {
+            if (!allowGisCompletionToFinish.await(10, TimeUnit.SECONDS)) {
+              throw new IllegalStateException("GIS completion test gate timed out");
+            }
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("GIS completion test gate interrupted", interrupted);
+          }
+        }
         return new Completion(permit, operation, outcome, "completed");
       }
     };
     var executionPermits = new AuthGameMessageExecutionPermitService(jdbc,
         new TransactionTemplate(new DataSourceTransactionManager(database)), issuer,
-        (application, environment) -> policy.get(), (account, selected) -> profile.get(), gisAuthority, CLOCK);
+        (application, environment) -> policy.get(), (account, selected) -> {
+          var eligibleProfile = profile.get();
+          if (advanceClockDuringFinalProfileCheck.get() && executionProfileCalls.incrementAndGet() == 2) {
+            executionClockNow.set(NOW.plusMillis(500));
+          }
+          return eligibleProfile;
+        }, gisAuthority, executionClock);
     for (Instant invalidExpiry : List.of(NOW.plusMillis(500), NOW.plusMillis(3751))) {
       gisPermitExpiry.set(invalidExpiry);
       UUID rejectedOperation = UUID.randomUUID();
@@ -351,7 +376,21 @@ class SdkAuthorizationJdbcIntegrationTest {
       assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
           Map.of("operation", rejectedOperation), Long.class)).isZero();
     }
+    UUID finalCheckBoundaryOperation = UUID.randomUUID();
+    gisPermitExpiry.set(NOW.plusMillis(1000));
+    executionProfileCalls.set(0);
+    advanceClockDuringFinalProfileCheck.set(true);
+    assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, finalCheckBoundaryOperation, messageHash))
+        .isInstanceOf(SdkIdentityDeniedException.class)
+        .as("a final profile check that leaves exactly 500 ms cannot issue a permit");
+    advanceClockDuringFinalProfileCheck.set(false);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
+        Map.of("operation", finalCheckBoundaryOperation), Long.class)).isZero();
+
+    executionClockNow.set(NOW);
     gisPermitExpiry.set(NOW.plusMillis(3000));
+    executionProfileCalls.set(0);
+    advanceClockDuringFinalProfileCheck.set(true);
     var raceWorkers = Executors.newFixedThreadPool(2);
     AuthGameMessageExecutionPermitService.Permit issuedPermit;
     AuthGameBindingHandoffService.RevocationReceipt concurrentRevoke;
@@ -366,6 +405,7 @@ class SdkAuthorizationJdbcIntegrationTest {
       assertThat(revokeStarted.await(5, TimeUnit.SECONDS)).isTrue();
       allowGisIssueToFinish.countDown();
       issuedPermit = permitFuture.get(10, TimeUnit.SECONDS);
+      advanceClockDuringFinalProfileCheck.set(false);
       concurrentRevoke = revokeFuture.get(10, TimeUnit.SECONDS);
     } finally {
       allowGisIssueToFinish.countDown();
@@ -375,6 +415,8 @@ class SdkAuthorizationJdbcIntegrationTest {
         .as("revoke waits for the permit transaction, then drains its admitted operation");
     var signedPermit = SignedJWT.parse(issuedPermit.permitJws());
     UUID permitJti = UUID.fromString(signedPermit.getJWTClaimsSet().getJWTID());
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("iat_ms")).isEqualTo(NOW.plusMillis(500).toEpochMilli());
+    assertThat(signedPermit.getJWTClaimsSet().getClaim("expires_at_ms")).isEqualTo(NOW.plusMillis(3000).toEpochMilli());
     assertThat(signedPermit.getJWTClaimsSet().getClaim("scope")).isEqualTo("game.chat.send");
     assertThat(signedPermit.getJWTClaimsSet().getClaim("profile_id")).isEqualTo(secondaryProfile.toString());
     assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit);
@@ -384,7 +426,25 @@ class SdkAuthorizationJdbcIntegrationTest {
     assertThat(revoked.status()).isEqualTo("revoking");
     assertThat(executionPermits.issue(deviceAssertion, messageOperation, messageHash)).isEqualTo(issuedPermit)
         .as("exact operation replay returns the immutable permit while revoke fences new issue");
-    assertThat(executionPermits.complete(permitJti, messageOperation, "committed").status()).isEqualTo("completed");
+    var completionWorkers = Executors.newFixedThreadPool(2);
+    try {
+      var completionFuture = completionWorkers.submit(
+          () -> executionPermits.complete(permitJti, messageOperation, "committed"));
+      assertThat(gisCompletionEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      var retryIssueFuture = completionWorkers.submit(
+          () -> executionPermits.issue(deviceAssertion, messageOperation, messageHash));
+      DatabaseLockWait lockWait = awaitDatabaseLockWait("%sdk_game_message_grants%for update%");
+      assertThat(lockWait.waitingPid()).isPositive();
+      assertThat(jdbc.queryForObject("SELECT state FROM pg_stat_activity WHERE pid=:pid",
+          Map.of("pid", lockWait.blockingPid()), String.class)).isEqualTo("idle in transaction");
+      allowGisCompletionToFinish.countDown();
+      assertThat(completionFuture.get(10, TimeUnit.SECONDS).status()).isEqualTo("completed");
+      assertThat(retryIssueFuture.get(10, TimeUnit.SECONDS)).isEqualTo(issuedPermit);
+    } finally {
+      allowGisCompletionToFinish.countDown();
+      completionWorkers.shutdownNow();
+      assertThat(completionWorkers.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+    }
     assertThat(executionPermits.complete(permitJti, messageOperation, "committed").status()).isEqualTo("completed");
     revoked = authClaims.revoke(operationId);
     assertThat(revoked.status()).isEqualTo("revoked");
@@ -843,6 +903,33 @@ class SdkAuthorizationJdbcIntegrationTest {
   private String hash(String value) throws Exception {
     return HexFormat.of().formatHex(sha256(value));
   }
+
+  private DatabaseLockWait awaitDatabaseLockWait(String waitingQueryPattern) {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline) {
+      List<Map<String, Object>> waits = jdbc.queryForList("""
+          SELECT waiting.pid AS waiting_pid, blocking.pid AS blocking_pid
+          FROM pg_stat_activity waiting
+          CROSS JOIN LATERAL unnest(pg_blocking_pids(waiting.pid)) AS blockers(pid)
+          JOIN pg_stat_activity blocking ON blocking.pid=blockers.pid
+          WHERE waiting.datname=current_database() AND waiting.wait_event_type='Lock'
+            AND lower(waiting.query) LIKE :waitingQueryPattern
+            AND blocking.state='idle in transaction'
+          """, Map.of("waitingQueryPattern", waitingQueryPattern));
+      for (Map<String, Object> wait : waits) {
+        int blocker = ((Number) wait.get("blocking_pid")).intValue();
+        return new DatabaseLockWait(((Number) wait.get("waiting_pid")).intValue(), blocker);
+      }
+      try { Thread.sleep(20); }
+      catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new AssertionError("interrupted while observing PostgreSQL lock wait", interrupted);
+      }
+    }
+    throw new AssertionError("duplicate permit issue did not reach a PostgreSQL lock wait behind completion");
+  }
+
+  private record DatabaseLockWait(int waitingPid, int blockingPid) {}
 
   private String pkce(String value) throws Exception {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(sha256(value));

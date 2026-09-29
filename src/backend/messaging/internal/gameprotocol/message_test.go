@@ -149,6 +149,45 @@ func TestExtractDeviceAuthorityExpectedReadsExactAuthIdentityForEnvelopeCoupling
 	require.Error(t, err)
 }
 
+func TestVerifyDeviceAuthorityAcceptsNimbusHeaderOrderAndRejectsHeaderExtensions(t *testing.T) {
+	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
+	device, keyID := testDeviceKey(t)
+	authKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	assertion := signedDeviceAuthority(t, authKey, device, keyID, now, now.Add(2*time.Second))
+
+	// Nimbus serializes the JWS protected header with typ before kid. RFC 7515
+	// signs these exact bytes; the three-member object's property order is not a
+	// separate protocol constraint.
+	nimbusOrder := `{"alg":"RS256","typ":"voice.game-device-status+jwt","kid":"auth-current"}`
+	assertion = resignJWSHeaderForTest(t, assertion, authKey, nimbusOrder)
+	_, err = VerifyDeviceAuthority(assertion, map[string]*rsa.PublicKey{"auth-current": &authKey.PublicKey},
+		now, 0, testExpected())
+	require.NoError(t, err)
+
+	duplicate := `{"alg":"RS256","kid":"auth-current","typ":"voice.game-device-status+jwt","typ":"voice.game-device-status+jwt"}`
+	_, err = VerifyDeviceAuthority(resignJWSHeaderForTest(t, assertion, authKey, duplicate),
+		map[string]*rsa.PublicKey{"auth-current": &authKey.PublicKey}, now, 0, testExpected())
+	require.Error(t, err, "duplicate protected-header members must remain invalid")
+
+	unknown := `{"alg":"RS256","kid":"auth-current","typ":"voice.game-device-status+jwt","extra":true}`
+	_, err = VerifyDeviceAuthority(resignJWSHeaderForTest(t, assertion, authKey, unknown),
+		map[string]*rsa.PublicKey{"auth-current": &authKey.PublicKey}, now, 0, testExpected())
+	require.Error(t, err, "unknown protected-header members must remain invalid")
+}
+
+func resignJWSHeaderForTest(t *testing.T, compact string, key *rsa.PrivateKey, header string) string {
+	t.Helper()
+	parts := strings.Split(compact, ".")
+	require.Len(t, parts, 3)
+	headerSegment := base64.RawURLEncoding.EncodeToString([]byte(header))
+	input := headerSegment + "." + parts[1]
+	digest := sha256.Sum256([]byte(input))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+	return input + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
 func testExpected() Expected {
 	return Expected{
 		ApplicationID: "11111111-1111-4111-8111-111111111111",

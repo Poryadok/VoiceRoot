@@ -34,6 +34,33 @@ type WorkloadVerifier struct {
 	Nonces           NonceStore
 }
 
+// workloadProofFailure exposes only a bounded verification stage for internal
+// diagnostics. It never carries request data, signatures, or credential bytes.
+type workloadProofFailure string
+
+const (
+	workloadFailureHeader    workloadProofFailure = "header"
+	workloadFailureBody      workloadProofFailure = "body"
+	workloadFailureTimestamp workloadProofFailure = "timestamp"
+	workloadFailureNonce     workloadProofFailure = "nonce"
+	workloadFailureSignature workloadProofFailure = "signature"
+	workloadFailureReplay    workloadProofFailure = "replay"
+)
+
+func (e workloadProofFailure) Error() string { return ErrInvalidWorkloadProof.Error() }
+func (e workloadProofFailure) Unwrap() error { return ErrInvalidWorkloadProof }
+
+func workloadProofFailureStage(err error) string {
+	var failure workloadProofFailure
+	if errors.As(err, &failure) {
+		return string(failure)
+	}
+	if errors.Is(err, ErrWorkloadUnavailable) {
+		return "unavailable"
+	}
+	return "invalid"
+}
+
 func workloadMessage(method, path, timestamp, nonce string) string {
 	empty := sha256.Sum256(nil)
 	return "v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + nonce + "\n" + hex.EncodeToString(empty[:])
@@ -171,57 +198,57 @@ func (v WorkloadVerifier) VerifyAssertionBound(r *http.Request) ([]byte, error) 
 	}
 	if r == nil || r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.EscapedPath() != r.URL.Path ||
 		r.Header.Get("X-Voice-Workload") != "auth" || r.Header.Get("X-Voice-Workload-Version") != "2" {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureHeader
 	}
 	for _, name := range []string{"X-Voice-Workload", "X-Voice-Workload-Version", "X-Voice-Timestamp", "X-Voice-Nonce", "X-Voice-Signature", "X-Voice-Device-Authority"} {
 		if len(r.Header.Values(name)) != 1 {
-			return nil, ErrInvalidWorkloadProof
+			return nil, workloadFailureHeader
 		}
 	}
 	if len(r.Header.Values("Content-Type")) != 1 || r.Header.Get("Content-Type") != "application/json" {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureHeader
 	}
 	assertion := []byte(r.Header.Get("X-Voice-Device-Authority"))
 	if len(assertion) == 0 || len(assertion) > 16<<10 {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureHeader
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 2<<10))
 	if err != nil {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureBody
 	}
 	r.Body = io.NopCloser(strings.NewReader(string(body)))
 	if r.ContentLength >= 0 && int64(len(body)) != r.ContentLength {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureBody
 	}
 	timestamp := r.Header.Get("X-Voice-Timestamp")
 	seconds, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || strconv.FormatInt(seconds, 10) != timestamp {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureTimestamp
 	}
 	now := v.Now()
 	issued := time.Unix(seconds, 0)
 	if issued.Before(now.Add(-30*time.Second)) || issued.After(now.Add(30*time.Second)) {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureTimestamp
 	}
 	nonce := r.Header.Get("X-Voice-Nonce")
 	parsedNonce, err := uuid.Parse(nonce)
 	if err != nil || parsedNonce == uuid.Nil || parsedNonce.String() != nonce {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureNonce
 	}
 	signature := r.Header.Get("X-Voice-Signature")
 	if len(signature) != 43 || strings.ContainsAny(signature, "= \t\r\n") {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureSignature
 	}
 	expected := assertionBoundWorkloadSignature(v.Key, r.Method, r.URL.EscapedPath(), timestamp, nonce, body, assertion)
 	if !hmac.Equal([]byte(signature), []byte(expected)) {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureSignature
 	}
 	used, err := v.Nonces.Use(r.Context(), nonce, 60*time.Second)
 	if err != nil {
 		return nil, ErrWorkloadUnavailable
 	}
 	if !used {
-		return nil, ErrInvalidWorkloadProof
+		return nil, workloadFailureReplay
 	}
 	return assertion, nil
 }

@@ -25,7 +25,7 @@ func (f executionPermitRoundTripper) RoundTrip(request *http.Request) (*http.Res
 
 func TestGameMessagePermitClientIssuesExactBoundRequestAndCompletes(t *testing.T) {
 	endpoint := mustPermitEndpoint(t)
-	permitID, operationID := uuid.New(), uuid.New()
+	permitID, gisPermitID, operationID := uuid.New(), uuid.New(), uuid.New()
 	mutation := []byte(`{"version":1,"operation":"create"}`)
 	digest := sha256.Sum256(mutation)
 	authority := gameprotocol.DeviceAuthority{AssertionJWS: "auth.assertion.signature"}
@@ -54,13 +54,22 @@ func TestGameMessagePermitClientIssuesExactBoundRequestAndCompletes(t *testing.T
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal(body, &payload))
 		require.Equal(t, map[string]any{"operation_id": operationID.String(), "outcome": "committed"}, payload)
-		return permitHTTPResponse(http.StatusOK, `{"permit_id":"`+permitID.String()+`","operation_id":"`+operationID.String()+`","outcome":"committed","status":"completed"}`), nil
+		return permitHTTPResponse(http.StatusOK, `{"permit_id":"`+gisPermitID.String()+`","operation_id":"`+operationID.String()+`","outcome":"committed","status":"completed"}`), nil
 	})}}
 	permit, err := client.Issue(context.Background(), authority, operationID, mutation)
 	require.NoError(t, err)
 	require.Equal(t, "one.two.three", permit)
-	require.NoError(t, client.Complete(context.Background(), permitID, operationID, "committed"))
+	require.NoError(t, client.Complete(context.Background(), permitID, gisPermitID, operationID, "committed"))
 	require.Equal(t, 2, calls)
+}
+
+func TestGameMessagePermitClientRejectsCompletionForDifferentGISPermit(t *testing.T) {
+	endpoint := mustPermitEndpoint(t)
+	permitJTI, gisPermitID, operationID := uuid.New(), uuid.New(), uuid.New()
+	client := &GameMessageExecutionPermitClient{endpoint: endpoint, client: &http.Client{Transport: executionPermitRoundTripper(func(*http.Request) (*http.Response, error) {
+		return permitHTTPResponse(http.StatusOK, `{"permit_id":"`+uuid.NewString()+`","operation_id":"`+operationID.String()+`","outcome":"committed","status":"completed"}`), nil
+	})}}
+	require.Error(t, client.Complete(context.Background(), permitJTI, gisPermitID, operationID, "committed"))
 }
 
 func TestGameMessagePermitClientRejectsMalformedOrCacheablePermitResponses(t *testing.T) {

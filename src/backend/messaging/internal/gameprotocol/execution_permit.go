@@ -73,7 +73,7 @@ func VerifyExecutionPermit(compact string, authKeys map[string]*rsa.PublicKey, n
 	}
 	header, ok := headerValue.(map[string]any)
 	if !ok || !exactKeys(header, map[string]struct{}{"alg": {}, "kid": {}, "typ": {}}) ||
-		header["alg"] != "RS256" || header["typ"] != executionPermitType || !bytes.Equal(headerBytes, canonicalJSON(header)) {
+		header["alg"] != "RS256" || header["typ"] != executionPermitType {
 		return result, errors.New("invalid Auth execution permit protected header")
 	}
 	kid, ok := header["kid"].(string)

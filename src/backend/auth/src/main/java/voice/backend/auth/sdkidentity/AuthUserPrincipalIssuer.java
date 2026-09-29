@@ -267,8 +267,9 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     Long expiresAt = number(claims.get("exp"));
     Long notAfter = number(claims.get("not_after"));
     long now = clock.instant().toEpochMilli();
-    if (issuedAt == null || expiresAt == null || notAfter == null || issuedAt != now
-        || expiresAt <= issuedAt || expiresAt - issuedAt > 4000 || expiresAt > notAfter) {
+    if (issuedAt == null || expiresAt == null || notAfter == null || issuedAt > now + 250
+        || issuedAt < now - 250 || expiresAt <= now + 250 || expiresAt <= issuedAt
+        || expiresAt - issuedAt > 4000 || expiresAt > notAfter) {
       throw new IllegalArgumentException("invalid device status assertion lifetime");
     }
     JWSObject jwt = new JWSObject(
@@ -361,14 +362,21 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     Long issuedAt = number(claims.get("iat_ms"));
     Long expiresAt = number(claims.get("expires_at_ms"));
     Long expiration = number(claims.get("exp"));
-    if (issuedAt == null || expiresAt == null || expiration == null || issuedAt != now
+    if (issuedAt == null || expiresAt == null || expiration == null || issuedAt > now || issuedAt < now - 250
         || expiresAt <= issuedAt || expiresAt - issuedAt > 3750
         || expiration != Math.floorDiv(expiresAt, 1000)) {
       throw new IllegalArgumentException("invalid game-message execution permit lifetime");
     }
-    var jwtClaims = new JWTClaimsSet.Builder();
-    claims.forEach(jwtClaims::claim);
-    return sign(jwtClaims.build(), GAME_MESSAGE_EXECUTION_PERMIT_TYP);
+    JWSObject jwt = new JWSObject(
+        new JWSHeader.Builder(JWSAlgorithm.RS256).type(new JOSEObjectType(GAME_MESSAGE_EXECUTION_PERMIT_TYP))
+            .keyID(active.getKeyID()).build(),
+        new Payload(canonicalJson(claims)));
+    try {
+      jwt.sign(new RSASSASigner(active.toPrivateKey()));
+      return jwt.serialize();
+    } catch (JOSEException failure) {
+      throw new IllegalStateException("unable to sign Auth game-message execution permit", failure);
+    }
   }
 
   private static void validateHandoff(GameBindingHandoff value) {

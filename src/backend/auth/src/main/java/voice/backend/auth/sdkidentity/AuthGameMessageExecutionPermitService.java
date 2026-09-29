@@ -43,6 +43,9 @@ public final class AuthGameMessageExecutionPermitService {
     if (operationId == null || requestSha256 == null || !requestSha256.matches("[0-9a-f]{64}")) throw denied();
     AuthUserPrincipalIssuer.VerifiedDeviceStatus device = issuer.verifyDeviceStatusAssertion(assertion);
     return transactions.execute(status -> {
+      // Keep the shared identity/device serialization fence ahead of grant,
+      // session and key locks, matching device-authority issuance and revoke.
+      lockIdentityAndDevice(device.accountId(), device.deviceId());
       Instant now = clock.instant();
       var authRows = jdbc.queryForList("""
           SELECT request_id,game_binding_status FROM sdk_authorizations
@@ -80,6 +83,13 @@ public final class AuthGameMessageExecutionPermitService {
       }
       // Re-read every network-backed policy/profile authority after GIS admits; DB rows remain locked.
       requireAuthority(grant, device, assertion, signedAt);
+      // Timestamp the assertion immediately after the final authority check so
+      // its lifetime is measured from the signing boundary, not before remote
+      // policy/profile calls.
+      signedAt = clock.instant();
+      if (!gisPermit.expiresAt().isAfter(signedAt.plusMillis(500))
+          || gisPermit.expiresAt().isAfter(signedAt.plusMillis(3750))
+          || gisPermit.expiresAt().toEpochMilli() > device.expiresAtMs()) throw denied();
       UUID permitJti = UUID.randomUUID();
       long issuedAt = signedAt.toEpochMilli();
       long expiresAt = gisPermit.expiresAt().toEpochMilli();
@@ -112,12 +122,25 @@ public final class AuthGameMessageExecutionPermitService {
   public Completion complete(UUID permitJti, UUID operationId, String outcome) {
     if (permitJti == null || operationId == null || !Set.of("committed", "aborted").contains(outcome)) throw denied();
     return transactions.execute(status -> {
-      var rows = jdbc.queryForList("""
-          SELECT p.*,g.status AS grant_status FROM sdk_game_message_execution_permits p
-          JOIN sdk_game_message_grants g ON g.grant_id=p.grant_id WHERE p.permit_jti=:jti FOR UPDATE OF p,g
+      // Issue and completion both serialize grant -> permit. The initial lookup
+      // is deliberately unlocked because grant_id is immutable; after taking
+      // the grant lock, re-read and lock the permit row in that same order.
+      var ownership = jdbc.queryForList("""
+          SELECT grant_id FROM sdk_game_message_execution_permits WHERE permit_jti=:jti
           """, Map.of("jti", permitJti));
+      if (ownership.size() != 1) throw denied();
+      UUID grantId = (UUID) ownership.getFirst().get("grant_id");
+      var grants = jdbc.queryForList("""
+          SELECT status FROM sdk_game_message_grants WHERE grant_id=:grant FOR UPDATE
+          """, Map.of("grant", grantId));
+      if (grants.size() != 1) throw denied();
+      var rows = jdbc.queryForList("""
+          SELECT * FROM sdk_game_message_execution_permits
+          WHERE permit_jti=:jti AND grant_id=:grant FOR UPDATE
+          """, Map.of("jti", permitJti, "grant", grantId));
       if (rows.size() != 1) throw denied();
       Map<String, Object> row = rows.getFirst();
+      if (!grantId.equals(row.get("grant_id"))) throw denied();
       if (!operationId.equals(row.get("operation_id"))) throw conflict();
       if (row.get("completion_outcome") != null) {
         if (!outcome.equals(row.get("completion_outcome"))) throw conflict();
@@ -208,6 +231,14 @@ public final class AuthGameMessageExecutionPermitService {
   private UUID queryUuid(String sql, Map<String, Object> grant) {
     UUID request = (UUID) grant.get("authorization_request_id");
     return jdbc.queryForObject(sql, Map.of("id", request), UUID.class);
+  }
+
+  private void lockIdentityAndDevice(UUID accountId, UUID deviceId) {
+    jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
+        Map.of("id", accountId), rs -> { });
+    Integer found = jdbc.query("SELECT device_id FROM sdk_devices WHERE device_id=:id AND account_id=:account FOR UPDATE",
+        Map.of("id", deviceId, "account", accountId), rs -> rs.next() ? 1 : 0);
+    if (found == null || found != 1) throw denied();
   }
 
   private static SdkIdentityDeniedException denied() { return new SdkIdentityDeniedException(); }
