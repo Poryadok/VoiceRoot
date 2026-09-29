@@ -536,6 +536,11 @@ func probeT16AuthPrincipalJWKS(t *testing.T, ctx context.Context, baseURL, certF
 		t.Logf("T16 diagnostic: Auth JWKS mTLS probe could not load Messaging identity: %v", err)
 		return
 	}
+	leaf, err := x509.ParseCertificate(certificate.Certificate[0])
+	if err != nil {
+		t.Logf("T16 diagnostic: Auth JWKS mTLS probe client certificate is invalid: %v", err)
+		return
+	}
 	caPEM, err := os.ReadFile(caFile)
 	if err != nil {
 		t.Logf("T16 diagnostic: Auth JWKS mTLS probe could not read CA: %v", err)
@@ -550,7 +555,20 @@ func probeT16AuthPrincipalJWKS(t *testing.T, ctx context.Context, baseURL, certF
 		return
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots,
+		Certificates: []tls.Certificate{certificate},
+		GetClientCertificate: func(request *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			issuerMatch := false
+			for _, acceptableCA := range request.AcceptableCAs {
+				if string(acceptableCA) == string(leaf.RawIssuer) {
+					issuerMatch = true
+					break
+				}
+			}
+			t.Logf("T16 diagnostic: Auth requested client certificate; acceptable_ca_count=%d issuer_match=%t",
+				len(request.AcceptableCAs), issuerMatch)
+			return &certificate, nil
+		}}
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
 	defer transport.CloseIdleConnections()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/auth/.well-known/principal-jwks.json", nil)
