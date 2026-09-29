@@ -121,6 +121,26 @@ func subscribeFriendRequestEvents(js nats.JetStreamContext, hub *wsHub, instance
 	return sub, nil
 }
 
+// preflightFriendRequestConsumer verifies the fixed durable through the deployed
+// credential without binding to the live push consumer. Its subscribe grant
+// remains an external ACL activation gate for the subsequent Realtime rollout.
+func preflightFriendRequestConsumer(natsURL, instanceID string) error {
+	if strings.TrimSpace(natsURL) == "" || strings.TrimSpace(instanceID) == "" {
+		return fmt.Errorf("missing Realtime NATS preflight configuration")
+	}
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-friend-request-preflight")...)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+	js, err := nc.JetStream()
+	if err != nil {
+		return err
+	}
+	durable := friendRequestConsumerDurableName(instanceID)
+	return validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request"))
+}
+
 func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("social events consumer: missing hub or NATS URL")

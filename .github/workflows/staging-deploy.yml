@@ -314,6 +314,7 @@ jobs:
           VOICE_NATS_STORAGE_CLASS: ${{ inputs.nats_storage_class }}
           VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
           VOICE_NATS_FRESH_INSTALL: "false"
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
           NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
           NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
         run: |
