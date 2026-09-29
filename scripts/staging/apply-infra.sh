@@ -11,6 +11,13 @@ REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 [ "${NS}" = voice-staging ] || { echo 'ERROR: staging NATS bootstrap is restricted to voice-staging' >&2; exit 1; }
+if [ "${VOICE_NATS_REQUIRE_APP_READY:-false}" = true ]; then
+  acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+  nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}" || {
+    echo 'ERROR: reviewed staging NATS ACL activation proof is missing or stale; refusing app rollout' >&2
+    exit 1
+  }
+fi
 NATS_STORAGE_CLASS="${VOICE_NATS_STORAGE_CLASS:?VOICE_NATS_STORAGE_CLASS must be set from the reviewed staging preflight}"
 NATS_STORAGE_SIZE="${VOICE_NATS_STORAGE_SIZE:?VOICE_NATS_STORAGE_SIZE must be set from the reviewed staging capacity evidence}"
 MINIO_IMAGE="${VOICE_MINIO_IMAGE:-ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0}"
@@ -68,6 +75,11 @@ if [ -n "${clean_install_state_json}" ] && [ "${clean_install_state_json}" != nu
 elif [ "${fresh_install}" = true ]; then
   echo 'ERROR: clean-install opt-in requires the namespace reset marker' >&2
   exit 1
+else
+  nats_service_selector="$(kubectl get service voice-nats -n "${NS}" -o jsonpath='{.spec.selector.app}')" || {
+    echo 'ERROR: NATS source Service is missing; refusing staging infra apply' >&2
+    exit 1
+  }
 fi
 export VOICE_NATS_PRESERVE_SERVICE_SELECTOR
 
@@ -204,19 +216,22 @@ if [ "${clean_install_mode}" = true ]; then
   if [ "${clean_install_bootstrap}" = true ]; then
     run_nats_bootstrap_jobs
   fi
-elif nats_bootstrap_on_active_pvc "${clean_install_mode_value}" "${nats_service_selector}" "${fresh_install}"; then
-  # The already-accepted PVC hub is live. Refresh fixed durables before the app
-  # tier can bind new consumers; bootstrap validates existing state in place.
-  kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
-  run_nats_bootstrap_jobs
 elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
   NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
   VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
   run_nats_bootstrap_jobs
+elif nats_action="$(nats_bootstrap_action "${clean_install_mode_value}" "${nats_service_selector}" "${fresh_install}" "${VOICE_NATS_REQUIRE_APP_READY:-false}")"; then
+  if [ "${nats_action}" = bootstrap ]; then
+    # The accepted PVC hub is live. Reconcile fixed durables in place.
+    kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
+    run_nats_bootstrap_jobs
+  else
+    echo 'NATS PVC candidate prepared; bootstrap deferred until migration acceptance.'
+  fi
 else
-  echo 'ERROR: NATS bootstrap deferred: PVC hub is not active and accepted; refusing app rollout.' >&2
+  echo 'ERROR: NATS bootstrap deferred: PVC hub is not active and accepted; refusing full app rollout.' >&2
   exit 1
 fi
 

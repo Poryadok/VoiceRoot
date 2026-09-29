@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -122,9 +121,9 @@ func subscribeFriendRequestEvents(js nats.JetStreamContext, hub *wsHub, instance
 	return sub, nil
 }
 
-// preflightFriendRequestConsumer proves the exact deployed credential can inspect
-// and bind the fixed durable before staging replaces the running Realtime pod.
-// Manual ACK keeps any concurrent user event pending for the real consumer.
+// preflightFriendRequestConsumer verifies the fixed durable through the deployed
+// credential without binding to the live push consumer. Its subscribe grant
+// remains an external ACL activation gate for the subsequent Realtime rollout.
 func preflightFriendRequestConsumer(natsURL, instanceID string) error {
 	if strings.TrimSpace(natsURL) == "" || strings.TrimSpace(instanceID) == "" {
 		return fmt.Errorf("missing Realtime NATS preflight configuration")
@@ -139,16 +138,7 @@ func preflightFriendRequestConsumer(natsURL, instanceID string) error {
 		return err
 	}
 	durable := friendRequestConsumerDurableName(instanceID)
-	if err := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request")); err != nil {
-		return err
-	}
-	sub, err := js.Subscribe("social.friend_request", func(msg *nats.Msg) {
-		_ = msg.NakWithDelay(time.Second)
-	}, nats.Bind(jsStreamSocialEvents, durable), nats.ManualAck())
-	if err != nil {
-		return err
-	}
-	return sub.Unsubscribe()
+	return validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request"))
 }
 
 func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {

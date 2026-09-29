@@ -38,7 +38,7 @@ case "${MODE}" in
     kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
     ;;
   full|*)
-    bash "${ROOT}/scripts/staging/apply-infra.sh"
+    VOICE_NATS_REQUIRE_APP_READY=true bash "${ROOT}/scripts/staging/apply-infra.sh"
     bash "${ROOT}/scripts/staging/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/staging/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-app-tier.sh"

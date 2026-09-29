@@ -1,4 +1,5 @@
-# Staging-only, bind-only check using the exact Realtime image and leaf route.
+# Staging-only ConsumerInfo/config check using the exact Realtime image and leaf route.
+# This does not bind the live push durable or attest to SUB/ACK grants.
 # The service credential is mounted only into the leaf, never the app container.
 apiVersion: batch/v1
 kind: Job

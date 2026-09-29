@@ -42,7 +42,7 @@ func preprovisionRealtimeConsumer(t *testing.T, js nats.JetStreamContext, stream
 	}
 }
 
-func TestPreflightFriendRequestConsumerBindsOnlyProvisionedDurable(t *testing.T) {
+func TestPreflightFriendRequestConsumerInspectsWithoutBindingLiveDurable(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
 	nc, err := nats.Connect(s.ClientURL())
 	if err != nil {
@@ -70,8 +70,25 @@ func TestPreflightFriendRequestConsumerBindsOnlyProvisionedDurable(t *testing.T)
 	}); err != nil {
 		t.Fatal(err)
 	}
+	received := make(chan struct{}, 1)
+	live, err := js.Subscribe("social.friend_request", func(msg *nats.Msg) {
+		_ = msg.Ack()
+		received <- struct{}{}
+	}, nats.Bind(jsStreamSocialEvents, durable), nats.ManualAck())
+	if err != nil {
+		t.Fatalf("bind live consumer: %v", err)
+	}
+	t.Cleanup(func() { _ = live.Unsubscribe() })
 	if err := preflightFriendRequestConsumer(s.ClientURL(), instanceID); err != nil {
-		t.Fatalf("preflight exact durable: %v", err)
+		t.Fatalf("inspect exact durable while live consumer is bound: %v", err)
+	}
+	if _, err := js.Publish("social.friend_request", []byte("live")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-received:
+	case <-time.After(2 * time.Second):
+		t.Fatal("live consumer stopped receiving after preflight")
 	}
 }
 
