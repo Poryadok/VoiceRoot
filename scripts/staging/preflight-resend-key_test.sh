@@ -38,6 +38,10 @@ if [ "${1:-}" = get ] && [ "${2:-}" = secret ]; then
   cat "${TEST_STATE}/existing.json"
   exit 0
 fi
+if [ "$*" = 'get configmap voice-nats-generation -n voice-staging -o json' ]; then
+  printf 'Error from server (NotFound): configmaps "voice-nats-generation" not found\n' >&2
+  exit 1
+fi
 printf '%s\n' mutation >>"${TEST_STATE}/mutations"
 exit 97
 MOCK
