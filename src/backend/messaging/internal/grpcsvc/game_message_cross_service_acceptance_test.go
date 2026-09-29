@@ -250,9 +250,18 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		"GIS runtime role and fixture owner must observe the same mapping revision; search_path=%s", runtimeSearchPath)
 	workloadNoncesBeforePositive := countT16GISWorkloadNonces(t, ctx)
 	mappingCallsBeforePositive := mappingAuthority.calls.Load()
+	diagnosticProcessor.watchAssertion(positiveMappingRequest.GetDeviceAuthorityAssertion())
 	response, err := apply(positiveMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, positiveMappingHash)
+	diagnosticProcessor.clearWatchedAssertion()
 	workloadNonceDelta := countT16GISWorkloadNonces(t, ctx) - workloadNoncesBeforePositive
 	t.Logf("T16 positive request returned err=%v GIS workload nonce delta=%d", err, workloadNonceDelta)
+	if err != nil {
+		var authPermits, gisPermits, messageCompletions int
+		require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).Scan(&authPermits))
+		require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).Scan(&gisPermits))
+		require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_execution_permit_completions WHERE operation_id=$1`, fixture.operationID).Scan(&messageCompletions))
+		t.Logf("T16 positive failure state: auth_permits=%d gis_permits=%d messaging_completions=%d", authPermits, gisPermits, messageCompletions)
+	}
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
 	require.Equal(t, int64(1), mappingAuthority.calls.Load()-mappingCallsBeforePositive,
 		"the exact linked-chat request must traverse GIS mapping authorization exactly once")
@@ -260,6 +269,63 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		"positive request should use one GIS mapping proof, one Auth-to-GIS permit issue proof, and one completion proof")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
+	var authPermitID, gisPermitID uuid.UUID
+	var authOutcome string
+	var authReceipt []byte
+	var authCompletedAt time.Time
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT permit_jti,gis_permit_id,completion_outcome,completion_receipt,completed_at
+		FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).
+		Scan(&authPermitID, &gisPermitID, &authOutcome, &authReceipt, &authCompletedAt))
+	require.NotEqual(t, uuid.Nil, authPermitID)
+	require.NotEqual(t, uuid.Nil, gisPermitID)
+	require.Equal(t, "committed", authOutcome)
+	require.NotEmpty(t, authReceipt)
+	require.JSONEq(t, `{"outcome":"committed","operation_id":"`+fixture.operationID.String()+
+		`","permit_id":"`+gisPermitID.String()+`","status":"completed"}`, string(authReceipt))
+	require.False(t, authCompletedAt.IsZero())
+	var gisPermitStatus string
+	var gisCompletedAt time.Time
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status,completion_at FROM player_binding_execution_permits
+		WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).
+		Scan(&gisPermitStatus, &gisCompletedAt))
+	require.Equal(t, "committed", gisPermitStatus)
+	require.False(t, gisCompletedAt.IsZero())
+	var messagingOutcome, messagingStatus string
+	var messagingCompletedAt time.Time
+	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT outcome,status,completed_at FROM game_message_execution_permit_completions
+		WHERE operation_id=$1`, fixture.operationID).Scan(&messagingOutcome, &messagingStatus, &messagingCompletedAt))
+	require.Equal(t, "committed", messagingOutcome)
+	require.Equal(t, "completed", messagingStatus)
+	require.False(t, messagingCompletedAt.IsZero())
+
+	// Auth's retained committed receipt makes an exact completion replay
+	// read-only: it returns the same validated receipt without a fresh GIS call.
+	workloadNoncesBeforeCompletionReplay := countT16GISWorkloadNonces(t, ctx)
+	require.NoError(t, permitClient.Complete(ctx, authPermitID, fixture.operationID, "committed"))
+	var replayedAuthOutcome string
+	var replayedAuthReceipt []byte
+	var replayedAuthCompletedAt time.Time
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT completion_outcome,completion_receipt,completed_at
+		FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).
+		Scan(&replayedAuthOutcome, &replayedAuthReceipt, &replayedAuthCompletedAt))
+	require.Equal(t, authOutcome, replayedAuthOutcome)
+	require.Equal(t, authReceipt, replayedAuthReceipt)
+	require.Equal(t, authCompletedAt, replayedAuthCompletedAt)
+	var replayedGISStatus, replayedMessagingOutcome, replayedMessagingStatus string
+	var replayedGISCompletedAt, replayedMessagingCompletedAt time.Time
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status,completion_at FROM player_binding_execution_permits
+		WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).
+		Scan(&replayedGISStatus, &replayedGISCompletedAt))
+	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT outcome,status,completed_at FROM game_message_execution_permit_completions
+		WHERE operation_id=$1`, fixture.operationID).
+		Scan(&replayedMessagingOutcome, &replayedMessagingStatus, &replayedMessagingCompletedAt))
+	require.Equal(t, gisPermitStatus, replayedGISStatus)
+	require.Equal(t, gisCompletedAt, replayedGISCompletedAt)
+	require.Equal(t, messagingOutcome, replayedMessagingOutcome)
+	require.Equal(t, messagingStatus, replayedMessagingStatus)
+	require.Equal(t, messagingCompletedAt, replayedMessagingCompletedAt)
+	require.Equal(t, workloadNoncesBeforeCompletionReplay, countT16GISWorkloadNonces(t, ctx),
+		"exact Auth completion replay must not call GIS or consume a new WorkloadProof nonce")
 
 	// A lost gRPC response is retried with a fresh Gateway principal. Messaging
 	// must return the exact durable receipt without another permit or message.
