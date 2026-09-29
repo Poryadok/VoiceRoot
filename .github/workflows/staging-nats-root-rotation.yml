@@ -1,0 +1,137 @@
+name: Staging NATS root rotation
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Activate a new generation or roll back the current one
+        required: true
+        type: choice
+        options:
+          - activate
+          - rollback
+      generation:
+        description: Generation for activate (rYYYYMMDD, optionally followed by up to 8 lowercase letters or digits); leave empty for rollback
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-staging-maintenance
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    runs-on: [self-hosted, Linux, X64, voice-staging]
+    environment: staging
+    timeout-minutes: 90
+    env:
+      VOICE_K8S_NAMESPACE: voice-staging
+    steps:
+      - name: Validate staging dispatch
+        shell: bash
+        env:
+          ROTATION_OPERATION: ${{ inputs.operation }}
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_CONFIGURED_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/master || ! "$GITHUB_SHA" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'NATS_ROTATION=FAIL_MASTER_REF'
+            exit 1
+          fi
+          if [[ -n "$STAGING_CONFIGURED_NAMESPACE" && "$STAGING_CONFIGURED_NAMESPACE" != voice-staging ]]; then
+            echo 'NATS_ROTATION=FAIL_NAMESPACE'
+            exit 1
+          fi
+          case "$ROTATION_OPERATION" in
+            activate)
+              if [[ ! "$ROTATION_GENERATION" =~ ^r[0-9]{8}[a-z0-9]{0,8}$ ]]; then
+                echo 'NATS_ROTATION=FAIL_GENERATION'
+                exit 1
+              fi
+              ;;
+            rollback)
+              if [[ -n "$ROTATION_GENERATION" ]]; then
+                echo 'NATS_ROTATION=FAIL_UNUSED_GENERATION'
+                exit 1
+              fi
+              ;;
+            *)
+              echo 'NATS_ROTATION=FAIL_OPERATION'
+              exit 1
+              ;;
+          esac
+
+      - name: Download exact master source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify source commit and namespace
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "$GITHUB_SHA" || "$GITHUB_REF" != refs/heads/master ]]; then
+            echo 'NATS_ROTATION=FAIL_SOURCE_SHA'
+            exit 1
+          fi
+          if [[ "$VOICE_K8S_NAMESPACE" != voice-staging ]]; then
+            echo 'NATS_ROTATION=FAIL_NAMESPACE'
+            exit 1
+          fi
+
+      - uses: azure/setup-kubectl@v5
+
+      - name: Configure staging kubectl
+        shell: bash
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+
+      - name: Activate NATS root generation
+        if: inputs.operation == 'activate'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" ]]; then
+            echo 'NATS_ROTATION=FAIL_MISSING_BUNDLE'
+            exit 1
+          fi
+          umask 077
+          bundle="$(mktemp "${RUNNER_TEMP:-/tmp}/voice-nats-rotation.XXXXXX")"
+          trap 'rm -f -- "$bundle"' EXIT
+          chmod 600 "$bundle"
+          if ! printf '%s' "$STAGING_NATS_ROTATION_SECRETS_B64" | base64 --decode 2>/dev/null | gzip -dc 2>/dev/null >"$bundle"; then
+            echo 'NATS_ROTATION=FAIL_BUNDLE_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_ROTATION_SECRETS_B64
+          if [[ ! -s "$bundle" ]]; then
+            echo 'NATS_ROTATION=FAIL_EMPTY_BUNDLE'
+            exit 1
+          fi
+          bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle"
+
+      - name: Roll back NATS root generation
+        if: inputs.operation == 'rollback'
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          bash scripts/staging/rotate-nats-root.sh --rollback
