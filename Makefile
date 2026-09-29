@@ -55,6 +55,10 @@ game-integration-bootstrap-acceptance:
 game-integrations-q11-acceptance: game-integration-bootstrap-acceptance
 	cd "$(ROOT)/src/backend/federation" && $(FEDERATION_Q11_ACCEPTANCE_RUN)
 
+.PHONY: sdk-protocol-client-acceptance
+sdk-protocol-client-acceptance:
+	cd "$(ROOT)/tests/sdk-protocol-client" && go test ./...
+
 buf-lint:
 	buf lint
 

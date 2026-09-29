@@ -276,8 +276,18 @@ contracts land before consumers; activation lands after all consumers.
     `rtk golangci-lint run ./...`. PR #508 merged after a separate Codex
     exact-head review returned CLEAR and hosted checks passed. Broad
     T03/T04/T06 parents remain open.
-- [ ] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
+- [x] **T07b** `D: T03,T06,T15` Build independent protocol client with per-device
   keys only after T15 key proof/registration semantics are implemented.
+  **Development evidence:** added the isolated test-only Go module
+  `tests/sdk-protocol-client`: ephemeral independent P-256 key generation,
+  public RFC 7638 JWK/thumbprint, RFC 8785 payload serialization for the T15
+  ASCII claim profile, ES256 compact JWS signing and typed HTTP calls to Auth
+  public challenge/rotate/recover/revoke routes. Route fixtures verify the
+  exact methods/paths/JSON names; signatures are checked independently with
+  Go's ECDSA verifier; redirect forwarding is denied. `rtk make
+  sdk-protocol-client-acceptance` passed (11 tests); `rtk go vet ./...` passed
+  from the module. This is test-only development evidence: no provider calls,
+  Auth deployment, real device, production key, or live-provider acceptance.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
   LiveKit/media and public-client acceptance paths exist. These are test
   infrastructure, not a public SDK.
