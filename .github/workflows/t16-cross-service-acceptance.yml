@@ -92,6 +92,14 @@ jobs:
           go test ./internal/grpcsvc -list '^TestT16ComposeCrossServiceAcceptance$' | grep -Fx 'TestT16ComposeCrossServiceAcceptance'
           go test ./internal/grpcsvc -run '^TestT16ComposeCrossServiceAcceptance$' -count=1 -v
 
+      - name: Capture disposable service logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+            -f docker-compose.yml \
+            -f docker-compose.t16-cross-service-acceptance.yml \
+            -p "$T16_COMPOSE_PROJECT" logs --no-color --tail=250
+
       - name: Tear down disposable T16 services
         if: always()
         run: |
