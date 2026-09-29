@@ -584,7 +584,8 @@ func seedT16AcceptFixture(t *testing.T, ctx context.Context, authDB, gisDB, user
 		require.NoError(t, err)
 	}
 	_, err = authDB.Exec(ctx, `INSERT INTO sdk_identities(account_id,actor_id,application_id,environment_id,issuer,provider_subject,ownership_generation,status,created_at)
-VALUES($1,$2,$3,$4,'google','t16-subject-'||$1::text,1,'active',$5)`, fixture.sourceAccountID, fixture.sourceActorID, fixture.appID, fixture.envID, now)
+VALUES($1,$2,$3,$4,'google',$6,1,'active',$5)`, fixture.sourceAccountID, fixture.sourceActorID, fixture.appID, fixture.envID, now,
+		"t16-subject-"+fixture.sourceAccountID.String())
 	require.NoError(t, err)
 	_, err = authDB.Exec(ctx, `INSERT INTO sdk_devices(device_id,account_id,thumbprint,public_jwk,authority_revision) VALUES($1,$2,$3,$4,1)`,
 		fixture.deviceID, fixture.sourceAccountID, thumbprint, string(publicJWK))
