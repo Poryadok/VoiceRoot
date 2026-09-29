@@ -77,6 +77,9 @@ func (h *InternalExecutionPermitHandler) issue(w http.ResponseWriter, r *http.Re
 	_ = body
 	claims, err := parseForwardedDeviceAuthority(assertion)
 	if err != nil {
+		if os.Getenv("T16_ACCEPTANCE_DIAGNOSTICS") == "1" {
+			slog.Info("T16 device authority assertion rejected", "stage", deviceAuthorityFailureStage(err))
+		}
 		signedError(w, r, h.Verifier.Key, http.StatusUnauthorized, "INVALID_DEVICE_AUTHORITY")
 		return
 	}

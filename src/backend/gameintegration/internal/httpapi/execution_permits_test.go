@@ -137,14 +137,13 @@ func TestInternalExecutionPermitCompletionRequiresWorkloadAndIsExact(t *testing.
 
 func makeTestDeviceAuthorityAssertion(t *testing.T, claims registry.GameDeviceAuthorityClaims) []byte {
 	t.Helper()
-	keyID := claims.KeyID.String()
-	header, err := json.Marshal(map[string]string{"alg": "RS256", "kid": keyID, "typ": "voice.game-device-status+jwt"})
+	header, err := json.Marshal(map[string]string{"alg": "RS256", "kid": "current", "typ": "voice.game-device-status+jwt"})
 	require.NoError(t, err)
 	payload := map[string]any{
 		"version": 1, "iss": claims.Issuer, "aud": claims.Audience, "jti": claims.AssertionID.String(),
 		"application_id": claims.ApplicationID.String(), "environment_id": claims.EnvironmentID.String(),
 		"account_id": claims.AccountID.String(), "actor_id": claims.ActorID.String(), "binding_id": claims.BindingID.String(),
-		"device_id": claims.DeviceID.String(), "key_id": keyID, "public_jwk": map[string]any{"kty": "EC", "crv": "P-256", "x": "x", "y": "y"},
+		"device_id": claims.DeviceID.String(), "key_id": claims.KeyID.String(), "public_jwk": map[string]any{"kty": "EC", "crv": "P-256", "x": "x", "y": "y"},
 		"key_thumbprint": "test-thumbprint", "device_generation": claims.DeviceGeneration,
 		"authority_revision": claims.AuthorityRevision, "status": claims.Status,
 		"not_after": claims.NotAfter.UnixMilli(), "iat": claims.IssuedAt.UnixMilli(), "exp": claims.ExpiresAt.UnixMilli(),
