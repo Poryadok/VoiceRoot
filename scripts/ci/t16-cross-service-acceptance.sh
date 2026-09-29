@@ -36,7 +36,10 @@ make_leaf messaging-client messaging 'URI:spiffe://voice/service/messaging' clie
 cp src/backend/auth/src/test/resources/jwt-test-private.pem "$t16_dir/auth-principal/current.pem"
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
   -out "$t16_dir/auth-principal/next.pem" >/dev/null 2>&1
-chmod 600 "$tls_dir"/*.key "$t16_dir/auth-principal"/*.pem
+# These synthetic keys are mounted read-only into non-root service containers
+# (Auth runs as uid 65532); keep them readable there and confined to this
+# disposable CI fixture directory.
+chmod 644 "$tls_dir"/*.key "$t16_dir/auth-principal"/*.pem
 rm "$tls_dir/ca.key" "$tls_dir/ca.srl"
 
 cat > "$t16_dir/compose.env" <<EOF
