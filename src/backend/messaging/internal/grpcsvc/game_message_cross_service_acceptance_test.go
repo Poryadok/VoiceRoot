@@ -66,6 +66,7 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 
 	fixture := seedT16AcceptFixture(t, ctx, authDB, gisDB, userDB, chatDB)
 	seedT16GISOwnerSession(t, ctx, fixture)
+	assertT16AuthDeviceAuthorityFailsClosed(t, ctx, authDB, gisDB, fixture)
 	workloadNonceCount := countT16GISWorkloadNonces(t, ctx)
 	assertion, authorityProof := requestT16AuthDeviceAuthority(t, ctx, fixture)
 	// Auth admission reads GIS policy once, then its production binding-authority reader
@@ -169,8 +170,38 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	}
 	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
 
-	// GIS must deny absent, foreign-binding, and altered-chat mappings before
-	// Auth issues any execution permit.
+	// GIS must deny absent, foreign-application, foreign-environment,
+	// foreign-binding, and altered-chat mappings before Auth issues any permit.
+	for _, wrongScope := range []struct {
+		name             string
+		wrongApplication bool
+	}{
+		{name: "wrong application", wrongApplication: true},
+		{name: "wrong environment"},
+	} {
+		t.Run(wrongScope.name+" mapping", func(t *testing.T) {
+			_, deleteErr := gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
+			require.NoError(t, deleteErr)
+			wrongAppID, wrongEnvID, seedErr := seedT16WrongScopeResourceMapping(ctx, gisDB, fixture, wrongScope.wrongApplication)
+			require.NoError(t, seedErr)
+			wrongScopeRequest, wrongScopeHash := newT16Request(fixture)
+			workloadNoncesBeforeMapping := countT16GISWorkloadNonces(t, ctx)
+			_, callErr := apply(wrongScopeRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, wrongScopeHash)
+			require.Error(t, callErr, "mapping for a different application/environment must fail closed")
+			require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "scope-mismatch denial must reach GIS exactly once")
+			assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
+			_, cleanupErr := gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND external_key='t16-wrong-scope'`, wrongAppID, wrongEnvID)
+			require.NoError(t, cleanupErr)
+			_, cleanupErr = gisDB.Exec(ctx, `DELETE FROM environments WHERE application_id=$1 AND id=$2`, wrongAppID, wrongEnvID)
+			require.NoError(t, cleanupErr)
+			if wrongScope.wrongApplication {
+				_, cleanupErr = gisDB.Exec(ctx, `DELETE FROM applications WHERE id=$1`, wrongAppID)
+				require.NoError(t, cleanupErr)
+			}
+		})
+	}
+	require.NoError(t, seedT16ResourceMapping(ctx, gisDB, fixture))
+
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
 	require.NoError(t, err)
 	missingMappingRequest, missingMappingHash := newT16Request(fixture)
@@ -509,6 +540,19 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		time.Sleep(10 * time.Millisecond)
 	}
 	require.False(t, t0Observed.IsZero(), "GIS must durably commit active→revoking before permit drain")
+	// A new Auth/GIS permit is forbidden once the durable GIS binding transition
+	// has begun, even while permits issued before t0 are still draining.
+	postRevokeOperationID := uuid.New()
+	_, err = permitClient.Issue(ctx, gameprotocol.DeviceAuthority{AssertionJWS: assertion}, postRevokeOperationID, []byte("T16 must deny issue after durable revoking"))
+	require.Error(t, err, "new Auth/GIS permit issue must fail after GIS durably enters revoking")
+	var postRevokeAuthRows, postRevokeGISRows int
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, postRevokeOperationID).Scan(&postRevokeAuthRows))
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, postRevokeOperationID).Scan(&postRevokeGISRows))
+	require.Zero(t, postRevokeAuthRows, "revoking binding must not persist a new Auth permit")
+	require.Zero(t, postRevokeGISRows, "revoking binding must not persist a new GIS permit")
+	var pendingStatusDuringRevoke string
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingStatusDuringRevoke))
+	require.Equal(t, "issued", pendingStatusDuringRevoke, "preexisting pending GIS permit must still be draining before releasing Messaging")
 	chatGuard.releaseBarrier()
 	select {
 	case err = <-messageResult:
@@ -591,6 +635,126 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	_, err = apply(oldAfterRestoreRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, oldAfterRestoreHash)
 	require.Error(t, err, "pre-relink Auth assertion for the old binding must remain denied")
 	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, oldAfterRestore)
+}
+
+type t16GISUnavailableFixture struct {
+	SessionToken    string    `json:"session_token"`
+	Proof           string    `json:"proof"`
+	DeviceID        uuid.UUID `json:"device_id"`
+	AppID           uuid.UUID `json:"app_id"`
+	EnvID           uuid.UUID `json:"environment_id"`
+	BindingID       uuid.UUID `json:"binding_id"`
+	ChallengeID     uuid.UUID `json:"challenge_id"`
+	ExchangeID      uuid.UUID `json:"exchange_id"`
+	SourceAccountID uuid.UUID `json:"source_account_id"`
+	TargetAccountID uuid.UUID `json:"target_account_id"`
+	OwnerProfileID  uuid.UUID `json:"owner_profile_id"`
+	TargetProfileID uuid.UUID `json:"target_profile_id"`
+	ChatID          uuid.UUID `json:"chat_id"`
+}
+
+// TestT16PrepareAuthGISUnavailableFixture persists one synthetic Auth identity
+// before the workflow stops GIS. A later test process uses the same live Auth
+// endpoint and disposable databases, without substituting either service.
+func TestT16PrepareAuthGISUnavailableFixture(t *testing.T) {
+	if os.Getenv("T16_ACCEPTANCE") != "1" {
+		t.Skip("requires the hosted T16 Compose fixture")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	authDB := t16Pool(t, ctx, "T16_AUTH_DATABASE_URL")
+	gisDB := t16Pool(t, ctx, "T16_GIS_DATABASE_URL")
+	userDB := t16Pool(t, ctx, "T16_USER_DATABASE_URL")
+	chatDB := t16Pool(t, ctx, "T16_CHAT_DATABASE_URL")
+	fixture := seedT16AcceptFixture(t, ctx, authDB, gisDB, userDB, chatDB)
+	_, err := gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
+	require.NoError(t, err)
+	prepared := t16GISUnavailableFixture{SessionToken: fixture.sessionToken,
+		Proof: t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), DeviceID: fixture.deviceID,
+		AppID: fixture.appID, EnvID: fixture.envID, BindingID: fixture.bindingID, ChallengeID: fixture.challengeID,
+		ExchangeID: fixture.bindingOperationID, SourceAccountID: fixture.sourceAccountID, TargetAccountID: fixture.targetAccountID,
+		OwnerProfileID: fixture.ownerProfileID, TargetProfileID: fixture.targetProfileID, ChatID: fixture.chatID}
+	data, err := json.Marshal(prepared)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(requiredT16Env(t, "T16_FIXTURE_DIR"), "auth-gis-unavailable.json"), data, 0o600)
+	require.NoError(t, err)
+}
+
+// TestT16AuthDeviceAuthorityRejectsUnavailableGIS runs after the workflow has
+// stopped only GIS. Auth remains the production container and must fail closed
+// before it persists an authority receipt when its real GIS client cannot dial.
+func TestT16AuthDeviceAuthorityRejectsUnavailableGIS(t *testing.T) {
+	if os.Getenv("T16_ACCEPTANCE") != "1" {
+		t.Skip("requires the hosted T16 Compose fixture")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	authDB := t16Pool(t, ctx, "T16_AUTH_DATABASE_URL")
+	fixturePath := filepath.Join(requiredT16Env(t, "T16_FIXTURE_DIR"), "auth-gis-unavailable.json")
+	data, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	var fixture t16GISUnavailableFixture
+	require.NoError(t, json.Unmarshal(data, &fixture))
+	t.Cleanup(func() { cleanupT16GISUnavailableFixture(t, fixture, fixturePath) })
+	beforeNonces := countT16GISWorkloadNonces(t, ctx)
+	beforeIssues := countT16DeviceAuthorityIssues(t, ctx, authDB, fixture.DeviceID)
+	status, body := postT16AuthDeviceAuthorityBearerResponse(t, ctx, fixture.SessionToken, fixture.Proof)
+	require.Equal(t, http.StatusUnauthorized, status, body)
+	require.Equal(t, beforeNonces, countT16GISWorkloadNonces(t, ctx), "unavailable GIS must not consume a workload nonce")
+	require.Equal(t, beforeIssues, countT16DeviceAuthorityIssues(t, ctx, authDB, fixture.DeviceID), "Auth must not persist an assertion when GIS is unavailable")
+}
+
+func cleanupT16GISUnavailableFixture(t *testing.T, fixture t16GISUnavailableFixture, fixturePath string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	authDB := t16Pool(t, ctx, "T16_AUTH_DATABASE_URL")
+	gisDB := t16Pool(t, ctx, "T16_GIS_DATABASE_URL")
+	userDB := t16Pool(t, ctx, "T16_USER_DATABASE_URL")
+	chatDB := t16Pool(t, ctx, "T16_CHAT_DATABASE_URL")
+	defer authDB.Close()
+	defer gisDB.Close()
+	defer userDB.Close()
+	defer chatDB.Close()
+	_, err := chatDB.Exec(ctx, `DELETE FROM chat_members WHERE chat_id=$1`, fixture.ChatID)
+	require.NoError(t, err)
+	_, err = chatDB.Exec(ctx, `DELETE FROM chats WHERE id=$1`, fixture.ChatID)
+	require.NoError(t, err)
+	_, err = userDB.Exec(ctx, `DELETE FROM profiles WHERE id IN ($1,$2)`, fixture.OwnerProfileID, fixture.TargetProfileID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_binding_chats WHERE binding_id=$1`, fixture.BindingID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2`, fixture.AppID, fixture.EnvID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM player_binding_exchange_operations WHERE operation_id=$1`, fixture.ExchangeID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM player_binding_challenges WHERE challenge_id=$1`, fixture.ChallengeID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM player_bindings WHERE binding_id=$1`, fixture.BindingID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM environments WHERE id=$1`, fixture.EnvID)
+	require.NoError(t, err)
+	_, err = gisDB.Exec(ctx, `DELETE FROM applications WHERE id=$1`, fixture.AppID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_device_authority_issues WHERE device_id=$1`, fixture.DeviceID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_game_message_grants WHERE binding_id=$1`, fixture.BindingID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_linked_sessions WHERE request_id IN (SELECT request_id FROM sdk_authorizations WHERE game_binding_id=$1)`, fixture.BindingID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_authorizations WHERE game_binding_id=$1`, fixture.BindingID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_sessions WHERE device_id=$1`, fixture.DeviceID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_device_keys WHERE device_id=$1`, fixture.DeviceID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_devices WHERE device_id=$1`, fixture.DeviceID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM sdk_identities WHERE application_id=$1 AND environment_id=$2`, fixture.AppID, fixture.EnvID)
+	require.NoError(t, err)
+	_, err = authDB.Exec(ctx, `DELETE FROM accounts WHERE id IN ($1,$2)`, fixture.SourceAccountID, fixture.TargetAccountID)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(fixturePath))
 }
 
 func assertNoT16ExecutionSideEffects(t *testing.T, ctx context.Context, authDB, gisDB, messagingDB *pgxpool.Pool, fixture t16AcceptFixture) {
@@ -845,6 +1009,25 @@ VALUES($1,$2,$3,'t16-synthetic-chat','chat',$4,$4,$5,'sha256:`+strings.Repeat("e
 	return err
 }
 
+func seedT16WrongScopeResourceMapping(ctx context.Context, gisDB *pgxpool.Pool, fixture t16AcceptFixture, wrongApplication bool) (uuid.UUID, uuid.UUID, error) {
+	appID := fixture.appID
+	if wrongApplication {
+		appID = uuid.New()
+		if _, err := gisDB.Exec(ctx, `INSERT INTO applications(id,owner_account_id,name,status,revision) VALUES($1,$2,'T16 wrong-scope synthetic','sandbox',1)`, appID, fixture.sourceAccountID); err != nil {
+			return uuid.Nil, uuid.Nil, err
+		}
+	}
+	envID := uuid.New()
+	if _, err := gisDB.Exec(ctx, `INSERT INTO environments(id,application_id,kind,status,provider_policy,redirect_uris,allowed_origins,revision)
+VALUES($1,$2,'sandbox','active',$3,'["https://voice.test/callback"]','[]',1)`, envID, appID,
+		`{"providers":["google"],"player_scopes":["game.chat.send"]}`); err != nil {
+		return appID, uuid.Nil, err
+	}
+	_, err := gisDB.Exec(ctx, `INSERT INTO game_resource_mappings(mapping_id,application_id,environment_id,external_key,resource_kind,resource_id,chat_id,chat_operation_id,chat_request_hash,status,mapping_revision)
+VALUES($1,$2,$3,'t16-wrong-scope','chat',$4,$4,$5,'sha256:`+strings.Repeat("e", 64)+`','active',1)`, uuid.New(), appID, envID, fixture.chatID, uuid.New())
+	return appID, envID, err
+}
+
 func seedT16BindingChatMapping(ctx context.Context, gisDB *pgxpool.Pool, fixture t16AcceptFixture) error {
 	_, err := gisDB.Exec(ctx, `INSERT INTO game_resource_binding_chats(application_id,environment_id,binding_id,chat_id,roster_revision,status,lease_expires_at)
 VALUES($1,$2,$3,$4,1,'active',now()+interval '1 hour')`, fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID)
@@ -989,15 +1172,20 @@ VALUES($1,$2,$3,$4,1,'active',$5)`, fixture.appID, fixture.envID, fixture.bindin
 
 func requestT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture) (string, string) {
 	t.Helper()
+	proof := t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID)
+	return postT16AuthDeviceAuthority(t, ctx, fixture, proof), proof
+}
+
+func t16AuthDeviceAuthorityProof(t *testing.T, fixture t16AcceptFixture, claimedDeviceID uuid.UUID) string {
+	t.Helper()
 	now := time.Now().UTC()
 	claims := map[string]any{"version": 1, "audience": "voice.game-message", "request_id": uuid.NewString(),
-		"application_id": fixture.appID.String(), "environment_id": fixture.envID.String(), "device_id": fixture.deviceID.String(), "issued_at": now.UnixMilli()}
+		"application_id": fixture.appID.String(), "environment_id": fixture.envID.String(), "device_id": claimedDeviceID.String(), "issued_at": now.UnixMilli()}
 	body, err := json.Marshal(claims)
 	require.NoError(t, err)
 	header, err := json.Marshal(map[string]string{"alg": "ES256", "kid": fixture.keyID.String(), "typ": "voice.game-device-authority-request+jws"})
 	require.NoError(t, err)
-	proof := signT16ES256(t, fixture.deviceKey, header, body)
-	return postT16AuthDeviceAuthority(t, ctx, fixture, proof), proof
+	return signT16ES256(t, fixture.deviceKey, header, body)
 }
 
 func replayT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture, proof string) string {
@@ -1007,17 +1195,126 @@ func replayT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16
 
 func postT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture, proof string) string {
 	t.Helper()
+	status, body := postT16AuthDeviceAuthorityResponse(t, ctx, fixture, proof)
+	require.Equal(t, http.StatusOK, status, body)
+	return body
+}
+
+func postT16AuthDeviceAuthorityResponse(t *testing.T, ctx context.Context, fixture t16AcceptFixture, proof string) (int, string) {
+	t.Helper()
+	return postT16AuthDeviceAuthorityBearerResponse(t, ctx, fixture.sessionToken, proof)
+}
+
+func postT16AuthDeviceAuthorityBearerResponse(t *testing.T, ctx context.Context, sessionToken, proof string) (int, string) {
+	t.Helper()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, requiredT16Env(t, "T16_AUTH_BASE_URL")+"/api/v1/auth/sdk/device-authority", strings.NewReader(proof))
 	require.NoError(t, err)
-	request.Header.Set("Authorization", "Bearer "+fixture.sessionToken)
+	request.Header.Set("Authorization", "Bearer "+sessionToken)
 	request.Header.Set("Content-Type", "text/plain")
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, 16*1024))
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, response.StatusCode, string(data))
-	return string(data)
+	return response.StatusCode, string(data)
+}
+
+func assertT16AuthDeviceAuthorityFailsClosed(t *testing.T, ctx context.Context, authDB, gisDB *pgxpool.Pool, fixture t16AcceptFixture) {
+	t.Helper()
+	assertDenied := func(name, proof string, expectedGISNonceDelta int) {
+		t.Helper()
+		beforeNonces := countT16GISWorkloadNonces(t, ctx)
+		beforeIssues := countT16DeviceAuthorityIssues(t, ctx, authDB, fixture.deviceID)
+		status, body := postT16AuthDeviceAuthorityResponse(t, ctx, fixture, proof)
+		require.Equal(t, http.StatusUnauthorized, status, "%s: %s", name, body)
+		require.Equal(t, beforeNonces+expectedGISNonceDelta, countT16GISWorkloadNonces(t, ctx), "%s GIS WorkloadProof calls", name)
+		require.Equal(t, beforeIssues, countT16DeviceAuthorityIssues(t, ctx, authDB, fixture.deviceID), "%s must not persist an Auth authority receipt", name)
+	}
+
+	t.Run("device-authority rejects a valid proof bound to a different device", func(t *testing.T) {
+		assertDenied("device mismatch", t16AuthDeviceAuthorityProof(t, fixture, uuid.New()), 0)
+	})
+	t.Run("device-authority rejects a bad signed proof before GIS", func(t *testing.T) {
+		proof := t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID)
+		parts := strings.Split(proof, ".")
+		require.Len(t, parts, 3)
+		signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+		require.NoError(t, err)
+		signature[0] ^= 0x80
+		parts[2] = base64.RawURLEncoding.EncodeToString(signature)
+		assertDenied("bad signature", strings.Join(parts, "."), 0)
+	})
+	t.Run("device-authority rejects when there is no active Auth grant", func(t *testing.T) {
+		commandTag, err := authDB.Exec(ctx, `UPDATE sdk_game_message_grants SET status='revoked',authority_revision=authority_revision+1
+WHERE binding_id=$1 AND status='active'`, fixture.bindingID)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, commandTag.RowsAffected())
+		t.Cleanup(func() {
+			_, restoreErr := authDB.Exec(ctx, `UPDATE sdk_game_message_grants SET status='active',authority_revision=1
+WHERE binding_id=$1 AND status='revoked'`, fixture.bindingID)
+			require.NoError(t, restoreErr)
+		})
+		assertDenied("no active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 0)
+	})
+	t.Run("device-authority rejects an ambiguous active Auth grant", func(t *testing.T) {
+		requestID, bindingID, linkedHash, targetProfileID := uuid.New(), uuid.New(), randomT16TokenHash(t), uuid.New()
+		t.Cleanup(func() {
+			_, cleanupErr := gisDB.Exec(ctx, `DELETE FROM player_bindings WHERE binding_id=$1`, bindingID)
+			require.NoError(t, cleanupErr)
+			_, cleanupErr = authDB.Exec(ctx, `DELETE FROM sdk_game_message_grants WHERE binding_id=$1`, bindingID)
+			require.NoError(t, cleanupErr)
+			_, cleanupErr = authDB.Exec(ctx, `DELETE FROM sdk_linked_sessions WHERE request_id=$1`, requestID)
+			require.NoError(t, cleanupErr)
+			_, cleanupErr = authDB.Exec(ctx, `DELETE FROM sdk_authorizations WHERE request_id=$1`, requestID)
+			require.NoError(t, cleanupErr)
+		})
+		_, err := authDB.Exec(ctx, `INSERT INTO sdk_authorizations(request_id,source_account_id,device_id,source_session_hash,source_generation,
+application_id,environment_id,idempotency_key,request_hash,redirect_uri,code_challenge,client_state,scopes,policy_revision,display_name,
+expires_at,target_account_id,target_profile_id,target_epoch,profile_revision,consumed_at,game_binding_id,game_binding_status,
+game_binding_authority_revision,game_binding_intent,game_binding_consent_revision)
+SELECT $1,source_account_id,device_id,source_session_hash,source_generation,application_id,environment_id,$2,request_hash,
+redirect_uri,code_challenge,client_state,scopes,policy_revision,display_name,expires_at,$3,$4,target_epoch,profile_revision,
+consumed_at,$5,'active',1,false,NULL FROM sdk_authorizations WHERE game_binding_id=$6`,
+			requestID, uuid.New(), fixture.sourceAccountID, targetProfileID, bindingID, fixture.bindingID)
+		require.NoError(t, err)
+		_, err = authDB.Exec(ctx, `INSERT INTO sdk_linked_sessions(token_hash,request_id,expires_at)
+SELECT $1,$2,expires_at FROM sdk_linked_sessions WHERE request_id=(SELECT request_id FROM sdk_authorizations WHERE game_binding_id=$3)`, linkedHash, requestID, fixture.bindingID)
+		require.NoError(t, err)
+		_, err = authDB.Exec(ctx, `UPDATE sdk_authorizations SET game_binding_consent_revision=(SELECT consent_revision FROM sdk_linked_sessions WHERE request_id=$1) WHERE request_id=$1`, requestID)
+		require.NoError(t, err)
+		_, err = authDB.Exec(ctx, `INSERT INTO sdk_game_message_grants(grant_id,authorization_request_id,application_id,environment_id,target_account_id,target_profile_id,
+target_epoch,binding_id,consent_revision,scopes,policy_revision,profile_revision,status,authority_revision,created_at,updated_at)
+SELECT $1,$2,application_id,environment_id,$3,$4,target_epoch,$5,
+  (SELECT consent_revision FROM sdk_linked_sessions WHERE request_id=$2),scopes,policy_revision,profile_revision,'active',1,now(),now()
+FROM sdk_game_message_grants WHERE binding_id=$6 AND status='active'`, uuid.New(), requestID, fixture.sourceAccountID, targetProfileID, bindingID, fixture.bindingID)
+		require.NoError(t, err)
+		_, err = gisDB.Exec(ctx, `INSERT INTO player_bindings(binding_id,application_id,environment_id,provider,provider_subject_digest,account_id,actor_id,profile_id,device_id,status,authority_revision)
+SELECT $1,application_id,environment_id,'google','hmac-sha256-v1:t16-ambiguous:`+strings.Repeat("a", 64)+`',account_id,actor_id,profile_id,device_id,'active',1
+FROM player_bindings WHERE binding_id=$2`, bindingID, fixture.bindingID)
+		require.NoError(t, err)
+		assertDenied("ambiguous active grant", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 0)
+	})
+	t.Run("device-authority rejects a GIS-revoked binding", func(t *testing.T) {
+		_, err := gisDB.Exec(ctx, `UPDATE player_bindings SET status='revoked',authority_revision=authority_revision+1 WHERE binding_id=$1`, fixture.bindingID)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, restoreErr := gisDB.Exec(ctx, `UPDATE player_bindings SET status='active',authority_revision=1 WHERE binding_id=$1`, fixture.bindingID)
+			require.NoError(t, restoreErr)
+		})
+		assertDenied("GIS binding revoked", t16AuthDeviceAuthorityProof(t, fixture, fixture.deviceID), 1)
+	})
+}
+
+func randomT16TokenHash(t *testing.T) string {
+	t.Helper()
+	return hex.EncodeToString(randomT16Bytes(t, 32))
+}
+
+func countT16DeviceAuthorityIssues(t *testing.T, ctx context.Context, authDB *pgxpool.Pool, deviceID uuid.UUID) int {
+	t.Helper()
+	var count int
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_device_authority_issues WHERE device_id=$1`, deviceID).Scan(&count))
+	return count
 }
 
 func signT16Message(t *testing.T, fixture t16AcceptFixture, key *ecdsa.PrivateKey, now time.Time) string {
