@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PACKAGE="${ROOT}/scripts/staging/prepare-nats-rotation-bundle.py"
 GENERATION="${ROOT}/scripts/staging/nats-generation.sh"
 APPLY="${ROOT}/scripts/staging/render-and-apply.sh"
+ACL_PROOF_SHA="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
@@ -269,6 +270,7 @@ export NATS_TEST_CAPTURE_APPLY="${tmp}/app-applies.yaml"
 export NATS_TEST_EXPECT_GENERATION="${generation}"
 : >"${NATS_TEST_CAPTURE_APPLY}"
 NATS_TEST_MARKER="${tmp}/active.json" VOICE_IMAGE_REGISTRY=example.invalid/voice VOICE_IMAGE_TAG=test \
+  VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" VOICE_NATS_ACL_PROOF_GENERATION="${generation}" \
   "${BASH}" "${ROOT}/scripts/staging/apply-app-manifests.sh" >"${tmp}/app.out" 2>"${tmp}/app.err" || {
     sed -n '1,12p' "${tmp}/app.err" >&2
     fail 'app-only manifest entrypoint with active generation'
@@ -279,6 +281,7 @@ grep -Fq "secretName: voice-nats-hub-tls-${generation}" "${NATS_TEST_CAPTURE_APP
 
 : >"${NATS_TEST_CAPTURE_APPLY}"
 NATS_TEST_MARKER="${tmp}/rollback.json" NATS_TEST_EXPECT_GENERATION=legacy VOICE_IMAGE_REGISTRY=example.invalid/voice VOICE_IMAGE_TAG=test \
+  VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" VOICE_NATS_ACL_PROOF_GENERATION=legacy \
   "${BASH}" "${ROOT}/scripts/staging/apply-app-manifests.sh" >"${tmp}/rollback-app.out" 2>"${tmp}/rollback-app.err" || {
     sed -n '1,12p' "${tmp}/rollback-app.err" >&2
     fail 'app-only entrypoint after rollback to legacy generation'
