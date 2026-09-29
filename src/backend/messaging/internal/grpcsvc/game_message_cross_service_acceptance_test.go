@@ -602,7 +602,7 @@ expires_at,target_account_id,target_profile_id,target_epoch,profile_revision,con
 game_binding_authority_revision,game_binding_challenge_id,game_binding_operation_id,game_binding_intent,game_binding_challenge_nonce,
 game_binding_consent_revision)
 VALUES($1,$2,$3,$4,1,$5,$6,$7,repeat('a',64),'https://voice.test/callback',repeat('b',43),'t16','game.chat.send',1,
-'T16 synthetic',$8,$9,$10,1,$11,$12,'active',1,$13,$14,true,repeat('c',43),1)`,
+'T16 synthetic',$8,$9,$10,1,$11,$12,$13,'active',1,$14,$15,true,repeat('c',43),1)`,
 		requestID, fixture.sourceAccountID, fixture.deviceID, accessHash, fixture.appID, fixture.envID, uuid.New(), now.Add(time.Hour),
 		fixture.targetAccountID, fixture.targetProfileID, profileRevision, now, fixture.bindingID, challengeID, bindingOperationID)
 	require.NoError(t, err)
