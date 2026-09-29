@@ -467,23 +467,27 @@ contracts land before consumers; activation lands after all consumers.
   permit. Endpoint request-to-transition and Auth grant's `revoking` timestamp
   are reported separately. It also covers
   relink under a fresh binding/assertion, including a read-only exact receipt
-  retry after revoke and a distinct new-operation deny with old proof. Until
-  that hosted run is green, its
-  development proof gate remains open. Restore's ≤5.0s monotonic target is
+  retry after revoke and a distinct new-operation deny with old proof. The
+  development proof gate passed. Restore's ≤5.0s monotonic target is
   a new provisional developer SLO from activated new binding plus current
   grant/consent to first accepted fresh-assertion operation; old binding
-  proofs remain denied. T16 parent remains open for broader PostgreSQL
+  proofs remain denied. The hosted Linux T16-DEV gate passed on code commit
+  `e1fbe949e440f0ddfc2d1e5788b7af2f689901da`:
+  [workflow run 36609945598](https://github.com/Poryadok/VoiceRoot/actions/runs/36609945598)
+  completed successfully, including GIS-unavailable denial, GIS restoration,
+  and integrated production-handler Messaging acceptance. T16 parent remains open for broader PostgreSQL
   concurrency/replay, independent direct-call scope checks and selected-profile
   policy surfaces. Selected-profile/alias fanout and hidden-profile non-leak across
   roster/cards/search/presence belong to the separately named consumer task;
   Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Keep
   downstream message writes fail-closed until their
   producer and consumer checks are implemented.
-  - [ ] **T16-DEV** `D: T14-DEV,T15` Complete the hosted Linux Compose
+  - [x] **T16-DEV** `D: T14-DEV,T15` Complete the hosted Linux Compose
     cross-service acceptance described in [game-integrations acceptance](game-integrations-acceptance.md#t16-dev-cross-service-permit-acceptance).
-    This evidence subgate remains open until the production Auth/GIS services,
-    GIS PostgreSQL handlers/store, and Messaging gRPC path pass and exact-run
-    evidence is recorded; it does not close parent T16 or T30/T31.
+    The production Auth/GIS services, GIS PostgreSQL handlers/store, and
+    Messaging gRPC path passed on commit
+    `e1fbe949e440f0ddfc2d1e5788b7af2f689901da` in [run 36609945598](https://github.com/Poryadok/VoiceRoot/actions/runs/36609945598).
+    This does not close parent T16 or T30/T31.
 - [ ] **T17** `D: T13–T16` Implement durable sdk→new-permanent conversion:
   operation/status, source proof, registration, preview/consent, authority
   freeze, owner receipts, grant recompute, new credentials, retired source
