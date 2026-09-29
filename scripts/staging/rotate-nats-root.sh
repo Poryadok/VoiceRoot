@@ -167,6 +167,201 @@ prepare_realtime_image() {
   ROTATION_IMAGE_TAG="${image##*:}"
 }
 
+check_proof_image_pull_secret() (
+  local secret_json="$1" scratch image
+  command -v docker >/dev/null 2>&1 || fail 'Docker is required to verify private proof image access'
+  scratch="$(mktemp -d)" || fail 'cannot create protected image pull scratch directory'
+  trap 'rm -f -- "$scratch/config.json"; rmdir -- "$scratch"' EXIT
+  jq -er '.data[".dockerconfigjson"]' <<<"$secret_json" | base64 -d >"$scratch/config.json" 2>/dev/null ||
+    fail 'invalid proof image pull Secret encoding'
+  chmod 600 "$scratch/config.json"
+  jq -e '(.auths["ghcr.io"] // .auths["https://ghcr.io"]) | type == "object"' \
+    "$scratch/config.json" >/dev/null || fail 'proof image pull Secret has no GHCR credentials'
+  image="${VOICE_NATS_PROOF_IMAGE_REGISTRY}/realtime:${VOICE_NATS_PROOF_IMAGE_TAG}"
+  docker --config "$scratch" manifest inspect "$image" >/dev/null 2>&1 ||
+    fail 'Kubernetes proof image pull Secret cannot access exact-master image'
+)
+
+prepare_proof() {
+  local generation="$1" bundle="$2" credential="$3" mode size run_id attempt
+  [[ -f "$credential" && ! -L "$credential" ]] || fail 'proof credential must be a regular file'
+  mode="$(stat -c %a -- "$credential")" || fail 'cannot inspect proof credential permissions'
+  [[ "$mode" == 400 || "$mode" == 600 ]] || fail 'proof credential must be mode 0400 or 0600'
+  size="$(wc -c <"$credential")"
+  [[ "$size" =~ ^[0-9]+$ ]] && ((size > 0 && size <= 65536)) || fail 'proof credential size is invalid'
+  [[ "${VOICE_NATS_PROOF_IMAGE_REGISTRY:-}" == ghcr.io/poryadok/voiceroot ]] || fail 'exact-master proof image registry is required'
+  [[ "${VOICE_NATS_PROOF_IMAGE_TAG:-}" =~ ^[a-f0-9]{40}$ ]] || fail 'exact-master proof image SHA is required'
+  if [[ -n "${GITHUB_SHA:-}" ]]; then
+    [[ "$VOICE_NATS_PROOF_IMAGE_TAG" == "${GITHUB_SHA,,}" ]] || fail 'proof image differs from workflow master SHA'
+  fi
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    [[ "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]] ||
+      fail 'invalid proof image pull Secret name'
+    local pull_secret
+    pull_secret="$(read_required secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET")"
+    check_identity "$pull_secret" Secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET"
+    jq -e '.type == "kubernetes.io/dockerconfigjson" and
+      (.data[".dockerconfigjson"] | type == "string" and length > 0)' \
+      <<<"$pull_secret" >/dev/null || fail 'proof image pull Secret has invalid type or data'
+    check_proof_image_pull_secret "$pull_secret"
+  else
+    [[ "${VOICE_NATS_PROOF_IMAGE_PUBLIC:-}" == true ]] ||
+      fail 'anonymous GHCR pull proof or reviewed image pull Secret is required'
+  fi
+  command -v go >/dev/null 2>&1 || fail 'Go is required for proof credential validation'
+  local credential_abs bundle_abs
+  credential_abs="$(cd -- "$(dirname -- "$credential")" && pwd -P)/$(basename -- "$credential")"
+  bundle_abs="$(cd -- "$(dirname -- "$bundle")" && pwd -P)/$(basename -- "$bundle")"
+  (cd "$ROOT/src/backend/pkg" && go run ./cmd/nats-proof-credential \
+    --check-min-validity 30m --credential "$credential_abs" --bundle "$bundle_abs" \
+    --generation "$generation" --namespace "$NS") >/dev/null 2>&1 ||
+    fail 'proof credential is invalid or expires within 30 minutes'
+  run_id="${GITHUB_RUN_ID:-$(openssl rand -hex 6)}"
+  attempt="${GITHUB_RUN_ATTEMPT:-1}"
+  [[ "$run_id" =~ ^[a-z0-9]{1,18}$ && "$attempt" =~ ^[0-9]{1,3}$ ]] || fail 'invalid proof run identity'
+  PROOF_NAME="voice-nats-acl-proof-${generation}-${run_id}-${attempt}"
+  (("${#PROOF_NAME}" <= 63)) || fail 'proof resource name is too long'
+  local kind
+  for kind in secret networkpolicy job; do
+    if read_optional "$kind" "$PROOF_NAME" >/dev/null; then
+      fail 'proof resource from this run already exists'
+    fi
+  done
+  PROOF_ACL_SHA="$(sha256sum "$ROOT/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+  [[ "$PROOF_ACL_SHA" =~ ^[a-f0-9]{64}$ ]] || fail 'invalid reviewed ACL digest'
+}
+
+render_proof_secret() {
+  local name="$1" generation="$2" credential="$3"
+  kubectl create secret generic "$name" -n "$NS" --from-file="proof.creds=$credential" \
+    --dry-run=client -o json |
+    jq -c --arg gen "$generation" --arg name "$name" '
+      .immutable = true |
+      .metadata.annotations = ((.metadata.annotations // {}) + {"voice.io/nats-generation":$gen}) |
+      .metadata.labels = ((.metadata.labels // {}) +
+        {"voice.io/nats-proof":"true", "voice.io/nats-proof-generation":$gen,
+         "voice.io/nats-proof-run":$name})
+    '
+}
+
+render_proof_manifest() {
+  local file="$1" name="$2" generation="$3" pull_secrets='[]'
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    pull_secrets="[{name: ${VOICE_NATS_PROOF_IMAGE_PULL_SECRET}}]"
+  fi
+  sed -e "s|__PROOF_NAME__|${name}|g" \
+      -e "s|__GENERATION__|${generation}|g" \
+      -e "s|__ACL_SHA__|${PROOF_ACL_SHA}|g" \
+      -e "s|__IMAGE_REGISTRY__|${VOICE_NATS_PROOF_IMAGE_REGISTRY}|g" \
+      -e "s|__IMAGE_TAG__|${VOICE_NATS_PROOF_IMAGE_TAG}|g" \
+      -e "s|__IMAGE_PULL_SECRETS__|${pull_secrets}|g" "$file"
+}
+
+# A lost runner bypasses the EXIT trap. Rollback reclaims only proof resources
+# whose selector, name, generation annotation, and namespace all agree.
+recover_proof_resources() {
+  local generation="$1" selector listing remaining kind resource name
+  selector="voice.io/nats-proof=true,voice.io/nats-proof-generation=${generation}"
+  listing="$(kubectl get jobs,networkpolicies,secrets -n "$NS" -l "$selector" -o json 2>/dev/null)" ||
+    fail 'cannot list interrupted live ACL proof resources'
+  jq -e --arg gen "$generation" --arg ns "$NS" '
+    .apiVersion == "v1" and .kind == "List" and (.items | type == "array") and
+    (.items | all(.[];
+      (.kind == "Job" or .kind == "NetworkPolicy" or .kind == "Secret") and
+      .metadata.namespace == $ns and
+      (.metadata.name | type == "string" and test("^voice-nats-acl-proof-" + $gen + "-[a-z0-9]{1,18}-[0-9]{1,3}$")) and
+      .metadata.labels["voice.io/nats-proof"] == "true" and
+      .metadata.labels["voice.io/nats-proof-generation"] == $gen and
+      .metadata.labels["voice.io/nats-proof-run"] == .metadata.name and
+      .metadata.annotations["voice.io/nats-generation"] == $gen)) and
+    ([.items[] | .kind + "/" + .metadata.name] as $ids |
+      ($ids | length) == ($ids | unique | length))
+  ' <<<"$listing" >/dev/null || fail 'interrupted live ACL proof resources have ambiguous identity'
+  for kind in Job NetworkPolicy Secret; do
+    case "$kind" in
+      Job) resource=job ;;
+      NetworkPolicy) resource=networkpolicy ;;
+      Secret) resource=secret ;;
+    esac
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      if [[ "$kind" == Job ]]; then
+        kubectl delete "$resource" "$name" -n "$NS" --cascade=foreground --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+          fail 'interrupted live ACL proof Job cleanup failed'
+      else
+        kubectl delete "$resource" "$name" -n "$NS" --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+          fail 'interrupted live ACL proof resource cleanup failed'
+      fi
+      if read_optional "$resource" "$name" >/dev/null; then
+        fail 'interrupted live ACL proof resource remains after cleanup'
+      fi
+    done < <(jq -r --arg kind "$kind" '.items[] | select(.kind == $kind) | .metadata.name' <<<"$listing")
+  done
+  remaining="$(kubectl get jobs,networkpolicies,secrets -n "$NS" -l "$selector" -o json 2>/dev/null)" ||
+    fail 'cannot verify interrupted live ACL proof cleanup'
+  jq -e '.apiVersion == "v1" and .kind == "List" and .items == []' \
+    <<<"$remaining" >/dev/null || fail 'interrupted live ACL proof resources remain'
+}
+
+preflight_proof_resources() {
+  local name="$1" generation="$2" credential="$3"
+  render_proof_secret "$name" "$generation" "$credential" |
+    kubectl create -n "$NS" --dry-run=server -f - >/dev/null 2>&1 ||
+    fail 'proof Secret rejected by API dry-run'
+  render_proof_manifest "$ROOT/deploy/templates/network-policy-nats-live-acl-proof.yaml" "$name" "$generation" |
+    kubectl create -n "$NS" --dry-run=server -f - >/dev/null 2>&1 ||
+    fail 'proof NetworkPolicy rejected by API dry-run'
+  render_proof_manifest "$ROOT/deploy/templates/nats-realtime-acl-proof.yaml" "$name" "$generation" |
+    kubectl create -n "$NS" --dry-run=server -f - >/dev/null 2>&1 ||
+    fail 'proof Job rejected by API dry-run'
+}
+
+cleanup_proof_resources() {
+  local result="$1" name="$2" kind response cleanup_failed=0
+  trap - EXIT
+  # Foreground deletion waits for the proof Pod to disappear before its
+  # credential Secret or network exception can be removed.
+  kubectl delete job "$name" -n "$NS" --cascade=foreground --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+    cleanup_failed=1
+  for kind in networkpolicy secret; do
+    kubectl delete "$kind" "$name" -n "$NS" --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+      cleanup_failed=1
+  done
+  for kind in job networkpolicy secret; do
+    if response="$(kubectl get "$kind" "$name" -n "$NS" -o json 2>&1)"; then
+      cleanup_failed=1
+    elif [[ "$response" != *NotFound* && "$response" != *'not found'* ]]; then
+      cleanup_failed=1
+    fi
+  done
+  if ((cleanup_failed)); then
+    printf 'ERROR: NATS root rotation: live ACL proof cleanup failed\n' >&2
+    exit 1
+  fi
+  exit "$result"
+}
+
+run_live_acl_proof() (
+  local name="$1" generation="$2" credential="$3" logs expected
+  trap 'cleanup_proof_resources "$?" "$name"' EXIT
+  trap 'exit 1' INT TERM
+  render_proof_secret "$name" "$generation" "$credential" |
+    kubectl create -n "$NS" -f - >/dev/null 2>&1 ||
+    fail 'cannot create proof Secret'
+  render_proof_manifest "$ROOT/deploy/templates/network-policy-nats-live-acl-proof.yaml" "$name" "$generation" |
+    kubectl create -n "$NS" -f - >/dev/null 2>&1 ||
+    fail 'cannot create proof NetworkPolicy'
+  render_proof_manifest "$ROOT/deploy/templates/nats-realtime-acl-proof.yaml" "$name" "$generation" |
+    kubectl create -n "$NS" -f - >/dev/null 2>&1 ||
+    fail 'cannot create live ACL proof Job'
+  kubectl wait --for=condition=complete "job/$name" -n "$NS" --timeout=300s >/dev/null 2>&1 ||
+    fail 'live ACL proof Job did not complete'
+  logs="$(kubectl logs "job/$name" -n "$NS" -c realtime-proof --tail=5 --limit-bytes=512 2>/dev/null)" ||
+    fail 'cannot read live ACL proof result'
+  expected="NATS_LIVE_ACL_PROOF=PASS generation=${generation} acl_sha=${PROOF_ACL_SHA}"
+  [[ "$logs" == "$expected" ]] || fail 'live ACL proof did not return the exact PASS token'
+)
+
 marker_state() {
   local marker
   if marker="$(read_optional configmap voice-nats-generation)"; then
@@ -340,13 +535,14 @@ run_jobs() {
 }
 
 main() {
-  local mode="${1:-}" target bundle source pvc class size selector old
+  local mode="${1:-}" target bundle proof_credential source pvc class size selector old
   case "$mode" in
     --activate)
-      [[ $# -eq 3 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json | --rollback'
-      target="$2" bundle="$3"
+      [[ $# -eq 4 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback'
+      target="$2" bundle="$3" proof_credential="$4"
       valid_generation "$target" || fail 'invalid generation token'
       check_bundle "$bundle" "$target"
+      prepare_proof "$target" "$bundle" "$proof_credential"
       marker_state
       [[ "$MARKER_PHASE" == absent || "$MARKER_PHASE" == active ]] || fail 'generation marker is not active'
       source="$MARKER_GENERATION"
@@ -367,6 +563,7 @@ main() {
       prepare_realtime_image
       kubectl create -n "$NS" --dry-run=server -o name -f "$bundle" >/dev/null 2>&1 || fail 'target Secrets rejected by API dry-run'
       prepare_pvc "$target" "$class" "$size" | kubectl create -n "$NS" --dry-run=server -o name -f - >/dev/null 2>&1 || fail 'target PVC rejected by API dry-run'
+      preflight_proof_resources "$PROOF_NAME" "$target" "$proof_credential"
       set_marker rotating "$target" "$source"
       kubectl create -n "$NS" -f "$bundle" >/dev/null
       prepare_pvc "$target" "$class" "$size" | kubectl create -n "$NS" -f - >/dev/null
@@ -375,19 +572,22 @@ main() {
       patch_hub "$target"
       start_hub
       run_jobs "$target"
+      run_live_acl_proof "$PROOF_NAME" "$target" "$proof_credential"
+      printf 'NATS_LIVE_ACL_PROOF=PASS generation=%s acl_sha=%s\n' "$target" "$PROOF_ACL_SHA"
       for old in "${LEAVES[@]}"; do patch_leaf "$old" "$target"; done
       start_leaves
       set_marker active "$target" "$source"
       echo "NATS root generation ${target} active in voice-staging"
       ;;
     --rollback)
-      [[ $# -eq 1 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json | --rollback'
+      [[ $# -eq 1 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback'
       marker_state
       [[ "$MARKER_PHASE" == active || "$MARKER_PHASE" == rotating ]] || fail 'no active or interrupted rotation to roll back'
       target="$MARKER_GENERATION" source="$MARKER_PREVIOUS"
       valid_generation "$target" || fail 'legacy generation has no root rotation to roll back'
       [[ "$source" == legacy ]] || valid_generation "$source" || fail 'invalid retained generation'
       [[ "$source" != "$target" ]] || fail 'rollback would be a no-op'
+      recover_proof_resources "$target"
       check_selector
       check_no_second_hub
       check_secret_set "$source" source
@@ -417,7 +617,7 @@ main() {
       set_marker active "$source" "$target"
       echo "NATS root generation ${source} restored in voice-staging"
       ;;
-    *) fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json | --rollback' ;;
+    *) fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback' ;;
   esac
 }
 

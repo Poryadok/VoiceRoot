@@ -11,6 +11,12 @@ REGISTRY="${VOICE_IMAGE_REGISTRY:?VOICE_IMAGE_REGISTRY required}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 nats_generation_load
+acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+[[ "${VOICE_NATS_ACL_PROOF_SHA:-}" == "$acl_intent_sha" &&
+   "${VOICE_NATS_ACL_PROOF_GENERATION:-}" == "$NATS_GENERATION" ]] || {
+  echo 'ERROR: staging NATS ACL proof does not match the active generation' >&2
+  exit 1
+}
 S3_SIGNING_ENDPOINT="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRESS_HOST:-${VOICE_GATEWAY_INGRESS_HOST}}}"
 
 render() {

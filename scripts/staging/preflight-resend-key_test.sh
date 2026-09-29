@@ -85,6 +85,7 @@ run_manifest_case() {
   PATH="${TMP}/bin:${PATH}" VOICE_IMAGE_TAG=contract-test DEPLOY_MODE=full \
     VOICE_NATS_STORAGE_CLASS=local-path VOICE_NATS_STORAGE_SIZE=1Gi \
     VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
+    VOICE_NATS_ACL_PROOF_GENERATION=legacy \
     STAGING_APP_SECRETS_YAML_B64="$(cat "${TMP}/input.b64")" \
     bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
   status=$?
@@ -139,6 +140,7 @@ run_existing_case() {
   PATH="${TMP}/bin:${PATH}" VOICE_IMAGE_TAG=contract-test DEPLOY_MODE=full \
     VOICE_NATS_STORAGE_CLASS=local-path VOICE_NATS_STORAGE_SIZE=1Gi \
     VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
+    VOICE_NATS_ACL_PROOF_GENERATION=legacy \
     STAGING_APP_SECRETS_YAML_B64= \
     bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
   status=$?

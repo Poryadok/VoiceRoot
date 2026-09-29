@@ -16,7 +16,7 @@ cat >"$work/bin/kubectl" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"${KUBECTL_LOG:?}"
 case "$1" in
-  get|create|apply|patch|replace|delete|scale|set|annotate|label|wait|rollout|config|version) ;;
+  get|create|apply|patch|replace|delete|scale|set|annotate|label|wait|rollout|logs|config|version) ;;
   *) echo "mock kubectl rejects unexpected verb: $1" >&2; exit 2 ;;
 esac
 if [[ "$1" == create || "$1" == apply || "$1" == patch || "$1" == replace || "$1" == delete || "$1" == scale || "$1" == set || "$1" == annotate || "$1" == label || "$1" == rollout && "$2" == restart ]] && [[ "$*" != *'--dry-run'* ]]; then
@@ -35,8 +35,16 @@ if [[ "$*" == *'--dry-run'* ]]; then
   if [[ "$manifest" == - ]]; then cat >/dev/null; fi
 elif [[ "$manifest" == - ]]; then
   # Keep only names/references/phase. Secret data never reaches the log.
-  awk '/^kind:/ {kind=$2} /^metadata:/ {metadata=1; next} metadata && /^  name:/ {print kind, $2, "voice-staging"} metadata && /^  namespace:/ {print "namespace", $2; metadata=0} /secretName:|claimName:|voice.io\/nats-generation:|^[[:space:]]*(immutable|phase|generation|previousGeneration):/ {print}' \
-    >"${KUBECTL_RENDER_DIR:?}/latest.names"
+  input="$(mktemp "${MOCK_KUBE_STATE_DIR:?}/manifest.XXXXXX")"
+  cat >"$input"
+  if jq -e . "$input" >/dev/null 2>&1; then
+    jq -r '(.kind + " " + .metadata.name + " " + .metadata.namespace + " immutable=" + (.immutable | tostring)),
+      ("namespace " + .metadata.namespace), (.data | keys[] | "key " + .)' "$input" >"${KUBECTL_RENDER_DIR:?}/latest.names"
+  else
+    awk '/^kind:/ {kind=$2} /^metadata:/ {metadata=1; next} metadata && /^  name:/ {print kind, $2, "voice-staging"} metadata && /^  namespace:/ {print "namespace", $2; metadata=0} /secretName:|claimName:|voice.io\/nats-generation:|^[[:space:]]*(immutable|phase|generation|previousGeneration):/ {print}' "$input" \
+      >"${KUBECTL_RENDER_DIR:?}/latest.names"
+  fi
+  rm -f "$input"
   expected_job_generation=r20260930a
   if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then expected_job_generation=legacy; fi
   if grep -Eq '^Job voice-nats-' "${KUBECTL_RENDER_DIR}/latest.names" && ! grep -Eq "voice.io/nats-generation: \"?${expected_job_generation}\"?" "${KUBECTL_RENDER_DIR}/latest.names"; then
@@ -61,6 +69,12 @@ elif [[ -f "$manifest" ]] && [[ "$1" == create || "$1" == apply ]]; then
 elif [[ -n "$manifest" && "$manifest" != - ]]; then
   echo 'mock kubectl rejects an unreadable manifest path' >&2
   exit 2
+fi
+if [[ "$1" == create && "$2" == secret && "$3" == generic ]]; then
+  [[ "$*" == *'--dry-run=client'* && "$*" == *'--from-file=proof.creds='* && "$*" != *'--from-literal='* ]] || {
+    echo 'mock kubectl rejects unsafe proof Secret create' >&2; exit 2;
+  }
+  printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","namespace":"voice-staging"},"type":"Opaque","data":{"proof.creds":"eA=="}}\n' "$4"
 fi
 if [[ "$1" == patch && "$*" == *'configmap voice-nats-generation'* ]]; then
   marker_patch=''
@@ -88,6 +102,9 @@ if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
     <<<"$deployment_patch" >/dev/null || { echo 'mock kubectl rejects a Deployment patch without resourceVersion CAS' >&2; exit 2; }
 fi
 case "$*" in
+  *'get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json'*)
+    printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}'
+    ;;
   *'get configmap voice-nats-generation'*|*'get configmap/voice-nats-generation'*)
     if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then
       printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy"}}\n'
@@ -99,6 +116,10 @@ case "$*" in
       echo 'Error from server (NotFound): configmaps "voice-nats-generation" not found' >&2
       exit 1
     fi
+    ;;
+  *'get secret voice-nats-acl-proof-'*|*'get networkpolicy voice-nats-acl-proof-'*|*'get job voice-nats-acl-proof-'*)
+    echo 'Error from server (NotFound): temporary proof resource not found' >&2
+    exit 1
     ;;
   *'get secret voice-nats-operator-r20260930a'*|*'get secret/voice-nats-operator-r20260930a'*)
     if [[ "${MOCK_PARTIAL_SET:-false}" != true && "${MOCK_GENERATION_STATE:-absent}" != active && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-secrets" ]]; then
@@ -167,12 +188,21 @@ case "$*" in
     if [[ "$service" == realtime ]]; then image="${MOCK_REALTIME_IMAGE:-$image}"; fi
     jq -n --arg service "$service" --arg image "$image" --arg suffix "$suffix" '{kind:"Deployment",metadata:{name:("voice-"+$service),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{spec:{containers:[{name:$service,image:$image},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($service+".creds"),path:($service+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}'
     ;;
+  *'logs job/voice-nats-acl-proof-'*)
+    printf 'NATS_LIVE_ACL_PROOF=PASS generation=r20260930a acl_sha=%s\n' "${MOCK_ACL_SHA:?}"
+    ;;
   *)
     if [[ "$1" == get ]]; then echo 'mock kubectl rejects an unexpected get resource' >&2; exit 2; fi
     ;;
 esac
 EOF
 chmod +x "$work/bin/kubectl"
+cat >"$work/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == *'run ./cmd/nats-proof-credential --check-min-validity 30m'* && "$*" == *'--generation r20260930a --namespace voice-staging'* ]] || exit 2
+EOF
+chmod +x "$work/bin/go"
 
 generation=r20260930a
 umask 077
@@ -186,6 +216,8 @@ jq -n --arg g "$generation" --rawfile cert "$work/tls.crt" --rawfile key "$work/
     {apiVersion:"v1",kind:"Secret",metadata:{name:("voice-nats-bootstrap-credentials-"+$g),namespace:"voice-staging"},type:"Opaque",immutable:true,data:{"bootstrap.creds":"eA=="}},
     {apiVersion:"v1",kind:"Secret",metadata:{name:("voice-nats-service-credentials-"+$g),namespace:"voice-staging"},type:"Opaque",immutable:true,data:(["analytics","auth","bot","chat","file","gateway","matchmaking","messaging","moderation","notification","realtime","role","search","social","space","story","subscription","user","voice"] | map({key:(.+".creds"),value:"eA=="}) | from_entries)}
   ]}' >"$work/bundle.json"
+printf 'inert-proof-credential\n' >"$work/proof.creds"
+acl_sha="$(sha256sum "$ROOT/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 run_rotation() {
   local rc=0
   : >"$work/kubectl.log"
@@ -208,6 +240,11 @@ run_rotation() {
     MOCK_SOURCE_PVC_CLASS="${MOCK_SOURCE_PVC_CLASS:-local-path}" \
     MOCK_REALTIME_IMAGE="${MOCK_REALTIME_IMAGE:-}" \
     MOCK_GENERATION_STATE="${MOCK_GENERATION_STATE:-absent}" \
+    MOCK_ACL_SHA="$acl_sha" GITHUB_RUN_ID=123456 GITHUB_RUN_ATTEMPT=1 \
+    GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
+    VOICE_NATS_PROOF_IMAGE_REGISTRY=ghcr.io/poryadok/voiceroot \
+    VOICE_NATS_PROOF_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567 \
+    VOICE_NATS_PROOF_IMAGE_PUBLIC=true \
     bash "$ROTATE" "$@" >"$work/output" 2>&1 || rc=$?
   if grep -Eq 'eA==|BEGIN (RSA )?PRIVATE KEY' "$work/output"; then
     fail 'rotation output exposed fixture credential bytes'
@@ -245,55 +282,58 @@ assert_nats_only_mutations() {
     if [[ "$operation" =~ ^mutation\ (create|delete)\ .*job[/[:space:]]+voice-nats-(realtime|notification|search|analytics-chat)-bootstrap([[:space:]]|$) || "$operation" =~ ^mutation\ (create|delete)\ .*job[/[:space:]]+voice-nats-realtime-permissions-preflight([[:space:]]|$) ]]; then
       continue
     fi
-    fail 'rotation used an unexpected Kubernetes mutation outside its NATS allowlist'
+    if [[ "$operation" =~ ^mutation\ delete\ (job|networkpolicy|secret)\ voice-nats-acl-proof-r20260930a-[a-z0-9-]+\ -n\ voice-staging([[:space:]]|$) ]]; then
+      continue
+    fi
+    fail "rotation used an unexpected Kubernetes mutation outside its NATS allowlist: ${operation}"
   done <"$work/mutations.log"
 }
 
-if run_rotation --activate '../voice-prod' "$work/bundle.json"; then
+if run_rotation --activate '../voice-prod' "$work/bundle.json" "$work/proof.creds"; then
   fail 'path-like generation must fail'
 fi
 assert_no_mutation
-if run_rotation --activate r20260930A "$work/bundle.json"; then
+if run_rotation --activate r20260930A "$work/bundle.json" "$work/proof.creds"; then
   fail 'generation must match r[0-9]{8}[a-z0-9]{0,8}'
 fi
 assert_no_mutation
-if TEST_NAMESPACE=voice-prod run_rotation --activate "$generation" "$work/bundle.json"; then
+if TEST_NAMESPACE=voice-prod run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject every namespace except voice-staging'
 fi
 assert_no_mutation
-if MOCK_PARTIAL_SET=true run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_PARTIAL_SET=true run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject a partial target generation'
 fi
 assert_no_mutation
-if MOCK_TARGET_PVC_EXISTS=true run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_TARGET_PVC_EXISTS=true run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject a preexisting target PVC'
 fi
 assert_no_mutation
-if MOCK_LIVE_SELECTOR=voice-postgres run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_LIVE_SELECTOR=voice-postgres run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject a wrong live voice-nats Service selector'
 fi
 assert_no_mutation
-if MOCK_SOURCE_PVC=voice-postgres-pgdata run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_SOURCE_PVC=voice-postgres-pgdata run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject an unexpected source PVC mount'
 fi
 assert_no_mutation
-if MOCK_REALTIME_IMAGE=ghcr.io/example/voice/realtime:latest run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_REALTIME_IMAGE=ghcr.io/example/voice/realtime:latest run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject a mutable deployed Realtime image before writing the marker'
 fi
 assert_no_mutation
-if jq 'del(.items[] | select(.metadata.name == "voice-nats-service-credentials-r20260930a") | .data["chat.creds"])' "$work/bundle.json" >"$work/incomplete.json" && run_rotation --activate "$generation" "$work/incomplete.json"; then
+if jq 'del(.items[] | select(.metadata.name == "voice-nats-service-credentials-r20260930a") | .data["chat.creds"])' "$work/bundle.json" >"$work/incomplete.json" && run_rotation --activate "$generation" "$work/incomplete.json" "$work/proof.creds"; then
   fail 'rotation must reject a bundle missing a required service key'
 fi
 assert_no_mutation
-if jq '(.items[0].metadata.namespace) = "voice-prod"' "$work/bundle.json" >"$work/wrong-bundle-namespace.json" && run_rotation --activate "$generation" "$work/wrong-bundle-namespace.json"; then
+if jq '(.items[0].metadata.namespace) = "voice-prod"' "$work/bundle.json" >"$work/wrong-bundle-namespace.json" && run_rotation --activate "$generation" "$work/wrong-bundle-namespace.json" "$work/proof.creds"; then
   fail 'rotation must reject a bundle whose namespace differs from voice-staging'
 fi
 assert_no_mutation
-if jq '(.items[0].immutable) = false' "$work/bundle.json" >"$work/mutable.json" && run_rotation --activate "$generation" "$work/mutable.json"; then
+if jq '(.items[0].immutable) = false' "$work/bundle.json" >"$work/mutable.json" && run_rotation --activate "$generation" "$work/mutable.json" "$work/proof.creds"; then
   fail 'rotation must reject a mutable generation Secret'
 fi
 assert_no_mutation
-if jq '.items += [{apiVersion:"v1",kind:"Secret",metadata:{name:"voice-app-secrets",namespace:"voice-staging"},type:"Opaque",immutable:true,data:{x:"eA=="}}]' "$work/bundle.json" >"$work/extra-secret.json" && run_rotation --activate "$generation" "$work/extra-secret.json"; then
+if jq '.items += [{apiVersion:"v1",kind:"Secret",metadata:{name:"voice-app-secrets",namespace:"voice-staging"},type:"Opaque",immutable:true,data:{x:"eA=="}}]' "$work/bundle.json" >"$work/extra-secret.json" && run_rotation --activate "$generation" "$work/extra-secret.json" "$work/proof.creds"; then
   fail 'rotation must reject bundles with a fifth or non-NATS Secret'
 fi
 assert_no_mutation
@@ -314,7 +354,7 @@ grep -Fq 'NATS generation rotation is in progress' "$work/output" || fail 'full 
 
 # The generated deployment/app templates and regular full deploy must follow
 # this marker, while the stable application DNS must remain voice-nats.
-if ! run_rotation --activate "$generation" "$work/bundle.json"; then
+if ! run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail "valid staging activation did not complete under mock kubectl: $(tail -1 "$work/output")"
 fi
 assert_nats_only_mutations
@@ -335,7 +375,7 @@ hub_patches="$(grep -E '^patch .*deployment[/[:space:]]+voice-nats-pvc-candidate
 for ref in "voice-nats-jsdata-${generation}" "voice-nats-operator-${generation}" "voice-nats-hub-tls-${generation}"; do
   [[ "$hub_patches" == *"$ref"* ]] || fail "hub must bind ${ref}"
 done
-! grep -Eq '^delete (secret|pvc|persistentvolumeclaim) ' "$work/kubectl.log" || fail 'activation must retain previous Secrets and PVC for rollback'
+! grep -Eq '^delete (pvc|persistentvolumeclaim) |^delete secret voice-nats-(operator|hub-tls|bootstrap-credentials|service-credentials)( |$)' "$work/kubectl.log" || fail 'activation must retain previous Secrets and PVC for rollback'
 ! grep -Eq '^delete namespace |^delete (secret|pvc|persistentvolumeclaim) (voice-postgres|voice-minio|voice-app)' "$work/kubectl.log" || fail 'rotation must not delete non-NATS resources'
 ! grep -Eq '^patch service voice-nats |^delete service voice-nats ' "$work/kubectl.log" || fail 'rotation must preserve stable voice-nats Service and DNS'
 ! grep -Eq 'render-and-apply.sh|apply-infra.sh|apply-app-manifests.sh' "$work/kubectl.log" || fail 'NATS-only rotation must not invoke full infrastructure/app apply'
@@ -356,6 +396,17 @@ for bootstrap in realtime notification search analytics-chat; do
 done
 grep -Fq 'Job voice-nats-realtime-permissions-preflight voice-staging' "$work/rendered/metadata.names" || fail 'new generation must apply Realtime permissions preflight'
 grep -Eq '^wait .*job/voice-nats-realtime-permissions-preflight' "$work/kubectl.log" || fail 'new generation must pass Realtime permissions preflight'
+proof_name="$(awk '$1 == "Secret" && $2 ~ /^voice-nats-acl-proof-/ {print $2}' "$work/rendered/metadata.names" | sort -u)"
+[[ "$proof_name" =~ ^voice-nats-acl-proof-r20260930a-[a-z0-9-]+$ ]] || fail 'activation must create a uniquely named proof Secret'
+for kind in Secret NetworkPolicy Job; do
+  [[ "$(grep -Ec "^${kind} ${proof_name} voice-staging" "$work/rendered/metadata.names" || true)" == 1 ]] || fail "activation must create one temporary proof ${kind}"
+done
+grep -Fq "Secret ${proof_name} voice-staging immutable=true" "$work/rendered/metadata.names" || fail 'temporary proof Secret must be immutable'
+for kind in job networkpolicy secret; do
+  [[ "$(grep -Ec "^delete ${kind} ${proof_name} -n voice-staging " "$work/kubectl.log" || true)" == 1 ]] || fail "activation must delete temporary proof ${kind} exactly once"
+  grep -Eq "^get ${kind} ${proof_name} -n voice-staging " "$work/kubectl.log" || fail "activation must verify temporary proof ${kind} is absent"
+done
+grep -Fq "NATS_LIVE_ACL_PROOF=PASS generation=${generation} acl_sha=${acl_sha}" "$work/output" || fail 'activation must report the exact live proof PASS token'
 hub_ready_line="$(grep -nm1 -E '^rollout status deployment/voice-nats-pvc-candidate' "$work/kubectl.log" | cut -d: -f1)"
 [[ -n "$hub_ready_line" ]] || fail 'rotation must wait for the new hub'
 rotating_line="$(grep -nm1 '^event phase=rotating$' "$work/kubectl.log" | cut -d: -f1)"
@@ -364,14 +415,16 @@ hub_patch_line="$(grep -nm1 -E '^patch .*deployment[/[:space:]]+voice-nats-pvc-c
 last_stop_line="$(grep -nE '^(scale|patch) .*deployment[/[:space:]]+voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics).*(replicas[=: ]+0|\\\"replicas\\\":0)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 [[ -n "$last_stop_line" && "$last_stop_line" -lt "$hub_patch_line" ]] || fail 'all 18 leaves must stop before hub volume switch'
 last_bootstrap_line="$(grep -nE '^wait .*job/voice-nats-((realtime|notification|search|analytics-chat)-bootstrap|realtime-permissions-preflight)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
+proof_logs_line="$(grep -nF "logs job/${proof_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
 first_start_line="$(grep -nm1 -E '^(scale|patch) .*deployment[/[:space:]]+voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics).*(replicas[=: ]+1|\\\"replicas\\\":1)' "$work/kubectl.log" | cut -d: -f1)"
 [[ -n "$last_bootstrap_line" && -n "$first_start_line" && "$last_bootstrap_line" -lt "$first_start_line" ]] || fail 'all bootstrap Jobs must complete before a leaf starts'
+[[ -n "$proof_logs_line" && "$last_bootstrap_line" -lt "$proof_logs_line" && "$proof_logs_line" -lt "$first_start_line" ]] || fail 'live ACL proof must complete between bootstrap and first leaf restart'
 active_line="$(grep -n '^event phase=active$' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 last_leaf_ready_line="$(grep -nE '^rollout status deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)( |$)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 [[ -n "$active_line" && -n "$last_leaf_ready_line" && "$last_leaf_ready_line" -lt "$active_line" ]] || fail 'active marker must follow leaf rollout convergence'
 grep -Eq 'voice-nats-generation|generation.*r20260930a' "$work/mutations.log" "$work/rendered/metadata.names" || fail 'active generation marker must be recorded'
 
-if MOCK_GENERATION_STATE=active run_rotation --activate "$generation" "$work/bundle.json"; then
+if MOCK_GENERATION_STATE=active run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'repeated activation of the already active generation must fail closed'
 fi
 assert_no_mutation

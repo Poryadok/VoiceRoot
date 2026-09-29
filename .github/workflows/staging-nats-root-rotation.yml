@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: voice-staging-maintenance
@@ -194,6 +195,45 @@ jobs:
             exit 1
           fi
 
+      - name: Verify exact-master Realtime proof image in GHCR
+        if: inputs.operation == 'activate'
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGING_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != Poryadok/VoiceRoot || ! "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_IDENTITY'
+            exit 1
+          fi
+          registry=ghcr.io/poryadok/voiceroot
+          image="$registry/realtime:$GITHUB_SHA"
+          docker_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-ghcr.XXXXXX")"
+          anonymous_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-anonymous.XXXXXX")"
+          trap 'rm -rf -- "$docker_config" "$anonymous_config"' EXIT
+          if ! printf '%s' "$GHCR_TOKEN" | docker --config "$docker_config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GHCR_LOGIN'
+            exit 1
+          fi
+          unset GHCR_TOKEN
+          if ! docker --config "$docker_config" manifest inspect "$image" >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_MISSING'
+            exit 1
+          fi
+          if docker --config "$anonymous_config" manifest inspect "$image" >/dev/null 2>&1; then
+            printf 'VOICE_NATS_PROOF_IMAGE_PUBLIC=true\n' >>"$GITHUB_ENV"
+          else
+            if [[ ! "$STAGING_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+              echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_PULL_SECRET'
+              exit 1
+            fi
+            printf 'VOICE_NATS_PROOF_IMAGE_PULL_SECRET=%s\n' "$STAGING_IMAGE_PULL_SECRET" >>"$GITHUB_ENV"
+          fi
+          printf 'VOICE_NATS_PROOF_IMAGE_REGISTRY=%s\n' "$registry" >>"$GITHUB_ENV"
+          printf 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$GITHUB_SHA" >>"$GITHUB_ENV"
+
       - uses: azure/setup-kubectl@v5
 
       - name: Configure staging kubectl
@@ -213,27 +253,37 @@ jobs:
         env:
           ROTATION_GENERATION: ${{ inputs.generation }}
           STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+          STAGING_NATS_PROOF_CREDS_B64: ${{ secrets.STAGING_NATS_PROOF_CREDS_B64 }}
         run: |
           set +x
           set -euo pipefail
-          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" ]]; then
-            echo 'NATS_ROTATION=FAIL_MISSING_BUNDLE'
+          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" || -z "${STAGING_NATS_PROOF_CREDS_B64:-}" ]]; then
+            echo 'NATS_ROTATION=FAIL_MISSING_ACTIVATION_SECRET'
             exit 1
           fi
           umask 077
-          bundle="$(mktemp "${RUNNER_TEMP:-/tmp}/voice-nats-rotation.XXXXXX")"
-          trap 'rm -f -- "$bundle"' EXIT
-          chmod 600 "$bundle"
+          temp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-rotation.XXXXXX")"
+          trap 'rm -f -- "$temp/bundle.json" "$temp/proof.creds"; rmdir -- "$temp"' EXIT
+          bundle="$temp/bundle.json"
+          proof="$temp/proof.creds"
+          : >"$bundle"
+          : >"$proof"
+          chmod 600 "$bundle" "$proof"
           if ! printf '%s' "$STAGING_NATS_ROTATION_SECRETS_B64" | base64 --decode 2>/dev/null | gzip -dc 2>/dev/null >"$bundle"; then
             echo 'NATS_ROTATION=FAIL_BUNDLE_DECODE'
             exit 1
           fi
           unset STAGING_NATS_ROTATION_SECRETS_B64
-          if [[ ! -s "$bundle" ]]; then
-            echo 'NATS_ROTATION=FAIL_EMPTY_BUNDLE'
+          if ! printf '%s' "$STAGING_NATS_PROOF_CREDS_B64" | base64 --decode 2>/dev/null >"$proof"; then
+            echo 'NATS_ROTATION=FAIL_PROOF_DECODE'
             exit 1
           fi
-          bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle"
+          unset STAGING_NATS_PROOF_CREDS_B64
+          if [[ ! -s "$bundle" || ! -s "$proof" ]]; then
+            echo 'NATS_ROTATION=FAIL_EMPTY_ACTIVATION_SECRET'
+            exit 1
+          fi
+          bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle" "$proof"
 
       - name: Roll back NATS root generation
         if: inputs.operation == 'rollback'
