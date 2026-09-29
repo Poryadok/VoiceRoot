@@ -103,11 +103,12 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 
 	storeMessages := &store.MessagesStore{Pool: messagingDB}
 	chatGuard := &t16BlockingChatGuard{ChatGuard: &store.SQLChatGuard{Pool: chatDB}, entered: make(chan struct{}), release: make(chan struct{})}
+	mappingAuthority := &t16DiagnosticResourceMappingAuthority{
+		delegate: mappingClient, runtimeDB: gisRuntimeDB, t: t,
+	}
 	processor := &VerifiedGameMessageProcessor{Store: storeMessages, AuthKeys: gameAuthKeys,
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
-			Chats: chatGuard, ResourceMappings: &t16DiagnosticResourceMappingAuthority{
-				delegate: mappingClient, runtimeDB: gisRuntimeDB, t: t,
-			},
+			Chats: chatGuard, ResourceMappings: mappingAuthority,
 		}}
 	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
 	diagnosticProcessor.probeAuthJWKS = func() {
@@ -248,10 +249,15 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.Equal(t, seededMappingRevision, runtimeMappingRevision,
 		"GIS runtime role and fixture owner must observe the same mapping revision; search_path=%s", runtimeSearchPath)
 	workloadNoncesBeforePositive := countT16GISWorkloadNonces(t, ctx)
+	mappingCallsBeforePositive := mappingAuthority.calls.Load()
 	response, err := apply(positiveMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, positiveMappingHash)
-	require.Equal(t, workloadNoncesBeforePositive+1, countT16GISWorkloadNonces(t, ctx),
-		"the exact linked-chat request must traverse GIS mapping authorization once")
+	workloadNonceDelta := countT16GISWorkloadNonces(t, ctx) - workloadNoncesBeforePositive
+	t.Logf("T16 positive request returned err=%v GIS workload nonce delta=%d", err, workloadNonceDelta)
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
+	require.Equal(t, int64(1), mappingAuthority.calls.Load()-mappingCallsBeforePositive,
+		"the exact linked-chat request must traverse GIS mapping authorization exactly once")
+	require.Equal(t, 2, workloadNonceDelta,
+		"positive request should use one GIS mapping proof and one Auth-to-GIS execution-permit proof")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
 
@@ -550,12 +556,15 @@ type t16DiagnosticResourceMappingAuthority struct {
 	}
 	runtimeDB *pgxpool.Pool
 	t         *testing.T
+	calls     atomic.Int64
 }
 
 func (d *t16DiagnosticResourceMappingAuthority) AuthorizeAppBindingChat(
 	ctx context.Context, authority gameprotocol.DeviceAuthority, message gameprotocol.Message,
 ) error {
+	call := d.calls.Add(1)
 	err := d.delegate.AuthorizeAppBindingChat(ctx, authority, message)
+	d.t.Logf("T16 GIS mapping call=%d allowed=%t", call, err == nil)
 	if err != nil {
 		var runtimeRevision int64
 		runtimeErr := d.runtimeDB.QueryRow(ctx, `SELECT m.mapping_revision
@@ -570,7 +579,8 @@ func (d *t16DiagnosticResourceMappingAuthority) AuthorizeAppBindingChat(
 			AND r.status='active' AND r.lease_expires_at > clock_timestamp()`,
 			authority.ApplicationID, authority.EnvironmentID, authority.BindingID, message.ChatID).
 			Scan(&runtimeRevision)
-		d.t.Logf("T16 diagnostic: real GIS mapping client rejected tuple app=%s env=%s binding=%s messageApp=%s messageEnv=%s messageBinding=%s chat=%s: %v",
+		d.t.Logf("T16 diagnostic: real GIS mapping client rejected call=%d tuple app=%s env=%s binding=%s messageApp=%s messageEnv=%s messageBinding=%s chat=%s: %v",
+			call,
 			authority.ApplicationID, authority.EnvironmentID, authority.BindingID,
 			message.ApplicationID, message.EnvironmentID, message.BindingID, message.ChatID, err)
 		d.t.Logf("T16 diagnostic: actual request tuple under GIS runtime role revision=%d query_error=%v",

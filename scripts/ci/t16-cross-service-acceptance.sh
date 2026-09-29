@@ -37,6 +37,14 @@ make_leaf messaging-client messaging 'URI:spiffe://voice/service/messaging' clie
 # only this disposable fixture CA; caCertificateFile alone is OpenSSL-specific.
 T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD="$(openssl rand -hex 16)"
 T16_GAME_INTEGRATION_DB_PASSWORD="$(openssl rand -hex 32)"
+T16_AUTH_WORKLOAD_KEY_B64="$(openssl rand -base64 32)"
+T16_MESSAGING_WORKLOAD_KEY_B64="$(openssl rand -base64 32)"
+# Register generated environment secrets with Actions before exporting them.
+printf '::add-mask::%s\n' \
+  "$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD" \
+  "$T16_GAME_INTEGRATION_DB_PASSWORD" \
+  "$T16_AUTH_WORKLOAD_KEY_B64" \
+  "$T16_MESSAGING_WORKLOAD_KEY_B64"
 keytool -importcert -noprompt -storetype PKCS12 -alias t16-client-ca \
   -file "$tls_dir/ca.crt" -keystore "$tls_dir/auth-client-ca.p12" \
   -storepass "$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD" >/dev/null 2>&1
@@ -59,8 +67,8 @@ rm "$tls_dir/ca.key" "$tls_dir/ca.srl"
 
 cat > "$t16_dir/compose.env" <<EOF
 T16_FIXTURE_DIR=$t16_dir
-T16_AUTH_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
-T16_MESSAGING_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
+T16_AUTH_WORKLOAD_KEY_B64=$T16_AUTH_WORKLOAD_KEY_B64
+T16_MESSAGING_WORKLOAD_KEY_B64=$T16_MESSAGING_WORKLOAD_KEY_B64
 T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD=$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD
 GAME_INTEGRATION_DB_PASSWORD=$T16_GAME_INTEGRATION_DB_PASSWORD
 EOF
