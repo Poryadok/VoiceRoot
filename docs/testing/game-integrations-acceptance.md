@@ -544,6 +544,28 @@ resource-mapping dependency is absent and new game-authored writes fail closed;
 tests with a synthetic mapping fixture prove only the consumer seam, not that
 the prerequisite has shipped. Receipt-first exact retries remain readable.
 
+### T15-DEV JCS wire conformance
+
+`src/backend/messaging/internal/gameprotocol/message_test.go` checks the
+RFC 8785 Appendix B binary64 number samples and Appendix C canonical JSON
+example, plus UTF-16 property ordering (including a supplementary-plane key
+against a BMP key), JSON escaping, and rejection of unpaired UTF-16 surrogate
+escapes. The shared canonicalizer emits ECMAScript-compatible shortest
+binary64 number strings and rejects numbers outside the finite binary64 range.
+The full affected package passes with
+`rtk go -C src/backend/messaging test ./internal/gameprotocol -count=1`.
+
+Auth key lifecycle, authority/status signing, execution-permit integration,
+and handoff coverage passed 64 tests with:
+`rtk mvn -B '-Dtest=SdkIdentityJdbcIntegrationTest,AuthUserPrincipalIssuerContractTest,AuthGameMessageExecutionPermitRestControllerTest,AuthGameBindingHandoffControllerTest' test`.
+The earlier Messaging receiver suite passed 434 tests across
+`gameprotocol`, `s2s`, `store`, and `grpcsvc`; the post-canonicalizer run reran
+the complete changed `gameprotocol` package. These are development checks,
+not live game-server runtime evidence. Real-provider acceptance, production
+admission, and a measured node revoke-to-eject interval remain open/excluded.
+New message writes also remain fail-closed until the T30/T31 app/environment/
+binding/chat mapping producer is available.
+
 ### T16-DEV cross-service permit acceptance
 
 The hosted Linux Compose gate must exercise the production Auth permit REST

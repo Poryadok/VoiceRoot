@@ -13,11 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -693,6 +695,9 @@ func parseStrictJSON(data []byte) (any, error) {
 	if len(data) == 0 || !utf8.Valid(data) || bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
 		return nil, errors.New("invalid UTF-8 JSON")
 	}
+	if hasUnpairedSurrogateEscape(data) {
+		return nil, errors.New("invalid Unicode surrogate escape")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	value, err := readValue(decoder)
@@ -703,6 +708,60 @@ func parseStrictJSON(data []byte) (any, error) {
 		return nil, errors.New("trailing JSON data")
 	}
 	return value, nil
+}
+
+// encoding/json replaces lone UTF-16 surrogate escapes with U+FFFD. JCS
+// requires invalid Unicode data to be rejected instead of silently changed.
+func hasUnpairedSurrogateEscape(data []byte) bool {
+	inString := false
+	for i := 0; i < len(data); {
+		if !inString {
+			if data[i] == '"' {
+				inString = true
+			}
+			i++
+			continue
+		}
+		switch data[i] {
+		case '"':
+			inString = false
+			i++
+		case '\\':
+			if i+1 >= len(data) {
+				return false // The JSON decoder reports the malformed escape.
+			}
+			if data[i+1] != 'u' {
+				i += 2
+				continue
+			}
+			if i+6 > len(data) {
+				return false // The JSON decoder reports the truncated escape.
+			}
+			code, err := strconv.ParseUint(string(data[i+2:i+6]), 16, 16)
+			if err != nil {
+				i += 6
+				continue
+			}
+			switch {
+			case code >= 0xd800 && code <= 0xdbff:
+				if i+12 > len(data) || data[i+6] != '\\' || data[i+7] != 'u' {
+					return true
+				}
+				low, err := strconv.ParseUint(string(data[i+8:i+12]), 16, 16)
+				if err != nil || low < 0xdc00 || low > 0xdfff {
+					return true
+				}
+				i += 12
+			case code >= 0xdc00 && code <= 0xdfff:
+				return true
+			default:
+				i += 6
+			}
+		default:
+			i++
+		}
+	}
+	return false
 }
 
 func readValue(decoder *json.Decoder) (any, error) {
@@ -771,7 +830,7 @@ func writeCanonical(out *bytes.Buffer, value any) {
 		for key := range v {
 			keys = append(keys, key)
 		}
-		sort.Strings(keys)
+		sort.Slice(keys, func(i, j int) bool { return compareUTF16(keys[i], keys[j]) < 0 })
 		out.WriteByte('{')
 		for index, key := range keys {
 			if index > 0 {
@@ -794,7 +853,7 @@ func writeCanonical(out *bytes.Buffer, value any) {
 	case string:
 		writeJSONString(out, v)
 	case json.Number:
-		out.WriteString(v.String())
+		out.WriteString(canonicalNumber(v))
 	case bool:
 		if v {
 			out.WriteString("true")
@@ -806,6 +865,95 @@ func writeCanonical(out *bytes.Buffer, value any) {
 	default:
 		out.WriteString("null")
 	}
+}
+
+// RFC 8785 sorts property names lexicographically by their UTF-16 code units,
+// matching ECMAScript's string ordering (which differs from UTF-8/code-point
+// order for supplementary characters).
+func compareUTF16(left, right string) int {
+	a, b := utf16.Encode([]rune(left)), utf16.Encode([]rune(right))
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] < b[i] {
+			return -1
+		}
+		if a[i] > b[i] {
+			return 1
+		}
+	}
+	switch {
+	case len(a) < len(b):
+		return -1
+	case len(a) > len(b):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// canonicalNumber applies ECMAScript Number::toString formatting to a parsed
+// binary64 value, as required by JCS. strconv supplies the shortest round-trip
+// digits; this function applies ECMAScript's decimal/exponent cutovers.
+func canonicalNumber(number json.Number) string {
+	value, err := strconv.ParseFloat(number.String(), 64)
+	if err != nil || math.IsInf(value, 0) || math.IsNaN(value) {
+		return ""
+	}
+	if value == 0 {
+		return "0"
+	}
+	negative := math.Signbit(value)
+	if negative {
+		value = -value
+	}
+	text := strconv.FormatFloat(value, 'g', -1, 64)
+	exponent := 0
+	if index := strings.IndexAny(text, "eE"); index >= 0 {
+		parsed, err := strconv.Atoi(text[index+1:])
+		if err != nil {
+			return ""
+		}
+		exponent = parsed
+		text = text[:index]
+	}
+	dot := strings.IndexByte(text, '.')
+	if dot < 0 {
+		dot = len(text)
+	} else {
+		text = text[:dot] + text[dot+1:]
+	}
+	digits := strings.TrimLeft(text, "0")
+	decimalPoint := dot + exponent
+	if digits == "" {
+		return "0"
+	}
+	decimalPoint -= len(text) - len(digits)
+	for len(digits) > 1 && digits[len(digits)-1] == '0' {
+		digits = digits[:len(digits)-1]
+	}
+	var result string
+	switch {
+	case len(digits) <= decimalPoint && decimalPoint <= 21:
+		result = digits + strings.Repeat("0", decimalPoint-len(digits))
+	case 0 < decimalPoint && decimalPoint <= 21:
+		result = digits[:decimalPoint] + "." + digits[decimalPoint:]
+	case -6 < decimalPoint && decimalPoint <= 0:
+		result = "0." + strings.Repeat("0", -decimalPoint) + digits
+	default:
+		sign := "+"
+		exponent = decimalPoint - 1
+		if exponent < 0 {
+			sign = ""
+		}
+		result = digits[:1]
+		if len(digits) > 1 {
+			result += "." + digits[1:]
+		}
+		result += "e" + sign + strconv.Itoa(exponent)
+	}
+	if negative {
+		return "-" + result
+	}
+	return result
 }
 
 func writeJSONString(out *bytes.Buffer, value string) {

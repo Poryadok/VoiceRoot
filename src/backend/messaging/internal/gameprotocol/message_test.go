@@ -34,6 +34,65 @@ func TestVerifyMessageAcceptsCanonicalSignedCreateAndReturnsExactContent(t *test
 	require.Equal(t, compact, got.Compact)
 }
 
+func TestCanonicalJSONMatchesRFC8785NumberAndPropertyOrderVectors(t *testing.T) {
+	t.Run("appendix C sample", func(t *testing.T) {
+		input := []byte(`{"numbers":[333333333.33333329,1E30,4.50,2e-3,1e-27],"string":"€$\u000f\nA'B\"\\\"/","literals":[null,true,false]}`)
+		value, err := parseStrictJSON(input)
+		require.NoError(t, err)
+		require.Equal(t, `{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27],"string":"€$\u000f\nA'B\"\\\"/"}`, string(canonicalJSON(value)))
+	})
+
+	t.Run("UTF-16 property ordering", func(t *testing.T) {
+		input := []byte(`{"דּ":"Hebrew Letter Dalet With Dagesh","😀":"Emoji: Grinning Face","€":"Euro Sign","ö":"Latin Small Letter O With Diaeresis","1":"One","\r":"Carriage Return"}`)
+		value, err := parseStrictJSON(input)
+		require.NoError(t, err)
+		require.Equal(t, `{"\r":"Carriage Return","1":"One","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","דּ":"Hebrew Letter Dalet With Dagesh"}`, string(canonicalJSON(value)))
+	})
+
+	t.Run("appendix B binary64 samples", func(t *testing.T) {
+		vectors := []struct{ input, want string }{
+			{"-0", "0"},
+			{"5e-324", "5e-324"},
+			{"-5e-324", "-5e-324"},
+			{"1.7976931348623157e+308", "1.7976931348623157e+308"},
+			{"9007199254740992", "9007199254740992"},
+			{"295147905179352830000", "295147905179352830000"},
+			{"9.999999999999997e+22", "9.999999999999997e+22"},
+			{"1e+23", "1e+23"},
+			{"1.0000000000000001e+23", "1.0000000000000001e+23"},
+			{"999999999999999700000", "999999999999999700000"},
+			{"999999999999999900000", "999999999999999900000"},
+			{"1e+21", "1e+21"},
+			{"9.999999999999997e-7", "9.999999999999997e-7"},
+			{"0.000001", "0.000001"},
+			{"333333333.3333332", "333333333.3333332"},
+			{"333333333.33333325", "333333333.33333325"},
+			{"333333333.3333333", "333333333.3333333"},
+			{"333333333.3333334", "333333333.3333334"},
+			{"333333333.33333343", "333333333.33333343"},
+			{"-0.0000033333333333333333", "-0.0000033333333333333333"},
+			{"1424953923781206.25", "1424953923781206.2"},
+		}
+		for _, vector := range vectors {
+			t.Run(vector.input, func(t *testing.T) {
+				value, err := parseStrictJSON([]byte(vector.input))
+				require.NoError(t, err)
+				require.Equal(t, vector.want, string(canonicalJSON(value)))
+			})
+		}
+	})
+
+	t.Run("rejects unpaired UTF-16 surrogate escapes", func(t *testing.T) {
+		for _, input := range []string{`"\ud800"`, `"\udc00"`, `"\ud800\u0041"`} {
+			_, err := parseStrictJSON([]byte(input))
+			require.Error(t, err, input)
+		}
+		value, err := parseStrictJSON([]byte(`"\ud800\udc00"`))
+		require.NoError(t, err)
+		require.Equal(t, `"𐀀"`, string(canonicalJSON(value)))
+	})
+}
+
 func TestVerifyMessageRejectsNoncanonicalPayloadAndRouteSubstitution(t *testing.T) {
 	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
 	key, keyID := testDeviceKey(t)

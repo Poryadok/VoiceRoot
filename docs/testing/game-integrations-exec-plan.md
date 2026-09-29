@@ -422,6 +422,17 @@ contracts land before consumers; activation lands after all consumers.
   Messaging enforces a 250ms transaction maximum plus 250ms clock margin and
   records completion atomically with the message receipt. Auth/GIS revoke
   succeeds only after issued permits drain; unknown completion remains pending.
+  - [x] **T15-DEV** `D: T13-DEV,T14-DEV` Verify provider-independent Auth key
+    lifecycle/status assertions and the Messaging/File signed-message receiver,
+    then add full RFC 8785 vectors for binary64 number rendering, UTF-16 key
+    ordering, escaping, and invalid surrogate rejection. Auth-focused tests
+    passed 64 tests; the pre-canonicalizer four-package Messaging receiver run
+    passed 434 tests across `gameprotocol`, `s2s`, `store`, and `grpcsvc`; after
+    canonicalizer changes the complete modified `gameprotocol` package passed.
+    The exact current acceptance map and commands are recorded in
+    [T15-DEV acceptance](game-integrations-acceptance.md#t15-dev-jcs-wire-conformance).
+    Real-provider/runtime admission and measured node revoke propagation remain
+    excluded or open; this subgate does not close the T16 or T30/T31 producers.
 - [ ] **T16** `D: T14,T15` Implement limited delegated grants, binding/authority
   reads, selected profile/alias serialization, direct-call scope checks and
   account/profile/app/device revocation epochs. Verify hidden profiles cannot
