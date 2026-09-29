@@ -76,6 +76,12 @@ func TestInternalExecutionPermitBindsAssertionAndReturnsGISOnlyFields(t *testing
 
 	tampered := request(uuid.NewString(), assertion)
 	tampered.Header.Set("X-Voice-Device-Authority", string(otherAssertion))
+	_, err := verifier.VerifyAssertionBound(tampered)
+	var failure workloadProofFailure
+	require.ErrorIs(t, err, ErrInvalidWorkloadProof)
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, workloadFailureSignature, failure)
+	require.NotContains(t, failure.Error(), string(assertion))
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, tampered)
 	require.Equal(t, http.StatusUnauthorized, w.Code)

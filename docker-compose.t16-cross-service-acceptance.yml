@@ -96,6 +96,7 @@ services:
 
   gameintegration:
     environment:
+      T16_ACCEPTANCE_DIAGNOSTICS: "1"
       GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${T16_AUTH_WORKLOAD_KEY_B64:?required}
       GIS_AUTH_GAME_BINDING_BASE_URL: https://auth:9443
       GIS_AUTH_GAME_BINDING_CA_FILE: /run/t16/ca.crt

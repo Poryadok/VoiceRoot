@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -57,6 +59,9 @@ func (h *InternalExecutionPermitHandler) issue(w http.ResponseWriter, r *http.Re
 	}
 	assertion, err := h.Verifier.VerifyAssertionBound(r)
 	if err != nil {
+		if os.Getenv("T16_ACCEPTANCE_DIAGNOSTICS") == "1" {
+			slog.Info("T16 execution permit workload proof rejected", "stage", workloadProofFailureStage(err))
+		}
 		if errors.Is(err, ErrWorkloadUnavailable) {
 			writeError(w, http.StatusServiceUnavailable, "AUTHORITY_UNAVAILABLE")
 		} else {
