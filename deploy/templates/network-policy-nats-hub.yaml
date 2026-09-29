@@ -18,7 +18,7 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [voice-auth, voice-analytics, voice-bot, voice-chat, voice-file, voice-matchmaking, voice-messaging, voice-moderation, voice-notification, voice-realtime, voice-nats-realtime-permissions-preflight, voice-role, voice-search, voice-social, voice-space, voice-story, voice-subscription, voice-user, voice-voice]
+                values: [voice-auth, voice-analytics, voice-bot, voice-chat, voice-file, voice-matchmaking, voice-messaging, voice-moderation, voice-notification, voice-realtime, voice-role, voice-search, voice-social, voice-space, voice-story, voice-subscription, voice-user, voice-voice]
       ports:
         - {protocol: TCP, port: 7422}
     - from:
