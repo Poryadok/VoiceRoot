@@ -121,6 +121,13 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	request := &messagingv1.ApplyGameMessageRequest{CompactJws: fixture.compactMessage, DeviceAuthorityAssertion: assertion}
 	requestHash, err := principal.RequestHash(request)
 	require.NoError(t, err)
+	newT16Request := func(current t16AcceptFixture) (*messagingv1.ApplyGameMessageRequest, string) {
+		freshAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, current)
+		freshRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: current.compactMessage, DeviceAuthorityAssertion: freshAssertion}
+		freshHash, hashErr := principal.RequestHash(freshRequest)
+		require.NoError(t, hashErr)
+		return freshRequest, freshHash
+	}
 	apply := func(callRequest *messagingv1.ApplyGameMessageRequest, tokenIssuer *principal.Issuer, audience, rpc, signedHash string) (*messagingv1.ApplyGameMessageResponse, error) {
 		id := uuid.NewString()
 		servicePrincipal, issueErr := tokenIssuer.IssueService(principal.ServiceInput{
@@ -150,15 +157,18 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 			require.Error(t, callErr)
 		})
 	}
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, fixture)
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
 
 	// GIS must deny absent, foreign-binding, and altered-chat mappings before
 	// Auth issues any execution permit.
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
 	require.NoError(t, err)
-	_, err = apply(request, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, requestHash)
+	missingMappingRequest, missingMappingHash := newT16Request(fixture)
+	workloadNoncesBeforeMapping := countT16GISWorkloadNonces(t, ctx)
+	_, err = apply(missingMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, missingMappingHash)
 	require.Error(t, err, "absent mapping must fail closed")
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, fixture)
+	require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "absent mapping denial must reach GIS exactly once")
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
 	require.NoError(t, seedT16ResourceMapping(ctx, gisDB, fixture))
 
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_binding_chats WHERE application_id=$1 AND environment_id=$2 AND binding_id=$3 AND chat_id=$4`, fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID)
@@ -170,9 +180,12 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, err)
 	_, err = gisDB.Exec(ctx, `INSERT INTO game_resource_binding_chats(application_id,environment_id,binding_id,chat_id,roster_revision,status,lease_expires_at) VALUES($1,$2,$3,$4,1,'active',now()+interval '1 hour')`, fixture.appID, fixture.envID, foreignBindingID, fixture.chatID)
 	require.NoError(t, err)
-	_, err = apply(request, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, requestHash)
+	foreignMappingRequest, foreignMappingHash := newT16Request(fixture)
+	workloadNoncesBeforeMapping = countT16GISWorkloadNonces(t, ctx)
+	_, err = apply(foreignMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, foreignMappingHash)
 	require.Error(t, err, "foreign binding mapping must fail closed")
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, fixture)
+	require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "foreign binding denial must reach GIS exactly once")
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_binding_chats WHERE application_id=$1 AND environment_id=$2 AND binding_id=$3 AND chat_id=$4`, fixture.appID, fixture.envID, foreignBindingID, fixture.chatID)
 	require.NoError(t, err)
 	_, err = gisDB.Exec(ctx, `INSERT INTO game_resource_binding_chats(application_id,environment_id,binding_id,chat_id,roster_revision,status,lease_expires_at) VALUES($1,$2,$3,$4,1,'active',now()+interval '1 hour')`, fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID)
@@ -180,12 +193,16 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 
 	_, err = gisDB.Exec(ctx, `UPDATE game_resource_mappings SET chat_id=$1,resource_id=$1 WHERE application_id=$2 AND environment_id=$3 AND chat_id=$4`, uuid.New(), fixture.appID, fixture.envID, fixture.chatID)
 	require.NoError(t, err)
-	_, err = apply(request, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, requestHash)
+	alteredMappingRequest, alteredMappingHash := newT16Request(fixture)
+	workloadNoncesBeforeMapping = countT16GISWorkloadNonces(t, ctx)
+	_, err = apply(alteredMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, alteredMappingHash)
 	require.Error(t, err, "altered chat mapping must fail closed")
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, fixture)
+	require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "altered chat denial must reach GIS exactly once")
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
 	require.NoError(t, seedT16ResourceMapping(ctx, gisDB, fixture))
 
-	response, err := apply(request, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, requestHash)
+	positiveMappingRequest, positiveMappingHash := newT16Request(fixture)
+	response, err := apply(positiveMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, positiveMappingHash)
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
@@ -195,11 +212,11 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	retryID := uuid.NewString()
 	retryPrincipal, err := gatewayIssuer.IssueService(principal.ServiceInput{
 		Audience: "messaging", RPC: messagingv1.MessagingService_ApplyGameMessage_FullMethodName,
-		RequestID: retryID, RequestHash: requestHash,
+		RequestID: retryID, RequestHash: positiveMappingHash,
 	})
 	require.NoError(t, err)
 	retryCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+retryPrincipal, "x-request-id", retryID))
-	retried, err := client.ApplyGameMessage(retryCtx, request)
+	retried, err := client.ApplyGameMessage(retryCtx, positiveMappingRequest)
 	require.NoError(t, err)
 	require.Equal(t, response.GetMessage().GetId(), retried.GetMessage().GetId())
 	var revisions int
@@ -402,7 +419,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, err)
 	_, err = apply(oldAuthorityRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, oldAuthorityHash)
 	require.Error(t, err, "old-binding proof must not authorize a new operation after GIS revoke")
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, oldAuthorityOperation)
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, oldAuthorityOperation)
 
 	// Model a durable owner-approved relink without provider credentials: GIS
 	// commits a new binding ID/authority revision, and the current Auth grant,
@@ -436,16 +453,18 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, err)
 	_, err = apply(oldAfterRestoreRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, oldAfterRestoreHash)
 	require.Error(t, err, "pre-relink Auth assertion for the old binding must remain denied")
-	assertNoT16ExecutionSideEffects(t, ctx, authDB, messagingDB, oldAfterRestore)
+	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, oldAfterRestore)
 }
 
-func assertNoT16ExecutionSideEffects(t *testing.T, ctx context.Context, authDB, messagingDB *pgxpool.Pool, fixture t16AcceptFixture) {
+func assertNoT16ExecutionSideEffects(t *testing.T, ctx context.Context, authDB, gisDB, messagingDB *pgxpool.Pool, fixture t16AcceptFixture) {
 	t.Helper()
-	var permits, messages, completions int
-	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).Scan(&permits))
+	var authPermits, gisPermits, messages, completions int
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=$1`, fixture.operationID).Scan(&authPermits))
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, fixture.operationID).Scan(&gisPermits))
 	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_revisions WHERE message_id=$1`, fixture.messageID).Scan(&messages))
 	require.NoError(t, messagingDB.QueryRow(ctx, `SELECT count(*) FROM game_message_execution_permit_completions WHERE operation_id=$1`, fixture.operationID).Scan(&completions))
-	require.Zero(t, permits, "denial must precede Auth permit issuance")
+	require.Zero(t, authPermits, "denial must precede Auth permit issuance")
+	require.Zero(t, gisPermits, "denial must precede GIS permit issuance")
 	require.Zero(t, messages, "denial must precede message commit")
 	require.Zero(t, completions, "mapping denial must not create completion")
 }
