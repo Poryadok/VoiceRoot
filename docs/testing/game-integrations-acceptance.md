@@ -134,7 +134,7 @@ operator then creates a synthetic Space placement with
 `POST /v1/nodes/{node}/spaces/{space}` and `{}`. The operator-publisher fixture
 publishes its initial complete allowlist with
 `POST /v1/nodes/{node}/spaces/{space}/snapshot`, revision `1`, one page, and a
-`valid_until` no more than five seconds ahead. Use only synthetic Space, account,
+`valid_until` no more than two seconds ahead. Use only synthetic Space, account,
 profile and resource IDs; the permission may grant `read` for this fixture.
 Federation has no production owning-service snapshot publisher yet, so this
 operator-published snapshot proves only the authority contract. The node then
@@ -143,6 +143,10 @@ gets its signed snapshot at
 revision/hash with a fresh nonce at
 `POST /v1/nodes/{node}/spaces/{space}/lease`, using its node certificate and
 node-scoped bearer. The test must not seed or repair registry rows with SQL.
+Node enforcement subtracts at most 250ms combined clock uncertainty from the
+signed wall-clock deadline before monotonic conversion, fails closed if
+uncertainty exceeds 250ms, and fences active media within 2.75s after the deny
+trigger; the complete revoke-to-eject budget remains at most 5s.
 For every enumerated Federation HTTP denial below, send a canonical
 `X-Request-ID` and verify the response header and append-only Federation audit
 row agree on that ID, the actor certificate fingerprint, target IDs, action,
