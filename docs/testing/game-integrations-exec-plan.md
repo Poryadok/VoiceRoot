@@ -205,13 +205,18 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
+  The executable cross-authority and SQL-tamper cases are listed in the
+  [T04 trust-matrix acceptance](game-integrations-acceptance.md#t04-principal-trust-matrix).
+  The principal matrix, including the 90-day absolute `vgi1` TTL and atomic
+  T11 HMAC replacement rule, is frozen in
+  [Game Integration API](../architecture/game-integration-api.md#t04-principal-trust-matrix).
+  Contract is frozen; full GIS/Bot module verification and exact-head CI remain pending.
   - [x] T04-AUTH: the Auth-only provider/ticket issuers, audiences, key sources,
     proof binding, storage boundary, freshness and replay rules are frozen in
     GAME-AUTH-01 for T13a. Google proof and app/env game-ticket proof are
     independent; neither a developer credential nor `guest` conversion can
     establish player identity. T13a verifier, SQL and route tests exercise the
-    bounded rules. The service/bot/node trust matrix and broader runtime
-    negative-case suite remain open.
+    bounded rules. This Auth-only slice remains unchanged by T04.
 - [ ] **T05** `D: T03,T04` Freeze resource/state model and ownership: account,
   selected profile/alias, character, app/env/installation, binding, party,
   match/fleet, corporation→Space, grant reasons, operations and tombstones.

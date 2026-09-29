@@ -56,10 +56,21 @@ does not enable a public game communication capability.
 4. Game service credentials are 256-bit HMAC-derived opaque secrets from a
    random credential ID and deployment-held 256-bit key; the database stores
    only keyed digests. The issue response returns the secret and an identical
-   idempotent retry can recover it for ten minutes after creation. After that
+   idempotent retry can recover it strictly before ten minutes after creation;
+   equality and later are expired. After that
    the API refuses redisplay and the owner must rotate. This resolves the
    original one-time-display versus lost-response retry conflict. Credentials
-   are scoped to one application/environment and explicit service scopes.
+   are scoped to one application/environment and explicit service scopes. Each
+   credential expires 90 days after creation; equality with `expires_at` is
+   expired. Replacement caps each previous credential at the earlier of its
+   original expiry and ten minutes after replacement. The retry reveal window
+   does not extend the credential's absolute TTL. The 90-day expiry instant is
+   expired. Explicit revoke ends admission on the next verification. Every
+   application or environment status transition atomically marks all child
+   credentials revoked and zeros their keyed digest. Migration to authority-v2
+   also retires every existing credential; a rollback never restores those
+   secrets. Restoring a prior status cannot revive credentials; the owner must
+   issue a new credential.
    Issuing a replacement bounds every previous active credential to at most
    ten more minutes; explicit revoke ends admission immediately. A credential cannot authenticate
    as a player, register a player device key, choose an Auth provider, or
