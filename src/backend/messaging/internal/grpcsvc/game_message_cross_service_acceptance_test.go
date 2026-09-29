@@ -24,7 +24,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -106,10 +105,9 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
 			Chats: chatGuard, ResourceMappings: mappingClient,
 		}}
-	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
 	verifier, gatewayIssuer := t16GatewayPrincipalRuntime(t, ctx)
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(principalgrpc.ApplyGameMessageUnaryInterceptor(verifier)))
-	messagingv1.RegisterMessagingServiceServer(grpcServer, &MessagingGRPC{Messages: storeMessages, GameMessages: diagnosticProcessor})
+	messagingv1.RegisterMessagingServiceServer(grpcServer, &MessagingGRPC{Messages: storeMessages, GameMessages: processor})
 	listener := bufconn.Listen(1 << 20)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
@@ -166,10 +164,8 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
 	require.NoError(t, err)
 	missingMappingRequest, missingMappingHash := newT16Request(fixture)
-	diagnosticProcessor.watchAssertion(missingMappingRequest.GetDeviceAuthorityAssertion())
 	workloadNoncesBeforeMapping := countT16GISWorkloadNonces(t, ctx)
 	_, err = apply(missingMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, missingMappingHash)
-	diagnosticProcessor.clearWatchedAssertion()
 	require.Error(t, err, "absent mapping must fail closed")
 	require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "absent mapping denial must reach GIS exactly once")
 	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
@@ -233,7 +229,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	// Chat membership is intentionally checked after Auth/GIS issues the permit.
 	// The failure must therefore leave a durable aborted completion and no message.
 	chatFailure := fixture
-	chatFailure.operationID, chatFailure.messageID = uuid.New(), uuid.New()
+	chatFailure.operationID, chatFailure.messageID = uuid.New(), newT16MessageID(t)
 	chatFailure.compactMessage = signT16Message(t, chatFailure, fixture.deviceKey, time.Now().UTC())
 	chatAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, chatFailure)
 	chatRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: chatFailure.compactMessage, DeviceAuthorityAssertion: chatAssertion}
@@ -257,7 +253,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	// after the permit. This harness intentionally has no File service, so the
 	// processor must fail closed and terminalize that permit as aborted.
 	fileFailure := fixture
-	fileFailure.operationID, fileFailure.messageID = uuid.New(), uuid.New()
+	fileFailure.operationID, fileFailure.messageID = uuid.New(), newT16MessageID(t)
 	fileFailure.compactMessage = signT16MessageWithAttachments(t, fileFailure, fixture.deviceKey, time.Now().UTC(), []map[string]any{{
 		"byte_length": 17, "content_sha256": strings.Repeat("a", 64), "file_id": uuid.NewString(), "media_type": "text/plain", "object_revision": 1,
 	}})
@@ -279,7 +275,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	// permit is durable. A second real Auth-issued permit has no Messaging receipt
 	// and withholds completion so GIS must exercise its explicit expiry path.
 	revokeRace := fixture
-	revokeRace.operationID, revokeRace.messageID = uuid.New(), uuid.New()
+	revokeRace.operationID, revokeRace.messageID = uuid.New(), newT16MessageID(t)
 	revokeRace.compactMessage = signT16Message(t, revokeRace, fixture.deviceKey, time.Now().UTC())
 	revokeAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, revokeRace)
 	revokeRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: revokeRace.compactMessage, DeviceAuthorityAssertion: revokeAssertion}
@@ -416,7 +412,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.Equal(t, revokeRace.messageID.String(), retained.GetMessage().GetId())
 	require.Equal(t, beforeRetainedRetry, countT16Permits(t, ctx, authDB, gisDB, fixture.bindingID, revokeRace.operationID), "receipt retry after revoke must not call Auth/GIS again")
 	oldAuthorityOperation := fixture
-	oldAuthorityOperation.operationID, oldAuthorityOperation.messageID = uuid.New(), uuid.New()
+	oldAuthorityOperation.operationID, oldAuthorityOperation.messageID = uuid.New(), newT16MessageID(t)
 	oldAuthorityOperation.compactMessage = signT16Message(t, oldAuthorityOperation, fixture.deviceKey, time.Now().UTC())
 	oldAuthorityRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: oldAuthorityOperation.compactMessage, DeviceAuthorityAssertion: assertion}
 	oldAuthorityHash, err := principal.RequestHash(oldAuthorityRequest)
@@ -433,7 +429,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	restoredMapping := seedT16BindingChatMapping(ctx, gisDB, restored)
 	require.NoError(t, restoredMapping)
 	restoreOperation := restored
-	restoreOperation.operationID, restoreOperation.messageID = uuid.New(), uuid.New()
+	restoreOperation.operationID, restoreOperation.messageID = uuid.New(), newT16MessageID(t)
 	restoreOperation.compactMessage = signT16Message(t, restoreOperation, restored.deviceKey, time.Now().UTC())
 	newAuthority, _ := requestT16AuthDeviceAuthority(t, ctx, restoreOperation)
 	restoreRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: restoreOperation.compactMessage, DeviceAuthorityAssertion: newAuthority}
@@ -450,7 +446,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	// The assertion issued before relink remains tied to the revoked binding ID
 	// and cannot authorize a new write after the new binding is active.
 	oldAfterRestore := restored
-	oldAfterRestore.operationID, oldAfterRestore.messageID = uuid.New(), uuid.New()
+	oldAfterRestore.operationID, oldAfterRestore.messageID = uuid.New(), newT16MessageID(t)
 	oldAfterRestore.compactMessage = signT16Message(t, oldAfterRestore, restored.deviceKey, time.Now().UTC())
 	oldAfterRestoreRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: oldAfterRestore.compactMessage, DeviceAuthorityAssertion: assertion}
 	oldAfterRestoreHash, err := principal.RequestHash(oldAfterRestoreRequest)
@@ -492,36 +488,6 @@ type t16BlockingChatGuard struct {
 // t16DiagnosticGameMessageProcessor delegates to the real processor and logs
 // only the underlying error for the one assertion selected by the acceptance
 // test. It adds no authorization behavior or substitute provider seam.
-type t16DiagnosticGameMessageProcessor struct {
-	delegate GameMessageProcessor
-	t        *testing.T
-	mu       sync.Mutex
-	watch    string
-}
-
-func (p *t16DiagnosticGameMessageProcessor) watchAssertion(assertion string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.watch = assertion
-}
-
-func (p *t16DiagnosticGameMessageProcessor) clearWatchedAssertion() {
-	p.watchAssertion("")
-}
-
-func (p *t16DiagnosticGameMessageProcessor) ProcessGameMessage(ctx context.Context, compact, authority string) (*store.MessageRow, error) {
-	row, err := p.delegate.ProcessGameMessage(ctx, compact, authority)
-	if err != nil {
-		p.mu.Lock()
-		watched := authority != "" && authority == p.watch
-		p.mu.Unlock()
-		if watched {
-			p.t.Logf("T16 diagnostic: real game message processor rejected selected request: %v", err)
-		}
-	}
-	return row, err
-}
-
 func (g *t16BlockingChatGuard) arm() { g.armed.Store(true) }
 
 func (g *t16BlockingChatGuard) releaseBarrier() { close(g.release) }
@@ -614,7 +580,7 @@ func seedT16AcceptFixture(t *testing.T, ctx context.Context, authDB, gisDB, user
 	fixture := t16AcceptFixture{appID: uuid.MustParse("00000000-0000-4000-8000-000000000016"),
 		envID: uuid.MustParse("00000000-0000-4000-8000-000000000017"), sourceAccountID: uuid.New(), sourceActorID: uuid.New(),
 		bindingID: uuid.New(), deviceID: uuid.New(), keyID: uuid.New(), targetAccountID: uuid.New(), targetProfileID: uuid.New(),
-		chatID: uuid.New(), messageID: uuid.New(), operationID: uuid.New(), ownerProfileID: uuid.New(), challengeID: uuid.New(), bindingOperationID: uuid.New()}
+		chatID: uuid.New(), messageID: newT16MessageID(t), operationID: uuid.New(), ownerProfileID: uuid.New(), challengeID: uuid.New(), bindingOperationID: uuid.New()}
 	fixture.authorityRevision = 1
 	deviceKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -745,6 +711,13 @@ func postT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16Ac
 
 func signT16Message(t *testing.T, fixture t16AcceptFixture, key *ecdsa.PrivateKey, now time.Time) string {
 	return signT16MessageWithAttachments(t, fixture, key, now, nil)
+}
+
+func newT16MessageID(t *testing.T) uuid.UUID {
+	t.Helper()
+	messageID, err := uuid.NewV7()
+	require.NoError(t, err)
+	return messageID
 }
 
 func signT16MessageWithAttachments(t *testing.T, fixture t16AcceptFixture, key *ecdsa.PrivateKey, now time.Time, attachments []map[string]any) string {
