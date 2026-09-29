@@ -29,6 +29,7 @@ make_leaf() {
 }
 
 make_leaf auth-server auth 'DNS:auth,DNS:localhost,IP:127.0.0.1' serverAuth
+make_leaf auth-principal-jwks auth 'DNS:auth' serverAuth
 make_leaf gis-server gameintegration 'DNS:gameintegration,DNS:localhost,IP:127.0.0.1' serverAuth
 make_leaf gameintegration-client gameintegration 'URI:spiffe://voice/service/gameintegration' clientAuth
 make_leaf messaging-client messaging 'URI:spiffe://voice/service/messaging' clientAuth
@@ -58,6 +59,7 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
 # because the real Go gRPC test process uses it directly.
 chmod 400 \
   "$tls_dir/auth-server.key" \
+  "$tls_dir/auth-principal-jwks.key" \
   "$tls_dir/gis-server.key" \
   "$tls_dir/gameintegration-client.key" \
   "$t16_dir/auth-principal"/*.pem
@@ -100,6 +102,7 @@ fi
 # key so the runner process does not need to read it afterward.
 sudo chown 65532:65532 \
   "$tls_dir/auth-server.key" \
+  "$tls_dir/auth-principal-jwks.key" \
   "$tls_dir/gis-server.key" \
   "$tls_dir/gameintegration-client.key" \
   "$tls_dir/auth-client-ca.p12" \

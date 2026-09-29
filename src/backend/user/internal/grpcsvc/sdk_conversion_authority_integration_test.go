@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -205,38 +206,41 @@ func TestSdkConversionAuthListenerAcceptsOnlyVerifiedAuthWorkloadProof(t *testin
 	ctx := context.Background()
 	pool := startUserPostgresForSubscriptionTests(t, ctx)
 	owner, profileID := uuid.New(), uuid.New()
-	_, err := pool.Exec(ctx, `INSERT INTO profiles (id, account_id, username, username_norm, display_name, is_primary)
-		VALUES ($1, $2, 'authlistener', 'authlistener', 'Auth Listener', true)`, profileID, owner)
+	_, err := pool.Exec(ctx, `INSERT INTO profiles
+		(id, account_id, username, discriminator, display_name, is_primary)
+		VALUES ($1, $2, 'authlistener', '0001', 'Auth Listener', true)`, profileID, owner)
 	require.NoError(t, err)
 
 	redisServer := miniredis.RunT(t)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	const keyID = "t16-user-auth-listener"
-	modulus := base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes())
-	exponent := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes())
-	jwksBody, err := json.Marshal(map[string]any{"keys": []map[string]string{{
-		"kty": "RSA", "use": "sig", "alg": "RS256", "kid": keyID, "n": modulus, "e": exponent,
-	}}})
+	nextKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	const keyID = "t16-user-auth-listener"
+	currentJWK := sdkPrincipalJWK(key, keyID)
+	nextJWK := sdkPrincipalJWK(nextKey, "t16-user-auth-listener-next")
+	jwksBody, err := json.Marshal(map[string]any{"keys": []map[string]string{currentJWK, nextJWK}})
+	require.NoError(t, err)
+	certPEM, keyPEM, caPEM := sdkAuthorityTLSFixture(t)
+	serverCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	require.NoError(t, err)
+	jwksServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(jwksBody)
 	}))
+	jwksServer.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}}
+	jwksServer.StartTLS()
 	t.Cleanup(jwksServer.Close)
 
-	serverCert := jwksServer.TLS.Certificates[0]
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverCert.Certificate[0]})
-	privateDER, err := x509.MarshalPKCS8PrivateKey(serverCert.PrivateKey)
-	require.NoError(t, err)
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})
-	certPath, keyPath := filepath.Join(t.TempDir(), "user-auth.crt"), filepath.Join(t.TempDir(), "user-auth.key")
+	materialDir := t.TempDir()
+	certPath, keyPath, caPath := filepath.Join(materialDir, "user-auth.crt"), filepath.Join(materialDir, "user-auth.key"), filepath.Join(materialDir, "test-ca.crt")
 	require.NoError(t, os.WriteFile(certPath, certPEM, 0600))
 	require.NoError(t, os.WriteFile(keyPath, keyPEM, 0600))
+	require.NoError(t, os.WriteFile(caPath, caPEM, 0600))
 
 	runtime, err := socialprincipal.New(ctx, socialprincipal.Config{
 		Target: "user", Capability: "auth", JWKSURLs: map[string]string{"auth": jwksServer.URL},
-		JWKSCAFile: certPath, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute,
+		JWKSCAFile: caPath, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute,
 		UnknownKIDCooldown: 5 * time.Second, ReplayAddr: redisServer.Addr(),
 		TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: ":0",
 	})
@@ -249,7 +253,7 @@ func TestSdkConversionAuthListenerAcceptsOnlyVerifiedAuthWorkloadProof(t *testin
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop(); _ = listener.Close() })
 	roots := x509.NewCertPool()
-	require.True(t, roots.AppendCertsFromPEM(certPEM))
+	require.True(t, roots.AppendCertsFromPEM(caPEM))
 	conn, err := grpc.NewClient("passthrough:///user-auth-authority",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost"})),
@@ -261,27 +265,68 @@ func TestSdkConversionAuthListenerAcceptsOnlyVerifiedAuthWorkloadProof(t *testin
 	method := userv1.UserService_GetSdkProfileEligibility_FullMethodName
 
 	_, err = client.GetSdkProfileEligibility(ctx, request)
-	require.Equal(t, codes.Unauthenticated, status.Code(err), "missing workload proof must be rejected by the protected listener")
+	require.Equalf(t, codes.Unauthenticated, status.Code(err), "missing workload proof must be rejected by the protected listener: %v", err)
 
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "auth", KeyID: keyID, PrivateKey: key})
 	require.NoError(t, err)
-	callWithProof := func(audience, rpc string) (*userv1.GetSdkProfileEligibilityResponse, error) {
+	proofContext := func(audience, rpc string) context.Context {
 		requestID := uuid.NewString()
 		hash, hashErr := principal.RequestHash(request)
 		require.NoError(t, hashErr)
 		token, issueErr := issuer.IssueService(principal.ServiceInput{Audience: audience, RPC: rpc, RequestID: requestID, RequestHash: hash})
 		require.NoError(t, issueErr)
-		callCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
-		return client.GetSdkProfileEligibility(callCtx, request)
+		return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
 	}
-	_, err = callWithProof("space", method)
+	_, err = client.GetSdkProfileEligibility(proofContext("space", method), request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "wrong-audience Auth proof must be rejected")
 
-	result, err := callWithProof("user", method)
+	validProof := proofContext("user", method)
+	result, err := client.GetSdkProfileEligibility(validProof, request)
 	require.NoError(t, err)
 	require.Equal(t, owner.String(), result.GetAccountId())
 	require.Equal(t, profileID.String(), result.GetProfileId())
 	require.Positive(t, result.GetProfileRevision())
+	_, err = client.GetSdkProfileEligibility(validProof, request)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "replaying the exact signed proof and request ID must be rejected")
+}
+
+func sdkPrincipalJWK(key *rsa.PrivateKey, keyID string) map[string]string {
+	return map[string]string{
+		"kty": "RSA", "use": "sig", "alg": "RS256", "kid": keyID,
+		"n": base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
+		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
+	}
+}
+
+func sdkAuthorityTLSFixture(t *testing.T) ([]byte, []byte, []byte) {
+	t.Helper()
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	caTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "T16 User test CA"},
+		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+		KeyUsage: x509.KeyUsageCertSign, BasicConstraintsValid: true, IsCA: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+	leafKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	leafTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "localhost"},
+		NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caTemplate, &leafKey.PublicKey, caKey)
+	require.NoError(t, err)
+	privateDER, err := x509.MarshalPKCS8PrivateKey(leafKey)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 }
 
 // SourceActorId is an Auth SDK actor alias. User deliberately has no source

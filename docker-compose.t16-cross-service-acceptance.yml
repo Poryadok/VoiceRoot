@@ -53,6 +53,43 @@ services:
       - "127.0.0.1:18080:8080"
       - "127.0.0.1:19443:9443"
 
+  t16-auth-principal-ca-bundle:
+    profiles: ["app"]
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cat /base/ca.crt /run/t16/ca.crt > /bundle/ca.crt && chmod 644 /bundle/ca.crt"]
+    volumes:
+      - social_principal_ca:/base:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/ca.crt:/run/t16/ca.crt:ro
+      - t16_auth_principal_ca:/bundle
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
+
+  auth-principal-jwks:
+    profiles: ["app"]
+    image: node:24-alpine
+    network_mode: "service:auth"
+    command: ["node", "/run/t16/t16-auth-principal-jwks-proxy.mjs"]
+    volumes:
+      - ./scripts/ci/t16-auth-principal-jwks-proxy.mjs:/run/t16/t16-auth-principal-jwks-proxy.mjs:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-principal-jwks.crt:/run/t16/auth-principal-jwks.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-principal-jwks.key:/run/t16/auth-principal-jwks.key:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/ca.crt:/run/t16/ca.crt:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('node:fs'),https=require('node:https');const r=https.get({hostname:'auth',port:9444,path:'/health',ca:fs.readFileSync('/run/t16/ca.crt')},s=>process.exit(s.statusCode===200?0:1));r.on('error',()=>process.exit(1));"
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 2s
+
   gameintegration:
     environment:
       GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${T16_AUTH_WORKLOAD_KEY_B64:?required}
@@ -81,7 +118,16 @@ services:
       USER_AUTH_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       USER_AUTH_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       USER_AUTH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json","search":"https://search:8443/.well-known/jwks.json","auth":"http://auth:8080/api/v1/auth/.well-known/principal-jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","file":"https://file:8443/.well-known/jwks.json","search":"https://search:8443/.well-known/jwks.json","auth":"https://auth:9444/api/v1/auth/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/t16/principal-ca/ca.crt
+    volumes:
+      - t16_auth_principal_ca:/run/t16/principal-ca:ro
+    depends_on:
+      t16-auth-principal-ca-bundle:
+        condition: service_completed_successfully
+      auth-principal-jwks:
+        condition: service_healthy
 
 volumes:
   social_principal_ca: {}
+  t16_auth_principal_ca: {}
