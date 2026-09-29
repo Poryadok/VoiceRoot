@@ -439,10 +439,12 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingGISRows))
 	require.Equal(t, 1, pendingAuthRows, "Auth retry must retain one durable permit")
 	require.Equal(t, 1, pendingGISRows, "GIS retry must retain one durable permit")
-	var pendingExpiryBefore, pendingExpiryAfter time.Time
-	require.NoError(t, authDB.QueryRow(ctx, `SELECT expires_at FROM sdk_game_message_execution_permits WHERE operation_id=$1`, pendingOperationID).Scan(&pendingExpiryBefore))
+	var pendingExpiryBeforeMS int64
+	var pendingExpiryAfter time.Time
+	require.NoError(t, authDB.QueryRow(ctx, `SELECT expires_at_ms FROM sdk_game_message_execution_permits WHERE operation_id=$1`, pendingOperationID).Scan(&pendingExpiryBeforeMS))
+	pendingExpiryBefore := time.UnixMilli(pendingExpiryBeforeMS).UTC()
 	require.NoError(t, gisDB.QueryRow(ctx, `SELECT expires_at FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingExpiryAfter))
-	require.Equal(t, pendingExpiryBefore, pendingExpiryAfter, "Auth and GIS must persist the same fixed permit expiry")
+	require.Equal(t, pendingExpiryBefore, pendingExpiryAfter.Truncate(time.Millisecond).UTC(), "Auth and GIS must persist the same fixed permit expiry to the signed millisecond precision")
 	var pendingPermitStatus string
 	var pendingExpiresAt time.Time
 	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status,expires_at FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingPermitStatus, &pendingExpiresAt))
