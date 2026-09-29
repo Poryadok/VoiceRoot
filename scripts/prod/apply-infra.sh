@@ -145,6 +145,7 @@ sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \
     -e "s|__VOICE_MINIO_STORAGE_CLASS__|${MINIO_STORAGE_CLASS}|g" \
     -e "s|__VOICE_MINIO_STORAGE_SIZE__|${MINIO_STORAGE_SIZE}|g" \
+    -e "s|__WEB_ORIGIN__|https://${VOICE_WEB_INGRESS_HOST}|g" \
   "${MANIFEST_DIR}/minio.yaml" | kubectl apply -f -
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s

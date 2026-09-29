@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,9 +20,9 @@ import (
 )
 
 const (
-	MaxFreeFileBytes     = 50 * 1024 * 1024
-	MaxPremiumFileBytes  = 200 * 1024 * 1024
-	DefaultURLTTL        = time.Hour
+	MaxFreeFileBytes    = 50 * 1024 * 1024
+	MaxPremiumFileBytes = 200 * 1024 * 1024
+	DefaultURLTTL       = time.Hour
 )
 
 type PutPresignInput struct {
@@ -48,6 +49,7 @@ type ObjectReader interface {
 
 type S3R2Config struct {
 	Endpoint        string
+	SigningEndpoint string
 	Region          string
 	AccessKeyID     string
 	SecretAccessKey string
@@ -63,6 +65,7 @@ type S3R2Presigner struct {
 func EnvConfigFromOSEnv() S3R2Config {
 	return S3R2Config{
 		Endpoint:        strings.TrimSpace(os.Getenv("FILE_R2_ENDPOINT")),
+		SigningEndpoint: strings.TrimSpace(os.Getenv("FILE_R2_SIGNING_ENDPOINT")),
 		Region:          strings.TrimSpace(os.Getenv("FILE_R2_REGION")),
 		AccessKeyID:     strings.TrimSpace(os.Getenv("FILE_R2_ACCESS_KEY_ID")),
 		SecretAccessKey: strings.TrimSpace(os.Getenv("FILE_R2_SECRET_ACCESS_KEY")),
@@ -90,10 +93,23 @@ func NewS3R2Presigner(cfg S3R2Config) (*S3R2Presigner, error) {
 		o.BaseEndpoint = aws.String(strings.TrimRight(endpoint, "/"))
 		o.UsePathStyle = true
 	})
+	signingEndpoint := strings.TrimSpace(cfg.SigningEndpoint)
+	if signingEndpoint == "" {
+		signingEndpoint = endpoint
+	} else {
+		u, err := url.Parse(signingEndpoint)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			return nil, fmt.Errorf("r2file: signing endpoint must be an HTTPS origin")
+		}
+	}
+	signingClient := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(strings.TrimRight(signingEndpoint, "/"))
+		o.UsePathStyle = true
+	})
 	return &S3R2Presigner{
 		bucket:        bucket,
 		client:        client,
-		presignClient: s3.NewPresignClient(client),
+		presignClient: s3.NewPresignClient(signingClient),
 	}, nil
 }
 
@@ -171,8 +187,9 @@ func (p *S3R2Presigner) PresignGet(ctx context.Context, in GetPresignInput) (str
 		ttl = DefaultURLTTL
 	}
 	out, err := p.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(p.bucket),
-		Key:    aws.String(key),
+		Bucket:               aws.String(p.bucket),
+		Key:                  aws.String(key),
+		ResponseCacheControl: aws.String("no-store"),
 	}, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", err
