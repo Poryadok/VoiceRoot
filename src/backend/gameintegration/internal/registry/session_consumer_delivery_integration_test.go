@@ -31,7 +31,7 @@ func createActiveSessionEventForDeliveryTest(t *testing.T, ctx context.Context, 
 
 func TestSessionEventOutboxPersistsTheSevenFieldBodyBytesAndDigest(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	sessionID := createActiveSessionEventForDeliveryTest(t, ctx, store, p, "delivery-exact-bytes")
 
 	var eventID, applicationID, environmentID, savedSessionID, operationID uuid.UUID
@@ -75,10 +75,8 @@ func TestSessionEventOutboxPersistsTheSevenFieldBodyBytesAndDigest(t *testing.T)
 
 func TestSessionEventClaimIsAppEnvironmentScopedAndConcurrentClaimsAreExclusive(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
-	appA, appB := uuid.New(), uuid.New()
-	envA, envB := uuid.New(), uuid.New()
-	pA := SessionPrincipal{ApplicationID: appA, EnvironmentID: envA, Scopes: []string{"game.sessions.manage"}}
-	pB := SessionPrincipal{ApplicationID: appB, EnvironmentID: envB, Scopes: []string{"game.sessions.manage"}}
+	pA := newT31TestSessionPrincipal(t, ctx, store)
+	pB := newT31TestSessionPrincipal(t, ctx, store)
 	sessionA := createActiveSessionEventForDeliveryTest(t, ctx, store, pA, "claim-a")
 	secondSessionA := createActiveSessionEventForDeliveryTest(t, ctx, store, pA, "claim-a-second")
 	sessionB := createActiveSessionEventForDeliveryTest(t, ctx, store, pB, "claim-b")
@@ -128,7 +126,7 @@ func TestSessionEventClaimIsAppEnvironmentScopedAndConcurrentClaimsAreExclusive(
 
 func TestSessionEventLeaseExpiryReclaimsIdenticalBytesWithNewLeaseAndACKIsDigestBound(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	sessionID := createActiveSessionEventForDeliveryTest(t, ctx, store, p, "claim-expiry")
 	first, err := store.ClaimSessionEvent(ctx, p)
 	require.NoError(t, err)
@@ -175,7 +173,7 @@ func TestSessionEventLeaseExpiryReclaimsIdenticalBytesWithNewLeaseAndACKIsDigest
 
 func TestSessionEventReceiverCommitLostAckExpiryReclaimAndNewLeaseAck(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	sessionID := createActiveSessionEventForDeliveryTest(t, ctx, store, p, "receiver-ack-reclaim")
 	receiverPool := integrationtest.StartPostgres(t, ctx, "controlled_game_t31_inbox_test_db", "")
 	_, err := receiverPool.Exec(ctx, `CREATE TABLE session_event_inbox (
@@ -284,7 +282,7 @@ func TestSessionEventReceiverCommitLostAckExpiryReclaimAndNewLeaseAck(t *testing
 
 func TestSessionEventAckCommittedResponseLostRetriesSameAckSuccessfully(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	sessionID := createActiveSessionEventForDeliveryTest(t, ctx, store, p, "receiver-lost-successful-ack")
 	receiverPool := integrationtest.StartPostgres(t, ctx, "controlled_game_t31_lost_ack_test_db", "")
 	_, err := receiverPool.Exec(ctx, `CREATE TABLE session_event_inbox (

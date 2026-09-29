@@ -13,7 +13,7 @@ func TestSessionOwnerRetryDelayUsesExponentialBackoffCappedAtThirtySeconds(t *te
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
 	owners.blocked["chat_create"] = true
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	o := NewSessionOrchestrator(store, owners.adapters())
 	input := CreateSessionInput{
 		OperationID: uuid.New(), Kind: "party", ExternalKey: "retry-backoff",
@@ -85,7 +85,7 @@ func TestSessionOwnerRetryDelayUsesExponentialBackoffCappedAtThirtySeconds(t *te
 func TestSessionWorkerRestartReclaimsRealFiveSecondLeaseWithinSixSeconds(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	o := NewSessionOrchestrator(store, owners.adapters())
 	accepted, err := o.CreateSession(ctx, p, CreateSessionInput{
 		OperationID: uuid.New(), Kind: "party", ExternalKey: "restart-real-lease",

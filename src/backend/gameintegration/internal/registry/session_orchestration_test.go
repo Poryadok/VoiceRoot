@@ -94,12 +94,20 @@ func startT31SessionStore(t *testing.T) (*Store, context.Context) {
 	return &Store{Pool: pool}, ctx
 }
 
+func newT31TestSessionPrincipal(t *testing.T, ctx context.Context, store *Store) SessionPrincipal {
+	t.Helper()
+	applicationID, environmentID := createBindingTestEnvironment(t, ctx, store)
+	return SessionPrincipal{
+		ApplicationID: applicationID,
+		EnvironmentID: environmentID,
+		Scopes:        []string{"game.sessions.manage"},
+	}
+}
+
 func TestSessionOrchestratorWaitsForEveryOwnerReceiptBeforeAtomicActiveOutbox(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
-	principal := SessionPrincipal{
-		ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"},
-	}
+	principal := newT31TestSessionPrincipal(t, ctx, store)
 	orchestrator := NewSessionOrchestrator(store, owners.adapters())
 	request := CreateSessionInput{
 		OperationID: uuid.New(), Kind: "match", ExternalKey: "match-red-1", DisplayName: "Match one",
@@ -226,9 +234,7 @@ func stageAfterOwnerReceipt(owner string) string {
 func TestParentedChildKeepsPartyChatAndReceiptsAfterClose(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
-	principal := SessionPrincipal{
-		ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"},
-	}
+	principal := newT31TestSessionPrincipal(t, ctx, store)
 	orchestrator := NewSessionOrchestrator(store, owners.adapters())
 	partyMembers := []uuid.UUID{uuid.New()}
 

@@ -12,7 +12,7 @@ import (
 func TestSessionCloseAndPermanentFailureHaveOneTerminalizationWinner(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	o := NewSessionOrchestrator(store, owners.adapters())
 	created, err := o.CreateSession(ctx, p, CreateSessionInput{OperationID: uuid.New(), Kind: "party", ExternalKey: "terminal-race", DisplayName: "Raid", RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{}})
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func firstSessionTerminalizer(ctx context.Context, store *Store, session uuid.UU
 func TestSessionWorkerRestartReclaimsExpiredStageLease(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
 	owners := newSessionOwnerScript()
-	p := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New(), Scopes: []string{"game.sessions.manage"}}
+	p := newT31TestSessionPrincipal(t, ctx, store)
 	o := NewSessionOrchestrator(store, owners.adapters())
 	accepted, err := o.CreateSession(ctx, p, CreateSessionInput{OperationID: uuid.New(), Kind: "party", ExternalKey: "restart-lease", DisplayName: "Raid", RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{}})
 	require.NoError(t, err)
