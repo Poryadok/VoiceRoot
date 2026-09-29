@@ -238,7 +238,11 @@ preflight_proof_resources() {
 cleanup_proof_resources() {
   local result="$1" name="$2" kind response cleanup_failed=0
   trap - EXIT
-  for kind in job networkpolicy secret; do
+  # Foreground deletion waits for the proof Pod to disappear before its
+  # credential Secret or network exception can be removed.
+  kubectl delete job "$name" -n "$NS" --cascade=foreground --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
+    cleanup_failed=1
+  for kind in networkpolicy secret; do
     kubectl delete "$kind" "$name" -n "$NS" --ignore-not-found=true --wait=true >/dev/null 2>&1 ||
       cleanup_failed=1
   done
