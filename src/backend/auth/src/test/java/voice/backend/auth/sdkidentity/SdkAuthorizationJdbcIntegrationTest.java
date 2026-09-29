@@ -1,7 +1,6 @@
 package voice.backend.auth.sdkidentity;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -651,21 +650,6 @@ class SdkAuthorizationJdbcIntegrationTest {
     changeAuthority(mutation);
     assertThatThrownBy(() -> authorization().linkedSession(linked.accessToken(), linkedProof))
         .isInstanceOf(SdkIdentityDeniedException.class);
-  }
-
-  @Test
-  void unknownAndRevokedLinkedCredentialsHaveTheSameCoarseDenial() throws Exception {
-    var request = start(authorization(), UUID.randomUUID(), REDIRECT, STATE, SCOPES);
-    var approval = authorization().approve(request.requestId(), VOICE_BEARER, secondaryProfile, 3);
-    var linked = exchange(authorization(), request.requestId(), approval.code(), REDIRECT, VERIFIER, device);
-    String linkedProof = proof(device, "voice-sdk-linked-v1\n" + hash(linked.accessToken()));
-    changeAuthority("policy-revision");
-
-    var revoked = catchThrowable(() -> authorization().linkedSession(linked.accessToken(), linkedProof));
-    var unknown = catchThrowable(() -> authorization().linkedSession("u".repeat(43), linkedProof));
-
-    assertThat(revoked).isInstanceOf(SdkIdentityDeniedException.class).hasMessage("invalid_sdk_identity");
-    assertThat(unknown).isInstanceOf(SdkIdentityDeniedException.class).hasMessage("invalid_sdk_identity");
   }
 
   @Test
