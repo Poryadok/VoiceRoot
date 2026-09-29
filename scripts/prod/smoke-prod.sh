@@ -9,4 +9,5 @@ source "${ROOT}/scripts/prod/load-prod-domains.sh"
 source "${ROOT}/scripts/prod/map-prod-env.sh"
 
 export VOICE_STAGING_URL="https://${VOICE_GATEWAY_INGRESS_HOST}"
+export VOICE_K8S_NAMESPACE="${VOICE_K8S_NAMESPACE:-voice-prod}"
 bash "${ROOT}/scripts/staging/smoke-staging.sh"

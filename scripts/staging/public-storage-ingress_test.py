@@ -72,6 +72,24 @@ class PublicStorageIngressTest(unittest.TestCase):
             render = (ROOT / path).read_text(encoding="utf-8")
             self.assertIn("VOICE_STORAGE_INGRESS_HOST", render)
 
+    def test_storage_ingress_is_ready_before_any_rollout_changes_signers(self):
+        for path in ("scripts/staging/render-and-apply.sh", "scripts/prod/render-and-apply-prod.sh"):
+            rollout = (ROOT / path).read_text(encoding="utf-8")
+            for mode in ("images-only)", "app-only)", "full|*)"):
+                branch = rollout.split(mode, 1)[1].split(";;", 1)[0]
+                ingress = branch.index("apply-gateway-ingress.sh")
+                for mutation in ("rollout-subset.sh", "deploy-changed.sh", "apply-signing-env.sh", "apply-app-manifests.sh"):
+                    if mutation in branch:
+                        self.assertLess(ingress, branch.index(mutation), (path, mode, mutation))
+        for path in ("scripts/staging/apply-gateway-ingress.sh", "scripts/prod/apply-gateway-ingress.sh"):
+            apply = (ROOT / path).read_text(encoding="utf-8")
+            self.assertLess(apply.index("storage TLS Secret missing"), apply.index('"${ROOT}/deploy/gateway/ingress.yaml" | kubectl apply'))
+
+    def test_production_smoke_uses_production_namespace(self):
+        smoke = (ROOT / "scripts/prod/smoke-prod.sh").read_text(encoding="utf-8")
+        self.assertIn('export VOICE_K8S_NAMESPACE="${VOICE_K8S_NAMESPACE:-voice-prod}"', smoke)
+        self.assertLess(smoke.index('export VOICE_K8S_NAMESPACE='), smoke.index('smoke-staging.sh'))
+
 
 if __name__ == "__main__":
     unittest.main()

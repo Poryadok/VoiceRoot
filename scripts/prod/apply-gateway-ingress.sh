@@ -28,14 +28,6 @@ for bucket in "${FILE_BUCKET}" "${AVATAR_BUCKET}"; do
   [[ "${bucket}" =~ ^[a-z0-9][a-z0-9.-]*[a-z0-9]$ ]] || { echo "invalid storage bucket in voice-app-secrets" >&2; exit 1; }
 done
 
-echo "Applying gateway Ingress: host=${INGRESS_HOST} namespace=${NS} tls=${TLS}"
-sed -e "s|__K_NAMESPACE__|${NS}|g" \
-    -e "s|__INGRESS_HOST__|${INGRESS_HOST}|g" \
-    -e "s|__TLS_SECRET_NAME__|${TLS}|g" \
-    -e "s|__FILE_BUCKET__|${FILE_BUCKET}|g" \
-    -e "s|__AVATAR_BUCKET__|${AVATAR_BUCKET}|g" \
-  "${ROOT}/deploy/gateway/ingress.yaml" | kubectl apply -f -
-
 if [ -n "${VOICE_STORAGE_INGRESS_HOST:-}" ]; then
   storage_tls="${VOICE_STORAGE_TLS_SECRET:-voice-storage-tls}"
   [ "$(kubectl get secret "${storage_tls}" -n "${NS}" -o 'jsonpath={.type}')" = 'kubernetes.io/tls' ] || {
@@ -49,3 +41,11 @@ if [ -n "${VOICE_STORAGE_INGRESS_HOST:-}" ]; then
       -e "s|__AVATAR_BUCKET__|${AVATAR_BUCKET}|g" \
     "${ROOT}/deploy/storage/ingress.yaml" | kubectl apply -f -
 fi
+
+echo "Applying gateway Ingress: host=${INGRESS_HOST} namespace=${NS} tls=${TLS}"
+sed -e "s|__K_NAMESPACE__|${NS}|g" \
+    -e "s|__INGRESS_HOST__|${INGRESS_HOST}|g" \
+    -e "s|__TLS_SECRET_NAME__|${TLS}|g" \
+    -e "s|__FILE_BUCKET__|${FILE_BUCKET}|g" \
+    -e "s|__AVATAR_BUCKET__|${AVATAR_BUCKET}|g" \
+  "${ROOT}/deploy/gateway/ingress.yaml" | kubectl apply -f -
