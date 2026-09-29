@@ -269,7 +269,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.Equal(t, 5, workloadNonceDelta,
 		"positive request should use one mapping proof, two Auth policy preflight proofs, one permit issue proof, and one completion proof")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
-	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
+	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetChat().GetId())
 	var authPermitID, gisPermitID uuid.UUID
 	var authOutcome string
 	var authReceipt []byte
