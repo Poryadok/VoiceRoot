@@ -27,6 +27,7 @@ var proofPublish = []string{
 var proofSubscribe = []string{"_INBOX.voice.nats-proof.>"}
 
 func TestIssueProofCredentialExactGrantsAndShortExpiry(t *testing.T) {
+	requireLinuxProofHost(t)
 	account, public, seedPath, bundlePath := proofFixture(t, "r20260930a1")
 	_ = account
 	output := protectedOutputPath(t)
@@ -81,6 +82,7 @@ func TestIssueProofCredentialExactGrantsAndShortExpiry(t *testing.T) {
 }
 
 func TestIssueProofCredentialWithPublicKeyInsteadOfBundle(t *testing.T) {
+	requireLinuxProofHost(t)
 	_, public, seedPath, _ := proofFixture(t, "legacy")
 	output := protectedOutputPath(t)
 	now := time.Now().Truncate(time.Second)
@@ -112,6 +114,7 @@ func issueProofCredentialWithoutOverwrite(opts proofOptions, now time.Time) erro
 }
 
 func TestProofCredentialRejectsIdentityAndDurationErrorsBeforeOutput(t *testing.T) {
+	requireLinuxProofHost(t)
 	_, public, seedPath, bundlePath := proofFixture(t, "legacy")
 	_, _, otherSeed, otherBundle := proofFixture(t, "legacy")
 	now := time.Now().Truncate(time.Second)
@@ -144,6 +147,7 @@ func TestProofCredentialRejectsIdentityAndDurationErrorsBeforeOutput(t *testing.
 }
 
 func TestReadOnlyPreflightRejectsBroadOrUntrustedCredentials(t *testing.T) {
+	requireLinuxProofHost(t)
 	account, _, seedPath, bundlePath := proofFixture(t, "r20260930a1")
 	_, _, _, wrongBundle := proofFixture(t, "r20260930a1")
 	now := time.Now().Truncate(time.Second)
@@ -183,6 +187,7 @@ func TestReadOnlyPreflightRejectsBroadOrUntrustedCredentials(t *testing.T) {
 }
 
 func TestProofCredentialCLIPrintsOnlyExpiryMetadata(t *testing.T) {
+	requireLinuxProofHost(t)
 	_, _, seedPath, bundlePath := proofFixture(t, "legacy")
 	output := protectedOutputPath(t)
 	now := time.Now().Truncate(time.Second)
@@ -241,6 +246,37 @@ func protectedOutputPath(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return filepath.Join(dir, "proof.creds")
+}
+
+func requireLinuxProofHost(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("proof credential operations require Linux filesystem permissions")
+	}
+}
+
+func TestProofCredentialRejectsNonLinuxHost(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("non-Linux refusal contract")
+	}
+	account, _, seedPath, bundlePath := proofFixture(t, "r20260930a1")
+	now := time.Now().Truncate(time.Second)
+	output := protectedOutputPath(t)
+	issue := proofOptions{Namespace: "voice-staging", Generation: "r20260930a1", AccountSeed: seedPath, Bundle: bundlePath, Output: output, TTL: time.Hour}
+	if _, err := issueProofCredential(issue, now); err == nil {
+		t.Fatal("proof credential issuance succeeded on non-Linux host")
+	}
+	if _, err := os.Stat(output); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("non-Linux issuance wrote output: %v", err)
+	}
+	credential := filepath.Join(t.TempDir(), "proof.creds")
+	if err := os.WriteFile(credential, []byte(signedProofCreds(t, account, now, proofPublish, proofSubscribe)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	check := proofOptions{Namespace: "voice-staging", Generation: "r20260930a1", Bundle: bundlePath, Credential: credential, MinValidity: 30 * time.Minute}
+	if err := checkProofCredential(check, now); err == nil {
+		t.Fatal("proof credential preflight succeeded on non-Linux host")
+	}
 }
 
 func proofFixture(t *testing.T, generation string) (nkeys.KeyPair, string, string, string) {

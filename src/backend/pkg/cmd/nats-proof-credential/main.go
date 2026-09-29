@@ -193,6 +193,9 @@ func accountPublic(opts proofOptions, requireBundle bool) (string, error) {
 }
 
 func issueProofCredential(opts proofOptions, now time.Time) (expiry time.Time, resultErr error) {
+	if runtime.GOOS != "linux" {
+		return time.Time{}, errors.New("proof issuance requires Linux filesystem permissions")
+	}
 	if err := validateTarget(opts); err != nil {
 		return time.Time{}, err
 	}
@@ -276,6 +279,9 @@ func issueProofCredential(opts proofOptions, now time.Time) (expiry time.Time, r
 }
 
 func checkProofCredential(opts proofOptions, now time.Time) error {
+	if runtime.GOOS != "linux" {
+		return errors.New("proof preflight requires Linux filesystem permissions")
+	}
 	if err := validateTarget(opts); err != nil {
 		return err
 	}
