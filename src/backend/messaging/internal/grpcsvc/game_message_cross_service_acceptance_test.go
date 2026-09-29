@@ -214,7 +214,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	chatFailure := fixture
 	chatFailure.operationID, chatFailure.messageID = uuid.New(), uuid.New()
 	chatFailure.compactMessage = signT16Message(t, chatFailure, fixture.deviceKey, time.Now().UTC())
-		chatAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, chatFailure)
+	chatAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, chatFailure)
 	chatRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: chatFailure.compactMessage, DeviceAuthorityAssertion: chatAssertion}
 	chatHash, err := principal.RequestHash(chatRequest)
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	fileFailure.compactMessage = signT16MessageWithAttachments(t, fileFailure, fixture.deviceKey, time.Now().UTC(), []map[string]any{{
 		"byte_length": 17, "content_sha256": strings.Repeat("a", 64), "file_id": uuid.NewString(), "media_type": "text/plain", "object_revision": 1,
 	}})
-		fileAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, fileFailure)
+	fileAssertion, _ := requestT16AuthDeviceAuthority(t, ctx, fileFailure)
 	fileRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: fileFailure.compactMessage, DeviceAuthorityAssertion: fileAssertion}
 	fileHash, err := principal.RequestHash(fileRequest)
 	require.NoError(t, err)
@@ -693,6 +693,8 @@ func signT16Message(t *testing.T, fixture t16AcceptFixture, key *ecdsa.PrivateKe
 
 func signT16MessageWithAttachments(t *testing.T, fixture t16AcceptFixture, key *ecdsa.PrivateKey, now time.Time, attachments []map[string]any) string {
 	t.Helper()
+	issuedAt := now.UTC().Truncate(time.Second)
+	expiresAt := issuedAt.Add(5 * time.Minute)
 	content := []byte("T16 synthetic message")
 	contentHash := sha256.Sum256(content)
 	var manifest any
@@ -709,8 +711,8 @@ func signT16MessageWithAttachments(t *testing.T, fixture t16AcceptFixture, key *
 		"account_id": fixture.sourceAccountID.String(), "actor_id": fixture.sourceActorID.String(), "binding_id": fixture.bindingID.String(),
 		"device_id": fixture.deviceID.String(), "operation_id": fixture.operationID.String(), "authority_revision": fixture.authorityRevision,
 		"chat_id": fixture.chatID.String(), "message_id": fixture.messageID.String(), "revision": 1,
-		"previous_revision_hash": nil, "issued_at": now.Add(-time.Second).UTC().Truncate(time.Second).Format(time.RFC3339),
-		"expires_at": now.Add(5 * time.Minute).UTC().Truncate(time.Second).Format(time.RFC3339), "content_type": "text/plain",
+		"previous_revision_hash": nil, "issued_at": issuedAt.Format(time.RFC3339),
+		"expires_at": expiresAt.Format(time.RFC3339), "content_type": "text/plain",
 		"content_b64": base64.RawURLEncoding.EncodeToString(content), "content_sha256": hex.EncodeToString(contentHash[:]),
 		"attachment_manifest_b64": manifest, "attachment_manifest_sha256": manifestHash}
 	payload, err := json.Marshal(claims)
