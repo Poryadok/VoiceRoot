@@ -93,6 +93,9 @@ func parseForwardedDeviceAuthority(raw []byte) (registry.GameDeviceAuthorityClai
 		return empty, deviceAuthorityClaims
 	}
 	issuer, err := rawString(payload["iss"])
+	if err != nil {
+		return empty, deviceAuthorityIssuerAudience
+	}
 	audience, err := rawString(payload["aud"])
 	if err != nil || issuer != "auth" || audience != "voice.game-message" {
 		return empty, deviceAuthorityIssuerAudience
