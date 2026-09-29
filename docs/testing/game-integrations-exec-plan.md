@@ -202,7 +202,7 @@ contracts land before consumers; activation lands after all consumers.
     login/conversion and every public payload. Tests Q07/ID cases; consumers
     T14, T17–T19, T38–T39. Full adopted defaults and acceptance cases are in the
     [T03 cross-cutting API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
-- [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
+- [x] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
   The executable cross-authority and SQL-tamper cases are listed in the
@@ -210,7 +210,10 @@ contracts land before consumers; activation lands after all consumers.
   The principal matrix, including the 90-day absolute `vgi1` TTL and atomic
   T11 HMAC replacement rule, is frozen in
   [Game Integration API](../architecture/game-integration-api.md#t04-principal-trust-matrix).
-  Contract is frozen; full GIS/Bot module verification and exact-head CI remain pending.
+  Contract and implementation verification are complete: PR #562 is merged;
+  exact-head hosted CI and the full rollup passed at merge
+  `865210494e5056ce38240272678ef6f9f21778a9`. This evidence closes T04 only;
+  it does not close dependent runtime gates.
   - [x] T04-AUTH: the Auth-only provider/ticket issuers, audiences, key sources,
     proof binding, storage boundary, freshness and replay rules are frozen in
     GAME-AUTH-01 for T13a. Google proof and app/env game-ticket proof are
@@ -278,10 +281,13 @@ contracts land before consumers; activation lands after all consumers.
 - [ ] **T07c** `D: T03,T06,T36,T40` Build real-media clients only after the P2
   LiveKit/media and public-client acceptance paths exist. These are test
   infrastructure, not a public SDK.
-- [ ] **T08** `D: T03` Define measured targets and harness: revocation clocks,
-  game→Voice roster latency, lease/skew/eject budget, retry/retention windows,
-  RPO/RTO, host/runtime/version matrix, concurrency and capacity. Separate
-  target, measurement method and observed result.
+- [ ] **T08** `D: T03` Define the measurement record and harness for revocation,
+  roster freshness, lease/skew/eject, retry/retention, restore RPO/RTO, and
+  qualified-host load. For each item keep the contractual target, provisional
+  qualification profile (if any), method, and observed result/status separate.
+  No host SKU, general GIS route threshold, new latency/capacity/cost/SLA target,
+  or measured Q12 result is adopted here. T03 freezes the measurement inputs;
+  T08 supplies the evidence contract and T93 consumes it for runtime evidence.
 
 ### P1 — developer bootstrap and player identity
 

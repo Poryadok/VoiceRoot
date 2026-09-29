@@ -262,6 +262,34 @@ costs and supported hardware before production admission. Retry/retention values
 and G08/G09/G13 bounds keep their owning contracts and evidence gates; price/SLA
 is not inferred from using one service instance.
 
+#### Q12 measurement record and status
+
+Keep three fields distinct in every report: **contractual target** (a bound
+already adopted by its owning contract), **provisional qualification profile**
+(the planning values above, not a product promise), and **observed result**.
+For each observation record `PASS`, `FAIL`, or `NOT RUN`; never promote a
+provisional value to a measured result. `NOT RUN` includes work blocked on an
+unselected qualified host or missing runtime evidence.
+
+The report must capture: exact source commit SHA; component, API/schema,
+database, host OS/runtime, container engine and image versions; host model/SKU
+and topology when selected; warm/cold state; run start/end and configuration;
+load and fault profile; population; source locations/IDs for raw observations;
+start and stop event IDs; monotonic elapsed durations per host; and clock
+uncertainty for cross-host comparisons. Include each repetition and the
+reported statistic when available. For restore, include backup identity,
+failure-injection event, latest recovered committed one-minute canary, readiness
+event, and successful scoped read/write check IDs. Keep missing fields explicitly
+`UNKNOWN` and unperformed measurements `NOT RUN`; hosted CI does not establish
+real-media eject, restore RPO/RTO, or provider proof.
+
+OPS02 has one already adopted enforcement value: the installation callback
+registration limiter is 120 attempts per application per UTC minute, shared
+across that app's environments, with the documented 429/Retry-After and minute
+rollover behavior. This is not a general GIS route-capacity or tenant-isolation
+threshold. Those targets remain `OPEN` until a qualified host and workload are
+chosen; any future observations use the same report fields above.
+
 До GI8/GI9: зафиксировать измеримые значения, платформы мессенджера для проверки
 и политику несовместимого upgrade. Нельзя считать media verifier реализуемым
 только потому, что LiveKit выдаёт JWT: FED10 обязан доказать fencing на media

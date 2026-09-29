@@ -135,6 +135,16 @@ target, not a measured runtime claim. FED02/FED03/Q06 must measure each interval
 under 2x the qualified event/snapshot load and show that unrelated Spaces remain
 available.
 
+For each measurement, start at the durable commit of the owning-authority
+mutation and retain its event ID. Record commit→new-revision publication/deny
+trigger and deny-trigger→final media delivery stop as separate durations. Record
+command drain from its own start/stop events against the stricter 4.25-second
+bound; drain completion is not a substitute for media delivery stop. Use
+monotonic durations per host, retain event IDs, and include clock uncertainty
+for cross-host comparisons. Exercise stale bearer reconnect after authority
+expiry while the control plane is unavailable. Until qualified media runtime
+evidence exists, actual media eject remains `OPEN` / `NOT RUN`.
+
 ## Storage, runtime and activation
 
 `federation_db` owns nodes, placements, current snapshots, lease nonces and schema
