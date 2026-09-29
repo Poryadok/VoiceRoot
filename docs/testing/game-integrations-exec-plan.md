@@ -342,6 +342,22 @@ contracts land before consumers; activation lands after all consumers.
   error code is introduced. This completes only the Auth→User prerequisite;
   the broader T14 browser/device authorization work and operational rollout
   remain pending.
+  - [ ] **T14-DEV** `D: T13-DEV,T10,T04-AUTH,T06-AUTH` Close the bounded,
+    provider-independent development vertical for explicit Voice profile and
+    scope consent: Auth authorization request, PKCE callback/exchange and
+    returning linked-session; current User profile eligibility/revision check;
+    and GIS persisted binding challenge plus one-use Auth-code exchange. The
+    implementation is present at the feature base, with existing Auth, GIS,
+    and Flutter test sources mapped in [T14-DEV acceptance](game-integrations-acceptance.md#t14-dev-source-and-test-map).
+    Auth's full Maven suite passed 890 tests with 0 failures/errors/skips at
+    `7dd013ce551867074ab148dabaedfd30c1f83478`; the Auth, GIS binding, and
+    Flutter authorization source/test files in this slice are unchanged at
+    feature base `213fd1bae14b0145604953f8f36c90f45a9c350f`. Exact-head hosted
+    Auth/GIS/Flutter checks for `94dde2986d0024a48c65e77f3e6c98bb175418d6`
+    are still pending, so leave this subgate unchecked until all three finish
+    green. This development subgate does not close parent T14, publish Auth
+    routes through Gateway, prove real-provider behavior, or pass production
+    admission; those gates remain open.
 - [ ] **T15** `D: T13,T14` Implement the frozen Auth-owned ES256/P-256 device
   key lifecycle, RFC 8785/JWS v1 message bytes, Auth RS256 status assertions,
   Messaging EdDSA tombstones, revision chain, File manifest and exact-receipt
