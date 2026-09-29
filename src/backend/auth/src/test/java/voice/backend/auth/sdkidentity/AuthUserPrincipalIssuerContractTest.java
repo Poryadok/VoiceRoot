@@ -112,6 +112,29 @@ class AuthUserPrincipalIssuerContractTest {
         + segments[2].substring(1);
     assertThatThrownBy(() -> issuer.verifyDeviceStatusAssertion(tampered))
         .isInstanceOf(IllegalArgumentException.class);
+
+    Map<String, Object> slightlyDelayedClaims = new LinkedHashMap<>(claims);
+    slightlyDelayedClaims.put("iat", NOW.minusMillis(1).toEpochMilli());
+    slightlyDelayedClaims.put("exp", NOW.plusSeconds(4).minusMillis(1).toEpochMilli());
+    String delayed = issuer.issueDeviceStatus(slightlyDelayedClaims);
+    assertThat(issuer.verifyDeviceStatusAssertion(delayed).issuedAtMs()).isEqualTo(NOW.minusMillis(1).toEpochMilli());
+
+    Map<String, Object> staleClaims = new LinkedHashMap<>(claims);
+    staleClaims.put("iat", NOW.minusMillis(251).toEpochMilli());
+    staleClaims.put("exp", NOW.plusSeconds(4).minusMillis(251).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(staleClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> futureClaims = new LinkedHashMap<>(claims);
+    futureClaims.put("iat", NOW.plusMillis(251).toEpochMilli());
+    futureClaims.put("exp", NOW.plusSeconds(4).plusMillis(251).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(futureClaims))
+        .hasMessage("invalid device status assertion lifetime");
+
+    Map<String, Object> shortClaims = new LinkedHashMap<>(claims);
+    shortClaims.put("exp", NOW.plusMillis(250).toEpochMilli());
+    assertThatThrownBy(() -> issuer.issueDeviceStatus(shortClaims))
+        .hasMessage("invalid device status assertion lifetime");
   }
 
   @Test

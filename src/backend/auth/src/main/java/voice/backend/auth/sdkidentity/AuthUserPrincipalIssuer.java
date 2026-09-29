@@ -267,8 +267,9 @@ public final class AuthUserPrincipalIssuer implements SdkDeviceStatusIssuer {
     Long expiresAt = number(claims.get("exp"));
     Long notAfter = number(claims.get("not_after"));
     long now = clock.instant().toEpochMilli();
-    if (issuedAt == null || expiresAt == null || notAfter == null || issuedAt != now
-        || expiresAt <= issuedAt || expiresAt - issuedAt > 4000 || expiresAt > notAfter) {
+    if (issuedAt == null || expiresAt == null || notAfter == null || issuedAt > now + 250
+        || issuedAt < now - 250 || expiresAt <= now + 250 || expiresAt <= issuedAt
+        || expiresAt - issuedAt > 4000 || expiresAt > notAfter) {
       throw new IllegalArgumentException("invalid device status assertion lifetime");
     }
     JWSObject jwt = new JWSObject(
