@@ -256,8 +256,8 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
 	require.Equal(t, int64(1), mappingAuthority.calls.Load()-mappingCallsBeforePositive,
 		"the exact linked-chat request must traverse GIS mapping authorization exactly once")
-	require.Equal(t, 2, workloadNonceDelta,
-		"positive request should use one GIS mapping proof and one Auth-to-GIS execution-permit proof")
+	require.Equal(t, 3, workloadNonceDelta,
+		"positive request should use one GIS mapping proof, one Auth-to-GIS permit issue proof, and one completion proof")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
 
