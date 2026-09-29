@@ -69,6 +69,7 @@ type ProfileFriendChecker interface {
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).
 type DMStore interface {
 	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID, recipientInboxBucket string) (*store.ChatRow, bool, error)
+	PromoteFriendDMRequests(ctx context.Context, profileA, profileB uuid.UUID) error
 	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)
