@@ -376,6 +376,18 @@ class SdkAuthorizationJdbcIntegrationTest {
       assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
           Map.of("operation", rejectedOperation), Long.class)).isZero();
     }
+    UUID finalCheckBoundaryOperation = UUID.randomUUID();
+    gisPermitExpiry.set(NOW.plusMillis(1000));
+    executionProfileCalls.set(0);
+    advanceClockDuringFinalProfileCheck.set(true);
+    assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, finalCheckBoundaryOperation, messageHash))
+        .isInstanceOf(SdkIdentityDeniedException.class)
+        .as("a final profile check that leaves exactly 500 ms cannot issue a permit");
+    advanceClockDuringFinalProfileCheck.set(false);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
+        Map.of("operation", finalCheckBoundaryOperation), Long.class)).isZero();
+
+    executionClockNow.set(NOW);
     gisPermitExpiry.set(NOW.plusMillis(3000));
     executionProfileCalls.set(0);
     advanceClockDuringFinalProfileCheck.set(true);
