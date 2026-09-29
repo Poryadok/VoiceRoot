@@ -37,6 +37,8 @@ spec:
           image: __VOICE_MINIO_IMAGE__
           args: ["server", "/data", "--console-address", ":9001"]
           env:
+            - name: MINIO_API_CORS_ALLOW_ORIGIN
+              value: "__WEB_ORIGIN__"
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:

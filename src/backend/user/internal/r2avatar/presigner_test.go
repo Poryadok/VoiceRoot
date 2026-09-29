@@ -2,6 +2,10 @@ package r2avatar
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -137,4 +141,81 @@ func TestS3R2PutPresigner_PresignPut_enforcesUploadLimits(t *testing.T) {
 
 	_, _, _, err = p.PresignPut(ctx, key, "image/jpeg", MaxAvatarBytes+1)
 	require.Error(t, err)
+}
+
+func TestAvatarPresignUsesBrowserEndpointAndKeepsPublicObjectURL(t *testing.T) {
+	t.Setenv("USER_R2_ENDPOINT", "http://voice-minio:9000")
+	t.Setenv("USER_R2_SIGNING_ENDPOINT", "https://storage.example.test")
+	t.Setenv("USER_R2_REGION", "us-east-1")
+	t.Setenv("USER_R2_ACCESS_KEY_ID", "test-access")
+	t.Setenv("USER_R2_SECRET_ACCESS_KEY", "test-secret")
+	t.Setenv("USER_R2_BUCKET", "voice-avatars")
+	t.Setenv("USER_R2_PUBLIC_BASE_URL", "https://cdn.example.test/avatars")
+	p, err := NewS3R2PutPresigner(EnvConfigFromOSEnv())
+	require.NoError(t, err)
+
+	key := "avatars/11111111-1111-1111-1111-111111111111/photo.png"
+	raw, _, _, err := p.PresignPut(context.Background(), key, "image/png", 2048)
+	require.NoError(t, err)
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	require.Equal(t, "https", u.Scheme)
+	require.Equal(t, "storage.example.test", u.Host)
+	require.Equal(t, "/voice-avatars/"+key, u.Path)
+	require.Contains(t, u.Query().Get("X-Amz-SignedHeaders"), "host")
+	require.NotEmpty(t, u.Query().Get("X-Amz-Signature"))
+	require.Equal(t, u.Query().Get("X-Amz-Signature"), testAvatarSigV4(u, "test-secret", "image/png", "2048"), "signature must bind the public host and path")
+	require.Equal(t, "https://cdn.example.test/avatars/"+key, p.PublicObjectURL(key))
+}
+
+func TestAvatarPresignDefaultsToStorageEndpointWhenNoSigningEndpointConfigured(t *testing.T) {
+	t.Setenv("USER_R2_ENDPOINT", "http://minio:9000")
+	t.Setenv("USER_R2_SIGNING_ENDPOINT", "")
+	t.Setenv("USER_R2_REGION", "us-east-1")
+	t.Setenv("USER_R2_ACCESS_KEY_ID", "test-access")
+	t.Setenv("USER_R2_SECRET_ACCESS_KEY", "test-secret")
+	t.Setenv("USER_R2_BUCKET", "voice-avatars")
+	t.Setenv("USER_R2_PUBLIC_BASE_URL", "http://localhost:9000/voice-avatars")
+	p, err := NewS3R2PutPresigner(EnvConfigFromOSEnv())
+	require.NoError(t, err)
+	raw, _, _, err := p.PresignPut(context.Background(), "avatars/photo.png", "image/png", 2048)
+	require.NoError(t, err)
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	require.Equal(t, "http", u.Scheme)
+	require.Equal(t, "minio:9000", u.Host)
+	require.Equal(t, u.Query().Get("X-Amz-Signature"), testAvatarSigV4(u, "test-secret", "image/png", "2048"))
+}
+
+func testAvatarSigV4(u *url.URL, secret, contentType, contentLength string) string {
+	q := u.Query()
+	q.Del("X-Amz-Signature")
+	signed := q.Get("X-Amz-SignedHeaders")
+	var canonicalHeaders strings.Builder
+	for _, name := range strings.Split(signed, ";") {
+		value := map[string]string{"host": u.Host, "content-type": contentType, "content-length": contentLength}[name]
+		canonicalHeaders.WriteString(name + ":" + strings.TrimSpace(value) + "\n")
+	}
+	canonicalRequest := http.MethodPut + "\n" + u.EscapedPath() + "\n" + q.Encode() + "\n" + canonicalHeaders.String() + "\n" + signed + "\nUNSIGNED-PAYLOAD"
+	credential := strings.Split(q.Get("X-Amz-Credential"), "/")
+	requestHash := sha256.Sum256([]byte(canonicalRequest))
+	stringToSign := "AWS4-HMAC-SHA256\n" + q.Get("X-Amz-Date") + "\n" + strings.Join(credential[1:], "/") + "\n" + hex.EncodeToString(requestHash[:])
+	key := []byte("AWS4" + secret)
+	for _, part := range credential[1:] {
+		mac := hmac.New(sha256.New, key)
+		_, _ = mac.Write([]byte(part))
+		key = mac.Sum(nil)
+	}
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(stringToSign))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestAvatarRejectsNonHTTPSOrPathfulSigningEndpoint(t *testing.T) {
+	for _, endpoint := range []string{"http://storage.example.test", "https://storage.example.test/prefix", "https://storage.example.test?token=oops"} {
+		t.Run(endpoint, func(t *testing.T) {
+			_, err := NewS3R2PutPresigner(S3R2Config{Endpoint: "http://minio:9000", SigningEndpoint: endpoint, Region: "us-east-1", AccessKeyID: "ak", SecretAccessKey: "sk", Bucket: "avatars", PublicBaseURL: "https://cdn.example.test"})
+			require.ErrorContains(t, err, "signing endpoint")
+		})
+	}
 }

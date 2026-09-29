@@ -9,12 +9,14 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $IngressHost,
     [string] $Namespace = 'voice-staging',
-    [string] $TlsSecretName = 'voice-gateway-tls'
+    [string] $TlsSecretName = 'voice-gateway-tls',
+    [string] $FileBucket = 'voice-staging-files',
+    [string] $AvatarBucket = 'voice-staging-avatars'
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $manifestPath = Join-Path $root.Path 'deploy\gateway\ingress.yaml'
 if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Not found: $manifestPath" }
 $raw = Get-Content -LiteralPath $manifestPath -Raw
-$raw = $raw.Replace('__K_NAMESPACE__', $Namespace).Replace('__INGRESS_HOST__', $IngressHost).Replace('__TLS_SECRET_NAME__', $TlsSecretName)
+$raw = $raw.Replace('__K_NAMESPACE__', $Namespace).Replace('__INGRESS_HOST__', $IngressHost).Replace('__TLS_SECRET_NAME__', $TlsSecretName).Replace('__FILE_BUCKET__', $FileBucket).Replace('__AVATAR_BUCKET__', $AvatarBucket)
 $raw | kubectl apply -f -
