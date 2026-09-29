@@ -61,6 +61,8 @@ grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-permissi
 grep -Fq 'values: [voice-auth, voice-analytics' "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" || fail 'hub leaf network policy is missing'
 grep -Fq 'VOICE_NATS_REQUIRE_APP_READY=true bash "${ROOT}/scripts/staging/apply-infra.sh"' "${RENDER}" || fail 'full deploy must require accepted NATS state before app rollout'
 grep -Fq 'nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}"' "${APPLY}" || fail 'full deploy must reject absent or stale ACL activation proof'
+grep -Fq '"${VOICE_NATS_ACL_PROOF_GENERATION:-}" != "$NATS_GENERATION"' "${APPLY}" || fail 'full deploy must reject ACL proof for a different NATS generation'
 grep -Fq 'VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}' "${WORKFLOW}" || fail 'staging workflow must pass reviewed ACL proof'
+grep -Fq 'VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}' "${WORKFLOW}" || fail 'staging workflow must pass the reviewed proof generation'
 
 echo 'staging NATS bootstrap policy: OK'
