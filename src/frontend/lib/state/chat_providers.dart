@@ -2369,10 +2369,13 @@ class RealtimeHub {
   Future<void> reconnectWithNewSession() async {
     final auth = _ref.read(authControllerProvider).session;
     if (auth == null) return;
-    await _reconnect(_activateBinding(auth));
+    await _reconnect(_activateBinding(auth), isReconnectAttempt: true);
   }
 
-  Future<void> _reconnect(_RealtimeHubBinding binding) async {
+  Future<void> _reconnect(
+    _RealtimeHubBinding binding, {
+    bool isReconnectAttempt = false,
+  }) async {
     if (_disposed) return;
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
@@ -2382,7 +2385,11 @@ class RealtimeHub {
     if (!_isCurrent(binding)) return;
     final config = _ref.read(gatewayConfigProvider);
     if (!config.hasBaseUrl) return;
-    await _connect(binding, config.baseUrl);
+    await _connect(
+      binding,
+      config.baseUrl,
+      isReconnectAttempt: isReconnectAttempt,
+    );
   }
 
   void _setStatus(RealtimeLinkStatus next, {_RealtimeHubBinding? binding}) {
@@ -2414,6 +2421,16 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
     if (!autoConnect) return;
     if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
       unawaited(hub.ensureConnected());
+    } else if (next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
+      final previousSession = prev?.session;
+      final nextSession = next.session;
+      if (previousSession != null &&
+          nextSession != null &&
+          previousSession.accountId == nextSession.accountId &&
+          previousSession.activeProfileId == nextSession.activeProfileId &&
+          previousSession.accessToken != nextSession.accessToken) {
+        unawaited(hub.reconnectWithNewSession());
+      }
     }
     if (!next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
       unawaited(hub.disconnect());
@@ -2548,13 +2565,26 @@ class ChatActions {
   final Ref _ref;
 
   Future<String?> openDmWithProfile(String otherProfileId) async {
-    final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return 'not_authenticated';
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .createDm(authorization: auth, otherProfileId: otherProfileId);
+        .createDm(
+          authorization: session.authorizationHeader,
+          otherProfileId: otherProfileId,
+        );
+    final current = _ref.read(authControllerProvider).session;
+    if (current?.activeProfileId != session.activeProfileId ||
+        current?.authorizationHeader != session.authorizationHeader) {
+      return kChatActionStaleContext;
+    }
     return switch (result) {
-      ChatsApiOk(:final data) => _selectDmChat(data.id, otherProfileId),
+      ChatsApiOk(:final data) => () {
+        final reconciler = _ref.read(inboxReconcilerProvider.notifier);
+        final error = _selectDmChat(data.id, otherProfileId);
+        if (error == null) unawaited(reconciler.reconcile());
+        return error;
+      }(),
       ChatsApiFailure(:final message) => message,
     };
   }

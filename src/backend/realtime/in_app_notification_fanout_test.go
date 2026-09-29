@@ -121,6 +121,46 @@ func TestInAppNotificationFanouts_MessageRequestForRequestsInbox(t *testing.T) {
 	}
 }
 
+func TestDispatchMessageStreamEvent_RequestRecipientWithoutChatSubscription(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, recipientID := uuid.NewString(), uuid.NewString()
+	hub := newWSHub()
+	hub.memberInboxLister = staticMemberDeliveryLister{states: map[string]chatMemberDeliveryState{
+		senderID:    {InboxBucket: "main"},
+		recipientID: {InboxBucket: "requests"},
+	}}
+	recipient := hub.attachConn("inst", "recipient", recipientID, 8)
+	// The recipient has not loaded or subscribed to this newly created DM.
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderID,
+	}}})
+	require.NoError(t, err)
+
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	select {
+	case got := <-recipient.fanout:
+		d := notificationPayload(t, got)
+		require.Equal(t, "message_request", d["type"])
+		require.Equal(t, chatID, d["chat_id"])
+	case <-time.After(time.Second):
+		t.Fatal("unsubscribed request recipient did not receive personal notification")
+	}
+}
+
+func TestInAppNotificationFanouts_DeclinedRequestStaysQuiet(t *testing.T) {
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	senderID, recipientID := uuid.NewString(), uuid.NewString()
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderID,
+	}}})
+	require.NoError(t, err)
+	fanouts, ok := inAppNotificationFanouts(payload, []string{senderID, recipientID}, "", map[string]chatMemberDeliveryState{
+		recipientID: {InboxBucket: "declined"},
+	})
+	require.True(t, ok)
+	require.Empty(t, fanouts)
+}
+
 func TestInAppNotificationFanouts_ArchivedRecipientsStayQuiet(t *testing.T) {
 	chatID, messageID := uuid.NewString(), uuid.NewString()
 	senderID, activeID, archivedID := uuid.NewString(), uuid.NewString(), uuid.NewString()

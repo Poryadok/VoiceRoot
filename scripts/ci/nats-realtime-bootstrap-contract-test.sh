@@ -53,6 +53,7 @@ for consumer in \
   "consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat" \
   'consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user' \
   'consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social' \
+  'consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request' \
   "consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role" \
   "consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice" \
   "consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking"; do

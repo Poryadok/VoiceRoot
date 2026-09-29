@@ -23,6 +23,28 @@ import 'support/gateway_test_client.dart';
 /// history or inbox replay trigger. REST reconciliation remains covered by
 /// `t103_reconnect_history_delta_red_test.dart`.
 void main() {
+  test(
+    'refreshed access token replaces the Realtime connection binding',
+    () async {
+      final harness = _ResumeReconnectHarness(autoConnect: true);
+      addTearDown(harness.dispose);
+
+      await harness.connectInitial();
+      harness.auth.state = const AuthState(session: _rotatedSession);
+
+      await harness.transport
+          .waitForConnect(1)
+          .timeout(const Duration(seconds: 2));
+      expect(harness.transport.sessions[1], _rotatedSession);
+      harness.connection(1).addHello();
+      await pumpEventQueue();
+      expect(
+        harness.container.read(realtimeLinkStatusProvider),
+        RealtimeLinkStatus.connected,
+      );
+    },
+  );
+
   test('reconnect resumes the prior last_s only after the new hello', () async {
     final harness = _ResumeReconnectHarness();
     addTearDown(harness.dispose);
@@ -83,8 +105,16 @@ const _session = AuthSession(
   expiresInSeconds: 900,
 );
 
+const _rotatedSession = AuthSession(
+  accessToken: 'access-b',
+  refreshToken: 'refresh-b',
+  accountId: 'account-a',
+  activeProfileId: 'profile-a',
+  expiresInSeconds: 900,
+);
+
 class _ResumeReconnectHarness {
-  _ResumeReconnectHarness() {
+  _ResumeReconnectHarness({bool autoConnect = false}) {
     final client = MockClient((_) async => http.Response('{}', 404));
     auth = AuthController(
       authClient: VoiceAuthClient(gateway: gatewayHttpForTest(client)),
@@ -97,7 +127,7 @@ class _ResumeReconnectHarness {
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
-        realtimeAutoConnectProvider.overrideWithValue(false),
+        realtimeAutoConnectProvider.overrideWithValue(autoConnect),
         realtimeTransportFactoryProvider.overrideWithValue(transport),
       ],
     );
@@ -131,12 +161,14 @@ class _ResumeReconnectHarness {
 
 class _ResumeTransportFactory implements RealtimeTransportFactory {
   final connections = <_ResumeConnection>[];
+  final sessions = <AuthSession>[];
 
   @override
   Future<VoiceRealtimeConnection> open({
     required Uri uri,
     required AuthSession session,
   }) async {
+    sessions.add(session);
     final connection = _ResumeConnection(connections.length);
     connections.add(connection);
     return connection;
