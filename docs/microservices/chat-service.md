@@ -141,7 +141,7 @@ chat_members
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)
-├── inbox_bucket (main | requests | declined) — per-member DM request state
+├── inbox_bucket (main | requests | declined) — per-member DM request state; `social.friend_accepted` promotes existing requests for that pair to main
 └── UNIQUE(chat_id, profile_id)
 
 folders

@@ -13,7 +13,7 @@
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db`         | presence cache; Social principal replay | —                         |
-| Social Service       | `social_db`       | —                         | —                                |
+| Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events until Chat can promote existing DM requests |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |

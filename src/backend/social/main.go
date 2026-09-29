@@ -33,6 +33,8 @@ const serviceName = "social"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	outboxCtx, stopOutbox := context.WithCancel(context.Background())
+	defer stopOutbox()
 	metricsReg := prometheus.NewRegistry()
 	principalRuntime, err := loadSocialPrincipalRuntime()
 	if err != nil {
@@ -114,6 +116,7 @@ func main() {
 			BlockedProfiles:    blockedProfiles,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			go runFriendAcceptanceOutbox(outboxCtx, socialSvc.Friends, natsURL, logger)
 			if pub, err := socialevents.NewJetStreamPublisher(natsURL); err == nil {
 				socialSvc.Events = pub
 				defer func() { _ = pub.Close() }()
@@ -151,6 +154,7 @@ func main() {
 			log.Fatal(err)
 		}
 	case <-stop:
+		stopOutbox()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if principalRuntime.JWKS != nil {

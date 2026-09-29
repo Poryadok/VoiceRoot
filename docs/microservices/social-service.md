@@ -105,7 +105,15 @@ blocks
 ├── blocked_profile_id UUID NULL -- added by migration 000003
 ├── blocked_display_name, blocked_username, blocked_discriminator TEXT NULL -- added by migration 000003
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+friend_accept_outbox (migration 000004)
+├── friendship_id UUID PRIMARY KEY REFERENCES friendships(id) ON DELETE CASCADE
+├── requester_profile_id / target_profile_id UUID NOT NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+└── delivered_at TIMESTAMPTZ NULL
 ```
+
+`AcceptFriendInvitation` commits the accepted friendship and its outbox row in one `social_db` transaction. A Social worker retries `social.friend_accepted` publication after NATS failures; Chat's durable consumer moves an existing DM request to `main` only if the pair remains friends. The consumer is idempotent, so publish success followed by a worker crash may safely replay. Deploy migration 000004 before the updated Social service; rollback of 000004 discards undelivered rows and therefore requires draining the outbox first.
 
 Индексы v1:
 - `UNIQUE INDEX friendships_pair_uq ON friendships(requester_profile_id, target_profile_id)`
