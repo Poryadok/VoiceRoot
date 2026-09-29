@@ -145,16 +145,28 @@ func (s *FriendshipStore) acceptInvitation(ctx context.Context, caller, requeste
 			return ErrFriendshipBlocked
 		}
 	}
-	cmd, err := tx.Exec(ctx, `
+	var friendshipID uuid.UUID
+	err = tx.QueryRow(ctx, `
 UPDATE friendships
 SET status = 'accepted', updated_at = now()
 WHERE status = 'pending'
-  AND requester_profile_id = $1 AND target_profile_id = $2`, requester, caller)
+  AND requester_profile_id = $1 AND target_profile_id = $2
+RETURNING id`, requester, caller).Scan(&friendshipID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrFriendshipNotFound
+	}
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
-		return ErrFriendshipNotFound
+	_, err = tx.Exec(ctx, `
+INSERT INTO friend_accept_outbox (friendship_id, requester_profile_id, target_profile_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (friendship_id) DO UPDATE
+SET requester_profile_id = EXCLUDED.requester_profile_id,
+    target_profile_id = EXCLUDED.target_profile_id,
+    created_at = now(), delivered_at = NULL`, friendshipID, requester, caller)
+	if err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
