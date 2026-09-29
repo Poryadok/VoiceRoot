@@ -95,15 +95,23 @@ jobs:
       - name: Capture disposable service logs on failure
         if: failure()
         run: |
-          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
-            -f docker-compose.yml \
-            -f docker-compose.t16-cross-service-acceptance.yml \
-            -p "$T16_COMPOSE_PROJECT" logs --no-color --tail=250
+          if [[ -f tmp/t16-cross-service/compose.env ]]; then
+            docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+              -f docker-compose.yml \
+              -f docker-compose.t16-cross-service-acceptance.yml \
+              -p "$T16_COMPOSE_PROJECT" logs --no-color --tail=250
+          else
+            echo "T16 fixture was not generated; no service logs to collect."
+          fi
 
       - name: Tear down disposable T16 services
         if: always()
         run: |
-          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
-            -f docker-compose.yml \
-            -f docker-compose.t16-cross-service-acceptance.yml \
-            -p "$T16_COMPOSE_PROJECT" down --volumes --remove-orphans
+          if [[ -f tmp/t16-cross-service/compose.env ]]; then
+            docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+              -f docker-compose.yml \
+              -f docker-compose.t16-cross-service-acceptance.yml \
+              -p "$T16_COMPOSE_PROJECT" down --volumes --remove-orphans
+          else
+            echo "T16 fixture was not generated; nothing to tear down."
+          fi

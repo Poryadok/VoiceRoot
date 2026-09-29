@@ -40,17 +40,17 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
 # containers (both run as uid/gid 65532). Keep private files owner-only and
 # readable by those containers; the Messaging client key stays runner-owned
 # because the real Go gRPC test process uses it directly.
-sudo chown 65532:65532 \
-  "$tls_dir/auth-server.key" \
-  "$tls_dir/gis-server.key" \
-  "$tls_dir/gameintegration-client.key" \
-  "$t16_dir/auth-principal"/*.pem
 chmod 400 \
   "$tls_dir/auth-server.key" \
   "$tls_dir/gis-server.key" \
   "$tls_dir/gameintegration-client.key" \
   "$t16_dir/auth-principal"/*.pem
 chmod 600 "$tls_dir/messaging-client.key"
+sudo chown 65532:65532 \
+  "$tls_dir/auth-server.key" \
+  "$tls_dir/gis-server.key" \
+  "$tls_dir/gameintegration-client.key" \
+  "$t16_dir/auth-principal"/*.pem
 rm "$tls_dir/ca.key" "$tls_dir/ca.srl"
 
 cat > "$t16_dir/compose.env" <<EOF
