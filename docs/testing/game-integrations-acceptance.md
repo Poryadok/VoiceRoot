@@ -506,8 +506,8 @@ explicit test adapters; neither the Auth↔GIS permit seam nor GIS mapping
 authority may be mocked.
 
 The base Compose User service retains its real synthetic-principal gRPC path;
-the T16 overlay replaces only the unrelated MinIO bucket-init dependency with
-a no-op using the already-required Postgres image. This acceptance does not
+the T16 overlay substitutes the unrelated MinIO service and bucket-init with
+no-ops using the already-required Postgres image. This acceptance does not
 exercise avatar uploads or other User object-storage writes.
 
 Auth's real `/api/v1/auth/sdk/device-authority` endpoint must use its required

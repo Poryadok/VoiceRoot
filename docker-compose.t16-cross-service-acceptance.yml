@@ -1,7 +1,19 @@
 # Disposable hosted Linux acceptance fixture for Auth -> GIS -> Messaging.
 services:
-  # T16 never exercises User object storage; use the already-required Postgres
-  # image for a no-op completion instead of pulling the unrelated MinIO client.
+  # T16 never exercises User object storage. Keep the base User dependency graph
+  # healthy without pulling MinIO from an external registry; Postgres is already
+  # required by this disposable stack. Avatar/object-storage writes are out of
+  # scope for this acceptance.
+  minio:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while :; do sleep 3600; done"]
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+
   minio-init:
     image: postgres:16-alpine
     entrypoint: ["/bin/sh", "-c", "exit 0"]
