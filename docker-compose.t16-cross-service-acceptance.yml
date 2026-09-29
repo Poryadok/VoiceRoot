@@ -69,6 +69,10 @@ services:
   auth-principal-jwks:
     profiles: ["app"]
     image: node:24-alpine
+    user: "65532:65532"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     network_mode: "service:auth"
     command: ["node", "/run/t16/t16-auth-principal-jwks-proxy.mjs"]
     volumes:
