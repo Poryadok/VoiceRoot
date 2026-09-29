@@ -293,8 +293,8 @@ func TestSdkConversionAuthListenerAcceptsOnlyVerifiedAuthWorkloadProof(t *testin
 func sdkPrincipalJWK(key *rsa.PrivateKey, keyID string) map[string]string {
 	return map[string]string{
 		"kty": "RSA", "use": "sig", "alg": "RS256", "kid": keyID,
-		"n": base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
-		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
+		"n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
 	}
 }
 
