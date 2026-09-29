@@ -14,7 +14,10 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-const liveACLProofTimeout = 3 * time.Second
+const (
+	liveACLProofTimeout     = 3 * time.Second
+	liveACLProofStartupWait = 20 * time.Second
+)
 
 var (
 	liveACLProofGenerationPattern = regexp.MustCompile(`^r[0-9]{8}[a-z0-9]{0,8}$`)
@@ -49,25 +52,39 @@ func runNATSLiveACLProofFromEnv() error {
 	}
 	quietErrors := nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, _ error) {})
 	connectOpts := []nats.Option{nats.Timeout(liveACLProofTimeout), nats.MaxReconnects(0), nats.PermissionErrOnSubscribe(true), nats.CustomInboxPrefix("_INBOX.voice.realtime"), quietErrors}
-	leafRT, err := nats.Connect(os.Getenv("NATS_URL"), connectOpts...)
+	leafRT, err := connectLiveACLProof(os.Getenv("NATS_URL"), connectOpts)
 	if err != nil {
 		return liveACLFail("leaf_connect_failed")
 	}
 	defer leafRT.Close()
 	hubOpts := append([]nats.Option{}, connectOpts...)
 	hubOpts = append(hubOpts, nats.UserCredentials(credsFile))
-	hubRT, err := nats.Connect(hubURL, hubOpts...)
+	hubRT, err := connectLiveACLProof(hubURL, hubOpts)
 	if err != nil {
 		return liveACLFail("hub_connect_failed")
 	}
 	defer hubRT.Close()
 	proofOpts := []nats.Option{nats.Timeout(liveACLProofTimeout), nats.MaxReconnects(0), nats.CustomInboxPrefix("_INBOX.voice.nats-proof"), quietErrors}
-	proofNC, err := nats.Connect(os.Getenv("REALTIME_NATS_PROOF_URL"), proofOpts...)
+	proofNC, err := connectLiveACLProof(os.Getenv("REALTIME_NATS_PROOF_URL"), proofOpts)
 	if err != nil {
 		return liveACLFail("proof_connect_failed")
 	}
 	defer proofNC.Close()
 	return runNATSLiveACLProof(leafRT, hubRT, proofNC, instanceID)
+}
+
+func connectLiveACLProof(rawURL string, options []nats.Option) (*nats.Conn, error) {
+	deadline := time.Now().Add(liveACLProofStartupWait)
+	for {
+		nc, err := nats.Connect(rawURL, options...)
+		if err == nil {
+			return nc, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
 }
 
 func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (result error) {
@@ -78,8 +95,19 @@ func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (
 	if err != nil {
 		return liveACLFail("proof_jetstream_failed")
 	}
-	streamInfo, err := proofJS.StreamInfo(jsStreamSocialEvents)
-	if err != nil {
+	var streamInfo *nats.StreamInfo
+	deadline := time.Now().Add(liveACLProofStartupWait)
+	for {
+		streamInfo, err = proofJS.StreamInfo(jsStreamSocialEvents)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return liveACLFail("stream_info_failed")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if streamInfo == nil {
 		return liveACLFail("stream_info_failed")
 	}
 	if streamInfo.State.Msgs != 0 || streamInfo.State.LastSeq != 0 {
@@ -93,8 +121,15 @@ func runNATSLiveACLProof(leafRT, hubRT, proofNC *nats.Conn, instanceID string) (
 		if jsErr != nil {
 			return liveACLFail("realtime_jetstream_failed")
 		}
-		if cfgErr := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", deliver); cfgErr != nil {
-			return liveACLFail("consumer_info_failed")
+		deadline := time.Now().Add(liveACLProofStartupWait)
+		for {
+			if cfgErr := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", deliver); cfgErr == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				return liveACLFail("consumer_info_failed")
+			}
+			time.Sleep(300 * time.Millisecond)
 		}
 	}
 	// The hub CLIENT connection enforces the signed Realtime user permissions.
