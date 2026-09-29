@@ -627,8 +627,8 @@ VALUES($1,$2,'sandbox','active',$3,'["https://voice.test/callback"]','[]',1)`, f
 VALUES($1,$2,$3,'google','hmac-sha256-v1:t16:`+digest+`',$4,$5,$6,$7,'active',1)`, fixture.bindingID, fixture.appID, fixture.envID,
 		fixture.sourceAccountID, fixture.sourceActorID, fixture.targetProfileID, fixture.deviceID)
 	require.NoError(t, err)
-	_, err = gisDB.Exec(ctx, `INSERT INTO player_binding_challenges(challenge_id,nonce,application_id,environment_id,provider,redirect_uri_sha256,pkce_challenge,device_key_id,device_key_thumbprint,operation_id,expires_at,status,consumed_at)
-VALUES($1,$2,$3,$4,'google',repeat('1',64),repeat('2',43),$5,$6,$7,now()+interval '1 hour','consumed',now())`, fixture.challengeID, uuid.NewString(), fixture.appID, fixture.envID, fixture.keyID, thumbprint, fixture.bindingOperationID)
+	_, err = gisDB.Exec(ctx, `INSERT INTO player_binding_challenges(challenge_id,nonce,application_id,environment_id,provider,redirect_uri_sha256,pkce_challenge,device_key_id,device_key_thumbprint,operation_id,expires_at,status,consumed_at,request_sha256)
+VALUES($1,$2,$3,$4,'google',repeat('1',64),repeat('2',43),$5,$6,$7,now()+interval '1 hour','consumed',now(),repeat('3',64))`, fixture.challengeID, uuid.NewString(), fixture.appID, fixture.envID, fixture.keyID, thumbprint, fixture.bindingOperationID)
 	require.NoError(t, err)
 	_, err = gisDB.Exec(ctx, `INSERT INTO player_binding_exchange_operations(operation_id,challenge_id,request_sha256,status,handoff_jws,auth_claim_id,assertion_jti,binding_id)
 VALUES($1,$2,repeat('3',64),'created','t16-synthetic-handoff',$3,$4,$5)`, fixture.bindingOperationID, fixture.challengeID, uuid.New(), uuid.New(), fixture.bindingID)
