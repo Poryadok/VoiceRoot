@@ -85,6 +85,17 @@ func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if !created {
+		if recipientInbox == inboxMain && s.Friends != nil {
+			friends, err := s.Friends.AreFriends(ctx, callerProfile, otherProfile)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if friends {
+				if err := s.DM.PromoteFriendDMRequests(ctx, callerProfile, otherProfile); err != nil {
+					return nil, status.Error(codes.Internal, err.Error())
+				}
+			}
+		}
 		if err := s.DM.ClearDeletedForSelf(ctx, row.ID, callerProfile); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}

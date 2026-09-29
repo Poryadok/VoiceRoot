@@ -70,9 +70,11 @@ services:
       - $JS.API.STREAM.INFO.chat_events
       - $JS.API.CONSUMER.INFO.user_events.chat_account_deleted
       - $JS.API.CONSUMER.INFO.message_events.chat_message_activity
+      - $JS.API.CONSUMER.INFO.social_events.chat_friend_accepted
       - $JS.ACK.user_events.chat_account_deleted.>
       - $JS.ACK.message_events.chat_message_activity.>
-    subscribe: [_INBOX.voice.chat.>, _INBOX.voice.chat.chat_account_deleted, _INBOX.voice.chat.chat_message_activity]
+      - $JS.ACK.social_events.chat_friend_accepted.>
+    subscribe: [_INBOX.voice.chat.>, _INBOX.voice.chat.chat_account_deleted, _INBOX.voice.chat.chat_message_activity, _INBOX.voice.chat.chat_friend_accepted]
   file:
     no_response: true
     publish:
@@ -363,6 +365,8 @@ bootstrap:
     - $JS.API.CONSUMER.CREATE.analytics_events.analytics_v2_telemetry
     - $JS.API.CONSUMER.INFO.user_events.chat_account_deleted
     - $JS.API.CONSUMER.CREATE.user_events.chat_account_deleted
+    - $JS.API.CONSUMER.INFO.social_events.chat_friend_accepted
+    - $JS.API.CONSUMER.CREATE.social_events.chat_friend_accepted
     - $JS.API.CONSUMER.INFO.message_events.messaging_delivery_ack
     - $JS.API.CONSUMER.CREATE.message_events.messaging_delivery_ack
     - $JS.API.CONSUMER.INFO.user_events.messaging_receipt_privacy

@@ -153,6 +153,24 @@ WHERE chat_id = $1 AND profile_id = $2
 	return nil
 }
 
+// PromoteFriendDMRequests moves existing pending DM inboxes for a newly
+// accepted friendship to main. An explicit decline remains hidden.
+func (s *DMStore) PromoteFriendDMRequests(ctx context.Context, profileA, profileB uuid.UUID) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("dm store: pool not configured")
+	}
+	_, err := s.Pool.Exec(ctx, `
+UPDATE chat_members m
+SET inbox_bucket = 'main'
+FROM chats c
+JOIN chat_members a ON a.chat_id = c.id AND a.profile_id = $1
+JOIN chat_members b ON b.chat_id = c.id AND b.profile_id = $2
+WHERE c.type = 'dm' AND m.chat_id = c.id
+  AND m.profile_id IN ($1, $2) AND m.inbox_bucket = 'requests'
+`, profileA, profileB)
+	return err
+}
+
 func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*ChatRow, error) {
 	var id, creator uuid.UUID
 	var createdAt, updatedAt time.Time
