@@ -46,10 +46,11 @@ func TestCentralBootstrapPreprovisionsEveryFixedConsumer(t *testing.T) {
 			t.Errorf("%s appears %d times, want exactly once", key, count)
 		}
 	}
-	if len(counts) != 41 {
-		t.Errorf("central bootstrap defines %d unique durables, want 41", len(counts))
+	if len(counts) != 42 {
+		t.Errorf("central bootstrap defines %d unique durables, want 42", len(counts))
 	}
 	for _, line := range []string{
+		"consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request",
 		"consumer message_events chat_message_activity message.sent _INBOX.voice.chat.chat_message_activity all chat_message_activity",
 		"consumer social_events chat_friend_accepted social.friend_accepted _INBOX.voice.chat.chat_friend_accepted all chat_friend_accepted",
 		"consumer message_events messaging_delivery_ack message.delivery_ack _INBOX.voice.messaging.messaging_delivery_ack all messaging_delivery_ack",
