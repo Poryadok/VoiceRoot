@@ -17,9 +17,10 @@ CLI/portal и публикуемые примеры — отдельная за�
 
 Принятые 15 продуктовых направлений записаны в
 [feature canon](../features/game-integrations.md#принятые-владельцем-продуктовые-правила).
-Их не нужно заново согласовывать. Конкретные недоопределённые правила ниже —
-остаточные решения: согласие с направлением не задаёт числовой срок хранения,
-конкретного provider или алгоритм восстановления.
+Их не нужно заново согласовывать. T03 has now adopted the remaining technical
+defaults in the owning API and Federation contracts. Entries below distinguish
+closed decision gates from runtime, measurement, and live-provider acceptance
+that remains assigned to consumer tasks.
 
 ## Исправленные противоречия
 
@@ -32,16 +33,17 @@ CLI/portal и публикуемые примеры — отдельная за�
 - Game-server ticket не считается независимым доказательством пользовательского
   авторства. Device proof и service/node authority — разные проверки.
 - Дополнительное подтверждение опасной команды больше не обозначено безусловно
-  optional; способ server-side enforcement остаётся Q05.
+  optional; Q05 specifies risk classes, a five-minute single-use challenge,
+  canonical argument binding, and atomic challenge/command consumption.
 - Voice Node поставляется одним bundle с single-instance компонентами;
   это не обещание HA или объединения внутренних доверенных identities.
 
-## Остаточные вопросы
+## Decision status and remaining acceptance
 
-Рекомендации ниже — предложения аудиторов, не уже утверждённые ответы.
-GI0 координирует их закрытие; ответ фиксируется в owning feature/API до кода,
-а acceptance превращается в проверяемый тест. Независимые подзадачи не обязаны
-ждать решения вопроса, которого они не касаются.
+Rows marked `Принято` or `Решение заморожено` record adopted contract decisions;
+they do not claim code or runtime acceptance. Consumer tasks remain responsible
+for implementing each rule and passing its listed tests. Any item still called
+a proposal is a measured qualification target, not a product contract.
 
 ### Q01. Повторное вступление и интервалы истории
 
@@ -67,11 +69,15 @@ file metadata и download fetch-time authorization; создание URL сам�
 и node registration описывают первоначальный consent, но не передачу приложения
 другой студии, изменение оператора/назначения или расширение scopes.
 
-Предложение: versioned consent; расширение доступа и смена получателя доверия
-требуют повторного согласия, старые grants не повышаются сами. Определить судьбу
-queued/in-flight commands и что именно считается сменой оператора. До GI7/GI8;
-acceptance: старая installation/key не получает новые права, queued actions
-проверяют актуальный consent, уже admitted effect следует G13.
+Принято: consent revision scoped to account/app/environment/scope set. Scope
+expansion, Owner generation, operator, or destination/trust-recipient change
+requires fresh consent and immediately revokes old credentials/grants. Queued,
+not-yet-admitted actions are cancelled or revalidated; admitted actions follow
+only the immutable G13 permit window. Notification delivery dedupes by
+recipient/category/source event and rechecks consent after quiet hours. Runtime
+and consumer tests remain in T14/T58–T59; acceptance Q02/BOT09 covers each
+change and queued-versus-admitted behavior. The owning defaults are in the
+[T03 API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 
 ### Q03. Новый владелец того же game subject или персонажа
 
@@ -80,10 +86,14 @@ acceptance: старая installation/key не получает новые пр�
 от входа прежнего владельца. Продажа персонажа, перераспределение provider subject
 или recovery у провайдера не должны переносить личную историю и consent.
 
-Предложение: отдельная ownership generation/transfer процедура, отзыв прежних
-bindings без наследования private контекста. Требуется определить доступный
-доверенный сигнал передачи; если provider его не даёт, нельзя обещать её
-автоматическое обнаружение. До GI7/GI5; acceptance: один внешний ID, новый owner,
+Принято: one active character per app/env/sdk identity by default; multiple
+characters require explicit environment policy and independent bindings,
+consent, and grants. Ownership changes create a new generation and revoke old
+bindings; without an authoritative provider transfer signal, transfer is never
+inferred. A new owner receives no private history or grants. Runtime remains in
+T17–T19/T37–T39; acceptance Q03/MMO02 covers same external ID/new owner, hidden
+alternate, and no inherited history/authority. See the
+[T03 API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 нет доступа к старому permanent account, ключам, истории и командам.
 
 ### Q04. Подписи edits, deletes и вложений на чужой ноде
@@ -116,28 +126,34 @@ gate Q04 закрыт; runtime и measured evidence остаются в T15/GI4/
 
 ### Q05. Обязательное подтверждение команды на сервере
 
-Основание: [bot actions](../features/game-bot-interactions.md) передают immutable
-action IDs, но ещё не определяют proof того, что конкретная цена/последствия
-подтверждены. Прямой invoke не должен обходить required confirmation.
-
-Предложение: server-issued single-use challenge, привязанный к actor, action,
-цене/state revision, expiry и consent. Определить классы опасных действий;
-при изменении цены повторить подтверждение. Это доказывает protocol consent,
-не физический клик человека в контролируемом разработчиком executable.
-До GI2/GI3; acceptance: direct invoke без challenge, replay, другая цена/actor,
-expired challenge и два одновременных подтверждения.
+Принято in [Bot interactions](../features/game-bot-interactions.md): explicit
+allowlisted read-only actions alone may skip confirmation. Irreversible,
+value/currency, one-shot, privacy/export, authority, external-message, and
+unknown actions require a server-issued single-use 256-bit challenge; only its
+hash is stored, lifetime is five minutes, and it binds actor/session epoch,
+app/env/installation, source message/card revision, action, and canonical
+argument hash. Confirm is authenticated and atomically consumes the challenge
+with command acceptance; concurrent confirmations use CAS, one wins. Direct
+invoke cannot bypass it; unknown risk/summary or challenge outage denies the
+action. This proves protocol consent, not a physical click in a developer-
+controlled executable. GI2/GI3 implement it; acceptance includes direct invoke,
+replay, changed price/actor, 5m boundary, and competing confirmations.
 
 ### Q06. Отзыв прав под нагрузкой и целостность control plane
 
-Основание: [federation](../architecture/game-federation.md) задаёт короткую lease
-и quotas, но не резерв ресурсов для revoke/freeze/lease при потоке сообщений,
-roster updates и полном resync. Особенно важно для single-host Voice Node.
+Основание: [Federation authority v1](../architecture/federation-authority-v1.md)
+is the active contract. Before this T03 freeze it did not allocate propagation,
+clock, ejection, or reserved control-plane capacity within the revoke bound.
 
-Предложение: отдельные очереди/лимиты и ресурсный бюджет критических control
-операций; отсутствие свежей authority закрывает доступ независимо от очереди.
-До GI6/GI8; acceptance: flood + большой snapshot + revoke + живой SFU, замер
-полного budget. Нужно отделить корректное fail-closed от приемлемой доступности
-соседних Space, а не считать массовое отключение единственным успешным исходом.
+Принято: revoke-to-eject ≤5.0s, allocated to authority propagation ≤2.0s,
+combined clock uncertainty ≤250ms, and active media enforcement ≤2.75s after
+observation. Nodes subtract the clock uncertainty from wall-clock expiry before
+monotonic conversion; excess uncertainty fails closed. Command drain retains its stricter 4.25s bound. Revoke/freeze/lease
+expiry use a separately bounded priority lane and reserved DB/worker capacity;
+stale authority fails closed. T70–T78/T93 must prove these values under 2×
+qualified event/snapshot load while unrelated Spaces remain available. The
+canonical timing allocation is in [Federation authority G08/Q06](../architecture/federation-authority-v1.md#g08q06-revoke-budget)
+and summarized in the [T03 API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 
 ### Q07. Отображение sdk-account и ограничения профилей
 
@@ -146,11 +162,15 @@ roster updates и полном resync. Особенно важно для single
 учёт лимита профилей при conversion и поведение при заполненном лимите target.
 Глобальный profile ID/аватар может раскрыть больше, чем разрешённый игровой alias.
 
-Нужно определить Auth/User модель principal/profile/app-visible alias, выбор
-существующего target profile и сохранение исторического автора без implicit
-extra profile. Проверить сериализацию roster/cards/search/presence, а не только
-ник в UI. До GI7/GI4; acceptance: полный лимит профилей, скрытые профили,
-две игры, conversion и нет утечки cross-app связи в публичные payload.
+Принято: expose only stable opaque profile references scoped to app/environment;
+never expose a global Voice profile ID or infer cross-app identity. The user
+selects the app-approved alias; normalize it to NFC and limit it to 64 Unicode
+scalar values. Avatar/hidden-profile fields require separate consent and app
+policy. Apply the existing profile cap consistently to login, conversion,
+roster, cards, search, and presence. T14/T17–T19/T38–T39 implement and prove
+this; Q07/ID cases cover full profile cap, hidden profiles, two apps, conversion,
+alias boundaries, and public payload inspection. See the [T03 API
+freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 
 ### Q08. Account-wide voice при конвертации и отдельных sdk-accounts
 
@@ -158,23 +178,29 @@ extra profile. Проверить сериализацию roster/cards/search/p
 sdk-account могут принадлежать одному человеку. Без доказанной связи Voice
 не может считать их одной identity и не должен угадывать по устройству/IP.
 
-Предложение: до linking лимит применяется к каждому подтверждённому аккаунту;
-при conversion объединённая authority проверяет обе текущие сессии и требует
-handoff/conflict, без двух active sessions и незаметного unmute. До GI7/Voice;
-acceptance: permanent account уже в звонке, sdk-account слушает другую комнату,
-conversion одновременно с reconnect и lease renewal.
+Принято in [T03-AUTH-LIFECYCLE](../architecture/game-integration-api.md#замороженный-auth-identity-slice-game-auth-01):
+until linking, limits apply to each independently proven account; Voice does not
+infer shared identity from device/IP. Conversion checks both current sessions,
+requires explicit handoff or conflict, and cannot leave two active sessions or
+silently unmute. T17–T19/Voice implement it; acceptance covers permanent account
+in a call, sdk-account in another room, conversion racing reconnect and lease
+renewal.
 
 ### Q09. Детальная семантика block/report и жалобы на оператора
 
-Основание: report/block и разделение санкций приняты; не определено, скрывает ли
-block текст/голос в общем managed chat, блокирует ли mentions/бота игры и куда
-попадает жалоба, если обвиняемый — оператор ноды. Локальное скрытие не равно
-отзыву membership и не должно ломать authoritative roster.
+Основание: report/block and sanction separation are accepted; this T03 freeze
+now defines interaction behavior and operator complaint handling below. A
+personal block never rewrites authoritative roster/membership.
 
-Предложение: явно разделить личный block, moderation ban и app/node suspension;
-независимый master путь жалобы на ноду, минимальный evidence с provenance.
-Не пересылать без согласия всю историю студии. До GI3/GI5/GI6; acceptance:
-общая корпорация после block, blocked bot, жалоба при недоступной/злонамеренной ноде.
+Принято: a personal block hides/blocks direct interaction but does not mutate
+authoritative membership; Voice moderation ban remains the access authority.
+Owner loss/dissolution freezes privileged writes until a Voice operator verifies
+a named human and records a new owner generation. Node operators/game leaders
+cannot assign Voice ownership. Operator complaints use Voice-owned intake with
+IDs, timestamps, and evidence digests by default, not copied chat content.
+T37–T39/moderation implement this; Q09/MMO03 covers shared-space block, blocked
+bot, Owner loss/dissolution, and hostile/unavailable node operator. See the
+[T03 API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 
 ### Q10. Политики retention, удаления и восстановления identity
 
@@ -182,11 +208,16 @@ block текст/голос в общем managed chat, блокирует ли 
 оставляет retired audit reference; account deletion и сохранение signatures,
 dedupe, abuse history и node backups должны быть совместимы.
 
-Нужны конкретные сроки и схема минимальных tombstones: что остаётся после
-удаления, как не воскресить старую связь из backup и как отличить повторный
-вход от повторной регистрации. Правила экспорта и история при закрытии игры
-также требуют G04/G10. До GI7/GI8; acceptance: delete → restore backup → повторный
-provider login, отсутствие оживших private данных/ключей/старых grants.
+Принято: v1 has one immutable node home and no online cross-node migration.
+Operators own encrypted backups and hardware recovery; Voice owns identity,
+consent, generation, and revoke authority. Restore must merge current Voice
+fences and non-expiring external-key tombstones before serving. Owner export is
+limited to app-owned configuration and explicitly exportable app data; it
+excludes provider secrets, Voice credentials, other users' private profiles, and
+unconsented message history. After node loss, resources stay unavailable until
+same-home restore or explicit retirement. FED06–FED08/Q10 prove filtering,
+delete/restore, and no resurrection. See the [T03 API
+freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 
 ### Q11. Кто и как впервые получает developer/node полномочия
 
@@ -209,11 +240,11 @@ Do not count fake-provider CI as real-provider acceptance or production approval
 
 ### Q12. Совместимость, SLO и вместимость поставки
 
-API endpoints are versioned as `/api/v1` and Federation authority as `/v1`;
-the proposal is to support v1 until a successor major is generally available,
-then for 12 months. Compatibility must be proven by old-client/new-server and
-new-client/previous-server fixtures before production admission. This is a
-support policy proposal, not evidence of compatibility.
+Accepted support policy: keep `/api/v1` and Federation `/v1` supported until a
+successor major is generally available, then provide a 12-month migration
+window. Compatibility must be proven with old-client/new-server and
+new-client/previous-server fixtures before production admission; this decision
+is not runtime compatibility evidence.
 
 Provisional single-host node qualification targets for planning are RPO ≤24h,
 RTO ≤4h, 250 concurrent authenticated clients, 50 concurrent media publishers,
@@ -238,11 +269,12 @@ path. Длительность спринта/команда ещё не зад�
 
 ## Границы и следующие действия
 
-G01–G13 сохраняют решения по доменам, Q01–Q12 уточняют конкретные незамкнутые
-сценарии. Это один backlog спринта Voice, а не дополнительные релизные этапы.
-До dependent implementation закрыть Q01–Q11 контрактами; Q12 должен получить
-проверяемые цели до нагрузочной/эксплуатационной приёмки. Проверки могут готовиться
-раньше, но неизвестные значения не заменяются удобными константами без фиксации.
+G01–G13 сохраняют решения по доменам, Q01–Q12 уточняют конкретные сценарии. Это
+один backlog спринта Voice, а не дополнительные релизные этапы. Decision inputs
+for Q01–Q11 are recorded in owning contracts; dependent tasks must still pass
+runtime acceptance. Q12's 12-month major-version migration window is adopted,
+while capacity, RPO, and RTO remain provisional until T08/T93 measure them on
+qualified hosts.
 
 Приоритет обсуждения: Q03/Q07/Q11 (identity/bootstrap), Q01/Q02/Q05 (доступ и
 consent), Q04/Q06/Q08 (federation/media), Q09/Q10/Q12 (эксплуатация и lifecycle).

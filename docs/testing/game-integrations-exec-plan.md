@@ -126,7 +126,7 @@ contracts land before consumers; activation lands after all consumers.
     `src/frontend/test/sdk_authorization_client_test.dart` and
     `sdk_authorization_widget_test.dart`; this is authorization UI, not a full
     game-integrations client.
-- [ ] **T03** `D: T01,T02` Choose technical defaults for G01–G13 and Q01–Q12
+- [x] **T03** `D: T01,T02` Choose technical defaults for G01–G13 and Q01–Q12
   in owning docs before dependent implementation; assign every value/algorithm,
   test and consumer. The owner has delegated these choices; escalate only a
   genuine product contradiction or unavailable external dependency. See the
@@ -165,7 +165,43 @@ contracts land before consumers; activation lands after all consumers.
     anti-resurrection tombstone floor. Their owning-service runtime and restore
     acceptance remain open; this closes only the decision prerequisites for
     the Auth identity/conversion consumers (T13, T17–T19).
-  - [ ] Remaining G/Q decisions and their tests/consumers are still open.
+  - [x] T03-G02/Q03: one active character per app/env/sdk identity by default;
+    opt-in multiple characters have independent bindings, consent, and grants;
+    ownership never transfers without an authoritative provider signal. Tests:
+    Q03/MMO02; consumers T17–T19, T37–T39.
+  - [x] T03-G03/Q09: Owner loss/dissolution freezes privileged writes until a
+    Voice operator verifies a named human and records a new owner generation;
+    game leaders/node operators cannot assign Voice ownership. Personal block
+    does not mutate membership; Voice ban remains authoritative. Tests Q09/MMO03;
+    consumers T37–T39 and moderation.
+  - [x] T03-Q02/G11: scope, Owner, operator, or destination changes increment
+    consent revision and revoke old authority; queued actions are cancelled or
+    revalidated, while admitted work follows G13. Notifications dedupe by
+    recipient/category/source event and recheck consent after quiet hours. Tests
+    Q02/BOT09; consumers T14, T58–T59.
+  - [x] T03-G07/Q12: preserve the implemented 120 registration attempts per
+    app/UTC-minute cap; all other sandbox capabilities require bounded quotas
+    and size limits before enablement. Production, pricing, and SLA remain
+    disabled pending T08/T93 measurement. Tests OPS02/Q12; consumers T08,
+    T11–T12, T76, T93.
+  - [x] T03-G08/Q06: canonical Federation authority contract sets the 500ms
+    renewal, ≤2.0s publication or last-lease validity to node-side denial,
+    ≤250ms uncertainty subtracted from expiry before monotonic conversion,
+    ≤2.75s media enforcement, and ≤5.0s
+    total revoke-to-eject; command drain retains the stricter 4.25s bound.
+    Stale authority fails closed and revoke/freeze has reserved priority
+    capacity. Tests FED02/FED03/Q06 under 2x qualified load; consumers T70–T78/T93.
+  - [x] T03-G10/Q10: v1 node home is immutable; no online cross-node migration.
+    Operators own encrypted backup/hardware recovery; Voice owns identity,
+    consent, generations, and revoke ledger. Restore merges current Voice fences
+    before serving; exports exclude secrets and unconsented personal data.
+    Tests FED06–FED08/Q10; consumers T70–T78/T76.
+  - [x] T03-G12/Q07: expose only app/env-scoped opaque profile references and
+    user-selected NFC aliases (64 Unicode scalar values max); hidden profile
+    fields require separate consent and app policy. Enforce profile caps across
+    login/conversion and every public payload. Tests Q07/ID cases; consumers
+    T14, T17–T19, T38–T39. Full adopted defaults and acceptance cases are in the
+    [T03 cross-cutting API freeze](../architecture/game-integration-api.md#t03-cross-cutting-defaults-g02-g12-and-q02-q12).
 - [ ] **T04** `D: T03` Freeze trust matrix for game service, player, bot and node;
   principals, issuer/audience, scopes, credential storage, expiry, rotation,
   revoke, rate limit and direct-service negative cases.
