@@ -204,6 +204,11 @@ production admission flow. These checks use a fake Voice JWKS and do not claim
 Google provider proof, production admission, or an unmeasured latency or
 restore result.
 
+At feature PR #557 exact head `1c028516d1358b43385d2b7168d616b3b1ccce0b`,
+`rtk make game-integration-bootstrap-acceptance` passed again in 2.603 seconds.
+This reruns the empty-database GIS bootstrap API selector only; it does not
+close T11's production-admission, live-provider, or out-of-band secret gates.
+
 T11 installation binding is asserted separately as BOT11: public registration
 accepts an owner-selected Bot ID but no owner override; GIS derives the owner
 from the application row. The protected GIS→Bot proof must be signed by the
