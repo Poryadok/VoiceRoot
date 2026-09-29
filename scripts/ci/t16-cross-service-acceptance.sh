@@ -36,6 +36,7 @@ make_leaf messaging-client messaging 'URI:spiffe://voice/service/messaging' clie
 # Tomcat runs with JSSE in the hosted Temurin image. Build its truststore from
 # only this disposable fixture CA; caCertificateFile alone is OpenSSL-specific.
 T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD="$(openssl rand -hex 16)"
+T16_GAME_INTEGRATION_DB_PASSWORD="$(openssl rand -hex 32)"
 keytool -importcert -noprompt -storetype PKCS12 -alias t16-client-ca \
   -file "$tls_dir/ca.crt" -keystore "$tls_dir/auth-client-ca.p12" \
   -storepass "$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD" >/dev/null 2>&1
@@ -61,6 +62,7 @@ T16_FIXTURE_DIR=$t16_dir
 T16_AUTH_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
 T16_MESSAGING_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
 T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD=$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD
+GAME_INTEGRATION_DB_PASSWORD=$T16_GAME_INTEGRATION_DB_PASSWORD
 EOF
 T16_GAME_PUBLIC_JWK="$(python3 - "$t16_dir/auth-principal/current.pem" <<'PY'
 import base64
