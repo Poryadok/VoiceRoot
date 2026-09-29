@@ -58,6 +58,7 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	defer cancel()
 	authDB := t16Pool(t, ctx, "T16_AUTH_DATABASE_URL")
 	gisDB := t16Pool(t, ctx, "T16_GIS_DATABASE_URL")
+	gisRuntimeDB := t16Pool(t, ctx, "T16_GIS_RUNTIME_DATABASE_URL")
 	userDB := t16Pool(t, ctx, "T16_USER_DATABASE_URL")
 	chatDB := t16Pool(t, ctx, "T16_CHAT_DATABASE_URL")
 	messagingDB := t16Pool(t, ctx, "T16_MESSAGING_DATABASE_URL")
@@ -104,7 +105,9 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	chatGuard := &t16BlockingChatGuard{ChatGuard: &store.SQLChatGuard{Pool: chatDB}, entered: make(chan struct{}), release: make(chan struct{})}
 	processor := &VerifiedGameMessageProcessor{Store: storeMessages, AuthKeys: gameAuthKeys,
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
-			Chats: chatGuard, ResourceMappings: &t16DiagnosticResourceMappingAuthority{delegate: mappingClient, t: t},
+			Chats: chatGuard, ResourceMappings: &t16DiagnosticResourceMappingAuthority{
+				delegate: mappingClient, runtimeDB: gisRuntimeDB, t: t,
+			},
 		}}
 	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
 	diagnosticProcessor.probeAuthJWKS = func() {
@@ -223,7 +226,6 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID).Scan(&seededMappingRevision)
 	require.NoError(t, err, "GIS exact app/environment/binding/chat predicate must match the seeded active tuple")
 	require.Positive(t, seededMappingRevision)
-	gisRuntimeDB := t16Pool(t, ctx, "T16_GIS_RUNTIME_DATABASE_URL")
 	var runtimeUser, runtimeDatabase, runtimeSearchPath string
 	err = gisRuntimeDB.QueryRow(ctx, `SELECT current_user, current_database(), current_setting('search_path')`).
 		Scan(&runtimeUser, &runtimeDatabase, &runtimeSearchPath)
@@ -546,7 +548,8 @@ type t16DiagnosticResourceMappingAuthority struct {
 	delegate interface {
 		AuthorizeAppBindingChat(context.Context, gameprotocol.DeviceAuthority, gameprotocol.Message) error
 	}
-	t *testing.T
+	runtimeDB *pgxpool.Pool
+	t         *testing.T
 }
 
 func (d *t16DiagnosticResourceMappingAuthority) AuthorizeAppBindingChat(
@@ -554,9 +557,24 @@ func (d *t16DiagnosticResourceMappingAuthority) AuthorizeAppBindingChat(
 ) error {
 	err := d.delegate.AuthorizeAppBindingChat(ctx, authority, message)
 	if err != nil {
+		var runtimeRevision int64
+		runtimeErr := d.runtimeDB.QueryRow(ctx, `SELECT m.mapping_revision
+			FROM game_resource_binding_chats r
+			JOIN applications a ON a.id=r.application_id AND a.status IN ('sandbox','active')
+			JOIN environments e ON e.id=r.environment_id AND e.application_id=r.application_id AND e.status='active'
+			JOIN player_bindings b ON b.application_id=r.application_id AND b.environment_id=r.environment_id
+				AND b.binding_id=r.binding_id AND b.status='active'
+			JOIN game_resource_mappings m ON m.application_id=r.application_id AND m.environment_id=r.environment_id
+				AND m.resource_kind='chat' AND m.chat_id=r.chat_id AND m.status='active'
+			WHERE r.application_id=$1 AND r.environment_id=$2 AND r.binding_id=$3 AND r.chat_id=$4
+			AND r.status='active' AND r.lease_expires_at > clock_timestamp()`,
+			authority.ApplicationID, authority.EnvironmentID, authority.BindingID, message.ChatID).
+			Scan(&runtimeRevision)
 		d.t.Logf("T16 diagnostic: real GIS mapping client rejected tuple app=%s env=%s binding=%s messageApp=%s messageEnv=%s messageBinding=%s chat=%s: %v",
 			authority.ApplicationID, authority.EnvironmentID, authority.BindingID,
 			message.ApplicationID, message.EnvironmentID, message.BindingID, message.ChatID, err)
+		d.t.Logf("T16 diagnostic: actual request tuple under GIS runtime role revision=%d query_error=%v",
+			runtimeRevision, runtimeErr)
 	}
 	return err
 }

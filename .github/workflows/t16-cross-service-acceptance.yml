@@ -6,7 +6,6 @@ on:
       - ".github/workflows/t16-cross-service-acceptance.yml"
       - "docker-compose.yml"
       - "docker-compose.t16-cross-service-acceptance.yml"
-      - "docker-compose.t16-cross-service-acceptance.yml"
       - "docs/architecture/game-integration-api.md"
       - "docs/microservices/auth-service.md"
       - "docs/microservices/game-integration-service.md"
@@ -78,9 +77,9 @@ jobs:
         env:
           T16_ACCEPTANCE: "1"
           T16_FIXTURE_DIR: ${{ github.workspace }}/tmp/t16-cross-service
-      T16_AUTH_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/auth_db?sslmode=disable
-      T16_GIS_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/game_integration_db?sslmode=disable
-      T16_GIS_RUNTIME_DATABASE_URL: postgres://gameintegration_runtime:t16-gameintegration-runtime-password@127.0.0.1:5432/game_integration_db?sslmode=disable
+          T16_AUTH_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/auth_db?sslmode=disable
+          T16_GIS_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/game_integration_db?sslmode=disable
+          T16_GIS_RUNTIME_DATABASE_URL: postgres://gameintegration_runtime:t16-gameintegration-runtime-password@127.0.0.1:5432/game_integration_db?sslmode=disable
           T16_USER_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/user_db?sslmode=disable
           T16_CHAT_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/chat_db?sslmode=disable
           T16_MESSAGING_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/messaging_db?sslmode=disable
