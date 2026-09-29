@@ -497,7 +497,10 @@ are implemented or prove any external game-provider admission.
 `Retry-After` до границы следующей минуты. Denial audit объединяется в одну
 строку на app/minute со счётчиком. После минутного rollover квота снова
 доступна. Этот лимит относится только к новой регистрации installation; он не
-обещает пропускную способность всех GIS routes или T15 delivery.
+обещает пропускную способность всех GIS routes, general tenant isolation, или
+T15 delivery. General GIS route capacity and isolation thresholds remain
+`OPEN` / `NOT RUN` until a qualified host/workload is selected and measured;
+do not infer them from this callback limiter.
 
 Регистрация разрешена только владельцу приложения и активной environment.
 Квота владельца фиксируется до Bot authority proof: отказ proof расходует
@@ -663,8 +666,8 @@ remain required before dependent capabilities are enabled.
 | G05 | Current contracts are Voice Game API `/api/v1` and Federation authority `/v1`; keep v1 supported until a successor major is generally available, then provide a 12-month migration window. | GI4 old/new client-server conformance and exact-version manifest remain runtime gates; the adopted support policy is not compatibility proof; engine versions/assets remain separate |
 | G06 | Отдельный Go Game Integration Service и собственное `game_integration_db` приняты; app owner, operator approval, API bootstrap and credential lifecycle are frozen in the service contract | Clean empty-DB bootstrap and scoped credential lifecycle via API; no direct SQL/portal; run Q11 acceptance before enabling |
 | G07 | Сохранён GIS registration cap: 120 attempts/application/UTC-minute. Other sandbox capabilities require bounded per-app/env quota and request/body limits before enablement. Production admission, pricing, and SLA stay disabled until T08/T93 measure capacity and costs. | OPS02/Q12 tenant isolation, quota exhaustion/Retry-After, measured load and restore; consumers T08/T11–T12/T76/T93 |
-| G08 | Revoke-to-eject ≤5s: publish a newer revoke revision within 2s or let the last signed validity expire within 2s; subtract ≤250ms clock uncertainty from expiry before monotonic conversion, then fence active media within 2.75s. Command drain retains the stricter 4.25s bound. Stale authority fails closed; a reserved priority lane protects revoke/freeze/lease work. | FED02/FED03/Q06 measure the sub-budgets under 2× qualified event/snapshot load and verify unrelated Spaces remain available; consumers T70–T78/T93 |
-| G09 | A complete accepted roster has a 60-second lease from its GIS DB commit. Exact same-revision/same-body retry is inert and does not renew; lower revision is stale no-op; same revision with different body conflicts. Incomplete or failed fetch is never empty. At exact lease expiry deny new admission/reconnect and governed reads/writes; fence active Voice/media within the existing ≤5-second revoke bound. Old-snapshot retries never renew. | SE07 expiry boundary; assert no access at `lease_expires_at`, active media fenced at/before `lease_expires_at + 5s`; only a complete higher revision renews |
+| G08 | Revoke-to-eject ≤5s: publish a newer revoke revision within 2s or let the last signed validity expire within 2s; subtract ≤250ms clock uncertainty from expiry before monotonic conversion, then fence active media within 2.75s. Command drain retains the stricter 4.25s bound. Stale authority fails closed; a reserved priority lane protects revoke/freeze/lease work. | Start propagation timing at the durable owning-authority mutation commit event. Record separately commit→new-revision publication/deny trigger, deny-trigger→final media delivery stop, and command drain; total commit→final media delivery stop must satisfy the adopted budget. Include stale bearer reconnect after authority expiry. Capture start/stop event IDs and monotonic durations per host; cross-host comparisons include clock uncertainty. FED02/FED03/Q06 exercise sub-budgets under 2× qualified event/snapshot load and verify unrelated Spaces remain available; consumers T70–T78/T93. Actual media eject remains `OPEN` / `NOT RUN` until qualified runtime evidence. |
+| G09 | A complete accepted roster has a 60-second lease from its GIS DB commit. Exact same-revision/same-body retry is inert and does not renew; lower revision is stale no-op; same revision with different body conflicts. Incomplete or failed fetch is never empty. At exact lease expiry deny new admission/reconnect and governed reads/writes; fence active Voice/media within the existing ≤5-second revoke bound. Old-snapshot retries never renew. | Start at the complete roster's accepted GIS database commit event. Stop each measurement at Voice acceptance of the revision, or at explicit deny/lease-expiry event; record expiry→media fence separately. Preserve event IDs and per-host monotonic durations. Verify duplicate and stale retries are inert, including stale bearer reconnect at/after expiry; only a complete higher revision renews. SE07 boundary checks; runtime acceptance remains `OPEN` / `NOT RUN` until evidence exists. |
 | G10 | Node home immutable in v1; no online cross-node migration. Operators own encrypted backup/hardware recovery; Voice owns identity, consent, generation and revoke authority. Restore merges current Voice fences before serving. Export excludes secrets and unconsented personal data. | FED06–FED08/Q10 cover export filtering, old-backup restore, deletion, and no identity/grant/resource resurrection; consumers T70–T78/T76 |
 | G11 | Consent is versioned by account/app/env/scope. Scope, Owner, operator, or destination changes revoke old authority and require fresh consent. Notifications dedupe by recipient/category/source event; quiet-hour delivery rechecks consent at send time. | Q02/BOT09 cover trust changes, queued vs admitted work, duplicate events, and quiet-hour boundaries; consumers T14/T58–T59 |
 | G12 | Public payloads use stable opaque app/env profile references, never global Voice profile IDs. Alias is user-selected, app-approved, NFC-normalized, and at most 64 Unicode scalar values; hidden profile fields need separate consent and app policy. Profile caps apply across login, conversion, roster, cards, search, and presence. | Q07/ID cases cover cap, hidden profiles, two apps, conversion, alias normalization/length, and cross-app leak inspection; consumers T14/T17–T19/T38–T39 |
@@ -677,6 +680,33 @@ resource, roster, idempotency and retention rules are recorded in
 decision checklist are updated in `docs/testing/game-integrations-exec-plan.md`.
 Runtime behavior and exact-SHA acceptance remain open under T32–T34.
 
+### Q12 qualification profile and measurement status
+
+The current one-host profile is **provisional**, for qualification planning only:
+two Space, 250 authenticated clients, 50 concurrent media publishers, and 25
+durable messages/second for 60 minutes, with a concurrent revoke and host
+restart. Preserve the proposed RPO ≤24h and RTO ≤4h definitions: write a
+committed synthetic canary at least once per minute; RPO is failure time minus
+the latest recovered committed canary, and RTO runs from failure injection to
+readiness plus successful scoped read and write checks. Restore the latest
+scheduled backup onto a fresh isolated host and validate owner, generation, and
+revocation fences before serving.
+
+Separate columns in the evidence report for the owning contractual target, this
+provisional profile, the measurement method, and the observed result. Record
+`PASS`, `FAIL`, or `NOT RUN` per observation. Capture exact commit and component
+versions (including host/runtime/database/image), host model/SKU and topology
+when selected, warm/cold state, run conditions, load/fault profile, population,
+raw observation source IDs, start/stop event IDs, per-host monotonic durations,
+and clock uncertainty for cross-host comparisons. Include repetitions and
+statistics when available. Unknown configuration is `UNKNOWN`; an unperformed
+or unqualified observation is `NOT RUN`.
+
+Current Q12 result: `NOT RUN`. Do not mark Q12 measured from hosted CI; real
+media eject, restore RPO/RTO, and provider proof require their qualified runtime
+evidence under T07c/T70–T78/T93. Host selection, latency threshold, repeat count,
+general route capacity, cost and SLA remain `OPEN` pending an owner decision.
+
 ## 6. Release evidence и rollout
 
 Дополнительная приёмка design audit: Q01 history rejoin matrix; Q02 consent
@@ -687,9 +717,9 @@ as specified above; Q12 measured capacity/compatibility. Q11 ownership, approver
 provider, and bootstrap decisions are frozen. The API-only clean-start proof
 passed at `165a11e`; the real-Google gate is OPEN / NOT RUN, and production
 admission remains open.
-Q12 has provisional targets and a measurement procedure; its results remain
-unmeasured. An open runtime gate is never replaced by a skipped test when the
-sprint is declared done.
+Q12 retains its provisional qualification profile; its result is `NOT RUN` and
+the remaining host/threshold decisions are `OPEN`. An open runtime gate is never
+replaced by a skipped test when the sprint is declared done.
 
 Каждая capability включается отдельно: linked identity, sessions, native voice,
 managed communities, cards, proactive DM, node hosting. Default off до собственного
