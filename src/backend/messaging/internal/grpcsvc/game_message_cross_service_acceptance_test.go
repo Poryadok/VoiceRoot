@@ -1018,8 +1018,13 @@ func seedT16WrongScopeResourceMapping(ctx context.Context, gisDB *pgxpool.Pool, 
 		}
 	}
 	envID := uuid.New()
+	kind := "sandbox"
+	if !wrongApplication {
+		// The fixture application's sandbox environment already exists.
+		kind = "production"
+	}
 	if _, err := gisDB.Exec(ctx, `INSERT INTO environments(id,application_id,kind,status,provider_policy,redirect_uris,allowed_origins,revision)
-VALUES($1,$2,'sandbox','active',$3,'["https://voice.test/callback"]','[]',1)`, envID, appID,
+	VALUES($1,$2,$3,'active',$4,'["https://voice.test/callback"]','[]',1)`, envID, appID, kind,
 		`{"providers":["google"],"player_scopes":["game.chat.send"]}`); err != nil {
 		return appID, uuid.Nil, err
 	}
