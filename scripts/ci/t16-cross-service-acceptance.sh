@@ -46,11 +46,6 @@ chmod 400 \
   "$tls_dir/gameintegration-client.key" \
   "$t16_dir/auth-principal"/*.pem
 chmod 600 "$tls_dir/messaging-client.key"
-sudo chown 65532:65532 \
-  "$tls_dir/auth-server.key" \
-  "$tls_dir/gis-server.key" \
-  "$tls_dir/gameintegration-client.key" \
-  "$t16_dir/auth-principal"/*.pem
 rm "$tls_dir/ca.key" "$tls_dir/ca.srl"
 
 cat > "$t16_dir/compose.env" <<EOF
@@ -81,3 +76,11 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
   sed '/^T16_FIXTURE_DIR=/d' "$t16_dir/compose.env" >> "$GITHUB_ENV"
   printf 'T16_FIXTURE_DIR=%s\n' "$t16_dir" >> "$GITHUB_ENV"
 fi
+
+# Complete ownership changes after deriving the public JWK from the private
+# key so the runner process does not need to read it afterward.
+sudo chown 65532:65532 \
+  "$tls_dir/auth-server.key" \
+  "$tls_dir/gis-server.key" \
+  "$tls_dir/gameintegration-client.key" \
+  "$t16_dir/auth-principal"/*.pem
