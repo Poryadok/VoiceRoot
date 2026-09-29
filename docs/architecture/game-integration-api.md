@@ -760,8 +760,11 @@ message admission remain gated until the T16 producer is available.
 The request proof payload is canonical RFC 8785 UTF-8 JSON, protected header is
 exactly `{"alg":"ES256","kid":"<device key UUID>","typ":"voice.game-device-authority-request+jws"}`,
 and the JWS signature covers the normal RFC 7515 signing input. The assertion
-protected header is exactly
-`{"alg":"RS256","kid":"<Auth principal key ID>","typ":"voice.game-device-status+jwt"}`.
+protected header contains exactly the members and values
+`{"alg":"RS256","kid":"<Auth principal key ID>","typ":"voice.game-device-status+jwt"}`;
+member order is insignificant, but duplicate or additional members are denied.
+The signature covers the exact encoded header bytes. The assertion payload
+remains canonical JSON.
 Payload fields are exactly `version:1`, `iss:"auth"`,
 `aud:"voice.game-message"`, `jti` (fresh UUID), `application_id`,
 `environment_id`, `account_id`, `actor_id`, `binding_id`, `device_id`,
@@ -845,7 +848,9 @@ pins exact compact JWS bytes. Auth returns strict JSON
 `{ "permit_jws": "<compact JWS>" }`, `application/json`, `Cache-Control:
 no-store`, and no unknown/trailing fields. The Auth-signed JWS uses protected
 `typ=voice.game-message-execution-permit+jwt`, `alg=RS256`, and the dedicated
-Auth principal JWKS `kid`. Its exact claims are `version=1`, `iss=auth`,
+Auth principal JWKS `kid`; the protected header contains exactly `alg`, `kid`,
+and `typ` (member order is insignificant, duplicate/unknown members are denied),
+and its signature covers the exact encoded header bytes. Its exact claims are `version=1`, `iss=auth`,
 `aud=voice.game-message`, unique permit UUID `jti`, `operation=message.send`,
 `scope=game.chat.send`, `operation_id`, `request_sha256`,
 `application_id`, `environment_id`, `account_id`, `actor_id`, `binding_id`,

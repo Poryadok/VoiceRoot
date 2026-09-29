@@ -56,6 +56,40 @@ func TestVerifyExecutionPermitBindsCanonicalMutationAndCurrentAuthority(t *testi
 	}
 }
 
+func TestVerifyExecutionPermitAcceptsNimbusHeaderOrderAndRejectsHeaderExtensions(t *testing.T) {
+	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	device := gameAuthorityForPermit()
+	device.AssertionJTI = uuid.New()
+	operationID := uuid.New()
+	mutation := []byte(`{"version":1,"operation":"create","body":"hi"}`)
+	digest := sha256.Sum256(mutation)
+	requestHash := hex.EncodeToString(digest[:])
+	claims := validExecutionPermitClaims(device, operationID, requestHash, now)
+	compact := signExecutionPermitForTest(t, key, claims)
+	expected := ExecutionPermitExpected{Device: device, OperationID: operationID,
+		RequestSHA256: requestHash, MutationBytes: mutation}
+
+	// Auth's Nimbus JWS header ordering is valid because the protected-header
+	// signature authenticates the exact encoded bytes; member order is not a
+	// separate protocol constraint.
+	nimbusOrder := `{"alg":"RS256","typ":"voice.game-message-execution-permit+jwt","kid":"auth-1"}`
+	compact = resignJWSHeaderForTest(t, compact, key, nimbusOrder)
+	_, err = VerifyExecutionPermit(compact, map[string]*rsa.PublicKey{"auth-1": &key.PublicKey}, now, 0, expected)
+	require.NoError(t, err)
+
+	duplicate := `{"alg":"RS256","kid":"auth-1","typ":"voice.game-message-execution-permit+jwt","typ":"voice.game-message-execution-permit+jwt"}`
+	_, err = VerifyExecutionPermit(resignJWSHeaderForTest(t, compact, key, duplicate),
+		map[string]*rsa.PublicKey{"auth-1": &key.PublicKey}, now, 0, expected)
+	require.Error(t, err, "duplicate protected-header members must remain invalid")
+
+	unknown := `{"alg":"RS256","kid":"auth-1","typ":"voice.game-message-execution-permit+jwt","extra":true}`
+	_, err = VerifyExecutionPermit(resignJWSHeaderForTest(t, compact, key, unknown),
+		map[string]*rsa.PublicKey{"auth-1": &key.PublicKey}, now, 0, expected)
+	require.Error(t, err, "unknown protected-header members must remain invalid")
+}
+
 func TestVerifyExecutionPermitRejectsExpiredOrUncertainDeadlineAndExtraClaims(t *testing.T) {
 	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
