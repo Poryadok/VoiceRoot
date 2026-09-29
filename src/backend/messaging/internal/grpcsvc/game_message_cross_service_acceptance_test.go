@@ -104,7 +104,7 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	chatGuard := &t16BlockingChatGuard{ChatGuard: &store.SQLChatGuard{Pool: chatDB}, entered: make(chan struct{}), release: make(chan struct{})}
 	processor := &VerifiedGameMessageProcessor{Store: storeMessages, AuthKeys: gameAuthKeys,
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
-			Chats: chatGuard, ResourceMappings: mappingClient,
+			Chats: chatGuard, ResourceMappings: &t16DiagnosticResourceMappingAuthority{delegate: mappingClient, t: t},
 		}}
 	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
 	diagnosticProcessor.probeAuthJWKS = func() {
@@ -209,7 +209,24 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, seedT16ResourceMapping(ctx, gisDB, fixture))
 
 	positiveMappingRequest, positiveMappingHash := newT16Request(fixture)
+	var seededMappingRevision int64
+	err = gisDB.QueryRow(ctx, `SELECT m.mapping_revision
+		FROM game_resource_binding_chats r
+		JOIN applications a ON a.id=r.application_id AND a.status IN ('sandbox','active')
+		JOIN environments e ON e.id=r.environment_id AND e.application_id=r.application_id AND e.status='active'
+		JOIN player_bindings b ON b.application_id=r.application_id AND b.environment_id=r.environment_id
+			AND b.binding_id=r.binding_id AND b.status='active'
+		JOIN game_resource_mappings m ON m.application_id=r.application_id AND m.environment_id=r.environment_id
+			AND m.resource_kind='chat' AND m.chat_id=r.chat_id AND m.status='active'
+		WHERE r.application_id=$1 AND r.environment_id=$2 AND r.binding_id=$3 AND r.chat_id=$4
+		AND r.status='active' AND r.lease_expires_at > clock_timestamp()`,
+		fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID).Scan(&seededMappingRevision)
+	require.NoError(t, err, "GIS exact app/environment/binding/chat predicate must match the seeded active tuple")
+	require.Positive(t, seededMappingRevision)
+	workloadNoncesBeforePositive := countT16GISWorkloadNonces(t, ctx)
 	response, err := apply(positiveMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, positiveMappingHash)
+	require.Equal(t, workloadNoncesBeforePositive+1, countT16GISWorkloadNonces(t, ctx),
+		"the exact linked-chat request must traverse GIS mapping authorization once")
 	require.NoError(t, err, "the real Auth -> GIS -> Messaging path should accept the exact linked chat")
 	require.Equal(t, fixture.messageID.String(), response.GetMessage().GetId())
 	require.Equal(t, fixture.chatID.String(), response.GetMessage().GetDisplayChatId())
@@ -501,6 +518,25 @@ type t16DiagnosticGameMessageProcessor struct {
 	probeAuthJWKS func()
 	mu            sync.Mutex
 	watch         string
+}
+
+type t16DiagnosticResourceMappingAuthority struct {
+	delegate interface {
+		AuthorizeAppBindingChat(context.Context, gameprotocol.DeviceAuthority, gameprotocol.Message) error
+	}
+	t *testing.T
+}
+
+func (d *t16DiagnosticResourceMappingAuthority) AuthorizeAppBindingChat(
+	ctx context.Context, authority gameprotocol.DeviceAuthority, message gameprotocol.Message,
+) error {
+	err := d.delegate.AuthorizeAppBindingChat(ctx, authority, message)
+	if err != nil {
+		d.t.Logf("T16 diagnostic: real GIS mapping client rejected tuple app=%s env=%s binding=%s messageApp=%s messageEnv=%s messageBinding=%s chat=%s: %v",
+			authority.ApplicationID, authority.EnvironmentID, authority.BindingID,
+			message.ApplicationID, message.EnvironmentID, message.BindingID, message.ChatID, err)
+	}
+	return err
 }
 
 func (p *t16DiagnosticGameMessageProcessor) watchAssertion(assertion string) {
