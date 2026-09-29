@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -105,9 +106,10 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
 			Chats: chatGuard, ResourceMappings: mappingClient,
 		}}
+	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
 	verifier, gatewayIssuer := t16GatewayPrincipalRuntime(t, ctx)
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(principalgrpc.ApplyGameMessageUnaryInterceptor(verifier)))
-	messagingv1.RegisterMessagingServiceServer(grpcServer, &MessagingGRPC{Messages: storeMessages, GameMessages: processor})
+	messagingv1.RegisterMessagingServiceServer(grpcServer, &MessagingGRPC{Messages: storeMessages, GameMessages: diagnosticProcessor})
 	listener := bufconn.Listen(1 << 20)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(grpcServer.Stop)
@@ -164,8 +166,10 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	_, err = gisDB.Exec(ctx, `DELETE FROM game_resource_mappings WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3`, fixture.appID, fixture.envID, fixture.chatID)
 	require.NoError(t, err)
 	missingMappingRequest, missingMappingHash := newT16Request(fixture)
+	diagnosticProcessor.watchAssertion(missingMappingRequest.GetDeviceAuthorityAssertion())
 	workloadNoncesBeforeMapping := countT16GISWorkloadNonces(t, ctx)
 	_, err = apply(missingMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, missingMappingHash)
+	diagnosticProcessor.clearWatchedAssertion()
 	require.Error(t, err, "absent mapping must fail closed")
 	require.Equal(t, workloadNoncesBeforeMapping+1, countT16GISWorkloadNonces(t, ctx), "absent mapping denial must reach GIS exactly once")
 	assertNoT16ExecutionSideEffects(t, ctx, authDB, gisDB, messagingDB, fixture)
@@ -483,6 +487,39 @@ type t16BlockingChatGuard struct {
 	armed   atomic.Bool
 	entered chan struct{}
 	release chan struct{}
+}
+
+// t16DiagnosticGameMessageProcessor delegates to the real processor and logs
+// only the underlying error for the one assertion selected by the acceptance
+// test. It adds no authorization behavior or substitute provider seam.
+type t16DiagnosticGameMessageProcessor struct {
+	delegate GameMessageProcessor
+	t        *testing.T
+	mu       sync.Mutex
+	watch    string
+}
+
+func (p *t16DiagnosticGameMessageProcessor) watchAssertion(assertion string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.watch = assertion
+}
+
+func (p *t16DiagnosticGameMessageProcessor) clearWatchedAssertion() {
+	p.watchAssertion("")
+}
+
+func (p *t16DiagnosticGameMessageProcessor) ProcessGameMessage(ctx context.Context, compact, authority string) (*store.MessageRow, error) {
+	row, err := p.delegate.ProcessGameMessage(ctx, compact, authority)
+	if err != nil {
+		p.mu.Lock()
+		watched := authority != "" && authority == p.watch
+		p.mu.Unlock()
+		if watched {
+			p.t.Logf("T16 diagnostic: real game message processor rejected selected request: %v", err)
+		}
+	}
+	return row, err
 }
 
 func (g *t16BlockingChatGuard) arm() { g.armed.Store(true) }
