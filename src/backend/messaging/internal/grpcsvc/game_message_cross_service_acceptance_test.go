@@ -302,7 +302,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	// Auth's retained committed receipt makes an exact completion replay
 	// read-only: it returns the same validated receipt without a fresh GIS call.
 	workloadNoncesBeforeCompletionReplay := countT16GISWorkloadNonces(t, ctx)
-	require.NoError(t, permitClient.Complete(ctx, authPermitID, fixture.operationID, "committed"))
+	require.NoError(t, permitClient.Complete(ctx, authPermitID, gisPermitID, fixture.operationID, "committed"))
 	var replayedAuthOutcome string
 	var replayedAuthReceipt []byte
 	var replayedAuthCompletedAt time.Time
