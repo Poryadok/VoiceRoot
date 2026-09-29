@@ -672,11 +672,40 @@ with an empty token. Its `voice-staging-maintenance` concurrency group prevents
 ordinary staging deploy from overlapping a rotation. The script derives the
 new PVC class/size from the current NATS PVC and the Realtime preflight image
 from the currently deployed Realtime workload; it does not touch another PVC.
-It writes the `rotating` marker before any Secret/PVC create, and only writes
-`active` after all four bootstrap Jobs, Realtime preflight and 18 leaf rollouts
-succeed. A failed run remains fail-closed at `rotating`; dispatch `rollback`
-to restore the retained generation before resuming ordinary deploys. Keep the
-old NATS PVC and Secrets until the replacement has passed NATS and HTTP smoke.
+For the live ACL proof Job, the workflow instead checks that the Realtime image
+tagged with its exact `master` SHA exists in GHCR before any cluster mutation.
+
+Immediately before activation, issue a short-lived `proof.creds` for the new
+APP account on the isolated trusted issuer host and upload its base64 bytes as
+the staging Environment secret `STAGING_NATS_PROOF_CREDS_B64`. The issuer
+limits its lifetime to at most two hours (60 minutes by default). The rotation
+preflight verifies the credential signature, issuer, exact scoped ACL and at
+least 30 minutes of remaining validity against the versioned Secret List before
+writing the marker or creating any Secret/PVC. The account signing seed remains
+only in the protected external location; neither the Job nor GitHub receives
+it. Delete the GitHub proof credential secret after the run and retain only
+sanitized evidence. The workflow does not delete GitHub secrets itself.
+
+After the new hub and four bootstrap Jobs are ready, the script creates a
+unique immutable temporary `proof.creds` Secret, a staging-only additive
+NetworkPolicy, and a one-shot Realtime proof Job. The Job uses separate local
+leaves for the fixed Realtime and proof credentials; only that Job also mounts
+the fixed Realtime credential for a direct authenticated hub ACK check. The
+script requires the exact sanitized
+`NATS_LIVE_ACL_PROOF=PASS generation=<generation> acl_sha=<sha256>` result and
+verifies deletion of the Job, NetworkPolicy and Secret before restarting any
+leaf or writing `active`. A failure after the cutover begins leaves the marker
+at `rotating` and all 18 leaves stopped; dispatch `rollback` to restore the
+retained generation.
+After successful proof and cleanup, set both staging Environment variables
+`VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and
+`VOICE_NATS_ACL_PROOF_GENERATION` (the newly active generation). Ordinary
+`full` and `app-only` deploys require both values to match the reviewed
+intent and active generation before mutation. After a verified rollback,
+restore `VOICE_NATS_ACL_PROOF_GENERATION` to the retained active generation
+and `VOICE_NATS_ACL_PROOF_SHA` to its previously accepted reviewed digest;
+never leave either variable attesting to the abandoned target. Keep the old
+NATS PVC and Secrets until the replacement has passed NATS and HTTP smoke.
 
 After activation, verify the marker is `active` with the requested generation,
 `voice-nats` still selects `voice-nats-pvc-candidate`, the candidate hub mounts

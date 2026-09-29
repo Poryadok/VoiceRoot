@@ -1,0 +1,67 @@
+# Staging-only one-shot live ACL proof. The proof app alone also mounts the
+# new Realtime credential for an authenticated direct-hub ACK check.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __PROOF_NAME__
+  namespace: voice-staging
+  annotations:
+    voice.io/nats-generation: __GENERATION__
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 240
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: voice-nats-acl-proof
+        voice.io/nats-proof-run: __PROOF_NAME__
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      initContainers:
+        - name: realtime-leaf
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          restartPolicy: Always
+          args: ["-c", "/etc/nats/leaf.conf"]
+          env: [{name: NATS_CREDS, value: "/var/run/nats/creds/realtime.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-service-creds, mountPath: /var/run/nats/creds/realtime.creds, subPath: realtime.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+        - name: proof-leaf
+          image: nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          restartPolicy: Always
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              sed 's/^listen: 127.0.0.1:4222$/listen: 127.0.0.1:4223/' /etc/nats/leaf.conf > /tmp/leaf-proof.conf
+              exec nats-server -c /tmp/leaf-proof.conf
+          env: [{name: NATS_CREDS, value: "/var/run/nats/proof/proof.creds"}]
+          volumeMounts:
+            - {name: nats-leaf-config, mountPath: /etc/nats/leaf.conf, subPath: leaf.conf, readOnly: true}
+            - {name: nats-proof-creds, mountPath: /var/run/nats/proof/proof.creds, subPath: proof.creds, readOnly: true}
+            - {name: nats-hub-tls, mountPath: /etc/nats/tls/ca.crt, subPath: ca.crt, readOnly: true}
+      containers:
+        - name: realtime-proof
+          image: __IMAGE_REGISTRY__/realtime:__IMAGE_TAG__
+          env:
+            - {name: REALTIME_NATS_LIVE_ACL_PROOF, value: "true"}
+            - {name: REALTIME_INSTANCE_ID, value: "realtime-1"}
+            - {name: NATS_URL, value: "nats://127.0.0.1:4222"}
+            - {name: REALTIME_NATS_PROOF_URL, value: "nats://127.0.0.1:4223"}
+            - {name: REALTIME_NATS_HUB_URL, value: "nats://voice-nats:4222"}
+            - {name: REALTIME_NATS_HUB_CREDS_FILE, value: "/etc/nats-realtime/realtime.creds"}
+            - {name: REALTIME_NATS_PROOF_GENERATION, value: "__GENERATION__"}
+            - {name: REALTIME_NATS_PROOF_ACL_SHA, value: "__ACL_SHA__"}
+          volumeMounts:
+            - {name: nats-service-creds, mountPath: /etc/nats-realtime/realtime.creds, subPath: realtime.creds, readOnly: true}
+      volumes:
+        - name: nats-leaf-config
+          configMap: {name: voice-nats-leaf-config}
+        - name: nats-service-creds
+          secret: {secretName: voice-nats-service-credentials-__GENERATION__, defaultMode: 0400, items: [{key: realtime.creds, path: realtime.creds}]}
+        - name: nats-proof-creds
+          secret: {secretName: __PROOF_NAME__, defaultMode: 0400, items: [{key: proof.creds, path: proof.creds}]}
+        - name: nats-hub-tls
+          secret: {secretName: voice-nats-hub-tls-__GENERATION__, items: [{key: ca.crt, path: ca.crt}]}

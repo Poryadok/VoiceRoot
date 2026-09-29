@@ -249,13 +249,17 @@ jobs:
         run: bash scripts/staging/nats-generation.sh --check
 
       - name: Verify NATS ACL proof before staging mutation
-        if: inputs.deploy_mode == 'full'
+        if: inputs.deploy_mode == 'full' || inputs.deploy_mode == 'app-only'
         env:
           VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
         run: |
           set -euo pipefail
+          source scripts/staging/nats-generation.sh
+          nats_generation_load
           expected="$(sha256sum deploy/nats/acl-intent.yaml | cut -d' ' -f1)"
           test -n "${VOICE_NATS_ACL_PROOF_SHA:-}" && test "${VOICE_NATS_ACL_PROOF_SHA}" = "$expected"
+          test -n "${VOICE_NATS_ACL_PROOF_GENERATION:-}" && test "${VOICE_NATS_ACL_PROOF_GENERATION}" = "$NATS_GENERATION"
 
       - name: Verify staging images in GHCR
         id: verify_image
@@ -339,6 +343,7 @@ jobs:
           VOICE_NATS_STORAGE_SIZE: ${{ inputs.nats_storage_size }}
           VOICE_NATS_FRESH_INSTALL: "false"
           VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
           NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
           NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
         run: |

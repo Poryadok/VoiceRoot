@@ -16,10 +16,11 @@ NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
 nats_generation_load
 if [ "${VOICE_NATS_REQUIRE_APP_READY:-false}" = true ]; then
   acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
-  nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}" || {
-    echo 'ERROR: reviewed staging NATS ACL activation proof is missing or stale; refusing app rollout' >&2
+  if ! nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}" ||
+     [[ "${VOICE_NATS_ACL_PROOF_GENERATION:-}" != "$NATS_GENERATION" ]]; then
+    echo 'ERROR: reviewed staging NATS ACL proof does not match the active generation; refusing app rollout' >&2
     exit 1
-  }
+  fi
 fi
 NATS_STORAGE_CLASS="${VOICE_NATS_STORAGE_CLASS:?VOICE_NATS_STORAGE_CLASS must be set from the reviewed staging preflight}"
 NATS_STORAGE_SIZE="${VOICE_NATS_STORAGE_SIZE:?VOICE_NATS_STORAGE_SIZE must be set from the reviewed staging capacity evidence}"

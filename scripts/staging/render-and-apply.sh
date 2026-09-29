@@ -17,6 +17,19 @@ export VOICE_K8S_NAMESPACE="${NS}"
 export DEPLOY_MODE="${MODE}"
 
 bash "${ROOT}/scripts/staging/nats-generation.sh" --check
+if [[ "$MODE" != images-only ]]; then
+  # Check the reviewed ACL digest and the exact active NATS identity before
+  # ingress, migrations, infra or app manifests can mutate staging.
+  # shellcheck source=scripts/staging/nats-generation.sh
+  source "${ROOT}/scripts/staging/nats-generation.sh"
+  nats_generation_load
+  acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+  [[ "${VOICE_NATS_ACL_PROOF_SHA:-}" == "$acl_intent_sha" &&
+     "${VOICE_NATS_ACL_PROOF_GENERATION:-}" == "$NATS_GENERATION" ]] || {
+    echo 'ERROR: staging NATS ACL proof does not match the active generation' >&2
+    exit 1
+  }
+fi
 bash "${ROOT}/scripts/staging/preflight-resend-key.sh"
 
 echo "Applying Voice staging: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
