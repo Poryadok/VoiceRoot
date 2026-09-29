@@ -223,6 +223,26 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID).Scan(&seededMappingRevision)
 	require.NoError(t, err, "GIS exact app/environment/binding/chat predicate must match the seeded active tuple")
 	require.Positive(t, seededMappingRevision)
+	runtimeTx, err := gisDB.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = runtimeTx.Rollback(ctx) }()
+	_, err = runtimeTx.Exec(ctx, `SET LOCAL ROLE gameintegration_runtime`)
+	require.NoError(t, err, "the integration test role must be able to assume the GIS runtime role")
+	var runtimeMappingRevision int64
+	err = runtimeTx.QueryRow(ctx, `SELECT m.mapping_revision
+		FROM game_resource_binding_chats r
+		JOIN applications a ON a.id=r.application_id AND a.status IN ('sandbox','active')
+		JOIN environments e ON e.id=r.environment_id AND e.application_id=r.application_id AND e.status='active'
+		JOIN player_bindings b ON b.application_id=r.application_id AND b.environment_id=r.environment_id
+			AND b.binding_id=r.binding_id AND b.status='active'
+		JOIN game_resource_mappings m ON m.application_id=r.application_id AND m.environment_id=r.environment_id
+			AND m.resource_kind='chat' AND m.chat_id=r.chat_id AND m.status='active'
+		WHERE r.application_id=$1 AND r.environment_id=$2 AND r.binding_id=$3 AND r.chat_id=$4
+		AND r.status='active' AND r.lease_expires_at > clock_timestamp()`,
+		fixture.appID, fixture.envID, fixture.bindingID, fixture.chatID).Scan(&runtimeMappingRevision)
+	require.NoError(t, err, "GIS runtime role must see the exact active app/environment/binding/chat tuple")
+	require.Equal(t, seededMappingRevision, runtimeMappingRevision,
+		"GIS runtime role and fixture owner must observe the same mapping revision")
 	workloadNoncesBeforePositive := countT16GISWorkloadNonces(t, ctx)
 	response, err := apply(positiveMappingRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, positiveMappingHash)
 	require.Equal(t, workloadNoncesBeforePositive+1, countT16GISWorkloadNonces(t, ctx),

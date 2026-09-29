@@ -171,8 +171,14 @@ func (c *GameResourceMappingAuthorizationClient) AuthorizeAppBindingChat(ctx con
 		return errors.New("GIS resource mapping response proof is invalid")
 	}
 	var result authorizeGameChatMappingResponse
-	if err := decodeCanonicalResourceMappingResponse(responseBody, &result); err != nil || !result.Allowed || result.MappingRevision <= 0 {
-		return errors.New("GIS resource mapping denied or returned an invalid revision")
+	if err := decodeCanonicalResourceMappingResponse(responseBody, &result); err != nil {
+		return errors.New("GIS resource mapping response body is invalid")
+	}
+	if !result.Allowed {
+		return fmt.Errorf("GIS resource mapping denied: allowed=%t mapping_revision=%d", result.Allowed, result.MappingRevision)
+	}
+	if result.MappingRevision <= 0 {
+		return fmt.Errorf("GIS resource mapping revision is invalid: allowed=%t mapping_revision=%d", result.Allowed, result.MappingRevision)
 	}
 	return nil
 }
