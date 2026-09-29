@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
@@ -13,15 +14,144 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/in_app_notifications.dart';
+import 'package:voice_frontend/state/inbox_reconciler.dart';
+import 'package:voice_frontend/state/message_requests_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
+import 'support/inbox_reconciler_fakes.dart';
 
 /// Unit tests for in-app notifications (sound + badge, no FCM).
 ///
 /// Production: [InAppNotificationController] in `lib/state/in_app_notifications.dart`.
 void main() {
   group('InAppNotificationController', () {
+    test(
+      'friend_request refreshes incoming invitations without reload',
+      () async {
+        final hub = _FakeRealtimeHub();
+        final friends = _RequestFriendsClient();
+        final container = _container(
+          sound: _RecordingSoundPlayer(),
+          hub: hub,
+          friends: friends,
+        );
+        addTearDown(container.dispose);
+        final subscription = container.listen(
+          friendRequestsProvider,
+          (_, _) {},
+        );
+        addTearDown(subscription.close);
+        container.read(inAppNotificationControllerProvider);
+        expect(
+          (await container.read(friendRequestsProvider.future)).incoming,
+          isEmpty,
+        );
+
+        friends.requestVisible = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'notification',
+            data: {
+              'type': 'friend_request',
+              'friend_request_id': 'request-1',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
+
+        expect((await container.read(friendRequestsProvider.future)).incoming, [
+          'peer-1',
+        ]);
+      },
+    );
+
+    test('reconnect refreshes friend requests missed while offline', () async {
+      final hub = _FakeRealtimeHub();
+      final friends = _RequestFriendsClient();
+      final container = _container(
+        sound: _RecordingSoundPlayer(),
+        hub: hub,
+        friends: friends,
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(friendRequestsProvider, (_, _) {});
+      addTearDown(subscription.close);
+      container.read(inAppNotificationControllerProvider);
+      expect(
+        (await container.read(friendRequestsProvider.future)).incoming,
+        isEmpty,
+      );
+
+      friends.requestVisible = true;
+      final session = container.read(authControllerProvider).session!;
+      container
+          .read(realtimeHelloBindingProvider.notifier)
+          .state = RealtimeHelloBinding(
+        generation: 1,
+        bindingGeneration: 1,
+        profileId: session.activeProfileId,
+        authorization: session.authorizationHeader,
+      );
+      await pumpEventQueue();
+
+      expect((await container.read(friendRequestsProvider.future)).incoming, [
+        'peer-1',
+      ]);
+    });
+
+    test('message_request updates the requests inbox and in-app row', () async {
+      final sound = _RecordingSoundPlayer();
+      final hub = _FakeRealtimeHub();
+      final chats = _RequestChatsClient();
+      final container = _container(sound: sound, hub: hub, chats: chats);
+      addTearDown(container.dispose);
+
+      container.read(inAppNotificationControllerProvider);
+      expect(
+        (await container.read(
+          messageRequestsSummaryProvider.future,
+        )).pendingCount,
+        0,
+      );
+      await container.read(inboxReconcilerProvider.notifier).reconcile();
+      chats.requestVisible = true;
+
+      hub.emit(
+        const RealtimeFrame(
+          op: 'notification',
+          data: {
+            'type': 'message_request',
+            'chat_id': 'new-request',
+            'message_id': 'first-message',
+            'sender_profile_id': 'peer-1',
+          },
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        (await container.read(
+          messageRequestsSummaryProvider.future,
+        )).pendingCount,
+        1,
+      );
+      expect(
+        container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.requests]
+            .items
+            .map((item) => item.chatId),
+        contains('new-request'),
+      );
+      expect(
+        container.read(inAppNotificationCenterProvider).items.single.type,
+        'message_request',
+      );
+    });
+
     test(
       'notification for non-selected chat bumps unread and plays sound',
       () async {
@@ -633,7 +763,8 @@ void main() {
 ProviderContainer _container({
   required _RecordingSoundPlayer sound,
   required _FakeRealtimeHub hub,
-  _FakeChatsClient? chats,
+  VoiceChatsClient? chats,
+  VoiceFriendsClient? friends,
   bool soundEnabled = true,
 }) {
   final chatsClient =
@@ -674,6 +805,8 @@ ProviderContainer _container({
         MockClient((_) async => http.Response('{}', 404)),
       ),
       voiceChatsClientProvider.overrideWithValue(chatsClient),
+      if (friends != null)
+        voiceFriendsClientProvider.overrideWithValue(friends),
       voiceMessagesClientProvider.overrideWithValue(_FakeMessagesClient()),
       realtimeHubProvider.overrideWithValue(hub),
       notificationSoundPlayerProvider.overrideWithValue(sound),
@@ -752,6 +885,53 @@ class _FakeChatsClient extends VoiceChatsClient {
     }
     return ChatsApiOk(_pages.removeAt(0));
   }
+}
+
+class _RequestChatsClient extends VoiceChatsClient {
+  _RequestChatsClient()
+    : super(
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
+      );
+
+  bool requestVisible = false;
+
+  @override
+  Future<ChatsApiResult<ChatListData>> listChats({
+    required String authorization,
+    String? cursor,
+    int? pageSize,
+    String? inbox,
+    String? folderId,
+  }) async => ChatsApiOk(
+    ChatListData(
+      items: inbox == 'requests' && requestVisible
+          ? [inboxChatItem('new-request', inbox: 'requests')]
+          : const [],
+    ),
+  );
+}
+
+class _RequestFriendsClient extends VoiceFriendsClient {
+  _RequestFriendsClient()
+    : super(
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
+      );
+
+  bool requestVisible = false;
+
+  @override
+  Future<FriendsApiResult<FriendRequestsData>> listFriendRequests({
+    required String authorization,
+  }) async => FriendsApiOk(
+    FriendRequestsData(
+      incoming: requestVisible ? ['peer-1'] : const [],
+      outgoing: const [],
+    ),
+  );
 }
 
 class _FakeMessagesClient extends VoiceMessagesClient {

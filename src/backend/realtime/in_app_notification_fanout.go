@@ -74,6 +74,9 @@ func newMessageNotificationFanouts(ms *eventsv1.MessageSent, chatMemberProfileID
 		if profileID == "" || profileID == senderID {
 			continue
 		}
+		if recipientStates != nil && recipientStates[profileID].InboxBucket == "declined" {
+			continue
+		}
 		if recipientStates != nil && recipientStates[profileID].IsArchived {
 			continue
 		}
@@ -209,7 +212,24 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 	var fanouts []profileFanout
 	notifyOK := false
 	if lookupOK {
-		fanouts, notifyOK = inAppNotificationFanouts(data, hub.profileIDsSubscribedToChat(chatID), "", recipientStates)
+		recipientIDs := hub.profileIDsSubscribedToChat(chatID)
+		if hub.memberInboxLister != nil {
+			// A new DM request recipient has no chat subscription yet. Add only
+			// authoritative request-bucket members; keep ordinary notification
+			// delivery scoped to existing chat subscriptions.
+			seen := make(map[string]struct{}, len(recipientIDs))
+			for _, profileID := range recipientIDs {
+				seen[profileID] = struct{}{}
+			}
+			for profileID, state := range recipientStates {
+				if state.InboxBucket == "requests" {
+					if _, exists := seen[profileID]; !exists {
+						recipientIDs = append(recipientIDs, profileID)
+					}
+				}
+			}
+		}
+		fanouts, notifyOK = inAppNotificationFanouts(data, recipientIDs, "", recipientStates)
 	}
 	if lookupOK {
 		for _, f := range archiveActivityFanouts(data, recipientStates) {

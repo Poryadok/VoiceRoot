@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,6 +22,36 @@ func socialConsumerDurableName(instanceID string) string {
 		id = "unknown"
 	}
 	return "rt_" + strings.ReplaceAll(id, "-", "") + "_social"
+}
+
+func friendRequestConsumerDurableName(instanceID string) string {
+	id := strings.TrimSpace(instanceID)
+	if id == "" {
+		id = "unknown"
+	}
+	return "rt_" + strings.ReplaceAll(id, "-", "") + "_friend_request"
+}
+
+func friendRequestEventToFanout(data []byte) (string, fanoutEnvelope, bool) {
+	var event eventsv1.SocialStreamEvent
+	if err := proto.Unmarshal(data, &event); err != nil {
+		return "", fanoutEnvelope{}, false
+	}
+	request := event.GetFriendRequest()
+	if request == nil || strings.TrimSpace(request.GetRequestId()) == "" ||
+		strings.TrimSpace(request.GetRequesterProfileId()) == "" ||
+		strings.TrimSpace(request.GetTargetProfileId()) == "" {
+		return "", fanoutEnvelope{}, false
+	}
+	payload, err := json.Marshal(map[string]string{
+		"type":              "friend_request",
+		"friend_request_id": request.GetRequestId(),
+		"sender_profile_id": request.GetRequesterProfileId(),
+	})
+	if err != nil {
+		return "", fanoutEnvelope{}, false
+	}
+	return request.GetTargetProfileId(), fanoutEnvelope{Op: "notification", D: payload}, true
 }
 
 func socialBlockEventAccounts(data []byte) (string, string, bool) {
@@ -66,6 +97,30 @@ func subscribeSocialEvents(js nats.JetStreamContext, hub *wsHub, instanceID stri
 	return sub, nil
 }
 
+func subscribeFriendRequestEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
+	if hub == nil {
+		return nil, fmt.Errorf("friend request subscriber requires hub")
+	}
+	durable := friendRequestConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request")); err != nil {
+		return nil, err
+	}
+	handler := func(msg *nats.Msg) {
+		profileID, envelope, ok := friendRequestEventToFanout(msg.Data)
+		if !ok {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "invalid friend request event payload")
+			return
+		}
+		hub.broadcastToProfile(profileID, envelope, logger, "")
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "friend request delivered")
+	}
+	sub, err := js.Subscribe("social.friend_request", handler, nats.Bind(jsStreamSocialEvents, durable))
+	if err != nil {
+		return nil, fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
+	}
+	return sub, nil
+}
+
 func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("social events consumer: missing hub or NATS URL")
@@ -85,12 +140,23 @@ func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceI
 	if err != nil {
 		return err
 	}
-	markRealtimeConsumerBound(ctx)
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("social.events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
+	requestSub, err := subscribeJetStreamWithRetry(ctx, "realtime social.friend_request", func() (*nats.Subscription, error) {
+		return subscribeFriendRequestEvents(js, hub, instanceID, logger)
+	})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := requestSub.Unsubscribe(); err != nil && logger != nil {
+			logger.Warn("friend request events unsubscribe failed", slog.String("error", err.Error()))
+		}
+	}()
+	markRealtimeConsumerBound(ctx)
 	<-ctx.Done()
 	return ctx.Err()
 }

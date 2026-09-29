@@ -149,6 +149,7 @@ func TestRealtimeConsumerDurableNamesMatchBootstrapContract(t *testing.T) {
 		{"chat", chatConsumerDurableName(instanceID), "rt_realtime1_chat"},
 		{"user", userConsumerDurableName(instanceID), "rt_realtime1_user"},
 		{"social", socialConsumerDurableName(instanceID), "rt_realtime1_social"},
+		{"friend request", friendRequestConsumerDurableName(instanceID), "rt_realtime1_friend_request"},
 		{"role", roleConsumerDurableName(instanceID), "rt_realtime1_role"},
 		{"voice", voiceConsumerDurableName(instanceID), "rt_realtime1_voice"},
 		{"matchmaking", matchmakingConsumerDurableName(instanceID), "rt_realtime1_matchmaking"},
@@ -160,6 +161,38 @@ func TestRealtimeConsumerDurableNamesMatchBootstrapContract(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSubscribeFriendRequestEventsBindsOnlyExactConsumer(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamSocialEvents, Subjects: []string{"social.>"}}); err != nil {
+		t.Fatal(err)
+	}
+	const instanceID = "friend-bind-only"
+	durable := friendRequestConsumerDurableName(instanceID)
+	if _, err := subscribeFriendRequestEvents(js, newWSHub(), instanceID, nil); err == nil {
+		t.Fatal("missing pre-provisioned friend request consumer was accepted")
+	}
+	if _, err := js.AddConsumer(jsStreamSocialEvents, &nats.ConsumerConfig{
+		Durable: durable, DeliverSubject: realtimeConsumerDeliverSubject(instanceID, "friend_request"),
+		FilterSubject: "social.friend_request", DeliverPolicy: nats.DeliverNewPolicy, AckPolicy: nats.AckExplicitPolicy,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := subscribeFriendRequestEvents(js, newWSHub(), instanceID, nil)
+	if err != nil {
+		t.Fatalf("bind exact friend request consumer: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
 }
 
 func TestSubscribeRoleEventsFailsClosedWhenConsumerIsMissing(t *testing.T) {
