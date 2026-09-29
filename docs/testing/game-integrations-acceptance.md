@@ -350,7 +350,7 @@ respectively.
 | ID03 | `SdkAuthorizationJdbcIntegrationTest.concurrentCodeExchangeAcrossServiceInstancesHasExactlyOneWinner` and `bindingExchangeConsumesTheT14CodeOnceAndReplaysOnlyWithTheRegisteredDeviceProof`, plus GIS `TestBindingExchangeHandlerRunsClaimCommitAndCompletionInOrder`, cover one-use exchange and exact replay. Flutter callback/resume retry tests avoid exchanging the callback code again. | The broader conversion crash/recovery acceptance remains ID12/T17. |
 | ID04 | The T14 approval API requires an explicit profile ID and checks exact ownership/current eligibility (`selectedProfileMustHaveExactOwnerAndCurrentEligibility`, `approvalRequiresExactPolicyRevisionAndCannotReissueLostCode`; controller `approvalRequiresExplicitProfileAndPositivePolicyRevision`). `SdkIdentityJdbcIntegrationTest.providerEmailAndDisplayClaimsNeverMergeOrSplitSdkAccounts` proves equal provider email/name cannot merge distinct provider subjects and changing those claims cannot split one subject's app/environment identity. | Conversion into an existing permanent account still requires explicit proof/preview/consent and its full email/nickname-only merge denial remains T17/T18 acceptance; the T14 provider identity test does not claim that conversion gate. |
 | ID05 | Auth rechecks authority at exchange and linked-session use (`exchangeRechecksCurrentAuthoritiesAfterBrowserApproval`, `issuedLinkedCredentialImmediatelyObservesAuthorityRevocation`); GIS binding authority tests require authenticated Auth workload. | Full unlink/delete/suspension propagation and governed-resource drain remain downstream T16/T20 acceptance. |
-| ID06 | Auth persists the explicit selected profile/revision; Flutter requires an explicit choice before approval and serializes the selected profile in the callback/session path (`browserConsentPreservesExplicitSecondaryProfileAndIssuesOnlyLinkedBootstrap`, `sdk_authorization_widget_test.dart`, `sdk_authorization_client_test.dart`). | The no-second-voice and hidden-profile roster/card/search/presence assertions remain broader T16 acceptance. |
+| ID06 | Auth persists the explicit selected profile/revision; Flutter requires an explicit choice before approval and serializes the selected profile in the callback/session path (`browserConsentPreservesExplicitSecondaryProfileAndIssuesOnlyLinkedBootstrap`, `sdk_authorization_widget_test.dart`, `sdk_authorization_client_test.dart`). | Hidden-profile roster/card/search/presence non-leak is verified by the T38-T39 consumer tasks; T16 checks the selected profile at authorization and execution time. |
 
 | ID | Given / When | Then / свидетельство |
 |---|---|---|
@@ -565,6 +565,33 @@ not live game-server runtime evidence. Real-provider acceptance, production
 admission, and a measured node revoke-to-eject interval remain open/excluded.
 New message writes also remain fail-closed until the T30/T31 app/environment/
 binding/chat mapping producer is available.
+
+### T16-DEV supplemental Auth authority checks
+
+`SdkAuthorizationJdbcIntegrationTest.bindingExchangeConsumesTheT14CodeOnceAndReplaysOnlyWithTheRegisteredDeviceProof`
+uses disposable PostgreSQL to verify three remaining Auth execution-permit
+boundaries. First, changing `sdk_authorizations.target_profile_id` after the
+GIS grant is persisted causes a direct permit issue to fail with no permit row;
+the service also compares the authorization's target account. Second, removing
+`game.chat.send` from the current application policy denies a direct permit
+service call before it reaches GIS. Third, a concurrent exact operation retry
+racing binding revoke returns the same immutable permit to both callers while
+GIS receives exactly one issuance; the existing transaction-lock and completion
+replay checks remain in the same PostgreSQL scenario. The test also preserves
+existing selected-profile eligibility/revision rechecks and denial at policy,
+profile, device, assertion, expiry and revoke boundaries.
+
+Focused development verification passed 65 tests (53 PostgreSQL JDBC
+integration, 5 permit-controller and 7 issuer-contract tests; no failures,
+errors or skips):
+
+```text
+rtk mvn -B '-Dtest=SdkAuthorizationJdbcIntegrationTest,AuthGameMessageExecutionPermitRestControllerTest,AuthUserPrincipalIssuerContractTest' test
+```
+
+This proves the Auth development boundary only. Hidden-profile roster/cards/
+search/presence fanout remains T38-T39; target-chat mapping remains T30/T31.
+No provider call, staging deployment, or live acceptance is included.
 
 ### T16-DEV cross-service permit acceptance
 

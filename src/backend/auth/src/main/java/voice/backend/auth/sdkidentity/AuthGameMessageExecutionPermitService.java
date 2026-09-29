@@ -173,7 +173,7 @@ public final class AuthGameMessageExecutionPermitService {
     if (currentEpoch == null || currentEpoch.longValue() != ((Number) grant.get("target_epoch")).longValue()) throw denied();
     var receipt = jdbc.queryForList("""
         SELECT a.game_binding_status,a.game_binding_id,a.game_binding_consent_revision,s.consent_revision,
-               s.expires_at,a.scopes,a.policy_revision,a.profile_revision
+               s.expires_at,a.scopes,a.policy_revision,a.profile_revision,a.target_account_id,a.target_profile_id
         FROM sdk_authorizations a JOIN sdk_linked_sessions s ON s.request_id=a.request_id
         WHERE a.request_id=:request
         """, Map.of("request", grant.get("authorization_request_id")));
@@ -185,6 +185,8 @@ public final class AuthGameMessageExecutionPermitService {
         || authorization.get("game_binding_consent_revision") == null
         || ((Number) authorization.get("game_binding_consent_revision")).longValue() != consent
         || ((Number) authorization.get("consent_revision")).longValue() != consent
+        || !targetAccount.equals(authorization.get("target_account_id"))
+        || !targetProfile.equals(authorization.get("target_profile_id"))
         || !grant.get("scopes").equals(authorization.get("scopes"))
         || ((Number) grant.get("policy_revision")).longValue() != ((Number) authorization.get("policy_revision")).longValue()
         || ((Number) grant.get("profile_revision")).longValue() != ((Number) authorization.get("profile_revision")).longValue()) throw denied();

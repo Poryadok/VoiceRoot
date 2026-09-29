@@ -326,12 +326,14 @@ class SdkAuthorizationJdbcIntegrationTest {
     AtomicReference<Instant> gisPermitExpiry = new AtomicReference<>(NOW.plusMillis(3000));
     CountDownLatch gisIssueEntered = new CountDownLatch(1);
     CountDownLatch allowGisIssueToFinish = new CountDownLatch(1);
+    AtomicInteger gisIssueCalls = new AtomicInteger();
     CountDownLatch gisCompletionEntered = new CountDownLatch(1);
     CountDownLatch allowGisCompletionToFinish = new CountDownLatch(1);
     var executionProfileCalls = new AtomicInteger();
     var advanceClockDuringFinalProfileCheck = new AtomicBoolean(false);
     SdkGameIntegrationExecutionPermitAuthority gisAuthority = new SdkGameIntegrationExecutionPermitAuthority() {
       @Override public Permit issue(UUID binding, UUID operation, String assertion) {
+        gisIssueCalls.incrementAndGet();
         if (operation.equals(messageOperation)) {
           gisIssueEntered.countDown();
           try {
@@ -368,6 +370,26 @@ class SdkAuthorizationJdbcIntegrationTest {
           }
           return eligibleProfile;
         }, gisAuthority, executionClock);
+    UUID policyScopeOperation = UUID.randomUUID();
+    policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), SCOPES,
+        Set.of("google")));
+    assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, policyScopeOperation, messageHash))
+        .isInstanceOf(SdkIdentityDeniedException.class)
+        .as("direct permit calls must recheck the currently selected player scope");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
+        Map.of("operation", policyScopeOperation), Long.class)).isZero();
+    policy.set(new SdkAuthorizationPolicy.Policy(app, env, 3, "Example Game", Set.of(REDIRECT), executionScopes,
+        Set.of("google")));
+    UUID profileDivergenceOperation = UUID.randomUUID();
+    jdbc.update("UPDATE sdk_authorizations SET target_profile_id=:profile WHERE request_id=:request",
+        Map.of("profile", UUID.randomUUID(), "request", request.requestId()));
+    assertThatThrownBy(() -> executionPermits.issue(deviceAssertion, profileDivergenceOperation, messageHash))
+        .isInstanceOf(SdkIdentityDeniedException.class)
+        .as("permit issuance must remain bound to the profile selected by the linked authorization");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM sdk_game_message_execution_permits WHERE operation_id=:operation",
+        Map.of("operation", profileDivergenceOperation), Long.class)).isZero();
+    jdbc.update("UPDATE sdk_authorizations SET target_profile_id=:profile WHERE request_id=:request",
+        Map.of("profile", secondaryProfile, "request", request.requestId()));
     for (Instant invalidExpiry : List.of(NOW.plusMillis(500), NOW.plusMillis(3751))) {
       gisPermitExpiry.set(invalidExpiry);
       UUID rejectedOperation = UUID.randomUUID();
@@ -392,20 +414,30 @@ class SdkAuthorizationJdbcIntegrationTest {
     gisPermitExpiry.set(NOW.plusMillis(3000));
     executionProfileCalls.set(0);
     advanceClockDuringFinalProfileCheck.set(true);
-    var raceWorkers = Executors.newFixedThreadPool(2);
+    int gisIssuesBeforeRace = gisIssueCalls.get();
+    var raceWorkers = Executors.newFixedThreadPool(3);
     AuthGameMessageExecutionPermitService.Permit issuedPermit;
+    AuthGameMessageExecutionPermitService.Permit concurrentReplay;
     AuthGameBindingHandoffService.RevocationReceipt concurrentRevoke;
     CountDownLatch revokeStarted = new CountDownLatch(1);
+    CountDownLatch replayStarted = new CountDownLatch(1);
     try {
       var permitFuture = raceWorkers.submit(() -> executionPermits.issue(deviceAssertion, messageOperation, messageHash));
       assertThat(gisIssueEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      var replayFuture = raceWorkers.submit(() -> {
+        replayStarted.countDown();
+        return executionPermits.issue(deviceAssertion, messageOperation, messageHash);
+      });
+      assertThat(replayStarted.await(5, TimeUnit.SECONDS)).isTrue();
       var revokeFuture = raceWorkers.submit(() -> {
         revokeStarted.countDown();
         return authClaims.revoke(operationId);
       });
       assertThat(revokeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      awaitDatabaseLockWait("%sdk_identities%for update%");
       allowGisIssueToFinish.countDown();
       issuedPermit = permitFuture.get(10, TimeUnit.SECONDS);
+      concurrentReplay = replayFuture.get(10, TimeUnit.SECONDS);
       advanceClockDuringFinalProfileCheck.set(false);
       concurrentRevoke = revokeFuture.get(10, TimeUnit.SECONDS);
     } finally {
@@ -414,6 +446,10 @@ class SdkAuthorizationJdbcIntegrationTest {
     }
     assertThat(concurrentRevoke.status()).isEqualTo("revoking")
         .as("revoke waits for the permit transaction, then drains its admitted operation");
+    assertThat(concurrentReplay).isEqualTo(issuedPermit)
+        .as("concurrent exact operation replay returns the original committed permit");
+    assertThat(gisIssueCalls.get()).isEqualTo(gisIssuesBeforeRace + 1)
+        .as("the PostgreSQL operation lock admits only one GIS permit issuance");
     var signedPermit = SignedJWT.parse(issuedPermit.permitJws());
     UUID permitJti = UUID.fromString(signedPermit.getJWTClaimsSet().getJWTID());
     assertThat(signedPermit.getJWTClaimsSet().getClaim("iat_ms")).isEqualTo(NOW.plusMillis(500).toEpochMilli());

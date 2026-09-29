@@ -433,10 +433,15 @@ contracts land before consumers; activation lands after all consumers.
     [T15-DEV acceptance](game-integrations-acceptance.md#t15-dev-jcs-wire-conformance).
     Real-provider/runtime admission and measured node revoke propagation remain
     excluded or open; this subgate does not close the T16 or T30/T31 producers.
-- [ ] **T16** `D: T14,T15` Implement limited delegated grants, binding/authority
+- [x] **T16** `D: T14-DEV,T15-DEV` Implement limited delegated grants, binding/authority
+  The original `D:T14,T15` edge is resolved here against their completed
+  provider-independent development subgates; real-provider/production evidence
+  remains separately excluded and does not block this development behavior.
   reads, selected profile/alias serialization, direct-call scope checks and
-  account/profile/app/device revocation epochs. Verify hidden profiles cannot
-  leak via roster, cards, search or presence. **Partial producer slice:** GIS
+  account/profile/app/device revocation epochs. Bind execution to the selected
+  profile and current player-scope policy. Hidden-profile fanout through
+  roster/cards/search/presence is owned by T38-T39 consumers. **Development
+  implementation:** GIS
   has durable binding state, an Auth-workload-protected owner read, and a short
   operation-scoped permit ledger with revoking/drain semantics. Auth now has a
   dedicated handoff signer, opt-in private mTLS claim/completion routes, and a
@@ -465,8 +470,8 @@ contracts land before consumers; activation lands after all consumers.
   with the request's same key, enforces a 2-second timeout, and fails closed
   when the complete client configuration or mapping authority is unavailable.
   Scoped Auth and Messaging tests, including an ApplyGameMessage-through-client
-  mTLS allow/deny test with local PostgreSQL, pass. **T16-DEV still requires a
-  hosted Linux Compose gate** that starts the production Auth and GIS services
+  mTLS allow/deny test with local PostgreSQL, pass. **T16-DEV required a hosted
+  Linux Compose gate** that starts the production Auth and GIS services
   with disposable PostgreSQL state and invokes Messaging's production gRPC
   ingress, exact principal verification, permit client, GIS mapping client,
   and receipt transaction. Synthetic mappings are seeded only in that
@@ -486,19 +491,21 @@ contracts land before consumers; activation lands after all consumers.
   `e1fbe949e440f0ddfc2d1e5788b7af2f689901da`:
   [workflow run 36609945598](https://github.com/Poryadok/VoiceRoot/actions/runs/36609945598)
   completed successfully, including GIS-unavailable denial, GIS restoration,
-  and integrated production-handler Messaging acceptance. T16 parent remains open for broader PostgreSQL
-  concurrency/replay, independent direct-call scope checks and selected-profile
-  policy surfaces. Selected-profile/alias fanout and hidden-profile non-leak across
-  roster/cards/search/presence belong to the separately named consumer task;
-  Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Keep
-  downstream message writes fail-closed until their
-  producer and consumer checks are implemented.
-  - [x] **T16-DEV** `D: T14-DEV,T15` Complete the hosted Linux Compose
+  and integrated production-handler Messaging acceptance. Supplemental Auth
+  PostgreSQL coverage then closed exact concurrent permit replay against
+  revoke, direct-call current-scope denial, and selected-profile account/profile
+  equality between current authorization and the durable GIS grant. The focused
+  JDBC/controller/issuer run passed 65 tests with no skips; see the T16-DEV
+  supplemental evidence map. Selected-profile/alias fanout and hidden-profile
+  non-leak across roster/cards/search/presence are owned by T38-T39 consumers.
+  Direct target-chat authorization remains T30/T31 mapping+ChatGuard. Real
+  provider, live deployment and production admission are not claimed.
+  - [x] **T16-DEV** `D: T14-DEV,T15-DEV` Complete the hosted Linux Compose
     cross-service acceptance described in [game-integrations acceptance](game-integrations-acceptance.md#t16-dev-cross-service-permit-acceptance).
     The production Auth/GIS services, GIS PostgreSQL handlers/store, and
     Messaging gRPC path passed on commit
     `e1fbe949e440f0ddfc2d1e5788b7af2f689901da` in [run 36609945598](https://github.com/Poryadok/VoiceRoot/actions/runs/36609945598).
-    This does not close parent T16 or T30/T31.
+    This hosted proof alone does not close T30/T31 producer work.
 - [ ] **T17** `D: T13–T16` Implement durable sdk→new-permanent conversion:
   operation/status, source proof, registration, preview/consent, authority
   freeze, owner receipts, grant recompute, new credentials, retired source
