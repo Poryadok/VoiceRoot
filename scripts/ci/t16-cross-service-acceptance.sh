@@ -33,6 +33,13 @@ make_leaf gis-server gameintegration 'DNS:gameintegration,DNS:localhost,IP:127.0
 make_leaf gameintegration-client gameintegration 'URI:spiffe://voice/service/gameintegration' clientAuth
 make_leaf messaging-client messaging 'URI:spiffe://voice/service/messaging' clientAuth
 
+# Tomcat runs with JSSE in the hosted Temurin image. Build its truststore from
+# only this disposable fixture CA; caCertificateFile alone is OpenSSL-specific.
+T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD="$(openssl rand -hex 16)"
+keytool -importcert -noprompt -storetype PKCS12 -alias t16-client-ca \
+  -file "$tls_dir/ca.crt" -keystore "$tls_dir/auth-client-ca.p12" \
+  -storepass "$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD" >/dev/null 2>&1
+
 cp src/backend/auth/src/test/resources/jwt-test-private.pem "$t16_dir/auth-principal/current.pem"
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
   -out "$t16_dir/auth-principal/next.pem" >/dev/null 2>&1
@@ -46,12 +53,14 @@ chmod 400 \
   "$tls_dir/gameintegration-client.key" \
   "$t16_dir/auth-principal"/*.pem
 chmod 600 "$tls_dir/messaging-client.key"
+chmod 440 "$tls_dir/auth-client-ca.p12"
 rm "$tls_dir/ca.key" "$tls_dir/ca.srl"
 
 cat > "$t16_dir/compose.env" <<EOF
 T16_FIXTURE_DIR=$t16_dir
 T16_AUTH_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
 T16_MESSAGING_WORKLOAD_KEY_B64=$(openssl rand -base64 32)
+T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD=$T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD
 EOF
 T16_GAME_PUBLIC_JWK="$(python3 - "$t16_dir/auth-principal/current.pem" <<'PY'
 import base64
@@ -83,4 +92,5 @@ sudo chown 65532:65532 \
   "$tls_dir/auth-server.key" \
   "$tls_dir/gis-server.key" \
   "$tls_dir/gameintegration-client.key" \
+  "$tls_dir/auth-client-ca.p12" \
   "$t16_dir/auth-principal"/*.pem

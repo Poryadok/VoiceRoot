@@ -104,11 +104,17 @@ without extending its original expiry; changed tuple conflicts.
 
 Auth's dedicated mTLS connector uses
 `voice.auth.game-binding.mtls.port`, `.server-cert-file`, `.server-key-file`,
-`.client-ca-file`, and `.allowed-client-uri-san`, with environment bindings
+`.client-ca-file`, `.truststore-file`, `.truststore-password`, and
+`.allowed-client-uri-san`, with environment bindings
 `AUTH_GAME_BINDING_MTLS_PORT`, `_SERVER_CERT_FILE`, `_SERVER_KEY_FILE`,
-`_CLIENT_CA_FILE`, and `_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it;
-enabling requires all TLS files and the exact GIS URI SAN. Partial configuration,
-untrusted client certificates, or a mismatched URI SAN fail closed. This private
+`_CLIENT_CA_FILE`, `_TRUSTSTORE_FILE`, `_TRUSTSTORE_PASSWORD`, and
+`_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it; enabling requires all TLS
+files and the exact GIS URI SAN. The PKCS12 JSSE truststore must contain exactly
+the X.509 CA set in `client-ca-file`; the latter also configures Tomcat's
+OpenSSL provider. Configure only the approved GIS and Messaging client CA set,
+and keep the truststore password out of logs. Private route filters require a
+verified peer certificate with the exact route-specific URI SAN; missing or
+untrusted certificates and mismatched URI SANs fail closed. This private
 listener is not Gateway-published and has no plaintext fallback.
 
 Provider subjects are HMAC-SHA-256 digested in Auth with a dedicated 32-byte

@@ -27,14 +27,22 @@ public class AuthGameBindingMtlsConfiguration {
   private static final String SERVER_CERT = "AUTH_GAME_BINDING_MTLS_SERVER_CERT_FILE";
   private static final String SERVER_KEY = "AUTH_GAME_BINDING_MTLS_SERVER_KEY_FILE";
   private static final String CLIENT_CA = "AUTH_GAME_BINDING_MTLS_CLIENT_CA_FILE";
+  private static final String TRUSTSTORE_FILE = "AUTH_GAME_BINDING_MTLS_TRUSTSTORE_FILE";
+  private static final String TRUSTSTORE_PASSWORD = "AUTH_GAME_BINDING_MTLS_TRUSTSTORE_PASSWORD";
   private static final String CLIENT_SAN = "AUTH_GAME_BINDING_MTLS_ALLOWED_CLIENT_URI_SAN";
   private static final String MESSAGING_CLIENT_SAN = "AUTH_GAME_MESSAGE_EXECUTION_PERMIT_ALLOWED_CLIENT_URI_SAN";
 
   record Settings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
-                  Path clientCaFile, String allowedClientUriSan, String allowedMessagingClientUriSan) {
+                  Path clientCaFile, Path truststoreFile, String truststorePassword,
+                  String allowedClientUriSan, String allowedMessagingClientUriSan) {
     Settings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile, Path clientCaFile,
         String allowedClientUriSan) {
-      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, allowedClientUriSan, "");
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, null, null, allowedClientUriSan, "");
+    }
+    Settings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile, Path clientCaFile,
+        String allowedClientUriSan, String allowedMessagingClientUriSan) {
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, null, null,
+          allowedClientUriSan, allowedMessagingClientUriSan);
     }
   }
 
@@ -43,25 +51,29 @@ public class AuthGameBindingMtlsConfiguration {
     String cert = property(environment, "voice.auth.game-binding.mtls.server-cert-file", SERVER_CERT);
     String key = property(environment, "voice.auth.game-binding.mtls.server-key-file", SERVER_KEY);
     String ca = property(environment, "voice.auth.game-binding.mtls.client-ca-file", CLIENT_CA);
+    String truststore = property(environment, "voice.auth.game-binding.mtls.truststore-file", TRUSTSTORE_FILE);
+    String truststorePassword = property(environment, "voice.auth.game-binding.mtls.truststore-password", TRUSTSTORE_PASSWORD);
     String san = property(environment, "voice.auth.game-binding.mtls.allowed-client-uri-san", CLIENT_SAN);
     String messagingSan = property(environment, "voice.auth.game-message.mtls.allowed-client-uri-san", MESSAGING_CLIENT_SAN);
-    boolean configured = List.of(cert, key, ca, san, messagingSan).stream().anyMatch(value -> !value.isBlank());
+    boolean configured = List.of(cert, key, ca, truststore, truststorePassword, san, messagingSan)
+        .stream().anyMatch(value -> !value.isBlank());
     if (rawPort == null || rawPort.isBlank()) {
       if (configured) throw invalid();
-      return new Settings(false, 0, null, null, null, null, null);
+      return new Settings(false, 0, null, null, null, null, null, null, null);
     }
     final int port;
     try { port = Integer.parseInt(rawPort); }
     catch (NumberFormatException malformed) { throw invalid(); }
-    if (port == 0 && !configured) return new Settings(false, 0, null, null, null, null, null);
+    if (port == 0 && !configured) return new Settings(false, 0, null, null, null, null, null, null, null);
     if (port < 1 || port > 65535 || cert.isBlank() || key.isBlank() || ca.isBlank()
-        || !validUriSan(san)) throw invalid();
+        || truststore.isBlank() || truststorePassword.isBlank() || !validUriSan(san)) throw invalid();
     Path certPath = readableFile(cert);
     Path keyPath = readableFile(key);
     Path caPath = readableFile(ca);
-    validateCertificateMaterial(certPath, keyPath, caPath);
+    Path truststorePath = readableFile(truststore);
+    validateCertificateMaterial(certPath, keyPath, caPath, truststorePath, truststorePassword);
     if (!messagingSan.isBlank() && !validUriSan(messagingSan)) throw invalid();
-    return new Settings(true, port, certPath, keyPath, caPath, san, messagingSan);
+    return new Settings(true, port, certPath, keyPath, caPath, truststorePath, truststorePassword, san, messagingSan);
   }
 
   private static boolean validUriSan(String san) {
@@ -77,7 +89,8 @@ public class AuthGameBindingMtlsConfiguration {
   AuthGameBindingMtlsSettings authGameBindingMtlsSettings(Environment environment) {
     Settings settings = settings(environment);
     return new AuthGameBindingMtlsSettings(settings.enabled(), settings.port(), settings.serverCertFile(),
-        settings.serverKeyFile(), settings.clientCaFile(), settings.allowedClientUriSan(),
+        settings.serverKeyFile(), settings.clientCaFile(), settings.truststoreFile(), settings.truststorePassword(),
+        settings.allowedClientUriSan(),
         settings.allowedMessagingClientUriSan());
   }
 
@@ -93,7 +106,12 @@ public class AuthGameBindingMtlsConfiguration {
       connector.setProperty("SSLEnabled", "true");
       SSLHostConfig ssl = new SSLHostConfig();
       ssl.setCertificateVerification("required");
+      // caCertificateFile is used by Tomcat's OpenSSL provider. The Temurin runtime
+      // uses JSSE, which reads the client trust roots from truststoreFile instead.
       ssl.setCaCertificateFile(settings.clientCaFile().toString());
+      ssl.setTruststoreFile(settings.truststoreFile().toString());
+      ssl.setTruststoreType("PKCS12");
+      ssl.setTruststorePassword(settings.truststorePassword());
       SSLHostConfigCertificate certificate = new SSLHostConfigCertificate(
           ssl, SSLHostConfigCertificate.Type.UNDEFINED);
       certificate.setCertificateFile(settings.serverCertFile().toString());
@@ -139,7 +157,8 @@ public class AuthGameBindingMtlsConfiguration {
     } catch (RuntimeException invalidPath) { throw invalid(); }
   }
 
-  private static void validateCertificateMaterial(Path certPath, Path keyPath, Path caPath) {
+  private static void validateCertificateMaterial(Path certPath, Path keyPath, Path caPath,
+      Path truststorePath, String truststorePassword) {
     try {
       CertificateFactory certificates = CertificateFactory.getInstance("X.509");
       X509Certificate server;
@@ -159,24 +178,45 @@ public class AuthGameBindingMtlsConfiguration {
           || rsaPrivate.getModulus().bitLength() < 2048
           || !rsaPrivate.getModulus().equals(rsaPublic.getModulus())
           || !rsaPrivate.getPublicExponent().equals(rsaPublic.getPublicExponent())) throw invalid();
+      java.util.Set<X509Certificate> allowedAuthorities = new java.util.HashSet<>();
       try (var input = Files.newInputStream(caPath)) {
-        if (certificates.generateCertificates(input).isEmpty()) throw invalid();
+        for (var authority : certificates.generateCertificates(input)) {
+          allowedAuthorities.add((X509Certificate) authority);
+        }
       }
+      java.util.Set<X509Certificate> trustedAuthorities = new java.util.HashSet<>();
+      var truststore = java.security.KeyStore.getInstance("PKCS12");
+      try (var input = Files.newInputStream(truststorePath)) {
+        truststore.load(input, truststorePassword.toCharArray());
+      }
+      var aliases = truststore.aliases();
+      while (aliases.hasMoreElements()) {
+        var trusted = truststore.getCertificate(aliases.nextElement());
+        if (trusted instanceof X509Certificate x509) trustedAuthorities.add(x509);
+      }
+      if (allowedAuthorities.isEmpty() || trustedAuthorities.isEmpty()
+          || !allowedAuthorities.equals(trustedAuthorities)) throw invalid();
     } catch (Exception malformed) {
       throw invalid();
     }
   }
 
   private static IllegalStateException invalid() {
-    return new IllegalStateException("Auth game-binding mTLS requires a valid port, server cert/key, client CA and exact GIS URI SAN");
+    return new IllegalStateException("Auth game-binding mTLS requires a valid port, server cert/key, matching JSSE truststore/client CA and exact GIS URI SAN");
   }
 
   record AuthGameBindingMtlsSettings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
-                                     Path clientCaFile, String allowedClientUriSan,
+                                     Path clientCaFile, Path truststoreFile, String truststorePassword,
+                                     String allowedClientUriSan,
                                      String allowedMessagingClientUriSan) {
     AuthGameBindingMtlsSettings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
         Path clientCaFile, String allowedClientUriSan) {
-      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, allowedClientUriSan, "");
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, null, null, allowedClientUriSan, "");
+    }
+    AuthGameBindingMtlsSettings(boolean enabled, int port, Path serverCertFile, Path serverKeyFile,
+        Path clientCaFile, String allowedClientUriSan, String allowedMessagingClientUriSan) {
+      this(enabled, port, serverCertFile, serverKeyFile, clientCaFile, null, null,
+          allowedClientUriSan, allowedMessagingClientUriSan);
     }
   }
 }

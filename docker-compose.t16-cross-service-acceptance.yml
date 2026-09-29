@@ -37,12 +37,15 @@ services:
       AUTH_GAME_BINDING_MTLS_SERVER_CERT_FILE: /run/t16/auth-server.crt
       AUTH_GAME_BINDING_MTLS_SERVER_KEY_FILE: /run/t16/auth-server.key
       AUTH_GAME_BINDING_MTLS_CLIENT_CA_FILE: /run/t16/ca.crt
+      AUTH_GAME_BINDING_MTLS_TRUSTSTORE_FILE: /run/t16/auth-client-ca.p12
+      AUTH_GAME_BINDING_MTLS_TRUSTSTORE_PASSWORD: ${T16_AUTH_CLIENT_TRUSTSTORE_PASSWORD:?required}
       AUTH_GAME_BINDING_MTLS_ALLOWED_CLIENT_URI_SAN: spiffe://voice/service/gameintegration
       AUTH_GAME_MESSAGE_EXECUTION_PERMIT_ALLOWED_CLIENT_URI_SAN: spiffe://voice/service/messaging
       GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${T16_AUTH_WORKLOAD_KEY_B64:?required}
     volumes:
       - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/auth-principal:/run/t16/auth-principal:ro
       - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/ca.crt:/run/t16/ca.crt:ro
+      - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-client-ca.p12:/run/t16/auth-client-ca.p12:ro
       - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-server.crt:/run/t16/auth-server.crt:ro
       - ${T16_FIXTURE_DIR:?generate T16 fixtures first}/tls/auth-server.key:/run/t16/auth-server.key:ro
       - social_principal_ca:/run/t16/user-ca:ro
