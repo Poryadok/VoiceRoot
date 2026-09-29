@@ -64,6 +64,7 @@ if [[ "$manifest" == - ]]; then
     /name: REALTIME_NATS_(HUB_URL|PROOF_URL)/ {line=$0; sub(/^.*name:[[:space:]]*/, "", line); sub(/[,}].*$/, "", line); print "proof-env", line}
     /^[[:space:]]*- name: (realtime-leaf|proof-leaf)/ {print "proof-container", $3}
     /image:/ {print "image", $2}
+    /imagePullSecrets:/ {print "image-pull", $0}
     /^[[:space:]]*immutable:/ {print "immutable", kind, name, $2}
     /claimName:|secretName:/ {print "ref", $2}
     /^[[:space:]]*(phase|generation|previousGeneration):/ {print "marker", $1, $2}' \
@@ -104,6 +105,13 @@ fi
 if [[ "$1" == delete && "$2" == secret && "$3" == voice-nats-acl-proof-* ]]; then
   touch "$STATE/proof-secret-delete-attempted"
 fi
+if [[ "$1" == delete && "$3" == voice-nats-acl-proof-* && "${MOCK_LEFTOVER_MODE:-none}" != none ]]; then
+  [[ "$*" == *'-n voice-staging'* ]] || { echo 'proof cleanup escaped staging namespace' >&2; exit 2; }
+  if [[ "$2" == networkpolicy && "${MOCK_LEFTOVER_MODE:-none}" == delete_fail ]]; then
+    echo 'simulated interrupted rollback policy deletion' >&2; exit 1
+  fi
+  touch "$STATE/leftover-$2-deleted"
+fi
 if [[ "$1" == wait && "$*" == *'job/voice-nats-acl-proof-'* && "${MOCK_PROOF_RESULT:-pass}" == deny ]]; then
   echo 'simulated proof Job denied' >&2; exit 1
 fi
@@ -116,10 +124,47 @@ if [[ "$1" == logs && "$*" == *'voice-nats-acl-proof-'* ]]; then
   esac
   exit 0
 fi
+proof_item() {
+  jq -cn --arg kind "$1" --arg name voice-nats-acl-proof-r20260930a-123456-1 '
+    {kind:$kind,metadata:{name:$name,namespace:"voice-staging",
+      labels:{"voice.io/nats-proof":"true","voice.io/nats-proof-generation":"r20260930a","voice.io/nats-proof-run":$name},
+      annotations:{"voice.io/nats-generation":"r20260930a"}}}'
+}
 case "$*" in
+  *'get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json'*)
+    items=()
+    if [[ "${MOCK_LEFTOVER_MODE:-none}" != none ]]; then
+      for entry in 'job Job' 'networkpolicy NetworkPolicy' 'secret Secret'; do
+        read -r resource kind <<<"$entry"
+        [[ -f "$STATE/leftover-$resource-deleted" ]] || items+=("$(proof_item "$kind")")
+      done
+    fi
+    printf '%s\n' "${items[@]}" | jq -cs '{apiVersion:"v1",kind:"List",items:.}' | if [[ "${MOCK_LEFTOVER_MODE:-none}" == mismatch ]]; then
+      jq '.items[2].metadata.name = "voice-postgres"'
+    elif [[ "${MOCK_LEFTOVER_MODE:-none}" == duplicate ]]; then
+      jq '.items += [.items[0]]'
+    else
+      cat
+    fi
+    ;;
   *'get configmap voice-nats-generation'*)
+    if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then
+      printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}'
+      exit 0
+    fi
     echo 'Error from server (NotFound): configmaps "voice-nats-generation" not found' >&2; exit 1 ;;
+  *'get secret voice-proof-ghcr'*)
+    if [[ "${MOCK_PULL_SECRET_BAD:-false}" == true ]]; then
+      printf '%s\n' '{"kind":"Secret","metadata":{"name":"voice-proof-ghcr","namespace":"voice-staging"},"type":"Opaque","data":{".dockerconfigjson":"eA=="}}'
+    else
+      config='{"auths":{"ghcr.io":{"auth":"eA=="}}}'
+      jq -cn --arg encoded "$(printf '%s' "$config" | base64 -w0)" '{kind:"Secret",metadata:{name:"voice-proof-ghcr",namespace:"voice-staging"},type:"kubernetes.io/dockerconfigjson",data:{".dockerconfigjson":$encoded}}'
+    fi
+    ;;
   *'get secret voice-nats-acl-proof-'*)
+    if [[ "${MOCK_LEFTOVER_MODE:-none}" != none && ! -f "$STATE/leftover-secret-deleted" ]]; then
+      proof_item Secret; exit 0
+    fi
     if [[ "${MOCK_PROOF_REMAINS:-false}" == true && -f "$STATE/proof-secret-delete-attempted" ]]; then
       printf '%s\n' '{"kind":"Secret","metadata":{"name":"voice-nats-acl-proof-r20260930a-123461-1","namespace":"voice-staging"}}'
       exit 0
@@ -128,6 +173,9 @@ case "$*" in
   *'get secret '*'-r20260930a'*|*'get pvc voice-nats-jsdata-r20260930a'*)
     echo 'Error from server (NotFound): generation resource not found' >&2; exit 1 ;;
   *'get networkpolicy voice-nats-acl-proof-'*|*'get networkpolicy/voice-nats-acl-proof-'*)
+    if [[ "${MOCK_LEFTOVER_MODE:-none}" != none && ! -f "$STATE/leftover-networkpolicy-deleted" ]]; then
+      proof_item NetworkPolicy; exit 0
+    fi
     echo 'Error from server (NotFound): temporary proof NetworkPolicy not found' >&2; exit 1 ;;
   *'get secret voice-nats-'*)
     name="$3"
@@ -146,6 +194,9 @@ case "$*" in
     jq -n --arg s "$service" --arg image "$image" '{kind:"Deployment",metadata:{name:("voice-"+$s),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{spec:{containers:[{name:$s,image:$image},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:"voice-nats-service-credentials",items:[{key:($s+".creds"),path:($s+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}' ;;
   *'get pods -n voice-staging -l app=voice-'*) ;;
   *'get job voice-nats-acl-proof-'*)
+    if [[ "${MOCK_LEFTOVER_MODE:-none}" != none && ! -f "$STATE/leftover-job-deleted" ]]; then
+      proof_item Job; exit 0
+    fi
     echo 'Error from server (NotFound): proof job not found' >&2; exit 1 ;;
   *)
     [[ "$1" != get ]] || { echo 'unexpected Kubernetes read' >&2; exit 2; } ;;
@@ -171,6 +222,15 @@ done
 }
 MOCK_GO
 chmod +x "$work/bin/go"
+cat >"$work/bin/docker" <<'MOCK_DOCKER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${DOCKER_LOG:?}"
+[[ "$1" == --config && "$3" == manifest && "$4" == inspect && "$5" == ghcr.io/poryadok/voiceroot/realtime:0123456789abcdef0123456789abcdef01234567 ]] || exit 2
+jq -e '(.auths["ghcr.io"] // .auths["https://ghcr.io"]) | type == "object"' "$2/config.json" >/dev/null || exit 2
+[[ "${MOCK_DOCKER_RESULT:-pass}" == pass ]] || exit 1
+MOCK_DOCKER
+chmod +x "$work/bin/docker"
 
 # The four-Secret bundle is deliberately inert. TLS is local, ephemeral, and
 # valid only to exercise the rotation preflight; all other payloads are "x".
@@ -192,18 +252,26 @@ run_rotation() {
   : >"$work/kubectl.log"
   : >"$work/mutations.log"
   : >"$work/go.log"
+  : >"$work/docker.log"
   : >"$work/rendered/all"
-  rm -f "$work/state/marker" "$work/state/proof-secret-names" "$work/state/proof-secret-delete-attempted"
+  rm -f "$work/state/marker" "$work/state/proof-secret-names" "$work/state/proof-secret-delete-attempted" \
+    "$work/state/leftover-job-deleted" "$work/state/leftover-networkpolicy-deleted" "$work/state/leftover-secret-deleted"
   PATH="$work/bin:$PATH" KUBECTL_LOG="$work/kubectl.log" MUTATION_LOG="$work/mutations.log" \
     RENDERED="$work/rendered" STATE="$work/state" BUNDLE="$work/bundle.json" \
     GO_LOG="$work/go.log" MOCK_CREDENTIAL_VALID="${MOCK_CREDENTIAL_VALID:-true}" \
+    DOCKER_LOG="$work/docker.log" MOCK_DOCKER_RESULT="${MOCK_DOCKER_RESULT:-pass}" \
+    MOCK_PULL_SECRET_BAD="${MOCK_PULL_SECRET_BAD:-false}" \
     MOCK_ACL_SHA="$ACL_SHA" MOCK_PROOF_RESULT="${MOCK_PROOF_RESULT:-pass}" \
     MOCK_CLEANUP_FAIL="${MOCK_CLEANUP_FAIL:-false}" \
     MOCK_PROOF_REMAINS="${MOCK_PROOF_REMAINS:-false}" \
+    MOCK_GENERATION_STATE="${MOCK_GENERATION_STATE:-absent}" \
+    MOCK_LEFTOVER_MODE="${MOCK_LEFTOVER_MODE:-none}" \
     GITHUB_RUN_ID="${MOCK_RUN_ID:-123456}" GITHUB_RUN_ATTEMPT=1 \
     GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
     VOICE_NATS_PROOF_IMAGE_REGISTRY="${TEST_PROOF_REGISTRY-ghcr.io/poryadok/voiceroot}" \
     VOICE_NATS_PROOF_IMAGE_TAG="${TEST_PROOF_TAG:-0123456789abcdef0123456789abcdef01234567}" \
+    VOICE_NATS_PROOF_IMAGE_PUBLIC="${TEST_PROOF_IMAGE_PUBLIC:-true}" \
+    VOICE_NATS_PROOF_IMAGE_PULL_SECRET="${TEST_PROOF_PULL_SECRET:-}" \
     VOICE_K8S_NAMESPACE=voice-staging bash "$ROTATE" "$@" >"$work/output" 2>&1 || rc=$?
   if grep -Eq 'eA==|BEGIN (RSA )?PRIVATE KEY|STAGING_NATS_PROOF_CREDS_B64|synthetic-proof-credential-do-not-log' "$work/output"; then
     fail 'rotation printed credential or environment content'
@@ -279,6 +347,27 @@ if TEST_PROOF_REGISTRY='' run_rotation --activate "$GEN" "$work/bundle.json" "$w
   fail 'missing proof image registry was accepted'
 fi
 assert_no_mutation
+if TEST_PROOF_IMAGE_PUBLIC=false run_rotation --activate "$GEN" "$work/bundle.json" "$work/proof.creds"; then
+  fail 'proof image without anonymous access or a verified Kubernetes pull Secret was accepted'
+fi
+assert_no_mutation
+if TEST_PROOF_IMAGE_PUBLIC=false TEST_PROOF_PULL_SECRET=voice-proof-ghcr MOCK_PULL_SECRET_BAD=true \
+  run_rotation --activate "$GEN" "$work/bundle.json" "$work/proof.creds"; then
+  fail 'malformed Kubernetes image pull Secret was accepted'
+fi
+assert_no_mutation
+if TEST_PROOF_IMAGE_PUBLIC=false TEST_PROOF_PULL_SECRET=voice-proof-ghcr MOCK_DOCKER_RESULT=fail \
+  run_rotation --activate "$GEN" "$work/bundle.json" "$work/proof.creds"; then
+  fail 'private proof image inaccessible to Kubernetes credentials was accepted'
+fi
+assert_no_mutation
+grep -Fq 'manifest inspect ghcr.io/poryadok/voiceroot/realtime:0123456789abcdef0123456789abcdef01234567' "$work/docker.log" || fail 'private image preflight did not check the exact master SHA'
+
+TEST_PROOF_IMAGE_PUBLIC=false TEST_PROOF_PULL_SECRET=voice-proof-ghcr \
+  run_rotation --activate "$GEN" "$work/bundle.json" "$work/proof.creds" || \
+  fail "valid private image pull Secret did not permit proof: $(tail -1 "$work/output")"
+grep -Fq 'get secret voice-proof-ghcr -n voice-staging -o json' "$work/kubectl.log" || fail 'rotation did not read the namespaced Kubernetes pull Secret'
+grep -Fq 'imagePullSecrets: [{name: voice-proof-ghcr}]' "$work/rendered/all" || fail 'proof Job did not mount the validated private image pull Secret'
 
 # A PASS is necessary and sufficient only when it is from this newly created
 # Job, after hub/bootstrap convergence and before any leaf is restarted.
@@ -325,5 +414,43 @@ if MOCK_PROOF_REMAINS=true MOCK_RUN_ID=123461 run_rotation --activate "$GEN" "$w
   fail 'proof cleanup verification accepted a still-present Secret'
 fi
 assert_rotating_without_leaves
+
+# A killed runner can leave all temporary resources in the staging namespace.
+# Rollback must identify and remove only this generation's owned proof trio
+# before touching the marker, hub, or application leaves.
+leftover_name=voice-nats-acl-proof-r20260930a-123456-1
+MOCK_LEFTOVER_MODE=owned MOCK_GENERATION_STATE=rotating run_rotation --rollback || \
+  fail "rollback could not recover owned proof leftovers: $(tail -1 "$work/output")"
+grep -Fq 'get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json' "$work/kubectl.log" || fail 'rollback did not list only owned proof resources for the marker generation'
+for kind in job networkpolicy secret; do
+  [[ "$(grep -Ec "^delete ${kind} ${leftover_name} -n voice-staging " "$work/kubectl.log" || true)" == 1 ]] || fail "rollback did not delete owned proof ${kind} exactly once"
+  grep -Eq "^get ${kind} ${leftover_name} -n voice-staging -o json$" "$work/kubectl.log" || fail "rollback did not verify ${kind} NotFound"
+done
+grep -E '^delete job voice-nats-acl-proof-' "$work/kubectl.log" | grep -Fq -- '--cascade=foreground' || fail 'rollback must wait for proof Pod foreground deletion'
+for kind in job networkpolicy secret; do
+  grep -E "^delete ${kind} voice-nats-acl-proof-" "$work/kubectl.log" | grep -Fq -- '--wait=true' || fail "rollback must wait for ${kind} deletion"
+done
+job_delete_line="$(grep -nF "delete job ${leftover_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+policy_delete_line="$(grep -nF "delete networkpolicy ${leftover_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+secret_delete_line="$(grep -nF "delete secret ${leftover_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+marker_patch_line="$(grep -n '^patch configmap voice-nats-generation ' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+first_scale_line="$(grep -n '^scale deployment/' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+((job_delete_line < policy_delete_line && policy_delete_line < secret_delete_line && secret_delete_line < marker_patch_line && secret_delete_line < first_scale_line)) || fail 'rollback did not clean proof Job, policy, Secret before changing marker or workloads'
+[[ "$(grep -c '^get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json$' "$work/kubectl.log" || true)" -ge 2 ]] || fail 'rollback must re-list and prove no owned proof resource remains'
+! grep -Eq '^delete (job|networkpolicy|secret) (voice-postgres|voice-minio|voice-app)' "$work/kubectl.log" || fail 'rollback deleted an unrelated resource'
+
+assert_rollback_stopped_before_workloads() {
+  ! grep -Eq '^patch configmap voice-nats-generation |^scale deployment/|^patch deployment ' "$work/kubectl.log" || fail 'unsafe proof cleanup reached marker or workload mutation'
+}
+for bad in mismatch duplicate; do
+  if MOCK_LEFTOVER_MODE="$bad" MOCK_GENERATION_STATE=rotating run_rotation --rollback; then
+    fail "rollback accepted ${bad} proof resource identity"
+  fi
+  assert_no_mutation
+done
+if MOCK_LEFTOVER_MODE=delete_fail MOCK_GENERATION_STATE=rotating run_rotation --rollback; then
+  fail 'rollback accepted proof NetworkPolicy deletion failure'
+fi
+assert_rollback_stopped_before_workloads
 
 printf 'staging NATS live ACL proof contract: OK\n'

@@ -102,6 +102,9 @@ if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
     <<<"$deployment_patch" >/dev/null || { echo 'mock kubectl rejects a Deployment patch without resourceVersion CAS' >&2; exit 2; }
 fi
 case "$*" in
+  *'get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json'*)
+    printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}'
+    ;;
   *'get configmap voice-nats-generation'*|*'get configmap/voice-nats-generation'*)
     if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then
       printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy"}}\n'
@@ -241,6 +244,7 @@ run_rotation() {
     GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
     VOICE_NATS_PROOF_IMAGE_REGISTRY=ghcr.io/poryadok/voiceroot \
     VOICE_NATS_PROOF_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567 \
+    VOICE_NATS_PROOF_IMAGE_PUBLIC=true \
     bash "$ROTATE" "$@" >"$work/output" 2>&1 || rc=$?
   if grep -Eq 'eA==|BEGIN (RSA )?PRIVATE KEY' "$work/output"; then
     fail 'rotation output exposed fixture credential bytes'
