@@ -107,6 +107,9 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 			Chats: chatGuard, ResourceMappings: mappingClient,
 		}}
 	diagnosticProcessor := &t16DiagnosticGameMessageProcessor{delegate: processor, t: t}
+	diagnosticProcessor.probeAuthJWKS = func() {
+		probeT16AuthPrincipalJWKS(t, ctx, authBase, messagingCert, messagingKey, caFile)
+	}
 	verifier, gatewayIssuer := t16GatewayPrincipalRuntime(t, ctx)
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(principalgrpc.ApplyGameMessageUnaryInterceptor(verifier)))
 	messagingv1.RegisterMessagingServiceServer(grpcServer, &MessagingGRPC{Messages: storeMessages, GameMessages: diagnosticProcessor})
@@ -493,10 +496,11 @@ type t16BlockingChatGuard struct {
 // only the underlying error for the one assertion selected by the acceptance
 // test. It adds no authorization behavior or substitute provider seam.
 type t16DiagnosticGameMessageProcessor struct {
-	delegate GameMessageProcessor
-	t        *testing.T
-	mu       sync.Mutex
-	watch    string
+	delegate      GameMessageProcessor
+	t             *testing.T
+	probeAuthJWKS func()
+	mu            sync.Mutex
+	watch         string
 }
 
 func (p *t16DiagnosticGameMessageProcessor) watchAssertion(assertion string) {
@@ -517,9 +521,50 @@ func (p *t16DiagnosticGameMessageProcessor) ProcessGameMessage(ctx context.Conte
 		p.mu.Unlock()
 		if watched {
 			p.t.Logf("T16 diagnostic: real game message processor rejected selected request: %v", err)
+			if strings.Contains(err.Error(), "auth principal JWKS request failed") && p.probeAuthJWKS != nil {
+				p.probeAuthJWKS()
+			}
 		}
 	}
 	return row, err
+}
+
+func probeT16AuthPrincipalJWKS(t *testing.T, ctx context.Context, baseURL, certFile, keyFile, caFile string) {
+	t.Helper()
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Logf("T16 diagnostic: Auth JWKS mTLS probe could not load Messaging identity: %v", err)
+		return
+	}
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Logf("T16 diagnostic: Auth JWKS mTLS probe could not read CA: %v", err)
+		return
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(caPEM) {
+		t.Log("T16 diagnostic: Auth JWKS mTLS probe CA contains no certificates")
+		return
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
+	defer transport.CloseIdleConnections()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/auth/.well-known/principal-jwks.json", nil)
+	if err != nil {
+		t.Logf("T16 diagnostic: Auth JWKS mTLS probe request construction failed: %v", err)
+		return
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Logf("T16 diagnostic: Auth JWKS mTLS probe transport error: %T: %v", err, err)
+		return
+	}
+	defer response.Body.Close()
+	t.Logf("T16 diagnostic: Auth JWKS mTLS probe returned HTTP %d", response.StatusCode)
 }
 
 func (g *t16BlockingChatGuard) arm() { g.armed.Store(true) }
