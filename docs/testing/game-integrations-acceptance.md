@@ -81,6 +81,46 @@ SDK03/SDK05/SDK06 проверяют серверную и messenger часть 
 варианты тех же проверок выполняются при поставке инструментов. OS-specific
 SDK cache/cleanup/UI не принимаются по результату server-only теста.
 
+### T04 principal trust matrix
+
+The normative issuer, audience, scope, storage, lifetime, rotation, revocation,
+rate-limit and direct-call boundaries are frozen in the
+[T04 matrix](../architecture/game-integration-api.md#t04-principal-trust-matrix).
+The following implementation tests are required evidence for this contract;
+T04 does not claim that downstream T05 resource ownership or T06 wire/proto
+review is complete.
+
+| ID | Forged or foreign authority | Expected result | Executable evidence |
+|---|---|---|---|
+| T04-01 | SQL edits broaden `vgi1` scopes, expiry, application/environment/owner or generation; an unkeyed forged digest is installed | Credential verification and secret replay fail; only the server-held seal can authenticate immutable authority fields | `src/backend/gameintegration/internal/registry/credential_test.go` |
+| T04-02 | Revoked credential is revived by clearing the SQL revoke timestamp | Verification still fails because revoke also invalidates the keyed seal | `src/backend/gameintegration/internal/registry/credential_test.go` |
+| T04-02a | Direct SQL changes app status `sandbox→suspended→sandbox` | Status trigger revokes and destroys the credential seal atomically; restoration cannot revive prior authority | `src/backend/gameintegration/internal/registry/credential_lifecycle_test.go` |
+| T04-02b | Direct SQL changes environment status `active→suspended→active` | Status trigger revokes and destroys the credential; restoration cannot revive prior authority | `src/backend/gameintegration/internal/registry/credential_lifecycle_test.go` |
+| T04-02e | Apply authority-v2 migration to existing credential rows, then roll the migration down | Upgrade revokes and zeros every legacy credential; rollback drops triggers only and never restores old rows | `src/backend/gameintegration/internal/registry/credential_lifecycle_test.go` |
+| T04-02c | Verify at `expires_at−1µs`, exactly at expiry, and `expires_at+1µs` | Before is accepted; equality and after are expired using the injected store clock | `src/backend/gameintegration/internal/registry/credential_test.go` |
+| T04-02d | Redisplay issue secret at `created_at+10m−1µs`, exactly `+10m`, and `+10m+1µs` | Before is allowed; equality and after return `CREDENTIAL_REVEAL_EXPIRED` | `src/backend/gameintegration/internal/registry/credential_test.go` |
+| T04-03 | `vgi1` or Federation node Bearer is presented as GIS owner authentication | Reject; no owner principal is minted | `src/backend/gameintegration/internal/httpapi/authorizer_test.go` |
+| T04-04 | GIS `vgi1` is presented to Federation Node authority HTTPS | 403; no authority payload is returned | `src/backend/federation/q11_acceptance_test.go` |
+| T04-05 | Federation node certificate plus its Bearer is presented to GIS | Reject; node authority is not a GIS service principal | `src/backend/gameintegration/internal/httpapi/authorizer_test.go` |
+| T04-06 | Bot token/account metadata, `vgi1`, or T11 HMAC material is sent directly to T51 `PublishGameEvent` while the route is absent | Current contract returns `UNIMPLEMENTED`; no authority is minted | `src/backend/bot/internal/grpcsvc/t04_principal_matrix_test.go` |
+| T04-07 | Future enabled T51 verifier receives `vgi1` or T11 HMAC rather than a GIS service JWT with exact audience/scope | Reject; the verifier accepts only the GIS service principal for the exact T51 RPC | `src/backend/pkg/principal/principal_test.go` |
+| T04-08 | T11 proof is replayed as generic S2S or used after atomic coordinated key replacement | No generic S2S authority; old signatures, including in-flight requests after Bot loads the new key, fail closed | Contract in Bot and Game Integration docs; route-level negative remains gated on T11 implementation |
+| T04-09 | Operator certificate has the wrong Federation node role, or node certificate/Bearer has wrong audience, app or environment | Reject at certificate/route verification; no cross-app or cross-environment authority | Federation Q11 authority API acceptance tests |
+
+GIS `vgi1` bearer credentials expire 90 days after issuance (the expiry instant
+is already expired). Replacement overlap is at most 10 minutes and is capped by
+the predecessor's original expiry; idempotent secret redisplay is valid strictly
+before the ten-minute cutoff and does not extend credential lifetime. Any app
+or environment status transition irrevocably revokes its prior credentials;
+restoring status requires fresh owner-issued credentials. T11 HMAC key
+replacement is atomic and coordinated with no overlap or key ID: once Bot
+loads the replacement, old signatures are rejected, including requests already
+in flight. GIS retries the same durable operation using the current key.
+
+The Federation Q11 audit-row guarantee applies to its enumerated Q11 denial
+classes. A malformed cross-authority `vgi1` denial is asserted separately as a
+403 with no authority payload; it is not claimed to produce a Q11 audit row.
+
 ### Q11 bootstrap evidence (API-only clean-start passed; real-Google gate open)
 
 The Auth-only T13a contract is independently testable with deterministic fake

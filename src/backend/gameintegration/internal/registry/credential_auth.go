@@ -46,28 +46,33 @@ func (s *Store) VerifyCredential(ctx context.Context, bearer, scope string, key 
 	var principal ServicePrincipal
 	var digest []byte
 	var appStatus, envStatus string
-	var expiresAt time.Time
+	var ownerID uuid.UUID
+	var expiresAt, createdAt time.Time
+	var generation int64
 	var revokedAt pgtype.Timestamptz
-	err = s.Pool.QueryRow(ctx, `SELECT c.id, a.id, e.id, c.secret_digest, c.scopes,
-		c.expires_at, c.revoked_at, a.status, e.status
+	err = s.Pool.QueryRow(ctx, `SELECT c.id, a.id, a.owner_account_id, e.id, c.secret_digest, c.scopes,
+		c.generation, c.created_at, c.expires_at, c.revoked_at, a.status, e.status
 		FROM service_credentials c JOIN environments e ON e.id=c.environment_id
 		JOIN applications a ON a.id=e.application_id WHERE c.id=$1`, id).
-		Scan(&principal.CredentialID, &principal.ApplicationID, &principal.EnvironmentID,
-			&digest, &principal.Scopes, &expiresAt, &revokedAt, &appStatus, &envStatus)
+		Scan(&principal.CredentialID, &principal.ApplicationID, &ownerID, &principal.EnvironmentID,
+			&digest, &principal.Scopes, &generation, &createdAt, &expiresAt, &revokedAt, &appStatus, &envStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
 	if err != nil {
 		return ServicePrincipal{}, fmt.Errorf("read service credential: %w", err)
 	}
-	if !hmac.Equal(digest, credentialDigest(key, secret)) || !slices.Contains(principal.Scopes, scope) ||
-		!time.Now().Before(expiresAt) || revokedAt.Valid {
-		return ServicePrincipal{}, ErrInvalidServiceCredential
-	}
+	credential := Credential{ID: principal.CredentialID, ApplicationID: principal.ApplicationID,
+		OwnerAccountID: ownerID, EnvironmentID: principal.EnvironmentID, Scopes: principal.Scopes,
+		Generation: generation, CreatedAt: createdAt, ExpiresAt: expiresAt}
 	if appStatus == "suspended" {
 		return ServicePrincipal{}, ErrApplicationSuspended
 	}
 	if envStatus != "active" || appStatus != "sandbox" && appStatus != "active" {
+		return ServicePrincipal{}, ErrInvalidServiceCredential
+	}
+	if !hmac.Equal(digest, credentialDigest(key, secret, credential)) || !slices.Contains(principal.Scopes, scope) ||
+		!s.now().Before(expiresAt) || revokedAt.Valid {
 		return ServicePrincipal{}, ErrInvalidServiceCredential
 	}
 	return principal, nil
@@ -103,7 +108,7 @@ func (s *Store) RevokeCredential(ctx context.Context, ownerID, appID, envID, cre
 		return ErrAdmissionConflict
 	}
 	if !revokedAt.Valid {
-		_, err = tx.Exec(ctx, `UPDATE service_credentials SET revoked_at=now() WHERE id=$1`, credentialID)
+		_, err = tx.Exec(ctx, `UPDATE service_credentials SET revoked_at=now(),secret_digest=decode(repeat('00',32),'hex') WHERE id=$1`, credentialID)
 		if err != nil {
 			return fmt.Errorf("revoke credential: %w", err)
 		}

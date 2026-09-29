@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,4 +61,29 @@ func TestAuthorizerRejectsQueryTokenAndForgedPrincipalHeaders(t *testing.T) {
 	}
 	_, code := authorizer.Validate(r)
 	require.Equal(t, "invalid_token", code)
+}
+
+func TestAuthorizerRejectsGameAndFederationWorkloadCredentials(t *testing.T) {
+	authorizer := Authorizer{
+		Tokens: testValidator{claims: voicejwt.Claims{UserID: "owner", SessionEpoch: 1, JTI: "jti-1"}},
+		State:  fakeEpochAndBlacklist{minimum: 1},
+	}
+	for _, tc := range []struct {
+		name   string
+		bearer string
+		cert   bool
+	}{
+		{name: "game-service vgi1", bearer: "vgi1_00000000-0000-4000-8000-000000000001_" + strings.Repeat("A", 43)},
+		{name: "federation node bearer with client certificate", bearer: "federation-node-bearer", cert: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/api/v1/game-integrations/applications", nil)
+			r.Header.Set("Authorization", "Bearer "+tc.bearer)
+			if tc.cert {
+				r.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{{}}}
+			}
+			_, code := authorizer.Validate(r)
+			require.Equal(t, "invalid_token", code, "workload authority cannot create a GIS owner principal")
+		})
+	}
 }

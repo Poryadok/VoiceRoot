@@ -42,6 +42,10 @@ certificate and Bearer credential. Lease requests acknowledge the current
 revision/hash with a single-use nonce; leases expire within two seconds and
 nonces remain reserved through credential expiry. Node changes increment an
 epoch and serialize with lease issuance using node-then-placement row locks.
+The Federation Node Bearer is accepted only with the matching node client
+certificate on this authority HTTPS listener. It is scoped to registered node
+and Space routes, and is not a GIS `vgi1` credential or a generic S2S token.
+Operator certificates are accepted only on operator routes.
 
 The runtime requires `FEDERATION_DATABASE_URL`, `FEDERATION_TLS_CERT`,
 `FEDERATION_TLS_KEY`, `FEDERATION_CLIENT_CA`, `FEDERATION_SIGNING_SEED_FILE`,

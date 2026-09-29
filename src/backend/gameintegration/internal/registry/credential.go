@@ -37,13 +37,15 @@ type IssueCredentialInput struct {
 }
 
 type Credential struct {
-	ID            uuid.UUID
-	EnvironmentID uuid.UUID
-	Scopes        []string
-	Generation    int64
-	Secret        string
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	ID             uuid.UUID
+	ApplicationID  uuid.UUID
+	OwnerAccountID uuid.UUID
+	EnvironmentID  uuid.UUID
+	Scopes         []string
+	Generation     int64
+	Secret         string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
 }
 
 func canonicalCredentialInput(in IssueCredentialInput) (IssueCredentialInput, [32]byte, error) {
@@ -77,9 +79,15 @@ func deriveCredentialSecret(key []byte, id uuid.UUID) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func credentialDigest(key []byte, secret string) []byte {
+func credentialDigest(key []byte, secret string, credential Credential) []byte {
 	mac := hmac.New(sha256.New, key)
-	_, _ = mac.Write([]byte("credential-digest-v1:" + secret))
+	scopes := append([]string(nil), credential.Scopes...)
+	slices.Sort(scopes)
+	_, _ = mac.Write([]byte("credential-authority-v2\n"))
+	_, _ = mac.Write([]byte(secret + "\n" + credential.ID.String() + "\n" + credential.ApplicationID.String() + "\n" +
+		credential.OwnerAccountID.String() + "\n" + credential.EnvironmentID.String() + "\n" +
+		fmt.Sprint(credential.Generation) + "\n" + credential.CreatedAt.UTC().Format(time.RFC3339Nano) + "\n" +
+		credential.ExpiresAt.UTC().Format(time.RFC3339Nano) + "\n" + strings.Join(scopes, "\n")))
 	return mac.Sum(nil)
 }
 
@@ -146,10 +154,18 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 		if err != nil {
 			return Credential{}, err
 		}
-		if s.now().Sub(credential.CreatedAt) > 10*time.Minute {
+		var savedDigest []byte
+		if err := tx.QueryRow(ctx, `SELECT secret_digest FROM service_credentials WHERE id=$1`, credential.ID).Scan(&savedDigest); err != nil {
+			return Credential{}, fmt.Errorf("read credential retry authority: %w", err)
+		}
+		secret := deriveCredentialSecret(in.SecretKey, credential.ID)
+		if !hmac.Equal(savedDigest, credentialDigest(in.SecretKey, secret, credential)) {
+			return Credential{}, ErrInvalidServiceCredential
+		}
+		if !s.now().Before(credential.CreatedAt.Add(10 * time.Minute)) {
 			return Credential{}, ErrCredentialRevealExpired
 		}
-		credential.Secret = deriveCredentialSecret(in.SecretKey, credential.ID)
+		credential.Secret = secret
 		if err := tx.Commit(ctx); err != nil {
 			return Credential{}, fmt.Errorf("commit credential retry: %w", err)
 		}
@@ -164,19 +180,53 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 	// the same creation/expiry values so an idempotent retry has an identical
 	// response after the transaction is read back from the database.
 	now := s.now().Truncate(time.Microsecond)
-	credential := Credential{ID: uuid.New(), EnvironmentID: in.EnvironmentID, Scopes: in.Scopes,
+	credential := Credential{ID: uuid.New(), ApplicationID: in.ApplicationID, OwnerAccountID: in.OwnerAccountID,
+		EnvironmentID: in.EnvironmentID, Scopes: in.Scopes,
 		Generation: generation, CreatedAt: now, ExpiresAt: now.Add(90 * 24 * time.Hour)}
 	credential.Secret = deriveCredentialSecret(in.SecretKey, credential.ID)
-	_, err = tx.Exec(ctx, `UPDATE service_credentials
-		SET expires_at=least(expires_at,$2) WHERE environment_id=$1 AND revoked_at IS NULL AND expires_at>$2`,
-		in.EnvironmentID, now.Add(10*time.Minute))
+	// Bound every active predecessor and reseal its SQL authority fields. The
+	// bearer remains the same through the overlap, but SQL-only scope/expiry/env
+	// edits no longer retain a valid keyed digest.
+	cutoff := now.Add(10 * time.Minute)
+	rows, err := tx.Query(ctx, `SELECT c.id,e.application_id,a.owner_account_id,c.environment_id,c.scopes,
+		c.generation,c.created_at,c.expires_at FROM service_credentials c
+		JOIN environments e ON e.id=c.environment_id JOIN applications a ON a.id=e.application_id
+		WHERE c.environment_id=$1 AND c.revoked_at IS NULL AND c.expires_at>$2 ORDER BY c.id FOR UPDATE OF c`,
+		in.EnvironmentID, cutoff)
 	if err != nil {
 		return Credential{}, fmt.Errorf("bound prior credential overlap: %w", err)
+	}
+	var predecessors []Credential
+	for rows.Next() {
+		var prior Credential
+		if err := rows.Scan(&prior.ID, &prior.ApplicationID, &prior.OwnerAccountID, &prior.EnvironmentID,
+			&prior.Scopes, &prior.Generation, &prior.CreatedAt, &prior.ExpiresAt); err != nil {
+			rows.Close()
+			return Credential{}, fmt.Errorf("read prior credential overlap: %w", err)
+		}
+		prior.CreatedAt = prior.CreatedAt.UTC()
+		prior.ExpiresAt = prior.ExpiresAt.UTC()
+		predecessors = append(predecessors, prior)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return Credential{}, fmt.Errorf("read prior credential overlap: %w", err)
+	}
+	rows.Close()
+	for _, prior := range predecessors {
+		if prior.ExpiresAt.After(cutoff) {
+			prior.ExpiresAt = cutoff
+			digest := credentialDigest(in.SecretKey, deriveCredentialSecret(in.SecretKey, prior.ID), prior)
+			if _, err := tx.Exec(ctx, `UPDATE service_credentials SET expires_at=$2,secret_digest=$3 WHERE id=$1`,
+				prior.ID, cutoff, digest); err != nil {
+				return Credential{}, fmt.Errorf("update prior credential overlap: %w", err)
+			}
+		}
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO service_credentials
 		(id,environment_id,secret_digest,scopes,generation,created_at,expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)`, credential.ID, in.EnvironmentID,
-		credentialDigest(in.SecretKey, credential.Secret), in.Scopes, generation, now, credential.ExpiresAt)
+		credentialDigest(in.SecretKey, credential.Secret, credential), in.Scopes, generation, now, credential.ExpiresAt)
 	if err != nil {
 		return Credential{}, fmt.Errorf("insert service credential: %w", err)
 	}
@@ -202,9 +252,11 @@ func (s *Store) IssueCredential(ctx context.Context, input IssueCredentialInput)
 
 func getCredential(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Credential, error) {
 	var credential Credential
-	err := tx.QueryRow(ctx, `SELECT id, environment_id, scopes, generation, created_at, expires_at
-		FROM service_credentials WHERE id=$1`, id).Scan(&credential.ID, &credential.EnvironmentID,
-		&credential.Scopes, &credential.Generation, &credential.CreatedAt, &credential.ExpiresAt)
+	err := tx.QueryRow(ctx, `SELECT c.id, e.application_id, a.owner_account_id, c.environment_id, c.scopes,
+		c.generation, c.created_at, c.expires_at FROM service_credentials c
+		JOIN environments e ON e.id=c.environment_id JOIN applications a ON a.id=e.application_id WHERE c.id=$1`, id).
+		Scan(&credential.ID, &credential.ApplicationID, &credential.OwnerAccountID, &credential.EnvironmentID,
+			&credential.Scopes, &credential.Generation, &credential.CreatedAt, &credential.ExpiresAt)
 	if err != nil {
 		return Credential{}, fmt.Errorf("read service credential: %w", err)
 	}

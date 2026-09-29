@@ -176,6 +176,13 @@ func TestQ11FederationCleanStartAuthorityAPIs(t *testing.T) {
 			q11RequireAudit(t, ctx, pool, tc.requestID, tc.action, "denied", tc.status, tc.actorClass, tc.reasonCode, tc.actorFingerprint, tc.nodeID, tc.spaceID)
 		})
 	}
+	// A well-formed GIS vgi1 credential is not a Federation node Bearer. It is
+	// rejected before the snapshot handler can mint an envelope.
+	crossAuthorityID := newID()
+	crossAuthorityResponse, crossAuthorityBody := getWithBearer(nodeClient, baseA+"/snapshot", crossAuthorityID,
+		"vgi1_"+newID()+"_"+strings.Repeat("A", 43))
+	require.Equal(t, http.StatusForbidden, crossAuthorityResponse.StatusCode, string(crossAuthorityBody))
+	require.NotContains(t, string(crossAuthorityBody), "payload")
 
 	// Duplicate approval is a Q11-enumerated conflict and must not mint another credential.
 	dupID := newID()
