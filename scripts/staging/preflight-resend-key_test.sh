@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ACL_PROOF_SHA="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 export TEST_STATE="${TMP}"
@@ -79,6 +80,7 @@ run_manifest_case() {
   set +e
   PATH="${TMP}/bin:${PATH}" VOICE_IMAGE_TAG=contract-test DEPLOY_MODE=full \
     VOICE_NATS_STORAGE_CLASS=local-path VOICE_NATS_STORAGE_SIZE=1Gi \
+    VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
     STAGING_APP_SECRETS_YAML_B64="$(cat "${TMP}/input.b64")" \
     bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
   status=$?
@@ -132,6 +134,7 @@ run_existing_case() {
   set +e
   PATH="${TMP}/bin:${PATH}" VOICE_IMAGE_TAG=contract-test DEPLOY_MODE=full \
     VOICE_NATS_STORAGE_CLASS=local-path VOICE_NATS_STORAGE_SIZE=1Gi \
+    VOICE_NATS_ACL_PROOF_SHA="${ACL_PROOF_SHA}" \
     STAGING_APP_SECRETS_YAML_B64= \
     bash "${ROOT}/scripts/staging/render-and-apply.sh" >"${TMP}/output" 2>&1
   status=$?
