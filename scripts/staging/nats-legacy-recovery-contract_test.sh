@@ -81,8 +81,12 @@ case "$verb" in
       pods)
         if [[ "$*" == *app=voice-nats-pvc-candidate* ]]; then
           echo '{"items":[{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"phase":"Running","containerStatuses":[{"ready":true}]}}]}'
-        elif [[ "$*" == *'app=voice-nats -o json'* && "${MOCK_OLD_HUB_POD:-0}" == 1 ]]; then
-          echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
+        elif [[ "$*" == *'app=voice-nats -o json'* ]]; then
+          if [[ "${MOCK_OLD_HUB_POD:-0}" == 1 ]]; then
+            echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
+          else
+            echo '{"items":[]}'
+          fi
         elif [[ "$*" == *app=voice-auth* || "$*" == *app=voice-social* || "$*" == *app=voice-user* || "${MOCK_ALL_READY:-0}" == 1 && "$*" == *app=voice-* ]]; then
           args="$*"; app="${args#*app=}"; app="${app%% *}"
           if [[ "${MOCK_ALL_STOPPED:-0}" == 1 && ! -e "${KUBE_STARTED_DIR:?}/${app}" ]]; then
