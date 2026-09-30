@@ -237,9 +237,15 @@ class AuthServiceRestoreSessionEpochTest {
 
     @Override
     public RefreshTokenRecord create(
-        UUID id, String hash, String device, String jti, Instant expires, Instant now) {
+        UUID id,
+        UUID profileId,
+        String hash,
+        String device,
+        String jti,
+        Instant expires,
+        Instant now) {
       createCalls++;
-      return super.create(id, hash, device, jti, expires, now);
+      return super.create(id, profileId, hash, device, jti, expires, now);
     }
   }
 

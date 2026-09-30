@@ -1677,7 +1677,7 @@ void main() {
     expect(await controller.switchActiveProfile('profile-b'), isNull);
 
     refreshResponse.complete(
-      http.Response(jsonEncode(refreshedA.toJson()), 200),
+      http.Response(jsonEncode({'session': refreshedA.toJson()}), 200),
     );
     expect(await refresh, isTrue);
 
@@ -1691,6 +1691,65 @@ void main() {
     final persisted = await storage.read();
     expect(persisted?.activeProfileId, sessionB.activeProfileId);
     expect(persisted?.accessToken, sessionB.accessToken);
+  });
+
+  test('refresh started during a profile switch cannot overwrite its new session', () async {
+    const sessionA = AuthSession(
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    const sessionB = AuthSession(
+      accessToken: 'access-b',
+      refreshToken: 'refresh-b',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-b',
+      expiresInSeconds: 900,
+    );
+    const refreshedA = AuthSession(
+      accessToken: 'access-a-refreshed',
+      refreshToken: 'refresh-a-refreshed',
+      accountId: 'acc-1',
+      activeProfileId: 'profile-a',
+      expiresInSeconds: 900,
+    );
+    final switchRequested = Completer<void>();
+    final switchResponse = Completer<http.Response>();
+    final refreshRequested = Completer<void>();
+    final refreshResponse = Completer<http.Response>();
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/auth/switch-profile') {
+        switchRequested.complete();
+        return switchResponse.future;
+      }
+      if (req.url.path == '/api/v1/auth/refresh') {
+        refreshRequested.complete();
+        return refreshResponse.future;
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock);
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier)
+      ..state = const AuthState(session: sessionA);
+
+    final switching = controller.switchActiveProfile('profile-b');
+    await switchRequested.future;
+    final refreshing = controller.refreshOn401();
+    await refreshRequested.future;
+
+    switchResponse.complete(http.Response(jsonEncode(sessionB.toJson()), 200));
+    expect(await switching, isNull);
+    refreshResponse.complete(
+      http.Response(jsonEncode({'session': refreshedA.toJson()}), 200),
+    );
+    expect(await refreshing, isTrue);
+
+    final current = container.read(authControllerProvider).session;
+    expect(current?.activeProfileId, sessionB.activeProfileId);
+    expect(current?.accessToken, sessionB.accessToken);
   });
 
   test('late B storage write cannot overwrite newer C switch', () async {

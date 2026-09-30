@@ -244,7 +244,11 @@ public class AuthService {
       refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
       tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
       touchLastOnline(account);
-      AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
+      String profileId = current.profileId() == null
+          ? primaryProfileProvisioner.ensurePrimaryProfile(
+              account.id(), displayHint(account), "guest".equals(account.type()))
+          : current.profileId().toString();
+      AuthSession session = issueSessionForProfile(account, prepared, profileId, command.deviceInfoJson());
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -787,6 +791,7 @@ public class AuthService {
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(
         account.id(),
+        UUID.fromString(profileId),
         refreshTokenCodec.hash(refreshToken),
         deviceInfoJson,
         claims.jti(),

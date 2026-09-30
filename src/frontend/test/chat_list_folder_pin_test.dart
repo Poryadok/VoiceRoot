@@ -86,6 +86,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(ChatListBody.quickAccessButtonKey(chatId)),
+      findsOneWidget,
+      reason: 'Quick Access must be directly discoverable on each chat row',
+    );
+
     await tester.longPress(find.text('Pin Target'));
     await tester.pumpAndSettle();
 

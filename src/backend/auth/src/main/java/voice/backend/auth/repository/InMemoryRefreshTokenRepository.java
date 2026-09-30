@@ -16,8 +16,20 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
   @Override
   public synchronized RefreshTokenRecord create(
       UUID accountId, String tokenHash, String deviceInfoJson, String accessJti, Instant expiresAt, Instant now) {
+    return create(accountId, null, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+  }
+
+  @Override
+  public synchronized RefreshTokenRecord create(
+      UUID accountId,
+      UUID profileId,
+      String tokenHash,
+      String deviceInfoJson,
+      String accessJti,
+      Instant expiresAt,
+      Instant now) {
     RefreshTokenRecord record = new RefreshTokenRecord(
-        UUID.randomUUID(), accountId, tokenHash, deviceInfoJson == null ? "{}" : deviceInfoJson, accessJti, expiresAt, now, null);
+        UUID.randomUUID(), accountId, profileId, tokenHash, deviceInfoJson == null ? "{}" : deviceInfoJson, accessJti, expiresAt, now, null);
     byHash.put(tokenHash, record);
     hashById.put(record.id(), tokenHash);
     return record;
@@ -62,6 +74,7 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
     RefreshTokenRecord revoked = new RefreshTokenRecord(
         current.id(),
         current.accountId(),
+        current.profileId(),
         current.tokenHash(),
         current.deviceInfoJson(),
         current.accessJti(),
@@ -91,6 +104,7 @@ public class InMemoryRefreshTokenRepository implements RefreshTokenRepository {
           return new RefreshTokenRecord(
               record.id(),
               record.accountId(),
+              record.profileId(),
               record.tokenHash(),
               record.deviceInfoJson(),
               record.accessJti(),

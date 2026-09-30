@@ -371,9 +371,15 @@ class AuthServiceSessionEpochIssuanceTest {
 
     @Override
     public synchronized RefreshTokenRecord create(
-        UUID accountId, String tokenHash, String deviceInfoJson, String accessJti, Instant expiresAt, Instant now) {
+        UUID accountId,
+        UUID profileId,
+        String tokenHash,
+        String deviceInfoJson,
+        String accessJti,
+        Instant expiresAt,
+        Instant now) {
       createCalls++;
-      return super.create(accountId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+      return super.create(accountId, profileId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
     }
 
     @Override

@@ -5,7 +5,24 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface RefreshTokenRepository {
-  RefreshTokenRecord create(UUID accountId, String tokenHash, String deviceInfoJson, String accessJti, Instant expiresAt, Instant now);
+  RefreshTokenRecord create(
+      UUID accountId,
+      UUID profileId,
+      String tokenHash,
+      String deviceInfoJson,
+      String accessJti,
+      Instant expiresAt,
+      Instant now);
+
+  default RefreshTokenRecord create(
+      UUID accountId,
+      String tokenHash,
+      String deviceInfoJson,
+      String accessJti,
+      Instant expiresAt,
+      Instant now) {
+    return create(accountId, null, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+  }
 
   Optional<RefreshTokenRecord> findByHash(String tokenHash);
 

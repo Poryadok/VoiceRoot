@@ -1113,7 +1113,15 @@ class AuthController extends StateNotifier<AuthState> {
     );
     switch (refreshed) {
       case AuthSessionOk(:final session):
+        if (generation != _profileSwitchGeneration ||
+            state.session?.refreshToken != current.refreshToken) {
+          return true;
+        }
         final isGuest = await _resolveIsGuest(session);
+        if (generation != _profileSwitchGeneration ||
+            state.session?.refreshToken != current.refreshToken) {
+          return true;
+        }
         await _commitProfileSession(
           session: session,
           generation: generation,
