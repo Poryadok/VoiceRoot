@@ -234,6 +234,29 @@ jobs:
           printf 'VOICE_NATS_PROOF_IMAGE_REGISTRY=%s\n' "$registry" >>"$GITHUB_ENV"
           printf 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$GITHUB_SHA" >>"$GITHUB_ENV"
 
+      - uses: actions/setup-go@v5
+        if: inputs.operation == 'activate'
+        with:
+          go-version-file: src/backend/pkg/go.mod
+          cache: false
+
+      - name: Verify NATS proof validator toolchain
+        if: inputs.operation == 'activate'
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          if ! command -v go >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GO_TOOLCHAIN'
+            exit 1
+          fi
+          validator="$(mktemp "${RUNNER_TEMP:-/tmp}/voice-nats-proof-validator.XXXXXX")"
+          trap 'rm -f -- "$validator"' EXIT
+          if ! (cd src/backend/pkg && go build -o "$validator" ./cmd/nats-proof-credential) >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GO_VALIDATOR_BUILD'
+            exit 1
+          fi
+
       - uses: azure/setup-kubectl@v5
 
       - name: Configure staging kubectl

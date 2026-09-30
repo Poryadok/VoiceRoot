@@ -5,8 +5,25 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROTATE="${ROOT}/scripts/staging/rotate-nats-root.sh"
+WORKFLOW="${ROOT}/.github/workflows/staging-nats-root-rotation.yml"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 test -x "$ROTATE" || fail 'NATS root rotation entrypoint must be executable'
+
+# The trusted staging runner does not have Go preinstalled. Resolve and build
+# the exact-source validator before kubectl is configured or activation starts.
+source_line="$(grep -n 'name: Download exact master source archive' "$WORKFLOW" | cut -d: -f1 || true)"
+setup_line="$(grep -n 'uses: actions/setup-go@v5' "$WORKFLOW" | cut -d: -f1 || true)"
+validator_line="$(grep -n 'name: Verify NATS proof validator toolchain' "$WORKFLOW" | cut -d: -f1 || true)"
+kubectl_line="$(grep -n 'name: Configure staging kubectl' "$WORKFLOW" | cut -d: -f1 || true)"
+activate_line="$(grep -n 'name: Activate NATS root generation' "$WORKFLOW" | cut -d: -f1 || true)"
+[[ "$source_line" =~ ^[0-9]+$ && "$setup_line" =~ ^[0-9]+$ &&
+  "$validator_line" =~ ^[0-9]+$ && "$kubectl_line" =~ ^[0-9]+$ &&
+  "$activate_line" =~ ^[0-9]+$ ]] || fail 'rotation workflow must prepare Go validator'
+((source_line < setup_line && setup_line < validator_line &&
+  validator_line < kubectl_line && kubectl_line < activate_line)) ||
+  fail 'Go validator must be ready before Kubernetes access or mutation'
+grep -Fq 'go-version-file: src/backend/pkg/go.mod' "$WORKFLOW" ||
+  fail 'Go version must come from the exact master source archive'
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -200,6 +217,7 @@ chmod +x "$work/bin/kubectl"
 cat >"$work/bin/go" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "${MOCK_GO_PROOF_VALIDATION_FAIL:-false}" != true ]] || exit 127
 [[ "$*" == *'run ./cmd/nats-proof-credential --check-min-validity 30m'* && "$*" == *'--generation r20260930a --namespace voice-staging'* ]] || exit 2
 EOF
 chmod +x "$work/bin/go"
@@ -239,6 +257,7 @@ run_rotation() {
     MOCK_SOURCE_PVC="${MOCK_SOURCE_PVC:-voice-nats-jsdata}" \
     MOCK_SOURCE_PVC_CLASS="${MOCK_SOURCE_PVC_CLASS:-local-path}" \
     MOCK_REALTIME_IMAGE="${MOCK_REALTIME_IMAGE:-}" \
+    MOCK_GO_PROOF_VALIDATION_FAIL="${MOCK_GO_PROOF_VALIDATION_FAIL:-false}" \
     MOCK_GENERATION_STATE="${MOCK_GENERATION_STATE:-absent}" \
     MOCK_ACL_SHA="$acl_sha" GITHUB_RUN_ID=123456 GITHUB_RUN_ATTEMPT=1 \
     GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
@@ -246,7 +265,7 @@ run_rotation() {
     VOICE_NATS_PROOF_IMAGE_TAG=0123456789abcdef0123456789abcdef01234567 \
     VOICE_NATS_PROOF_IMAGE_PUBLIC=true \
     bash "$ROTATE" "$@" >"$work/output" 2>&1 || rc=$?
-  if grep -Eq 'eA==|BEGIN (RSA )?PRIVATE KEY' "$work/output"; then
+  if grep -Eq 'eA==|inert-proof-credential|BEGIN (RSA )?PRIVATE KEY' "$work/output"; then
     fail 'rotation output exposed fixture credential bytes'
   fi
   return "$rc"
@@ -299,6 +318,10 @@ fi
 assert_no_mutation
 if TEST_NAMESPACE=voice-prod run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'rotation must reject every namespace except voice-staging'
+fi
+assert_no_mutation
+if MOCK_GO_PROOF_VALIDATION_FAIL=true run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
+  fail 'rotation must reject a failed proof validator before changing Kubernetes'
 fi
 assert_no_mutation
 if MOCK_PARTIAL_SET=true run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
