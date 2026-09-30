@@ -379,7 +379,7 @@ marker_state() {
 }
 
 recover_legacy() {
-  local target="$1" pvc hub pods svc service leaf patch marker replicas ready started=0 stopped=false min_pods max_pods
+  local target="$1" mode="${2:-recover}" pvc hub pods svc service leaf patch marker replicas ready started=0 stopped=false min_pods max_pods
   [[ "$target" == r20260930a1 ]] || fail 'legacy recovery is scoped to r20260930a1'
   marker_state
   [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" && "$MARKER_PREVIOUS" == legacy ]] ||
@@ -434,7 +434,7 @@ recover_legacy() {
       [[ "$service" == auth || "$service" == social || "$service" == user ]] && min_pods=1
       max_pods=1
       if [[ "$service" == user ]] && { [[ "$USER_CYCLE_STATE" == owned ]] ||
-        jq -e 'any(.items[]?; any(.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and .value == "" and .valueFrom == null))' <<<"$pods" >/dev/null; }; then
+        jq -e 'any(.items[]?; any(.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and (.value // "") == "" and .valueFrom == null))' <<<"$pods" >/dev/null; }; then
         max_pods=2
       fi
       jq -e --arg app "voice-${service}" --argjson min "$min_pods" --argjson max "$max_pods" '(.items | length) >= $min and (.items | length) <= $max and
@@ -442,11 +442,14 @@ recover_legacy() {
           any(.spec.volumes[]?; .name == "nats-service-creds" and .secret.secretName == "voice-nats-service-credentials") and
           any(.spec.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == "voice-nats-hub-tls") and
           (if $app == "voice-user" then any(.spec.containers[]?; .name == "user") else true end) and
-          all(.spec.containers[]? | select(.name == "user") | .env[]? | select(.name == "SPACE_GRPC_ADDR"); .value == "" and (.valueFrom == null)))' <<<"$pods" >/dev/null ||
+          all(.spec.containers[]? | select(.name == "user") | .env[]? | select(.name == "SPACE_GRPC_ADDR"); (.value // "") == "" and (.valueFrom == null) and ((keys - ["name", "value"]) | length) == 0))' <<<"$pods" >/dev/null ||
         fail "voice-${service} Pod differs from the verified partial recovery state"
     fi
   done
   [[ "$started" -ge 3 ]] || fail 'recovery prefix is shorter than the observed auth/social/user state'
+  if [[ "$mode" == restore ]]; then
+    [[ "$started" -eq "${#LEAVES[@]}" && "$USER_CYCLE_STATE" == owned ]] || fail 'restore-user-cycle requires the exact fully started owned recovery state'
+  fi
   if [[ "$started" == 3 ]]; then
     for service in auth social user; do
       leaf="$(read_required deployment "voice-${service}")"
@@ -464,7 +467,7 @@ recover_legacy() {
     .data.generation == $target and .data.previousGeneration == "legacy"
   ' <<<"$marker" >/dev/null || fail 'generation marker changed during recovery preflight'
 
-  start_leaves "$started" legacy recover
+  start_leaves "$started" legacy "$mode"
   patch="$(jq -cn --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
     [{op:"test",path:"/metadata/resourceVersion",value:$rv},
      {op:"test",path:"/data/phase",value:"rotating"},
@@ -583,7 +586,9 @@ validate_user_cycle_deployment() {
   entries="$(jq -c --argjson index "$USER_CYCLE_CONTAINER_INDEX" '[.spec.template.spec.containers[$index].env[]? | select(.name == "SPACE_GRPC_ADDR")]' <<<"$json")" || return 1
   USER_CYCLE_STATE=clean
   if [[ "$owner_present" == true || "$entries" != '[]' ]]; then
-    [[ "$owner" == "$MARKER_GENERATION" && "$entries" == '[{"name":"SPACE_GRPC_ADDR","value":""}]' ]] || return 1
+    [[ "$owner" == "$MARKER_GENERATION" ]] || return 1
+    jq -e 'length == 1 and .[0].name == "SPACE_GRPC_ADDR" and (.[0].value // "") == "" and
+      .[0].valueFrom == null and ((.[0] | keys - ["name", "value"]) | length) == 0' <<<"$entries" >/dev/null || return 1
     USER_CYCLE_STATE=owned
   fi
   USER_CYCLE_RESOURCE_VERSION="$(jq -er '.metadata.resourceVersion | select(type == "string" and test("^[0-9]+$"))' <<<"$json")" || return 1
@@ -615,15 +620,17 @@ apply_user_cycle_override() {
 }
 
 remove_user_cycle_override() {
-  local generation="$1" user index patch
+  local generation="$1" user index entry patch
+  check_user_cycle_marker || return 1
   user="$(read_required deployment voice-user)" || return 1
   validate_user_cycle_deployment "$user" "$generation" || return 1
   [[ "$USER_CYCLE_STATE" == owned ]] || return 0
-  index="$(jq -er --argjson container "$USER_CYCLE_CONTAINER_INDEX" '[.spec.template.spec.containers[$container].env | to_entries[] | select(.value.name == "SPACE_GRPC_ADDR" and .value.value == "") | .key] | if length == 1 then .[0] else error("override count") end' <<<"$user")" || return 1
-  patch="$(jq -cn --arg rv "$USER_CYCLE_RESOURCE_VERSION" --argjson container "$USER_CYCLE_CONTAINER_INDEX" --argjson index "$index" --arg target "$MARKER_GENERATION" '
+  index="$(jq -er --argjson container "$USER_CYCLE_CONTAINER_INDEX" '[.spec.template.spec.containers[$container].env | to_entries[] | select(.value.name == "SPACE_GRPC_ADDR" and (.value.value // "") == "" and .value.valueFrom == null) | .key] | if length == 1 then .[0] else error("override count") end' <<<"$user")" || return 1
+  entry="$(jq -c --argjson container "$USER_CYCLE_CONTAINER_INDEX" --argjson index "$index" '.spec.template.spec.containers[$container].env[$index]' <<<"$user")" || return 1
+  patch="$(jq -cn --arg rv "$USER_CYCLE_RESOURCE_VERSION" --argjson container "$USER_CYCLE_CONTAINER_INDEX" --argjson index "$index" --argjson entry "$entry" --arg target "$MARKER_GENERATION" '
     [{op:"test",path:"/metadata/resourceVersion",value:$rv},
      {op:"test",path:"/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap",value:$target},
-     {op:"test",path:("/spec/template/spec/containers/" + ($container|tostring) + "/env/" + ($index|tostring)),value:{name:"SPACE_GRPC_ADDR",value:""}},
+     {op:"test",path:("/spec/template/spec/containers/" + ($container|tostring) + "/env/" + ($index|tostring)),value:$entry},
      {op:"remove",path:("/spec/template/spec/containers/" + ($container|tostring) + "/env/" + ($index|tostring))},
      {op:"remove",path:"/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap"}]
   ')" || return 1
@@ -655,12 +662,15 @@ verify_restored_user_pod() {
 }
 
 bootstrap_user_space_cycle() (
-  local generation="$1" user space
+  local generation="$1" mode="${2:-recover}" user space
   trap 'user_cycle_exit "$?" "$generation"' EXIT
   trap 'exit 1' INT TERM
   check_user_cycle_marker || fail 'generation marker changed before User/Space recovery'
   user="$(read_required deployment voice-user)"
   validate_user_cycle_deployment "$user" "$generation" || fail 'unexpected User cycle override state'
+  if [[ "$mode" == restore && "$USER_CYCLE_STATE" != owned ]]; then
+    fail 'restore-user-cycle lost the owned User override before cleanup'
+  fi
   space="$(read_required deployment voice-space)"
   check_leaf "$space" voice-space space "$generation" 1
   if [[ "$USER_CYCLE_STATE" == clean ]] &&
@@ -689,7 +699,7 @@ start_leaves() {
   for ((index=started; index<${#LEAVES[@]}; index++)); do
     kubectl scale "deployment/voice-${LEAVES[index]}" -n "$NS" --replicas=1 >/dev/null
   done
-  if [[ "$mode" == recover ]]; then bootstrap_user_space_cycle "$generation"; fi
+  if [[ "$mode" == recover || "$mode" == restore ]]; then bootstrap_user_space_cycle "$generation" "$mode"; fi
   for service in "${LEAVES[@]}"; do
     kubectl rollout status "deployment/voice-${service}" -n "$NS" --timeout=300s >/dev/null
   done
@@ -761,6 +771,10 @@ main() {
     --recover-legacy)
       [[ $# -eq 2 ]] || fail 'usage: rotate-nats-root.sh --recover-legacy r20260930a1'
       recover_legacy "$2"
+      ;;
+    --restore-user-cycle)
+      [[ $# -eq 2 ]] || fail 'usage: rotate-nats-root.sh --restore-user-cycle r20260930a1'
+      recover_legacy "$2" restore
       ;;
     --activate)
       [[ $# -eq 4 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback'
