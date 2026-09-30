@@ -153,6 +153,107 @@ void main() {
     });
 
     test(
+      'chat_update reveals a newly created DM request without reload',
+      () async {
+        final hub = _FakeRealtimeHub();
+        final chats = _RequestChatsClient();
+        final container = _container(
+          sound: _RecordingSoundPlayer(),
+          hub: hub,
+          chats: chats,
+        );
+        addTearDown(container.dispose);
+        container.read(inAppNotificationControllerProvider);
+        expect(
+          (await container.read(
+            messageRequestsSummaryProvider.future,
+          )).pendingCount,
+          0,
+        );
+        chats.requestVisible = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'chat_update',
+            data: {
+              'chat_id': 'new-request',
+              'profile_id': 'prof-test',
+              'change': 'joined',
+            },
+          ),
+        );
+        await pumpEventQueue();
+        expect(
+          (await container.read(
+            messageRequestsSummaryProvider.future,
+          )).pendingCount,
+          1,
+        );
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.requests]
+              .items
+              .single
+              .chatId,
+          'new-request',
+        );
+      },
+    );
+
+    test(
+      'inbox bucket update removes accepted DM request without reload',
+      () async {
+        final hub = _FakeRealtimeHub();
+        final chats = _RequestChatsClient()..requestVisible = true;
+        final container = _container(
+          sound: _RecordingSoundPlayer(),
+          hub: hub,
+          chats: chats,
+        );
+        addTearDown(container.dispose);
+        container.read(inAppNotificationControllerProvider);
+        expect(
+          (await container.read(
+            messageRequestsSummaryProvider.future,
+          )).pendingCount,
+          1,
+        );
+        chats.requestVisible = false;
+        chats.mainVisible = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'chat_update',
+            data: {
+              'chat_id': 'new-request',
+              'profile_id': 'prof-test',
+              'change': 'inbox_bucket_changed',
+            },
+          ),
+        );
+        await pumpEventQueue();
+        expect(
+          (await container.read(
+            messageRequestsSummaryProvider.future,
+          )).pendingCount,
+          0,
+        );
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.main]
+              .items
+              .single
+              .chatId,
+          'new-request',
+        );
+        expect(
+          container.read(chatListControllerProvider).items.single.chatId,
+          'new-request',
+        );
+      },
+    );
+
+    test(
       'notification for non-selected chat bumps unread and plays sound',
       () async {
         final sound = _RecordingSoundPlayer();
@@ -896,6 +997,7 @@ class _RequestChatsClient extends VoiceChatsClient {
       );
 
   bool requestVisible = false;
+  bool mainVisible = false;
 
   @override
   Future<ChatsApiResult<ChatListData>> listChats({
@@ -908,6 +1010,8 @@ class _RequestChatsClient extends VoiceChatsClient {
     ChatListData(
       items: inbox == 'requests' && requestVisible
           ? [inboxChatItem('new-request', inbox: 'requests')]
+          : inbox == 'main' && mainVisible
+          ? [inboxChatItem('new-request', inbox: 'main')]
           : const [],
     ),
   );

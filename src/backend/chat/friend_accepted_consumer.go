@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/chat/internal/chatevents"
 	"voice/backend/pkg/natslog"
 )
 
@@ -23,6 +24,7 @@ const (
 
 type friendDMRequestStore interface {
 	PromoteFriendDMRequests(ctx context.Context, profileA, profileB uuid.UUID) error
+	FindDMChatIDByProfiles(ctx context.Context, profileA, profileB uuid.UUID) (uuid.UUID, error)
 }
 
 type acceptedFriendChecker interface {
@@ -56,7 +58,7 @@ func validateFriendAcceptedDurable(js nats.JetStreamContext) error {
 	return nil
 }
 
-func handleFriendAccepted(ctx context.Context, store friendDMRequestStore, friends acceptedFriendChecker, msg *nats.Msg, logger *slog.Logger) error {
+func handleFriendAccepted(ctx context.Context, store friendDMRequestStore, friends acceptedFriendChecker, publisher chatevents.Publisher, msg *nats.Msg, logger *slog.Logger) error {
 	if msg == nil || msg.Subject != friendAcceptedSubject {
 		return nil
 	}
@@ -85,11 +87,24 @@ func handleFriendAccepted(ctx context.Context, store friendDMRequestStore, frien
 		natslog.LogConsume(logger, msg, slog.LevelWarn, "friend DM request promotion failed", slog.String("error", err.Error()))
 		return err
 	}
+	chatID, err := store.FindDMChatIDByProfiles(ctx, a, b)
+	if err != nil {
+		natslog.LogConsume(logger, msg, slog.LevelWarn, "friend DM request lookup failed", slog.String("error", err.Error()))
+		return err
+	}
+	if publisher != nil && chatID != uuid.Nil {
+		for _, profileID := range []uuid.UUID{a, b} {
+			if err := publisher.PublishChatMemberChanged(ctx, chatID.String(), profileID.String(), "inbox_bucket_changed"); err != nil {
+				natslog.LogConsume(logger, msg, slog.LevelWarn, "friend DM inbox change publish failed", slog.String("error", err.Error()))
+				return err
+			}
+		}
+	}
 	natslog.LogConsume(logger, msg, slog.LevelInfo, "friend DM requests promoted")
 	return nil
 }
 
-func subscribeFriendAccepted(ctx context.Context, js nats.JetStreamContext, store friendDMRequestStore, friends acceptedFriendChecker, logger *slog.Logger) (*nats.Subscription, error) {
+func subscribeFriendAccepted(ctx context.Context, js nats.JetStreamContext, store friendDMRequestStore, friends acceptedFriendChecker, publisher chatevents.Publisher, logger *slog.Logger) (*nats.Subscription, error) {
 	if store == nil || friends == nil {
 		return nil, fmt.Errorf("friend DM dependencies not configured")
 	}
@@ -97,7 +112,7 @@ func subscribeFriendAccepted(ctx context.Context, js nats.JetStreamContext, stor
 		return nil, err
 	}
 	return js.QueueSubscribe(friendAcceptedSubject, friendAcceptedDurable, func(msg *nats.Msg) {
-		if err := handleFriendAccepted(ctx, store, friends, msg, logger); err != nil {
+		if err := handleFriendAccepted(ctx, store, friends, publisher, msg, logger); err != nil {
 			_ = msg.Nak()
 			return
 		}
@@ -105,12 +120,12 @@ func subscribeFriendAccepted(ctx context.Context, js nats.JetStreamContext, stor
 	}, nats.Bind(friendAcceptedStream, friendAcceptedDurable), nats.ManualAck())
 }
 
-func runFriendAcceptedConsumer(ctx context.Context, natsURL string, store friendDMRequestStore, friends acceptedFriendChecker, logger *slog.Logger) error {
+func runFriendAcceptedConsumer(ctx context.Context, natsURL string, store friendDMRequestStore, friends acceptedFriendChecker, publisher chatevents.Publisher, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("friend accepted consumer: missing NATS URL")
 	}
 	for {
-		err := runFriendAcceptedConsumerOnce(ctx, natsURL, store, friends, logger)
+		err := runFriendAcceptedConsumerOnce(ctx, natsURL, store, friends, publisher, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -125,7 +140,7 @@ func runFriendAcceptedConsumer(ctx context.Context, natsURL string, store friend
 	}
 }
 
-func runFriendAcceptedConsumerOnce(ctx context.Context, natsURL string, store friendDMRequestStore, friends acceptedFriendChecker, logger *slog.Logger) error {
+func runFriendAcceptedConsumerOnce(ctx context.Context, natsURL string, store friendDMRequestStore, friends acceptedFriendChecker, publisher chatevents.Publisher, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL,
 		nats.Name("voice-chat-friend-accepted"),
 		nats.CustomInboxPrefix("_INBOX.voice.chat"),
@@ -142,7 +157,7 @@ func runFriendAcceptedConsumerOnce(ctx context.Context, natsURL string, store fr
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeFriendAccepted(ctx, js, store, friends, logger)
+	sub, err := subscribeFriendAccepted(ctx, js, store, friends, publisher, logger)
 	if err != nil {
 		return err
 	}

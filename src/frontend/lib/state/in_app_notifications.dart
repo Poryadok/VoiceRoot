@@ -172,6 +172,8 @@ class InAppNotificationController {
         _onMarkRead(frame.data);
       case 'archive_activity':
         _onArchiveActivity(frame.data);
+      case 'chat_update':
+        _onChatUpdate(frame.data);
       default:
         break;
     }
@@ -271,6 +273,23 @@ class InAppNotificationController {
     if (chatId == null || chatId.isEmpty) return;
     _ref.read(inAppNotificationCenterProvider.notifier).markChatRead(chatId);
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+  }
+
+  void _onChatUpdate(Map<String, dynamic>? data) {
+    final chatId = data?['chat_id'] as String?;
+    final change = data?['change'] as String?;
+    if (chatId == null ||
+        chatId.isEmpty ||
+        (change != 'joined' && change != 'inbox_bucket_changed')) {
+      return;
+    }
+    _ref.invalidate(messageRequestsSummaryProvider);
+    unawaited(_ref.read(inboxReconcilerProvider.notifier).reconcile());
+    unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+    if (change == 'inbox_bucket_changed') {
+      _ref.invalidate(friendsListProvider);
+      _ref.invalidate(friendRequestsProvider);
+    }
   }
 
   bool _recordCenterRow({

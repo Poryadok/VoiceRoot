@@ -171,6 +171,26 @@ WHERE c.type = 'dm' AND m.chat_id = c.id
 	return err
 }
 
+// FindDMChatIDByProfiles returns the existing DM for a profile pair without
+// creating one. It also returns the ID after a replayed promotion event.
+func (s *DMStore) FindDMChatIDByProfiles(ctx context.Context, profileA, profileB uuid.UUID) (uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return uuid.Nil, errors.New("dm store: pool not configured")
+	}
+	var id uuid.UUID
+	err := s.Pool.QueryRow(ctx, `
+SELECT c.id FROM chats c
+JOIN chat_members a ON a.chat_id = c.id AND a.profile_id = $1
+JOIN chat_members b ON b.chat_id = c.id AND b.profile_id = $2
+WHERE c.type = 'dm'
+LIMIT 1
+`, profileA, profileB).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, nil
+	}
+	return id, err
+}
+
 func findDMInTx(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) (*ChatRow, error) {
 	var id, creator uuid.UUID
 	var createdAt, updatedAt time.Time
