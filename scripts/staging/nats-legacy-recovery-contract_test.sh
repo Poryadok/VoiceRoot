@@ -6,7 +6,8 @@ workflow="$root/.github/workflows/staging-nats-root-rotation.yml"
 rotate="$root/scripts/staging/rotate-nats-root.sh"
 grep -Fq "if: inputs.operation == 'recover-legacy'" "$workflow" || { echo 'recovery dispatch missing' >&2; exit 1; }
 grep -Fq "if: inputs.operation == 'restore-user-cycle'" "$workflow" || { echo 'owned User cleanup dispatch missing' >&2; exit 1; }
-grep -Fq 'r20260930a1' "$workflow" || { echo 'recovery generation not fixed' >&2; exit 1; }
+grep -Fq 'r20260930a1' "$workflow" || { echo 'original recovery generation missing' >&2; exit 1; }
+grep -Fq 'r20260930a2' "$workflow" || { echo 'all-stopped recovery generation missing' >&2; exit 1; }
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
@@ -27,7 +28,7 @@ case "$verb" in
         if [[ "$name" == voice-app-config ]]; then
           echo '{"kind":"ConfigMap","metadata":{"name":"voice-app-config","namespace":"voice-staging"},"data":{"SPACE_GRPC_ADDR":"voice-space:9090"}}'
         else
-          jq -cn --arg phase "${MOCK_PHASE:-rotating}" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:"100"},data:{phase:$phase,generation:"r20260930a1",previousGeneration:"legacy"}}'
+          jq -cn --arg phase "${MOCK_PHASE:-rotating}" --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:"100"},data:{phase:$phase,generation:$generation,previousGeneration:"legacy"}}'
         fi ;;
       service)
         echo '{"kind":"Service","metadata":{"name":"voice-nats","namespace":"voice-staging"},"spec":{"selector":{"app":"voice-nats-pvc-candidate"},"ports":[{"name":"client","port":4222,"targetPort":4222}]}}' ;;
@@ -59,7 +60,7 @@ case "$verb" in
         creds=voice-nats-service-credentials
         if [[ "$name" == "${MOCK_BAD_LEAF:-never}" ]]; then creds=voice-nats-service-credentials-r20260930a1; fi
         replicas=0 ready=0
-        if [[ "$name" == voice-auth || "$name" == voice-social || "$name" == voice-user || "${MOCK_RESUME_ALL:-0}" == 1 && "$name" == voice-* || -e "${KUBE_STARTED_DIR:?}/$name" ]]; then replicas=1; fi
+        if [[ -e "${KUBE_STARTED_DIR:?}/$name" || ( "${MOCK_ALL_STOPPED:-0}" != 1 && ( "$name" == voice-auth || "$name" == voice-social || "$name" == voice-user || "${MOCK_RESUME_ALL:-0}" == 1 && "$name" == voice-* ) ) ]]; then replicas=1; fi
         if [[ "$name" == "${MOCK_BAD_PREFIX:-never}" ]]; then replicas=1; fi
         if [[ "$name" == voice-auth || "$name" == voice-social ]]; then ready=1; fi
         if [[ "$name" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || -e "${KUBE_SPACE_READY:?}" || "${MOCK_CLEAN_READY:-0}" == 1 ) ]]; then ready=1; fi
@@ -70,7 +71,7 @@ case "$verb" in
         empty_owner=false
         if [[ "$name" == voice-user && "${MOCK_EMPTY_OWNER:-0}" == 1 ]]; then empty_owner=true; fi
         owner='' owner_present=false
-        if [[ "$owned" == true ]]; then owner=r20260930a1; owner_present=true; fi
+        if [[ "$owned" == true ]]; then owner="${MOCK_TARGET_GENERATION:-r20260930a1}"; owner_present=true; fi
         if [[ "$empty_owner" == true ]]; then owner_present=true; fi
         annotations='{}'
         if [[ "$owner_present" == true ]]; then annotations="$(jq -cn --arg owner "$owner" '{"voice.io/nats-user-space-bootstrap":$owner}')"; fi
@@ -82,6 +83,10 @@ case "$verb" in
           echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
         elif [[ "$*" == *app=voice-auth* || "$*" == *app=voice-social* || "$*" == *app=voice-user* ]]; then
           args="$*"; app="${args#*app=}"; app="${app%% *}"
+          if [[ "${MOCK_ALL_STOPPED:-0}" == 1 && ! -e "${KUBE_STARTED_DIR:?}/${app}" ]]; then
+            echo '{"items":[]}'
+            exit
+          fi
           app_ready=true
           [[ "$app" == voice-user ]] && app_ready=false
           pod_creds=voice-nats-service-credentials
@@ -113,7 +118,7 @@ case "$verb" in
     if [[ "$2" == deployment && "$3" == voice-user ]]; then
       jq -e 'type == "array" and any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == "100") and
         all(.[]; .path == "/metadata/resourceVersion" or .path == "/spec/template/spec/containers/1/env/-" or .path == "/spec/template/spec/containers/1/env/0" or .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$payload" >/dev/null || exit 2
-      if jq -e 'any(.[]; .op == "add" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap" and .value == "r20260930a1")' <<<"$payload" >/dev/null; then
+      if jq -e --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" 'any(.[]; .op == "add" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap" and .value == $generation)' <<<"$payload" >/dev/null; then
         jq -e 'any(.[]; .op == "add" and .path == "/spec/template/spec/containers/1/env/-" and .value == {name:"SPACE_GRPC_ADDR",value:""})' <<<"$payload" >/dev/null || exit 2
         [[ "${MOCK_FAIL_STAGE:-}" != apply ]] || exit 1
         touch "${KUBE_USER_OVERRIDE:?}"
@@ -126,16 +131,16 @@ case "$verb" in
       exit
     fi
     [[ "$2" == configmap && "$3" == voice-nats-generation ]] || exit 2
-    jq -e 'type == "array" and length == 7 and
+    jq -e --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" 'type == "array" and length == 7 and
       ([.[] | select(.op == "test") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration","/metadata/resourceVersion"] and
       ([.[] | select(.op == "replace") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration"] and
       any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == "100") and
       any(.[]; .op == "test" and .path == "/data/phase" and .value == "rotating") and
-      any(.[]; .op == "test" and .path == "/data/generation" and .value == "r20260930a1") and
+      any(.[]; .op == "test" and .path == "/data/generation" and .value == $generation) and
       any(.[]; .op == "test" and .path == "/data/previousGeneration" and .value == "legacy") and
       any(.[]; .op == "replace" and .path == "/data/phase" and .value == "active") and
       any(.[]; .op == "replace" and .path == "/data/generation" and .value == "legacy") and
-      any(.[]; .op == "replace" and .path == "/data/previousGeneration" and .value == "r20260930a1")' <<<"$payload" >/dev/null || exit 2
+      any(.[]; .op == "replace" and .path == "/data/previousGeneration" and .value == $generation)' <<<"$payload" >/dev/null || exit 2
     printf 'marker patched\n' >>"${KUBE_PATCHES:?}" ;;
   *) echo 'forbidden Kubernetes mutation' >&2; exit 2 ;;
 esac
@@ -145,10 +150,11 @@ mkdir "$work/started"
 export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready" KUBE_USER_GET_COUNT="$work/user-gets"
 
 run_case() {
+  local generation="${MOCK_TARGET_GENERATION:-r20260930a1}"
   : >"$KUBE_CALLS"; : >"$KUBE_SCALES"; : >"$KUBE_ROLLOUTS"; : >"$KUBE_PATCHES"
   rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT"
   [[ "${MOCK_START_OWNED:-0}" != 1 ]] || touch "$KUBE_USER_OVERRIDE"
-  VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --"${MOCK_OPERATION:-recover-legacy}" r20260930a1 >"$work/output" 2>"$work/error"
+  VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --"${MOCK_OPERATION:-recover-legacy}" "$generation" >"$work/output" 2>"$work/error"
 }
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'recovery success marker missing' >&2; exit 1; }
@@ -245,5 +251,18 @@ if run_case; then echo 'restore-user-cycle accepted an unowned User Deployment' 
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unowned restore-user-cycle caused mutation' >&2; exit 1; }
 unset MOCK_OPERATION
 unset MOCK_RESUME_ALL
+
+export MOCK_ALL_STOPPED=1
+if run_case; then echo 'original recovery generation accepted a fully stopped state' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unsupported a1 all-stopped state caused mutation' >&2; exit 1; }
+export MOCK_TARGET_GENERATION=r20260930a2
+unset MOCK_ALL_STOPPED
+if run_case; then echo 'a2 recovery accepted a started leaf outside its all-stopped precondition' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unsupported a2 partial state caused mutation' >&2; exit 1; }
+export MOCK_ALL_STOPPED=1
+run_case || { cat "$work/error" >&2; exit 1; }
+grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'a2 recovery success marker missing' >&2; exit 1; }
+[[ ! -e "$KUBE_USER_OVERRIDE" && "$(wc -l <"$KUBE_SCALES")" == 18 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'a2 all-stopped recovery did not restore leaves and clear User override' >&2; exit 1; }
+! grep -Eq 'run_jobs|voice-nats-realtime-permissions-preflight|voice-nats-acl-proof' "$KUBE_CALLS" || { echo 'recovery reran bootstrap or proof' >&2; exit 1; }
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'
