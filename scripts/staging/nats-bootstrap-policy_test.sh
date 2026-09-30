@@ -39,6 +39,8 @@ PREFLIGHT="${ROOT}/deploy/templates/nats-realtime-permissions-preflight.yaml"
 test -f "${PREFLIGHT}" || fail 'Realtime credential preflight Job is missing'
 grep -Fq 'run_nats_realtime_preflight' "${APPLY}" || fail 'bootstrap must verify Realtime permissions before app rollout'
 grep -Fq 'job/voice-nats-realtime-permissions-preflight' "${APPLY}" || fail 'infra apply must wait for Realtime credential preflight'
+grep -Fq 'nats_image_pull_secrets_fragment' "${APPLY}" || fail 'preflight render must generate a valid image pull Secret list'
+grep -Fq 's|__IMAGE_PULL_SECRETS__|${image_pull_secrets}|g' "${APPLY}" || fail 'preflight render must substitute its image pull Secret list'
 grep -Fq 'REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT' "${PREFLIGHT}" || fail 'preflight must execute Realtime bind logic'
 grep -Fq 'restartPolicy: Always' "${PREFLIGHT}" || fail 'preflight leaf must be a native Job sidecar'
 grep -Fq 'realtime.creds' "${PREFLIGHT}" || fail 'preflight leaf must use Realtime credential'

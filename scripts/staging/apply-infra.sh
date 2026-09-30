@@ -101,9 +101,12 @@ fi
 export VOICE_NATS_PRESERVE_SERVICE_SELECTOR
 
 render() {
+  local image_pull_secrets
+  image_pull_secrets="$(nats_image_pull_secrets_fragment)" || return 1
   nats_generation_render "$1" | sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
       -e "s|IMAGE_PLACEHOLDER|${REGISTRY}/gateway:${TAG}|g" \
+      -e "s|__IMAGE_PULL_SECRETS__|${image_pull_secrets}|g" \
       -e "s|__NATS_STORAGE_CLASS__|${NATS_STORAGE_CLASS}|g" \
       -e "s|__NATS_STORAGE_SIZE__|${NATS_STORAGE_SIZE}|g"
 }

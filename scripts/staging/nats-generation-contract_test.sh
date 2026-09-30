@@ -8,8 +8,20 @@ APPLY="${ROOT}/scripts/staging/render-and-apply.sh"
 ACL_PROOF_SHA="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# NATS staging Jobs that use private application images must receive a valid
+# Kubernetes imagePullSecrets list; the empty configuration remains a list.
+# shellcheck source=scripts/staging/nats-generation.sh
+source "${GENERATION}"
+[[ "$(nats_image_pull_secrets_fragment)" == '[]' ]] || fail 'empty image pull Secret must render as an empty list'
+VOICE_IMAGE_PULL_SECRET=voice-ghcr-pull
+[[ "$(nats_image_pull_secrets_fragment)" == '[{name: voice-ghcr-pull}]' ]] || fail 'configured image pull Secret must render as a Kubernetes list'
+VOICE_IMAGE_PULL_SECRET='invalid name'
+if nats_image_pull_secrets_fragment >/dev/null 2>&1; then
+  fail 'invalid image pull Secret name was accepted'
+fi
+
 expect_failure() {
   local label="$1"
   shift
