@@ -12,6 +12,13 @@ kubectl get deployments -n "$ns" -o json |
   jq -c '[.items[]? | select(any(.spec.template.spec.volumes[]?; .name == "nats-service-creds")) | {name:.metadata.name,replicas:.spec.replicas,ready:(.status.readyReplicas // 0),generation:.spec.template.metadata.annotations["voice.io/nats-generation"],serviceCredential:([.spec.template.spec.volumes[]? | select(.name == "nats-service-creds") | .secret.secretName] | first),hubTLS:([.spec.template.spec.volumes[]? | select(.name == "nats-hub-tls") | .secret.secretName] | first)}]'
 kubectl get service voice-nats -n "$ns" -o json |
   jq -c '{service:{selector:.spec.selector,clientPorts:[.spec.ports[]? | select(.port == 4222) | {name,port,targetPort}]}}'
+kubectl get deployment voice-user -n "$ns" -o json |
+  jq -c '{userSpaceOverride:{ownedAnnotation:((.spec.template.metadata.annotations // {}) | has("voice.io/nats-user-space-bootstrap")),
+    explicitEmpty:(any(.spec.template.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and .value == "" and .valueFrom == null)),
+    explicitOther:(any(.spec.template.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and (.value != "" or .valueFrom != null)))}}'
+kubectl get pods -n "$ns" -l app=voice-user -o json |
+  jq -c '{userSpaceOverridePods:{total:(.items | length),emptyOverride:([.items[]? | select(any(.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and .value == "" and .valueFrom == null))] | length),
+    otherOverride:([.items[]? | select(any(.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and (.value != "" or .valueFrom != null)))] | length)}}'
 
 classify_log() {
   local log="$1" category=OTHER
