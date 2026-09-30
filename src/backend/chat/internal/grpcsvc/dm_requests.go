@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
@@ -39,11 +40,22 @@ func (s *ChatGRPC) setRequestInbox(ctx context.Context, rawChatID, bucket string
 	if err != nil {
 		return err
 	}
+	members, err := s.DM.ListChatMembers(ctx, chatID)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
 	if err := s.DM.SetInboxBucket(ctx, chatID, profileID, bucket); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return status.Error(codes.NotFound, "chat not found")
 		}
 		return status.Error(codes.Internal, err.Error())
+	}
+	if s.ChatEvents != nil {
+		for _, member := range members {
+			if err := s.ChatEvents.PublishChatMemberChanged(ctx, chatID.String(), member.ProfileID.String(), "inbox_bucket_changed"); err != nil {
+				s.logPublishError(ctx, "chat.member_changed", err, slog.String("chat_id", chatID.String()), slog.String("profile_id", member.ProfileID.String()))
+			}
+		}
 	}
 	return nil
 }

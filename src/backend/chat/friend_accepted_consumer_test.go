@@ -14,9 +14,12 @@ import (
 )
 
 type friendDMStoreStub struct {
-	a, b  uuid.UUID
-	calls int
-	err   error
+	a, b        uuid.UUID
+	calls       int
+	err         error
+	chatID      uuid.UUID
+	lookupCalls int
+	lookupErr   error
 }
 
 type acceptedFriendStub struct {
@@ -34,6 +37,11 @@ func (s *friendDMStoreStub) PromoteFriendDMRequests(_ context.Context, a, b uuid
 	return s.err
 }
 
+func (s *friendDMStoreStub) FindDMChatIDByProfiles(context.Context, uuid.UUID, uuid.UUID) (uuid.UUID, error) {
+	s.lookupCalls++
+	return s.chatID, s.lookupErr
+}
+
 func friendAcceptedMessage(t *testing.T, a, b uuid.UUID) *nats.Msg {
 	t.Helper()
 	data, err := proto.Marshal(&eventsv1.SocialStreamEvent{
@@ -48,26 +56,57 @@ func friendAcceptedMessage(t *testing.T, a, b uuid.UUID) *nats.Msg {
 func TestFriendAcceptedPromotesExistingDMRequests(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	store := &friendDMStoreStub{}
-	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, friendAcceptedMessage(t, a, b), nil))
+	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, nil, friendAcceptedMessage(t, a, b), nil))
 	require.Equal(t, 1, store.calls)
 	require.Equal(t, a, store.a)
 	require.Equal(t, b, store.b)
 }
 
+func TestFriendAcceptedWithoutExistingDMDoesNotPublish(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	store := &friendDMStoreStub{}
+	spy := &friendAcceptedChatEventsSpy{}
+	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, spy, friendAcceptedMessage(t, a, b), nil))
+	require.Equal(t, 1, store.calls)
+	require.Equal(t, 1, store.lookupCalls)
+	require.Empty(t, spy.changes)
+}
+
+func TestFriendAcceptedPublishesInboxChangeToBothProfiles(t *testing.T) {
+	a, b, chatID := uuid.New(), uuid.New(), uuid.New()
+	store := &friendDMStoreStub{chatID: chatID}
+	spy := &friendAcceptedChatEventsSpy{}
+	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, spy, friendAcceptedMessage(t, a, b), nil))
+	require.Equal(t, [][3]string{
+		{chatID.String(), a.String(), "inbox_bucket_changed"},
+		{chatID.String(), b.String(), "inbox_bucket_changed"},
+	}, spy.changes)
+}
+
+type friendAcceptedChatEventsSpy struct{ changes [][3]string }
+
+func (*friendAcceptedChatEventsSpy) PublishChatCreated(context.Context, string, string) error {
+	return nil
+}
+func (s *friendAcceptedChatEventsSpy) PublishChatMemberChanged(_ context.Context, chatID, profileID, change string) error {
+	s.changes = append(s.changes, [3]string{chatID, profileID, change})
+	return nil
+}
+
 func TestFriendAcceptedRetriesStoreFailureAndIgnoresInvalidPayload(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	store := &friendDMStoreStub{err: errors.New("database unavailable")}
-	require.Error(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, friendAcceptedMessage(t, a, b), nil))
+	require.Error(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, nil, friendAcceptedMessage(t, a, b), nil))
 	require.Equal(t, 1, store.calls)
-	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, &nats.Msg{Subject: friendAcceptedSubject, Data: []byte("invalid")}, nil))
+	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{accepted: true}, nil, &nats.Msg{Subject: friendAcceptedSubject, Data: []byte("invalid")}, nil))
 	require.Equal(t, 1, store.calls)
 }
 
 func TestFriendAcceptedReplayAfterUnfriendKeepsRequest(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	store := &friendDMStoreStub{}
-	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{}, friendAcceptedMessage(t, a, b), nil))
+	require.NoError(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{}, nil, friendAcceptedMessage(t, a, b), nil))
 	require.Zero(t, store.calls)
-	require.Error(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{err: errors.New("social unavailable")}, friendAcceptedMessage(t, a, b), nil))
+	require.Error(t, handleFriendAccepted(context.Background(), store, acceptedFriendStub{err: errors.New("social unavailable")}, nil, friendAcceptedMessage(t, a, b), nil))
 	require.Zero(t, store.calls)
 }

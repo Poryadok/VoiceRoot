@@ -12,9 +12,9 @@ import (
 )
 
 type spyChatEvents struct {
-	mu              sync.Mutex
-	created         [][2]string // chat_id, type
-	memberChanged   [][3]string // chat_id, profile_id, change
+	mu            sync.Mutex
+	created       [][2]string // chat_id, type
+	memberChanged [][3]string // chat_id, profile_id, change
 }
 
 func (s *spyChatEvents) PublishChatCreated(_ context.Context, chatID, chatType string) error {
@@ -77,4 +77,28 @@ func TestChatGRPC_ChatEvents_NewDMPublishesOnce(t *testing.T) {
 	cr, mc = spy.snapshot()
 	require.Len(t, cr, 1)
 	require.Len(t, mc, 2)
+}
+
+func TestChatGRPC_AcceptDMRequestPublishesInboxChangeToBothProfiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, accB := uuid.New(), uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	spy := &spyChatEvents{}
+	client, cleanup := startChatGRPCTestServer(t, pool, mapProfileAccounts{profA: accA, profB: accB}, nil, nil, WithChatEventsPublisher(spy))
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateDM(withAccountProfileCtx(ctx, accA, profA), &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	chatID := created.GetChat().GetId()
+	_, err = client.AcceptDMRequest(withAccountProfileCtx(ctx, accB, profB), &chatv1.AcceptDMRequestRequest{ChatId: chatID})
+	require.NoError(t, err)
+	_, changes := spy.snapshot()
+	require.Contains(t, changes, [3]string{chatID, profA.String(), "inbox_bucket_changed"})
+	require.Contains(t, changes, [3]string{chatID, profB.String(), "inbox_bucket_changed"})
 }
