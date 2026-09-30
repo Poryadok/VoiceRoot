@@ -58,7 +58,7 @@ func TestPreflightFriendRequestConsumerInspectsWithoutBindingLiveDurable(t *test
 	}
 	const instanceID = "realtime-1"
 	durable := friendRequestConsumerDurableName(instanceID)
-	if err := preflightFriendRequestConsumer(s.ClientURL(), instanceID); err == nil {
+	if err := preflightFriendRequestConsumerWithWait(s.ClientURL(), instanceID, 100*time.Millisecond); err == nil {
 		t.Fatal("preflight accepted a missing durable")
 	}
 	if _, err := js.ConsumerInfo(jsStreamSocialEvents, durable); err == nil {
@@ -79,7 +79,7 @@ func TestPreflightFriendRequestConsumerInspectsWithoutBindingLiveDurable(t *test
 		t.Fatalf("bind live consumer: %v", err)
 	}
 	t.Cleanup(func() { _ = live.Unsubscribe() })
-	if err := preflightFriendRequestConsumer(s.ClientURL(), instanceID); err != nil {
+	if err := preflightFriendRequestConsumerWithWait(s.ClientURL(), instanceID, time.Second); err != nil {
 		t.Fatalf("inspect exact durable while live consumer is bound: %v", err)
 	}
 	if _, err := js.Publish("social.friend_request", []byte("live")); err != nil {
@@ -89,6 +89,36 @@ func TestPreflightFriendRequestConsumerInspectsWithoutBindingLiveDurable(t *test
 	case <-received:
 	case <-time.After(2 * time.Second):
 		t.Fatal("live consumer stopped receiving after preflight")
+	}
+}
+
+func TestPreflightFriendRequestConsumerWaitsForDurableReadiness(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamSocialEvents, Subjects: []string{"social.>"}}); err != nil {
+		t.Fatal(err)
+	}
+	const instanceID = "realtime-1"
+	durable := friendRequestConsumerDurableName(instanceID)
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_, _ = js.AddConsumer(jsStreamSocialEvents, &nats.ConsumerConfig{
+			Durable: durable, DeliverSubject: realtimeConsumerDeliverSubject(instanceID, "friend_request"),
+			FilterSubject: "social.friend_request", DeliverPolicy: nats.DeliverNewPolicy, AckPolicy: nats.AckExplicitPolicy,
+		})
+	}()
+
+	if err := preflightFriendRequestConsumer(s.ClientURL(), instanceID); err != nil {
+		t.Fatalf("preflight should wait for the bootstrap-owned durable: %v", err)
 	}
 }
 
