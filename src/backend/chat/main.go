@@ -222,7 +222,7 @@ func main() {
 				logger.Warn("friend accepted consumer disabled: SOCIAL_GRPC_ADDR not set")
 			} else {
 				go func() {
-					if err := runFriendAcceptedConsumer(runCtx, natsURL, dmStore, friends, logger); err != nil && !errors.Is(err, context.Canceled) {
+					if err := runFriendAcceptedConsumer(runCtx, natsURL, dmStore, friends, chatEvents, logger); err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("friend accepted consumer stopped", slog.String("error", err.Error()))
 					}
 				}()
