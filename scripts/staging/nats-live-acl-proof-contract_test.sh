@@ -214,9 +214,9 @@ case "$*" in
     jq -n --arg s "$service" --arg image "$image" --arg suffix "$suffix" --argjson owned "$owned" '{kind:"Deployment",metadata:{name:("voice-"+$s),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{metadata:{annotations:(if $owned then {"voice.io/nats-user-space-bootstrap":"r20260930a"} else {} end)},spec:{containers:[{name:$s,image:$image,env:(if $s == "user" and $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end),envFrom:(if $s == "user" then [{configMapRef:{name:"voice-app-config"}}] else [] end)},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($s+".creds"),path:($s+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}' ;;
   *'get pods -n voice-staging -l app=voice-user -o json'*)
     if [[ -f "$STATE/user-override" ]]; then
-      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]}}]}'
+      printf '%s\n' '{"items":[{"metadata":{"name":"voice-user-pod","labels":{"app":"voice-user"}},"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]},"status":{"phase":"Running","containerStatuses":[{"name":"user","ready":true}]}}]}'
     else
-      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[]}]}}]}'
+      printf '%s\n' '{"items":[{"metadata":{"name":"voice-user-pod","labels":{"app":"voice-user"}},"spec":{"containers":[{"name":"user","env":[]}]},"status":{"phase":"Running","containerStatuses":[{"name":"user","ready":true}]}}]}'
     fi ;;
   *'get pods -n voice-staging -l app=voice-'*) ;;
   *'get job voice-nats-'*'-bootstrap'*|*'get job voice-nats-realtime-permissions-preflight '*)
