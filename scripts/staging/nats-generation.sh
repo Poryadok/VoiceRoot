@@ -68,6 +68,19 @@ nats_generation_render() {
   fi
 }
 
+nats_image_pull_secrets_fragment() {
+  local secret_name="${VOICE_IMAGE_PULL_SECRET:-}"
+  if [[ -z "$secret_name" ]]; then
+    printf '[]'
+    return 0
+  fi
+  [[ ${#secret_name} -le 253 && "$secret_name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$ ]] || {
+    echo 'ERROR: VOICE_IMAGE_PULL_SECRET must be a Kubernetes Secret name' >&2
+    return 1
+  }
+  printf '[{name: %s}]' "$secret_name"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   case "${1:-}" in
     --check)
