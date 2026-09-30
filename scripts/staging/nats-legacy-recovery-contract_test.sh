@@ -46,6 +46,8 @@ case "$verb" in
       pods)
         if [[ "$*" == *app=voice-nats-pvc-candidate* ]]; then
           echo '{"items":[{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"phase":"Running","containerStatuses":[{"ready":true}]}}]}'
+        elif [[ "$*" == *'app=voice-nats -o json'* && "${MOCK_OLD_HUB_POD:-0}" == 1 ]]; then
+          echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
         else echo '{"items":[]}'
         fi ;;
       *) echo 'unexpected read' >&2; exit 2 ;;
@@ -97,6 +99,10 @@ export MOCK_HUB_READY=0
 if run_case; then echo 'unready hub did not block recovery' >&2; exit 1; fi
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unready hub caused mutation' >&2; exit 1; }
 unset MOCK_HUB_READY
+export MOCK_OLD_HUB_POD=1
+if run_case; then echo 'lingering old hub Pod did not block recovery' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'lingering old hub caused mutation' >&2; exit 1; }
+unset MOCK_OLD_HUB_POD
 export MOCK_PHASE=active
 if run_case; then echo 'wrong marker did not block recovery' >&2; exit 1; fi
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'wrong marker caused mutation' >&2; exit 1; }

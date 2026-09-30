@@ -387,6 +387,8 @@ recover_legacy() {
   [[ "$MARKER_RESOURCE_VERSION" =~ ^[0-9]+$ ]] || fail 'legacy recovery marker has no resourceVersion'
   check_selector
   check_no_second_hub
+  pods="$(kubectl get pods -n "$NS" -l app=voice-nats -o json)" || fail 'cannot inspect previous hub Pods'
+  jq -e '(.items | length) == 0' <<<"$pods" >/dev/null || fail 'previous NATS hub still has Pods'
   svc="$(read_required service voice-nats)"
   jq -e 'any(.spec.ports[]?; .name == "client" and .port == 4222 and .targetPort == 4222)' <<<"$svc" >/dev/null ||
     fail 'voice-nats client Service port differs'

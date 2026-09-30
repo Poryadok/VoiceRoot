@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Activate, roll back, or diagnose the current NATS generation
+        description: Activate, roll back, diagnose, or recover the retained legacy NATS generation
         required: true
         type: choice
         options:
@@ -13,7 +13,7 @@ on:
           - diagnose
           - recover-legacy
       generation:
-        description: Generation for activate (rYYYYMMDD, optionally followed by up to 8 lowercase letters or digits); leave empty for rollback
+        description: Generation for activate; use r20260930a1 for recover-legacy; leave empty for rollback or diagnose
         required: false
         type: string
 
