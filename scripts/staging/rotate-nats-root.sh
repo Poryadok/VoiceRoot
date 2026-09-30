@@ -394,7 +394,7 @@ marker_state() {
 
 recover_legacy() {
   local target="$1" mode="${2:-recover}" pvc hub pods svc service leaf patch marker replicas ready started=0 stopped=false min_pods max_pods
-  [[ "$target" == r20260930a1 ]] || fail 'legacy recovery is scoped to r20260930a1'
+  [[ "$target" == r20260930a1 || "$target" == r20260930a2 ]] || fail 'legacy recovery generation is not supported'
   marker_state
   [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" && "$MARKER_PREVIOUS" == legacy ]] ||
     fail 'legacy recovery marker does not match the interrupted rotation'
@@ -421,7 +421,10 @@ recover_legacy() {
     (.items[0].status.containerStatuses | length) > 0 and
     all(.items[0].status.containerStatuses[]; .ready == true)' <<<"$pods" >/dev/null ||
     fail 'legacy hub Pod is not the sole ready candidate'
-  validate_user_cycle_deployment "$(read_required deployment voice-user)" legacy
+  leaf="$(read_required deployment voice-user)"
+  replicas="$(jq -er '.spec.replicas' <<<"$leaf")" || fail 'voice-user has no replica count'
+  [[ "$replicas" == 0 || "$replicas" == 1 ]] || fail 'voice-user has an unsafe replica count'
+  validate_user_cycle_deployment "$leaf" legacy "$replicas"
   for service in "${LEAVES[@]}"; do
     leaf="$(read_required deployment "voice-${service}")"
     replicas="$(jq -er '.spec.replicas' <<<"$leaf")" || fail "voice-${service} has no replica count"
@@ -460,7 +463,11 @@ recover_legacy() {
         fail "voice-${service} Pod differs from the verified partial recovery state"
     fi
   done
-  [[ "$started" -ge 3 ]] || fail 'recovery prefix is shorter than the observed auth/social/user state'
+  if [[ "$target" == r20260930a2 ]]; then
+    [[ "$started" -eq 0 ]] || fail 'r20260930a2 recovery requires all leaves stopped'
+  else
+    [[ "$started" -ge 3 ]] || fail 'recovery prefix is shorter than the observed auth/social/user state'
+  fi
   if [[ "$mode" == restore ]]; then
     [[ "$started" -eq "${#LEAVES[@]}" && "$USER_CYCLE_STATE" == owned ]] || fail 'restore-user-cycle requires the exact fully started owned recovery state'
   fi
@@ -587,8 +594,8 @@ start_hub() {
 }
 
 validate_user_cycle_deployment() {
-  local json="$1" generation="$2" owner owner_present entries
-  check_leaf "$json" voice-user user "$generation" 1
+  local json="$1" generation="$2" expected_replicas="${3:-1}" owner owner_present entries
+  check_leaf "$json" voice-user user "$generation" "$expected_replicas"
   USER_CYCLE_CONTAINER_INDEX="$(jq -er '[.spec.template.spec.containers | to_entries[] | select(.value.name == "user") | .key] | if length == 1 then .[0] else error("user container count") end' <<<"$json")" || return 1
   jq -e --argjson index "$USER_CYCLE_CONTAINER_INDEX" '
     (.spec.template.metadata.annotations | type) == "object" and
@@ -818,7 +825,7 @@ main() {
   local mode="${1:-}" target bundle proof_credential source pvc class size selector old
   case "$mode" in
     --recover-legacy)
-      [[ $# -eq 2 ]] || fail 'usage: rotate-nats-root.sh --recover-legacy r20260930a1'
+      [[ $# -eq 2 ]] || fail 'usage: rotate-nats-root.sh --recover-legacy GENERATION'
       recover_legacy "$2"
       ;;
     --restore-user-cycle)

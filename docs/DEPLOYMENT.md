@@ -711,7 +711,7 @@ temporary NetworkPolicy and credential Secret. It verifies all are absent
 before changing the hub, leaves, or marker.
 If that rollback itself stops on a historical bootstrap Job after restoring
 the legacy hub, use `diagnose` first. For the interrupted
-`r20260930a1 → legacy` incident only, `recover-legacy` with generation
+`r20260930a1 → legacy` incident, `recover-legacy` with generation
 `r20260930a1` verifies the rotating marker, ready legacy hub and PVC, exact
 Service selector/client port, legacy Secret references and the partial
 state observed after run 36660139990: Auth and Social ready at one replica,
@@ -719,9 +719,11 @@ User at one unready replica, and the other 15 leaves stopped with no Pods.
 On retry it accepts only a contiguous prefix of those same old-reference
 leaves, verifies any existing Pods also mount the old credentials/TLS, and
 rejects an out-of-order or mixed-generation deployment before mutation.
-It does not rerun bootstrap/preflight, delete Jobs, or modify NATS PVCs and
-Secrets. It starts any remaining stopped leaves, then temporarily overrides
-only User's `SPACE_GRPC_ADDR` to an empty value in its Pod template. User's
+For the interrupted `r20260930a2 → legacy` recovery, the same operation accepts
+only the observed state with all 18 legacy-reference leaves stopped and no Pods.
+Both paths skip bootstrap and proof Jobs, retain NATS PVCs and Secrets, start
+the remaining leaves, and temporarily override only User's `SPACE_GRPC_ADDR`
+to an empty value in its Pod template. User's
 space-membership privacy check denies when Space is unavailable. The operation
 waits for User and then Space, removes its exact owned override, waits for the
 normal User rollout, and finally requires all 18 leaves ready before it
