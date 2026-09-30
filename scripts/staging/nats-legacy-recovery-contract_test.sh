@@ -87,13 +87,22 @@ case "$verb" in
             echo '{"items":[]}'
             exit
           fi
+          extra_user_pod=false
+          if [[ "$app" == voice-user && -e "${KUBE_USER_RESTORE_STARTED:?}" ]]; then
+            pod_count=0
+            if [[ -f "${KUBE_USER_PODS_GET_COUNT:?}" ]]; then read -r pod_count <"$KUBE_USER_PODS_GET_COUNT"; fi
+            pod_count=$((pod_count + 1))
+            printf '%s\n' "$pod_count" >"$KUBE_USER_PODS_GET_COUNT"
+            if [[ "${MOCK_TRANSIENT_USER_DUPLICATE:-0}" == 1 && "$pod_count" == 1 ]] ||
+              [[ "${MOCK_PERSISTENT_USER_DUPLICATE:-0}" == 1 ]]; then extra_user_pod=true; fi
+          fi
           app_ready=true
           [[ "$app" == voice-user ]] && app_ready=false
           pod_creds=voice-nats-service-credentials
           [[ "$app" == "${MOCK_BAD_POD:-never}" ]] && pod_creds=voice-nats-service-credentials-r20260930a1
           owned=false
           [[ "$app" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || "${MOCK_LINGERING_OVERRIDE_POD:-0}" == 1 ) ]] && owned=true
-          jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson owned "$owned" --argjson appReady "$app_ready" '{items:[{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}],containers:[{name:($app|ltrimstr("voice-")),env:(if $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end)}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}]}'
+          jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson owned "$owned" --argjson appReady "$app_ready" --argjson extra "$extra_user_pod" '{items:([{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}],containers:[{name:($app|ltrimstr("voice-")),env:(if $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end)}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}] + (if $extra then [{metadata:{name:"voice-user-terminating-pod",labels:{app:"voice-user"},deletionTimestamp:"2026-09-30T00:00:00Z"},spec:{containers:[{name:"user"}]},status:{phase:"Terminating",containerStatuses:[{name:"user",ready:false}]}}] else [] end))}'
         else echo '{"items":[]}'
         fi ;;
       *) echo 'unexpected read' >&2; exit 2 ;;
@@ -126,6 +135,7 @@ case "$verb" in
         jq -e 'any(.[]; .op == "test" and .path == "/spec/template/spec/containers/1/env/0" and .value == {name:"SPACE_GRPC_ADDR"}) and any(.[]; .op == "remove" and .path == "/spec/template/spec/containers/1/env/0")' <<<"$payload" >/dev/null || exit 2
         [[ "${MOCK_FAIL_STAGE:-}" != remove ]] || exit 1
         rm -f "${KUBE_USER_OVERRIDE:?}"
+        touch "${KUBE_USER_RESTORE_STARTED:?}"
       else exit 2
       fi
       exit
@@ -146,13 +156,20 @@ case "$verb" in
 esac
 EOF
 chmod 700 "$work/kubectl"
+cat >"$work/sleep" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$#" == 1 && "$1" == 1 ]] || exit 2
+printf '%s\n' "$1" >>"${KUBE_SLEEP_CALLS:?}"
+EOF
+chmod 700 "$work/sleep"
 mkdir "$work/started"
-export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready" KUBE_USER_GET_COUNT="$work/user-gets"
+export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready" KUBE_USER_GET_COUNT="$work/user-gets" KUBE_USER_RESTORE_STARTED="$work/user-restore-started" KUBE_USER_PODS_GET_COUNT="$work/user-pod-gets" KUBE_SLEEP_CALLS="$work/sleep-calls"
 
 run_case() {
   local generation="${MOCK_TARGET_GENERATION:-r20260930a1}"
   : >"$KUBE_CALLS"; : >"$KUBE_SCALES"; : >"$KUBE_ROLLOUTS"; : >"$KUBE_PATCHES"
-  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT"
+  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT" "$KUBE_USER_RESTORE_STARTED" "$KUBE_USER_PODS_GET_COUNT" "$KUBE_SLEEP_CALLS"
   [[ "${MOCK_START_OWNED:-0}" != 1 ]] || touch "$KUBE_USER_OVERRIDE"
   VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --"${MOCK_OPERATION:-recover-legacy}" "$generation" >"$work/output" 2>"$work/error"
 }
@@ -264,5 +281,14 @@ run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'a2 recovery success marker missing' >&2; exit 1; }
 [[ ! -e "$KUBE_USER_OVERRIDE" && "$(wc -l <"$KUBE_SCALES")" == 18 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'a2 all-stopped recovery did not restore leaves and clear User override' >&2; exit 1; }
 ! grep -Eq 'run_jobs|voice-nats-realtime-permissions-preflight|voice-nats-acl-proof' "$KUBE_CALLS" || { echo 'recovery reran bootstrap or proof' >&2; exit 1; }
+export MOCK_TRANSIENT_USER_DUPLICATE=1
+run_case || { cat "$work/error" >&2; exit 1; }
+grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'transient User Pod did not settle before recovery completed' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 1 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 1 ]] || { echo 'transient User Pod wait did not retry exactly once before marker commit' >&2; exit 1; }
+unset MOCK_TRANSIENT_USER_DUPLICATE
+export MOCK_PERSISTENT_USER_DUPLICATE=1
+if run_case; then echo 'persistent extra non-override User Pod did not block recovery' >&2; exit 1; fi
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 0 ]] || { echo 'persistent extra User Pod did not time out before marker commit' >&2; exit 1; }
+unset MOCK_PERSISTENT_USER_DUPLICATE
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'
