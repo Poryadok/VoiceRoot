@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Activate a new generation or roll back the current one
+        description: Activate, roll back, or diagnose the current NATS generation
         required: true
         type: choice
         options:
           - activate
           - rollback
+          - diagnose
       generation:
         description: Generation for activate (rYYYYMMDD, optionally followed by up to 8 lowercase letters or digits); leave empty for rollback
         required: false
@@ -55,7 +56,7 @@ jobs:
                 exit 1
               fi
               ;;
-            rollback)
+            rollback|diagnose)
               if [[ -n "$ROTATION_GENERATION" ]]; then
                 echo 'NATS_ROTATION=FAIL_UNUSED_GENERATION'
                 exit 1
@@ -315,3 +316,8 @@ jobs:
           set +x
           set -euo pipefail
           bash scripts/staging/rotate-nats-root.sh --rollback
+
+      - name: Diagnose NATS rotation state (read-only)
+        if: inputs.operation == 'diagnose'
+        shell: bash
+        run: bash scripts/staging/diagnose-nats-root.sh
