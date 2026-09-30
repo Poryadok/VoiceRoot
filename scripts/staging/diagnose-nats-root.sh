@@ -16,11 +16,14 @@ kubectl get service voice-nats -n "$ns" -o json |
 classify_log() {
   local log="$1" category=OTHER
   if [[ -z "$log" ]]; then category=EMPTY
+  elif grep -Eqi 'incompatible configuration for stream' <<<"$log"; then category=INCOMPATIBLE_STREAM
+  elif grep -Eqi 'incompatible consumer' <<<"$log"; then category=INCOMPATIBLE_CONSUMER
   elif grep -Eqi 'permission|authorization|denied' <<<"$log"; then category=PERMISSION
   elif grep -Eqi 'authentication|credential|jwt' <<<"$log"; then category=AUTH
   elif grep -Eqi 'tls|certificate|x509' <<<"$log"; then category=TLS
   elif grep -Eqi 'connection|connect|timeout|timed out|no responders' <<<"$log"; then category=CONNECTIVITY
   elif grep -Eqi 'not found|does not exist' <<<"$log"; then category=NOT_FOUND
+  elif grep -Eqi 'bootstrap consumer CREATE failed' <<<"$log"; then category=CONSUMER_CREATE_FAILURE
   elif grep -Eqi 'passed|completed|success' <<<"$log"; then category=PASS
   fi
   printf '%s' "$category"
@@ -29,8 +32,17 @@ classify_log() {
 for name in voice-nats-realtime-bootstrap voice-nats-notification-bootstrap voice-nats-search-bootstrap voice-nats-analytics-chat-bootstrap voice-nats-realtime-permissions-preflight; do
   if kubectl get job "$name" -n "$ns" -o json 2>/dev/null |
     jq -c --arg name "$name" '{job:$name,generation:.metadata.annotations["voice.io/nats-generation"],active:(.status.active // 0),succeeded:(.status.succeeded // 0),failed:(.status.failed // 0),conditions:[.status.conditions[]? | {type,status,reason}]}'; then
-    kubectl get pods -n "$ns" -l "job-name=$name" -o json |
-      jq -c --arg job "$name" '[.items[]? | {job:$job,pod:.metadata.name,phase:.status.phase,containers:[.status.containerStatuses[]? | {name,ready,restarts:.restartCount,waiting:.state.waiting.reason,terminated:.state.terminated.reason,exitCode:.state.terminated.exitCode}],initContainers:[.status.initContainerStatuses[]? | {name,ready,restarts:.restartCount,waiting:.state.waiting.reason,terminated:.state.terminated.reason,exitCode:.state.terminated.exitCode}]}]'
+    pods="$(kubectl get pods -n "$ns" -l "job-name=$name" -o json)"
+    printf '%s' "$pods" |
+      jq -c --arg job "$name" '[.items[]? | {job:$job,pod:.metadata.name,phase:.status.phase,conditions:[.status.conditions[]? | {type,status,reason}],containers:[.status.containerStatuses[]? | {name,ready,restarts:.restartCount,waiting:.state.waiting.reason,terminated:.state.terminated.reason,exitCode:.state.terminated.exitCode,lastTermination:.lastState.terminated.reason,lastExitCode:.lastState.terminated.exitCode}],initContainers:[.status.initContainerStatuses[]? | {name,ready,restarts:.restartCount,waiting:.state.waiting.reason,terminated:.state.terminated.reason,exitCode:.state.terminated.exitCode,lastTermination:.lastState.terminated.reason,lastExitCode:.lastState.terminated.exitCode}]}]'
+    while IFS= read -r pod; do
+      [[ "$pod" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || continue
+      if events="$(kubectl get events -n "$ns" --field-selector "involvedObject.name=$pod" -o json 2>/dev/null)"; then
+        printf '%s' "$events" | jq -c --arg pod "$pod" '{pod:$pod,eventReasons:[.items[]? | {reason:(.reason // "" | if test("^[A-Za-z][A-Za-z0-9]{0,63}$") then . else "OTHER" end),count:(.count // 1)}]}'
+      else
+        printf 'NATS_DIAGNOSTIC_EVENTS=%s:UNAVAILABLE\n' "$pod"
+      fi
+    done < <(printf '%s' "$pods" | jq -r '.items[]?.metadata.name')
     container=bootstrap
     if [[ "$name" == voice-nats-realtime-permissions-preflight ]]; then container=realtime-preflight; fi
     log="$(kubectl logs "job/$name" -n "$ns" -c "$container" --tail=40 --limit-bytes=4096 2>/dev/null || true)"

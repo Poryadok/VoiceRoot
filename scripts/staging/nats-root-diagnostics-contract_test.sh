@@ -34,13 +34,19 @@ case "$1" in
         fi ;;
       pods)
         if [[ "$*" == *voice-nats-notification-bootstrap* ]]; then
-          echo '{"items":[{"metadata":{"name":"notification-bootstrap-pod"},"status":{"phase":"Failed","containerStatuses":[{"name":"bootstrap","ready":false,"restartCount":1,"state":{"terminated":{"reason":"Error","exitCode":1}}}]}}]}'
+          echo '{"items":[{"metadata":{"name":"notification-bootstrap-pod"},"status":{"phase":"Running","containerStatuses":[{"name":"bootstrap","ready":false,"restartCount":11,"state":{"waiting":{"reason":"CrashLoopBackOff"}},"lastState":{"terminated":{"reason":"Error","exitCode":1}}}]}}]}'
         else
           echo '{"items":[]}'
         fi ;;
+      events) echo '{"items":[{"reason":"BackOff","count":11,"message":"SENSITIVE_SENTINEL"}]}' ;;
       *) exit 2 ;;
     esac ;;
-  logs) echo 'authentication failed SENSITIVE_SENTINEL' ;;
+  logs)
+    if [[ "$2" == job/voice-nats-realtime-bootstrap ]]; then
+      echo 'incompatible configuration for stream social_events SENSITIVE_SENTINEL'
+    else
+      echo 'authentication failed SENSITIVE_SENTINEL'
+    fi ;;
   *) echo 'mutation or unexpected kubectl verb' >&2; exit 2 ;;
 esac
 EOF
@@ -49,6 +55,9 @@ KUBE_VERBS="$work/verbs" PATH="$work:$PATH" bash "$diagnose" >"$work/output"
 grep -Fq '"job":"voice-nats-notification-bootstrap"' "$work/output" || { echo 'middle bootstrap missing' >&2; exit 1; }
 grep -Fq '"failed":1' "$work/output" || { echo 'middle bootstrap failure hidden' >&2; exit 1; }
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-notification-bootstrap:AUTH' "$work/output" || { echo 'middle bootstrap log category missing' >&2; exit 1; }
+grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-realtime-bootstrap:INCOMPATIBLE_STREAM' "$work/output" || { echo 'incompatible stream category missing' >&2; exit 1; }
+grep -Fq '"lastExitCode":1' "$work/output" || { echo 'last termination hidden' >&2; exit 1; }
+grep -Fq '"eventReasons":[{"reason":"BackOff","count":11}]' "$work/output" || { echo 'safe event reason hidden' >&2; exit 1; }
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-realtime-permissions-preflight:nats-leaf:AUTH' "$work/output" || { echo 'leaf log category missing' >&2; exit 1; }
 if grep -Fq 'SENSITIVE_SENTINEL' "$work/output" || grep -Ev '^(get|logs)$' "$work/verbs"; then
   echo 'diagnose leaked details or issued a mutating verb' >&2
