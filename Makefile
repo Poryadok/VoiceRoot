@@ -295,6 +295,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/staging/nats-root-rotation-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-live-acl-proof-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/nats-root-diagnostics-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-legacy-recovery-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
