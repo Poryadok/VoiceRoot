@@ -22,6 +22,11 @@ spec:
         voice.io/nats-proof-run: __PROOF_NAME__
     spec:
       automountServiceAccountToken: false
+      # The Realtime image runs as UID/GID 65532. Projected Secret files are
+      # group-owned by this fsGroup so that the nonroot proof process can read
+      # the 0440 credentials without making them world-readable.
+      securityContext:
+        fsGroup: 65532
       imagePullSecrets: __IMAGE_PULL_SECRETS__
       restartPolicy: Never
       initContainers:
@@ -65,8 +70,8 @@ spec:
         - name: nats-leaf-config
           configMap: {name: voice-nats-leaf-config}
         - name: nats-service-creds
-          secret: {secretName: voice-nats-service-credentials-__GENERATION__, defaultMode: 0400, items: [{key: realtime.creds, path: realtime.creds}]}
+          secret: {secretName: voice-nats-service-credentials-__GENERATION__, defaultMode: 0440, items: [{key: realtime.creds, path: realtime.creds}]}
         - name: nats-proof-creds
-          secret: {secretName: __PROOF_NAME__, defaultMode: 0400, items: [{key: proof.creds, path: proof.creds}]}
+          secret: {secretName: __PROOF_NAME__, defaultMode: 0440, items: [{key: proof.creds, path: proof.creds}]}
         - name: nats-hub-tls
           secret: {secretName: voice-nats-hub-tls-__GENERATION__, items: [{key: ca.crt, path: ca.crt}]}

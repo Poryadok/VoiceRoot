@@ -709,6 +709,17 @@ rollback identifies only generation-labeled proof resources, verifies their
 names, annotations and namespace, then removes the Job and its Pod before the
 temporary NetworkPolicy and credential Secret. It verifies all are absent
 before changing the hub, leaves, or marker.
+If activation failed after creating its immutable generation Secrets and Bound
+PVC, do not rerun `activate` and do not remove those resources. The explicit
+`continue-activate` workflow operation is limited to the exact `rotating`
+marker generation: it verifies the retained source and target PVCs and Secret
+sets, accepts only known source/target hub and leaf references, repeats the
+bootstrap and live ACL proof, and restarts leaves only after that proof passes.
+The Realtime proof container runs as UID/GID 65532, so its projected service
+and proof credential files use group-read mode `0440` with Pod `fsGroup: 65532`.
+If continuation fails, leave the marker and resources intact, inspect sanitized
+workflow evidence, and choose the recovery path only after verifying the live
+resource state.
 If that rollback itself stops on a historical bootstrap Job after restoring
 the legacy hub, use `diagnose` first. For the interrupted
 `r20260930a1 → legacy` incident, `recover-legacy` with generation

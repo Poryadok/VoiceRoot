@@ -102,11 +102,21 @@ check_secret_set() {
               elif $base == "voice-nats-bootstrap-credentials" then ["bootstrap.creds"]
               else ["analytics.creds","auth.creds","bot.creds","chat.creds","file.creds","gateway.creds","matchmaking.creds","messaging.creds","moderation.creds","notification.creds","realtime.creds","role.creds","search.creds","social.creds","space.creds","story.creds","subscription.creds","user.creds","voice.creds"] end | sort))
         ' <<<"$result" >/dev/null || fail "invalid source Secret $name"
+      elif [[ "$mode" == target-existing ]]; then
+        jq -e --arg base "$base" '
+          .type == "Opaque" and .immutable == true and (.data | type == "object" and
+            (keys | sort) == (if $base == "voice-nats-operator" then ["operator.jwt","account.jwt","system-account.jwt","account.public","system-account.public"]
+              elif $base == "voice-nats-hub-tls" then ["tls.crt","tls.key","ca.crt"]
+              elif $base == "voice-nats-bootstrap-credentials" then ["bootstrap.creds"]
+              else ["analytics.creds","auth.creds","bot.creds","chat.creds","file.creds","gateway.creds","matchmaking.creds","messaging.creds","moderation.creds","notification.creds","realtime.creds","role.creds","search.creds","social.creds","space.creds","story.creds","subscription.creds","user.creds","voice.creds"] end | sort))
+        ' <<<"$result" >/dev/null || fail "invalid existing target Secret $name"
       fi
     fi
   done
   if [[ "$mode" == target ]]; then
     ((count == 0)) || fail 'target Secret generation already exists or is partial'
+  elif [[ "$mode" == target-existing ]]; then
+    ((count == 4)) || fail 'existing target Secret generation is incomplete'
   else
     ((count == 4)) || fail 'source Secret generation is incomplete'
   fi
@@ -137,7 +147,11 @@ check_leaf() {
     ([.spec.template.spec.volumes[]? | select(.name == "nats-service-creds")] | length == 1) and
     ([.spec.template.spec.volumes[]? | select(.name == "nats-hub-tls")] | length == 1) and
     any(.spec.template.spec.volumes[]?; .name == "nats-service-creds" and .secret.items == [{"key":($service + ".creds"),"path":($service + ".creds")}]) and
-    any(.spec.template.spec.volumes[]?; .name == "nats-hub-tls" and .secret.items == [{"key":"ca.crt","path":"ca.crt"}])' <<<"$json" >/dev/null || fail "unexpected leaf layout for $name"
+    any(.spec.template.spec.volumes[]?; .name == "nats-hub-tls" and .secret.items == [{"key":"ca.crt","path":"ca.crt"}])' <<<"$json" >/dev/null || {
+      local details
+      details="$(jq -c --arg s "$service" --argjson r "$expected_replicas" '{replicas:.spec.replicas,expected:$r,replicas_ok:(.spec.replicas == $r),has_leaf:any(.spec.template.spec.containers[]?;.name == "nats-leaf"),service_items:[.spec.template.spec.volumes[] | select(.name == "nats-service-creds") | .secret.items],tls_items:[.spec.template.spec.volumes[] | select(.name == "nats-hub-tls") | .secret.items]}' <<<"$json")"
+      fail "unexpected leaf layout for $name: $details"
+    }
   [[ "$(volume_ref "$json" nats-service-creds secret)" == "$(ref voice-nats-service-credentials "$generation")" ]] || fail "$name service credential ref differs"
   [[ "$(volume_ref "$json" nats-hub-tls secret)" == "$(ref voice-nats-hub-tls "$generation")" ]] || fail "$name TLS ref differs"
 }
@@ -149,12 +163,55 @@ check_source_pvc() {
 }
 
 check_workloads() {
-  local generation="$1" hub service json
+  local generation="$1" expected_replicas="${2:-1}" hub service json
   hub="$(read_required deployment voice-nats-pvc-candidate)"
   check_hub "$hub" "$generation"
   for service in "${LEAVES[@]}"; do
     json="$(read_required deployment "voice-${service}")"
-    check_leaf "$json" "voice-${service}" "$service" "$generation"
+    check_leaf "$json" "voice-${service}" "$service" "$generation" "$expected_replicas"
+  done
+}
+
+# An interrupted rotation may leave the hub and stopped leaves bound to either
+# the retained source or the exact target generation. Accept only those two
+# known layouts so continuation can stop every leaf, reapply the target in a
+# single controlled cycle, and require a fresh live proof before leaf restart.
+check_recoverable_workloads() {
+  local source="$1" target="$2" hub service json hub_pvc hub_operator hub_tls
+  hub="$(read_required deployment voice-nats-pvc-candidate)"
+  hub_pvc="$(volume_ref "$hub" jsdata persistentVolumeClaim)"
+  hub_operator="$(volume_ref "$hub" nats-operator-jwt secret)"
+  hub_tls="$(volume_ref "$hub" nats-hub-tls secret)"
+  if [[ "$hub_pvc" == "$(ref voice-nats-jsdata "$source")" &&
+        "$hub_operator" == "$(ref voice-nats-operator "$source")" &&
+        "$hub_tls" == "$(ref voice-nats-hub-tls "$source")" ]]; then
+    check_hub "$hub" "$source"
+  elif [[ "$hub_pvc" == "$(ref voice-nats-jsdata "$target")" &&
+          "$hub_operator" == "$(ref voice-nats-operator "$target")" &&
+          "$hub_tls" == "$(ref voice-nats-hub-tls "$target")" ]]; then
+    check_hub "$hub" "$target"
+  else
+    fail 'interrupted candidate hub references neither retained nor target generation'
+  fi
+  jq -e '.status.readyReplicas == 1 and .status.observedGeneration >= .metadata.generation' \
+    <<<"$hub" >/dev/null || fail 'interrupted candidate hub is not ready'
+  for service in "${LEAVES[@]}"; do
+    json="$(read_required deployment "voice-${service}")"
+    check_identity "$json" Deployment "voice-${service}"
+    local replicas creds tls
+    replicas="$(jq -er '.spec.replicas' <<<"$json")" || fail "${service} leaf has no replica count"
+    [[ "$replicas" == 0 || "$replicas" == 1 ]] || fail "${service} leaf has an unsafe replica count"
+    creds="$(volume_ref "$json" nats-service-creds secret)"
+    tls="$(volume_ref "$json" nats-hub-tls secret)"
+    if [[ "$creds" == "$(ref voice-nats-service-credentials "$source")" &&
+          "$tls" == "$(ref voice-nats-hub-tls "$source")" ]]; then
+      check_leaf "$json" "voice-${service}" "$service" "$source" "$replicas"
+    elif [[ "$creds" == "$(ref voice-nats-service-credentials "$target")" &&
+            "$tls" == "$(ref voice-nats-hub-tls "$target")" ]]; then
+      check_leaf "$json" "voice-${service}" "$service" "$target" "$replicas"
+    else
+      fail "${service} leaf references neither retained nor target generation"
+    fi
   done
 }
 
@@ -856,6 +913,51 @@ run_jobs() {
     fail 'Realtime permissions preflight did not complete'
 }
 
+continue_activation() {
+  local target="$1" bundle="$2" proof_credential="$3" source source_pvc target_pvc class size target_class target_size
+  valid_generation "$target" || fail 'invalid generation token'
+  check_bundle "$bundle" "$target"
+  prepare_proof "$target" "$bundle" "$proof_credential"
+  marker_state
+  [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" ]] ||
+    fail 'continuation requires the exact rotating target generation'
+  source="$MARKER_PREVIOUS"
+  [[ "$source" == legacy ]] || valid_generation "$source" || fail 'invalid retained source generation'
+  check_selector
+  check_no_second_hub
+  check_secret_set "$source" source
+  check_secret_set "$target" target-existing
+  source_pvc="$(read_required pvc "$(ref voice-nats-jsdata "$source")")"
+  jq -e '.status.phase == "Bound"' <<<"$source_pvc" >/dev/null || fail 'retained source NATS PVC is not Bound'
+  class="$(jq -er '.spec.storageClassName' <<<"$source_pvc")" || fail 'retained source PVC has no storage class'
+  size="$(jq -er '.spec.resources.requests.storage' <<<"$source_pvc")" || fail 'retained source PVC has no storage size'
+  [[ "$class" =~ ^[a-z0-9][a-z0-9.-]*$ && "$size" =~ ^[1-9][0-9]*(Mi|Gi|Ti)$ ]] || fail 'retained source PVC storage contract is unsafe'
+  check_source_pvc "$source_pvc" "$(ref voice-nats-jsdata "$source")" "$class" "$size"
+  target_pvc="$(read_required pvc "$(ref voice-nats-jsdata "$target")")"
+  check_identity "$target_pvc" PersistentVolumeClaim "$(ref voice-nats-jsdata "$target")"
+  jq -e '.status.phase == "Bound"' <<<"$target_pvc" >/dev/null || fail 'existing target NATS PVC is not Bound'
+  target_class="$(jq -er '.spec.storageClassName' <<<"$target_pvc")" || fail 'target PVC has no storage class'
+  target_size="$(jq -er '.spec.resources.requests.storage' <<<"$target_pvc")" || fail 'target PVC has no storage size'
+  [[ "$target_class" == "$class" && "$target_size" == "$size" ]] || fail 'target PVC differs from retained storage contract'
+  check_source_pvc "$target_pvc" "$(ref voice-nats-jsdata "$target")" "$class" "$size"
+  check_recoverable_workloads "$source" "$target"
+  prepare_realtime_image
+  recover_proof_resources "$target"
+  preflight_proof_resources "$PROOF_NAME" "$target" "$proof_credential"
+
+  stop_leaves
+  stop_hub
+  patch_hub "$target"
+  start_hub
+  run_jobs "$target"
+  run_live_acl_proof "$PROOF_NAME" "$target" "$proof_credential"
+  printf 'NATS_LIVE_ACL_PROOF=PASS generation=%s acl_sha=%s\n' "$target" "$PROOF_ACL_SHA"
+  for service in "${LEAVES[@]}"; do patch_leaf "$service" "$target"; done
+  start_leaves 0 "$target" activate
+  set_marker active "$target" "$source"
+  echo "NATS root generation ${target} resumed and active in voice-staging"
+}
+
 main() {
   local mode="${1:-}" target bundle proof_credential source pvc class size selector old
   case "$mode" in
@@ -908,6 +1010,10 @@ main() {
       start_leaves 0 "$target" activate
       set_marker active "$target" "$source"
       echo "NATS root generation ${target} active in voice-staging"
+      ;;
+    --continue-activate)
+      [[ $# -eq 4 ]] || fail 'usage: rotate-nats-root.sh --continue-activate GENERATION BUNDLE.json PROOF.creds'
+      continue_activation "$2" "$3" "$4"
       ;;
     --rollback)
       [[ $# -eq 1 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback'

@@ -16,16 +16,19 @@ setup_line="$(grep -n 'uses: actions/setup-go@v5' "$WORKFLOW" | cut -d: -f1 || t
 validator_line="$(grep -n 'name: Verify NATS proof validator toolchain' "$WORKFLOW" | cut -d: -f1 || true)"
 kubectl_line="$(grep -n 'name: Configure staging kubectl' "$WORKFLOW" | cut -d: -f1 || true)"
 activate_line="$(grep -n 'name: Activate NATS root generation' "$WORKFLOW" | cut -d: -f1 || true)"
+continue_line="$(grep -n 'name: Continue interrupted NATS root activation' "$WORKFLOW" | cut -d: -f1 || true)"
 [[ "$source_line" =~ ^[0-9]+$ && "$setup_line" =~ ^[0-9]+$ &&
   "$validator_line" =~ ^[0-9]+$ && "$kubectl_line" =~ ^[0-9]+$ &&
-  "$activate_line" =~ ^[0-9]+$ ]] || fail 'rotation workflow must prepare Go validator'
+  "$activate_line" =~ ^[0-9]+$ && "$continue_line" =~ ^[0-9]+$ ]] || fail 'rotation workflow must prepare Go validator and continuation operation'
 ((source_line < setup_line && setup_line < validator_line &&
-  validator_line < kubectl_line && kubectl_line < activate_line)) ||
+  validator_line < kubectl_line && kubectl_line < activate_line && activate_line < continue_line)) ||
   fail 'Go validator must be ready before Kubernetes access or mutation'
 grep -Fq 'go-version-file: src/backend/pkg/go.mod' "$WORKFLOW" ||
   fail 'Go version must come from the exact master source archive'
-grep -Fq "if: inputs.operation == 'activate' || inputs.operation == 'rollback'" "$WORKFLOW" ||
-  fail 'exact-master Realtime image must be verified for activation and rollback'
+grep -Fq "if: inputs.operation == 'activate' || inputs.operation == 'continue-activate' || inputs.operation == 'rollback'" "$WORKFLOW" ||
+  fail 'exact-master Realtime image must be verified for activation, continuation, and rollback'
+grep -Fq 'activate|continue-activate)' "$WORKFLOW" ||
+  fail 'workflow dispatch must validate the continuation generation before setup or mutation'
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -34,6 +37,13 @@ cat >"$work/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${KUBECTL_LOG:?}"
+if [[ "$1" == scale && "${2#deployment/}" =~ ^voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)$ ]]; then
+  service="${BASH_REMATCH[1]}"
+  for token in "$@"; do
+    [[ "$token" =~ ^--replicas=([01])$ ]] || continue
+    printf '%s\n' "${BASH_REMATCH[1]}" >"${MOCK_KUBE_STATE_DIR:?}/leaf-replicas-${service}"
+  done
+fi
 case "$1" in
   get|create|apply|patch|replace|delete|scale|set|annotate|label|wait|rollout|logs|config|version) ;;
   *) echo "mock kubectl rejects unexpected verb: $1" >&2; exit 2 ;;
@@ -157,7 +167,7 @@ case "$*" in
     exit 1
     ;;
   *'get secret voice-nats-operator-r20260930a'*|*'get secret/voice-nats-operator-r20260930a'*)
-    if [[ "${MOCK_PARTIAL_SET:-false}" != true && "${MOCK_GENERATION_STATE:-absent}" != active && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-secrets" ]]; then
+    if [[ "${MOCK_PARTIAL_SET:-false}" != true && "${MOCK_GENERATION_STATE:-absent}" != active && "${MOCK_TARGET_SECRETS_EXISTS:-false}" != true && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-secrets" ]]; then
       if [[ "$*" != *'--ignore-not-found'* ]]; then echo 'Error from server (NotFound): secrets "voice-nats-operator-r20260930a" not found' >&2; exit 1; fi
     else
       jq -c '.items[] | select(.metadata.name == "voice-nats-operator-r20260930a")' "${MOCK_BUNDLE_FILE:?}"
@@ -169,7 +179,7 @@ case "$*" in
       token="${token#secret/}"
       if [[ "$token" =~ ^voice-nats-(operator|hub-tls|bootstrap-credentials|service-credentials)-r20260930a$ ]]; then target="$token"; fi
     done
-    if [[ "${MOCK_GENERATION_STATE:-absent}" != active && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-secrets" ]]; then
+    if [[ "${MOCK_GENERATION_STATE:-absent}" != active && "${MOCK_TARGET_SECRETS_EXISTS:-false}" != true && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-secrets" ]]; then
       if [[ "$*" != *'--ignore-not-found'* ]]; then echo "Error from server (NotFound): secrets \"${target}\" not found" >&2; exit 1; fi
     else
       jq -c --arg name "$target" '.items[] | select(.metadata.name == $name)' "${MOCK_BUNDLE_FILE:?}"
@@ -179,11 +189,11 @@ case "$*" in
     if [[ "${MOCK_TARGET_PVC_EXISTS:-false}" != true && "${MOCK_GENERATION_STATE:-absent}" != active && ! -f "${MOCK_KUBE_STATE_DIR:?}/target-pvc" ]]; then
       if [[ "$*" != *'--ignore-not-found'* ]]; then echo 'Error from server (NotFound): persistentvolumeclaims "voice-nats-jsdata-r20260930a" not found' >&2; exit 1; fi
     else
-      printf '{"kind":"PersistentVolumeClaim","metadata":{"name":"voice-nats-jsdata-r20260930a","namespace":"voice-staging"},"spec":{"storageClassName":"local-path","accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"20Gi"}}}}\n'
+      printf '{"kind":"PersistentVolumeClaim","metadata":{"name":"voice-nats-jsdata-r20260930a","namespace":"voice-staging"},"spec":{"storageClassName":"local-path","accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"20Gi"}}},"status":{"phase":"Bound"}}\n'
     fi
     ;;
   *'get pvc voice-nats-jsdata '*|*'get pvc/voice-nats-jsdata '*|*'get persistentvolumeclaim voice-nats-jsdata '*)
-    jq -n --arg class "${MOCK_SOURCE_PVC_CLASS:-local-path}" '{kind:"PersistentVolumeClaim",metadata:{name:"voice-nats-jsdata",namespace:"voice-staging"},spec:{storageClassName:$class,accessModes:["ReadWriteOnce"],resources:{requests:{storage:"20Gi"}}}}'
+    jq -n --arg class "${MOCK_SOURCE_PVC_CLASS:-local-path}" '{kind:"PersistentVolumeClaim",metadata:{name:"voice-nats-jsdata",namespace:"voice-staging"},spec:{storageClassName:$class,accessModes:["ReadWriteOnce"],resources:{requests:{storage:"20Gi"}}},status:{phase:"Bound"}}'
     ;;
   *'get secret voice-nats-'*|*'get secret/voice-nats-'*)
     legacy=''
@@ -230,7 +240,7 @@ case "$*" in
   *'get deployment voice-nats-pvc-candidate'*|*'get deployment/voice-nats-pvc-candidate'*)
     suffix=''
     if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then suffix='-r20260930a'; fi
-    printf '{"kind":"Deployment","metadata":{"name":"voice-nats-pvc-candidate","namespace":"voice-staging","resourceVersion":"100"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"voice-nats-pvc-candidate"}},"template":{"metadata":{"labels":{"app":"voice-nats-pvc-candidate"}},"spec":{"containers":[{"name":"nats"}],"volumes":[{"name":"jsdata","persistentVolumeClaim":{"claimName":"%s"}},{"name":"nats-resolver-input","secret":{"secretName":"voice-nats-operator%s"}},{"name":"nats-operator-jwt","secret":{"secretName":"voice-nats-operator%s"}},{"name":"nats-hub-tls","secret":{"secretName":"voice-nats-hub-tls%s"}}]}}}}\n' "${MOCK_SOURCE_PVC:-voice-nats-jsdata}${suffix}" "$suffix" "$suffix" "$suffix"
+    printf '{"kind":"Deployment","metadata":{"name":"voice-nats-pvc-candidate","namespace":"voice-staging","resourceVersion":"100","generation":1},"status":{"readyReplicas":1,"observedGeneration":1},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"voice-nats-pvc-candidate"}},"template":{"metadata":{"labels":{"app":"voice-nats-pvc-candidate"}},"spec":{"containers":[{"name":"nats"}],"volumes":[{"name":"jsdata","persistentVolumeClaim":{"claimName":"%s"}},{"name":"nats-resolver-input","secret":{"secretName":"voice-nats-operator%s"}},{"name":"nats-operator-jwt","secret":{"secretName":"voice-nats-operator%s"}},{"name":"nats-hub-tls","secret":{"secretName":"voice-nats-hub-tls%s"}}]}}}}\n' "${MOCK_SOURCE_PVC:-voice-nats-jsdata}${suffix}" "$suffix" "$suffix" "$suffix"
     ;;
   *'get deployment voice-'*|*'get deployment/voice-'*)
     service=auth
@@ -246,9 +256,12 @@ case "$*" in
     elif [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then suffix='-r20260930a'; fi
     image="ghcr.io/example/voice/${service}:0123456789abcdef0123456789abcdef01234567"
     if [[ "$service" == realtime ]]; then image="${MOCK_REALTIME_IMAGE:-$image}"; fi
+    replicas=1
+    if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then replicas=0; fi
+    if [[ -f "${MOCK_KUBE_STATE_DIR:?}/leaf-replicas-${service}" ]]; then replicas="$(cat "${MOCK_KUBE_STATE_DIR}/leaf-replicas-${service}")"; fi
     owned=false
     [[ "$service" != user || ! -f "${MOCK_KUBE_STATE_DIR:?}/user-override" ]] || owned=true
-    jq -n --arg service "$service" --arg image "$image" --arg suffix "$suffix" --argjson owned "$owned" '{kind:"Deployment",metadata:{name:("voice-"+$service),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{metadata:{annotations:(if $owned then {"voice.io/nats-user-space-bootstrap":"r20260930a"} else {} end)},spec:{containers:[{name:$service,image:$image,env:(if $service == "user" and $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end),envFrom:(if $service == "user" then [{configMapRef:{name:"voice-app-config"}}] else [] end)},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($service+".creds"),path:($service+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}'
+    jq -n --arg service "$service" --arg image "$image" --arg suffix "$suffix" --argjson owned "$owned" --argjson replicas "$replicas" '{kind:"Deployment",metadata:{name:("voice-"+$service),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:$replicas,template:{metadata:{annotations:(if $owned then {"voice.io/nats-user-space-bootstrap":"r20260930a"} else {} end)},spec:{containers:[{name:$service,image:$image,env:(if $service == "user" and $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end),envFrom:(if $service == "user" then [{configMapRef:{name:"voice-app-config"}}] else [] end)},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($service+".creds"),path:($service+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}'
     ;;
   *'logs job/voice-nats-acl-proof-'*)
     printf 'NATS_LIVE_ACL_PROOF=PASS generation=r20260930a acl_sha=%s\n' "${MOCK_ACL_SHA:?}"
@@ -287,7 +300,8 @@ run_rotation() {
   : >"$work/mutations.log"
   mkdir -p "$work/rendered"
   mkdir -p "$work/state"
-  rm -f "$work/state/marker" "$work/state/target-secrets" "$work/state/target-pvc" "$work/state/user-override" "$work/state"/leaf-*-suffix
+  rm -f "$work/state/marker" "$work/state/target-secrets" "$work/state/target-pvc" "$work/state/user-override" "$work/state"/leaf-*-suffix "$work/state"/leaf-replicas-*
+  if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then printf 'rotating\n' >"$work/state/marker"; fi
   : >"$work/rendered/metadata.names"
   PATH="$work/bin:$PATH" \
     KUBECTL_LOG="$work/kubectl.log" KUBECTL_MUTATIONS="$work/mutations.log" KUBECTL_RENDER_DIR="$work/rendered" \
@@ -298,6 +312,7 @@ run_rotation() {
     VOICE_IMAGE_REGISTRY=ghcr.io/example/voice \
     MOCK_PARTIAL_SET="${MOCK_PARTIAL_SET:-false}" \
     MOCK_TARGET_PVC_EXISTS="${MOCK_TARGET_PVC_EXISTS:-false}" \
+    MOCK_TARGET_SECRETS_EXISTS="${MOCK_TARGET_SECRETS_EXISTS:-false}" \
     MOCK_LIVE_SELECTOR="${MOCK_LIVE_SELECTOR:-voice-nats-pvc-candidate}" \
     MOCK_SOURCE_PVC="${MOCK_SOURCE_PVC:-voice-nats-jsdata}" \
     MOCK_SOURCE_PVC_CLASS="${MOCK_SOURCE_PVC_CLASS:-local-path}" \
@@ -559,5 +574,21 @@ if run_rotation --rollback; then
   fail 'rollback without an active generation marker must fail'
 fi
 assert_no_mutation
+
+# Continue only the exact interrupted target after it has already created its
+# immutable Secrets and Bound PVC. Continuation must prove ACL before restarting
+# any stopped service leaves and must not recreate or delete retained resources.
+if ! MOCK_GENERATION_STATE=rotating MOCK_TARGET_PVC_EXISTS=true MOCK_TARGET_SECRETS_EXISTS=true \
+  run_rotation --continue-activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
+  fail "guarded continuation of the interrupted generation failed: $(tail -8 "$work/output" | tr '\n' ' ')"
+fi
+assert_nats_only_mutations
+[[ "$(cat "$work/state/marker")" == active ]] || fail 'successful continuation must activate the exact rotating marker'
+! grep -Eq '^create secret voice-nats-(operator|hub-tls|bootstrap-credentials|service-credentials)-r20260930a |^create (pvc|persistentvolumeclaim) voice-nats-jsdata-r20260930a ' "$work/kubectl.log" ||
+  fail 'continuation must reuse existing generation Secrets and PVC'
+continuation_proof_line="$(grep -n '^logs job/voice-nats-acl-proof-' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+continuation_leaf_line="$(grep -nE '^scale deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics) .*--replicas=1' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
+[[ -n "$continuation_proof_line" && -n "$continuation_leaf_line" && "$continuation_proof_line" -lt "$continuation_leaf_line" ]] ||
+  fail 'continuation must finish live ACL proof before restarting leaves'
 
 echo 'staging NATS root rotation contract: OK'

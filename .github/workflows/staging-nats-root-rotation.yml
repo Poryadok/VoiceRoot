@@ -4,17 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Activate, roll back, diagnose, or recover the retained legacy NATS generation
+        description: Activate, continue an interrupted activation, roll back, diagnose, or recover the retained legacy NATS generation
         required: true
         type: choice
         options:
           - activate
+          - continue-activate
           - rollback
           - diagnose
           - recover-legacy
           - restore-user-cycle
       generation:
-        description: Generation for activate; use r20260930a1 for prior recovery, r20260930a2 for stopped or fully-ready recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
+        description: Generation for activate or continue-activate; use r20260930a1 for prior recovery, r20260930a2 for stopped or fully-ready recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
         required: false
         type: string
 
@@ -52,7 +53,7 @@ jobs:
             exit 1
           fi
           case "$ROTATION_OPERATION" in
-            activate)
+            activate|continue-activate)
               if [[ ! "$ROTATION_GENERATION" =~ ^r[0-9]{8}[a-z0-9]{0,8}$ ]]; then
                 echo 'NATS_ROTATION=FAIL_GENERATION'
                 exit 1
@@ -211,7 +212,7 @@ jobs:
           fi
 
       - name: Verify exact-master Realtime proof image in GHCR
-        if: inputs.operation == 'activate' || inputs.operation == 'rollback'
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate' || inputs.operation == 'rollback'
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -250,13 +251,13 @@ jobs:
           printf 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$GITHUB_SHA" >>"$GITHUB_ENV"
 
       - uses: actions/setup-go@v5
-        if: inputs.operation == 'activate'
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate'
         with:
           go-version-file: src/backend/pkg/go.mod
           cache: false
 
       - name: Verify NATS proof validator toolchain
-        if: inputs.operation == 'activate'
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate'
         shell: bash
         run: |
           set +x
@@ -322,6 +323,44 @@ jobs:
             exit 1
           fi
           bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle" "$proof"
+
+      - name: Continue interrupted NATS root activation
+        if: inputs.operation == 'continue-activate'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+          STAGING_NATS_PROOF_CREDS_B64: ${{ secrets.STAGING_NATS_PROOF_CREDS_B64 }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" || -z "${STAGING_NATS_PROOF_CREDS_B64:-}" ]]; then
+            echo 'NATS_ROTATION=FAIL_MISSING_CONTINUATION_SECRET'
+            exit 1
+          fi
+          umask 077
+          temp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-continuation.XXXXXX")"
+          trap 'rm -f -- "$temp/bundle.json" "$temp/proof.creds"; rmdir -- "$temp"' EXIT
+          bundle="$temp/bundle.json"
+          proof="$temp/proof.creds"
+          : >"$bundle"
+          : >"$proof"
+          chmod 600 "$bundle" "$proof"
+          if ! printf '%s' "$STAGING_NATS_ROTATION_SECRETS_B64" | base64 --decode 2>/dev/null | gzip -dc 2>/dev/null >"$bundle"; then
+            echo 'NATS_ROTATION=FAIL_CONTINUATION_BUNDLE_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_ROTATION_SECRETS_B64
+          if ! printf '%s' "$STAGING_NATS_PROOF_CREDS_B64" | base64 --decode 2>/dev/null >"$proof"; then
+            echo 'NATS_ROTATION=FAIL_CONTINUATION_PROOF_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_PROOF_CREDS_B64
+          if [[ ! -s "$bundle" || ! -s "$proof" ]]; then
+            echo 'NATS_ROTATION=FAIL_EMPTY_CONTINUATION_SECRET'
+            exit 1
+          fi
+          bash scripts/staging/rotate-nats-root.sh --continue-activate "$ROTATION_GENERATION" "$bundle" "$proof"
 
       - name: Roll back NATS root generation
         if: inputs.operation == 'rollback'
