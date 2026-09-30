@@ -13,7 +13,11 @@ cat >"$work/kubectl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 verb="$1"
-printf '%s %s\n' "$verb" "${2:-}" >>"${KUBE_CALLS:?}"
+if [[ "$verb" == rollout ]]; then
+  printf '%s %s\n' "$verb" "${3:-}" >>"${KUBE_CALLS:?}"
+else
+  printf '%s %s\n' "$verb" "${2:-}" >>"${KUBE_CALLS:?}"
+fi
 case "$verb" in
   get)
     kind="$2" name="${3:-}"
@@ -92,6 +96,11 @@ grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'recovery succe
 expected='auth social user role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics'
 actual="$(sed 's|deployment/voice-||' "$KUBE_SCALES" | paste -sd ' ' -)"
 [[ "$actual" == "$expected" ]] || { echo 'recovery leaf order differs' >&2; exit 1; }
+for service in $expected; do
+  printf 'scale deployment/voice-%s\nrollout deployment/voice-%s\n' "$service" "$service"
+done >"$work/expected-order"
+grep -E '^(scale|rollout) deployment/voice-' "$KUBE_CALLS" >"$work/actual-order"
+cmp -s "$work/expected-order" "$work/actual-order" || { echo 'recovery did not wait for each leaf before the next scale' >&2; exit 1; }
 [[ "$(tail -1 "$KUBE_CALLS")" == 'patch configmap' ]] || { echo 'marker changed before readiness' >&2; exit 1; }
 if grep -Ev '^(get|scale|rollout|patch) ' "$KUBE_CALLS"; then echo 'unapproved Kubernetes verb' >&2; exit 1; fi
 
@@ -114,6 +123,7 @@ unset MOCK_BAD_LEAF
 export MOCK_FAIL_ROLLOUT=voice-chat
 if run_case; then echo 'failed leaf readiness did not block recovery' >&2; exit 1; fi
 [[ ! -s "$KUBE_PATCHES" ]] || { echo 'marker changed after failed rollout' >&2; exit 1; }
+[[ "$(tail -1 "$KUBE_SCALES")" == 'deployment/voice-chat' ]] || { echo 'leaf scaling continued after failed rollout' >&2; exit 1; }
 unset MOCK_FAIL_ROLLOUT
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'
