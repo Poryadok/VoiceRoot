@@ -46,12 +46,24 @@ case "$verb" in
         service="${name#voice-}"
         creds=voice-nats-service-credentials
         if [[ "$name" == "${MOCK_BAD_LEAF:-never}" ]]; then creds=voice-nats-service-credentials-r20260930a1; fi
-        jq -cn --arg name "$name" --arg service "$service" --arg creds "$creds" '{kind:"Deployment",metadata:{name:$name,namespace:"voice-staging"},spec:{replicas:0,selector:{matchLabels:{app:$name}},template:{metadata:{labels:{app:$name}},spec:{containers:[{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:$creds,items:[{key:($service+".creds"),path:($service+".creds")}]}} ,{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}' ;;
+        replicas=0 ready=0
+        if [[ "$name" == voice-auth || "$name" == voice-social || "$name" == voice-user || "${MOCK_RESUME_ALL:-0}" == 1 && "$name" == voice-* ]]; then replicas=1; fi
+        if [[ "$name" == "${MOCK_BAD_PREFIX:-never}" ]]; then replicas=1; fi
+        if [[ "$name" == voice-auth || "$name" == voice-social ]]; then ready=1; fi
+        if [[ "$name" == "${MOCK_BAD_PARTIAL:-never}" ]]; then ready=1; fi
+        jq -cn --arg name "$name" --arg service "$service" --arg creds "$creds" --argjson replicas "$replicas" --argjson ready "$ready" '{kind:"Deployment",metadata:{name:$name,namespace:"voice-staging",generation:2},spec:{replicas:$replicas,selector:{matchLabels:{app:$name}},template:{metadata:{labels:{app:$name}},spec:{containers:[{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:$creds,items:[{key:($service+".creds"),path:($service+".creds")}]}} ,{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}},status:{readyReplicas:$ready,observedGeneration:2}}' ;;
       pods)
         if [[ "$*" == *app=voice-nats-pvc-candidate* ]]; then
           echo '{"items":[{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"phase":"Running","containerStatuses":[{"ready":true}]}}]}'
         elif [[ "$*" == *'app=voice-nats -o json'* && "${MOCK_OLD_HUB_POD:-0}" == 1 ]]; then
           echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
+        elif [[ "$*" == *app=voice-auth* || "$*" == *app=voice-social* || "$*" == *app=voice-user* ]]; then
+          args="$*"; app="${args#*app=}"; app="${app%% *}"
+          app_ready=true
+          [[ "$app" == voice-user ]] && app_ready=false
+          pod_creds=voice-nats-service-credentials
+          [[ "$app" == "${MOCK_BAD_POD:-never}" ]] && pod_creds=voice-nats-service-credentials-r20260930a1
+          jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson appReady "$app_ready" '{items:[{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}]}'
         else echo '{"items":[]}'
         fi ;;
       *) echo 'unexpected read' >&2; exit 2 ;;
@@ -90,17 +102,18 @@ run_case() {
   : >"$KUBE_CALLS"; : >"$KUBE_SCALES"; : >"$KUBE_ROLLOUTS"; : >"$KUBE_PATCHES"
   VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --recover-legacy r20260930a1 >"$work/output" 2>"$work/error"
 }
-run_case
+run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'recovery success marker missing' >&2; exit 1; }
-[[ "$(wc -l <"$KUBE_SCALES")" == 18 && "$(wc -l <"$KUBE_ROLLOUTS")" == 18 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'recovery mutation count differs' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SCALES")" == 15 && "$(wc -l <"$KUBE_ROLLOUTS")" == 18 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'recovery mutation count differs' >&2; exit 1; }
 expected='auth social user role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics'
-actual="$(sed 's|deployment/voice-||' "$KUBE_SCALES" | paste -sd ' ' -)"
-[[ "$actual" == "$expected" ]] || { echo 'recovery leaf order differs' >&2; exit 1; }
-for service in $expected; do
-  printf 'scale deployment/voice-%s\nrollout deployment/voice-%s\n' "$service" "$service"
+actual="$(sed 's|deployment/voice-||' "$KUBE_ROLLOUTS" | paste -sd ' ' -)"
+[[ "$actual" == "$expected" ]] || { echo 'recovery leaf readiness order differs' >&2; exit 1; }
+for service in role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics; do
+  printf 'scale deployment/voice-%s\n' "$service"
 done >"$work/expected-order"
+for service in $expected; do printf 'rollout deployment/voice-%s\n' "$service"; done >>"$work/expected-order"
 grep -E '^(scale|rollout) deployment/voice-' "$KUBE_CALLS" >"$work/actual-order"
-cmp -s "$work/expected-order" "$work/actual-order" || { echo 'recovery did not wait for each leaf before the next scale' >&2; exit 1; }
+cmp -s "$work/expected-order" "$work/actual-order" || { echo 'recovery must start all dependencies before readiness waits' >&2; exit 1; }
 [[ "$(tail -1 "$KUBE_CALLS")" == 'patch configmap' ]] || { echo 'marker changed before readiness' >&2; exit 1; }
 if grep -Ev '^(get|scale|rollout|patch) ' "$KUBE_CALLS"; then echo 'unapproved Kubernetes verb' >&2; exit 1; fi
 
@@ -120,10 +133,26 @@ export MOCK_BAD_LEAF=voice-chat
 if run_case; then echo 'partial target leaf reference did not block recovery' >&2; exit 1; fi
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'partial target reference caused mutation' >&2; exit 1; }
 unset MOCK_BAD_LEAF
+export MOCK_BAD_POD=voice-user
+if run_case; then echo 'mixed-generation running Pod did not block recovery' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'mixed-generation Pod caused mutation' >&2; exit 1; }
+unset MOCK_BAD_POD
+export MOCK_BAD_PARTIAL=voice-space
+if run_case; then echo 'unexpected partial state did not block recovery' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unexpected partial state caused mutation' >&2; exit 1; }
+unset MOCK_BAD_PARTIAL
+export MOCK_BAD_PREFIX=voice-space
+if run_case; then echo 'non-prefix partial state did not block recovery' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'non-prefix state caused mutation' >&2; exit 1; }
+unset MOCK_BAD_PREFIX
 export MOCK_FAIL_ROLLOUT=voice-chat
 if run_case; then echo 'failed leaf readiness did not block recovery' >&2; exit 1; fi
 [[ ! -s "$KUBE_PATCHES" ]] || { echo 'marker changed after failed rollout' >&2; exit 1; }
-[[ "$(tail -1 "$KUBE_SCALES")" == 'deployment/voice-chat' ]] || { echo 'leaf scaling continued after failed rollout' >&2; exit 1; }
+[[ "$(tail -1 "$KUBE_SCALES")" == 'deployment/voice-analytics' ]] || { echo 'all dependencies were not started before readiness failure' >&2; exit 1; }
 unset MOCK_FAIL_ROLLOUT
+export MOCK_RESUME_ALL=1
+run_case || { cat "$work/error" >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && "$(wc -l <"$KUBE_ROLLOUTS")" == 18 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'retry re-scaled an already started leaf or missed readiness' >&2; exit 1; }
+unset MOCK_RESUME_ALL
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'

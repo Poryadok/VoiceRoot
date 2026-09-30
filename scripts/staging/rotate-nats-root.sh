@@ -379,7 +379,7 @@ marker_state() {
 }
 
 recover_legacy() {
-  local target="$1" pvc hub pods svc service leaf patch marker
+  local target="$1" pvc hub pods svc service leaf patch marker replicas ready started=0 stopped=false min_pods
   [[ "$target" == r20260930a1 ]] || fail 'legacy recovery is scoped to r20260930a1'
   marker_state
   [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" && "$MARKER_PREVIOUS" == legacy ]] ||
@@ -409,19 +409,54 @@ recover_legacy() {
     fail 'legacy hub Pod is not the sole ready candidate'
   for service in "${LEAVES[@]}"; do
     leaf="$(read_required deployment "voice-${service}")"
-    check_leaf "$leaf" "voice-${service}" "$service" legacy 0
+    replicas="$(jq -er '.spec.replicas' <<<"$leaf")" || fail "voice-${service} has no replica count"
+    [[ "$replicas" == 0 || "$replicas" == 1 ]] || fail "voice-${service} has an unsafe replica count"
+    if [[ "$replicas" == 0 ]]; then
+      stopped=true
+    else
+      [[ "$stopped" == false ]] || fail "voice-${service} is outside the verified recovery prefix"
+      started=$((started + 1))
+    fi
+    check_leaf "$leaf" "voice-${service}" "$service" legacy "$replicas"
+    ready="$(jq -er '.status.readyReplicas // 0' <<<"$leaf")" || fail "voice-${service} has no readiness state"
+    [[ "$ready" == 0 || ( "$ready" == 1 && "$replicas" == 1 ) ]] || fail "voice-${service} has unexpected ready replicas"
+    jq -e '(.status.readyReplicas // 0) <= .spec.replicas and
+      .status.observedGeneration >= .metadata.generation' <<<"$leaf" >/dev/null ||
+      fail "voice-${service} has an unobserved or inconsistent recovery rollout"
     jq -e --arg app "voice-${service}" '.spec.selector.matchLabels.app == $app and .spec.template.metadata.labels.app == $app' <<<"$leaf" >/dev/null ||
       fail "unexpected leaf selector for voice-${service}"
     pods="$(kubectl get pods -n "$NS" -l "app=voice-${service}" -o json)" || fail "cannot inspect voice-${service} Pods"
-    jq -e '(.items | length) == 0' <<<"$pods" >/dev/null || fail "voice-${service} still has Pods"
+    if [[ "$replicas" == 0 ]]; then
+      jq -e '(.items | length) == 0' <<<"$pods" >/dev/null || fail "voice-${service} still has Pods"
+    else
+      min_pods=0
+      [[ "$service" == auth || "$service" == social || "$service" == user ]] && min_pods=1
+      jq -e --arg app "voice-${service}" --argjson min "$min_pods" '(.items | length) >= $min and (.items | length) <= 1 and
+        all(.items[]; .metadata.labels.app == $app and .metadata.deletionTimestamp == null and
+          any(.spec.volumes[]?; .name == "nats-service-creds" and .secret.secretName == "voice-nats-service-credentials") and
+          any(.spec.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == "voice-nats-hub-tls"))' <<<"$pods" >/dev/null ||
+        fail "voice-${service} Pod differs from the verified partial recovery state"
+    fi
   done
+  [[ "$started" -ge 3 ]] || fail 'recovery prefix is shorter than the observed auth/social/user state'
+  if [[ "$started" == 3 ]]; then
+    for service in auth social user; do
+      leaf="$(read_required deployment "voice-${service}")"
+      ready="$(jq -er '.status.readyReplicas // 0' <<<"$leaf")"
+      if [[ "$service" == user ]]; then
+        [[ "$ready" == 0 ]] || fail 'voice-user readiness differs from the observed partial state'
+      else
+        [[ "$ready" == 1 ]] || fail "voice-${service} readiness differs from the observed partial state"
+      fi
+    done
+  fi
   marker="$(read_required configmap voice-nats-generation)"
   jq -e --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
     .metadata.resourceVersion == $rv and .data.phase == "rotating" and
     .data.generation == $target and .data.previousGeneration == "legacy"
   ' <<<"$marker" >/dev/null || fail 'generation marker changed during recovery preflight'
 
-  start_leaves
+  start_leaves "$started"
   patch="$(jq -cn --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
     [{op:"test",path:"/metadata/resourceVersion",value:$rv},
      {op:"test",path:"/data/phase",value:"rotating"},
@@ -527,9 +562,14 @@ start_hub() {
 }
 
 start_leaves() {
-  local service
+  local service started="${1:-0}" index
+  [[ "$started" =~ ^[0-9]+$ && "$started" -le "${#LEAVES[@]}" ]] || fail 'invalid leaf recovery prefix'
+  # User and Space have a startup cycle. Start every remaining verified leaf
+  # before any rollout wait; a retry never re-scales the already started prefix.
+  for ((index=started; index<${#LEAVES[@]}; index++)); do
+    kubectl scale "deployment/voice-${LEAVES[index]}" -n "$NS" --replicas=1 >/dev/null
+  done
   for service in "${LEAVES[@]}"; do
-    kubectl scale "deployment/voice-${service}" -n "$NS" --replicas=1 >/dev/null
     kubectl rollout status "deployment/voice-${service}" -n "$NS" --timeout=300s >/dev/null
   done
 }

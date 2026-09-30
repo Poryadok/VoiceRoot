@@ -442,6 +442,9 @@ proof_logs_line="$(grep -nF "logs job/${proof_name} " "$work/kubectl.log" | sed 
 first_start_line="$(grep -nm1 -E '^(scale|patch) .*deployment[/[:space:]]+voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics).*(replicas[=: ]+1|\\\"replicas\\\":1)' "$work/kubectl.log" | cut -d: -f1)"
 [[ -n "$last_bootstrap_line" && -n "$first_start_line" && "$last_bootstrap_line" -lt "$first_start_line" ]] || fail 'all bootstrap Jobs must complete before a leaf starts'
 [[ -n "$proof_logs_line" && "$last_bootstrap_line" -lt "$proof_logs_line" && "$proof_logs_line" -lt "$first_start_line" ]] || fail 'live ACL proof must complete between bootstrap and first leaf restart'
+last_leaf_start_line="$(grep -nE '^scale deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics) .*--replicas=1' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
+first_leaf_ready_line="$(grep -nm1 -E '^rollout status deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)( |$)' "$work/kubectl.log" | cut -d: -f1)"
+[[ -n "$last_leaf_start_line" && -n "$first_leaf_ready_line" && "$last_leaf_start_line" -lt "$first_leaf_ready_line" ]] || fail 'rotation must start mutually dependent leaves before readiness waits'
 active_line="$(grep -n '^event phase=active$' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 last_leaf_ready_line="$(grep -nE '^rollout status deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)( |$)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 [[ -n "$active_line" && -n "$last_leaf_ready_line" && "$last_leaf_ready_line" -lt "$active_line" ]] || fail 'active marker must follow leaf rollout convergence'
@@ -458,6 +461,9 @@ assert_no_mutation
 
 MOCK_GENERATION_STATE=active run_rotation --rollback || fail "rollback to retained legacy generation failed: $(tail -1 "$work/output")"
 assert_nats_only_mutations
+last_leaf_start_line="$(grep -nE '^scale deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics) .*--replicas=1' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
+first_leaf_ready_line="$(grep -nm1 -E '^rollout status deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)( |$)' "$work/kubectl.log" | cut -d: -f1)"
+[[ -n "$last_leaf_start_line" && -n "$first_leaf_ready_line" && "$last_leaf_start_line" -lt "$first_leaf_ready_line" ]] || fail 'rollback must start mutually dependent leaves before readiness waits'
 grep -Eq '(generation[=:\\" ]+legacy|generation=legacy)' "$work/mutations.log" "$work/rendered/metadata.names" || fail 'rollback must record legacy as the active generation'
 grep -Eq '(phase[=:\\" ]+active|phase=active)' "$work/kubectl.log" "$work/mutations.log" "$work/rendered/metadata.names" || fail 'rollback must restore an active marker'
 ! grep -Eq '^delete (secret|pvc|persistentvolumeclaim) ' "$work/kubectl.log" || fail 'rollback must retain generation resources'
