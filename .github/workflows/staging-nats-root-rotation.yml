@@ -14,7 +14,7 @@ on:
           - recover-legacy
           - restore-user-cycle
       generation:
-        description: Generation for activate; use r20260930a1 for recover-legacy or restore-user-cycle; leave empty for rollback or diagnose
+        description: Generation for activate; use r20260930a1 for prior recovery, r20260930a2 for all-stopped recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
         required: false
         type: string
 
@@ -64,7 +64,13 @@ jobs:
                 exit 1
               fi
               ;;
-            recover-legacy|restore-user-cycle)
+            recover-legacy)
+              if [[ "$ROTATION_GENERATION" != r20260930a1 && "$ROTATION_GENERATION" != r20260930a2 ]]; then
+                echo 'NATS_ROTATION=FAIL_RECOVERY_GENERATION'
+                exit 1
+              fi
+              ;;
+            restore-user-cycle)
               if [[ "$ROTATION_GENERATION" != r20260930a1 ]]; then
                 echo 'NATS_ROTATION=FAIL_RECOVERY_GENERATION'
                 exit 1
