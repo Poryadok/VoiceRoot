@@ -28,17 +28,17 @@ case "$1" in
       service) echo '{"spec":{"selector":{"app":"voice-nats-pvc-candidate"},"ports":[{"name":"client","port":4222,"targetPort":4222}]}}' ;;
       job)
         if [[ "$3" == voice-nats-notification-bootstrap ]]; then
-          echo '{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"failed":1,"conditions":[{"type":"Failed","status":"True","reason":"BackoffLimitExceeded"}]},"data":"SENSITIVE_SENTINEL"}'
+          echo '{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"failed":1,"conditions":[{"type":"Failed","status":"True","reason":"TOKEN123456"}]},"data":"SENSITIVE_SENTINEL"}'
         else
           echo '{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"succeeded":1}}'
         fi ;;
       pods)
         if [[ "$*" == *voice-nats-notification-bootstrap* ]]; then
-          echo '{"items":[{"metadata":{"name":"notification-bootstrap-pod"},"status":{"phase":"Running","containerStatuses":[{"name":"bootstrap","ready":false,"restartCount":11,"state":{"waiting":{"reason":"CrashLoopBackOff"}},"lastState":{"terminated":{"reason":"Error","exitCode":1}}}]}}]}'
+          echo '{"items":[{"metadata":{"name":"notification-bootstrap-pod"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"False","reason":"TOKEN123456"}],"containerStatuses":[{"name":"bootstrap","ready":false,"restartCount":11,"state":{"waiting":{"reason":"CrashLoopBackOff"}},"lastState":{"terminated":{"reason":"TOKEN123456","exitCode":1}}}]}}]}'
         else
           echo '{"items":[]}'
         fi ;;
-      events) echo '{"items":[{"reason":"BackOff","count":11,"message":"SENSITIVE_SENTINEL"}]}' ;;
+      events) echo '{"items":[{"reason":"BackOff","count":11,"message":"SENSITIVE_SENTINEL"},{"reason":"TOKEN123456","count":1,"message":"SENSITIVE_SENTINEL"}]}' ;;
       *) exit 2 ;;
     esac ;;
   logs)
@@ -57,9 +57,10 @@ grep -Fq '"failed":1' "$work/output" || { echo 'middle bootstrap failure hidden'
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-notification-bootstrap:AUTH' "$work/output" || { echo 'middle bootstrap log category missing' >&2; exit 1; }
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-realtime-bootstrap:INCOMPATIBLE_STREAM' "$work/output" || { echo 'incompatible stream category missing' >&2; exit 1; }
 grep -Fq '"lastExitCode":1' "$work/output" || { echo 'last termination hidden' >&2; exit 1; }
-grep -Fq '"eventReasons":[{"reason":"BackOff","count":11}]' "$work/output" || { echo 'safe event reason hidden' >&2; exit 1; }
+grep -Fq '"eventReasons":[{"reason":"BackOff","count":11},{"reason":"OTHER","count":1}]' "$work/output" || { echo 'safe event reasons missing' >&2; exit 1; }
+grep -Fq '"reason":"OTHER"' "$work/output" || { echo 'unrecognized reason not redacted' >&2; exit 1; }
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-realtime-permissions-preflight:nats-leaf:AUTH' "$work/output" || { echo 'leaf log category missing' >&2; exit 1; }
-if grep -Fq 'SENSITIVE_SENTINEL' "$work/output" || grep -Ev '^(get|logs)$' "$work/verbs"; then
+if grep -Eq 'SENSITIVE_SENTINEL|TOKEN123456' "$work/output" || grep -Ev '^(get|logs)$' "$work/verbs"; then
   echo 'diagnose leaked details or issued a mutating verb' >&2
   exit 1
 fi
