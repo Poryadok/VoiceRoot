@@ -653,6 +653,14 @@ class ChatListController extends StateNotifier<ChatListState> {
     items[index] = updated;
     state = state.copyWith(items: items);
   }
+
+  void markChatRead(String chatId) {
+    final index = state.items.indexWhere((item) => item.chatId == chatId);
+    if (index < 0 || state.items[index].unreadCount == 0) return;
+    final items = [...state.items];
+    items[index] = items[index].copyWith(unreadCount: 0);
+    state = state.copyWith(items: items);
+  }
 }
 
 List<ChatListItem> _mergeChatItems(
@@ -1675,7 +1683,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return;
     if (ok) {
       _lastMarkedReadMessageId = lastId;
-      _invalidateChatLists(_ref);
+      if (state.lastMessageId == lastId) {
+        _ref.read(chatListControllerProvider.notifier).markChatRead(chatId);
+      } else {
+        _invalidateChatLists(_ref);
+      }
     }
   }
 

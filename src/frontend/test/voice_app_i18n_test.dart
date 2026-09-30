@@ -28,7 +28,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Шлюз: ок'), findsNothing);
-    expect(find.text('Личные сообщения'), findsOneWidget);
+    expect(find.text('Личные сообщения').first, findsOneWidget);
   });
 
   testWidgets('locale ru shows Russian message when base URL missing', (

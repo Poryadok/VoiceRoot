@@ -23,6 +23,47 @@ import 'support/gateway_test_client.dart';
 
 void main() {
   group('ChatListController', () {
+    test('clears a chat unread badge after its read position is saved', () async {
+      final chats = _FakeChatsClient(
+        pages: [
+          const ChatListData(
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-read',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'peer-1',
+                ),
+                unreadCount: 1,
+              ),
+            ],
+          ),
+        ],
+      );
+      final container = _container(
+        chatsClient: chats,
+        messagesClient: _FakeMessagesClient(),
+        realtimeHubBuilder: _FakeRealtimeHub.new,
+      );
+      addTearDown(container.dispose);
+
+      container.read(chatListControllerProvider);
+      await pumpEventQueue();
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        1,
+      );
+
+      container
+          .read(chatListControllerProvider.notifier)
+          .markChatRead('chat-read');
+
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        0,
+      );
+    });
+
     test('loads chats after auth becomes available', () async {
       final chats = _FakeChatsClient(
         pages: [
