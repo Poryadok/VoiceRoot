@@ -23,7 +23,12 @@ case "$1" in
   get)
     case "$2" in
       configmap) echo '{"data":{"phase":"rotating","generation":"r20260930a1","previousGeneration":"legacy","unrelated":"SENSITIVE_SENTINEL"}}' ;;
-      deployment) echo '{"spec":{"replicas":1,"template":{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"spec":{"volumes":[{"name":"jsdata","persistentVolumeClaim":{"claimName":"voice-nats-jsdata"}},{"name":"nats-operator-jwt","secret":{"secretName":"voice-nats-operator"}},{"name":"nats-hub-tls","secret":{"secretName":"voice-nats-hub-tls"}}]}}},"status":{"readyReplicas":1}}' ;;
+      deployment)
+        if [[ "$3" == voice-user ]]; then
+          echo '{"spec":{"template":{"metadata":{"annotations":{"voice.io/nats-user-space-bootstrap":"TOKEN123456"}},"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR","value":"SENSITIVE_SENTINEL"}]}]}}}}'
+        else
+          echo '{"spec":{"replicas":1,"template":{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"spec":{"volumes":[{"name":"jsdata","persistentVolumeClaim":{"claimName":"voice-nats-jsdata"}},{"name":"nats-operator-jwt","secret":{"secretName":"voice-nats-operator"}},{"name":"nats-hub-tls","secret":{"secretName":"voice-nats-hub-tls"}}]}}},"status":{"readyReplicas":1}}'
+        fi ;;
       deployments) echo '{"items":[{"metadata":{"name":"voice-realtime"},"spec":{"replicas":0,"template":{"metadata":{"annotations":{"voice.io/nats-generation":"r20260930a1"}},"spec":{"volumes":[{"name":"nats-service-creds","secret":{"secretName":"voice-nats-service-credentials-r20260930a1"}},{"name":"nats-hub-tls","secret":{"secretName":"voice-nats-hub-tls-r20260930a1"}}]}}},"status":{"readyReplicas":0}}]}' ;;
       service) echo '{"spec":{"selector":{"app":"voice-nats-pvc-candidate"},"ports":[{"name":"client","port":4222,"targetPort":4222}]}}' ;;
       job)
@@ -33,7 +38,9 @@ case "$1" in
           echo '{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"succeeded":1}}'
         fi ;;
       pods)
-        if [[ "$*" == *voice-nats-notification-bootstrap* ]]; then
+        if [[ "$*" == *app=voice-user* ]]; then
+          echo '{"items":[{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR","value":""}]}]}},{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR","value":"SENSITIVE_SENTINEL"}]}]}}]}'
+        elif [[ "$*" == *voice-nats-notification-bootstrap* ]]; then
           echo '{"items":[{"metadata":{"name":"notification-bootstrap-pod"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"False","reason":"TOKEN123456"}],"containerStatuses":[{"name":"bootstrap","ready":false,"restartCount":11,"state":{"waiting":{"reason":"CrashLoopBackOff"}},"lastState":{"terminated":{"reason":"TOKEN123456","exitCode":1}}}]}}]}'
         else
           echo '{"items":[]}'
@@ -60,6 +67,8 @@ grep -Fq '"lastExitCode":1' "$work/output" || { echo 'last termination hidden' >
 grep -Fq '"eventReasons":[{"reason":"BackOff","count":11},{"reason":"OTHER","count":1}]' "$work/output" || { echo 'safe event reasons missing' >&2; exit 1; }
 grep -Fq '"reason":"OTHER"' "$work/output" || { echo 'unrecognized reason not redacted' >&2; exit 1; }
 grep -Fq 'NATS_DIAGNOSTIC_LOG=voice-nats-realtime-permissions-preflight:nats-leaf:AUTH' "$work/output" || { echo 'leaf log category missing' >&2; exit 1; }
+grep -Fq '"userSpaceOverride":{"ownedAnnotation":true,"explicitEmpty":false,"explicitOther":true}' "$work/output" || { echo 'owned User override metadata missing' >&2; exit 1; }
+grep -Fq '"userSpaceOverridePods":{"total":2,"emptyOverride":1,"otherOverride":1}' "$work/output" || { echo 'User override Pod classification missing' >&2; exit 1; }
 if grep -Eq 'SENSITIVE_SENTINEL|TOKEN123456' "$work/output" || grep -Ev '^(get|logs)$' "$work/verbs"; then
   echo 'diagnose leaked details or issued a mutating verb' >&2
   exit 1

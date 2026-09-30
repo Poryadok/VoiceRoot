@@ -716,10 +716,20 @@ On retry it accepts only a contiguous prefix of those same old-reference
 leaves, verifies any existing Pods also mount the old credentials/TLS, and
 rejects an out-of-order or mixed-generation deployment before mutation.
 It does not rerun bootstrap/preflight, delete Jobs, or modify NATS PVCs and
-Secrets. It starts any remaining stopped leaves before waiting for readiness, since
-User and Space have a startup dependency cycle. It then requires all 18
-rollouts ready and compares and swaps the marker to `active/legacy`. A failed
-precondition or rollout leaves the marker rotating for investigation. Run staging smoke after recovery and
+Secrets. It starts any remaining stopped leaves, then temporarily overrides
+only User's `SPACE_GRPC_ADDR` to an empty value in its Pod template. User's
+space-membership privacy check denies when Space is unavailable. The operation
+waits for User and then Space, removes its exact owned override, waits for the
+normal User rollout, and finally requires all 18 leaves ready before it
+compares and swaps the marker to `active/legacy`. A failed step attempts to
+remove the temporary override; a later `recover-legacy` run recognizes an
+owned override left by runner interruption and resumes its cleanup. The
+read-only `diagnose` operation reports only booleans and counts for that
+override and its Pods; it never prints the environment value. A failed
+precondition, cleanup, or rollout leaves the marker rotating for investigation.
+This emergency override is limited to `recover-legacy`; do not retry root
+`activate` or `rollback` with all leaves stopped until the same startup cycle
+has a separately reviewed fix. Run staging smoke after recovery and
 leave A1 ACL proof variables unset unless a separate live proof passes.
 After successful proof and cleanup, set both staging Environment variables
 `VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and
