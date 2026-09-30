@@ -498,6 +498,11 @@ jobs:
           kctl get deployment voice-search -n voice-staging -o json 2>/dev/null | \
             jq -e '
               .spec.template.spec as $pod |
+              ([$pod.volumes[]? | select(.name == "nats-service-creds") | .secret.secretName] | first // "") as $serviceSecret |
+              ([$pod.volumes[]? | select(.name == "nats-hub-tls") | .secret.secretName] | first // "") as $tlsSecret |
+              (($serviceSecret == "voice-nats-service-credentials" and $tlsSecret == "voice-nats-hub-tls") or
+                ((try ($serviceSecret | capture("^voice-nats-service-credentials(?<g>-r[0-9]{8}[a-z0-9]{0,8})$").g) catch "") as $g |
+                  ($g != "" and $tlsSecret == ("voice-nats-hub-tls" + $g)))) and
               any($pod.containers[]?;
                 .name == "nats-leaf" and .image == "nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb" and
                 .args == ["-c", "/etc/nats/leaf.conf"] and
@@ -506,8 +511,8 @@ jobs:
                 any(.volumeMounts[]?; .mountPath == "/etc/nats/leaf.conf" and .subPath == "leaf.conf" and .readOnly == true) and
                 any(.volumeMounts[]?; .mountPath == "/etc/nats/tls/ca.crt" and .subPath == "ca.crt" and .readOnly == true)
               ) and
-              any($pod.volumes[]?; .name == "nats-service-creds" and .secret.secretName == "voice-nats-service-credentials" and any(.secret.items[]?; .key == "search.creds" and .path == "search.creds")) and
-              any($pod.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == "voice-nats-hub-tls" and any(.secret.items[]?; .key == "ca.crt" and .path == "ca.crt")) and
+              any($pod.volumes[]?; .name == "nats-service-creds" and .secret.secretName == $serviceSecret and any(.secret.items[]?; .key == "search.creds" and .path == "search.creds")) and
+              any($pod.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == $tlsSecret and any(.secret.items[]?; .key == "ca.crt" and .path == "ca.crt")) and
               any($pod.volumes[]?; .name == "nats-leaf-config" and .configMap.name == "voice-nats-leaf-config")
             ' >/dev/null 2>&1 || fail_probe SEARCH_LEAF_DEPLOYMENT
 

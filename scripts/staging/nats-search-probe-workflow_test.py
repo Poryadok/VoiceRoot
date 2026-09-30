@@ -2,7 +2,9 @@
 """Verify the probe Job manifest is rendered without expanding its pod script."""
 
 import os
+import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
@@ -13,7 +15,59 @@ ROOT = Path(__file__).resolve().parents[2]
 workflow = yaml.safe_load((ROOT / ".github/workflows/staging-deploy.yml").read_text(encoding="utf-8"))
 steps = workflow["jobs"]["nats-search-jetstream-probe"]["steps"]
 run = next(step["run"] for step in steps if step.get("name", "").startswith("Probe Search JetStream"))
+assert 'capture("^voice-nats-service-credentials(?<g>-r[0-9]{8}[a-z0-9]{0,8})$")' in run
+assert '"voice-nats-hub-tls" + $g' in run
 lines = run.splitlines()
+deployment_probe_start = next(i for i, line in enumerate(lines) if "kctl get deployment voice-search" in line)
+jq_start = next(i for i in range(deployment_probe_start, len(lines)) if "jq -e '" in lines[i])
+jq_end = next(i for i in range(jq_start + 1, len(lines)) if "|| fail_probe SEARCH_LEAF_DEPLOYMENT" in lines[i])
+jq_filter = "\n".join(line.strip() for line in lines[jq_start + 1 : jq_end])
+
+# GitHub's Ubuntu runner includes jq. Exercise the exact workflow predicate
+# with legacy refs, a matching generated pair, and a mismatched pair.
+jq_binary = shutil.which("jq")
+if jq_binary:
+    leaf_pod = {
+        "spec": {
+            "template": {
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "nats-leaf",
+                            "image": "nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb",
+                            "args": ["-c", "/etc/nats/leaf.conf"],
+                            "env": [{"name": "NATS_CREDS", "value": "/var/run/nats/creds/search.creds"}],
+                            "volumeMounts": [
+                                {"mountPath": "/var/run/nats/creds/search.creds", "subPath": "search.creds", "readOnly": True},
+                                {"mountPath": "/etc/nats/leaf.conf", "subPath": "leaf.conf", "readOnly": True},
+                                {"mountPath": "/etc/nats/tls/ca.crt", "subPath": "ca.crt", "readOnly": True},
+                            ],
+                        }
+                    ],
+                    "volumes": [
+                        {"name": "nats-service-creds", "secret": {"secretName": "voice-nats-service-credentials", "items": [{"key": "search.creds", "path": "search.creds"}]}},
+                        {"name": "nats-hub-tls", "secret": {"secretName": "voice-nats-hub-tls", "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+                        {"name": "nats-leaf-config", "configMap": {"name": "voice-nats-leaf-config"}},
+                    ],
+                }
+            }
+        }
+    }
+
+    def check_deployment_refs(service_secret: str, tls_secret: str) -> bool:
+        pod = json.loads(json.dumps(leaf_pod))
+        volumes = pod["spec"]["template"]["spec"]["volumes"]
+        volumes[0]["secret"]["secretName"] = service_secret
+        volumes[1]["secret"]["secretName"] = tls_secret
+        result = subprocess.run(
+            [jq_binary, "-e", jq_filter], input=json.dumps(pod), text=True, capture_output=True
+        )
+        return result.returncode == 0
+
+    assert check_deployment_refs("voice-nats-service-credentials", "voice-nats-hub-tls")
+    assert check_deployment_refs("voice-nats-service-credentials-r20260930a3", "voice-nats-hub-tls-r20260930a3")
+    assert not check_deployment_refs("voice-nats-service-credentials-r20260930a3", "voice-nats-hub-tls-r20260929a1")
+
 start = next(i for i, line in enumerate(lines) if "kctl create -f -" in line)
 end = next(i for i in range(start + 1, len(lines)) if lines[i] == "EOF")
 create = "\n".join(lines[start : end + 1])
