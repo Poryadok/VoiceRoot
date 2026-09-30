@@ -17,6 +17,8 @@ steps = workflow["jobs"]["nats-search-jetstream-probe"]["steps"]
 run = next(step["run"] for step in steps if step.get("name", "").startswith("Probe Search JetStream"))
 assert 'capture("^voice-nats-service-credentials(?<g>-r[0-9]{8}[a-z0-9]{0,8})$")' in run
 assert '"voice-nats-hub-tls" + $g' in run
+assert "search_service_secret" in run
+assert "__SEARCH_SERVICE_SECRET__" in run
 lines = run.splitlines()
 deployment_probe_start = next(i for i, line in enumerate(lines) if "kctl get deployment voice-search" in line)
 jq_start = next(i for i in range(deployment_probe_start, len(lines)) if "jq -e '" in lines[i])
@@ -68,7 +70,7 @@ if jq_binary:
     assert check_deployment_refs("voice-nats-service-credentials-r20260930a3", "voice-nats-hub-tls-r20260930a3")
     assert not check_deployment_refs("voice-nats-service-credentials-r20260930a3", "voice-nats-hub-tls-r20260929a1")
 
-start = next(i for i, line in enumerate(lines) if "kctl create -f -" in line)
+start = next(i for i, line in enumerate(lines) if 'sed -e "s/__PROBE_JOB_NAME__' in line)
 end = next(i for i in range(start + 1, len(lines)) if lines[i] == "EOF")
 create = "\n".join(lines[start : end + 1])
 
@@ -82,19 +84,27 @@ with tempfile.TemporaryDirectory() as directory:
             create,
         ]
     )
-    env = os.environ.copy()
-    env.update(
-        PROBE_JOB_NAME="voice-nats-search-probe-123-1",
-        PROBE_CAPTURE=str(capture),
-    )
     bash = Path(os.environ["PROGRAMFILES"]) / "Git/bin/bash.exe" if os.name == "nt" else "bash"
-    result = subprocess.run([str(bash), "-c", script], env=env, text=True, capture_output=True)
-    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    manifest = yaml.safe_load(capture.read_text(encoding="utf-8"))
 
-assert manifest["metadata"]["name"] == "voice-nats-search-probe-123-1"
-assert manifest["metadata"]["namespace"] == "voice-staging"
-pod_script = manifest["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    def render_probe_manifest(service_secret: str) -> dict:
+        env = os.environ.copy()
+        env.update(
+            PROBE_JOB_NAME="voice-nats-search-probe-123-1",
+            PROBE_CAPTURE=str(capture),
+            search_service_secret=service_secret,
+        )
+        result = subprocess.run([str(bash), "-c", script], env=env, text=True, capture_output=True)
+        assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        return yaml.safe_load(capture.read_text(encoding="utf-8"))
+
+    legacy_manifest = render_probe_manifest("voice-nats-service-credentials")
+    generated_manifest = render_probe_manifest("voice-nats-service-credentials-r20260930a3")
+
+assert legacy_manifest["metadata"]["name"] == "voice-nats-search-probe-123-1"
+assert legacy_manifest["metadata"]["namespace"] == "voice-staging"
+assert legacy_manifest["spec"]["template"]["spec"]["volumes"][0]["secret"]["secretName"] == "voice-nats-service-credentials"
+assert generated_manifest["spec"]["template"]["spec"]["volumes"][0]["secret"]["secretName"] == "voice-nats-service-credentials-r20260930a3"
+pod_script = generated_manifest["spec"]["template"]["spec"]["containers"][0]["args"][0]
 assert 'tmp="$(mktemp -d)"' in pod_script
 assert 'trap \'rm -rf "$tmp"\' EXIT' in pod_script
 assert "'$JS.API.CONSUMER.INFO.message_events.search-indexer-message-v1'" in pod_script
