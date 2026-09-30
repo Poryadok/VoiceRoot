@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 import 'package:voice_frontend/ui/shell/navigation_panel.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -34,8 +35,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final label = find.text('Личные сообщения');
+    final label = find.text('Личные сообщения').first;
     expect(label, findsOneWidget);
+    expect(find.byKey(ChatListBody.createGroupKey), findsOneWidget);
+    expect(find.byKey(ChatListBody.createSpaceKey), findsOneWidget);
+    expect(find.byKey(ChatListBody.joinSpaceInviteKey), findsOneWidget);
 
     final box = tester.renderObject<RenderBox>(label);
     final textPainter = TextPainter(

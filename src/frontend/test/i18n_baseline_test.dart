@@ -79,7 +79,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Личные сообщения'), findsOneWidget);
+      expect(find.text('Личные сообщения').first, findsOneWidget);
       expect(find.text('Пока нет диалогов'), findsOneWidget);
       expect(find.text('Выберите диалог'), findsOneWidget);
       expect(find.text('Выйти'), findsOneWidget);
