@@ -14,7 +14,7 @@ on:
           - recover-legacy
           - restore-user-cycle
       generation:
-        description: Generation for activate; use r20260930a1 for prior recovery, r20260930a2 for all-stopped recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
+        description: Generation for activate; use r20260930a1 for prior recovery, r20260930a2 for stopped or fully-ready recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
         required: false
         type: string
 

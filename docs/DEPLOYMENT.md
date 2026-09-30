@@ -720,14 +720,21 @@ On retry it accepts only a contiguous prefix of those same old-reference
 leaves, verifies any existing Pods also mount the old credentials/TLS, and
 rejects an out-of-order or mixed-generation deployment before mutation.
 For the interrupted `r20260930a2 → legacy` recovery, the same operation accepts
-only the observed state with all 18 legacy-reference leaves stopped and no Pods.
-Both paths skip bootstrap and proof Jobs, retain NATS PVCs and Secrets, start
-the remaining leaves, and temporarily override only User's `SPACE_GRPC_ADDR`
-to an empty value in its Pod template. User's
+either the observed state with all 18 legacy-reference leaves stopped and no
+Pods, or a completed rollout with all 18 leaves at one ready and updated replica
+on legacy refs. The completed-rollout path also requires exactly one Running,
+ready Pod per leaf with legacy credential/TLS mounts and no User override or
+override Pod. It skips workload changes and only compare-and-swaps the marker to
+`active/legacy` after those checks and a final User Pod check. Partial, mixed,
+missing, or unready state fails closed before mutation.
+Recovery paths skip bootstrap and proof Jobs and retain NATS PVCs and Secrets.
+When leaves are stopped, recovery starts the remaining leaves and temporarily
+overrides only User's `SPACE_GRPC_ADDR` to an empty value in its Pod template. User's
 space-membership privacy check denies when Space is unavailable. The operation
 waits for User and then Space, removes its exact owned override, waits for the
-normal User rollout, and finally requires all 18 leaves ready before it
-compares and swaps the marker to `active/legacy`. A failed step attempts to
+normal User rollout, waits up to 30 seconds for exactly one Running, ready User
+Pod without the temporary override, and finally requires all 18 leaves ready
+before it compares and swaps the marker to `active/legacy`. A failed step attempts to
 remove the temporary override; a later `recover-legacy` run recognizes an
 owned override left by runner interruption and resumes its cleanup. Kubernetes
 may omit the serialized `value` field for an empty environment variable; the

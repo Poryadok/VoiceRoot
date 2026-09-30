@@ -215,9 +215,9 @@ case "$*" in
     ;;
   *'get pods -n voice-staging -l app=voice-user -o json'*)
     if [[ -f "${MOCK_KUBE_STATE_DIR:?}/user-override" ]]; then
-      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]}}]}'
+      printf '%s\n' '{"items":[{"metadata":{"name":"voice-user-pod","labels":{"app":"voice-user"}},"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]},"status":{"phase":"Running","containerStatuses":[{"name":"user","ready":true}]}}]}'
     else
-      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[]}]}}]}'
+      printf '%s\n' '{"items":[{"metadata":{"name":"voice-user-pod","labels":{"app":"voice-user"}},"spec":{"containers":[{"name":"user","env":[]}]},"status":{"phase":"Running","containerStatuses":[{"name":"user","ready":true}]}}]}'
     fi
     ;;
   *'get pods -n voice-staging -l app=voice-'*'-o name'*)

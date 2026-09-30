@@ -393,7 +393,7 @@ marker_state() {
 }
 
 recover_legacy() {
-  local target="$1" mode="${2:-recover}" pvc hub pods svc service leaf patch marker replicas ready started=0 stopped=false min_pods max_pods
+  local target="$1" mode="${2:-recover}" pvc hub pods svc service leaf patch marker replicas ready updated started=0 stopped=false min_pods max_pods all_ready=true resume_finalize=false require_ready_pods=false
   [[ "$target" == r20260930a1 || "$target" == r20260930a2 ]] || fail 'legacy recovery generation is not supported'
   marker_state
   [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" && "$MARKER_PREVIOUS" == legacy ]] ||
@@ -438,6 +438,9 @@ recover_legacy() {
     check_leaf "$leaf" "voice-${service}" "$service" legacy "$replicas"
     ready="$(jq -er '.status.readyReplicas // 0' <<<"$leaf")" || fail "voice-${service} has no readiness state"
     [[ "$ready" == 0 || ( "$ready" == 1 && "$replicas" == 1 ) ]] || fail "voice-${service} has unexpected ready replicas"
+    updated="$(jq -er '.status.updatedReplicas // 0' <<<"$leaf")" || fail "voice-${service} has no updated replica state"
+    [[ "$updated" == 0 || ( "$updated" == 1 && "$replicas" == 1 ) ]] || fail "voice-${service} has unexpected updated replicas"
+    if [[ "$replicas" != 1 || "$ready" != 1 || "$updated" != 1 ]]; then all_ready=false; fi
     jq -e '(.status.readyReplicas // 0) <= .spec.replicas and
       .status.observedGeneration >= .metadata.generation' <<<"$leaf" >/dev/null ||
       fail "voice-${service} has an unobserved or inconsistent recovery rollout"
@@ -450,21 +453,37 @@ recover_legacy() {
       min_pods=0
       [[ "$service" == auth || "$service" == social || "$service" == user ]] && min_pods=1
       max_pods=1
+      if [[ "$target" == r20260930a2 && "$replicas" == 1 ]]; then
+        min_pods=1
+        require_ready_pods=true
+        if [[ "$service" == user ]]; then
+          [[ "$USER_CYCLE_STATE" == clean ]] || fail 'r20260930a2 ready-state finalization requires a clean User override state'
+          max_pods=1
+        fi
+      fi
       if [[ "$service" == user ]] && { [[ "$USER_CYCLE_STATE" == owned ]] ||
         jq -e 'any(.items[]?; any(.spec.containers[]? | select(.name == "user") | .env[]?; .name == "SPACE_GRPC_ADDR" and (.value // "") == "" and .valueFrom == null))' <<<"$pods" >/dev/null; }; then
         max_pods=2
       fi
-      jq -e --arg app "voice-${service}" --argjson min "$min_pods" --argjson max "$max_pods" '(.items | length) >= $min and (.items | length) <= $max and
+      jq -e --arg app "voice-${service}" --argjson min "$min_pods" --argjson max "$max_pods" --argjson requireReady "$require_ready_pods" '(.items | length) >= $min and (.items | length) <= $max and
         all(.items[]; .metadata.labels.app == $app and .metadata.deletionTimestamp == null and
+          (if $requireReady then .status.phase == "Running" and (.status.containerStatuses | length) > 0 and all(.status.containerStatuses[]; .ready == true) else true end) and
+          (if $app == "voice-user" and $requireReady then all(.spec.containers[]? | select(.name == "user") | .env[]?; .name != "SPACE_GRPC_ADDR") else true end) and
           any(.spec.volumes[]?; .name == "nats-service-creds" and .secret.secretName == "voice-nats-service-credentials") and
           any(.spec.volumes[]?; .name == "nats-hub-tls" and .secret.secretName == "voice-nats-hub-tls") and
           (if $app == "voice-user" then any(.spec.containers[]?; .name == "user") else true end) and
-          all(.spec.containers[]? | select(.name == "user") | .env[]? | select(.name == "SPACE_GRPC_ADDR"); (.value // "") == "" and (.valueFrom == null) and ((keys - ["name", "value"]) | length) == 0))' <<<"$pods" >/dev/null ||
+        all(.spec.containers[]? | select(.name == "user") | .env[]? | select(.name == "SPACE_GRPC_ADDR"); (.value // "") == "" and (.valueFrom == null) and ((keys - ["name", "value"]) | length) == 0))' <<<"$pods" >/dev/null ||
         fail "voice-${service} Pod differs from the verified partial recovery state"
     fi
   done
   if [[ "$target" == r20260930a2 ]]; then
-    [[ "$started" -eq 0 ]] || fail 'r20260930a2 recovery requires all leaves stopped'
+    if [[ "$started" -eq 0 ]]; then
+      :
+    elif [[ "$started" -eq "${#LEAVES[@]}" && "$all_ready" == true ]]; then
+      resume_finalize=true
+    else
+      fail 'r20260930a2 recovery requires all leaves stopped or all 18 legacy leaves ready'
+    fi
   else
     [[ "$started" -ge 3 ]] || fail 'recovery prefix is shorter than the observed auth/social/user state'
   fi
@@ -488,7 +507,11 @@ recover_legacy() {
     .data.generation == $target and .data.previousGeneration == "legacy"
   ' <<<"$marker" >/dev/null || fail 'generation marker changed during recovery preflight'
 
-  start_leaves "$started" legacy "$mode"
+  if [[ "$resume_finalize" == true ]]; then
+    wait_for_restored_user_pod || fail 'restored User Pod did not settle before legacy marker finalization'
+  else
+    start_leaves "$started" legacy "$mode"
+  fi
   patch="$(jq -cn --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
     [{op:"test",path:"/metadata/resourceVersion",value:$rv},
      {op:"test",path:"/data/phase",value:"rotating"},
@@ -678,8 +701,20 @@ verify_restored_user_pod() {
   local pods
   pods="$(kubectl get pods -n "$NS" -l app=voice-user -o json)" || return 1
   jq -e '(.items | length) == 1 and
+    .items[0].status.phase == "Running" and
+    (.items[0].status.containerStatuses | length) > 0 and
+    all(.items[0].status.containerStatuses[]; .ready == true) and
     all(.items[]; any(.spec.containers[]?; .name == "user") and
       all(.spec.containers[]? | select(.name == "user") | .env[]? | select(.name == "SPACE_GRPC_ADDR"); false))' <<<"$pods" >/dev/null
+}
+
+wait_for_restored_user_pod() {
+  local attempt
+  for ((attempt=0; attempt<30; attempt++)); do
+    verify_restored_user_pod && return 0
+    (( attempt < 29 )) && sleep 1
+  done
+  return 1
 }
 
 bootstrap_user_space_cycle() (
@@ -699,7 +734,7 @@ bootstrap_user_space_cycle() (
     jq -e '.status.readyReplicas == 1 and .status.updatedReplicas == 1 and .status.observedGeneration >= .metadata.generation' <<<"$space" >/dev/null; then
     kubectl rollout status deployment/voice-user -n "$NS" --timeout=300s >/dev/null || fail 'final User rollout is not ready'
     kubectl rollout status deployment/voice-space -n "$NS" --timeout=300s >/dev/null || fail 'Space rollout is not ready'
-    verify_restored_user_pod || fail 'temporary User Pod remains after restored rollout'
+    wait_for_restored_user_pod || fail 'temporary User Pod remains after restored rollout'
     return 0
   fi
   if [[ "$USER_CYCLE_STATE" == clean ]]; then
@@ -709,7 +744,7 @@ bootstrap_user_space_cycle() (
   kubectl rollout status deployment/voice-space -n "$NS" --timeout=300s >/dev/null || fail 'Space rollout is not ready'
   remove_user_cycle_override "$generation" || fail 'cannot restore User cycle configuration'
   kubectl rollout status deployment/voice-user -n "$NS" --timeout=300s >/dev/null || fail 'restored User rollout is not ready'
-  verify_restored_user_pod || fail 'temporary User Pod remains after restored rollout'
+  wait_for_restored_user_pod || fail 'temporary User Pod remains after restored rollout'
 )
 
 start_leaves() {
