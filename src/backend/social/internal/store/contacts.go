@@ -42,14 +42,35 @@ func (s *ContactStore) UpsertContact(ctx context.Context, ownerProfileID, contac
 	if source == "" {
 		source = "manual"
 	}
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if isFavorite {
+		_, err = tx.Exec(ctx, `
+INSERT INTO profile_favorites (owner_profile_id, favorite_profile_id)
+VALUES ($1, $2)
+ON CONFLICT (owner_profile_id, favorite_profile_id) DO UPDATE SET updated_at = now()`,
+			ownerProfileID, contactProfileID)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(ctx, `
 INSERT INTO contacts (owner_profile_id, contact_profile_id, source, is_favorite)
-VALUES ($1, $2, $3, $4)
+VALUES ($1, $2, $3, $4 OR EXISTS (
+  SELECT 1 FROM profile_favorites
+  WHERE owner_profile_id = $1 AND favorite_profile_id = $2
+))
 ON CONFLICT (owner_profile_id, contact_profile_id) DO UPDATE SET
   source = EXCLUDED.source,
   is_favorite = contacts.is_favorite OR EXCLUDED.is_favorite,
   updated_at = now()`, ownerProfileID, contactProfileID, source, isFavorite)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *ContactStore) RemoveContact(ctx context.Context, ownerProfileID, contactProfileID uuid.UUID) error {
@@ -72,17 +93,36 @@ func (s *ContactStore) SetFavorite(ctx context.Context, ownerProfileID, contactP
 	if s == nil || s.Pool == nil {
 		return errors.New("contact store unavailable")
 	}
-	tag, err := s.Pool.Exec(ctx, `
+	if ownerProfileID == contactProfileID {
+		return errors.New("cannot favorite self")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if favorite {
+		_, err = tx.Exec(ctx, `
+INSERT INTO profile_favorites (owner_profile_id, favorite_profile_id)
+VALUES ($1, $2)
+ON CONFLICT (owner_profile_id, favorite_profile_id) DO UPDATE SET updated_at = now()`,
+			ownerProfileID, contactProfileID)
+	} else {
+		_, err = tx.Exec(ctx, `
+DELETE FROM profile_favorites WHERE owner_profile_id = $1 AND favorite_profile_id = $2`,
+			ownerProfileID, contactProfileID)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 UPDATE contacts SET is_favorite = $3, updated_at = now()
 WHERE owner_profile_id = $1 AND contact_profile_id = $2`,
 		ownerProfileID, contactProfileID, favorite)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrContactNotFound
-	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *ContactStore) ListContacts(ctx context.Context, ownerProfileID uuid.UUID, after *ContactsListCursor, limit int) ([]ContactRow, error) {
@@ -135,10 +175,10 @@ func (s *ContactStore) ListFavorites(ctx context.Context, ownerProfileID uuid.UU
 		return nil, errors.New("contact store unavailable")
 	}
 	rows, err := s.Pool.Query(ctx, `
-SELECT id, owner_profile_id, contact_profile_id, source, is_favorite, created_at, updated_at
-FROM contacts
-WHERE owner_profile_id = $1 AND is_favorite = true
-ORDER BY updated_at DESC, id DESC`, ownerProfileID)
+SELECT owner_profile_id, favorite_profile_id, created_at, updated_at
+FROM profile_favorites
+WHERE owner_profile_id = $1
+ORDER BY updated_at DESC, favorite_profile_id`, ownerProfileID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,9 +186,10 @@ ORDER BY updated_at DESC, id DESC`, ownerProfileID)
 	out := make([]ContactRow, 0, 8)
 	for rows.Next() {
 		var r ContactRow
-		if err := rows.Scan(&r.ID, &r.OwnerProfileID, &r.ContactProfileID, &r.Source, &r.IsFavorite, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.OwnerProfileID, &r.ContactProfileID, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
+		r.IsFavorite = true
 		out = append(out, r)
 	}
 	return out, rows.Err()

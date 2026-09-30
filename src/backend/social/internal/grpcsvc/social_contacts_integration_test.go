@@ -58,13 +58,79 @@ func TestContacts_AddListFavoriteRemove(t *testing.T) {
 		TargetProfileId: contact.String(),
 	})
 	require.NoError(t, err)
+	favs, err = client.ListFavorites(withProfileCtx(ctx, owner), &socialv1.ListFavoritesRequest{})
+	require.NoError(t, err)
+	require.Len(t, favs.GetFriendList().GetFriends(), 1)
 
 	_, err = client.SetFavorite(withProfileCtx(ctx, owner), &socialv1.SetFavoriteRequest{
 		FriendProfileId: contact.String(),
+		Favorite:        false,
+	})
+	require.NoError(t, err)
+	favs, err = client.ListFavorites(withProfileCtx(ctx, owner), &socialv1.ListFavoritesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, favs.GetFriendList().GetFriends())
+}
+
+func TestFavorites_AreIndependentFromContacts(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	client, cleanup := startSocialGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	owner := uuid.New()
+	person := uuid.New()
+
+	_, err := client.SetFavorite(withProfileCtx(ctx, owner), &socialv1.SetFavoriteRequest{
+		FriendProfileId: person.String(),
 		Favorite:        true,
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Code(err))
+	require.NoError(t, err, "a profile favorite must not require a contact row")
+
+	favs, err := client.ListFavorites(withProfileCtx(ctx, owner), &socialv1.ListFavoritesRequest{})
+	require.NoError(t, err)
+	require.Len(t, favs.GetFriendList().GetFriends(), 1)
+	require.Equal(t, person.String(), favs.GetFriendList().GetFriends()[0].GetProfileId())
+
+	contacts, err := client.ListContacts(withProfileCtx(ctx, owner), &socialv1.ListContactsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Empty(t, contacts.GetContactList().GetContacts(), "favoriting must not create a contact")
+
+	_, err = client.AddContact(withProfileCtx(ctx, owner), &socialv1.AddContactRequest{
+		TargetProfileId: person.String(),
+		Source:          "manual",
+	})
+	require.NoError(t, err)
+	contacts, err = client.ListContacts(withProfileCtx(ctx, owner), &socialv1.ListContactsRequest{
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Len(t, contacts.GetContactList().GetContacts(), 1)
+	require.True(t, contacts.GetContactList().GetContacts()[0].GetIsFavorite())
+
+	_, err = client.RemoveContact(withProfileCtx(ctx, owner), &socialv1.RemoveContactRequest{
+		TargetProfileId: person.String(),
+	})
+	require.NoError(t, err)
+	favs, err = client.ListFavorites(withProfileCtx(ctx, owner), &socialv1.ListFavoritesRequest{})
+	require.NoError(t, err)
+	require.Len(t, favs.GetFriendList().GetFriends(), 1, "removing a contact must not remove the person favorite")
+
+	_, err = client.SetFavorite(withProfileCtx(ctx, owner), &socialv1.SetFavoriteRequest{
+		FriendProfileId: person.String(),
+		Favorite:        false,
+	})
+	require.NoError(t, err)
+	favs, err = client.ListFavorites(withProfileCtx(ctx, owner), &socialv1.ListFavoritesRequest{})
+	require.NoError(t, err)
+	require.Empty(t, favs.GetFriendList().GetFriends())
 }
 
 type stubPhoneHashLookup map[string]uuid.UUID

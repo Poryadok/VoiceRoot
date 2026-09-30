@@ -70,9 +70,16 @@ contacts
 ├── owner_profile_id (UUID, logical ref → user_db.profiles.id)
 ├── target_profile_id (UUID, logical ref → user_db.profiles.id)
 ├── source (manual | phone_sync | space | matchmaking)
-├── is_favorite (bool)
+├── is_favorite (bool; projection of profile_favorites for this contact)
 ├── created_at
 └── updated_at
+
+profile_favorites
+├── owner_profile_id (UUID, logical ref → user_db.profiles.id)
+├── favorite_profile_id (UUID, logical ref → user_db.profiles.id)
+├── created_at
+├── updated_at
+└── PRIMARY KEY(owner_profile_id, favorite_profile_id)
 
 blocks
 ├── id (UUID)
@@ -87,7 +94,7 @@ blocks
 ### V1 (core DM scope) — детальный профиль для DDL
 
 В первой волне миграций используются `friendships` и `blocks`.
-`contacts` откладывается отдельной миграцией после ядра DM/friends.
+`contacts` и независимые `profile_favorites` добавляются отдельными миграциями после ядра DM/friends. Значения `contacts.is_favorite` переносятся в `profile_favorites`; последующие изменения избранного обновляют проекцию контакта, если такая строка существует.
 
 ```
 friendships
