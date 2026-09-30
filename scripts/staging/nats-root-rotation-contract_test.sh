@@ -24,6 +24,8 @@ activate_line="$(grep -n 'name: Activate NATS root generation' "$WORKFLOW" | cut
   fail 'Go validator must be ready before Kubernetes access or mutation'
 grep -Fq 'go-version-file: src/backend/pkg/go.mod' "$WORKFLOW" ||
   fail 'Go version must come from the exact master source archive'
+grep -Fq "if: inputs.operation == 'activate' || inputs.operation == 'rollback'" "$WORKFLOW" ||
+  fail 'exact-master Realtime image must be verified for activation and rollback'
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -58,7 +60,7 @@ elif [[ "$manifest" == - ]]; then
     jq -r '(.kind + " " + .metadata.name + " " + .metadata.namespace + " immutable=" + (.immutable | tostring)),
       ("namespace " + .metadata.namespace), (.data | keys[] | "key " + .)' "$input" >"${KUBECTL_RENDER_DIR:?}/latest.names"
   else
-    awk '/^kind:/ {kind=$2} /^metadata:/ {metadata=1; next} metadata && /^  name:/ {print kind, $2, "voice-staging"} metadata && /^  namespace:/ {print "namespace", $2; metadata=0} /secretName:|claimName:|voice.io\/nats-generation:|^[[:space:]]*(immutable|phase|generation|previousGeneration):/ {print}' "$input" \
+    awk '/^kind:/ {kind=$2} /^metadata:/ {metadata=1; next} metadata && /^  name:/ {print kind, $2, "voice-staging"} metadata && /^  namespace:/ {print "namespace", $2; metadata=0} /image:|secretName:|claimName:|voice.io\/nats-generation:|^[[:space:]]*(immutable|phase|generation|previousGeneration):/ {print}' "$input" \
       >"${KUBECTL_RENDER_DIR:?}/latest.names"
   fi
   rm -f "$input"
@@ -117,18 +119,34 @@ if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
   done
   jq -e '[.[] | select(.op == "test" and .path == "/metadata/resourceVersion" and .value == "100")] | length == 1' \
     <<<"$deployment_patch" >/dev/null || { echo 'mock kubectl rejects a Deployment patch without resourceVersion CAS' >&2; exit 2; }
+  if [[ "$3" == voice-user ]] && jq -e 'any(.[]; .op == "add" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$deployment_patch" >/dev/null; then
+    jq -e 'any(.[]; .op == "add" and .value == {name:"SPACE_GRPC_ADDR",value:""})' <<<"$deployment_patch" >/dev/null || exit 2
+    touch "${MOCK_KUBE_STATE_DIR:?}/user-override"
+  elif [[ "$3" == voice-user ]] && jq -e 'any(.[]; .op == "remove" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$deployment_patch" >/dev/null; then
+    [[ "${MOCK_FAIL_STAGE:-}" != remove ]] || exit 1
+    jq -e 'any(.[]; .op == "test" and (.value == {name:"SPACE_GRPC_ADDR"} or .value == {name:"SPACE_GRPC_ADDR",value:""}))' <<<"$deployment_patch" >/dev/null || exit 2
+    rm -f "${MOCK_KUBE_STATE_DIR:?}/user-override"
+  elif jq -e 'any(.[]; .path | endswith("/secret/secretName"))' <<<"$deployment_patch" >/dev/null; then
+    if jq -e 'any(.[]; .value == "voice-nats-service-credentials-r20260930a")' <<<"$deployment_patch" >/dev/null; then
+      printf '%s' '-r20260930a' >"${MOCK_KUBE_STATE_DIR:?}/leaf-${3#voice-}-suffix"
+    else
+      : >"${MOCK_KUBE_STATE_DIR:?}/leaf-${3#voice-}-suffix"
+    fi
+  fi
 fi
+if [[ "$1" == rollout && "$2" == status && "$3" == deployment/voice-space && "${MOCK_FAIL_STAGE:-}" == space ]]; then exit 1; fi
+if [[ "$1" == rollout && "$2" == status && "$3" == deployment/voice-user && "${MOCK_FAIL_STAGE:-}" == restored-user && ! -f "${MOCK_KUBE_STATE_DIR:?}/user-override" ]]; then exit 1; fi
 case "$*" in
   *'get jobs,networkpolicies,secrets -n voice-staging -l voice.io/nats-proof=true,voice.io/nats-proof-generation=r20260930a -o json'*)
     printf '%s\n' '{"apiVersion":"v1","kind":"List","items":[]}'
     ;;
   *'get configmap voice-nats-generation'*|*'get configmap/voice-nats-generation'*)
-    if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then
+    if [[ -f "${MOCK_KUBE_STATE_DIR:?}/marker" ]]; then
+      jq -n --rawfile phase "$MOCK_KUBE_STATE_DIR/marker" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging"},data:{phase:($phase|rtrimstr("\n")),generation:"r20260930a",previousGeneration:"legacy"}}'
+    elif [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then
       printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"active","generation":"r20260930a","previousGeneration":"legacy"}}\n'
     elif [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then
       printf '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}\n'
-    elif [[ -f "${MOCK_KUBE_STATE_DIR:?}/marker" ]]; then
-      jq -n --rawfile phase "$MOCK_KUBE_STATE_DIR/marker" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging"},data:{phase:($phase|rtrimstr("\n")),generation:"r20260930a",previousGeneration:"legacy"}}'
     elif [[ "$*" != *'--ignore-not-found'* ]]; then
       echo 'Error from server (NotFound): configmaps "voice-nats-generation" not found' >&2
       exit 1
@@ -179,6 +197,29 @@ case "$*" in
   *'get service voice-nats'*|*'get service/voice-nats'*)
     printf '{"kind":"Service","metadata":{"name":"voice-nats","namespace":"voice-staging"},"spec":{"selector":{"app":"%s"}}}\n' "${MOCK_LIVE_SELECTOR:-voice-nats-pvc-candidate}"
     ;;
+  *'get configmap voice-app-config'*|*'get configmap/voice-app-config'*)
+    printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-app-config","namespace":"voice-staging"},"data":{"SPACE_GRPC_ADDR":"voice-space:9090"}}'
+    ;;
+  *'get job voice-nats-'*|*'get job/voice-nats-'*)
+    job=''
+    for token in "$@"; do
+      token="${token#job/}"
+      if [[ "$token" =~ ^voice-nats-(realtime|notification|search|analytics-chat)-bootstrap$ || "$token" == voice-nats-realtime-permissions-preflight ]]; then job="$token"; fi
+    done
+    [[ -n "$job" ]] || exit 2
+    state=complete
+    [[ "$job" != voice-nats-realtime-permissions-preflight || -z "${MOCK_FAIL_JOB:-}" ]] || state="$MOCK_FAIL_JOB"
+    job_generation=r20260930a
+    [[ "${MOCK_GENERATION_STATE:-absent}" != active ]] || job_generation=legacy
+    jq -n --arg job "$job" --arg state "$state" --arg generation "$job_generation" '{kind:"Job",metadata:{name:$job,namespace:"voice-staging",annotations:{"voice.io/nats-generation":$generation}},status:(if $state == "complete" then {conditions:[{type:"Complete",status:"True"}],succeeded:1} elif $state == "deadline" then {conditions:[{type:"Failed",status:"True",reason:"DeadlineExceeded"}],failed:1} else {conditions:[],failed:1} end)}'
+    ;;
+  *'get pods -n voice-staging -l app=voice-user -o json'*)
+    if [[ -f "${MOCK_KUBE_STATE_DIR:?}/user-override" ]]; then
+      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]}}]}'
+    else
+      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[]}]}}]}'
+    fi
+    ;;
   *'get pods -n voice-staging -l app=voice-'*'-o name'*)
     # Empty list proves the scaled-down hub or leaf pod has exited.
     ;;
@@ -200,10 +241,14 @@ case "$*" in
       fi
     done
     suffix=''
-    if [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then suffix='-r20260930a'; fi
+    if [[ -f "${MOCK_KUBE_STATE_DIR:?}/leaf-${service}-suffix" ]]; then
+      suffix="$(cat "${MOCK_KUBE_STATE_DIR}/leaf-${service}-suffix")"
+    elif [[ "${MOCK_GENERATION_STATE:-absent}" == active ]]; then suffix='-r20260930a'; fi
     image="ghcr.io/example/voice/${service}:0123456789abcdef0123456789abcdef01234567"
     if [[ "$service" == realtime ]]; then image="${MOCK_REALTIME_IMAGE:-$image}"; fi
-    jq -n --arg service "$service" --arg image "$image" --arg suffix "$suffix" '{kind:"Deployment",metadata:{name:("voice-"+$service),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{spec:{containers:[{name:$service,image:$image},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($service+".creds"),path:($service+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}'
+    owned=false
+    [[ "$service" != user || ! -f "${MOCK_KUBE_STATE_DIR:?}/user-override" ]] || owned=true
+    jq -n --arg service "$service" --arg image "$image" --arg suffix "$suffix" --argjson owned "$owned" '{kind:"Deployment",metadata:{name:("voice-"+$service),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{metadata:{annotations:(if $owned then {"voice.io/nats-user-space-bootstrap":"r20260930a"} else {} end)},spec:{containers:[{name:$service,image:$image,env:(if $service == "user" and $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end),envFrom:(if $service == "user" then [{configMapRef:{name:"voice-app-config"}}] else [] end)},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($service+".creds"),path:($service+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}'
     ;;
   *'logs job/voice-nats-acl-proof-'*)
     printf 'NATS_LIVE_ACL_PROOF=PASS generation=r20260930a acl_sha=%s\n' "${MOCK_ACL_SHA:?}"
@@ -242,7 +287,7 @@ run_rotation() {
   : >"$work/mutations.log"
   mkdir -p "$work/rendered"
   mkdir -p "$work/state"
-  rm -f "$work/state/marker" "$work/state/target-secrets" "$work/state/target-pvc"
+  rm -f "$work/state/marker" "$work/state/target-secrets" "$work/state/target-pvc" "$work/state/user-override" "$work/state"/leaf-*-suffix
   : >"$work/rendered/metadata.names"
   PATH="$work/bin:$PATH" \
     KUBECTL_LOG="$work/kubectl.log" KUBECTL_MUTATIONS="$work/mutations.log" KUBECTL_RENDER_DIR="$work/rendered" \
@@ -258,6 +303,8 @@ run_rotation() {
     MOCK_SOURCE_PVC_CLASS="${MOCK_SOURCE_PVC_CLASS:-local-path}" \
     MOCK_REALTIME_IMAGE="${MOCK_REALTIME_IMAGE:-}" \
     MOCK_GO_PROOF_VALIDATION_FAIL="${MOCK_GO_PROOF_VALIDATION_FAIL:-false}" \
+    MOCK_FAIL_JOB="${MOCK_FAIL_JOB:-}" \
+    MOCK_FAIL_STAGE="${MOCK_FAIL_STAGE:-}" \
     MOCK_GENERATION_STATE="${MOCK_GENERATION_STATE:-absent}" \
     MOCK_ACL_SHA="$acl_sha" GITHUB_RUN_ID=123456 GITHUB_RUN_ATTEMPT=1 \
     GITHUB_SHA=0123456789abcdef0123456789abcdef01234567 \
@@ -340,10 +387,17 @@ if MOCK_SOURCE_PVC=voice-postgres-pgdata run_rotation --activate "$generation" "
   fail 'rotation must reject an unexpected source PVC mount'
 fi
 assert_no_mutation
-if MOCK_REALTIME_IMAGE=ghcr.io/example/voice/realtime:latest run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
-  fail 'rotation must reject a mutable deployed Realtime image before writing the marker'
-fi
-assert_no_mutation
+# The old deployed Realtime image can predate the preflight entrypoint. The
+# one-shot Job must run the image validated against the workflow SHA instead.
+MOCK_REALTIME_IMAGE=ghcr.io/example/voice/realtime:latest run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds" ||
+  fail 'legacy deployed Realtime image must not determine the preflight Job image'
+grep -Fq 'image: ghcr.io/poryadok/voiceroot/realtime:0123456789abcdef0123456789abcdef01234567' "$work/rendered/metadata.names" ||
+  fail 'preflight Job must use the validated exact-master Realtime image'
+! grep -Fq 'image: ghcr.io/example/voice/realtime:latest' "$work/rendered/metadata.names" ||
+  fail 'preflight Job must never use the deployed legacy Realtime image'
+grep -Fxq 'NATS_USER_SPACE_OVERRIDE=APPLIED' "$work/output" || fail 'activation did not break the User/Space startup cycle'
+grep -Fxq 'NATS_USER_SPACE_OVERRIDE=REMOVED' "$work/output" || fail 'activation left the User override installed'
+assert_nats_only_mutations
 if jq 'del(.items[] | select(.metadata.name == "voice-nats-service-credentials-r20260930a") | .data["chat.creds"])' "$work/bundle.json" >"$work/incomplete.json" && run_rotation --activate "$generation" "$work/incomplete.json" "$work/proof.creds"; then
   fail 'rotation must reject a bundle missing a required service key'
 fi
@@ -415,10 +469,10 @@ done
 for bootstrap in realtime notification search analytics-chat; do
   grep -Fq "Job voice-nats-${bootstrap}-bootstrap voice-staging" "$work/rendered/metadata.names" || fail "new generation must apply ${bootstrap} bootstrap Job"
   grep -Eq "^delete job[/[:space:]]+voice-nats-${bootstrap}-bootstrap" "$work/kubectl.log" || fail "new generation must replace stale ${bootstrap} Job"
-  grep -Eq "^wait .*job/voice-nats-${bootstrap}-bootstrap" "$work/kubectl.log" || fail "new generation must wait for ${bootstrap} bootstrap"
+  grep -Eq "^get job voice-nats-${bootstrap}-bootstrap " "$work/kubectl.log" || fail "new generation must verify ${bootstrap} bootstrap completion"
 done
 grep -Fq 'Job voice-nats-realtime-permissions-preflight voice-staging' "$work/rendered/metadata.names" || fail 'new generation must apply Realtime permissions preflight'
-grep -Eq '^wait .*job/voice-nats-realtime-permissions-preflight' "$work/kubectl.log" || fail 'new generation must pass Realtime permissions preflight'
+grep -Eq '^get job voice-nats-realtime-permissions-preflight ' "$work/kubectl.log" || fail 'new generation must verify Realtime permissions preflight completion'
 proof_name="$(awk '$1 == "Secret" && $2 ~ /^voice-nats-acl-proof-/ {print $2}' "$work/rendered/metadata.names" | sort -u)"
 [[ "$proof_name" =~ ^voice-nats-acl-proof-r20260930a-[a-z0-9-]+$ ]] || fail 'activation must create a uniquely named proof Secret'
 for kind in Secret NetworkPolicy Job; do
@@ -437,7 +491,7 @@ hub_patch_line="$(grep -nm1 -E '^patch .*deployment[/[:space:]]+voice-nats-pvc-c
 [[ -n "$rotating_line" && -n "$hub_patch_line" && "$rotating_line" -lt "$hub_patch_line" ]] || fail 'rotating marker must precede hub volume switch'
 last_stop_line="$(grep -nE '^(scale|patch) .*deployment[/[:space:]]+voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics).*(replicas[=: ]+0|\\\"replicas\\\":0)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 [[ -n "$last_stop_line" && "$last_stop_line" -lt "$hub_patch_line" ]] || fail 'all 18 leaves must stop before hub volume switch'
-last_bootstrap_line="$(grep -nE '^wait .*job/voice-nats-((realtime|notification|search|analytics-chat)-bootstrap|realtime-permissions-preflight)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
+last_bootstrap_line="$(grep -nE '^get job voice-nats-((realtime|notification|search|analytics-chat)-bootstrap|realtime-permissions-preflight)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 proof_logs_line="$(grep -nF "logs job/${proof_name} " "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
 first_start_line="$(grep -nm1 -E '^(scale|patch) .*deployment[/[:space:]]+voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics).*(replicas[=: ]+1|\\\"replicas\\\":1)' "$work/kubectl.log" | cut -d: -f1)"
 [[ -n "$last_bootstrap_line" && -n "$first_start_line" && "$last_bootstrap_line" -lt "$first_start_line" ]] || fail 'all bootstrap Jobs must complete before a leaf starts'
@@ -449,6 +503,28 @@ active_line="$(grep -n '^event phase=active$' "$work/kubectl.log" | tail -1 | cu
 last_leaf_ready_line="$(grep -nE '^rollout status deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics)( |$)' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 [[ -n "$active_line" && -n "$last_leaf_ready_line" && "$last_leaf_ready_line" -lt "$active_line" ]] || fail 'active marker must follow leaf rollout convergence'
 grep -Eq 'voice-nats-generation|generation.*r20260930a' "$work/mutations.log" "$work/rendered/metadata.names" || fail 'active generation marker must be recorded'
+
+for failure in deadline failed-pod; do
+  if MOCK_FAIL_JOB="$failure" run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
+    fail "terminal Realtime preflight ${failure} must stop activation"
+  fi
+  grep -Fq "NATS_JOB=FAILED job=voice-nats-realtime-permissions-preflight category=${failure}" "$work/output" ||
+    fail "preflight ${failure} did not report a bounded failure category"
+  ! grep -Eq '^scale deployment/voice-(auth|social|user|role|space|chat|file|messaging|voice|matchmaking|search|notification|realtime|bot|subscription|moderation|story|analytics) .*--replicas=1' "$work/kubectl.log" || fail 'failed preflight started a leaf'
+  ! grep -Fxq 'event phase=active' "$work/kubectl.log" || fail 'failed preflight activated the marker'
+  [[ ! -f "$work/state/user-override" ]] || fail 'failed preflight altered User override'
+done
+for failure in space restored-user remove; do
+  if MOCK_FAIL_STAGE="$failure" run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
+    fail "User/Space ${failure} failure must stop activation"
+  fi
+  ! grep -Fxq 'event phase=active' "$work/kubectl.log" || fail 'User/Space failure activated the marker'
+  if [[ "$failure" == remove ]]; then
+    [[ -f "$work/state/user-override" ]] || fail 'failed removal lost the owned override evidence'
+  else
+    [[ ! -f "$work/state/user-override" ]] || fail 'User/Space failure left temporary override without a cleanup error'
+  fi
+done
 
 if MOCK_GENERATION_STATE=active run_rotation --activate "$generation" "$work/bundle.json" "$work/proof.creds"; then
   fail 'repeated activation of the already active generation must fail closed'

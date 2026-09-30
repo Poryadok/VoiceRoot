@@ -13,7 +13,7 @@ SECRET_BASES=(voice-nats-operator voice-nats-hub-tls voice-nats-bootstrap-creden
 
 fail() { printf 'ERROR: NATS root rotation: %s\n' "$1" >&2; exit 1; }
 [[ "$NS" == voice-staging ]] || fail 'namespace must be voice-staging'
-for command in kubectl jq base64 openssl cmp mktemp; do
+for command in kubectl jq base64 openssl cmp mktemp timeout; do
   command -v "$command" >/dev/null 2>&1 || fail "required command missing: $command"
 done
 
@@ -159,12 +159,26 @@ check_workloads() {
 }
 
 prepare_realtime_image() {
-  local realtime image
-  realtime="$(read_required deployment voice-realtime)"
-  image="$(jq -er '[.spec.template.spec.containers[]? | select(.name == "realtime") | .image] | if length == 1 then .[0] else empty end' <<<"$realtime")" || fail 'cannot resolve deployed Realtime image'
-  [[ "$image" =~ ^ghcr\.io/[a-z0-9._/-]+/realtime:[a-f0-9]{40}$ ]] || fail 'deployed Realtime image is not an immutable GHCR SHA tag'
-  ROTATION_IMAGE_REGISTRY="${image%/realtime:*}"
-  ROTATION_IMAGE_TAG="${image##*:}"
+  [[ "${VOICE_NATS_PROOF_IMAGE_REGISTRY:-}" == ghcr.io/poryadok/voiceroot &&
+    "${VOICE_NATS_PROOF_IMAGE_TAG:-}" =~ ^[a-f0-9]{40}$ &&
+    "${GITHUB_SHA:-}" == "$VOICE_NATS_PROOF_IMAGE_TAG" ]] ||
+    fail 'preflight Realtime image must match the verified exact-master workflow SHA'
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    [[ "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]] ||
+      fail 'invalid preflight image pull Secret name'
+    local pull_secret
+    pull_secret="$(read_required secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET")"
+    check_identity "$pull_secret" Secret "$VOICE_NATS_PROOF_IMAGE_PULL_SECRET"
+    jq -e '.type == "kubernetes.io/dockerconfigjson" and
+      (.data[".dockerconfigjson"] | type == "string" and length > 0)' \
+      <<<"$pull_secret" >/dev/null || fail 'preflight image pull Secret has invalid type or data'
+    check_proof_image_pull_secret "$pull_secret"
+  else
+    [[ "${VOICE_NATS_PROOF_IMAGE_PUBLIC:-}" == true ]] ||
+      fail 'preflight Realtime image requires verified anonymous pull access'
+  fi
+  ROTATION_IMAGE_REGISTRY="$VOICE_NATS_PROOF_IMAGE_REGISTRY"
+  ROTATION_IMAGE_TAG="$VOICE_NATS_PROOF_IMAGE_TAG"
 }
 
 check_proof_image_pull_secret() (
@@ -699,7 +713,9 @@ start_leaves() {
   for ((index=started; index<${#LEAVES[@]}; index++)); do
     kubectl scale "deployment/voice-${LEAVES[index]}" -n "$NS" --replicas=1 >/dev/null
   done
-  if [[ "$mode" == recover || "$mode" == restore ]]; then bootstrap_user_space_cycle "$generation" "$mode"; fi
+  if [[ "$mode" == recover || "$mode" == restore || "$mode" == activate || "$mode" == rollback ]]; then
+    bootstrap_user_space_cycle "$generation" "$mode"
+  fi
   for service in "${LEAVES[@]}"; do
     kubectl rollout status "deployment/voice-${service}" -n "$NS" --timeout=300s >/dev/null
   done
@@ -738,10 +754,14 @@ EOF
 }
 
 render_job() {
-  local file="$1" generation="$2" registry="${ROTATION_IMAGE_REGISTRY:-}" tag="${ROTATION_IMAGE_TAG:-}"
+  local file="$1" generation="$2" registry="${ROTATION_IMAGE_REGISTRY:-}" tag="${ROTATION_IMAGE_TAG:-}" pull_secrets='[]'
   [[ "$registry" =~ ^[A-Za-z0-9./:_-]+$ && "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || fail 'VOICE_IMAGE_REGISTRY and VOICE_IMAGE_TAG are required and must be safe template tokens'
+  if [[ -n "${VOICE_NATS_PROOF_IMAGE_PULL_SECRET:-}" ]]; then
+    pull_secrets="[{name: ${VOICE_NATS_PROOF_IMAGE_PULL_SECRET}}]"
+  fi
   sed -e "s|__NAMESPACE__|${NS}|g" \
       -e "s|__IMAGE_REGISTRY__|${registry}|g" -e "s|__IMAGE_TAG__|${tag}|g" \
+      -e "s|__IMAGE_PULL_SECRETS__|${pull_secrets}|g" \
       -e "s|voice-nats-bootstrap-credentials|$(ref voice-nats-bootstrap-credentials "$generation")|g" \
       -e "s|voice-nats-service-credentials|$(ref voice-nats-service-credentials "$generation")|g" \
       -e "s|voice-nats-hub-tls|$(ref voice-nats-hub-tls "$generation")|g" "$file" |
@@ -752,17 +772,46 @@ render_job() {
     '
 }
 
+wait_job_terminal() {
+  local job="$1" generation="$2" attempts="$3" state json attempt deadline
+  [[ "$attempts" =~ ^[0-9]+$ && "$attempts" -gt 0 ]] || return 1
+  deadline=$((SECONDS + attempts * 2))
+  for ((attempt=0; attempt<attempts; attempt++)); do
+    ((SECONDS < deadline)) || break
+    json="$(timeout -k 1s 7s kubectl get job "$job" -n "$NS" -o json --request-timeout=5s 2>/dev/null)" || return 1
+    state="$(jq -er --arg name "$job" --arg ns "$NS" --arg gen "$generation" '
+      if .kind != "Job" or .metadata.name != $name or .metadata.namespace != $ns or
+        .metadata.annotations["voice.io/nats-generation"] != $gen then error("job identity")
+      elif any(.status.conditions[]?; .type == "Complete" and .status == "True") and (.status.succeeded // 0) > 0 then "complete"
+      elif any(.status.conditions[]?; .type == "Failed" and .status == "True" and .reason == "DeadlineExceeded") then "deadline"
+      elif any(.status.conditions[]?; .type == "Failed" and .status == "True") or (.status.failed // 0) > 0 then "failed-pod"
+      else "pending" end
+    ' <<<"$json" 2>/dev/null)" || return 1
+    case "$state" in
+      complete) return 0 ;;
+      deadline|failed-pod)
+        printf 'NATS_JOB=FAILED job=%s category=%s\n' "$job" "$state" >&2
+        return 1 ;;
+      pending) sleep 2 ;;
+      *) return 1 ;;
+    esac
+  done
+  printf 'NATS_JOB=FAILED job=%s category=timeout\n' "$job" >&2
+  return 1
+}
+
 run_jobs() {
   local generation="$1" bootstrap job
   for bootstrap in "${BOOTSTRAPS[@]}"; do
     job="voice-nats-${bootstrap}-bootstrap"
     kubectl delete job "$job" -n "$NS" --ignore-not-found >/dev/null
     render_job "$ROOT/deploy/templates/nats-${bootstrap}-bootstrap.yaml" "$generation" | kubectl apply -f - >/dev/null
-    kubectl wait --for=condition=complete "job/${job}" -n "$NS" --timeout=120s >/dev/null
+    wait_job_terminal "$job" "$generation" 60 || fail "${job} did not complete"
   done
   kubectl delete job voice-nats-realtime-permissions-preflight -n "$NS" --ignore-not-found >/dev/null
   render_job "$ROOT/deploy/templates/nats-realtime-permissions-preflight.yaml" "$generation" | kubectl apply -f - >/dev/null
-  kubectl wait --for=condition=complete job/voice-nats-realtime-permissions-preflight -n "$NS" --timeout=210s >/dev/null
+  wait_job_terminal voice-nats-realtime-permissions-preflight "$generation" 105 ||
+    fail 'Realtime permissions preflight did not complete'
 }
 
 main() {
@@ -814,7 +863,7 @@ main() {
       run_live_acl_proof "$PROOF_NAME" "$target" "$proof_credential"
       printf 'NATS_LIVE_ACL_PROOF=PASS generation=%s acl_sha=%s\n' "$target" "$PROOF_ACL_SHA"
       for old in "${LEAVES[@]}"; do patch_leaf "$old" "$target"; done
-      start_leaves 0 "$target"
+      start_leaves 0 "$target" activate
       set_marker active "$target" "$source"
       echo "NATS root generation ${target} active in voice-staging"
       ;;
@@ -852,7 +901,7 @@ main() {
       start_hub
       run_jobs "$source"
       for old in "${LEAVES[@]}"; do patch_leaf "$old" "$source"; done
-      start_leaves 0 "$source"
+      start_leaves 0 "$source" rollback
       set_marker active "$source" "$target"
       echo "NATS root generation ${source} restored in voice-staging"
       ;;
