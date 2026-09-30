@@ -65,6 +65,8 @@ case "$verb" in
         if [[ "$replicas" == 1 && ( "$name" == voice-auth || "$name" == voice-social ) ]]; then ready=1; fi
         if [[ "$name" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || -e "${KUBE_SPACE_READY:?}" || "${MOCK_CLEAN_READY:-0}" == 1 ) ]]; then ready=1; fi
         if [[ "$name" == voice-space && ( -e "${KUBE_SPACE_READY:?}" || "${MOCK_CLEAN_READY:-0}" == 1 ) ]]; then ready=1; fi
+        if [[ "${MOCK_ALL_READY:-0}" == 1 && "$replicas" == 1 ]]; then ready=1; fi
+        if [[ "$name" == "${MOCK_NOT_READY:-never}" ]]; then ready=0; fi
         if [[ "$name" == "${MOCK_BAD_PARTIAL:-never}" ]]; then ready=1; fi
         owned=false
         [[ "$name" == voice-user && -e "${KUBE_USER_OVERRIDE:?}" ]] && owned=true
@@ -81,7 +83,7 @@ case "$verb" in
           echo '{"items":[{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"phase":"Running","containerStatuses":[{"ready":true}]}}]}'
         elif [[ "$*" == *'app=voice-nats -o json'* && "${MOCK_OLD_HUB_POD:-0}" == 1 ]]; then
           echo '{"items":[{"metadata":{"name":"old-hub-lingering"},"status":{"phase":"Terminating"}}]}'
-        elif [[ "$*" == *app=voice-auth* || "$*" == *app=voice-social* || "$*" == *app=voice-user* ]]; then
+        elif [[ "$*" == *app=voice-auth* || "$*" == *app=voice-social* || "$*" == *app=voice-user* || "${MOCK_ALL_READY:-0}" == 1 && "$*" == *app=voice-* ]]; then
           args="$*"; app="${args#*app=}"; app="${app%% *}"
           if [[ "${MOCK_ALL_STOPPED:-0}" == 1 && ! -e "${KUBE_STARTED_DIR:?}/${app}" ]]; then
             echo '{"items":[]}'
@@ -97,11 +99,13 @@ case "$verb" in
               [[ "${MOCK_PERSISTENT_USER_DUPLICATE:-0}" == 1 ]]; then extra_user_pod=true; fi
           fi
           app_ready=true
-          [[ "$app" == voice-user ]] && app_ready=false
+          if [[ "$app" == voice-user && "${MOCK_ALL_READY:-0}" != 1 && ! -e "${KUBE_USER_RESTORE_STARTED:?}" ]]; then app_ready=false; fi
+          if [[ "$app" == voice-user && "${MOCK_UNREADY_USER_POD:-0}" == 1 ]]; then app_ready=false; fi
           pod_creds=voice-nats-service-credentials
           [[ "$app" == "${MOCK_BAD_POD:-never}" ]] && pod_creds=voice-nats-service-credentials-r20260930a1
           owned=false
           [[ "$app" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || "${MOCK_LINGERING_OVERRIDE_POD:-0}" == 1 ) ]] && owned=true
+          if [[ "$app" == "${MOCK_MISSING_POD:-never}" ]]; then echo '{"items":[]}'; exit; fi
           jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson owned "$owned" --argjson appReady "$app_ready" --argjson extra "$extra_user_pod" '{items:([{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}],containers:[{name:($app|ltrimstr("voice-")),env:(if $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end)}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}] + (if $extra then [{metadata:{name:"voice-user-terminating-pod",labels:{app:"voice-user"},deletionTimestamp:"2026-09-30T00:00:00Z"},spec:{containers:[{name:"user"}]},status:{phase:"Terminating",containerStatuses:[{name:"user",ready:false}]}}] else [] end))}'
         else echo '{"items":[]}'
         fi ;;
@@ -290,5 +294,28 @@ export MOCK_PERSISTENT_USER_DUPLICATE=1
 if run_case; then echo 'persistent extra non-override User Pod did not block recovery' >&2; exit 1; fi
 [[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 0 ]] || { echo 'persistent extra User Pod did not time out before marker commit' >&2; exit 1; }
 unset MOCK_PERSISTENT_USER_DUPLICATE
+export MOCK_UNREADY_USER_POD=1
+if run_case; then echo 'unready restored User Pod did not block recovery' >&2; exit 1; fi
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 0 ]] || { echo 'unready User Pod was not bounded before marker commit' >&2; exit 1; }
+unset MOCK_UNREADY_USER_POD
+
+unset MOCK_ALL_STOPPED
+export MOCK_RESUME_ALL=1 MOCK_ALL_READY=1
+run_case || { cat "$work/error" >&2; exit 1; }
+grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'fully restored a2 state did not finalize legacy marker' >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_ROLLOUTS" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS" || true)" == 0 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 1 ]] || { echo 'a2 resume-finalize mutated workloads instead of only CASing marker' >&2; exit 1; }
+for failure_case in not-ready missing-pod unready-pod mixed-reference lingering-user-override; do
+  case "$failure_case" in
+    not-ready) export MOCK_NOT_READY=voice-chat ;;
+    missing-pod) export MOCK_MISSING_POD=voice-chat ;;
+    unready-pod) export MOCK_UNREADY_USER_POD=1 ;;
+    mixed-reference) export MOCK_BAD_LEAF=voice-chat ;;
+    lingering-user-override) export MOCK_LINGERING_OVERRIDE_POD=1 ;;
+  esac
+  if run_case; then echo "a2 resume-finalize accepted ${failure_case} state" >&2; exit 1; fi
+  [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_ROLLOUTS" && ! -s "$KUBE_PATCHES" && $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 && $(grep -c '^patch configmap$' "$KUBE_CALLS" || true) == 0 ]] || { echo "a2 ${failure_case} state caused mutation" >&2; exit 1; }
+  unset MOCK_NOT_READY MOCK_MISSING_POD MOCK_UNREADY_USER_POD MOCK_BAD_LEAF MOCK_LINGERING_OVERRIDE_POD
+done
+unset MOCK_ALL_READY MOCK_RESUME_ALL
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'
