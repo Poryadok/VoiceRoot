@@ -68,8 +68,8 @@ class AuthUserGrpcContractTest {
         new LoginCommand("contract@example.com", null, "Correct horse battery staple", null, "{}"));
     AuthSession refreshed = email.service.refresh(new RefreshCommand(loggedIn.refreshToken(), "{}"));
 
-    assertThat(email.profiles.ensureAccountIds).containsOnly(
-        UUID.fromString(registered.accountId()), UUID.fromString(registered.accountId()), UUID.fromString(registered.accountId()));
+    assertThat(email.profiles.ensureAccountIds).containsExactly(
+        UUID.fromString(registered.accountId()), UUID.fromString(registered.accountId()));
     assertThat(registered.profileId()).isEqualTo(email.profiles.profileId);
     assertThat(loggedIn.profileId()).isEqualTo(email.profiles.profileId);
     assertThat(refreshed.profileId()).isEqualTo(email.profiles.profileId);
@@ -82,7 +82,7 @@ class AuthUserGrpcContractTest {
         new RegisterCommand(null, null, "Correct horse battery staple", true, "{}"));
     AuthSession guestRefreshed =
         guest.service.refresh(new RefreshCommand(guestRegistered.refreshToken(), "{}"));
-    assertThat(guest.profiles.guestFlags).containsExactly(true, true);
+    assertThat(guest.profiles.guestFlags).containsExactly(true);
     assertThat(guestRegistered.profileId()).isEqualTo(guest.profiles.profileId);
     assertThat(guestRefreshed.profileId()).isEqualTo(guest.profiles.profileId);
     assertJwtProfile(guestRegistered, guest.profiles.profileId);
@@ -124,6 +124,13 @@ class AuthUserGrpcContractTest {
     AuthSession refreshCandidate = login.service.login(
         new LoginCommand("login-user-down@example.com", null,
             "Correct horse battery staple", null, "{}"));
+    login.refreshTokens.create(
+        UUID.fromString(refreshCandidate.accountId()),
+        new RefreshTokenCodec().hash(refreshCandidate.refreshToken()),
+        "{}",
+        "legacy-jti",
+        CLOCK.instant().plus(Duration.ofDays(30)),
+        CLOCK.instant());
     login.profiles.failure = new AuthException("auth_unavailable");
     assertThatThrownBy(() -> login.service.refresh(
         new RefreshCommand(refreshCandidate.refreshToken(), "{}")))

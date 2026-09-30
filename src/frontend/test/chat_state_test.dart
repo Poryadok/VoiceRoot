@@ -194,6 +194,33 @@ void main() {
   });
 
   group('ChatRoomController', () {
+    test('inherits realtime status when opened after the socket connects', () async {
+      final container = _container(
+        chatsClient: _FakeChatsClient(),
+        messagesClient: _FakeMessagesClient(),
+        realtimeHubBuilder: _FakeRealtimeHub.new,
+      );
+      addTearDown(container.dispose);
+
+      // The app-level socket can connect during login before a chat room is
+      // opened. A newly created controller must start from that current state.
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+
+      final sub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      await pumpEventQueue();
+
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).realtimeStatus,
+        RealtimeLinkStatus.connected,
+      );
+    });
+
     test(
       'fetches REST delta on realtime message_create and de-duplicates',
       () async {

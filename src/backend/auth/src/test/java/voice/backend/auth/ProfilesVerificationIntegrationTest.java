@@ -151,6 +151,40 @@ class ProfilesVerificationIntegrationTest {
   }
 
   @Test
+  void refreshingSwitchedSessionKeepsTheSelectedProfile() throws Exception {
+    JsonNode registered = registerSession("switch-refresh-profile@example.com");
+    String accountId = registered.get("account_id").asText();
+    UUID altProfileId = UUID.randomUUID();
+    userGrpc.addSwitchableProfile(altProfileId, UUID.fromString(accountId));
+
+    MvcResult switched =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/switch-profile")
+                    .header("Authorization", "Bearer " + registered.get("access_token").asText())
+                    .contentType("application/json")
+                    .content("{\"profile_id\":\"" + altProfileId + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn();
+    JsonNode switchedBody = objectMapper.readTree(switched.getResponse().getContentAsString());
+
+    MvcResult refreshed =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/refresh")
+                    .contentType("application/json")
+                    .content("{\"refresh_token\":\"" + switchedBody.get("refresh_token").asText() + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn();
+    JsonNode refreshedBody =
+        objectMapper.readTree(refreshed.getResponse().getContentAsString()).path("session");
+
+    assertThat(refreshedBody.get("profile_id").asText()).isEqualTo(altProfileId.toString());
+    var jwt = SignedJWT.parse(refreshedBody.get("access_token").asText()).getJWTClaimsSet();
+    assertThat(jwt.getStringClaim("profile_id")).isEqualTo(altProfileId.toString());
+  }
+
+  @Test
   void oauthTwitchPartnerPersistsLinkedIdentityAndListsIt() throws Exception {
     AtomicReference<String> twitchUsersPath = new AtomicReference<>();
     HttpServer mockTwitch = HttpServer.create(new InetSocketAddress(0), 0);

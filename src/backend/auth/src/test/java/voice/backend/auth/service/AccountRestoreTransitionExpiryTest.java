@@ -94,6 +94,7 @@ class AccountRestoreTransitionExpiryTest {
         .containsExactly("active", null);
     verify(refreshTokens).create(
         org.mockito.ArgumentMatchers.eq(account.id()),
+        org.mockito.ArgumentMatchers.any(UUID.class),
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.eq("{}"),
         org.mockito.ArgumentMatchers.anyString(),

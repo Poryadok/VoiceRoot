@@ -962,7 +962,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           _isSelectedForAutomaticHistory()) {
         unawaited(_catchUpAfterReconnect());
       }
-    });
+    }, fireImmediately: true);
     _eventSub = _ref.listen<AsyncValue<RealtimeFrame>>(realtimeEventProvider, (
       _,
       next,

@@ -161,13 +161,14 @@ class AccountRestoreExpiryTest {
     @Override
     public RefreshTokenRecord create(
         UUID accountId,
+        UUID profileId,
         String tokenHash,
         String deviceInfoJson,
         String accessJti,
         Instant expiresAt,
         Instant now) {
       createCount++;
-      return delegate.create(accountId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+      return delegate.create(accountId, profileId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
     }
 
     @Override
