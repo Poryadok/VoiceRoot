@@ -62,7 +62,7 @@ case "$verb" in
         replicas=0 ready=0
         if [[ -e "${KUBE_STARTED_DIR:?}/$name" || ( "${MOCK_ALL_STOPPED:-0}" != 1 && ( "$name" == voice-auth || "$name" == voice-social || "$name" == voice-user || "${MOCK_RESUME_ALL:-0}" == 1 && "$name" == voice-* ) ) ]]; then replicas=1; fi
         if [[ "$name" == "${MOCK_BAD_PREFIX:-never}" ]]; then replicas=1; fi
-        if [[ "$name" == voice-auth || "$name" == voice-social ]]; then ready=1; fi
+        if [[ "$replicas" == 1 && ( "$name" == voice-auth || "$name" == voice-social ) ]]; then ready=1; fi
         if [[ "$name" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || -e "${KUBE_SPACE_READY:?}" || "${MOCK_CLEAN_READY:-0}" == 1 ) ]]; then ready=1; fi
         if [[ "$name" == voice-space && ( -e "${KUBE_SPACE_READY:?}" || "${MOCK_CLEAN_READY:-0}" == 1 ) ]]; then ready=1; fi
         if [[ "$name" == "${MOCK_BAD_PARTIAL:-never}" ]]; then ready=1; fi
