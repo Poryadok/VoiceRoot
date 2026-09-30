@@ -131,9 +131,9 @@ check_hub() {
 }
 
 check_leaf() {
-  local json="$1" name="$2" service="$3" generation="$4"
+  local json="$1" name="$2" service="$3" generation="$4" expected_replicas="${5:-1}"
   check_identity "$json" Deployment "$name"
-  jq -e --arg service "$service" '.spec.replicas == 1 and any(.spec.template.spec.containers[]?; .name == "nats-leaf") and
+  jq -e --arg service "$service" --argjson replicas "$expected_replicas" '.spec.replicas == $replicas and any(.spec.template.spec.containers[]?; .name == "nats-leaf") and
     ([.spec.template.spec.volumes[]? | select(.name == "nats-service-creds")] | length == 1) and
     ([.spec.template.spec.volumes[]? | select(.name == "nats-hub-tls")] | length == 1) and
     any(.spec.template.spec.volumes[]?; .name == "nats-service-creds" and .secret.items == [{"key":($service + ".creds"),"path":($service + ".creds")}]) and
@@ -369,11 +369,69 @@ marker_state() {
     MARKER_PHASE="$(jq -er '.data.phase' <<<"$marker")" || fail 'invalid generation marker phase'
     MARKER_GENERATION="$(jq -er '.data.generation' <<<"$marker")" || fail 'invalid generation marker generation'
     MARKER_PREVIOUS="$(jq -er '.data.previousGeneration' <<<"$marker")" || fail 'invalid generation marker previous generation'
+    MARKER_RESOURCE_VERSION="$(jq -r '.metadata.resourceVersion // empty' <<<"$marker")"
     [[ "$MARKER_GENERATION" == legacy ]] || valid_generation "$MARKER_GENERATION" || fail 'invalid generation marker'
     [[ "$MARKER_PREVIOUS" == legacy ]] || valid_generation "$MARKER_PREVIOUS" || fail 'invalid previous generation marker'
   else
     MARKER_PHASE=absent MARKER_GENERATION=legacy MARKER_PREVIOUS=''
+    MARKER_RESOURCE_VERSION=''
   fi
+}
+
+recover_legacy() {
+  local target="$1" pvc hub pods svc service leaf patch marker
+  [[ "$target" == r20260930a1 ]] || fail 'legacy recovery is scoped to r20260930a1'
+  marker_state
+  [[ "$MARKER_PHASE" == rotating && "$MARKER_GENERATION" == "$target" && "$MARKER_PREVIOUS" == legacy ]] ||
+    fail 'legacy recovery marker does not match the interrupted rotation'
+  [[ "$MARKER_RESOURCE_VERSION" =~ ^[0-9]+$ ]] || fail 'legacy recovery marker has no resourceVersion'
+  check_selector
+  check_no_second_hub
+  svc="$(read_required service voice-nats)"
+  jq -e 'any(.spec.ports[]?; .name == "client" and .port == 4222 and .targetPort == 4222)' <<<"$svc" >/dev/null ||
+    fail 'voice-nats client Service port differs'
+  check_secret_set legacy source
+  pvc="$(read_required pvc voice-nats-jsdata)"
+  check_identity "$pvc" PersistentVolumeClaim voice-nats-jsdata
+  jq -e '.status.phase == "Bound"' <<<"$pvc" >/dev/null || fail 'legacy NATS PVC is not Bound'
+  hub="$(read_required deployment voice-nats-pvc-candidate)"
+  check_hub "$hub" legacy
+  jq -e '.status.readyReplicas == 1 and .status.observedGeneration >= .metadata.generation' <<<"$hub" >/dev/null ||
+    fail 'legacy NATS hub is not ready'
+  pods="$(kubectl get pods -n "$NS" -l app=voice-nats-pvc-candidate -o json)" || fail 'cannot inspect hub Pods'
+  jq -e '(.items | length) == 1 and .items[0].metadata.deletionTimestamp == null and
+    .items[0].metadata.annotations["voice.io/nats-generation"] == "legacy" and
+    .items[0].status.phase == "Running" and
+    (.items[0].status.containerStatuses | length) > 0 and
+    all(.items[0].status.containerStatuses[]; .ready == true)' <<<"$pods" >/dev/null ||
+    fail 'legacy hub Pod is not the sole ready candidate'
+  for service in "${LEAVES[@]}"; do
+    leaf="$(read_required deployment "voice-${service}")"
+    check_leaf "$leaf" "voice-${service}" "$service" legacy 0
+    jq -e --arg app "voice-${service}" '.spec.selector.matchLabels.app == $app and .spec.template.metadata.labels.app == $app' <<<"$leaf" >/dev/null ||
+      fail "unexpected leaf selector for voice-${service}"
+    pods="$(kubectl get pods -n "$NS" -l "app=voice-${service}" -o json)" || fail "cannot inspect voice-${service} Pods"
+    jq -e '(.items | length) == 0' <<<"$pods" >/dev/null || fail "voice-${service} still has Pods"
+  done
+  marker="$(read_required configmap voice-nats-generation)"
+  jq -e --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
+    .metadata.resourceVersion == $rv and .data.phase == "rotating" and
+    .data.generation == $target and .data.previousGeneration == "legacy"
+  ' <<<"$marker" >/dev/null || fail 'generation marker changed during recovery preflight'
+
+  start_leaves
+  patch="$(jq -cn --arg rv "$MARKER_RESOURCE_VERSION" --arg target "$target" '
+    [{op:"test",path:"/metadata/resourceVersion",value:$rv},
+     {op:"test",path:"/data/phase",value:"rotating"},
+     {op:"test",path:"/data/generation",value:$target},
+     {op:"test",path:"/data/previousGeneration",value:"legacy"},
+     {op:"replace",path:"/data/phase",value:"active"},
+     {op:"replace",path:"/data/generation",value:"legacy"},
+     {op:"replace",path:"/data/previousGeneration",value:$target}]
+  ')" || fail 'cannot prepare legacy recovery marker CAS'
+  kubectl patch configmap voice-nats-generation -n "$NS" --type=json -p "$patch" >/dev/null ||
+    fail 'generation marker changed during legacy recovery'
+  echo 'NATS_RECOVERY=LEGACY_ACTIVE'
 }
 
 check_selector() {
@@ -537,6 +595,10 @@ run_jobs() {
 main() {
   local mode="${1:-}" target bundle proof_credential source pvc class size selector old
   case "$mode" in
+    --recover-legacy)
+      [[ $# -eq 2 ]] || fail 'usage: rotate-nats-root.sh --recover-legacy r20260930a1'
+      recover_legacy "$2"
+      ;;
     --activate)
       [[ $# -eq 4 ]] || fail 'usage: rotate-nats-root.sh --activate GENERATION BUNDLE.json PROOF.creds | --rollback'
       target="$2" bundle="$3" proof_credential="$4"

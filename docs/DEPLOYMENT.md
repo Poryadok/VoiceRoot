@@ -705,6 +705,17 @@ rollback identifies only generation-labeled proof resources, verifies their
 names, annotations and namespace, then removes the Job and its Pod before the
 temporary NetworkPolicy and credential Secret. It verifies all are absent
 before changing the hub, leaves, or marker.
+If that rollback itself stops on a historical bootstrap Job after restoring
+the legacy hub, use `diagnose` first. For the interrupted
+`r20260930a1 → legacy` incident only, `recover-legacy` with generation
+`r20260930a1` verifies the rotating marker, ready legacy hub and PVC, exact
+Service selector/client port, legacy Secret references and zero replicas/Pods
+for all 18 leaves before any mutation. It does not rerun bootstrap/preflight,
+delete Jobs, or modify NATS PVCs and Secrets. It restarts the 18 retained-credential
+leaves in dependency order, requiring each rollout ready, then compares and
+swaps the marker to `active/legacy`. A failed precondition or rollout leaves
+the marker rotating for investigation. Run staging smoke after recovery and
+leave A1 ACL proof variables unset unless a separate live proof passes.
 After successful proof and cleanup, set both staging Environment variables
 `VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and
 `VOICE_NATS_ACL_PROOF_GENERATION` (the newly active generation). Ordinary
