@@ -654,12 +654,24 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(items: items);
   }
 
-  void markChatRead(String chatId) {
+  bool markChatRead(String chatId) {
     final index = state.items.indexWhere((item) => item.chatId == chatId);
-    if (index < 0 || state.items[index].unreadCount == 0) return;
+    if (index < 0) {
+      _loadGeneration++;
+      state = state.copyWith(isLoading: false, isLoadingMore: false);
+      return false;
+    }
+    // A list response that began before the persisted read position may still
+    // contain the old unread count. Do not let it overwrite the local read.
+    _loadGeneration++;
     final items = [...state.items];
     items[index] = items[index].copyWith(unreadCount: 0);
-    state = state.copyWith(items: items);
+    state = state.copyWith(
+      items: items,
+      isLoading: false,
+      isLoadingMore: false,
+    );
+    return true;
   }
 }
 
@@ -1684,7 +1696,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (ok) {
       _lastMarkedReadMessageId = lastId;
       if (state.lastMessageId == lastId) {
-        _ref.read(chatListControllerProvider.notifier).markChatRead(chatId);
+        final wasListed = _ref
+            .read(chatListControllerProvider.notifier)
+            .markChatRead(chatId);
+        if (!wasListed) _invalidateChatLists(_ref);
       } else {
         _invalidateChatLists(_ref);
       }
