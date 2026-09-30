@@ -33,7 +33,7 @@ func main() {
 	logger := initServiceLogger(serviceName)
 	if os.Getenv("REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT") == "true" {
 		if err := preflightFriendRequestConsumer(os.Getenv("NATS_URL"), strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))); err != nil {
-			logger.Error("Realtime NATS friend request preflight failed")
+			logger.Error("Realtime NATS friend request preflight failed", slog.String("error", err.Error()))
 			os.Exit(1)
 		}
 		logger.Info("Realtime NATS friend request preflight passed")

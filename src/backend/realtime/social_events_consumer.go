@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -15,6 +16,11 @@ import (
 )
 
 const jsStreamSocialEvents = "social_events"
+
+const (
+	realtimeConsumerPreflightStartupWait = 20 * time.Second
+	realtimeConsumerPreflightRetryDelay  = 250 * time.Millisecond
+)
 
 func socialConsumerDurableName(instanceID string) string {
 	id := strings.TrimSpace(instanceID)
@@ -125,6 +131,10 @@ func subscribeFriendRequestEvents(js nats.JetStreamContext, hub *wsHub, instance
 // credential without binding to the live push consumer. Its subscribe grant
 // remains an external ACL activation gate for the subsequent Realtime rollout.
 func preflightFriendRequestConsumer(natsURL, instanceID string) error {
+	return preflightFriendRequestConsumerWithWait(natsURL, instanceID, realtimeConsumerPreflightStartupWait)
+}
+
+func preflightFriendRequestConsumerWithWait(natsURL, instanceID string, startupWait time.Duration) error {
 	if strings.TrimSpace(natsURL) == "" || strings.TrimSpace(instanceID) == "" {
 		return fmt.Errorf("missing Realtime NATS preflight configuration")
 	}
@@ -138,7 +148,22 @@ func preflightFriendRequestConsumer(natsURL, instanceID string) error {
 		return err
 	}
 	durable := friendRequestConsumerDurableName(instanceID)
-	return validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request"))
+	deadline := time.NewTimer(startupWait)
+	defer deadline.Stop()
+	ticker := time.NewTicker(realtimeConsumerPreflightRetryDelay)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		lastErr = validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_request", realtimeConsumerDeliverSubject(instanceID, "friend_request"))
+		if lastErr == nil {
+			return nil
+		}
+		select {
+		case <-deadline.C:
+			return fmt.Errorf("realtime NATS friend request consumer did not become ready within %s: %w", startupWait, lastErr)
+		case <-ticker.C:
+		}
+	}
 }
 
 func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
