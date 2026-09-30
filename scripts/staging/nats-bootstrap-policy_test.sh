@@ -55,7 +55,7 @@ grep -Fq '[ "${NS}" = voice-staging ]' "${APPLY}" || fail 'preflight must be sta
 grep -Fq 'kubectl delete job voice-nats-realtime-permissions-preflight' "${APPLY}" || fail 'preflight must replace any stale completed Job'
 grep -Fq 'ttlSecondsAfterFinished: 3600' "${PREFLIGHT}" || fail 'preflight Job must clean up after completion'
 grep -Fq 'activeDeadlineSeconds: 180' "${PREFLIGHT}" || fail 'preflight Job must have a hard deadline'
-preflight_source="$(sed -n '/^func preflightFriendRequestConsumer(/,/^}/p' "${ROOT}/src/backend/realtime/social_events_consumer.go")"
+preflight_source="$(sed -n '/^func preflightFriendRequestConsumerWithWait(/,/^}/p' "${ROOT}/src/backend/realtime/social_events_consumer.go")"
 [[ "${preflight_source}" == *'validateRealtimeConsumerConfig('* ]] || fail 'preflight must inspect exact durable configuration'
 [[ "${preflight_source}" != *'.Subscribe('* && "${preflight_source}" != *'nats.Bind('* && "${preflight_source}" != *'.Ack('* ]] || fail 'preflight must never bind to or consume from the live durable'
 grep -Fq 'set -euo pipefail' "${APPLY}" || fail 'preflight failure must abort infra apply'
