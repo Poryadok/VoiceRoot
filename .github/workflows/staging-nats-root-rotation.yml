@@ -12,8 +12,9 @@ on:
           - rollback
           - diagnose
           - recover-legacy
+          - restore-user-cycle
       generation:
-        description: Generation for activate; use r20260930a1 for recover-legacy; leave empty for rollback or diagnose
+        description: Generation for activate; use r20260930a1 for recover-legacy or restore-user-cycle; leave empty for rollback or diagnose
         required: false
         type: string
 
@@ -63,7 +64,7 @@ jobs:
                 exit 1
               fi
               ;;
-            recover-legacy)
+            recover-legacy|restore-user-cycle)
               if [[ "$ROTATION_GENERATION" != r20260930a1 ]]; then
                 echo 'NATS_ROTATION=FAIL_RECOVERY_GENERATION'
                 exit 1
@@ -338,3 +339,13 @@ jobs:
           set +x
           set -euo pipefail
           bash scripts/staging/rotate-nats-root.sh --recover-legacy "$ROTATION_GENERATION"
+
+      - name: Restore owned User Space bootstrap and retained legacy NATS
+        if: inputs.operation == 'restore-user-cycle'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+        run: |
+          set +x
+          set -euo pipefail
+          bash scripts/staging/rotate-nats-root.sh --restore-user-cycle "$ROTATION_GENERATION"

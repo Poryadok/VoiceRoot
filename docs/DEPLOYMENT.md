@@ -723,11 +723,20 @@ waits for User and then Space, removes its exact owned override, waits for the
 normal User rollout, and finally requires all 18 leaves ready before it
 compares and swaps the marker to `active/legacy`. A failed step attempts to
 remove the temporary override; a later `recover-legacy` run recognizes an
-owned override left by runner interruption and resumes its cleanup. The
+owned override left by runner interruption and resumes its cleanup. Kubernetes
+may omit the serialized `value` field for an empty environment variable; the
+cleanup accepts only that omitted or exactly empty value with no `valueFrom`
+and CAS-tests the observed entry before removal. If all 18 legacy leaves are
+already started and the exact owned User override remains, dispatch
+`restore-user-cycle` with generation `r20260930a1`. This narrower operation
+requires the fully started old-reference state, removes only its owned User
+override, waits for restored User and all 18 leaves, then CAS-marks legacy
+active; it does not scale stopped leaves, run Jobs, or touch PVCs or Secrets. The
 read-only `diagnose` operation reports only booleans and counts for that
 override and its Pods; it never prints the environment value. A failed
 precondition, cleanup, or rollout leaves the marker rotating for investigation.
-This emergency override is limited to `recover-legacy`; do not retry root
+This emergency override is limited to `recover-legacy` and
+`restore-user-cycle`; do not retry root
 `activate` or `rollback` with all leaves stopped until the same startup cycle
 has a separately reviewed fix. Run staging smoke after recovery and
 leave A1 ACL proof variables unset unless a separate live proof passes.

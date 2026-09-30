@@ -5,6 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 workflow="$root/.github/workflows/staging-nats-root-rotation.yml"
 rotate="$root/scripts/staging/rotate-nats-root.sh"
 grep -Fq "if: inputs.operation == 'recover-legacy'" "$workflow" || { echo 'recovery dispatch missing' >&2; exit 1; }
+grep -Fq "if: inputs.operation == 'restore-user-cycle'" "$workflow" || { echo 'owned User cleanup dispatch missing' >&2; exit 1; }
 grep -Fq 'r20260930a1' "$workflow" || { echo 'recovery generation not fixed' >&2; exit 1; }
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
@@ -48,6 +49,13 @@ case "$verb" in
           exit
         fi
         service="${name#voice-}"
+        if [[ "$name" == voice-user ]]; then
+          count=0
+          if [[ -f "${KUBE_USER_GET_COUNT:?}" ]]; then read -r count <"$KUBE_USER_GET_COUNT"; fi
+          count=$((count + 1))
+          printf '%s\n' "$count" >"$KUBE_USER_GET_COUNT"
+          if [[ "${MOCK_CLEAN_AT_BOOTSTRAP:-0}" == 1 && "$count" -ge 3 ]]; then rm -f "${KUBE_USER_OVERRIDE:?}"; fi
+        fi
         creds=voice-nats-service-credentials
         if [[ "$name" == "${MOCK_BAD_LEAF:-never}" ]]; then creds=voice-nats-service-credentials-r20260930a1; fi
         replicas=0 ready=0
@@ -66,7 +74,7 @@ case "$verb" in
         if [[ "$empty_owner" == true ]]; then owner_present=true; fi
         annotations='{}'
         if [[ "$owner_present" == true ]]; then annotations="$(jq -cn --arg owner "$owner" '{"voice.io/nats-user-space-bootstrap":$owner}')"; fi
-        jq -cn --arg name "$name" --arg service "$service" --arg creds "$creds" --argjson replicas "$replicas" --argjson ready "$ready" --argjson owned "$owned" --argjson annotations "$annotations" '{kind:"Deployment",metadata:{name:$name,namespace:"voice-staging",generation:2,resourceVersion:"100"},spec:{replicas:$replicas,selector:{matchLabels:{app:$name}},template:{metadata:{labels:{app:$name},annotations:$annotations},spec:{containers:[{name:"nats-leaf"},{name:$service,env:(if $owned then [{name:"SPACE_GRPC_ADDR",value:""}] else [] end),envFrom:[{configMapRef:{name:"voice-app-config"}}]}],volumes:[{name:"nats-service-creds",secret:{secretName:$creds,items:[{key:($service+".creds"),path:($service+".creds")}]}} ,{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}},status:{readyReplicas:$ready,updatedReplicas:$ready,observedGeneration:2}}' ;;
+        jq -cn --arg name "$name" --arg service "$service" --arg creds "$creds" --argjson replicas "$replicas" --argjson ready "$ready" --argjson owned "$owned" --argjson annotations "$annotations" --argjson bad_override "${MOCK_BAD_OVERRIDE:-0}" '{kind:"Deployment",metadata:{name:$name,namespace:"voice-staging",generation:2,resourceVersion:"100"},spec:{replicas:$replicas,selector:{matchLabels:{app:$name}},template:{metadata:{labels:{app:$name},annotations:$annotations},spec:{containers:[{name:"nats-leaf"},{name:$service,env:(if $owned then (if $bad_override == 1 then [{name:"SPACE_GRPC_ADDR",value:"nonempty"}] else [{name:"SPACE_GRPC_ADDR"}] end) else [] end),envFrom:[{configMapRef:{name:"voice-app-config"}}]}],volumes:[{name:"nats-service-creds",secret:{secretName:$creds,items:[{key:($service+".creds"),path:($service+".creds")}]}} ,{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}},status:{readyReplicas:$ready,updatedReplicas:$ready,observedGeneration:2}}' ;;
       pods)
         if [[ "$*" == *app=voice-nats-pvc-candidate* ]]; then
           echo '{"items":[{"metadata":{"annotations":{"voice.io/nats-generation":"legacy"}},"status":{"phase":"Running","containerStatuses":[{"ready":true}]}}]}'
@@ -80,7 +88,7 @@ case "$verb" in
           [[ "$app" == "${MOCK_BAD_POD:-never}" ]] && pod_creds=voice-nats-service-credentials-r20260930a1
           owned=false
           [[ "$app" == voice-user && ( -e "${KUBE_USER_OVERRIDE:?}" || "${MOCK_LINGERING_OVERRIDE_POD:-0}" == 1 ) ]] && owned=true
-          jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson owned "$owned" --argjson appReady "$app_ready" '{items:[{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}],containers:[{name:($app|ltrimstr("voice-")),env:(if $owned then [{name:"SPACE_GRPC_ADDR",value:""}] else [] end)}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}]}'
+          jq -cn --arg app "$app" --arg creds "$pod_creds" --argjson owned "$owned" --argjson appReady "$app_ready" '{items:[{metadata:{name:($app+"-pod"),labels:{app:$app}},spec:{volumes:[{name:"nats-service-creds",secret:{secretName:$creds}},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls"}}],containers:[{name:($app|ltrimstr("voice-")),env:(if $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end)}]},status:{phase:"Running",containerStatuses:[{name:"nats-leaf",ready:true},{name:($app|ltrimstr("voice-")),ready:$appReady}]}}]}'
         else echo '{"items":[]}'
         fi ;;
       *) echo 'unexpected read' >&2; exit 2 ;;
@@ -110,7 +118,7 @@ case "$verb" in
         [[ "${MOCK_FAIL_STAGE:-}" != apply ]] || exit 1
         touch "${KUBE_USER_OVERRIDE:?}"
       elif jq -e 'any(.[]; .op == "remove" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$payload" >/dev/null; then
-        jq -e 'any(.[]; .op == "test" and .path == "/spec/template/spec/containers/1/env/0" and .value == {name:"SPACE_GRPC_ADDR",value:""}) and any(.[]; .op == "remove" and .path == "/spec/template/spec/containers/1/env/0")' <<<"$payload" >/dev/null || exit 2
+        jq -e 'any(.[]; .op == "test" and .path == "/spec/template/spec/containers/1/env/0" and .value == {name:"SPACE_GRPC_ADDR"}) and any(.[]; .op == "remove" and .path == "/spec/template/spec/containers/1/env/0")' <<<"$payload" >/dev/null || exit 2
         [[ "${MOCK_FAIL_STAGE:-}" != remove ]] || exit 1
         rm -f "${KUBE_USER_OVERRIDE:?}"
       else exit 2
@@ -134,13 +142,13 @@ esac
 EOF
 chmod 700 "$work/kubectl"
 mkdir "$work/started"
-export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready"
+export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready" KUBE_USER_GET_COUNT="$work/user-gets"
 
 run_case() {
   : >"$KUBE_CALLS"; : >"$KUBE_SCALES"; : >"$KUBE_ROLLOUTS"; : >"$KUBE_PATCHES"
-  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY"
+  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT"
   [[ "${MOCK_START_OWNED:-0}" != 1 ]] || touch "$KUBE_USER_OVERRIDE"
-  VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --recover-legacy r20260930a1 >"$work/output" 2>"$work/error"
+  VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --"${MOCK_OPERATION:-recover-legacy}" r20260930a1 >"$work/output" 2>"$work/error"
 }
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'recovery success marker missing' >&2; exit 1; }
@@ -221,7 +229,21 @@ run_case || { cat "$work/error" >&2; exit 1; }
 export MOCK_START_OWNED=1
 run_case || { cat "$work/error" >&2; exit 1; }
 [[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'interrupted owned override did not resume and clean up' >&2; exit 1; }
+export MOCK_OPERATION=restore-user-cycle
+export MOCK_CLEAN_AT_BOOTSTRAP=1
+if run_case; then echo 'restore-user-cycle reapplied a vanished ownership override' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" && $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 ]] || { echo 'restore-user-cycle clean-state race caused mutation' >&2; exit 1; }
+unset MOCK_CLEAN_AT_BOOTSTRAP
+export MOCK_BAD_OVERRIDE=1
+if run_case; then echo 'nonempty User override was accepted' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'nonempty User override caused mutation' >&2; exit 1; }
+unset MOCK_BAD_OVERRIDE
+run_case || { cat "$work/error" >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'restore-user-cycle changed unrelated state or missed cleanup' >&2; exit 1; }
 unset MOCK_START_OWNED
+if run_case; then echo 'restore-user-cycle accepted an unowned User Deployment' >&2; exit 1; fi
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unowned restore-user-cycle caused mutation' >&2; exit 1; }
+unset MOCK_OPERATION
 unset MOCK_RESUME_ALL
 
 echo 'NATS_LEGACY_RECOVERY_CONTRACT=PASS'
