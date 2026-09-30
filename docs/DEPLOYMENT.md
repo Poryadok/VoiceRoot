@@ -670,14 +670,15 @@ runner. Its manual [Staging NATS root rotation](../.github/workflows/staging-nat
 workflow accepts `activate` plus that exact generation token, or `rollback`
 with an empty token. Its `voice-staging-maintenance` concurrency group prevents
 ordinary staging deploy from overlapping a rotation. The script derives the
-new PVC class/size from the current NATS PVC and the Realtime preflight image
-from the currently deployed Realtime workload; it does not touch another PVC.
-For the live ACL proof Job, the workflow instead checks that the Realtime image
-tagged with its exact `master` SHA exists in GHCR before any cluster mutation.
+new PVC class/size from the current NATS PVC; it does not touch another PVC.
+For the Realtime permissions preflight and live ACL proof Jobs, the workflow
+checks that the Realtime image tagged with its exact `master` SHA exists in
+GHCR before any cluster mutation. Neither Job uses the previously deployed
+Realtime image, which may lack the preflight entrypoint.
 It checks anonymous pull with a clean Docker configuration. If that fails, the
 staging `VOICE_IMAGE_PULL_SECRET` variable must name a reviewed GHCR registry
 Secret in `voice-staging`; the script verifies that Secret can access the exact
-image and binds it explicitly to the one-shot Job before changing the marker.
+image and binds it explicitly to both one-shot Jobs before changing the marker.
 
 Immediately before activation, issue a short-lived `proof.creds` for the new
 APP account on an isolated trusted Linux issuer host and upload its base64 bytes as
@@ -699,8 +700,11 @@ script requires the exact sanitized
 `NATS_LIVE_ACL_PROOF=PASS generation=<generation> acl_sha=<sha256>` result and
 verifies deletion of the Job, NetworkPolicy and Secret before restarting any
 leaf or writing `active`. A failure after the cutover begins leaves the marker
-at `rotating` and all 18 leaves stopped; dispatch `rollback` to restore the
-retained generation. If the runner is lost before its cleanup trap runs,
+at `rotating`. Before leaf restart all 18 leaves remain stopped; a User/Space
+startup or cleanup failure can leave some or all leaves running with the new
+credentials. Inspect the marker, User override and leaf references before
+dispatching `rollback` to restore the retained generation. If the runner is
+lost before its cleanup trap runs,
 rollback identifies only generation-labeled proof resources, verifies their
 names, annotations and namespace, then removes the Job and its Pod before the
 temporary NetworkPolicy and credential Secret. It verifies all are absent
@@ -735,10 +739,14 @@ active; it does not scale stopped leaves, run Jobs, or touch PVCs or Secrets. Th
 read-only `diagnose` operation reports only booleans and counts for that
 override and its Pods; it never prints the environment value. A failed
 precondition, cleanup, or rollout leaves the marker rotating for investigation.
-This emergency override is limited to `recover-legacy` and
-`restore-user-cycle`; do not retry root
-`activate` or `rollback` with all leaves stopped until the same startup cycle
-has a separately reviewed fix. Run staging smoke after recovery and
+Root `activate` and `rollback` now use the same reviewed fail-closed temporary
+User override after all 18 leaves are started. Each waits for temporary User,
+then Space, removes the exact owned override, waits for the restored User Pod,
+and only then permits the marker to become active. A failed step leaves the
+marker rotating; cleanup failures retain the owned annotation for diagnosis.
+The four bootstrap Jobs and the Realtime permissions preflight fail promptly
+when a Job reports `Failed` or `DeadlineExceeded`, with only a bounded failure
+category in CI output. Run staging smoke after recovery and
 leave A1 ACL proof variables unset unless a separate live proof passes.
 After successful proof and cleanup, set both staging Environment variables
 `VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and

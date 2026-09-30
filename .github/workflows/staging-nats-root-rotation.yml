@@ -205,7 +205,7 @@ jobs:
           fi
 
       - name: Verify exact-master Realtime proof image in GHCR
-        if: inputs.operation == 'activate'
+        if: inputs.operation == 'activate' || inputs.operation == 'rollback'
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

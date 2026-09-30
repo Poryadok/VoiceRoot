@@ -99,6 +99,22 @@ if [[ "$1" == patch && "$2" == configmap && "$3" == voice-nats-generation ]]; th
   printf '%s\n' "$phase" >"$STATE/marker"
   printf 'marker phase %s\n' "$phase" >>"$RENDERED/all"
 fi
+if [[ "$1" == patch && "$2" == deployment && "$3" == voice-* ]]; then
+  patch=''
+  for ((i=1; i<=$#; i++)); do if [[ "${!i}" == -p ]] && ((i < $#)); then next=$((i+1)); patch="${!next}"; fi; done
+  jq -e 'any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == "100")' <<<"$patch" >/dev/null || exit 2
+  if [[ "$3" == voice-user ]] && jq -e 'any(.[]; .op == "add" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$patch" >/dev/null; then
+    touch "$STATE/user-override"
+  elif [[ "$3" == voice-user ]] && jq -e 'any(.[]; .op == "remove" and .path == "/spec/template/metadata/annotations/voice.io~1nats-user-space-bootstrap")' <<<"$patch" >/dev/null; then
+    rm -f "$STATE/user-override"
+  elif jq -e 'any(.[]; .path | endswith("/secret/secretName"))' <<<"$patch" >/dev/null; then
+    if jq -e 'any(.[]; .value == "voice-nats-service-credentials-r20260930a")' <<<"$patch" >/dev/null; then
+      printf '%s' '-r20260930a' >"$STATE/leaf-${3#voice-}-suffix"
+    else
+      : >"$STATE/leaf-${3#voice-}-suffix"
+    fi
+  fi
+fi
 if [[ "$1" == delete && "$2" == secret && "$3" == voice-nats-acl-proof-* && "${MOCK_CLEANUP_FAIL:-false}" == true ]]; then
   echo 'simulated proof Secret cleanup error' >&2; exit 1
 fi
@@ -148,7 +164,7 @@ case "$*" in
     fi
     ;;
   *'get configmap voice-nats-generation'*)
-    if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating ]]; then
+    if [[ "${MOCK_GENERATION_STATE:-absent}" == rotating || -f "$STATE/marker" ]]; then
       printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-nats-generation","namespace":"voice-staging"},"data":{"phase":"rotating","generation":"r20260930a","previousGeneration":"legacy"}}'
       exit 0
     fi
@@ -161,6 +177,8 @@ case "$*" in
       jq -cn --arg encoded "$(printf '%s' "$config" | base64 -w0)" '{kind:"Secret",metadata:{name:"voice-proof-ghcr",namespace:"voice-staging"},type:"kubernetes.io/dockerconfigjson",data:{".dockerconfigjson":$encoded}}'
     fi
     ;;
+  *'get configmap voice-app-config'*)
+    printf '%s\n' '{"kind":"ConfigMap","metadata":{"name":"voice-app-config","namespace":"voice-staging"},"data":{"SPACE_GRPC_ADDR":"voice-space:9090"}}' ;;
   *'get secret voice-nats-acl-proof-'*)
     if [[ "${MOCK_LEFTOVER_MODE:-none}" != none && ! -f "$STATE/leftover-secret-deleted" ]]; then
       proof_item Secret; exit 0
@@ -191,8 +209,20 @@ case "$*" in
   *'get deployment voice-'*)
     service="${3#voice-}"
     image="ghcr.io/example/voice/${service}:0123456789abcdef0123456789abcdef01234567"
-    jq -n --arg s "$service" --arg image "$image" '{kind:"Deployment",metadata:{name:("voice-"+$s),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{spec:{containers:[{name:$s,image:$image},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:"voice-nats-service-credentials",items:[{key:($s+".creds"),path:($s+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:"voice-nats-hub-tls",items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}' ;;
+    suffix=''; [[ ! -f "$STATE/leaf-${service}-suffix" ]] || suffix="$(cat "$STATE/leaf-${service}-suffix")"
+    owned=false; [[ "$service" != user || ! -f "$STATE/user-override" ]] || owned=true
+    jq -n --arg s "$service" --arg image "$image" --arg suffix "$suffix" --argjson owned "$owned" '{kind:"Deployment",metadata:{name:("voice-"+$s),namespace:"voice-staging",resourceVersion:"100"},spec:{replicas:1,template:{metadata:{annotations:(if $owned then {"voice.io/nats-user-space-bootstrap":"r20260930a"} else {} end)},spec:{containers:[{name:$s,image:$image,env:(if $s == "user" and $owned then [{name:"SPACE_GRPC_ADDR"}] else [] end),envFrom:(if $s == "user" then [{configMapRef:{name:"voice-app-config"}}] else [] end)},{name:"nats-leaf"}],volumes:[{name:"nats-service-creds",secret:{secretName:("voice-nats-service-credentials"+$suffix),items:[{key:($s+".creds"),path:($s+".creds")}] }},{name:"nats-hub-tls",secret:{secretName:("voice-nats-hub-tls"+$suffix),items:[{key:"ca.crt",path:"ca.crt"}]}}]}}}}' ;;
+  *'get pods -n voice-staging -l app=voice-user -o json'*)
+    if [[ -f "$STATE/user-override" ]]; then
+      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[{"name":"SPACE_GRPC_ADDR"}]}]}}]}'
+    else
+      printf '%s\n' '{"items":[{"spec":{"containers":[{"name":"user","env":[]}]}}]}'
+    fi ;;
   *'get pods -n voice-staging -l app=voice-'*) ;;
+  *'get job voice-nats-'*'-bootstrap'*|*'get job voice-nats-realtime-permissions-preflight '*)
+    job="$3"; generation=r20260930a
+    [[ "${MOCK_GENERATION_STATE:-absent}" != rotating ]] || generation=legacy
+    jq -n --arg name "$job" --arg gen "$generation" '{kind:"Job",metadata:{name:$name,namespace:"voice-staging",annotations:{"voice.io/nats-generation":$gen}},status:{conditions:[{type:"Complete",status:"True"}],succeeded:1}}' ;;
   *'get job voice-nats-acl-proof-'*)
     if [[ "${MOCK_LEFTOVER_MODE:-none}" != none && ! -f "$STATE/leftover-job-deleted" ]]; then
       proof_item Job; exit 0
@@ -255,7 +285,8 @@ run_rotation() {
   : >"$work/docker.log"
   : >"$work/rendered/all"
   rm -f "$work/state/marker" "$work/state/proof-secret-names" "$work/state/proof-secret-delete-attempted" \
-    "$work/state/leftover-job-deleted" "$work/state/leftover-networkpolicy-deleted" "$work/state/leftover-secret-deleted"
+    "$work/state/leftover-job-deleted" "$work/state/leftover-networkpolicy-deleted" "$work/state/leftover-secret-deleted" \
+    "$work/state/user-override" "$work/state"/leaf-*-suffix
   PATH="$work/bin:$PATH" KUBECTL_LOG="$work/kubectl.log" MUTATION_LOG="$work/mutations.log" \
     RENDERED="$work/rendered" STATE="$work/state" BUNDLE="$work/bundle.json" \
     GO_LOG="$work/go.log" MOCK_CREDENTIAL_VALID="${MOCK_CREDENTIAL_VALID:-true}" \
@@ -367,7 +398,8 @@ TEST_PROOF_IMAGE_PUBLIC=false TEST_PROOF_PULL_SECRET=voice-proof-ghcr \
   run_rotation --activate "$GEN" "$work/bundle.json" "$work/proof.creds" || \
   fail "valid private image pull Secret did not permit proof: $(tail -1 "$work/output")"
 grep -Fq 'get secret voice-proof-ghcr -n voice-staging -o json' "$work/kubectl.log" || fail 'rotation did not read the namespaced Kubernetes pull Secret'
-grep -Fq 'imagePullSecrets: [{name: voice-proof-ghcr}]' "$work/rendered/all" || fail 'proof Job did not mount the validated private image pull Secret'
+[[ "$(grep -Fc 'imagePullSecrets: [{name: voice-proof-ghcr}]' "$work/rendered/all")" -eq 2 ]] ||
+  fail 'preflight and proof Jobs must both use the validated private image pull Secret'
 
 # A PASS is necessary and sufficient only when it is from this newly created
 # Job, after hub/bootstrap convergence and before any leaf is restarted.
@@ -377,7 +409,7 @@ proof_name="$(awk '$1 == "Secret" && $2 ~ /^voice-nats-acl-proof-/ {print $2}' "
 [[ -n "$proof_name" && "$proof_name" != *$'\n'* ]] || fail 'expected one temporary proof resource identity'
 assert_proof_lifecycle "$proof_name"
 hub_ready_line="$(grep -n '^rollout status deployment/voice-nats-pvc-candidate ' "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
-bootstrap_done_line="$(grep -n '^wait .*job/voice-nats-realtime-permissions-preflight ' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
+bootstrap_done_line="$(grep -n '^get job voice-nats-realtime-permissions-preflight ' "$work/kubectl.log" | tail -1 | cut -d: -f1)"
 proof_job_line="$(grep -nF "event created Job ${proof_name}" "$work/kubectl.log" | sed -n '1p' | cut -d: -f1)"
 proof_wait_line="$(grep -nF "job/${proof_name}" "$work/kubectl.log" | grep ':wait ' | sed -n '1p' | cut -d: -f1)"
 proof_logs_line="$(grep -nF "job/${proof_name}" "$work/kubectl.log" | grep ':logs ' | sed -n '1p' | cut -d: -f1)"
