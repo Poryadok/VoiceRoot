@@ -10,14 +10,20 @@ GEN=r20260930a
 ACL_SHA="$(sha256sum "$ROOT/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 [[ -x "$ROTATE" ]] || fail 'rotation entrypoint is not executable'
+PROOF_TEMPLATE="$ROOT/deploy/templates/nats-realtime-acl-proof.yaml"
+grep -Fq 'fsGroup: 65532' "$PROOF_TEMPLATE" || fail 'proof Pod must make projected credentials readable by the nonroot Realtime UID'
+[[ "$(grep -Fc 'defaultMode: 0440' "$PROOF_TEMPLATE")" == 2 ]] || fail 'proof service and probe credentials must be group-readable only'
+! grep -Fq 'defaultMode: 0400' "$PROOF_TEMPLATE" || fail 'root-only proof credentials cannot be read by the nonroot Realtime image'
 grep -Fq 'image="$registry/realtime:$GITHUB_SHA"' "$WORKFLOW" || fail 'workflow proof image must use the exact master SHA'
 grep -Fq 'docker --config "$docker_config" manifest inspect "$image"' "$WORKFLOW" || fail 'workflow must prove the exact Realtime image exists'
 grep -Fq 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$WORKFLOW" || fail 'workflow must pass the exact proof image SHA to rotation'
 grep -Fq 'STAGING_NATS_PROOF_CREDS_B64: ${{ secrets.STAGING_NATS_PROOF_CREDS_B64 }}' "$WORKFLOW" || fail 'workflow must use separate protected proof credential'
 grep -Fq 'bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle" "$proof"' "$WORKFLOW" || fail 'workflow must pass the decoded proof credential file'
+grep -Fq 'bash scripts/staging/rotate-nats-root.sh --continue-activate "$ROTATION_GENERATION" "$bundle" "$proof"' "$WORKFLOW" || fail 'continuation must validate and pass both generation and proof credentials'
 image_check_line="$(grep -nF 'docker --config "$docker_config" manifest inspect "$image"' "$WORKFLOW" | sed -n '1p' | cut -d: -f1)"
 activate_line="$(grep -nF 'bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle" "$proof"' "$WORKFLOW" | sed -n '1p' | cut -d: -f1)"
-((image_check_line < activate_line)) || fail 'workflow must verify proof image before any activation mutation'
+continue_line="$(grep -nF 'bash scripts/staging/rotate-nats-root.sh --continue-activate "$ROTATION_GENERATION" "$bundle" "$proof"' "$WORKFLOW" | sed -n '1p' | cut -d: -f1)"
+((image_check_line < activate_line && image_check_line < continue_line)) || fail 'workflow must verify proof image before activation or continuation mutation'
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
