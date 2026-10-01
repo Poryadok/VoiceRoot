@@ -118,9 +118,19 @@ friend_accept_outbox (migration 000004)
 ├── requester_profile_id / target_profile_id UUID NOT NULL
 ├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 └── delivered_at TIMESTAMPTZ NULL
+
+friend_request_outbox (migration 000006)
+├── friendship_id UUID PRIMARY KEY REFERENCES friendships(id) ON DELETE CASCADE -- request_id
+├── event_id UUID NOT NULL -- stable JetStream message identity for retries
+├── requester_profile_id / target_profile_id UUID NOT NULL
+├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+├── delivered_at TIMESTAMPTZ NULL
+└── cancelled_at TIMESTAMPTZ NULL -- request was accepted/declined before notification dispatch
 ```
 
 `AcceptFriendInvitation` commits the accepted friendship and its outbox row in one `social_db` transaction. A Social worker retries `social.friend_accepted` publication after NATS failures; Chat's durable consumer moves an existing DM request to `main` only if the pair remains friends. The consumer is idempotent, so publish success followed by a worker crash may safely replay. Deploy migration 000004 before the updated Social service; rollback of 000004 discards undelivered rows and therefore requires draining the outbox first.
+
+`SendFriendInvitation` commits the pending friendship and its request-outbox row in one `social_db` transaction. A Social worker retries `social.friend_request` publication independently of the caller RPC. `FriendRequest.request_id` is the persisted friendship row ID; `SocialStreamEvent.event_id` and the JetStream `Nats-Msg-Id` come from the outbox row and stay stable across retries. The `social_events` stream deduplicates that message identity within its configured 24-hour duplicate window; delivery is at-least-once, and retries outside the window may be stored again. Re-sending a pending or declined request keeps its request ID and creates a new event ID for that explicit send. Accepting or declining cancels a request event that has not started dispatch. A publish already acknowledged by JetStream cannot be retracted if the Social process or database commit fails before marking the outbox row delivered; clients must reconcile notifications against the authoritative request list. Deploy migration 000006 and the updated `social_events` stream config before the updated Social service; rollback requires draining the request outbox first.
 
 Индексы v1:
 - `UNIQUE INDEX friendships_pair_uq ON friendships(requester_profile_id, target_profile_id)`

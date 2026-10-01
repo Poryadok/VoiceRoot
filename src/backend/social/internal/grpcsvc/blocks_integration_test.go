@@ -33,7 +33,7 @@ func startSocialPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool
 func applySocialMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	root := repoRoot(t)
-	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql", "000005_profile_favorites.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql", "000005_profile_favorites.up.sql", "000006_friend_request_outbox.up.sql"} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "social_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

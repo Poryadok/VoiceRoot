@@ -155,9 +155,6 @@ func (s *SocialGRPC) SendFriendInvitation(ctx context.Context, req *socialv1.Sen
 	err = s.Friends.SendInvitationChecked(ctx, caller, target, callerAccount, targetAccount)
 	switch {
 	case err == nil:
-		if s.Events != nil {
-			_ = s.Events.PublishFriendRequest(ctx, "", caller.String(), target.String())
-		}
 		return &socialv1.SendFriendInvitationResponse{}, nil
 	case errors.Is(err, store.ErrSelfInvitation):
 		return nil, status.Error(codes.InvalidArgument, err.Error())

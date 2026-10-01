@@ -30,7 +30,7 @@ func applyStoreMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 		_, err = pool.Exec(ctx, string(sqlBytes))
 		require.NoError(t, err)
 	}
-	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql", "000005_profile_favorites.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql", "000005_profile_favorites.up.sql", "000006_friend_request_outbox.up.sql"} {
 		apply(name)
 	}
 }

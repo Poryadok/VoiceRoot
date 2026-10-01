@@ -34,7 +34,9 @@ go run ./cmd/nats-jwt-fixture C:\temp\voice-nats-acl.yaml C:\temp\voice-nats-fix
 The reviewed policy is [`acl-intent.yaml`](acl-intent.yaml). It enumerates all
 19 services and the Job-only bootstrap identity with exact event, consumer,
 pull and ACK permissions. Service users cannot create, update or delete
-JetStream state. Reply inbox subscriptions use scoped service prefixes, never
+JetStream state. The bootstrap identity has only the scoped stream create/info
+permissions it needs, plus an in-place update permission for the `social_events`
+duplicate window; it cannot delete streams. Reply inbox subscriptions use scoped service prefixes, never
 `_INBOX.>` or `$JS.API.>`. The disposable fixture command above is for proof
 only; its signing seeds are discarded.
 
