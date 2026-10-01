@@ -269,6 +269,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   final profile = titleAsync?.valueOrNull;
                   final title =
                       profile?.displayName ??
+                      item.dmPeerDisplayName ??
                       item.chat.name ??
                       l10n.chatListDmFallback(_shortChatId(item.chatId));
                   final showPremium =

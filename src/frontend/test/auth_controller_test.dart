@@ -493,13 +493,63 @@ void main() {
     },
   );
 
+  test('login resends one email verification OTP for EMAIL_PENDING', () async {
+    final storage = InMemoryAuthSessionStorage();
+    var statuses = 0;
+    var sends = 0;
+    var verifies = 0;
+    final mock = MockClient((req) async {
+      switch (req.url.path) {
+        case '/api/v1/auth/login':
+          return http.Response(
+            jsonEncode({
+              'session': {
+                ...(sessionJson()['session'] as Map<String, dynamic>),
+                'access_token': 'restricted-access',
+                'refresh_token': 'restricted-refresh',
+                'account_type': 'guest',
+              },
+            }),
+            200,
+          );
+        case '/api/v1/auth/verification-status':
+          statuses++;
+          expect(req.headers['authorization'], 'Bearer restricted-access');
+          return http.Response(jsonEncode({'state': 'EMAIL_PENDING'}), 200);
+        case '/api/v1/auth/otp/send':
+          sends++;
+          expect(req.headers['authorization'], 'Bearer restricted-access');
+          expect(jsonDecode(req.body), {'otp_type': 'email_verify'});
+          return http.Response('', 204);
+        case '/api/v1/auth/otp/verify':
+          verifies++;
+          return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = buildContainer(mock: mock, storage: storage);
+    addTearDown(container.dispose);
+
+    await container
+        .read(authControllerProvider.notifier)
+        .login(
+          email: 'pending@example.test',
+          password: 'Correct horse battery staple',
+        );
+
+    final state = container.read(authControllerProvider);
+    expect(state.isEmailVerificationPending, isTrue);
+    expect(state.isEmailVerificationPromotionPending, isFalse);
+    expect(state.session?.accessToken, 'restricted-access');
+    expect((await storage.read())?.accessToken, 'restricted-access');
+    expect(statuses, 1);
+    expect(sends, 1);
+    expect(verifies, 0);
+  });
+
   test(
-    'login recovers EMAIL_PENDING from its restricted session without resend or OTP replay',
+    'login keeps the pending verification form when automatic resend is rate limited',
     () async {
-      final storage = InMemoryAuthSessionStorage();
-      var statuses = 0;
-      var sends = 0;
-      var verifies = 0;
       final mock = MockClient((req) async {
         switch (req.url.path) {
           case '/api/v1/auth/login':
@@ -515,19 +565,18 @@ void main() {
               200,
             );
           case '/api/v1/auth/verification-status':
-            statuses++;
-            expect(req.headers['authorization'], 'Bearer restricted-access');
             return http.Response(jsonEncode({'state': 'EMAIL_PENDING'}), 200);
           case '/api/v1/auth/otp/send':
-            sends++;
-            return http.Response('', 204);
-          case '/api/v1/auth/otp/verify':
-            verifies++;
-            return http.Response('', 204);
+            expect(req.headers['authorization'], 'Bearer restricted-access');
+            expect(jsonDecode(req.body), {'otp_type': 'email_verify'});
+            return http.Response(
+              jsonEncode({'error': 'otp_rate_limited'}),
+              429,
+            );
         }
         return http.Response('not found', 404);
       });
-      final container = buildContainer(mock: mock, storage: storage);
+      final container = buildContainer(mock: mock);
       addTearDown(container.dispose);
 
       await container
@@ -539,12 +588,8 @@ void main() {
 
       final state = container.read(authControllerProvider);
       expect(state.isEmailVerificationPending, isTrue);
-      expect(state.isEmailVerificationPromotionPending, isFalse);
       expect(state.session?.accessToken, 'restricted-access');
-      expect((await storage.read())?.accessToken, 'restricted-access');
-      expect(statuses, 1);
-      expect(sends, 0);
-      expect(verifies, 0);
+      expect(state.errorKey, 'rate_limited');
     },
   );
 

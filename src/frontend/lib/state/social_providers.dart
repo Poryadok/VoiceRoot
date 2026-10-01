@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/api_errors.dart';
 import '../backend/friends_client.dart';
 import '../backend/users_client.dart';
 import 'auth_providers.dart';
+import 'chat_providers.dart';
 
 final activeProfileProvider = FutureProvider<VoiceProfile?>((ref) async {
   final profileId = ref.watch(authControllerProvider).activeProfileId;
@@ -78,7 +81,6 @@ class SearchProfilesController extends StateNotifier<SearchProfilesState> {
   SearchProfilesController(this._ref) : super(const SearchProfilesState());
 
   final Ref _ref;
-
   Future<void> search(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
@@ -252,10 +254,50 @@ final blockedListProvider = FutureProvider<BlockedListData>((ref) async {
   };
 });
 
+/// Serializes account block mutations so their cache purge, pending barrier,
+/// API result, and rollback/commit form one transaction per app container.
+class SocialBlockMutationQueue {
+  Future<void> _tail = Future<void>.value();
+  int _pendingMutations = 0;
+
+  Future<T> enqueue<T>(
+    Future<T> Function() mutation, {
+    required void Function(bool pending) onPendingChanged,
+  }) {
+    _pendingMutations++;
+    onPendingChanged(true);
+    final operation = _tail.then((_) => mutation());
+    _tail = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation.whenComplete(() {
+      _pendingMutations--;
+      onPendingChanged(_pendingMutations > 0);
+    });
+  }
+}
+
+final socialBlockMutationQueueProvider = Provider<SocialBlockMutationQueue>(
+  (ref) => SocialBlockMutationQueue(),
+);
+
 class SocialActions {
   SocialActions(this._ref);
 
   final Ref _ref;
+  bool _reloadSelectedRoomAfterMutationQueueDrains = false;
+
+  void _onBlockMutationPendingChanged(bool pending) {
+    _ref.read(socialBlockMutationPendingProvider.notifier).state = pending;
+    if (pending || !_reloadSelectedRoomAfterMutationQueueDrains) return;
+    _reloadSelectedRoomAfterMutationQueueDrains = false;
+    final selectedChatId = _ref.read(selectedChatIdProvider);
+    if (selectedChatId != null) {
+      unawaited(
+        _ref
+            .read(chatRoomControllerProvider(selectedChatId).notifier)
+            .loadInitial(),
+      );
+    }
+  }
 
   Future<String?> sendFriendInvitation(String targetProfileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
@@ -311,10 +353,9 @@ class SocialActions {
   Future<String?> removeFriend(String friendProfileId) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceFriendsClientProvider).removeFriend(
-      authorization: auth,
-      friendProfileId: friendProfileId,
-    );
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .removeFriend(authorization: auth, friendProfileId: friendProfileId);
     _invalidateSocialLists();
     return switch (result) {
       FriendsApiEmpty() => null,
@@ -326,22 +367,73 @@ class SocialActions {
   Future<String?> blockAccount(
     String blockedAccountId, {
     String? blockedProfileId,
+  }) {
+    return _ref
+        .read(socialBlockMutationQueueProvider)
+        .enqueue(
+          () => _blockAccountTransaction(
+            blockedAccountId,
+            blockedProfileId: blockedProfileId,
+          ),
+          onPendingChanged: _onBlockMutationPendingChanged,
+        );
+  }
+
+  Future<String?> _blockAccountTransaction(
+    String blockedAccountId, {
+    String? blockedProfileId,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref
-        .read(voiceFriendsClientProvider)
-        .blockAccount(
-          authorization: auth,
-          blockedAccountId: blockedAccountId,
-          blockedProfileId: blockedProfileId,
+    try {
+      await prepareSocialBlockVisibilityChange(_ref);
+    } catch (_) {
+      return 'cache_clear_failed';
+    }
+    final FriendsApiResult<void> result;
+    try {
+      result = await _ref
+          .read(voiceFriendsClientProvider)
+          .blockAccount(
+            authorization: auth,
+            blockedAccountId: blockedAccountId,
+            blockedProfileId: blockedProfileId,
+          );
+    } catch (_) {
+      recordSocialBlockVisibilityChange(
+        _ref,
+        blocked: true,
+        profileId: blockedProfileId,
+        refreshSelectedRoom: false,
+      );
+      return 'unknown_error';
+    }
+    if (result case FriendsApiFailure(:final message, :final statusCode)) {
+      if (isDefinitiveSocialMutationRejection(statusCode)) {
+        // The speculative operation was rejected, so the committed barrier
+        // remains unchanged. Refill the purged cache from server-filtered
+        // history once all queued social mutations have settled.
+        _reloadSelectedRoomAfterMutationQueueDrains = true;
+      } else {
+        recordSocialBlockVisibilityChange(
+          _ref,
+          blocked: true,
+          profileId: blockedProfileId,
+          refreshSelectedRoom: false,
         );
-    _invalidateSocialLists();
-    return switch (result) {
-      FriendsApiEmpty() => null,
-      FriendsApiFailure(:final message) => message,
-      FriendsApiOk() => null,
-    };
+      }
+      return message;
+    }
+    if (result is FriendsApiEmpty || result is FriendsApiOk<void>) {
+      _invalidateSocialLists();
+      _invalidateProfileIfKnown(blockedProfileId);
+      recordSocialBlockVisibilityChange(
+        _ref,
+        blocked: true,
+        profileId: blockedProfileId,
+      );
+    }
+    return null;
   }
 
   Future<String?> addContact(String targetProfileId) async {
@@ -361,11 +453,13 @@ class SocialActions {
   Future<String?> setFavorite(String friendProfileId, bool favorite) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceFriendsClientProvider).setFavorite(
-      authorization: auth,
-      friendProfileId: friendProfileId,
-      favorite: favorite,
-    );
+    final result = await _ref
+        .read(voiceFriendsClientProvider)
+        .setFavorite(
+          authorization: auth,
+          friendProfileId: friendProfileId,
+          favorite: favorite,
+        );
     _invalidateSocialLists();
     return switch (result) {
       FriendsApiEmpty() => null,
@@ -374,19 +468,77 @@ class SocialActions {
     };
   }
 
-  Future<String?> unblockAccount(String blockedAccountId) async {
+  Future<String?> unblockAccount(
+    String blockedAccountId, {
+    String? blockedProfileId,
+  }) {
+    return _ref
+        .read(socialBlockMutationQueueProvider)
+        .enqueue(
+          () => _unblockAccountTransaction(
+            blockedAccountId,
+            blockedProfileId: blockedProfileId,
+          ),
+          onPendingChanged: _onBlockMutationPendingChanged,
+        );
+  }
+
+  Future<String?> _unblockAccountTransaction(
+    String blockedAccountId, {
+    String? blockedProfileId,
+  }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceFriendsClientProvider).unblockAccount(
-      authorization: auth,
-      blockedAccountId: blockedAccountId,
-    );
-    _invalidateSocialLists();
-    return switch (result) {
-      FriendsApiEmpty() => null,
-      FriendsApiFailure(:final message) => message,
-      FriendsApiOk() => null,
-    };
+    try {
+      await prepareSocialBlockVisibilityChange(_ref);
+    } catch (_) {
+      return 'cache_clear_failed';
+    }
+    final FriendsApiResult<void> result;
+    try {
+      result = await _ref
+          .read(voiceFriendsClientProvider)
+          .unblockAccount(
+            authorization: auth,
+            blockedAccountId: blockedAccountId,
+          );
+    } catch (_) {
+      recordSocialBlockVisibilityChange(
+        _ref,
+        blocked: false,
+        profileId: blockedProfileId,
+        refreshSelectedRoom: false,
+      );
+      return 'unknown_error';
+    }
+    if (result case FriendsApiFailure(:final message, :final statusCode)) {
+      if (isDefinitiveSocialMutationRejection(statusCode)) {
+        _reloadSelectedRoomAfterMutationQueueDrains = true;
+      } else {
+        recordSocialBlockVisibilityChange(
+          _ref,
+          blocked: false,
+          profileId: blockedProfileId,
+          refreshSelectedRoom: false,
+        );
+      }
+      return message;
+    }
+    if (result is FriendsApiEmpty || result is FriendsApiOk<void>) {
+      _invalidateSocialLists();
+      _invalidateProfileIfKnown(blockedProfileId);
+      recordSocialBlockVisibilityChange(
+        _ref,
+        blocked: false,
+        profileId: blockedProfileId,
+      );
+    }
+    return null;
+  }
+
+  void _invalidateProfileIfKnown(String? profileId) {
+    if (profileId == null || profileId.trim().isEmpty) return;
+    _ref.invalidate(profileProvider(profileId));
   }
 
   Future<({String? error, int matchedCount})> syncPhoneContacts(

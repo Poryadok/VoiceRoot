@@ -46,7 +46,8 @@ service SocialService {
   rpc BlockAccount(BlockAccountRequest) returns (BlockAccountResponse);
   rpc UnblockAccount(UnblockAccountRequest) returns (UnblockAccountResponse);
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
-  rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal
+  rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal account-pair policy
+  rpc IsProfilePairBlocked(IsProfilePairBlockedRequest) returns (IsProfilePairBlockedResponse); // internal directional history visibility; account IDs stay in Social
 
   // Граф
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse); // internal

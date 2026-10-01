@@ -150,6 +150,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		Blocks:              w.Blocks,
 		AccountBlocks:       w.AccountBlocks,
 		UserProfiles:        w.UserProfiles,
+		ProfilePairBlocks:   w.ProfilePairBlocks,
 		Privacy:             w.Privacy,
 		Friends:             w.Friends,
 		MessageEvents:       w.MessageEvents,
@@ -203,6 +204,7 @@ type messagingWire struct {
 	ChatTypeResolver           testAuthoritativeChatTypeResolver
 	RequireChatTypeResolver    bool
 	AccountBlocks              AccountBlockChecker
+	ProfilePairBlocks          ProfilePairBlockChecker
 }
 
 // wireDeletedAccounts keeps the P3 fixture isolated from production while the
@@ -435,11 +437,7 @@ func TestMessagingGetMessages_filtersOneWayBlockedAccountInGroupHistory(t *testi
 	seedGroupChat(t, ctx, pool, chatID, viewerProfile, blockedProfile)
 
 	client, cleanup := startMessagingServerWired(t, pool, messagingWire{
-		UserProfiles: profileAcctMap{
-			viewerProfile:  viewerAccount,
-			blockedProfile: blockedAccount,
-		},
-		AccountBlocks: directionalAccountBlocks{{viewerAccount, blockedAccount}: true},
+		ProfilePairBlocks: directionalProfilePairBlocks{{viewerProfile, blockedProfile}: true},
 	})
 	t.Cleanup(cleanup)
 
@@ -518,6 +516,24 @@ func TestMessagingGetMessages_filtersOneWayBlockedAccountInGroupHistory(t *testi
 	require.NotContains(t, messageIDs(channelHistory.GetMessageList().GetMessages()), channelSenderMessage)
 }
 
+type directionalProfilePairBlocks map[[2]uuid.UUID]bool
+
+func (b directionalProfilePairBlocks) ProfilePairBlocked(_ context.Context, viewerProfileID, senderProfileID uuid.UUID) (bool, error) {
+	return b[[2]uuid.UUID{viewerProfileID, senderProfileID}], nil
+}
+
+type allowProfilePairBlocks struct{}
+
+func (allowProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+type failingProfilePairBlocks struct{}
+
+func (failingProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("social unavailable")
+}
+
 type directionalAccountBlocks map[[2]uuid.UUID]bool
 
 func (b directionalAccountBlocks) AccountBlocked(_ context.Context, viewerAccountID, senderAccountID uuid.UUID) (bool, error) {
@@ -538,15 +554,13 @@ func messageIDs(messages []*messagingv1.Message) []string {
 	return ids
 }
 
-func TestFilterBlockedHistoryRows_FailsClosedOnOwnerOrSocialErrors(t *testing.T) {
+func TestFilterBlockedHistoryRows_FailsClosedOnSocialErrors(t *testing.T) {
 	viewerProfile, senderProfile := uuid.New(), uuid.New()
-	viewerAccount, senderAccount := uuid.New(), uuid.New()
 	rows := []store.MessageRow{{ID: uuid.New(), SenderProfileID: senderProfile, Content: "private"}}
 
-	t.Run("owner lookup error", func(t *testing.T) {
+	t.Run("missing social checker", func(t *testing.T) {
 		svc := &MessagingGRPC{
-			UserProfiles:  profileAcctMap{viewerProfile: viewerAccount},
-			AccountBlocks: directionalAccountBlocks{},
+			ProfilePairBlocks: nil,
 		}
 		visible, err := svc.filterBlockedHistoryRows(context.Background(), viewerProfile, rows)
 		require.Equal(t, codes.Unavailable, status.Code(err))
@@ -555,8 +569,7 @@ func TestFilterBlockedHistoryRows_FailsClosedOnOwnerOrSocialErrors(t *testing.T)
 
 	t.Run("social lookup error", func(t *testing.T) {
 		svc := &MessagingGRPC{
-			UserProfiles:  profileAcctMap{viewerProfile: viewerAccount, senderProfile: senderAccount},
-			AccountBlocks: failingAccountBlocks{},
+			ProfilePairBlocks: failingProfilePairBlocks{},
 		}
 		visible, err := svc.filterBlockedHistoryRows(context.Background(), viewerProfile, rows)
 		require.Equal(t, codes.Unavailable, status.Code(err))

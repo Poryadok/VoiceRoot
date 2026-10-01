@@ -36,6 +36,8 @@ service UserService {
   // S2S internal: resolve the owning account for Messaging DM lifecycle checks.
   // This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
   rpc ResolveAccountIDForProfile(ResolveAccountIDForProfileRequest) returns (ResolveAccountIDForProfileResponse);
+  // S2S internal: title-only projection for DM peer profile IDs from authorized Chat memberships.
+  rpc GetDMPeerDisplayNames(GetDMPeerDisplayNamesRequest) returns (GetDMPeerDisplayNamesResponse);
   // S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
   // Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
   rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse);
@@ -120,6 +122,19 @@ message ResolveAccountIDForProfileRequest {
 
 message ResolveAccountIDForProfileResponse {
   string account_id = 1;
+}
+
+message GetDMPeerDisplayNamesRequest {
+  repeated string profile_ids = 1;
+}
+
+message DMPeerDisplayName {
+  string profile_id = 1;
+  string display_name = 2;
+}
+
+message GetDMPeerDisplayNamesResponse {
+  repeated DMPeerDisplayName display_names = 1;
 }
 
 message GetProfileRequest {

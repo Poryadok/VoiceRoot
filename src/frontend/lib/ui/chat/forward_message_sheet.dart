@@ -87,7 +87,9 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
   }
 
   String _chatTitleFallback(AppLocalizations l10n, ChatListItem item) {
-    return item.chat.name ?? l10n.chatListDmFallback(_shortChatId(item.chatId));
+    return item.dmPeerDisplayName ??
+        item.chat.name ??
+        l10n.chatListDmFallback(_shortChatId(item.chatId));
   }
 
   List<ChatListItem> _filteredChats(

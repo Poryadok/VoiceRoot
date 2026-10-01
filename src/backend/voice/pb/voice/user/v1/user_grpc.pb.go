@@ -22,6 +22,7 @@ const (
 	UserService_EnsurePrimaryProfile_FullMethodName          = "/voice.user.v1.UserService/EnsurePrimaryProfile"
 	UserService_ListProfileIDsForAccount_FullMethodName      = "/voice.user.v1.UserService/ListProfileIDsForAccount"
 	UserService_ResolveAccountIDForProfile_FullMethodName    = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	UserService_GetDMPeerDisplayNames_FullMethodName         = "/voice.user.v1.UserService/GetDMPeerDisplayNames"
 	UserService_ResolvePrimaryProfileIDs_FullMethodName      = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	UserService_MarkAccountRegular_FullMethodName            = "/voice.user.v1.UserService/MarkAccountRegular"
 	UserService_GetProfile_FullMethodName                    = "/voice.user.v1.UserService/GetProfile"
@@ -69,6 +70,8 @@ type UserServiceClient interface {
 	// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
 	// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
 	ResolveAccountIDForProfile(ctx context.Context, in *ResolveAccountIDForProfileRequest, opts ...grpc.CallOption) (*ResolveAccountIDForProfileResponse, error)
+	// S2S internal: title-only projection for DM peer profile IDs from authorized Chat memberships.
+	GetDMPeerDisplayNames(ctx context.Context, in *GetDMPeerDisplayNamesRequest, opts ...grpc.CallOption) (*GetDMPeerDisplayNamesResponse, error)
 	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
 	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
 	ResolvePrimaryProfileIDs(ctx context.Context, in *ResolvePrimaryProfileIDsRequest, opts ...grpc.CallOption) (*ResolvePrimaryProfileIDsResponse, error)
@@ -146,6 +149,16 @@ func (c *userServiceClient) ResolveAccountIDForProfile(ctx context.Context, in *
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolveAccountIDForProfileResponse)
 	err := c.cc.Invoke(ctx, UserService_ResolveAccountIDForProfile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) GetDMPeerDisplayNames(ctx context.Context, in *GetDMPeerDisplayNamesRequest, opts ...grpc.CallOption) (*GetDMPeerDisplayNamesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDMPeerDisplayNamesResponse)
+	err := c.cc.Invoke(ctx, UserService_GetDMPeerDisplayNames_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -476,6 +489,8 @@ type UserServiceServer interface {
 	// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
 	// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
 	ResolveAccountIDForProfile(context.Context, *ResolveAccountIDForProfileRequest) (*ResolveAccountIDForProfileResponse, error)
+	// S2S internal: title-only projection for DM peer profile IDs from authorized Chat memberships.
+	GetDMPeerDisplayNames(context.Context, *GetDMPeerDisplayNamesRequest) (*GetDMPeerDisplayNamesResponse, error)
 	// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
 	// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
 	ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error)
@@ -537,6 +552,9 @@ func (UnimplementedUserServiceServer) ListProfileIDsForAccount(context.Context, 
 }
 func (UnimplementedUserServiceServer) ResolveAccountIDForProfile(context.Context, *ResolveAccountIDForProfileRequest) (*ResolveAccountIDForProfileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolveAccountIDForProfile not implemented")
+}
+func (UnimplementedUserServiceServer) GetDMPeerDisplayNames(context.Context, *GetDMPeerDisplayNamesRequest) (*GetDMPeerDisplayNamesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDMPeerDisplayNames not implemented")
 }
 func (UnimplementedUserServiceServer) ResolvePrimaryProfileIDs(context.Context, *ResolvePrimaryProfileIDsRequest) (*ResolvePrimaryProfileIDsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePrimaryProfileIDs not implemented")
@@ -702,6 +720,24 @@ func _UserService_ResolveAccountIDForProfile_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).ResolveAccountIDForProfile(ctx, req.(*ResolveAccountIDForProfileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_GetDMPeerDisplayNames_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDMPeerDisplayNamesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetDMPeerDisplayNames(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetDMPeerDisplayNames_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetDMPeerDisplayNames(ctx, req.(*GetDMPeerDisplayNamesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1282,6 +1318,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResolveAccountIDForProfile",
 			Handler:    _UserService_ResolveAccountIDForProfile_Handler,
+		},
+		{
+			MethodName: "GetDMPeerDisplayNames",
+			Handler:    _UserService_GetDMPeerDisplayNames_Handler,
 		},
 		{
 			MethodName: "ResolvePrimaryProfileIDs",

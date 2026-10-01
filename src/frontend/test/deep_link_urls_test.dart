@@ -38,4 +38,12 @@ void main() {
     );
     expect(profileShareUrl('vanya'), 'https://voice.gg/u/vanya');
   });
+
+  test('native invite links use the configured invite origin', () {
+    final configuredOrigin = Uri.parse(voiceInviteShareOrigin).origin;
+    expect(
+      spaceInviteShareUrl('invite-1'),
+      '$configuredOrigin/invite/invite-1',
+    );
+  });
 }

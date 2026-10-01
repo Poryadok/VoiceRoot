@@ -45,9 +45,10 @@ type MessagingGRPC struct {
 	SharedMedia *store.SharedMediaStore
 	ChatGuard   ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
-	Blocks        AccountPairBlockChecker
-	AccountBlocks AccountBlockChecker
-	UserProfiles  ProfileAccountLookup
+	Blocks            AccountPairBlockChecker
+	AccountBlocks     AccountBlockChecker
+	UserProfiles      ProfileAccountLookup
+	ProfilePairBlocks ProfilePairBlockChecker
 	// DeletedAccounts is the Auth S2S gate for DM writes. It is deliberately
 	// separate from other optional S2S policy checks: a missing dependency must
 	// fail closed for DM sends and forwards.
@@ -988,16 +989,10 @@ func historyBlockScanLimit(pageLimit int) int {
 }
 
 func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProfileID uuid.UUID, rows []store.MessageRow) ([]store.MessageRow, error) {
-	if isNilDependency(s.AccountBlocks) || isNilDependency(s.UserProfiles) {
+	if isNilDependency(s.ProfilePairBlocks) {
 		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 	}
-	viewerAccountID, err := s.UserProfiles.AccountIDByProfileID(ctx, viewerProfileID)
-	if err != nil || viewerAccountID == uuid.Nil {
-		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
-	}
-
-	accountByProfile := map[uuid.UUID]uuid.UUID{viewerProfileID: viewerAccountID}
-	blockedByAccount := make(map[uuid.UUID]bool)
+	blockedByProfile := make(map[uuid.UUID]bool)
 	visible := make([]store.MessageRow, 0, len(rows))
 	for i := range rows {
 		senderProfileID := rows[i].SenderProfileID
@@ -1008,25 +1003,14 @@ func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProf
 		if senderProfileID == uuid.Nil {
 			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 		}
-		senderAccountID, ok := accountByProfile[senderProfileID]
+		blocked, ok := blockedByProfile[senderProfileID]
 		if !ok {
-			senderAccountID, err = s.UserProfiles.AccountIDByProfileID(ctx, senderProfileID)
-			if err != nil || senderAccountID == uuid.Nil {
-				return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
-			}
-			accountByProfile[senderProfileID] = senderAccountID
-		}
-		if senderAccountID == viewerAccountID {
-			visible = append(visible, rows[i])
-			continue
-		}
-		blocked, ok := blockedByAccount[senderAccountID]
-		if !ok {
-			blocked, err = s.AccountBlocks.AccountBlocked(ctx, viewerAccountID, senderAccountID)
+			var err error
+			blocked, err = s.ProfilePairBlocks.ProfilePairBlocked(ctx, viewerProfileID, senderProfileID)
 			if err != nil {
 				return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 			}
-			blockedByAccount[senderAccountID] = blocked
+			blockedByProfile[senderProfileID] = blocked
 		}
 		if !blocked {
 			visible = append(visible, rows[i])

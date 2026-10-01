@@ -123,6 +123,19 @@ DeepLinkTarget parseDeepLinkUrl(String raw, {Uri? currentOrigin}) {
   return _parseDeepLinkPath(path, trimmed);
 }
 
+/// Returns an initial browser route only when it is a Space invite link.
+///
+/// Bootstrap calls this before the auth and guest-nickname gates can replace
+/// the web app shell, so the target can be retained until navigation is ready.
+DeepLinkTarget? parseInitialWebInviteTarget(Uri uri) {
+  try {
+    final target = parseDeepLinkUrl(uri.toString(), currentOrigin: uri);
+    return target.kind == DeepLinkKind.invite ? target : null;
+  } on DeepLinkParseException {
+    return null;
+  }
+}
+
 DeepLinkTarget _parseDeepLinkPath(String path, String raw) {
   if (path.isEmpty) {
     throw DeepLinkParseException('empty path');

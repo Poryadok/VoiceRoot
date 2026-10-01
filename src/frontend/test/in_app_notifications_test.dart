@@ -386,6 +386,102 @@ void main() {
     );
 
     test(
+      'selected chat notification refreshes preview and durable read count',
+      () async {
+        final hub = _FakeRealtimeHub();
+        final chats = _MutableInboxChatsClient();
+        final container = _container(
+          sound: _RecordingSoundPlayer(),
+          hub: hub,
+          chats: chats,
+        );
+        addTearDown(container.dispose);
+
+        await container.read(inboxReconcilerProvider.notifier).reconcile();
+        container.read(selectedChatIdProvider.notifier).state = 'chat-other';
+        container.read(inAppNotificationControllerProvider);
+
+        chats.showLatestMessage = true;
+        chats.markLatestMessageRead = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'notification',
+            data: {
+              'type': 'new_message',
+              'chat_id': 'chat-other',
+              'message_id': 'msg-visible',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
+
+        final item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest message');
+        expect(item.unreadCount, 0);
+        expect(chats.mainCalls, greaterThanOrEqualTo(2));
+      },
+    );
+
+    test(
+      'duplicate message notification still reconciles inbox without replaying side effects',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final chats = _MutableInboxChatsClient();
+        final container = _container(sound: sound, hub: hub, chats: chats);
+        addTearDown(container.dispose);
+
+        await container.read(inboxReconcilerProvider.notifier).reconcile();
+        container.read(selectedChatIdProvider.notifier).state = 'chat-open';
+        container.read(inAppNotificationControllerProvider);
+        const notification = RealtimeFrame(
+          op: 'notification',
+          data: {
+            'type': 'new_message',
+            'chat_id': 'chat-other',
+            'message_id': 'msg-replayed',
+            'sender_profile_id': 'peer-1',
+          },
+        );
+
+        chats.showLatestMessage = true;
+        hub.emit(notification);
+        await pumpEventQueue();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.main]
+              .items
+              .single
+              .lastMessagePreview,
+          'latest message',
+        );
+
+        chats.latestMessagePreview = 'latest corrected preview';
+        hub.emit(notification);
+        await pumpEventQueue();
+
+        final item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest corrected preview');
+        expect(chats.mainCalls, greaterThanOrEqualTo(3));
+        expect(
+          container.read(inAppNotificationCenterProvider).items,
+          hasLength(1),
+        );
+        expect(sound.newMessagePlays, 1);
+      },
+    );
+
+    test(
       'message_create alone does not bump unread (notification is canonical)',
       () async {
         final sound = _RecordingSoundPlayer();
@@ -1094,6 +1190,7 @@ class _MutableInboxChatsClient extends VoiceChatsClient {
 
   bool showLatestMessage = false;
   bool markLatestMessageRead = false;
+  String latestMessagePreview = 'latest message';
   int mainCalls = 0;
 
   @override
@@ -1113,7 +1210,7 @@ class _MutableInboxChatsClient extends VoiceChatsClient {
         items: [
           inboxChatItem(
             'chat-other',
-            preview: showLatestMessage ? 'latest message' : 'before',
+            preview: showLatestMessage ? latestMessagePreview : 'before',
             unreadCount: markLatestMessageRead
                 ? 0
                 : showLatestMessage

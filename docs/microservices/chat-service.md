@@ -110,7 +110,8 @@ message ChatListItem {
   int64 unread_count = 3;
   optional string inbox = 4;              // main | requests — ✓ from chat_members.inbox_bucket
   optional bool is_stranger = 5;          // ✓ true when inbox=requests
-  optional string dm_peer_profile_id = 6; // ✓ DM peer for list title/avatar
+  optional string dm_peer_profile_id = 6; // ✓ DM peer identity for authorized client lookups
+  optional string dm_peer_display_name = 8; // ✓ title-only nickname for existing DM when public profile is unavailable
 }
 ```
 
@@ -242,7 +243,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ## ListChats (список, превью, unread)
 
-**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests` \| `archive`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` (см. proto выше).
+**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests` \| `archive`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` и необязательный title-only `dm_peer_display_name` (см. proto выше). Chat запрашивает nickname у User только для peer profile IDs, подтверждённых членством в DM; это не раскрывает остальные данные заблокированного профиля.
 
 **Порядок и фильтр (shipped code)**:
 - членство в `chat_members`, `is_archived = false`, `inbox_bucket` = значение `inbox` (default `main`);

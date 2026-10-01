@@ -4,6 +4,10 @@ library;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 const voiceWebOrigin = 'https://voice.gg';
+const voiceInviteShareOrigin = String.fromEnvironment(
+  'VOICE_INVITE_SHARE_ORIGIN',
+  defaultValue: voiceWebOrigin,
+);
 
 String voiceDeepLinkUrl(String path, {Uri? currentOrigin}) {
   final normalized = path.startsWith('/') ? path : '/$path';
@@ -47,7 +51,12 @@ String dmShareUrl(String userId, {Uri? currentOrigin}) =>
     voiceDeepLinkUrl('/dm/$userId', currentOrigin: currentOrigin);
 
 String spaceInviteShareUrl(String code, {Uri? currentOrigin}) =>
-    voiceDeepLinkUrl('/invite/$code', currentOrigin: currentOrigin);
+    voiceDeepLinkUrl(
+      '/invite/$code',
+      currentOrigin:
+          currentOrigin ??
+          (kIsWeb ? Uri.base : Uri.tryParse(voiceInviteShareOrigin)),
+    );
 
 String _shareOrigin(Uri? explicitOrigin) {
   final candidate = explicitOrigin ?? (kIsWeb ? Uri.base : null);

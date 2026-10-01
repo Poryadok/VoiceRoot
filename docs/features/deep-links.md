@@ -14,7 +14,10 @@
 Ссылки, созданные работающим Web-клиентом, используют его публичный origin.
 Для staging это host из `VOICE_WEB_INGRESS_HOST` (например,
 `app.comrade.click`), на котором открыт клиент; parser принимает этот же текущий
-origin. Нативный клиент без web-origin использует canonical `voice.gg`.
+origin. Нативный клиент использует `VOICE_INVITE_SHARE_ORIGIN`, заданный при
+сборке; если define отсутствует, используется canonical `voice.gg`. Для staging
+и production define строится из соответствующего `VOICE_WEB_INGRESS_HOST`,
+который также задаёт Web Ingress.
 
 ## Схема URL
 
@@ -125,4 +128,3 @@ https://voice.gg/dm/{userId}
 2. `API Gateway` нормализует маршрут и определяет доменный target.
 3. Соответствующий доменный сервис проверяет существование ресурса и ACL.
 4. Клиент получает либо разрешённый target, либо `404/403` и показывает "Не найдено"/"Нет доступа".
-

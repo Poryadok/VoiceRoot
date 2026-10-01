@@ -160,6 +160,55 @@ final $typed_data.Uint8List resolveAccountIDForProfileResponseDescriptor =
         'CiJSZXNvbHZlQWNjb3VudElERm9yUHJvZmlsZVJlc3BvbnNlEh0KCmFjY291bnRfaWQYASABKA'
         'lSCWFjY291bnRJZA==');
 
+@$core.Deprecated('Use getDMPeerDisplayNamesRequestDescriptor instead')
+const GetDMPeerDisplayNamesRequest$json = {
+  '1': 'GetDMPeerDisplayNamesRequest',
+  '2': [
+    {'1': 'profile_ids', '3': 1, '4': 3, '5': 9, '10': 'profileIds'},
+  ],
+};
+
+/// Descriptor for `GetDMPeerDisplayNamesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getDMPeerDisplayNamesRequestDescriptor =
+    $convert.base64Decode(
+        'ChxHZXRETVBlZXJEaXNwbGF5TmFtZXNSZXF1ZXN0Eh8KC3Byb2ZpbGVfaWRzGAEgAygJUgpwcm'
+        '9maWxlSWRz');
+
+@$core.Deprecated('Use dMPeerDisplayNameDescriptor instead')
+const DMPeerDisplayName$json = {
+  '1': 'DMPeerDisplayName',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {'1': 'display_name', '3': 2, '4': 1, '5': 9, '10': 'displayName'},
+  ],
+};
+
+/// Descriptor for `DMPeerDisplayName`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List dMPeerDisplayNameDescriptor = $convert.base64Decode(
+    'ChFETVBlZXJEaXNwbGF5TmFtZRIdCgpwcm9maWxlX2lkGAEgASgJUglwcm9maWxlSWQSIQoMZG'
+    'lzcGxheV9uYW1lGAIgASgJUgtkaXNwbGF5TmFtZQ==');
+
+@$core.Deprecated('Use getDMPeerDisplayNamesResponseDescriptor instead')
+const GetDMPeerDisplayNamesResponse$json = {
+  '1': 'GetDMPeerDisplayNamesResponse',
+  '2': [
+    {
+      '1': 'display_names',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.user.v1.DMPeerDisplayName',
+      '10': 'displayNames'
+    },
+  ],
+};
+
+/// Descriptor for `GetDMPeerDisplayNamesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getDMPeerDisplayNamesResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1HZXRETVBlZXJEaXNwbGF5TmFtZXNSZXNwb25zZRJFCg1kaXNwbGF5X25hbWVzGAEgAygLMi'
+        'Audm9pY2UudXNlci52MS5ETVBlZXJEaXNwbGF5TmFtZVIMZGlzcGxheU5hbWVz');
+
 @$core.Deprecated('Use getProfileRequestDescriptor instead')
 const GetProfileRequest$json = {
   '1': 'GetProfileRequest',

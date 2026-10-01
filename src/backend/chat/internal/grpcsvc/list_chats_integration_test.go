@@ -25,6 +25,16 @@ import (
 
 type mapListEnricher map[uuid.UUID]ListChatExtra
 
+type recordingDMPeerNames struct {
+	called []uuid.UUID
+	names  map[uuid.UUID]string
+}
+
+func (r *recordingDMPeerNames) LookupDMPeerDisplayNames(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	r.called = append([]uuid.UUID(nil), ids...)
+	return r.names, nil
+}
+
 func (m mapListEnricher) EnrichListChats(_ context.Context, _ uuid.UUID, chatIDs []uuid.UUID) (map[uuid.UUID]ListChatExtra, error) {
 	out := make(map[uuid.UUID]ListChatExtra)
 	for _, id := range chatIDs {
@@ -119,6 +129,34 @@ func TestListChats_DMPeerProfileID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listB.GetChatList().GetItems(), 1)
 	require.Equal(t, profA.String(), listB.GetChatList().GetItems()[0].GetDmPeerProfileId())
+}
+
+func TestListChats_DMTitleLookupUsesOnlyAuthorizedPeerProfiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, accB := uuid.New(), uuid.New()
+	profA, profB := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accB}
+	names := &recordingDMPeerNames{names: map[uuid.UUID]string{profB: "Actual peer nickname"}}
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithDMPeerDisplayNameLookup(names))
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+	created, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Page: &commonv1.CursorPageRequest{PageSize: 10}})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	item := list.GetChatList().GetItems()[0]
+	require.Equal(t, profB.String(), item.GetDmPeerProfileId())
+	require.Equal(t, "Actual peer nickname", item.GetDmPeerDisplayName())
+	require.Equal(t, created.GetChat().GetId(), item.GetChat().GetId())
+	require.Equal(t, []uuid.UUID{profB}, names.called, "Chat may request titles only for the peer authorized by DM membership")
 }
 
 func TestListChats_Pagination(t *testing.T) {

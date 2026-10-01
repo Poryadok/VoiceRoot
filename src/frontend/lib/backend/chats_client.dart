@@ -87,6 +87,7 @@ class ChatListItem {
     this.inbox,
     this.isStranger = false,
     this.dmPeerProfileId,
+    this.dmPeerDisplayName,
     this.isPinned = false,
   });
 
@@ -96,6 +97,7 @@ class ChatListItem {
   final String? inbox;
   final bool isStranger;
   final String? dmPeerProfileId;
+  final String? dmPeerDisplayName;
   final bool isPinned;
 
   String get chatId => chat.id;
@@ -107,6 +109,7 @@ class ChatListItem {
     String? inbox,
     bool? isStranger,
     String? dmPeerProfileId,
+    String? dmPeerDisplayName,
     bool? isPinned,
   }) {
     return ChatListItem(
@@ -116,6 +119,7 @@ class ChatListItem {
       inbox: inbox ?? this.inbox,
       isStranger: isStranger ?? this.isStranger,
       dmPeerProfileId: dmPeerProfileId ?? this.dmPeerProfileId,
+      dmPeerDisplayName: dmPeerDisplayName ?? this.dmPeerDisplayName,
       isPinned: isPinned ?? this.isPinned,
     );
   }

@@ -35,6 +35,8 @@ service SocialService {
 
   // Internal S2S: Chat DM inbox bucketing (recipient contact list).
   rpc HasContact(HasContactRequest) returns (HasContactResponse);
+  // Internal S2S: directional block visibility for a profile pair; returns only a boolean.
+  rpc IsProfilePairBlocked(IsProfilePairBlockedRequest) returns (IsProfilePairBlockedResponse);
 }
 
 message SendFriendInvitationRequest {
@@ -156,6 +158,15 @@ message IsBlockedRequest {
 }
 
 message IsBlockedResponse {
+  bool blocked = 1;
+}
+
+message IsProfilePairBlockedRequest {
+  string viewer_profile_id = 1;
+  string other_profile_id = 2;
+}
+
+message IsProfilePairBlockedResponse {
   bool blocked = 1;
 }
 

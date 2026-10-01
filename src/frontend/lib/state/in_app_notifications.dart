@@ -223,6 +223,10 @@ class InAppNotificationController {
     switch (type) {
       case 'message_request':
         if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        // Reconcile even when this notification is a replay. Center-row
+        // deduplication is local presentation state and must not gate the
+        // durable Chat/Messaging inbox snapshot.
+        unawaited(_ref.read(inboxReconcilerProvider.notifier).reconcile());
         if (!_recordCenterRow(
           type: 'message_request',
           chatId: chatId,
@@ -231,9 +235,9 @@ class InAppNotificationController {
           return;
         }
         _ref.invalidate(messageRequestsSummaryProvider);
-        unawaited(_ref.read(inboxReconcilerProvider.notifier).reconcile());
       case 'new_message':
         if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(
           type: 'new_message',
           chatId: chatId,
@@ -248,6 +252,7 @@ class InAppNotificationController {
         );
       case 'reaction':
         if (_isOwnActivity(data['reactor_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(type: 'reaction', chatId: chatId, data: data)) {
           return;
         }
@@ -259,6 +264,7 @@ class InAppNotificationController {
         );
       case 'mention':
         if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(type: 'mention', chatId: chatId, data: data)) {
           return;
         }
@@ -271,6 +277,10 @@ class InAppNotificationController {
       default:
         break;
     }
+  }
+
+  void _reconcileInboxForActivity() {
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
   }
 
   void _onMarkRead(Map<String, dynamic>? data) {
@@ -330,11 +340,6 @@ class InAppNotificationController {
     if (selectedChatId == chatId) return;
 
     _ref.read(chatListControllerProvider.notifier).bumpUnread(chatId);
-    // ChatListBody renders this authoritative snapshot rather than the legacy
-    // list controller. Refresh it so live activity updates both unread state
-    // and the last-message preview without requiring navigation or reload.
-    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
-
     if (!_ref.read(inAppNotificationsSoundEnabledProvider)) return;
 
     final player = _ref.read(notificationSoundPlayerProvider);

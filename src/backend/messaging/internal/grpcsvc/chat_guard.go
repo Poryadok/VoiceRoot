@@ -50,6 +50,11 @@ type AccountBlockChecker interface {
 	AccountBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
 }
 
+// ProfilePairBlockChecker keeps non-DM history visibility decisions inside Social.
+type ProfilePairBlockChecker interface {
+	ProfilePairBlocked(ctx context.Context, viewerProfileID, otherProfileID uuid.UUID) (bool, error)
+}
+
 // PrivacyChecker reads recipient privacy policy for DM and attachment gates,
 // plus author allow_forward for ForwardMessage (privacy.md / forward-messages.md).
 type PrivacyChecker interface {

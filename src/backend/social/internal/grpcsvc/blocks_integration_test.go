@@ -16,6 +16,7 @@ import (
 	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/social/internal/authctx"
+	"voice/backend/social/internal/store"
 
 	commonv1 "voice.app/voice/common/v1"
 	socialv1 "voice.app/voice/social/v1"
@@ -116,6 +117,58 @@ func TestBlockFlow_Integration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, rBA.GetBlocked())
+}
+
+func TestIsProfilePairBlocked_ResolvesAccountBlockDirectionally(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startSocialPostgresForTest(t, ctx)
+	applySocialMigration(t, ctx, pool)
+
+	viewerProfile, viewerSibling := uuid.New(), uuid.New()
+	otherProfile := uuid.New()
+	viewerAccount, otherAccount := uuid.New(), uuid.New()
+	profiles := stubProfileAccounts{
+		viewerProfile: viewerAccount,
+		viewerSibling: viewerAccount,
+		otherProfile:  otherAccount,
+	}
+	require.NoError(t, (&store.BlockStore{Pool: pool}).BlockAccount(ctx, viewerAccount, otherAccount))
+	client, cleanup := startSocialGRPCTestServer(t, pool, func(s *SocialGRPC) {
+		s.ProfileAccounts = profiles
+	})
+	t.Cleanup(cleanup)
+
+	blocked, err := client.IsProfilePairBlocked(ctx, &socialv1.IsProfilePairBlockedRequest{
+		ViewerProfileId: viewerProfile.String(), OtherProfileId: otherProfile.String(),
+	})
+	require.NoError(t, err)
+	require.True(t, blocked.GetBlocked())
+
+	reverse, err := client.IsProfilePairBlocked(ctx, &socialv1.IsProfilePairBlockedRequest{
+		ViewerProfileId: otherProfile.String(), OtherProfileId: viewerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, reverse.GetBlocked(), "history visibility is directional")
+
+	sibling, err := client.IsProfilePairBlocked(ctx, &socialv1.IsProfilePairBlockedRequest{
+		ViewerProfileId: viewerSibling.String(), OtherProfileId: viewerProfile.String(),
+	})
+	require.NoError(t, err)
+	require.False(t, sibling.GetBlocked(), "profiles owned by the same account are not blocked from each other")
+
+	unknown, err := client.IsProfilePairBlocked(ctx, &socialv1.IsProfilePairBlockedRequest{
+		ViewerProfileId: viewerProfile.String(), OtherProfileId: uuid.NewString(),
+	})
+	require.Nil(t, unknown)
+	require.Equal(t, codes.Unavailable, status.Code(err), "unresolved ownership must fail closed")
+
+	_, err = client.IsProfilePairBlocked(ctx, &socialv1.IsProfilePairBlockedRequest{
+		ViewerProfileId: "malformed", OtherProfileId: otherProfile.String(),
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestListBlocked_InvalidCursor(t *testing.T) {

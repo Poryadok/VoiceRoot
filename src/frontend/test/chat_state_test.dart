@@ -16,6 +16,7 @@ import 'package:voice_frontend/state/bot_deferred_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -591,6 +592,72 @@ void main() {
 
         expect(messages.markReadCalls.single.messageId, 'msg-9');
         expect(hub.markReadCalls.single, ('chat-1', 'msg-9'));
+      },
+    );
+
+    test(
+      'persisted read refreshes the durable inbox preview and unread count',
+      () async {
+        var readPositionSaved = false;
+        final chats = _FakeChatsClient(
+          onListChats: (_) async => ChatsApiOk(
+            ChatListData(
+              items: [
+                ChatListItem(
+                  chat: const VoiceChat(
+                    id: 'chat-1',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'peer-1',
+                  ),
+                  lastMessagePreview:
+                      readPositionSaved ? 'latest message' : 'before',
+                  unreadCount: readPositionSaved ? 0 : 1,
+                ),
+              ],
+            ),
+          ),
+        );
+        final messages = _FakeMessagesClient(
+          pages: [MessageListData(messages: [_message('msg-9')])],
+          onMarkRead: () async {
+            readPositionSaved = true;
+            return const MessagesApiOk(null);
+          },
+        );
+        final container = _container(
+          chatsClient: chats,
+          messagesClient: messages,
+          realtimeHubBuilder: _FakeRealtimeHub.new,
+        );
+        addTearDown(container.dispose);
+
+        await container.read(inboxReconcilerProvider.notifier).reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.main]
+              .items
+              .single
+              .unreadCount,
+          1,
+        );
+
+        final roomSub = container.listen<ChatRoomState>(
+          chatRoomControllerProvider('chat-1'),
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(roomSub.close);
+        await pumpEventQueue();
+
+        expect(messages.markReadCalls.single.messageId, 'msg-9');
+        final item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest message');
+        expect(item.unreadCount, 0);
       },
     );
 

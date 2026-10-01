@@ -504,6 +504,36 @@ const IsBlockedResponse$json = {
 final $typed_data.Uint8List isBlockedResponseDescriptor = $convert.base64Decode(
     'ChFJc0Jsb2NrZWRSZXNwb25zZRIYCgdibG9ja2VkGAEgASgIUgdibG9ja2Vk');
 
+@$core.Deprecated('Use isProfilePairBlockedRequestDescriptor instead')
+const IsProfilePairBlockedRequest$json = {
+  '1': 'IsProfilePairBlockedRequest',
+  '2': [
+    {'1': 'viewer_profile_id', '3': 1, '4': 1, '5': 9, '10': 'viewerProfileId'},
+    {'1': 'other_profile_id', '3': 2, '4': 1, '5': 9, '10': 'otherProfileId'},
+  ],
+};
+
+/// Descriptor for `IsProfilePairBlockedRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isProfilePairBlockedRequestDescriptor =
+    $convert.base64Decode(
+        'ChtJc1Byb2ZpbGVQYWlyQmxvY2tlZFJlcXVlc3QSKgoRdmlld2VyX3Byb2ZpbGVfaWQYASABKA'
+        'lSD3ZpZXdlclByb2ZpbGVJZBIoChBvdGhlcl9wcm9maWxlX2lkGAIgASgJUg5vdGhlclByb2Zp'
+        'bGVJZA==');
+
+@$core.Deprecated('Use isProfilePairBlockedResponseDescriptor instead')
+const IsProfilePairBlockedResponse$json = {
+  '1': 'IsProfilePairBlockedResponse',
+  '2': [
+    {'1': 'blocked', '3': 1, '4': 1, '5': 8, '10': 'blocked'},
+  ],
+};
+
+/// Descriptor for `IsProfilePairBlockedResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List isProfilePairBlockedResponseDescriptor =
+    $convert.base64Decode(
+        'ChxJc1Byb2ZpbGVQYWlyQmxvY2tlZFJlc3BvbnNlEhgKB2Jsb2NrZWQYASABKAhSB2Jsb2NrZW'
+        'Q=');
+
 @$core.Deprecated('Use areFriendsRequestDescriptor instead')
 const AreFriendsRequest$json = {
   '1': 'AreFriendsRequest',

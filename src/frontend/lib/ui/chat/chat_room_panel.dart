@@ -258,9 +258,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     var slowModeSeconds = 0;
     var isGroup = false;
     VoiceChat? chatMeta;
+    ChatListItem? chatListItem;
     for (final item in ref.watch(chatListControllerProvider).items) {
       if (item.chatId == widget.chatId) {
         chatMeta = item.chat;
+        chatListItem = item;
         if (item.chat.isGroup) {
           groupName = item.chat.name;
           spaceId = item.chat.spaceId;
@@ -292,7 +294,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerProfile = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull
         : null;
-    final peerName = peerProfile?.displayName;
+    final peerName =
+        peerProfile?.displayName ?? chatListItem?.dmPeerDisplayName;
     final peerPresence = peerId != null
         ? ref.watch(presenceProvider(peerId))
         : null;

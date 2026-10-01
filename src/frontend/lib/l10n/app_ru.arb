@@ -573,6 +573,46 @@
   "spaceTreeTextChat": "Текстовый чат",
   "spaceTreeVoiceRoom": "Голосовая комната",
   "spaceTreeUncategorized": "Каналы",
+  "spaceTreeCreateTextChat": "Создать текстовый чат",
+  "spaceTreeCreateCategory": "Создать категорию",
+  "spaceTreeCreateChannel": "Канал",
+  "spaceTreeCreateGroup": "Групповой чат",
+  "spaceTreeCategoryLabel": "Категория",
+  "spaceTreeNoCategory": "Без категории",
+  "spaceTreeReorderTooltip": "Удерживайте и перетаскивайте, чтобы изменить порядок",
+  "spaceTreeCreateNameLabel": "Название",
+  "spaceTreeCreateSubmit": "Создать",
+  "spaceTreeCreateError": "Не удалось создать элемент: {message}",
+  "spaceTreeCategoryAssignError": "Чат создан, но его не удалось поместить в выбранную категорию: {message}",
+  "spaceTreePlacementUnknown": "Чат создан, но подтвердить его размещение в категории не удалось. Обновите дерево и проверьте размещение, прежде чем повторять попытку или менять порядок: {message}",
+  "spaceTreeCreateOutcomeUnknown": "Не удалось подтвердить создание элемента. Обновите или проверьте дерево, прежде чем повторять попытку: {message}",
+  "spaceTreeCreateRefreshFailed": "Запрос выполнен, но дерево не удалось обновить. Обновите или проверьте дерево, прежде чем повторять попытку.",
+  "spaceTreeReorderError": "Не удалось изменить порядок каналов: {message}",
+  "@spaceTreeCreateError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCategoryAssignError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreePlacementUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCreateOutcomeUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeReorderError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "spaceSelectPrompt": "Выберите спейс",
   "spaceListTitle": "Мои спейсы",
   "spaceOpenAction": "Открыть спейс",

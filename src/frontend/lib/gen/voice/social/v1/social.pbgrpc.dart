@@ -178,6 +178,14 @@ class SocialServiceClient extends $grpc.Client {
     return $createUnaryCall(_$hasContact, request, options: options);
   }
 
+  /// Internal S2S: directional block visibility for a profile pair; returns only a boolean.
+  $grpc.ResponseFuture<$0.IsProfilePairBlockedResponse> isProfilePairBlocked(
+    $0.IsProfilePairBlockedRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$isProfilePairBlocked, request, options: options);
+  }
+
   // method descriptors
 
   static final _$sendFriendInvitation = $grpc.ClientMethod<
@@ -281,6 +289,11 @@ class SocialServiceClient extends $grpc.Client {
           '/voice.social.v1.SocialService/HasContact',
           ($0.HasContactRequest value) => value.writeToBuffer(),
           $0.HasContactResponse.fromBuffer);
+  static final _$isProfilePairBlocked = $grpc.ClientMethod<
+          $0.IsProfilePairBlockedRequest, $0.IsProfilePairBlockedResponse>(
+      '/voice.social.v1.SocialService/IsProfilePairBlocked',
+      ($0.IsProfilePairBlockedRequest value) => value.writeToBuffer(),
+      $0.IsProfilePairBlockedResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.social.v1.SocialService')
@@ -460,6 +473,15 @@ abstract class SocialServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.HasContactRequest.fromBuffer(value),
         ($0.HasContactResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.IsProfilePairBlockedRequest,
+            $0.IsProfilePairBlockedResponse>(
+        'IsProfilePairBlocked',
+        isProfilePairBlocked_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.IsProfilePairBlockedRequest.fromBuffer(value),
+        ($0.IsProfilePairBlockedResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SendFriendInvitationResponse> sendFriendInvitation_Pre(
@@ -634,4 +656,13 @@ abstract class SocialServiceBase extends $grpc.Service {
 
   $async.Future<$0.HasContactResponse> hasContact(
       $grpc.ServiceCall call, $0.HasContactRequest request);
+
+  $async.Future<$0.IsProfilePairBlockedResponse> isProfilePairBlocked_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.IsProfilePairBlockedRequest> $request) async {
+    return isProfilePairBlocked($call, await $request);
+  }
+
+  $async.Future<$0.IsProfilePairBlockedResponse> isProfilePairBlocked(
+      $grpc.ServiceCall call, $0.IsProfilePairBlockedRequest request);
 }

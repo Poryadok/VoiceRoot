@@ -22,11 +22,15 @@ final class SpacesApiFailure extends SpacesApiResult<Never> {
     required this.message,
     this.errorCode,
     this.statusCode,
+    this.partialSuccess = false,
+    this.outcomeUncertain = false,
   });
 
   final String message;
   final String? errorCode;
   final int? statusCode;
+  final bool partialSuccess;
+  final bool outcomeUncertain;
 }
 
 class VoiceSpace {
@@ -96,6 +100,8 @@ class SpaceTreeNodeData {
     this.voiceRoomId,
     required this.sortOrder,
     this.isSystem = false,
+    this.isPinned = false,
+    this.pinOrder,
     required this.displayName,
     this.chatType,
   });
@@ -108,6 +114,8 @@ class SpaceTreeNodeData {
   final String? voiceRoomId;
   final int sortOrder;
   final bool isSystem;
+  final bool isPinned;
+  final int? pinOrder;
   final String displayName;
 
   /// Wire value from [ChatType] proto enum, e.g. `CHAT_TYPE_CHANNEL`.
@@ -307,7 +315,7 @@ class VoiceSpacesClient {
       ),
       createEmpty: space_pb.CreateCategoryResponse.create,
     );
-    return _map(result, (data) {
+    final mapped = _map(result, (data) {
       final c = data.category;
       return SpaceCategory(
         id: c.id,
@@ -316,6 +324,17 @@ class VoiceSpacesClient {
         sortOrder: c.sortOrder,
       );
     });
+    if (mapped case final SpacesApiFailure failure) {
+      if (_isUncertainMutationFailure(failure)) {
+        return SpacesApiFailure(
+          message: failure.message,
+          errorCode: failure.errorCode,
+          statusCode: failure.statusCode,
+          outcomeUncertain: true,
+        );
+      }
+    }
+    return mapped;
   }
 
   Future<SpacesApiResult<VoiceRoomData>> createVoiceRoom({
@@ -523,6 +542,7 @@ class VoiceSpacesClient {
     required String spaceId,
     required String name,
     ChatType chatType = ChatType.CHAT_TYPE_GROUP,
+    String? categoryId,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/spaces/$spaceId/chats'),
@@ -530,10 +550,93 @@ class VoiceSpacesClient {
       body: chat_pb.CreateChatRequest(type: chatType, name: name),
       createEmpty: space_pb.UpsertTreeNodeResponse.create,
     );
-    return _map(result, (data) {
+    final created = _map(result, (data) {
       final voiceById = <String, VoiceRoomData>{};
       return spaceTreeNodeFromProto(data.spaceTreeNode, voiceById);
     });
+    if (created case final SpacesApiFailure failure) {
+      if (_isUncertainMutationFailure(failure)) {
+        return SpacesApiFailure(
+          message: failure.message,
+          errorCode: failure.errorCode,
+          statusCode: failure.statusCode,
+          partialSuccess: failure.partialSuccess,
+          outcomeUncertain: true,
+        );
+      }
+      return created;
+    }
+    final createdNode = (created as SpacesApiOk<SpaceTreeNodeData>).data;
+    if (categoryId == null || categoryId.isEmpty) return created;
+
+    final categorized = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/tree/nodes'),
+      authorization: authorization,
+      body: space_pb.UpsertTreeNodeRequest(
+        spaceId: spaceId,
+        nodeId: createdNode.id,
+        categoryId: categoryId,
+        kind: 'text_chat',
+      ),
+      createEmpty: space_pb.UpsertTreeNodeResponse.create,
+    );
+    return switch (categorized) {
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+        partialSuccess: true,
+        outcomeUncertain:
+            GatewayApiResultMapper.failureCode(error) == 'network_error' ||
+            (GatewayApiResultMapper.failureStatus(error) != null &&
+                GatewayApiResultMapper.failureStatus(error)! >= 500),
+      ),
+      GatewayHttpOk() => SpacesApiOk(
+        SpaceTreeNodeData(
+          id: createdNode.id,
+          spaceId: createdNode.spaceId,
+          categoryId: categoryId,
+          kind: createdNode.kind,
+          linkedChatId: createdNode.linkedChatId,
+          voiceRoomId: createdNode.voiceRoomId,
+          sortOrder: createdNode.sortOrder,
+          isSystem: createdNode.isSystem,
+          isPinned: createdNode.isPinned,
+          pinOrder: createdNode.pinOrder,
+          displayName: createdNode.displayName,
+          chatType: createdNode.chatType,
+        ),
+      ),
+    };
+  }
+
+  bool _isUncertainMutationFailure(SpacesApiFailure failure) =>
+      failure.errorCode == 'network_error' ||
+      (failure.statusCode != null && failure.statusCode! >= 500);
+
+  Future<SpacesApiResult<void>> reorderSpaceTree({
+    required String authorization,
+    required String spaceId,
+    required List<String> orderedNodeIds,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/spaces/$spaceId/tree/reorder'),
+      authorization: authorization,
+      body: space_pb.ReorderSpaceTreeRequest(
+        spaceId: spaceId,
+        orderedNodeIds: orderedNodeIds,
+      ),
+      createEmpty: space_pb.ReorderSpaceTreeResponse.create,
+      allowNoContent: true,
+    );
+    return switch (result) {
+      GatewayHttpOk() => const SpacesApiOk(null),
+      GatewayHttpFailure(:final error) => SpacesApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
   }
 
   SpacesApiResult<T> _map<T>(

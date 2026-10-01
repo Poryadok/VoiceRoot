@@ -770,8 +770,12 @@ class AuthController extends StateNotifier<AuthState> {
     if (current == null || !state.isEmailVerificationPending) {
       return 'not_authenticated';
     }
+    return _sendEmailVerificationOtp(current);
+  }
+
+  Future<String?> _sendEmailVerificationOtp(AuthSession session) async {
     final result = await _authClient.sendGuestConversionEmailOtp(
-      session: current,
+      session: session,
     );
     return switch (result) {
       AuthApiOk<void>() => null,
@@ -919,6 +923,7 @@ class AuthController extends StateNotifier<AuthState> {
     () =>
         _authClient.login(email: email, password: password, totpCode: totpCode),
     recoverEmailVerification: true,
+    sendPendingVerificationOtp: true,
   );
 
   Future<void> applySession(AuthSession session) async {
@@ -984,6 +989,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _authenticate(
     Future<AuthSessionResult> Function() call, {
     bool recoverEmailVerification = false,
+    bool sendPendingVerificationOtp = false,
   }) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     final result = await call();
@@ -1057,14 +1063,20 @@ class AuthController extends StateNotifier<AuthState> {
           }
           recoveryState = EmailVerificationRecoveryState.promotionPending;
         }
+        final resendError =
+            sendPendingVerificationOtp &&
+                recoveryState == EmailVerificationRecoveryState.emailPending
+            ? await _sendEmailVerificationOtp(session)
+            : null;
         state = state.copyWith(
           session: session,
           isSubmitting: false,
-          clearError: true,
           pendingDiscoverHint: true,
           isGuest: isGuest,
           emailVerificationRecoveryState: recoveryState,
           clearEmailVerificationRecoveryState: !recoverEmailVerification,
+          clearError: resendError == null,
+          errorKey: resendError,
         );
         if (recoveryState != EmailVerificationRecoveryState.emailPending &&
             recoveryState != EmailVerificationRecoveryState.promotionPending) {

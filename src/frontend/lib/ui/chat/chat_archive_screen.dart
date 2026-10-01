@@ -169,6 +169,7 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
               final profile = profileAsync?.valueOrNull;
               final title =
                   profile?.displayName ??
+                  item.dmPeerDisplayName ??
                   item.chat.name ??
                   l10n.chatListDmFallback(_shortChatId(item.chatId));
               final row = VoiceListRow(
