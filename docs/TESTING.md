@@ -322,6 +322,21 @@ register accounts, change privacy settings, or fetch history to satisfy the
 delivery assertion. The generic `VOICE_RUN_LIVE_INTEGRATION` flag does not
 enable this check.
 
+For a dedicated pair of existing staging test accounts that are not friends
+and have no existing request record between them, run
+`existing_accounts_friend_request_ws_live_test.dart` with
+`VOICE_RUN_EXISTING_ACCOUNT_FRIEND_REQUEST_WS=true` and
+`VOICE_LIVE_REQUESTER_EMAIL/PASSWORD` plus
+`VOICE_LIVE_RECIPIENT_EMAIL/PASSWORD` (optional per-account
+`*_TOTP_CODE`). It connects the recipient to Realtime before sending one
+friend request, requires the matching `notification` WebSocket event, and
+checks the recipient's REST request snapshot without reloading. The recipient
+declines the request in teardown so it does not remain pending; Social retains
+the request as `declined` for the requester, so this is a one-shot check for
+that pair. Do not unfriend established accounts to prepare it. This test does
+not create accounts or change privacy settings and is not enabled by the
+generic `VOICE_RUN_LIVE_INTEGRATION` flag.
+
 Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics live tests; требуется compose app stack с ClickHouse + staff token.
 
 ---
