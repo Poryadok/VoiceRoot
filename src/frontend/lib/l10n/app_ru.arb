@@ -1226,6 +1226,7 @@
   "storyCreateVideoTooLong": "Видео должно быть не длиннее 60 секунд",
   "storyGameTagTapHint": "Открыть страницу игры",
   "onboardingSkip": "Пропустить",
+  "onboardingDismissFailed": "Не удалось сохранить выбор. Попробуйте ещё раз.",
   "onboardingGotIt": "Понятно",
   "onboardingLater": "Позже",
   "onboardingSaveAccountTitle": "Настрой профиль",

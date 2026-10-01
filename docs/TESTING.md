@@ -310,6 +310,18 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 | E2E encryption | `TestComposeE2EKeyBackup_live` | `encryption_key_backup_e2e_live_test` |
 | Analytics (staff) | `TestComposeAnalytics_live`, `TestComposeAnalyticsExport_live` | — (admin web only) |
 
+For staging accounts that already share a DM, Flutter also has the isolated
+`existing_accounts_dm_ws_live_test.dart` check. It requires the separate
+`VOICE_RUN_EXISTING_ACCOUNT_DM_WS=true` flag and
+`VOICE_LIVE_SENDER_EMAIL`, `VOICE_LIVE_SENDER_PASSWORD`,
+`VOICE_LIVE_RECEIVER_EMAIL`, and `VOICE_LIVE_RECEIVER_PASSWORD` environment
+variables (plus optional per-account `*_TOTP_CODE` values). It logs into the
+existing accounts, confirms the same DM is in both `main` inboxes, and sends a
+unique message while the receiver is subscribed over WebSocket. It does not
+register accounts, change privacy settings, or fetch history to satisfy the
+delivery assertion. The generic `VOICE_RUN_LIVE_INTEGRATION` flag does not
+enable this check.
+
 Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics live tests; требуется compose app stack с ClickHouse + staff token.
 
 ---

@@ -30,6 +30,80 @@ import 'support/voice_test_theme.dart';
 
 void main() {
   testWidgets(
+    'switching to a chat with no unread messages hides the previous unread separator',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(900, 600));
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          selectedChatIdProvider.overrideWith((ref) => 'chat-a'),
+          chatListControllerProvider.overrideWith(
+            _UnreadTwoChatListController.new,
+          ),
+          chatRoomControllerProvider('chat-a').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-a'),
+          ),
+          chatRoomControllerProvider('chat-b').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-b'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: ThreeColumnShell(
+                navigationChild: const ChatListBody(showHeader: false),
+                mainChild: Consumer(
+                  builder: (context, ref, _) {
+                    return ChatRoomPanel(
+                      chatId: ref.watch(selectedChatIdProvider)!,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(container.read(selectedChatIdProvider), 'chat-a');
+      expectMessagePlainText(tester, 'Message for chat-a');
+      expect(find.byType(ChatUnreadSeparator), findsOneWidget);
+
+      await tester.tap(find.byKey(ChatListBody.tileKey('chat-b')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(selectedChatIdProvider), 'chat-b');
+      expectMessagePlainText(tester, 'Message for chat-b');
+      expect(find.byType(ChatUnreadSeparator), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'switching chats keeps a visible room loading state without a progress line',
     (tester) async {
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -340,6 +414,59 @@ class _BlockedDmChatListController extends ChatListController {
           dmPeerProfileId: 'peer-1',
         ),
       ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _UnreadTwoChatListController extends ChatListController {
+  _UnreadTwoChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-a',
+            type: 'CHAT_TYPE_GROUP',
+            name: 'Chat A',
+            creatorProfileId: 'prof-test',
+          ),
+          unreadCount: 1,
+        ),
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-b',
+            type: 'CHAT_TYPE_GROUP',
+            name: 'Chat B',
+            creatorProfileId: 'prof-test',
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+
+  @override
+  Future<void> loadMore() async {}
+}
+
+class _SingleMessageRoomController extends ChatRoomController {
+  _SingleMessageRoomController(super.ref, super.chatId) : super() {
+    state = ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: '$chatId-message',
+          chatId: chatId,
+          senderProfileId: 'peer-1',
+          content: 'Message for $chatId',
+          createdAt: DateTime.parse('2026-09-20T00:00:00Z'),
+        ),
+      ],
+      historyProfileId: 'prof-test',
     );
   }
 

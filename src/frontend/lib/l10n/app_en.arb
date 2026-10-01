@@ -1325,6 +1325,7 @@
   "storyCreateVideoTooLong": "Video must be 60 seconds or shorter",
   "storyGameTagTapHint": "Open game page",
   "onboardingSkip": "Skip",
+  "onboardingDismissFailed": "We couldn't save your choice. Please try again.",
   "onboardingGotIt": "Got it",
   "onboardingLater": "Later",
   "onboardingSaveAccountTitle": "Set up your profile",
