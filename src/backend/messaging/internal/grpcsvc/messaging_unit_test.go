@@ -45,7 +45,7 @@ func TestMessageRowToProto(t *testing.T) {
 		Content:         "hi",
 		Type:            "system",
 		ThreadParentID:  &thread,
-		AttachmentsJSON:   "[]",
+		AttachmentsJSON: "[]",
 		MentionsJSON:    "[]",
 		EditedAt:        &edited,
 		DeletedAt:       &deleted,
@@ -71,12 +71,13 @@ func TestNextCursorForPage(t *testing.T) {
 	t.Parallel()
 	id1 := uuid.New()
 	id2 := uuid.New()
+	chatID := uuid.New()
 	rows := []store.MessageRow{{ID: id1}, {ID: id2}}
 
-	require.Empty(t, nextCursorForPage(store.ListLatest, nil))
-	require.Equal(t, store.EncodeBeforeCursor(id2), nextCursorForPage(store.ListBeforeID, rows))
-	require.Equal(t, store.EncodeAfterCursor(id2), nextCursorForPage(store.ListAfterID, rows))
-	require.Equal(t, store.EncodeBeforeCursor(id2), nextCursorForPage(store.ListLatest, rows))
+	require.Empty(t, nextCursorForPage(chatID, store.ListLatest, nil))
+	require.Equal(t, store.EncodeBeforeCursor(chatID, id2), nextCursorForPage(chatID, store.ListBeforeID, rows))
+	require.Equal(t, store.EncodeAfterCursor(chatID, id2), nextCursorForPage(chatID, store.ListAfterID, rows))
+	require.Equal(t, store.EncodeBeforeCursor(chatID, id2), nextCursorForPage(chatID, store.ListLatest, rows))
 }
 
 func TestForwardAttribution_pointsToOriginalSource(t *testing.T) {
@@ -86,10 +87,10 @@ func TestForwardAttribution_pointsToOriginalSource(t *testing.T) {
 	intermediateID := uuid.New()
 
 	originID, originSender := forwardAttribution(&store.MessageRow{
-		ID:                originalID,
-		SenderProfileID:   originalSender,
-		Content:           "root",
-		Type:              "text",
+		ID:              originalID,
+		SenderProfileID: originalSender,
+		Content:         "root",
+		Type:            "text",
 	})
 	require.Equal(t, originalID, originID)
 	require.Equal(t, originalSender.String(), originSender)
