@@ -870,8 +870,8 @@ class _TaggedInboxReconcilerController extends InboxReconcilerController {
   _TaggedInboxReconcilerController(super.ref) : super(pageSize: 1);
 
   @override
-  Future<void> reconcile() {
-    return _runTagged(super.reconcile);
+  Future<void> reconcile({bool force = false}) {
+    return _runTagged(() => super.reconcile(force: force));
   }
 
   @override

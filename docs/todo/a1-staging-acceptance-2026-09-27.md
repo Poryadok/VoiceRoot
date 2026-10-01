@@ -335,3 +335,27 @@ Still open and not credited as passed:
 
 A1 remains open. Continue after exact-head CI and only deploy once the active
 NATS proof and state-preserving migration gate are satisfied.
+
+## 2026-10-02 CI follow-up — inbox reconciliation
+
+- CI run [36937915331](https://github.com/Poryadok/VoiceRoot/actions/runs/36937915331)
+  found two remaining batch regressions: the profile-handoff check observed 12
+  inbox requests where it expected 6, and a direct Messaging service fixture
+  did not provide the required profile-pair block policy. The fixture now uses
+  an explicit allow-all policy, matching the test's intent.
+- Concurrent full reconciliations now share one in-flight three-scope snapshot.
+  Activity received during pagination schedules one follow-up after current
+  pages finish, preserving fresh preview and unread state without overlapping
+  generations. The retry path follows the same rule; a failed scope is not
+  implicitly retried.
+- Regression tests cover a full snapshot and a scope-local retry with activity
+  arriving during paging. They verify one follow-up refresh and the final
+  server preview/unread rows. The inbox reconciler suite passes 18 tests.
+- Final local checks for this batch: `make flutter-ci` passed (1,241 passed,
+  98 skipped; eight informational lints accepted by CI),
+  `make go-test-short-messaging` and `make golangci-ci` passed, and
+  `git diff --check` passed. The exact-head GitHub CI run is still required.
+- The GitHub staging environment's secret-name inventory confirms that
+  `STAGING_NATS_PROOF_CREDS_B64` is absent. No deployment or staging data
+  changes were made; the active-generation ACL proof and state-preserving
+  migration gate remain unresolved.

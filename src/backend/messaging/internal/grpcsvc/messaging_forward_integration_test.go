@@ -259,6 +259,7 @@ func TestMessagingForwardMessage_toChannelSetsPostedAsChat(t *testing.T) {
 	require.NoError(t, err)
 
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ProfilePairBlocks: allowProfilePairBlocks{},
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages: true,
 		}},

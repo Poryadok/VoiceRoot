@@ -140,6 +140,11 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       _archivedMutations.clear();
       _unarchivedMutations.clear();
       _lastHelloGeneration = null;
+      _refreshAfterCurrentWork = false;
+      // A new authenticated session must not join a reconciliation started
+      // for the previous profile or credential. The old future remains
+      // fenced by its generation and cannot publish into the new session.
+      _fullReconciliation = null;
       if (profileChanged) {
         _ref.read(dmPeerProfileByChatIdProvider.notifier).state = const {};
       }
@@ -154,6 +159,9 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   int _archiveMutationRevision = 0;
   int _unarchiveMutationRevision = 0;
   int? _lastHelloGeneration;
+  Future<void>? _fullReconciliation;
+  bool _refreshAfterCurrentWork = false;
+  final Map<int, int> _scopeWorkByGeneration = {};
   final Map<InboxScope, List<ChatListItem>> _pendingItems = {};
   final Map<String, Map<InboxScope, Set<String>>> _removedChatIds = {};
   final Map<String, Map<String, _ArchivedMutation>> _archivedMutations = {};
@@ -167,15 +175,18 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
   }
 
   /// Starts a new full, independent snapshot of main, requests and archive.
-  Future<void> reconcile() async {
+  Future<void> reconcile({bool force = false}) {
+    final inFlight = force ? null : _fullReconciliation;
+    if (inFlight != null) return inFlight;
+
     final session = _ref.read(authControllerProvider).session;
-    if (session == null) return;
+    if (session == null) return Future<void>.value();
     final profileId = session.activeProfileId;
     final authorization = session.authorizationHeader;
     final generation = ++_generation;
     _pendingItems.clear();
 
-    await Future.wait([
+    final future = Future.wait([
       for (final scope in InboxScope.values)
         _reconcileScope(
           generation: generation,
@@ -186,6 +197,24 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
           replacesFirstPage: true,
         ),
     ]);
+    _fullReconciliation = future;
+    unawaited(
+      future.then<void>(
+        (_) {
+          if (identical(_fullReconciliation, future)) {
+            _fullReconciliation = null;
+            _drainDeferredRefresh();
+          }
+        },
+        onError: (Object _, StackTrace _) {
+          if (identical(_fullReconciliation, future)) {
+            _fullReconciliation = null;
+            _drainDeferredRefresh();
+          }
+        },
+      ),
+    );
+    return future;
   }
 
   /// Refreshes an inbox already presented by the active profile after a
@@ -198,6 +227,16 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
       return;
     }
     final snapshot = state.profileSnapshots[profileId]!;
+    if (_fullReconciliation != null ||
+        snapshot.scopes.values.any((scope) => scope.isLoading)) {
+      // A full snapshot or scope-local retry is already reconciling this
+      // profile. Starting another generation would duplicate all three
+      // paginated requests and invalidate the work already in progress. Run
+      // one follow-up snapshot after the current pages finish so this activity
+      // is still reflected in unread counts and previews.
+      _refreshAfterCurrentWork = true;
+      return;
+    }
     if (snapshot.scopes.values.any((scope) => scope.hasError)) {
       // A background activity or MarkRead must not silently turn a visible
       // pagination error into an implicit retry. Preserve the loaded rows and
@@ -451,84 +490,117 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     required String? cursor,
     required bool replacesFirstPage,
   }) async {
-    var pageCursor = cursor;
-    var replacesPage = replacesFirstPage;
-
-    if (replacesFirstPage) _pendingItems[scope] = const [];
-    _beginScope(
-      generation: generation,
-      profileId: profileId,
-      scope: scope,
-      resetCursor: replacesFirstPage,
+    _scopeWorkByGeneration.update(
+      generation,
+      (count) => count + 1,
+      ifAbsent: () => 1,
     );
-    if (!_isCurrent(generation, profileId)) return;
+    try {
+      var pageCursor = cursor;
+      var replacesPage = replacesFirstPage;
 
-    while (true) {
-      final requestedCursor = pageCursor;
-      final archiveMutationRevisionAtRequest = scope == InboxScope.archive
-          ? _archiveMutationRevision
-          : null;
-      final unarchiveMutationRevisionAtRequest = scope == InboxScope.main
-          ? _unarchiveMutationRevision
-          : null;
-      final result = await _ref
-          .read(voiceChatsClientProvider)
-          .listChats(
-            authorization: authorization,
-            cursor: requestedCursor,
-            pageSize: _pageSize,
-            inbox: scope.name,
-          );
+      if (replacesFirstPage) _pendingItems[scope] = const [];
+      _beginScope(
+        generation: generation,
+        profileId: profileId,
+        scope: scope,
+        resetCursor: replacesFirstPage,
+      );
       if (!_isCurrent(generation, profileId)) return;
 
-      switch (result) {
-        case ChatsApiOk(:final data):
-          _commitPage(
-            generation: generation,
-            profileId: profileId,
-            scope: scope,
-            items: data.items,
-            nextCursor: _nonEmptyCursor(data.nextCursor),
-            replacesPage: replacesPage,
-            archiveMutationRevisionAtRequest: archiveMutationRevisionAtRequest,
-            unarchiveMutationRevisionAtRequest:
-                unarchiveMutationRevisionAtRequest,
-          );
-          if (!_isCurrent(generation, profileId)) return;
-          _syncDmPeers(
-            generation: generation,
-            profileId: profileId,
-            scope: scope,
-            items: data.items,
-          );
-          if (!_isCurrent(generation, profileId)) return;
+      while (true) {
+        final requestedCursor = pageCursor;
+        final archiveMutationRevisionAtRequest = scope == InboxScope.archive
+            ? _archiveMutationRevision
+            : null;
+        final unarchiveMutationRevisionAtRequest = scope == InboxScope.main
+            ? _unarchiveMutationRevision
+            : null;
+        final result = await _ref
+            .read(voiceChatsClientProvider)
+            .listChats(
+              authorization: authorization,
+              cursor: requestedCursor,
+              pageSize: _pageSize,
+              inbox: scope.name,
+            );
+        if (!_isCurrent(generation, profileId)) return;
 
-          pageCursor = _nonEmptyCursor(data.nextCursor);
-          if (pageCursor == null) {
-            _completeScope(
+        switch (result) {
+          case ChatsApiOk(:final data):
+            _commitPage(
               generation: generation,
               profileId: profileId,
               scope: scope,
+              items: data.items,
+              nextCursor: _nonEmptyCursor(data.nextCursor),
+              replacesPage: replacesPage,
+              archiveMutationRevisionAtRequest:
+                  archiveMutationRevisionAtRequest,
+              unarchiveMutationRevisionAtRequest:
+                  unarchiveMutationRevisionAtRequest,
             );
-            _removedChatIds[profileId]?.remove(scope);
-            if (_removedChatIds[profileId]?.isEmpty ?? false) {
-              _removedChatIds.remove(profileId);
+            if (!_isCurrent(generation, profileId)) return;
+            _syncDmPeers(
+              generation: generation,
+              profileId: profileId,
+              scope: scope,
+              items: data.items,
+            );
+            if (!_isCurrent(generation, profileId)) return;
+
+            pageCursor = _nonEmptyCursor(data.nextCursor);
+            if (pageCursor == null) {
+              _completeScope(
+                generation: generation,
+                profileId: profileId,
+                scope: scope,
+              );
+              _removedChatIds[profileId]?.remove(scope);
+              if (_removedChatIds[profileId]?.isEmpty ?? false) {
+                _removedChatIds.remove(profileId);
+              }
+              return;
             }
+            replacesPage = false;
+          case ChatsApiFailure(:final message, :final statusCode):
+            _failScope(
+              generation: generation,
+              profileId: profileId,
+              scope: scope,
+              failedCursor: requestedCursor,
+              message: message,
+              statusCode: statusCode,
+            );
             return;
-          }
-          replacesPage = false;
-        case ChatsApiFailure(:final message, :final statusCode):
-          _failScope(
-            generation: generation,
-            profileId: profileId,
-            scope: scope,
-            failedCursor: requestedCursor,
-            message: message,
-            statusCode: statusCode,
-          );
-          return;
+        }
+      }
+    } finally {
+      final remaining = (_scopeWorkByGeneration[generation] ?? 1) - 1;
+      if (remaining == 0) {
+        _scopeWorkByGeneration.remove(generation);
+        if (generation == _generation && _fullReconciliation == null) {
+          _drainDeferredRefresh();
+        }
+      } else {
+        _scopeWorkByGeneration[generation] = remaining;
       }
     }
+  }
+
+  void _drainDeferredRefresh() {
+    if (!_refreshAfterCurrentWork || _fullReconciliation != null) return;
+    _refreshAfterCurrentWork = false;
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return;
+    final snapshot = state.profileSnapshots[session.activeProfileId];
+    if (snapshot == null ||
+        snapshot.scopes.values.any(
+          (scope) => scope.hasError || scope.isLoading,
+        )) {
+      return;
+    }
+    unawaited(reconcile());
   }
 
   String? _nonEmptyCursor(String? cursor) {
