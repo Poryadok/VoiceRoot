@@ -68,6 +68,38 @@ void main() {
       },
     );
 
+    test('friend_removed refreshes the friend list without reload', () async {
+      final hub = _FakeRealtimeHub();
+      final friends = _RequestFriendsClient()..friendsVisible = true;
+      final container = _container(
+        sound: _RecordingSoundPlayer(),
+        hub: hub,
+        friends: friends,
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(friendsListProvider, (_, _) {});
+      addTearDown(subscription.close);
+      container.read(inAppNotificationControllerProvider);
+
+      expect((await container.read(friendsListProvider.future)).friends, [
+        'peer-1',
+      ]);
+      friends.friendsVisible = false;
+      hub.emit(
+        const RealtimeFrame(
+          op: 'notification',
+          data: {'type': 'friend_removed', 'friend_profile_id': 'peer-1'},
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        (await container.read(friendsListProvider.future)).friends,
+        isEmpty,
+      );
+      expect(friends.friendListCalls, greaterThanOrEqualTo(2));
+    });
+
     test('reconnect refreshes friend requests missed while offline', () async {
       final hub = _FakeRealtimeHub();
       final friends = _RequestFriendsClient();
@@ -286,6 +318,70 @@ void main() {
             .firstWhere((row) => row.chatId == 'chat-other');
         expect(item.unreadCount, 1);
         expect(sound.newMessagePlays, 1);
+      },
+    );
+
+    test(
+      'live message and read events reconcile the rendered inbox snapshot',
+      () async {
+        final sound = _RecordingSoundPlayer();
+        final hub = _FakeRealtimeHub();
+        final chats = _MutableInboxChatsClient();
+        final container = _container(sound: sound, hub: hub, chats: chats);
+        addTearDown(container.dispose);
+
+        final reconciler = container.read(inboxReconcilerProvider.notifier);
+        await reconciler.reconcile();
+        container.read(inAppNotificationControllerProvider);
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.main]
+              .items
+              .single
+              .lastMessagePreview,
+          'before',
+        );
+
+        chats.showLatestMessage = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'notification',
+            data: {
+              'type': 'new_message',
+              'chat_id': 'chat-other',
+              'message_id': 'msg-new',
+              'sender_profile_id': 'peer-1',
+            },
+          ),
+        );
+        await pumpEventQueue();
+
+        var item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest message');
+        expect(item.unreadCount, 2);
+
+        chats.markLatestMessageRead = true;
+        hub.emit(
+          const RealtimeFrame(
+            op: 'mark_read',
+            data: {'chat_id': 'chat-other', 'message_id': 'msg-new'},
+          ),
+        );
+        await pumpEventQueue();
+
+        item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest message');
+        expect(item.unreadCount, 0);
+        expect(chats.mainCalls, greaterThanOrEqualTo(3));
       },
     );
 
@@ -988,6 +1084,48 @@ class _FakeChatsClient extends VoiceChatsClient {
   }
 }
 
+class _MutableInboxChatsClient extends VoiceChatsClient {
+  _MutableInboxChatsClient()
+    : super(
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 500)),
+        ),
+      );
+
+  bool showLatestMessage = false;
+  bool markLatestMessageRead = false;
+  int mainCalls = 0;
+
+  @override
+  Future<ChatsApiResult<ChatListData>> listChats({
+    required String authorization,
+    String? cursor,
+    int? pageSize,
+    String? inbox,
+    String? folderId,
+  }) async {
+    if (inbox == null || inbox == 'main') mainCalls++;
+    if (inbox != null && inbox != 'main') {
+      return const ChatsApiOk(ChatListData(items: []));
+    }
+    return ChatsApiOk(
+      ChatListData(
+        items: [
+          inboxChatItem(
+            'chat-other',
+            preview: showLatestMessage ? 'latest message' : 'before',
+            unreadCount: markLatestMessageRead
+                ? 0
+                : showLatestMessage
+                ? 2
+                : 1,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RequestChatsClient extends VoiceChatsClient {
   _RequestChatsClient()
     : super(
@@ -1026,6 +1164,20 @@ class _RequestFriendsClient extends VoiceFriendsClient {
       );
 
   bool requestVisible = false;
+  bool friendsVisible = false;
+  int friendListCalls = 0;
+
+  @override
+  Future<FriendsApiResult<FriendsListData>> listFriends({
+    required String authorization,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    friendListCalls++;
+    return FriendsApiOk(
+      FriendsListData(friends: friendsVisible ? const ['peer-1'] : const []),
+    );
+  }
 
   @override
   Future<FriendsApiResult<FriendRequestsData>> listFriendRequests({

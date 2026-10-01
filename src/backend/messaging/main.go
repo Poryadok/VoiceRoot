@@ -129,6 +129,7 @@ func main() {
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
+		var accountBlocks grpcsvc.AccountBlockChecker
 		var friends grpcsvc.ProfileFriendChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
@@ -143,7 +144,9 @@ func main() {
 				log.Fatalf("social grpc dial: %v", err)
 			}
 			waitCancel()
-			blocks = s2s.NewSocialGRPCBlocks(sconn)
+			socialBlocks := s2s.NewSocialGRPCBlocks(sconn)
+			blocks = socialBlocks
+			accountBlocks = socialBlocks
 			friends = s2s.NewSocialGRPCFriends(sconn)
 		}
 
@@ -299,6 +302,7 @@ func main() {
 			ChatGuard:         chatGuard,
 			ChatTypeResolver:  chatTypeResolver,
 			Blocks:            blocks,
+			AccountBlocks:     accountBlocks,
 			UserProfiles:      profiles,
 			DeletedAccounts:   deletedAccounts,
 			Privacy:           privacy,

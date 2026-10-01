@@ -63,20 +63,20 @@ class DeepLinkTarget {
 
   @override
   int get hashCode => Object.hash(
-        kind,
-        rawUrl,
-        spaceId,
-        chatId,
-        voiceRoomId,
-        messageId,
-        inviteCode,
-        username,
-        userId,
-        botSlug,
-      );
+    kind,
+    rawUrl,
+    spaceId,
+    chatId,
+    voiceRoomId,
+    messageId,
+    inviteCode,
+    username,
+    userId,
+    botSlug,
+  );
 }
 
-DeepLinkTarget parseDeepLinkUrl(String raw) {
+DeepLinkTarget parseDeepLinkUrl(String raw, {Uri? currentOrigin}) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
     throw DeepLinkParseException('empty url');
@@ -101,13 +101,21 @@ DeepLinkTarget parseDeepLinkUrl(String raw) {
     path = voicePath;
   } else if (uri.scheme == 'https' || uri.scheme == 'http') {
     final host = uri.host.toLowerCase();
+    final activeOrigin = currentOrigin ?? Uri.base;
+    final isCurrentWebHost =
+        (activeOrigin.scheme == 'https' || activeOrigin.scheme == 'http') &&
+        activeOrigin.host.isNotEmpty &&
+        host == activeOrigin.host.toLowerCase();
     if (host != 'voice.gg' &&
         host != 'www.voice.gg' &&
         host != 'voice.app' &&
-        host != 'www.voice.app') {
+        host != 'www.voice.app' &&
+        !isCurrentWebHost) {
       throw DeepLinkParseException('foreign host');
     }
-    path = uri.path.replaceFirst(RegExp(r'^/+'), '').replaceAll(RegExp(r'/+$'), '');
+    path = uri.path
+        .replaceFirst(RegExp(r'^/+'), '')
+        .replaceAll(RegExp(r'/+$'), '');
   } else {
     throw DeepLinkParseException('unsupported scheme');
   }
@@ -173,7 +181,11 @@ DeepLinkTarget _parseSpacePath(List<String> parts, String raw) {
   }
   final spaceId = parts[1];
   if (parts.length == 2) {
-    return DeepLinkTarget(kind: DeepLinkKind.space, spaceId: spaceId, rawUrl: raw);
+    return DeepLinkTarget(
+      kind: DeepLinkKind.space,
+      spaceId: spaceId,
+      rawUrl: raw,
+    );
   }
   if (parts.length >= 4 && parts[2] == 'c' && parts[3].isNotEmpty) {
     if (parts.length == 4) {
@@ -207,9 +219,16 @@ DeepLinkTarget _parseSpacePath(List<String> parts, String raw) {
 
 DeepLinkTarget _parseChatPath(List<String> parts, String raw) {
   if (parts.length == 2 && parts[1].isNotEmpty) {
-    return DeepLinkTarget(kind: DeepLinkKind.chat, chatId: parts[1], rawUrl: raw);
+    return DeepLinkTarget(
+      kind: DeepLinkKind.chat,
+      chatId: parts[1],
+      rawUrl: raw,
+    );
   }
-  if (parts.length == 4 && parts[1].isNotEmpty && parts[2] == 'm' && parts[3].isNotEmpty) {
+  if (parts.length == 4 &&
+      parts[1].isNotEmpty &&
+      parts[2] == 'm' &&
+      parts[3].isNotEmpty) {
     return DeepLinkTarget(
       kind: DeepLinkKind.chatMessage,
       chatId: parts[1],

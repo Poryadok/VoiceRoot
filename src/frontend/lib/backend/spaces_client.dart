@@ -1,6 +1,7 @@
 import '../gen/voice/chat/v1/chat.pb.dart' as chat_pb;
 import '../gen/voice/chat/v1/chat.pbenum.dart';
 import '../gen/voice/space/v1/space.pb.dart' as space_pb;
+import '../routing/deep_link_urls.dart';
 import 'api_result.dart';
 import 'gateway_http.dart';
 import 'proto_mappers.dart';
@@ -108,6 +109,7 @@ class SpaceTreeNodeData {
   final int sortOrder;
   final bool isSystem;
   final String displayName;
+
   /// Wire value from [ChatType] proto enum, e.g. `CHAT_TYPE_CHANNEL`.
   final String? chatType;
 
@@ -143,7 +145,10 @@ class SpaceInvite {
   final DateTime createdAt;
   final DateTime? revokedAt;
 
-  String get inviteLink => 'https://voice.gg/invite/$code';
+  String get inviteLink => spaceInviteShareUrl(code);
+
+  String inviteLinkFor(Uri currentOrigin) =>
+      spaceInviteShareUrl(code, currentOrigin: currentOrigin);
 }
 
 class SpaceMembershipData {
@@ -266,7 +271,10 @@ class VoiceSpacesClient {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/spaces/$spaceId'),
       authorization: authorization,
-      body: updateSpaceRequestToProto(iconUrl: iconUrl, description: description),
+      body: updateSpaceRequestToProto(
+        iconUrl: iconUrl,
+        description: description,
+      ),
       createEmpty: space_pb.UpdateSpaceResponse.create,
     );
     return _map(result, (data) => voiceSpaceFromProto(data.space));
@@ -356,7 +364,9 @@ class VoiceSpacesClient {
       createEmpty: space_pb.ListInvitesResponse.create,
     );
     return _map<List<SpaceInvite>>(result, (data) {
-      final list = data.hasInviteList() ? data.inviteList : space_pb.InviteList();
+      final list = data.hasInviteList()
+          ? data.inviteList
+          : space_pb.InviteList();
       return <SpaceInvite>[
         for (final invite in list.invites) spaceInviteFromProto(invite),
       ];
@@ -596,7 +606,8 @@ SpaceMemberListData spaceMemberListFromJson(Map<String, dynamic> data) {
           roleNames: roleNames is List
               ? roleNames.whereType<String>().toList(growable: false)
               : const [],
-          joinedAt: _spaceMemberJoinedAtFromJson(item['joined_at']) ??
+          joinedAt:
+              _spaceMemberJoinedAtFromJson(item['joined_at']) ??
               DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
           nickname: item['nickname'] as String?,
         ),

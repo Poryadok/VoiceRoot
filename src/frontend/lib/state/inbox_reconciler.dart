@@ -188,6 +188,18 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     ]);
   }
 
+  /// Refreshes an inbox already presented by the active profile after a
+  /// durable message mutation or live activity event. Background controllers
+  /// that do not have an inbox snapshot yet leave initialization to the shell
+  /// or the next accepted realtime hello.
+  void reconcileAfterMutation() {
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
+    if (profileId == null || !state.profileSnapshots.containsKey(profileId)) {
+      return;
+    }
+    unawaited(reconcile());
+  }
+
   /// Retries precisely the page which last failed for [scope].
   Future<void> retry(InboxScope scope) async {
     final session = _ref.read(authControllerProvider).session;

@@ -730,6 +730,12 @@ func (h *wsHub) profileIDsSubscribedToChat(chatID string) []string {
 
 // broadcastToChat delivers a fan-out envelope to every connection subscribed to chatID (local hub only).
 func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.Logger, requestID string) {
+	h.broadcastToChatFiltered(chatID, env, nil, logger, requestID)
+}
+
+// broadcastToChatFiltered keeps chat membership intact while omitting profiles
+// excluded from this one message event. A nil allow set preserves ordinary fanout.
+func (h *wsHub) broadcastToChatFiltered(chatID string, env fanoutEnvelope, allowedProfiles map[string]bool, logger *slog.Logger, requestID string) {
 	chatID = canonicalChatID(chatID)
 	if chatID == "" {
 		return
@@ -738,6 +744,9 @@ func (h *wsHub) broadcastToChat(chatID string, env fanoutEnvelope, logger *slog.
 	m := h.byChat[chatID]
 	var targets []*connReg
 	for reg := range m {
+		if allowedProfiles != nil && !allowedProfiles[reg.profileID] {
+			continue
+		}
 		targets = append(targets, reg)
 	}
 	h.mu.RUnlock()

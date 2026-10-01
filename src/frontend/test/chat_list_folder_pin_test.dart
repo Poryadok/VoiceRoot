@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -17,6 +18,79 @@ import 'support/fake_voice_api_clients.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('chat row overflow opens actions and archives the chat', (
+    tester,
+  ) async {
+    const chatId = 'chat-archive-overflow';
+    final chats = _TrackingVoiceChatsClient(
+      pages: [
+        ChatListData(
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: chatId,
+                type: 'CHAT_TYPE_GROUP',
+                creatorProfileId: 'p1',
+                name: 'Archive Target',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        onboardingControllerProvider.overrideWith(
+          TestCompletedOnboardingController.new,
+        ),
+        voiceChatsClientProvider.overrideWith((ref) => chats),
+        chatFoldersProvider.overrideWith(
+          (_) async => const FolderListData(folders: []),
+        ),
+        quickAccessListProvider.overrideWith(
+          (_) async => const QuickAccessListData(items: []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatListBody(showHeader: false)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final overflowButton = find.byKey(ChatListBody.rowActionsButtonKey(chatId));
+    expect(overflowButton, findsOneWidget);
+    final overflowSemantics = tester
+        .getSemantics(overflowButton)
+        .getSemanticsData();
+    expect(overflowSemantics.tooltip, 'Archive');
+    expect(overflowSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(overflowSemantics.flagsCollection.isButton, isTrue);
+
+    await tester.tap(overflowButton);
+    await tester.pumpAndSettle();
+    final archiveAction = find.byKey(ChatListBody.archiveActionKey(chatId));
+    expect(archiveAction, findsOneWidget);
+    await tester.tap(archiveAction);
+    await tester.pumpAndSettle();
+
+    expect(chats.archived, [chatId]);
+    expect(find.byKey(ChatListBody.tileKey(chatId)), findsNothing);
+  });
+
   test('folder ListChats mapping restores persisted pin after reload', () {
     final item = chatListItemFromProto(
       chat_pb.ChatListItem(

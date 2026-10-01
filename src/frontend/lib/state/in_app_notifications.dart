@@ -202,6 +202,11 @@ class InAppNotificationController {
       return;
     }
 
+    if (type == 'friend_removed') {
+      _ref.invalidate(friendsListProvider);
+      return;
+    }
+
     if (navigateToChat) {
       final normalized = data.map(
         (key, value) => MapEntry(key, value?.toString() ?? ''),
@@ -273,6 +278,7 @@ class InAppNotificationController {
     if (chatId == null || chatId.isEmpty) return;
     _ref.read(inAppNotificationCenterProvider.notifier).markChatRead(chatId);
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
   }
 
   void _onChatUpdate(Map<String, dynamic>? data) {
@@ -324,6 +330,10 @@ class InAppNotificationController {
     if (selectedChatId == chatId) return;
 
     _ref.read(chatListControllerProvider.notifier).bumpUnread(chatId);
+    // ChatListBody renders this authoritative snapshot rather than the legacy
+    // list controller. Refresh it so live activity updates both unread state
+    // and the last-message preview without requiring navigation or reload.
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
 
     if (!_ref.read(inAppNotificationsSoundEnabledProvider)) return;
 

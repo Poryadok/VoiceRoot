@@ -322,7 +322,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         : widget.chatId.substring(0, 8);
     final title = isGroup
         ? (groupName ?? l10n.chatRoomTitle(shortId))
-        : (peerName ?? groupName ?? l10n.chatRoomTitle(shortId));
+        : (peerName ?? groupName ?? l10n.socialProfileUnavailable);
     final peerIsPremium = peerId != null &&
         ref.watch(profilePremiumBadgeProvider(peerId));
     final voice = VoiceColors.of(context);

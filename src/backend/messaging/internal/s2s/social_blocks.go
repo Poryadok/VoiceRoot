@@ -48,3 +48,23 @@ func (s *SocialGRPCBlocks) AccountPairBlocked(ctx context.Context, viewerAccount
 	}
 	return r2.GetBlocked(), nil
 }
+
+// AccountBlocked checks only viewerAccountID → otherAccountID. Shared-chat
+// history visibility is directional even though DM send policy is symmetric.
+func (s *SocialGRPCBlocks) AccountBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error) {
+	if s == nil || s.Client == nil {
+		return false, status.Error(codes.Unavailable, "social block status unavailable")
+	}
+	if viewerAccountID == otherAccountID {
+		return false, nil
+	}
+	ctx = ForwardIncomingMetadata(ctx)
+	resp, err := s.Client.IsBlocked(ctx, &socialv1.IsBlockedRequest{
+		AccountIdA: viewerAccountID.String(),
+		AccountIdB: otherAccountID.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetBlocked(), nil
+}

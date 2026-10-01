@@ -353,6 +353,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('User unavailable'), findsOneWidget);
+    expect(find.text('Chat chat-abc'), findsNothing);
+
     await tester.enterText(
       find.byKey(ChatRoomPanel.inputKey),
       'Draft stays here',

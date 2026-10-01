@@ -37,6 +37,11 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("Realtime NATS friend request preflight passed")
+		if err := preflightFriendRemovedConsumer(os.Getenv("NATS_URL"), strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))); err != nil {
+			logger.Error("Realtime NATS friend removed preflight failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		logger.Info("Realtime NATS friend removed preflight passed")
 		return
 	}
 	addr := ":8080"

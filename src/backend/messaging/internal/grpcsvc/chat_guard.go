@@ -45,6 +45,11 @@ type AccountPairBlockChecker interface {
 	AccountPairBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
 }
 
+// AccountBlockChecker reports a one-way account block for history visibility.
+type AccountBlockChecker interface {
+	AccountBlocked(ctx context.Context, viewerAccountID, otherAccountID uuid.UUID) (bool, error)
+}
+
 // PrivacyChecker reads recipient privacy policy for DM and attachment gates,
 // plus author allow_forward for ForwardMessage (privacy.md / forward-messages.md).
 type PrivacyChecker interface {

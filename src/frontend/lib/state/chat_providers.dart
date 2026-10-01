@@ -1695,6 +1695,10 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return;
     if (ok) {
       _lastMarkedReadMessageId = lastId;
+      // The visible inbox is owned by InboxReconciler, not the legacy
+      // ChatListController cache updated below. Re-read Chat's durable row so
+      // the badge and preview converge after a successful REST MarkRead.
+      _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
       if (state.lastMessageId == lastId) {
         final wasListed = _ref
             .read(chatListControllerProvider.notifier)

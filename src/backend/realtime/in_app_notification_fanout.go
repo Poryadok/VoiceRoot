@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -15,6 +16,133 @@ import (
 type profileFanout struct {
 	ProfileID string
 	Envelope  fanoutEnvelope
+}
+
+// sharedChatRecipientAllowSet makes one one-way block decision per account
+// and maps it back to all live profiles/tabs for that account.
+func sharedChatRecipientAllowSet(hub *wsHub, chatID, senderProfileID string, profileIDs []string, logger *slog.Logger) map[string]bool {
+	allowed := make(map[string]bool, len(profileIDs))
+	if hub == nil {
+		return allowed
+	}
+	for _, profileID := range profileIDs {
+		if profileID == senderProfileID && profileID != "" {
+			allowed[profileID] = true
+		}
+	}
+	policy, ok := hub.subscriptionChecker.(messageSentBlockPolicy)
+	if hub.subscriptionChecker == nil {
+		for _, profileID := range profileIDs {
+			allowed[profileID] = true
+		}
+		return allowed
+	}
+	if !ok {
+		if logger != nil {
+			logger.Warn("message block policy is not configured", slog.String("chat_id", chatID))
+		}
+		return allowed
+	}
+	senderAccountID, err := policy.MessageSenderAccount(context.Background(), senderProfileID)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("message sender account lookup failed", slog.String("chat_id", chatID), slog.Any("error", err))
+		}
+		return allowed
+	}
+	shared, err := policy.MessageChatIsShared(context.Background(), chatID, senderAccountID, senderProfileID)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("message chat type lookup failed", slog.String("chat_id", chatID), slog.Any("error", err))
+		}
+		return allowed
+	}
+	if !shared {
+		for _, profileID := range profileIDs {
+			allowed[profileID] = true
+		}
+		return allowed
+	}
+	profilesByAccount := make(map[string][]string)
+	hub.mu.RLock()
+	for _, profileID := range profileIDs {
+		if profileID == "" || profileID == senderProfileID {
+			continue
+		}
+		for reg := range hub.byProfile[profileID] {
+			if accountID := canonicalUUID(reg.accountID); accountID != "" {
+				profilesByAccount[accountID] = append(profilesByAccount[accountID], profileID)
+				break
+			}
+		}
+	}
+	hub.mu.RUnlock()
+	type decision struct {
+		accountID string
+		allow     bool
+	}
+	jobs := make(chan string)
+	results := make(chan decision, len(profilesByAccount))
+	workerCount := 16
+	if len(profilesByAccount) < workerCount {
+		workerCount = len(profilesByAccount)
+	}
+	var workers sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for accountID := range jobs {
+				if accountID == senderAccountID {
+					results <- decision{accountID, true}
+					continue
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), chatSubscriptionCheckTimeout)
+				blocked, lookupErr := policy.MessageRecipientBlocked(ctx, accountID, senderAccountID)
+				cancel()
+				if lookupErr != nil && logger != nil {
+					logger.Warn("message recipient block lookup failed", slog.String("chat_id", chatID), slog.String("recipient_account_id", accountID), slog.Any("error", lookupErr))
+				}
+				results <- decision{accountID, lookupErr == nil && !blocked}
+			}
+		}()
+	}
+	go func() {
+		for accountID := range profilesByAccount {
+			jobs <- accountID
+		}
+		close(jobs)
+		workers.Wait()
+		close(results)
+	}()
+	for result := range results {
+		for _, profileID := range profilesByAccount[result.accountID] {
+			allowed[profileID] = result.allow
+		}
+	}
+	return allowed
+}
+
+func filterProfileFanouts(fanouts []profileFanout, allowed map[string]bool) []profileFanout {
+	filtered := make([]profileFanout, 0, len(fanouts))
+	for _, fanout := range fanouts {
+		if allowed[fanout.ProfileID] {
+			filtered = append(filtered, fanout)
+		}
+	}
+	return filtered
+}
+
+func messageSentFromBytes(data []byte) *eventsv1.MessageSent {
+	var event eventsv1.MessageStreamEvent
+	if err := proto.Unmarshal(data, &event); err != nil {
+		return nil
+	}
+	payload, ok := event.GetPayload().(*eventsv1.MessageStreamEvent_MessageSent)
+	if !ok || payload.MessageSent == nil {
+		return nil
+	}
+	return payload.MessageSent
 }
 
 func inAppNotificationFanouts(data []byte, chatMemberProfileIDs []string, reactionMessageAuthorProfileID string, recipientStates map[string]chatMemberDeliveryState) ([]profileFanout, bool) {
@@ -211,8 +339,11 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 	// the chat-scoped message/reaction broadcast remains available.
 	var fanouts []profileFanout
 	notifyOK := false
+	var recipientIDs []string
+	if hub != nil {
+		recipientIDs = hub.profileIDsSubscribedToChat(chatID)
+	}
 	if lookupOK {
-		recipientIDs := hub.profileIDsSubscribedToChat(chatID)
 		if hub.memberInboxLister != nil {
 			// A new DM request recipient has no chat subscription yet. Add only
 			// authoritative request-bucket members; keep ordinary notification
@@ -231,14 +362,35 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 		}
 		fanouts, notifyOK = inAppNotificationFanouts(data, recipientIDs, "", recipientStates)
 	}
+	var archiveFanouts []profileFanout
 	if lookupOK {
-		for _, f := range archiveActivityFanouts(data, recipientStates) {
-			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
+		archiveFanouts = archiveActivityFanouts(data, recipientStates)
+	}
+	var allowedProfiles map[string]bool
+	var senderProfileID string
+	if messageSent := messageSentFromBytes(data); messageSent != nil {
+		senderProfileID = messageSent.GetSenderProfileId()
+	} else if mentionAdded := mentionAddedFromBytes(data); mentionAdded != nil {
+		senderProfileID = mentionAdded.GetSenderProfileId()
+	}
+	if messageSentFromBytes(data) != nil || mentionAddedFromBytes(data) != nil {
+		candidates := append([]string(nil), recipientIDs...)
+		for _, fanout := range fanouts {
+			candidates = append(candidates, fanout.ProfileID)
 		}
+		for _, fanout := range archiveFanouts {
+			candidates = append(candidates, fanout.ProfileID)
+		}
+		allowedProfiles = sharedChatRecipientAllowSet(hub, chatID, senderProfileID, candidates, logger)
+		fanouts = filterProfileFanouts(fanouts, allowedProfiles)
+		archiveFanouts = filterProfileFanouts(archiveFanouts, allowedProfiles)
+	}
+	for _, f := range archiveFanouts {
+		hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 	}
 	if mentionAddedFromBytes(data) != nil {
 		if lookupOK {
-			dispatchMentionAdded(hub, mentionAddedFromBytes(data), recipientStates, logger, requestID)
+			dispatchMentionAdded(hub, mentionAddedFromBytes(data), recipientStates, allowedProfiles, logger, requestID)
 		}
 		if notifyOK {
 			for _, f := range fanouts {
@@ -253,7 +405,11 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
 		}
 	}
-	hub.broadcastToChat(chatID, fe, logger, requestID)
+	if messageSentFromBytes(data) != nil {
+		hub.broadcastToChatFiltered(chatID, fe, allowedProfiles, logger, requestID)
+	} else {
+		hub.broadcastToChat(chatID, fe, logger, requestID)
+	}
 	if !notifyFirst && notifyOK {
 		for _, f := range fanouts {
 			hub.broadcastToProfile(f.ProfileID, f.Envelope, logger, requestID)
@@ -273,10 +429,13 @@ func mentionAddedFromBytes(data []byte) *eventsv1.MentionAdded {
 	return ma.MentionAdded
 }
 
-func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, recipientStates map[string]chatMemberDeliveryState, logger *slog.Logger, requestID string) {
+func dispatchMentionAdded(hub *wsHub, ma *eventsv1.MentionAdded, recipientStates map[string]chatMemberDeliveryState, allowedProfiles map[string]bool, logger *slog.Logger, requestID string) {
 	senderID := ma.GetSenderProfileId()
 	for _, profileID := range ma.GetMentionedProfileIds() {
 		if profileID == "" || profileID == senderID {
+			continue
+		}
+		if allowedProfiles != nil && !allowedProfiles[profileID] {
 			continue
 		}
 		if recipientStates[profileID].IsArchived {
