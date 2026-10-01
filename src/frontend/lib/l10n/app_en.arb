@@ -489,6 +489,8 @@
   "chatAttachmentPickAnother": "Choose another file",
   "chatAttachmentScanFailed": "File scan failed. Try again.",
   "chatAttachmentUploadFailed": "Could not upload file. Try again.",
+  "chatAttachmentTapToDownload": "Tap to download file",
+  "chatAttachmentDownloadFailed": "Could not open the file download. Try again.",
   "composerEmojiPanelTitle": "Emoji",
   "composerAttachPhotoOrVideo": "Photo or video",
   "composerAttachDocument": "Document",

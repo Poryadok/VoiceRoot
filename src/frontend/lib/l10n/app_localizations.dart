@@ -1862,6 +1862,18 @@ abstract class AppLocalizations {
   /// **'Could not upload file. Try again.'**
   String get chatAttachmentUploadFailed;
 
+  /// No description provided for @chatAttachmentTapToDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to download file'**
+  String get chatAttachmentTapToDownload;
+
+  /// No description provided for @chatAttachmentDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the file download. Try again.'**
+  String get chatAttachmentDownloadFailed;
+
   /// No description provided for @composerEmojiPanelTitle.
   ///
   /// In en, this message translates to:
