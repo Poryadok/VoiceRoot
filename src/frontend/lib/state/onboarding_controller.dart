@@ -31,11 +31,13 @@ class OnboardingUiState {
   const OnboardingUiState({
     this.completed = false,
     this.completedSteps = const [],
+    this.loaded = false,
     this.loading = false,
   });
 
   final bool completed;
   final List<String> completedSteps;
+  final bool loaded;
   final bool loading;
 
   bool get shouldShowHints => !completed;
@@ -52,11 +54,13 @@ class OnboardingUiState {
   OnboardingUiState copyWith({
     bool? completed,
     List<String>? completedSteps,
+    bool? loaded,
     bool? loading,
   }) {
     return OnboardingUiState(
       completed: completed ?? this.completed,
       completedSteps: completedSteps ?? this.completedSteps,
+      loaded: loaded ?? this.loaded,
       loading: loading ?? this.loading,
     );
   }
@@ -75,7 +79,7 @@ class OnboardingController extends Notifier<OnboardingUiState> {
   Future<void> load() async {
     final auth = ref.read(authControllerProvider);
     if (!auth.isAuthenticated || auth.session == null) return;
-    state = state.copyWith(loading: true);
+    state = state.copyWith(loaded: false, loading: true);
     final result = await _client.getState(
       authorization: 'Bearer ${auth.session!.accessToken}',
     );
@@ -84,6 +88,7 @@ class OnboardingController extends Notifier<OnboardingUiState> {
         state = OnboardingUiState(
           completed: data.completed,
           completedSteps: data.completedSteps,
+          loaded: true,
         );
       case OnboardingApiFailure():
         state = state.copyWith(loading: false);
@@ -102,6 +107,7 @@ class OnboardingController extends Notifier<OnboardingUiState> {
         state = OnboardingUiState(
           completed: data.completed,
           completedSteps: data.completedSteps,
+          loaded: true,
         );
       case OnboardingApiFailure():
         break;

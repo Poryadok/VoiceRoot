@@ -70,6 +70,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
   Future<void> _maybeShowStep() async {
     final onboarding = ref.read(onboardingControllerProvider);
+    if (!onboarding.loaded || onboarding.loading) return;
     if (!onboarding.shouldShowHints) return;
     final step = onboarding.currentStep;
     if (step == null) return;
