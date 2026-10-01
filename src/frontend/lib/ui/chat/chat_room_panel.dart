@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../backend/chats_client.dart';
@@ -1911,40 +1912,92 @@ class _AttachmentPreview extends ConsumerWidget {
         ),
       );
     }
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       key: ChatRoomPanel.attachmentPreviewKey(attachment.fileId),
       constraints: const BoxConstraints(maxWidth: 260),
-      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: voice.surface,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: voice.borderDefault),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.insert_drive_file_outlined, size: 20),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () =>
+              _openFileAttachment(context, ref, fileId: attachment.fileId),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  attachment.name ?? attachment.fileId,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (attachment.sizeBytes != null)
-                  Text(
-                    _formatBytes(attachment.sizeBytes!),
-                    style: Theme.of(context).textTheme.labelSmall,
+                const Icon(Icons.insert_drive_file_outlined, size: 20),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        attachment.name ?? attachment.fileId,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        l10n.chatAttachmentTapToDownload,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: voice.textSecondary,
+                            ),
+                      ),
+                      if (attachment.sizeBytes != null)
+                        Text(
+                          _formatBytes(attachment.sizeBytes!),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  Future<void> _openFileAttachment(
+    BuildContext context,
+    WidgetRef ref, {
+    required String fileId,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      // Fetch a fresh short-lived URL only after the user chooses to download.
+      final url = await ref.refresh(fileAttachmentUrlProvider(fileId).future);
+      if (!context.mounted) return;
+      final uri = Uri.tryParse(url ?? '');
+      if (uri == null || uri.host.isEmpty) {
+        throw const FormatException('File service returned an invalid URL');
+      }
+      final isLocalDevelopmentHost = const {
+        'localhost',
+        '127.0.0.1',
+        '::1',
+        'host.docker.internal',
+      }.contains(uri.host.toLowerCase());
+      if (uri.scheme != 'https' &&
+          !(uri.scheme == 'http' && isLocalDevelopmentHost)) {
+        throw const FormatException('File service returned an invalid URL');
+      }
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) throw StateError('Could not open attachment URL');
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatAttachmentDownloadFailed)),
+      );
+    }
   }
 
   Future<void> _downloadE2eAttachment(

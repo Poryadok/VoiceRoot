@@ -997,6 +997,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAttachmentUploadFailed => 'Could not upload file. Try again.';
 
   @override
+  String get chatAttachmentTapToDownload => 'Tap to download file';
+
+  @override
+  String get chatAttachmentDownloadFailed =>
+      'Could not open the file download. Try again.';
+
+  @override
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override

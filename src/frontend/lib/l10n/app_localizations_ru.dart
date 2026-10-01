@@ -1003,6 +1003,13 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось загрузить файл. Попробуйте снова.';
 
   @override
+  String get chatAttachmentTapToDownload => 'Нажмите, чтобы скачать файл';
+
+  @override
+  String get chatAttachmentDownloadFailed =>
+      'Не удалось открыть ссылку на файл. Попробуйте снова.';
+
+  @override
   String get composerEmojiPanelTitle => 'Эмодзи';
 
   @override
