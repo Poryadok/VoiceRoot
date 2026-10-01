@@ -364,6 +364,13 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(list.GetMessageList().GetMessages()), 2)
 
+	foreignCursor := store.EncodeBeforeCursor(uuid.New(), uuid.MustParse(list.GetMessageList().GetMessages()[0].GetId()))
+	_, err = client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID), Page: &commonv1.CursorPageRequest{Cursor: foreignCursor, PageSize: 2},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "cursor from a different chat must be rejected")
+
 	missing := uuid.New()
 	missingStr := missing.String()
 	gfb, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
@@ -1549,7 +1556,7 @@ func TestMessagingGetMessages_afterPageNextCursor(t *testing.T) {
 	require.True(t, ml.GetHasMore())
 	thirdID, err := uuid.Parse(ids[2])
 	require.NoError(t, err)
-	require.Equal(t, store.EncodeAfterCursor(thirdID), ml.GetNextCursor())
+	require.Equal(t, store.EncodeAfterCursor(chatID, thirdID), ml.GetNextCursor())
 }
 
 func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
@@ -1579,6 +1586,9 @@ func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
 		Page:           &commonv1.CursorPageRequest{PageSize: 2},
 	})
 	require.NoError(t, err)
+	require.Len(t, first.GetMessageList().GetMessages(), 2)
+	require.Equal(t, ids[1], first.GetMessageList().GetMessages()[0].GetId())
+	require.Equal(t, ids[2], first.GetMessageList().GetMessages()[1].GetId())
 	cursor := first.GetMessageList().GetNextCursor()
 	require.NotEmpty(t, cursor)
 
@@ -1587,7 +1597,8 @@ func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
 		Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 2},
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, second.GetMessageList().GetMessages())
+	require.Len(t, second.GetMessageList().GetMessages(), 1)
+	require.Equal(t, ids[3], second.GetMessageList().GetMessages()[0].GetId())
 }
 
 func TestMessagingGetMessages_lastAndAfterDisagree(t *testing.T) {

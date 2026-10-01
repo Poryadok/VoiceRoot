@@ -812,7 +812,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		pageSize = maxPageSize
 	}
 
-	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor())
+	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor(), chatID)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
 	}
@@ -939,7 +939,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(mode, rows)
+		next = nextCursorForPage(chatID, mode, rows)
 	}
 
 	ml := &messagingv1.MessageList{
@@ -1078,7 +1078,7 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
-	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor())
+	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor(), chatID)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
 	}
@@ -1110,7 +1110,7 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	}
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(mode, rows)
+		next = nextCursorForPage(chatID, mode, rows)
 	}
 	ml := &messagingv1.MessageList{
 		Messages:   msgs,
@@ -1174,15 +1174,15 @@ func threadListUnavailable(cause error) error {
 	return status.Error(code, "thread list unavailable")
 }
 
-func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
+func nextCursorForPage(chatID uuid.UUID, mode store.ListMode, rows []store.MessageRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
 	switch mode {
 	case store.ListAfterID:
-		return store.EncodeAfterCursor(rows[len(rows)-1].ID)
+		return store.EncodeAfterCursor(chatID, rows[len(rows)-1].ID)
 	default:
-		return store.EncodeBeforeCursor(rows[len(rows)-1].ID)
+		return store.EncodeBeforeCursor(chatID, rows[len(rows)-1].ID)
 	}
 }
 

@@ -23,6 +23,7 @@ import 'support/voice_test_theme.dart';
 class _OnboardingAtSpacesStep extends OnboardingController {
   @override
   OnboardingUiState build() => const OnboardingUiState(
+    loaded: true,
     completedSteps: ['save_account', 'chats_nav'],
   );
 
@@ -32,6 +33,7 @@ class _OnboardingAtSpacesStep extends OnboardingController {
   @override
   Future<void> completeStep(String stepId) async {
     state = OnboardingUiState(
+      loaded: true,
       completedSteps: [...state.completedSteps, stepId],
     );
   }
@@ -42,6 +44,7 @@ class _RecordingOnboardingController extends OnboardingController {
 
   @override
   OnboardingUiState build() => const OnboardingUiState(
+    loaded: true,
     completedSteps: ['save_account', 'chats_nav'],
   );
 
@@ -55,10 +58,11 @@ class _RecordingOnboardingController extends OnboardingController {
   Future<void> completeStep(String stepId) async {
     completedSteps.add(stepId);
     if (stepId == 'dismiss') {
-      state = const OnboardingUiState(completed: true);
+      state = const OnboardingUiState(completed: true, loaded: true);
       return;
     }
     state = OnboardingUiState(
+      loaded: true,
       completedSteps: [...state.completedSteps, stepId],
     );
   }
@@ -69,6 +73,7 @@ class _CoachMarkTourController extends OnboardingController {
 
   @override
   OnboardingUiState build() => const OnboardingUiState(
+    loaded: true,
     completedSteps: ['save_account'],
   );
 
@@ -82,10 +87,11 @@ class _CoachMarkTourController extends OnboardingController {
   Future<void> completeStep(String stepId) async {
     completedSteps.add(stepId);
     if (stepId == 'dismiss') {
-      state = const OnboardingUiState(completed: true);
+      state = const OnboardingUiState(completed: true, loaded: true);
       return;
     }
     state = OnboardingUiState(
+      loaded: true,
       completedSteps: [...state.completedSteps, stepId],
     );
   }
@@ -103,6 +109,7 @@ class _DelayedOnboardingController extends OnboardingController {
 
   @override
   OnboardingUiState build() => OnboardingUiState(
+    loaded: true,
     completedSteps: completedSteps,
   );
 
@@ -113,6 +120,7 @@ class _DelayedOnboardingController extends OnboardingController {
   Future<void> completeStep(String stepId) async {
     if (stepId == delayedStep) await completion.future;
     state = OnboardingUiState(
+      loaded: true,
       completedSteps: [...state.completedSteps, stepId],
     );
   }
@@ -126,6 +134,7 @@ class _FailedOnboardingController extends OnboardingController {
 
   @override
   OnboardingUiState build() => OnboardingUiState(
+    loaded: true,
     completedSteps: completedSteps,
   );
 
@@ -192,6 +201,159 @@ Widget _onboardingAnchorsScaffold() {
 }
 
 void main() {
+  testWidgets(
+    'profile arriving during state load does not show an already dismissed step',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final profile = Completer<VoiceProfile>();
+      final requestStarted = Completer<void>();
+      final response = Completer<http.Response>();
+
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((request) async {
+                if (request.url.path == '/api/v1/users/me/onboarding') {
+                  if (!requestStarted.isCompleted) requestStarted.complete();
+                  return response.future;
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+            activeProfileProvider.overrideWith((ref) => profile.future),
+          ],
+          child: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+      await tester.pump();
+      await requestStarted.future;
+      profile.complete(
+        const VoiceProfile(
+          id: 'prof-test',
+          accountId: 'acc-test',
+          username: 'voiceuser',
+          discriminator: '4242',
+          displayName: 'Voice User',
+          isPrimary: true,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+
+      response.complete(
+        http.Response(
+          jsonEncode({
+            'onboarding_state': {
+              'completed': true,
+              'completed_steps': ['save_account'],
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+    },
+  );
+
+  testWidgets('failed onboarding state load does not show save-account modal', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final profile = Completer<VoiceProfile>();
+    final requestStarted = Completer<void>();
+    final response = Completer<http.Response>();
+
+    await tester.pumpWidget(
+      _onboardingTestApp(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((request) async {
+              if (request.url.path == '/api/v1/users/me/onboarding') {
+                if (!requestStarted.isCompleted) requestStarted.complete();
+                return response.future;
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          activeProfileProvider.overrideWith((ref) => profile.future),
+        ],
+        child: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+    await tester.pump();
+    await requestStarted.future;
+    profile.complete(
+      const VoiceProfile(
+        id: 'prof-test',
+        accountId: 'acc-test',
+        username: 'voiceuser',
+        discriminator: '4242',
+        displayName: 'Voice User',
+        isPrimary: true,
+      ),
+    );
+    await tester.pump();
+    response.complete(http.Response('{}', 503));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+  });
+
+  testWidgets('loaded save-account step still shows for a regular account', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _onboardingTestApp(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((request) async {
+              if (request.url.path == '/api/v1/users/me/onboarding') {
+                return http.Response(
+                  jsonEncode({
+                    'onboarding_state': {
+                      'completed': false,
+                      'completed_steps': [],
+                    },
+                  }),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          activeProfileProvider.overrideWith(
+            (ref) async => const VoiceProfile(
+              id: 'prof-test',
+              accountId: 'acc-test',
+              username: 'voiceuser',
+              discriminator: '4242',
+              displayName: 'Voice User',
+              isPrimary: true,
+            ),
+          ),
+        ],
+        child: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
+  });
+
   testWidgets(
     'save-account skip stays open when dismissal fails',
     (tester) async {
