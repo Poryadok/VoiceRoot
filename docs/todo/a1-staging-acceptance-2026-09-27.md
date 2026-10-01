@@ -255,8 +255,9 @@ staging proof.
 ## 2026-10-02 integrated owner-findings batch
 
 The following reported defects now have local implementations and regression
-coverage on branch `codex/a1-inbox-reconcile-fix`; the work remains uncommitted
-and has no exact-head CI or staging acceptance yet:
+coverage on branch `codex/a1-inbox-reconcile-fix`, committed and pushed as
+`6d1310ab9425e9e20f3f66804e7f0af566565603` to PR #596. Exact-head CI run
+`36935069635` is queued/in progress; this batch still has no staging acceptance:
 
 - Friend removal updates both participants; incoming requests, notifications,
   inbox preview, and unread/read state reconcile without a page reload.
@@ -292,6 +293,12 @@ Integrated local verification on this branch:
   host. This is an environment limitation, not a passing check.
 - Realtime's full package suite previously passed 395 tests. Full Go integration
   suites remain limited by rootless Docker support on this host.
+- After push, `protobuf`, `markdown-link-check`, `admin`, `flutter-device-driver`,
+  and `backend-go-pkg` passed on run `36935069635`; remaining required jobs are
+  still pending or running.
+- `make buf-go-pb-check` passed after regenerating the Go protobuf trees. The
+  Graphify source graph update completed; its HTML visualization was skipped
+  because the repository graph exceeds the visualization node limit.
 
 Read-only staging observation on 2026-10-02: the existing signed-in session is
 `@xronos2#6340`, the visible inbox loads, and the regular-account “Set up your
@@ -299,8 +306,8 @@ profile” modal is still shown. No staging data was changed in this observation
 
 Still open and not credited as passed:
 
-- Generated-protobuf sync check, final diff review, commit/push, and PR #596
-  exact-head CI.
+- Completion of exact-head CI for PR #596 SHA
+  `6d1310ab9425e9e20f3f66804e7f0af566565603`.
 - Safe exact-SHA staging deployment. Active NATS generation remains
   `r20260930a4`; `STAGING_NATS_PROOF_CREDS_B64` is unavailable and the ACL proof
   hash does not match current intent. Do not change proof variables, rotate

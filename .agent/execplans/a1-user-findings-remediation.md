@@ -184,10 +184,13 @@ API-backed text-chat create flow in an existing Space.
   Messaging/Realtime; `make buf-ci buf-breaking`; `make flutter-ci` (1,239
   passed, 98 skipped); focused cache/privacy and Space suites; targeted Flutter
   analysis; `git diff --check`.
-- [ ] Regenerate/check every protobuf output from the current source and inspect
-  the generated diff for tool-version churn.
-- [ ] Inspect final diff, update A1 evidence, commit, push, and obtain exact-head
-  CI for PR #596.
+- [x] Regenerate Go/Dart protobuf outputs; `make buf-go-pb-check` confirms Go
+  outputs match the proto sources. `make buf-ci buf-breaking` passed before
+  commit.
+- [x] Inspect the final diff, update A1 evidence, commit `6d1310ab9`, and push
+  it to PR #596.
+- [ ] Obtain exact-head CI for SHA `6d1310ab9425e9e20f3f66804e7f0af566565603`
+  (run `36935069635` is queued/in progress; some jobs have already passed).
 - [ ] Continue live acceptance only against the deployed exact SHA after the
   state-preserving NATS gate is resolved.
 
