@@ -30,10 +30,11 @@ func preprovisionRealtimeConsumer(t *testing.T, js nats.JetStreamContext, stream
 		"message": "_msg", "chat": "_chat", "user": "_user", "social": "_social",
 		"role": "_role", "voice": "_voice", "matchmaking": "_matchmaking",
 	}[consumer]
-	if filter == "social.friend_request" {
+	switch filter {
+	case "social.friend_request":
 		suffix = "_friend_request"
 		deliveryConsumer = "friend_request"
-	} else if filter == "social.friend_removed" {
+	case "social.friend_removed":
 		suffix = "_friend_removed"
 		deliveryConsumer = "friend_removed"
 	}
