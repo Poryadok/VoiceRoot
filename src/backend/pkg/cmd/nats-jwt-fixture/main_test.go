@@ -281,11 +281,27 @@ func TestCanonicalACLHasScopedRuntimeAndBootstrapGrants(t *testing.T) {
 	for _, subject := range []string{
 		"$JS.API.INFO",
 		"$JS.API.STREAM.CREATE.message_events",
+		"$JS.API.STREAM.UPDATE.social_events",
 		"$JS.API.CONSUMER.INFO.message_events.chat_message_activity",
 		"$JS.API.CONSUMER.CREATE.message_events.chat_message_activity",
 	} {
 		if !slices.Contains(acl.Bootstrap.Publish, subject) {
 			t.Errorf("bootstrap missing grant %s", subject)
+		}
+	}
+}
+
+func TestBootstrapGrantAllowsOnlyScopedSocialStreamUpdate(t *testing.T) {
+	for _, subject := range []string{"$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.message_events", "$JS.API.STREAM.UPDATE.>"} {
+		acl := fixtureACL()
+		acl.Bootstrap.Publish = append(acl.Bootstrap.Publish, subject)
+		err := validateACL(acl)
+		if subject == "$JS.API.STREAM.UPDATE.social_events" {
+			if err != nil {
+				t.Errorf("scoped social stream update rejected: %v", err)
+			}
+		} else if err == nil {
+			t.Errorf("unscoped or unrelated stream update accepted: %s", subject)
 		}
 	}
 }

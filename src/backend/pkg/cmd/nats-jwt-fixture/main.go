@@ -113,6 +113,7 @@ func validateACL(acl aclDocument) error {
 		case subject == "$JS.API.INFO",
 			strings.HasPrefix(subject, "$JS.API.STREAM.INFO."),
 			strings.HasPrefix(subject, "$JS.API.STREAM.CREATE."),
+			subject == "$JS.API.STREAM.UPDATE.social_events",
 			strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO."),
 			strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE."),
 			strings.HasPrefix(subject, "$JS.API.CONSUMER.DELETE."):

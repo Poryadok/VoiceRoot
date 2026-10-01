@@ -216,6 +216,8 @@ func TestPolicyRejectsServiceMutationAndBroadInbox(t *testing.T) {
 		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.CONSUMER.CREATE.message_events.chat_message_activity"},
 		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.STREAM.PURGE.message_events"},
 		{"$JS.API.CONSUMER.INFO.message_events.chat_message_activity", "$JS.API.CONSUMER.PAUSE.message_events.chat_message_activity"},
+		{"$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.message_events"},
+		{"$JS.API.STREAM.UPDATE.social_events", "$JS.API.STREAM.UPDATE.>"},
 		{"_INBOX.voice.chat.>", "_INBOX.>"},
 		{"_INBOX.voice.chat.>", "_INBOX.voice.messaging.>"},
 		{"_INBOX.voice.chat.chat_message_activity", "_INBOX.voice.messaging.foreign"},
