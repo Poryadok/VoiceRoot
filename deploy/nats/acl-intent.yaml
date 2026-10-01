@@ -297,6 +297,7 @@ bootstrap:
     - $JS.API.STREAM.CREATE.story_events
     - $JS.API.STREAM.CREATE.user_events
     - $JS.API.STREAM.CREATE.social_events
+    - $JS.API.STREAM.UPDATE.social_events
     - $JS.API.STREAM.CREATE.role_events
     - $JS.API.STREAM.CREATE.voice_events
     - $JS.API.STREAM.CREATE.matchmaking_events

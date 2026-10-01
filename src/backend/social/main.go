@@ -116,6 +116,7 @@ func main() {
 			BlockedProfiles:    blockedProfiles,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			go runFriendRequestOutbox(outboxCtx, socialSvc.Friends, natsURL, logger)
 			go runFriendAcceptanceOutbox(outboxCtx, socialSvc.Friends, natsURL, logger)
 			if pub, err := socialevents.NewJetStreamPublisher(natsURL); err == nil {
 				socialSvc.Events = pub

@@ -37,6 +37,36 @@ stream_with_max_age() {
   max_age_cli="$(max_age_to_cli "$max_age")"
   nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age "$max_age_cli" --defaults
 }
+stream_with_duplicate_window() {
+  name="$1"; duplicate_window="$2"; shift 2
+  subjects="$(IFS=,; echo "$*")"
+  expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
+  if info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)"; then
+    if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+      printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
+    else
+      actual_base="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
+      expected_base="$(jq -cn --argjson subjects "$expected" '[ $subjects, "file", "limits", 604800000000000 ]')"
+      [ "$actual_base" = "$expected_base" ] || { echo "incompatible configuration for stream $name" >&2; exit 1; }
+      actual_window="$(printf '%s' "$info" | jq -r '.config.duplicate_window // 120000000000')"
+      if [ "$actual_window" != "$duplicate_window" ]; then
+        update_config="$(printf '%s' "$info" | jq -c --argjson duplicate_window "$duplicate_window" '.config | .duplicate_window = $duplicate_window')"
+        update_result="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.UPDATE.$name" "$update_config" 2>&1)" || { echo "$update_result" >&2; exit 1; }
+        if printf '%s' "$update_result" | jq -e '.error' >/dev/null; then
+          echo "$update_result" >&2; exit 1
+        fi
+        info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)" || { echo "$info" >&2; exit 1; }
+        actual_window="$(printf '%s' "$info" | jq -r '.config.duplicate_window // 120000000000')"
+        [ "$actual_window" = "$duplicate_window" ] || { echo "failed to update duplicate window for stream $name" >&2; exit 1; }
+      fi
+      return
+    fi
+  else
+    echo "$info" >&2; exit 1
+  fi
+  duplicate_window_cli="$(max_age_to_cli "$duplicate_window")"
+  nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age 168h --dupe-window "$duplicate_window_cli" --defaults
+}
 consumer() {
   stream_name="$1"; durable="$2"; filter="$3"; target="$4"
   echo "bootstrap consumer INFO $stream_name/$durable" >&2
@@ -74,7 +104,7 @@ stream subscription_events subscription.plan_started subscription.plan_cancelled
 stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined
 stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
 stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
-stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
+stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
 stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
 stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned

@@ -50,6 +50,7 @@ streams:
     subjects: [social.friend_request, social.friend_accepted, social.friend_removed, social.user_blocked, social.contacts_synced]
     retention: limits
     max_age: 168h
+    duplicate_window: 24h
     storage: file
   - name: role_events
     subjects: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed]

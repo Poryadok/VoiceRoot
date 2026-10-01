@@ -77,6 +77,7 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	requestID := correlation.FromGRPC(ctx)
 	msg := &nats.Msg{Subject: subject, Data: b, Header: nats.Header{}}
 	natslog.SetRequestIDHeader(msg.Header, requestID)
+	msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
 	if _, err := p.js.PublishMsg(msg); err != nil {
 		return fmt.Errorf("jetstream publish %s: %w", subject, err)
 	}
@@ -97,7 +98,20 @@ func (p *JetStreamPublisher) PublishFriendRequest(ctx context.Context, requestID
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
+	return p.PublishFriendRequestWithEventID(ctx, uuid.NewString(), requestID, requesterProfileID, targetProfileID)
+}
+
+// PublishFriendRequestWithEventID preserves JetStream deduplication identity
+// across durable outbox retries while keeping the persisted request ID in the payload.
+func (p *JetStreamPublisher) PublishFriendRequestWithEventID(ctx context.Context, eventID, requestID, requesterProfileID, targetProfileID string) error {
+	if eventID == "" {
+		eventID = uuid.NewString()
+	}
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
 	env := newSocialEvent()
+	env.EventId = eventID
 	env.Payload = &eventsv1.SocialStreamEvent_FriendRequest{
 		FriendRequest: &eventsv1.FriendRequest{
 			RequestId:          requestID,

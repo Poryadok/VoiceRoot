@@ -19,17 +19,17 @@ type FriendshipStore struct {
 // Idempotent when the same ordered pair is already pending.
 // Re-opens a declined row in the same direction (friends.md: declined visible to sender; new invite allowed).
 func (s *FriendshipStore) SendInvitation(ctx context.Context, requester, target uuid.UUID) error {
-	return s.sendInvitation(ctx, requester, target, uuid.Nil, uuid.Nil)
+	return s.sendInvitation(ctx, requester, target, uuid.Nil, uuid.Nil, false)
 }
 
 // SendInvitationChecked creates a pending invitation only while neither account
 // has blocked the other. Its block recheck shares an account-pair lock with the
 // block cascade, preventing a post-block friendship row.
 func (s *FriendshipStore) SendInvitationChecked(ctx context.Context, requester, target, requesterAccount, targetAccount uuid.UUID) error {
-	return s.sendInvitation(ctx, requester, target, requesterAccount, targetAccount)
+	return s.sendInvitation(ctx, requester, target, requesterAccount, targetAccount, true)
 }
 
-func (s *FriendshipStore) sendInvitation(ctx context.Context, requester, target, requesterAccount, targetAccount uuid.UUID) error {
+func (s *FriendshipStore) sendInvitation(ctx context.Context, requester, target, requesterAccount, targetAccount uuid.UUID, enqueueRequestEvent bool) error {
 	if requester == target {
 		return ErrSelfInvitation
 	}
@@ -92,6 +92,11 @@ LIMIT 1`, requester, target).Scan(&rowID, &st)
 	if err == nil {
 		switch st {
 		case "pending":
+			if enqueueRequestEvent {
+				if err := enqueueFriendRequestOutbox(ctx, tx, rowID, requester, target); err != nil {
+					return err
+				}
+			}
 			return tx.Commit(ctx)
 		case "accepted":
 			return ErrAlreadyFriends
@@ -101,19 +106,44 @@ UPDATE friendships SET status = 'pending', updated_at = now() WHERE id = $1`, ro
 			if err != nil {
 				return err
 			}
+			if enqueueRequestEvent {
+				if err := enqueueFriendRequestOutbox(ctx, tx, rowID, requester, target); err != nil {
+					return err
+				}
+			}
 			return tx.Commit(ctx)
 		default:
 			return errors.New("unexpected friendship status")
 		}
 	}
 
-	_, err = tx.Exec(ctx, `
+	err = tx.QueryRow(ctx, `
 INSERT INTO friendships (requester_profile_id, target_profile_id, status)
-VALUES ($1, $2, 'pending')`, requester, target)
+VALUES ($1, $2, 'pending')
+RETURNING id`, requester, target).Scan(&rowID)
 	if err != nil {
 		return err
 	}
+	if enqueueRequestEvent {
+		if err := enqueueFriendRequestOutbox(ctx, tx, rowID, requester, target); err != nil {
+			return err
+		}
+	}
 	return tx.Commit(ctx)
+}
+
+func enqueueFriendRequestOutbox(ctx context.Context, tx pgx.Tx, friendshipID, requester, target uuid.UUID) error {
+	_, err := tx.Exec(ctx, `
+INSERT INTO friend_request_outbox (friendship_id, event_id, requester_profile_id, target_profile_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (friendship_id) DO UPDATE
+SET event_id = EXCLUDED.event_id,
+    requester_profile_id = EXCLUDED.requester_profile_id,
+    target_profile_id = EXCLUDED.target_profile_id,
+    created_at = now(),
+    delivered_at = NULL,
+    cancelled_at = NULL`, friendshipID, uuid.New(), requester, target)
+	return err
 }
 
 // AcceptInvitation marks the pending row (requester -> caller) as accepted.
@@ -159,6 +189,12 @@ RETURNING id`, requester, caller).Scan(&friendshipID)
 		return err
 	}
 	_, err = tx.Exec(ctx, `
+UPDATE friend_request_outbox SET cancelled_at = now()
+WHERE friendship_id = $1 AND delivered_at IS NULL AND cancelled_at IS NULL`, friendshipID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
 INSERT INTO friend_accept_outbox (friendship_id, requester_profile_id, target_profile_id)
 VALUES ($1, $2, $3)
 ON CONFLICT (friendship_id) DO UPDATE
@@ -173,18 +209,31 @@ SET requester_profile_id = EXCLUDED.requester_profile_id,
 
 // DeclineInvitation marks the pending row (requester -> caller) as declined.
 func (s *FriendshipStore) DeclineInvitation(ctx context.Context, caller, requester uuid.UUID) error {
-	cmd, err := s.Pool.Exec(ctx, `
-UPDATE friendships
-SET status = 'declined', updated_at = now()
-WHERE status = 'pending'
-  AND requester_profile_id = $1 AND target_profile_id = $2`, requester, caller)
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
 	}
-	if cmd.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var friendshipID uuid.UUID
+	err = tx.QueryRow(ctx, `
+UPDATE friendships
+SET status = 'declined', updated_at = now()
+	WHERE status = 'pending'
+	  AND requester_profile_id = $1 AND target_profile_id = $2
+	RETURNING id`, requester, caller).Scan(&friendshipID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrFriendshipNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE friend_request_outbox SET cancelled_at = now()
+WHERE friendship_id = $1 AND delivered_at IS NULL AND cancelled_at IS NULL`, friendshipID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // PendingFriendIncoming is an incoming pending request (someone invited caller).
