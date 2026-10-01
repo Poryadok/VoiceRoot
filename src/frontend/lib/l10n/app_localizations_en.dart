@@ -2973,6 +2973,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingSkip => 'Skip';
 
   @override
+  String get onboardingDismissFailed =>
+      'We couldn\'t save your choice. Please try again.';
+
+  @override
   String get onboardingGotIt => 'Got it';
 
   @override

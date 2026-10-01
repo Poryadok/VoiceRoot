@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/l10n/app_localizations_ru.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/ui/onboarding/onboarding_anchor_keys.dart';
 import 'package:voice_frontend/ui/onboarding/onboarding_overlay.dart';
 
@@ -190,6 +192,48 @@ Widget _onboardingAnchorsScaffold() {
 }
 
 void main() {
+  testWidgets(
+    'save-account skip stays open when dismissal fails',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final failed = _FailedOnboardingController(completedSteps: const []);
+
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            activeProfileProvider.overrideWith(
+              (ref) async => const VoiceProfile(
+                id: 'prof-test',
+                accountId: 'acc-test',
+                username: 'voiceuser',
+                discriminator: '4242',
+                displayName: 'Voice User',
+                isPrimary: true,
+              ),
+            ),
+            onboardingControllerProvider.overrideWith(() => failed),
+          ],
+          child: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, l10n.onboardingSkip));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(failed.completeCalls, 1);
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
+      expect(find.text(l10n.onboardingDismissFailed), findsOneWidget);
+    },
+  );
+
   testWidgets('spaces step opens search for a known space', (
     tester,
   ) async {

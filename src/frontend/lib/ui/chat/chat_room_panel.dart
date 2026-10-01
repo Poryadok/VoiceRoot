@@ -161,6 +161,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     if (oldWidget.chatId != widget.chatId) {
       _draftKey = null;
       _composer.clear();
+      _initialUnreadCount = 0;
+      _unreadCaptured = false;
     }
   }
 

@@ -5462,6 +5462,12 @@ abstract class AppLocalizations {
   /// **'Skip'**
   String get onboardingSkip;
 
+  /// No description provided for @onboardingDismissFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t save your choice. Please try again.'**
+  String get onboardingDismissFailed;
+
   /// No description provided for @onboardingGotIt.
   ///
   /// In en, this message translates to:

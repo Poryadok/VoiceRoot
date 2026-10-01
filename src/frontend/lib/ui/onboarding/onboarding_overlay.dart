@@ -194,36 +194,71 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     if (profile == null) return;
     if (!mounted) return;
     _saveAccountModalOpen = true;
+    var dismissing = false;
+    var dismissFailed = false;
     try {
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: Text(l10n.onboardingSaveAccountTitle),
-          content: Text(l10n.onboardingSaveAccountBody),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await ref.read(onboardingControllerProvider.notifier).dismiss();
-                if (ctx.mounted) Navigator.of(ctx).pop();
-              },
-              child: Text(l10n.onboardingSkip),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: Text(l10n.onboardingSaveAccountTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.onboardingSaveAccountBody),
+                if (dismissFailed) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.onboardingDismissFailed,
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                  ),
+                ],
+              ],
             ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                if (!mounted) return;
-                await showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => ProfileEditSheet(profile: profile),
-                );
-                await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
-                _maybeShowStep();
-              },
-              child: Text(l10n.commonSave),
-            ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: dismissing
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          dismissing = true;
+                          dismissFailed = false;
+                        });
+                        await ref
+                            .read(onboardingControllerProvider.notifier)
+                            .dismiss();
+                        if (!ctx.mounted) return;
+                        if (ref.read(onboardingControllerProvider).completed) {
+                          Navigator.of(ctx).pop();
+                        } else {
+                          setDialogState(() {
+                            dismissing = false;
+                            dismissFailed = true;
+                          });
+                        }
+                      },
+                child: Text(l10n.onboardingSkip),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  if (!mounted) return;
+                  await showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => ProfileEditSheet(profile: profile),
+                  );
+                  await ref
+                      .read(onboardingControllerProvider.notifier)
+                      .completeCurrentStep();
+                  _maybeShowStep();
+                },
+                child: Text(l10n.commonSave),
+              ),
+            ],
+          ),
         ),
       );
     } finally {

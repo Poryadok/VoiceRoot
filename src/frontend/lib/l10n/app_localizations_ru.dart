@@ -2995,6 +2995,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingSkip => 'Пропустить';
 
   @override
+  String get onboardingDismissFailed =>
+      'Не удалось сохранить выбор. Попробуйте ещё раз.';
+
+  @override
   String get onboardingGotIt => 'Понятно';
 
   @override
