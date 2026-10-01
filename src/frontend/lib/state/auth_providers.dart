@@ -147,6 +147,7 @@ class AuthController extends StateNotifier<AuthState> {
   final Future<void> Function()? onAuthenticated;
   Timer? _refreshTimer;
   Future<bool>? _refreshInFlight;
+  final Map<String, Future<AuthSessionResult>> _sessionRefreshes = {};
   Future<String?>? _emailPromotionInFlight;
   var _profileSwitchGeneration = 0;
   AuthSession? _latestProfileSession;
@@ -172,11 +173,27 @@ class AuthController extends StateNotifier<AuthState> {
     return false;
   }
 
-  Future<void> _finishRestoreWithSavedSession(AuthSession saved) async {
+  Future<void> _finishRestoreWithSavedSession(
+    AuthSession saved, {
+    int? generation,
+    AuthSession? expectedCurrent,
+    bool resetGuestMetadata = false,
+  }) async {
     final isGuest = await _resolveIsGuest(saved);
     final needsGuestNickname =
         isGuest &&
         !await _guestCredentialsStorage.isNicknameCompleted(saved.accountId);
+    final pendingGuestConversionEmail = isGuest
+        ? await _guestCredentialsStorage.readPendingConversionEmail()
+        : null;
+    final isGuestConversionPromotionPending =
+        isGuest &&
+        await _guestCredentialsStorage.isGuestConversionPromotionPending();
+    if ((generation != null && generation != _profileSwitchGeneration) ||
+        (expectedCurrent != null &&
+            state.session?.refreshToken != expectedCurrent.refreshToken)) {
+      return;
+    }
     state = state.copyWith(
       session: saved,
       isRestoring: false,
@@ -184,31 +201,47 @@ class AuthController extends StateNotifier<AuthState> {
       clearDiscoverHint: true,
       isGuest: isGuest,
       needsGuestNickname: needsGuestNickname,
-      pendingGuestConversionEmail: isGuest
-          ? await _guestCredentialsStorage.readPendingConversionEmail()
-          : null,
-      isGuestConversionPromotionPending:
-          isGuest &&
-          await _guestCredentialsStorage.isGuestConversionPromotionPending(),
+      pendingGuestConversionEmail: pendingGuestConversionEmail,
+      isGuestConversionPromotionPending: isGuestConversionPromotionPending,
+      clearGuestNickname: resetGuestMetadata && !needsGuestNickname,
+      clearPendingGuestConversionEmail: resetGuestMetadata && !isGuest,
+      clearEmailVerificationRecoveryState: resetGuestMetadata,
     );
+    _scheduleProactiveRefresh();
     if (!needsGuestNickname) {
       await _notifyAuthenticated();
     }
   }
 
   Future<void> restore() async {
+    final generation = _profileSwitchGeneration;
+    final sessionBeforeRead = state.session;
     final saved = await _storage.read();
+    if (generation != _profileSwitchGeneration ||
+        !identical(state.session, sessionBeforeRead)) {
+      return;
+    }
     if (saved == null) {
       state = state.copyWith(isRestoring: false, clearError: true);
       return;
     }
     state = state.copyWith(session: saved, isRestoring: true, clearError: true);
-    final refreshed = await _authClient.refresh(
-      refreshToken: saved.refreshToken,
-    );
+    final refreshed = await _refreshSession(saved.refreshToken);
     switch (refreshed) {
       case AuthSessionOk(:final session):
-        await _persist(session);
+        if (generation != _profileSwitchGeneration ||
+            state.session?.refreshToken != saved.refreshToken) {
+          return;
+        }
+        await _commitProfileSession(
+          session: session,
+          generation: generation,
+          nextState: (currentState) => currentState.copyWith(session: session),
+        );
+        if (generation != _profileSwitchGeneration ||
+            state.session?.refreshToken != session.refreshToken) {
+          return;
+        }
         final isGuest = await _resolveIsGuest(session);
         final verificationRequired =
             isGuest && session.emailVerificationRequired != false;
@@ -223,6 +256,10 @@ class AuthController extends StateNotifier<AuthState> {
               statusCode: verification.statusCode,
             ),
           )) {
+            if (generation != _profileSwitchGeneration ||
+                state.session?.refreshToken != session.refreshToken) {
+              return;
+            }
             await _storage.clear();
             state = state.copyWith(
               clearSession: true,
@@ -259,24 +296,33 @@ class AuthController extends StateNotifier<AuthState> {
             verification.data ==
                 EmailVerificationRecoveryState.promotionPending;
         if (recoveryState == EmailVerificationRecoveryState.regular) {
-          final replacement = await _authClient.refresh(
-            refreshToken: session.refreshToken,
-          );
+          final replacement = await _refreshSession(session.refreshToken);
+          if (generation != _profileSwitchGeneration ||
+              state.session?.refreshToken != session.refreshToken) {
+            return;
+          }
           if (replacement case AuthSessionOk(
             :final session,
           ) when _isRegularSession(session)) {
-            await _persist(session);
-            state = state.copyWith(
+            await _commitProfileSession(
               session: session,
-              isRestoring: false,
-              clearError: true,
-              clearDiscoverHint: true,
-              clearGuest: true,
-              clearGuestNickname: true,
-              clearPendingGuestConversionEmail: true,
-              isGuestConversionPromotionPending: false,
-              clearEmailVerificationRecoveryState: true,
+              generation: generation,
+              nextState: (currentState) => currentState.copyWith(
+                session: session,
+                isRestoring: false,
+                clearError: true,
+                clearDiscoverHint: true,
+                clearGuest: true,
+                clearGuestNickname: true,
+                clearPendingGuestConversionEmail: true,
+                isGuestConversionPromotionPending: false,
+                clearEmailVerificationRecoveryState: true,
+              ),
             );
+            if (generation != _profileSwitchGeneration ||
+                state.session?.refreshToken != session.refreshToken) {
+              return;
+            }
             await _notifyAuthenticated();
             return;
           }
@@ -289,6 +335,18 @@ class AuthController extends StateNotifier<AuthState> {
             !await _guestCredentialsStorage.isNicknameCompleted(
               session.accountId,
             );
+        final pendingGuestConversionEmail = isGuest
+            ? await _guestCredentialsStorage.readPendingConversionEmail()
+            : null;
+        final isGuestConversionPromotionPending =
+            isGuest &&
+            (promotionPending ||
+                await _guestCredentialsStorage
+                    .isGuestConversionPromotionPending());
+        if (generation != _profileSwitchGeneration ||
+            state.session?.refreshToken != session.refreshToken) {
+          return;
+        }
         state = state.copyWith(
           session: session,
           isRestoring: false,
@@ -296,14 +354,8 @@ class AuthController extends StateNotifier<AuthState> {
           clearDiscoverHint: true,
           isGuest: isGuest,
           needsGuestNickname: needsGuestNickname,
-          pendingGuestConversionEmail: isGuest
-              ? await _guestCredentialsStorage.readPendingConversionEmail()
-              : null,
-          isGuestConversionPromotionPending:
-              isGuest &&
-              (promotionPending ||
-                  await _guestCredentialsStorage
-                      .isGuestConversionPromotionPending()),
+          pendingGuestConversionEmail: pendingGuestConversionEmail,
+          isGuestConversionPromotionPending: isGuestConversionPromotionPending,
           emailVerificationRecoveryState: recoveryState,
         );
         if (!needsGuestNickname &&
@@ -323,6 +375,11 @@ class AuthController extends StateNotifier<AuthState> {
             statusCode: statusCode,
           ),
         )) {
+          if (await _adoptNewerPersistedSession(saved, generation)) return;
+          if (generation != _profileSwitchGeneration ||
+              state.session?.refreshToken != saved.refreshToken) {
+            return;
+          }
           await _storage.clear();
           state = state.copyWith(
             clearSession: true,
@@ -331,7 +388,11 @@ class AuthController extends StateNotifier<AuthState> {
             clearGuest: true,
           );
         } else {
-          await _finishRestoreWithSavedSession(saved);
+          await _finishRestoreWithSavedSession(
+            saved,
+            generation: generation,
+            expectedCurrent: saved,
+          );
         }
     }
   }
@@ -535,9 +596,7 @@ class AuthController extends StateNotifier<AuthState> {
     var current = initialSession;
     for (var attempt = 0; attempt < 4; attempt++) {
       final credentials = await _guestCredentialsStorage.snapshot();
-      final refreshed = await _authClient.refresh(
-        refreshToken: current.refreshToken,
-      );
+      final refreshed = await _refreshSession(current.refreshToken);
       if (!_isGuestConversionCurrent(current, generation)) {
         _convertingGuest = false;
         return 'not_authenticated';
@@ -753,9 +812,7 @@ class AuthController extends StateNotifier<AuthState> {
     _convertingGuest = true;
     var current = initial;
     for (var attempt = 0; attempt < 4; attempt++) {
-      final refreshed = await _authClient.refresh(
-        refreshToken: current.refreshToken,
-      );
+      final refreshed = await _refreshSession(current.refreshToken);
       if (!_isEmailVerificationCurrent(current, generation)) {
         _convertingGuest = false;
         return 'not_authenticated';
@@ -981,9 +1038,7 @@ class AuthController extends StateNotifier<AuthState> {
             ? verification.data
             : null;
         if (recoveryState == EmailVerificationRecoveryState.regular) {
-          final replacement = await _authClient.refresh(
-            refreshToken: session.refreshToken,
-          );
+          final replacement = await _refreshSession(session.refreshToken);
           if (replacement case AuthSessionOk(
             :final session,
           ) when _isRegularSession(session)) {
@@ -1042,6 +1097,38 @@ class AuthController extends StateNotifier<AuthState> {
     _terminatedProfileSessionGeneration = null;
     await _storage.write(session);
     _scheduleProactiveRefresh();
+  }
+
+  Future<AuthSessionResult> _refreshSession(String refreshToken) {
+    final inFlight = _sessionRefreshes[refreshToken];
+    if (inFlight != null) return inFlight;
+    final future = _authClient.refresh(refreshToken: refreshToken);
+    _sessionRefreshes[refreshToken] = future;
+    return future.whenComplete(() {
+      if (identical(_sessionRefreshes[refreshToken], future)) {
+        _sessionRefreshes.remove(refreshToken);
+      }
+    });
+  }
+
+  Future<bool> _adoptNewerPersistedSession(
+    AuthSession rejected,
+    int generation,
+  ) async {
+    final persisted = await _storage.read();
+    if (persisted == null || persisted.refreshToken == rejected.refreshToken) {
+      return false;
+    }
+    if (generation == _profileSwitchGeneration &&
+        state.session?.refreshToken == rejected.refreshToken) {
+      await _finishRestoreWithSavedSession(
+        persisted,
+        generation: generation,
+        expectedCurrent: rejected,
+        resetGuestMetadata: true,
+      );
+    }
+    return true;
   }
 
   void _terminateProfileSession() {
@@ -1108,9 +1195,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<bool> _refreshOn401Once(int generation) async {
     final current = state.session;
     if (current == null) return false;
-    final refreshed = await _authClient.refresh(
-      refreshToken: current.refreshToken,
-    );
+    final refreshed = await _refreshSession(current.refreshToken);
     switch (refreshed) {
       case AuthSessionOk(:final session):
         if (generation != _profileSwitchGeneration ||
@@ -1146,6 +1231,13 @@ class AuthController extends StateNotifier<AuthState> {
             statusCode: statusCode,
           ),
         )) {
+          if (await _adoptNewerPersistedSession(current, generation)) {
+            return true;
+          }
+          if (generation != _profileSwitchGeneration ||
+              state.session?.refreshToken != current.refreshToken) {
+            return false;
+          }
           _terminateProfileSession();
           await _storage.clear();
           state = state.copyWith(clearSession: true, clearError: true);
