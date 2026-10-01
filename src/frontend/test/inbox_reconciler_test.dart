@@ -222,6 +222,25 @@ void main() {
           expect(scope.isComplete, isFalse);
           final callsBeforeRetry = chats.calls.length;
 
+          controller.reconcileAfterMutation();
+          await pumpEventQueue();
+
+          scope = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['prof-test']!
+              .scopes[failedScope]!;
+          expect(
+            chats.calls,
+            hasLength(callsBeforeRetry),
+            reason: 'a mutation must not silently retry a failed inbox page',
+          );
+          expect(scope.items.map((item) => item.chatId), [
+            'cached-$failedInbox',
+          ]);
+          expect(scope.failedCursor, failedCursor);
+          expect(scope.nextCursor, failedCursor);
+          expect(scope.errorMessage, 'later page unavailable');
+
           await controller.retry(failedScope);
 
           scope = container

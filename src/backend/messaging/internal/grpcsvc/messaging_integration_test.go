@@ -248,16 +248,17 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 	t.Helper()
 	guard := &store.SQLChatGuard{Pool: pool}
 	return &MessagingGRPC{
-		Messages:         &store.MessagesStore{Pool: pool},
-		Reactions:        &store.ReactionsStore{Pool: pool},
-		Pins:             &store.PinsStore{Pool: pool},
-		SharedMedia:      &store.SharedMediaStore{Pool: pool},
-		ChatGuard:        guard,
-		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
-		Moderation:       &store.SQLModerationGuard{Pool: pool},
-		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
-		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
-		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
+		Messages:          &store.MessagesStore{Pool: pool},
+		Reactions:         &store.ReactionsStore{Pool: pool},
+		Pins:              &store.PinsStore{Pool: pool},
+		SharedMedia:       &store.SharedMediaStore{Pool: pool},
+		ChatGuard:         guard,
+		ChatTypeResolver:  &store.SQLChatTypeResolver{Pool: pool},
+		ProfilePairBlocks: allowProfilePairBlocks{},
+		Moderation:        &store.SQLModerationGuard{Pool: pool},
+		ChatMentionsMeta:  &store.SQLChatMentionsMeta{Pool: pool},
+		ChatThreadPolicy:  &store.SQLChatThreadPolicy{Pool: pool},
+		PreKeyBundles:     &store.E2EPreKeyStore{Pool: pool},
 	}
 }
 
@@ -534,12 +535,6 @@ func (failingProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, u
 	return false, errors.New("social unavailable")
 }
 
-type directionalAccountBlocks map[[2]uuid.UUID]bool
-
-func (b directionalAccountBlocks) AccountBlocked(_ context.Context, viewerAccountID, senderAccountID uuid.UUID) (bool, error) {
-	return b[[2]uuid.UUID{viewerAccountID, senderAccountID}], nil
-}
-
 type allowAccountBlocks struct{}
 
 func (allowAccountBlocks) AccountBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
@@ -575,12 +570,6 @@ func TestFilterBlockedHistoryRows_FailsClosedOnSocialErrors(t *testing.T) {
 		require.Equal(t, codes.Unavailable, status.Code(err))
 		require.Empty(t, visible)
 	})
-}
-
-type failingAccountBlocks struct{}
-
-func (failingAccountBlocks) AccountBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
-	return false, errors.New("social unavailable")
 }
 
 func TestMessagingSendAttachmentOnlyMessageValidatesReadyFile(t *testing.T) {

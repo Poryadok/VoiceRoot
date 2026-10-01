@@ -197,6 +197,13 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     if (profileId == null || !state.profileSnapshots.containsKey(profileId)) {
       return;
     }
+    final snapshot = state.profileSnapshots[profileId]!;
+    if (snapshot.scopes.values.any((scope) => scope.hasError)) {
+      // A background activity or MarkRead must not silently turn a visible
+      // pagination error into an implicit retry. Preserve the loaded rows and
+      // failed cursor until the user explicitly retries that scope.
+      return;
+    }
     unawaited(reconcile());
   }
 

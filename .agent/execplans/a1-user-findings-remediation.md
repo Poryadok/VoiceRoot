@@ -187,10 +187,19 @@ API-backed text-chat create flow in an existing Space.
 - [x] Regenerate Go/Dart protobuf outputs; `make buf-go-pb-check` confirms Go
   outputs match the proto sources. `make buf-ci buf-breaking` passed before
   commit.
-- [x] Inspect the final diff, update A1 evidence, commit `6d1310ab9`, and push
-  it to PR #596.
-- [ ] Obtain exact-head CI for SHA `6d1310ab9425e9e20f3f66804e7f0af566565603`
-  (run `36935069635` is queued/in progress; some jobs have already passed).
+- [x] Push the initial implementation batch to PR #596 as `6d1310ab9` and
+  evidence updates as `4db8b6322`.
+- [x] Use exact-head CI feedback to fix stale unused Messaging test doubles,
+  explicitly allow Social policy in ordinary direct-service integration
+  fixtures, and keep a failed inbox page/cursor intact until explicit retry
+  after MarkRead or resumed activity. The inbox regression failed before the
+  fix and passes afterward.
+- [x] Rerun `make golangci-ci` across all 20 Go modules; `make flutter-ci`
+  (1,239 passed, 98 skipped); focused InboxReconciler (16), notifications and
+  chat (40), Messaging short tests and lint; and Graphify update.
+- [ ] Commit/push this CI-feedback batch and obtain exact-head CI. The previous
+  code run `36935069635` was superseded while the docs-only commit was pushed;
+  its findings are resolved locally but need confirmation on a fresh head.
 - [ ] Continue live acceptance only against the deployed exact SHA after the
   state-preserving NATS gate is resolved.
 

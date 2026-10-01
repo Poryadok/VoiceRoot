@@ -254,10 +254,12 @@ staging proof.
 
 ## 2026-10-02 integrated owner-findings batch
 
-The following reported defects now have local implementations and regression
-coverage on branch `codex/a1-inbox-reconcile-fix`, committed and pushed as
-`6d1310ab9425e9e20f3f66804e7f0af566565603` to PR #596. Exact-head CI run
-`36935069635` is queued/in progress; this batch still has no staging acceptance:
+The reported defects have local implementations and regression coverage on
+branch `codex/a1-inbox-reconcile-fix`; the first implementation and evidence
+commits (`6d1310ab9`, `4db8b6322`) are pushed to PR #596. The first code CI run
+`36935069635` was superseded when the evidence-only commit arrived. It exposed
+three findings now fixed locally; the follow-up code batch is not yet pushed and
+none of this work has staging acceptance:
 
 - Friend removal updates both participants; incoming requests, notifications,
   inbox preview, and unread/read state reconcile without a page reload.
@@ -280,22 +282,33 @@ coverage on branch `codex/a1-inbox-reconcile-fix`, committed and pushed as
   Unblock refreshes without a full-page reload. Cross-profile/room cache writes
   are fenced and blocked messages are purged before API refresh, including
   offline/failing-refresh cases.
+- CI found that `MarkRead` or resumed activity could silently restart all inbox
+  scopes after one page failed. `reconcileAfterMutation()` now preserves that
+  error and opaque cursor until the user retries; its new regression first
+  failed by adding three unexpected requests and now passes without extra calls.
+  CI also exposed stale unused Messaging fakes and one direct-service fixture
+  without the mandatory Social profile-pair policy; both are corrected.
 
 Integrated local verification on this branch:
 
 - `make go-test-short-chat go-test-short-social go-test-short-user go-test-short-messaging go-test-short-realtime` passed.
 - `make buf-ci buf-breaking` passed.
-- `make flutter-ci` passed: 1,239 passed, 98 skipped; analyzer reported only
-  informational lints accepted by CI.
+- Latest `make flutter-ci` passed: 1,239 passed, 98 skipped; analyzer reported
+  eight informational lints accepted by CI.
+- Latest `make golangci-ci` passed across all 20 Go modules. Focused inbox
+  reconciler (16), notification/chat (40), Messaging short tests and Messaging
+  lint passed after the CI-driven corrections.
 - Focused privacy/history/cache tests passed (37); focused Space client/widget
   tests and targeted Flutter analysis passed; `git diff --check` is clean.
 - `make ci-script-tests` could not run because `jq` is not installed on this
   host. This is an environment limitation, not a passing check.
 - Realtime's full package suite previously passed 395 tests. Full Go integration
   suites remain limited by rootless Docker support on this host.
-- After push, `protobuf`, `markdown-link-check`, `admin`, `flutter-device-driver`,
-  and `backend-go-pkg` passed on run `36935069635`; remaining required jobs are
-  still pending or running.
+- Before cancellation, protobuf, docs links, admin, Flutter device-driver,
+  backend package, most service tests, E2E and attachment proof passed on
+  `36935069635`. Lint, the profile-handoff live test and Messaging integration
+  failed; those findings are corrected locally. The run was canceled when the
+  follow-up docs commit landed. Fresh exact-head CI is required.
 - `make buf-go-pb-check` passed after regenerating the Go protobuf trees. The
   Graphify source graph update completed; its HTML visualization was skipped
   because the repository graph exceeds the visualization node limit.
@@ -306,8 +319,7 @@ profile” modal is still shown. No staging data was changed in this observation
 
 Still open and not credited as passed:
 
-- Completion of exact-head CI for PR #596 SHA
-  `6d1310ab9425e9e20f3f66804e7f0af566565603`.
+- Commit/push the CI-driven fixes, then complete exact-head CI for PR #596.
 - Safe exact-SHA staging deployment. Active NATS generation remains
   `r20260930a4`; `STAGING_NATS_PROOF_CREDS_B64` is unavailable and the ACL proof
   hash does not match current intent. Do not change proof variables, rotate
