@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nats-io/nats.go"
@@ -57,7 +58,7 @@ func TestDockerPopulatedProof(t *testing.T) {
 	before := sourceSnapshot(t, js)
 	for _, fault := range []string{"", "exercise", "cleanup"} {
 		t.Run("source-preserved-"+fault, func(t *testing.T) {
-			d := &faultDocker{fault: fault}
+			d := &faultDocker{fault: fault, t: t}
 			e := runSandbox(input, d, helper)
 			if fault == "" && e != nil {
 				t.Fatalf("fixture Docker proof: %v", e)
@@ -75,13 +76,28 @@ func TestDockerPopulatedProof(t *testing.T) {
 	}
 }
 
-type faultDocker struct{ fault string }
+type faultDocker struct {
+	fault string
+	t     *testing.T
+}
 
 func (d *faultDocker) run(ctx context.Context, args ...string) ([]byte, error) {
 	if d.fault == "exercise" && len(args) > 1 && args[0] == "exec" && args[len(args)-1] == "exercise" {
 		return nil, failure("fixture_exercise_fault")
 	}
 	raw, e := (realDocker{}).run(ctx, args...)
+	// Fixture-only diagnostics expose classification, never log bytes or credentials.
+	if e == nil && len(args) > 1 && args[0] == "start" {
+		state, stateErr := exec.CommandContext(ctx, "docker", "inspect", args[1], "--format", "{{json .State}}").Output()
+		var status struct {
+			Running  bool
+			ExitCode int
+		}
+		if stateErr == nil && json.Unmarshal(state, &status) == nil && !status.Running {
+			logs, _ := exec.CommandContext(ctx, "docker", "logs", args[1]).CombinedOutput()
+			d.t.Logf("fixture stopped: exit=%d permissionDenied=%t", status.ExitCode, strings.Contains(string(logs), "permission denied"))
+		}
+	}
 	// Remove first, then simulate an ambiguous cleanup result. Inspection still
 	// runs, all owned resources are removed, and uncertainty vetoes evidence.
 	if d.fault == "cleanup" && len(args) > 1 && args[0] == "network" && args[1] == "rm" {
