@@ -541,11 +541,33 @@ not activate the v2 ownership feature.
 
 ## P3 permanent Space retirement
 
+Role is participant 1 of the common Space lifecycle barrier. Before retirement,
+`ApplySpaceLifecycleFence` accepts only a request-bound authenticated Space
+service principal on the protected listener. The durable head binds canonical
+Space/deletion IDs, monotonic generation and the exact common manifest. FROZEN
+and PURGE_DECIDED block ordinary Role reads, permission decisions, mutations,
+bootstrap and new ownership admission under the same advisory Space lock.
+LIVE at the next generation restores ordinary admission only before irreversible
+purge. A later deletion cycle starts with a new operation at the next generation
+after LIVE; old exact receipt replay cannot reopen current authority. Prepared
+ownership operations prevent a new deletion fence. Exact immutable receipt
+replay preserves the original ID and database application time; changed bindings
+conflict. Permanent retirement takes precedence over every stale LIVE request.
+Migration `000013_space_deletion_fence` persists the head and immutable receipt
+tuple. Receipts bind the full typed participant RPC with a domain-separated
+SHA-256, independently of transport credential hashing. Startup checks the
+schema and runs bounded compaction; full bytes compact only 30 days after
+permanent retirement, while the semantic tuple and stable receipt remain.
+Focused real PostgreSQL, mTLS/JWKS and restart/negative checks verify this
+participant; integrated all-participant acceptance remains tracked in T40.
+
 `RetireSpace` is protected-listener only and accepts `protocol_version=1`,
 canonical Space/deletion IDs, positive generation, `purge_decided_at` and exact
 root manifest binding from authenticated Space workload identity. Unknown
 request fields are rejected. Role refuses retirement while any ownership-v2
-operation is `PREPARED`. One transaction writes the permanent retirement fence
+operation is `PREPARED`, or unless the durable `PURGE_DECIDED` head matches
+the exact Space, deletion operation, generation and complete manifest tuple.
+One transaction writes the permanent retirement fence
 and immutable receipt, removes ordinary Role rows and emits final policy
 invalidation. Exact replay returns stored bytes; changed operation, generation,
 manifest or request for the retired Space is `FAILED_PRECONDITION`.

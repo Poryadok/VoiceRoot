@@ -16,6 +16,7 @@ import (
 
 func TestOwnershipUnaryInterceptor_DrainsEveryProtectedProtocolOnLegacyListener(t *testing.T) {
 	methods := []string{
+		rolev1.RoleService_ApplySpaceLifecycleFence_FullMethodName,
 		rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName,
 		rolev1.RoleService_PrepareOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_FinalizeOwnershipTransfer_FullMethodName,

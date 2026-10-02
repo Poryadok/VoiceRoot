@@ -52,6 +52,9 @@ func (s *RoleStore) transitionOwnerRole(ctx context.Context, action string, in O
 	if retired {
 		return uuid.Nil, ErrSpaceRetired
 	}
+	if err = checkRoleDeletionFence(ctx, tx, []uuid.UUID{in.SpaceID}); err != nil {
+		return uuid.Nil, err
+	}
 
 	// A durable compensation is terminal, including when it fenced an Apply
 	// that had not reached this lock yet. Check it before replaying Apply success.

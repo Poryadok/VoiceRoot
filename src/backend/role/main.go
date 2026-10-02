@@ -58,6 +58,11 @@ func main() {
 		defer pool.Close()
 
 		roleStore := &store.RoleStore{Pool: pool}
+		stopRetention, err := startRoleDeletionRetention(roleStore, logger)
+		if err != nil {
+			log.Fatalf("Role lifecycle retention startup: %v", err)
+		}
+		defer stopRetention()
 		var events roleevents.Publisher = roleevents.NoopPublisher{}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			jsPub, err := roleevents.NewJetStreamPublisher(natsURL)

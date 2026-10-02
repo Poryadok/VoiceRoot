@@ -169,6 +169,9 @@ var gameSessionGrantMethods = []string{
 }
 
 func isOwnershipMethod(method string) bool {
+	if method == rolev1.RoleService_ApplySpaceLifecycleFence_FullMethodName {
+		return true
+	}
 	if method == rolev1.RoleService_GetOwnershipTransferCapabilities_FullMethodName || method == rolev1.RoleService_RetireSpace_FullMethodName {
 		return true
 	}

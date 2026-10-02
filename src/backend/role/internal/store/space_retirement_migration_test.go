@@ -333,6 +333,8 @@ func TestSpaceRetirementMigration_DownWaitsForActualReceiptFirstStoreRetirementT
 	require.NoError(t, err)
 
 	e := r23EvidenceAt(t, time.Now().UTC())
+	_, err = st.Pool.Exec(ctx, `INSERT INTO role_space_deletion_fences(space_id,deletion_operation_id,generation,state,manifest_id,manifest_sha256,manifest_item_count) VALUES($1,$2,$3,'PURGE_DECIDED',$4,$5,$6)`, e.spaceID, e.operationID, e.generation, e.manifestID, e.manifestHash, e.manifestItemCount)
+	require.NoError(t, err)
 	retirementPool := r22SecondRolePool(t, ctx, st.Pool, "r23-actual-retirement")
 	retirementDone := make(chan error, 1)
 	go func() {
