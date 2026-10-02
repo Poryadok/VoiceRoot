@@ -225,6 +225,10 @@ message MessageSent {
   bool was_scheduled = 9;
   // Original scheduled_at for time-based schedules; absent for when-online.
   optional google.protobuf.Timestamp scheduled_at = 10;
+  // Present only for GIS-verified game-event messages. Notification treats
+  // these references as routing scope and revalidates consent with GIS.
+  optional string game_application_id = 11;
+  optional string game_environment_id = 12;
 }
 
 message MentionAdded {
@@ -235,6 +239,9 @@ message MentionAdded {
   // Mirrors MessageSent.send_silent so mention push does not introduce an
   // audible duplicate for a silent message.
   bool send_silent = 5;
+  // Present only when the source message persisted GIS-verified game scope.
+  optional string game_application_id = 6;
+  optional string game_environment_id = 7;
 }
 
 message MessageEdited {
@@ -254,6 +261,9 @@ message ReactionAdded {
   string emoji = 3;
   string chat_id = 4;
   string message_author_profile_id = 5;
+  // Present only when the source message persisted GIS-verified game scope.
+  optional string game_application_id = 6;
+  optional string game_environment_id = 7;
 }
 
 message ReactionRemoved {

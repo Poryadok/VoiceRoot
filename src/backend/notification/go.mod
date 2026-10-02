@@ -20,6 +20,7 @@ require (
 	voice.app/voice/events v0.0.0
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/notification v0.0.0
+	voice.app/voice/social v0.0.0
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 )
@@ -126,6 +127,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/analytics v0.0.0 // indirect
+	voice.app/voice/gameintegration v0.0.0 // indirect
 )
 
 replace voice/backend/pkg => ../pkg
@@ -143,3 +145,7 @@ replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
 replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
+
+replace voice.app/voice/social => ../user/pb/voice/social

@@ -57,11 +57,13 @@ func (l DBPolicyLoader) LoadPolicy(
 
 	if chatID != "" {
 		if chatUUID, err := uuid.Parse(chatID); err == nil {
-			chatSettings, err := l.Reader.GetSettings(ctx, profileID, "chat", &chatUUID)
-			if err != nil {
-				return SettingsSnapshot{}, QuietHoursSnapshot{}, err
+			for _, scope := range []string{"chat", "channel"} {
+				chatSettings, err := l.Reader.GetSettings(ctx, profileID, scope, &chatUUID)
+				if err != nil {
+					return SettingsSnapshot{}, QuietHoursSnapshot{}, err
+				}
+				settings = mergeSettings(settings, settingsFromRecord(chatSettings, at))
 			}
-			settings = mergeSettings(settings, settingsFromRecord(chatSettings, at))
 		}
 	}
 

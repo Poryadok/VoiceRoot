@@ -46,13 +46,26 @@ func (s *SettingsStore) GetSettings(ctx context.Context, profileID uuid.UUID, sc
 	if scopeType == "" {
 		scopeType = "global"
 	}
+	queryer := interface {
+		QueryRow(context.Context, string, ...any) pgx.Row
+	}(s.Pool)
+	tx, owned, err := s.scopeTransaction(ctx, scopeType, scopeID)
+	if err != nil {
+		return NotificationSettings{}, err
+	}
+	if tx != nil {
+		if owned {
+			defer func() { _ = tx.Rollback(context.Background()) }()
+		}
+		queryer = tx
+	}
 	var (
 		out       NotificationSettings
 		scopeRaw  *uuid.UUID
 		muteUntil *time.Time
 		suppress  []byte
 	)
-	err := s.Pool.QueryRow(ctx, `
+	err = queryer.QueryRow(ctx, `
 SELECT profile_id, scope_type, scope_id, enabled, mute_until, suppress_types
 FROM notification_settings
 WHERE profile_id = $1 AND scope_type = $2 AND (
@@ -61,6 +74,11 @@ WHERE profile_id = $1 AND scope_type = $2 AND (
 		&out.ProfileID, &out.ScopeType, &scopeRaw, &out.Enabled, &muteUntil, &suppress,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if owned {
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				return NotificationSettings{}, commitErr
+			}
+		}
 		return NotificationSettings{
 			ProfileID: profileID,
 			ScopeType: scopeType,
@@ -70,6 +88,11 @@ WHERE profile_id = $1 AND scope_type = $2 AND (
 	}
 	if err != nil {
 		return NotificationSettings{}, err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return NotificationSettings{}, err
+		}
 	}
 	out.ScopeID = scopeRaw
 	out.MuteUntil = muteUntil
@@ -90,6 +113,9 @@ func (s *SettingsStore) UpsertSettings(ctx context.Context, settings Notificatio
 	}
 	if settings.ScopeType == "" {
 		settings.ScopeType = "global"
+	}
+	if (settings.ScopeType == "space" || settings.ScopeType == "chat" || settings.ScopeType == "channel") && settings.ScopeID != nil {
+		return s.upsertScopedSettings(ctx, settings)
 	}
 	if settings.ScopeType == "global" && settings.ScopeID == nil {
 		tag, err := s.Pool.Exec(ctx, `
@@ -114,7 +140,7 @@ VALUES ($1, $2, NULL, $3, $4, $5::jsonb)`,
 	_, err = s.Pool.Exec(ctx, `
 INSERT INTO notification_settings (profile_id, scope_type, scope_id, enabled, mute_until, suppress_types)
 VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-ON CONFLICT (profile_id, scope_type, scope_id) DO UPDATE SET
+ON CONFLICT (profile_id, scope_type, scope_id) WHERE scope_id IS NOT NULL DO UPDATE SET
   enabled = EXCLUDED.enabled,
   mute_until = EXCLUDED.mute_until,
   suppress_types = EXCLUDED.suppress_types`,

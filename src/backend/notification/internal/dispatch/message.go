@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,12 +24,31 @@ type TokenRepository interface {
 
 // MessagePusher sends grouped message pushes with settings, grouping, and presence.
 type MessagePusher struct {
-	Tokens   TokenRepository
-	Pusher   *PushDispatcher
-	Grouping grouping.Store
-	Presence presence.Checker
-	Policy   delivery.DeliveryPolicyLoader
-	Router   func(in delivery.DeliveryInput) delivery.DeliveryDecision
+	LifecycleDelivery interface {
+		WithChatDelivery(context.Context, string, func(context.Context) error) error
+	}
+	Tokens        TokenRepository
+	Pusher        *PushDispatcher
+	Grouping      grouping.Store
+	Presence      presence.Checker
+	Policy        delivery.DeliveryPolicyLoader
+	Router        func(in delivery.DeliveryInput) delivery.DeliveryDecision
+	GameConsent   GamePushConsentChecker
+	GameBlocks    GamePushBlockChecker
+	GameChatScope GamePushChatScopeResolver
+}
+
+// GamePushConsentChecker performs an execution-time GIS consent read for every device push.
+type GamePushConsentChecker interface {
+	AllowsGamePush(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error)
+}
+
+type GamePushChatScopeResolver interface {
+	ResolveGamePushChat(context.Context, uuid.UUID, uuid.UUID, string) (bool, bool, error)
+}
+
+type GamePushBlockChecker interface {
+	IsGamePushBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
 func (p *MessagePusher) router() func(delivery.DeliveryInput) delivery.DeliveryDecision {
@@ -47,6 +67,19 @@ func (p *MessagePusher) policy() delivery.DeliveryPolicyLoader {
 
 // SendPush delivers grouped chat notifications to offline recipients.
 func (p *MessagePusher) SendPush(
+	ctx context.Context,
+	decisions map[string]delivery.DeliveryDecision,
+	in delivery.DeliveryInput,
+	payload push.Payload,
+	previewBody string,
+) error {
+	if p != nil && p.LifecycleDelivery != nil {
+		return p.LifecycleDelivery.WithChatDelivery(ctx, in.ChatID, func(guarded context.Context) error { return p.sendPush(guarded, decisions, in, payload, previewBody) })
+	}
+	return p.sendPush(ctx, decisions, in, payload, previewBody)
+}
+
+func (p *MessagePusher) sendPush(
 	ctx context.Context,
 	decisions map[string]delivery.DeliveryDecision,
 	in delivery.DeliveryInput,
@@ -84,8 +117,14 @@ func (p *MessagePusher) SendPush(
 			continue
 		}
 		out := payload
+		groupingPreview := previewBody
+		if p.GameChatScope != nil && in.GameCategory != "" && in.GameApplicationID == uuid.Nil && in.GameEnvironmentID == uuid.Nil {
+			// A chat may be game-managed even when the event has no persisted app scope.
+			// Keep private message text out of shared grouping state until GIS classifies it.
+			groupingPreview = ""
+		}
 		if groupingID := pushGroupingID(in); groupingID != "" {
-			if err := grouping.ApplyToPayload(ctx, p.Grouping, recipient, groupingID, previewBody, &out); err != nil {
+			if err := grouping.ApplyToPayload(ctx, p.Grouping, recipient, groupingID, groupingPreview, &out); err != nil {
 				// Degraded: send without grouping when Redis fails.
 				out = payload
 			}
@@ -101,7 +140,51 @@ func (p *MessagePusher) SendPush(
 			if !ShouldDeliverPushToToken(notificationType, tok.PushService) {
 				continue
 			}
-			if err := p.Pusher.Send(ctx, recipient, tok, out); err != nil {
+			gameScoped := false
+			if in.GameApplicationID != uuid.Nil || in.GameEnvironmentID != uuid.Nil {
+				if in.GameApplicationID == uuid.Nil || in.GameEnvironmentID == uuid.Nil || in.GameCategory == "" || p.GameConsent == nil || p.GameBlocks == nil {
+					continue
+				}
+				allowed, err := p.GameConsent.AllowsGamePush(ctx, recipient, in.GameApplicationID, in.GameEnvironmentID, in.GameCategory)
+				if err != nil {
+					return err
+				}
+				if !allowed {
+					continue
+				}
+				gameScoped = true
+			} else if in.GameCategory != "" && in.ChatID != "" && p.GameChatScope != nil {
+				chatID, err := uuid.Parse(in.ChatID)
+				if err != nil || chatID == uuid.Nil {
+					return fmt.Errorf("game notification chat scope: invalid chat id")
+				}
+				resolvedGameScoped, allowed, err := p.GameChatScope.ResolveGamePushChat(ctx, recipient, chatID, in.GameCategory)
+				if err != nil {
+					return err
+				}
+				gameScoped = resolvedGameScoped
+				if gameScoped && !allowed {
+					continue
+				}
+			}
+			if gameScoped {
+				if p.GameBlocks == nil {
+					continue
+				}
+				blocked, err := p.GameBlocks.IsGamePushBlocked(ctx, recipient, in.SenderProfileID)
+				if err != nil {
+					return err
+				}
+				if blocked {
+					continue
+				}
+			}
+			devicePayload := out
+			if gameScoped {
+				devicePayload.Title = "Game update"
+				devicePayload.Body = "A game event is waiting in Voice."
+			}
+			if err := p.Pusher.Send(ctx, recipient, tok, devicePayload); err != nil {
 				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)
 					continue
@@ -115,6 +198,21 @@ func (p *MessagePusher) SendPush(
 
 // EnrichDecision applies presence, settings, and quiet hours to routing.
 func (p *MessagePusher) EnrichDecision(
+	ctx context.Context, profileID string, senderID uuid.UUID, chatID string, typ delivery.NotificationType,
+) (delivery.DeliveryDecision, error) {
+	if p != nil && p.LifecycleDelivery != nil {
+		var decision delivery.DeliveryDecision
+		err := p.LifecycleDelivery.WithChatDelivery(ctx, chatID, func(guarded context.Context) error {
+			var err error
+			decision, err = p.enrichDecision(guarded, profileID, senderID, chatID, typ)
+			return err
+		})
+		return decision, err
+	}
+	return p.enrichDecision(ctx, profileID, senderID, chatID, typ)
+}
+
+func (p *MessagePusher) enrichDecision(
 	ctx context.Context,
 	profileID string,
 	senderID uuid.UUID,

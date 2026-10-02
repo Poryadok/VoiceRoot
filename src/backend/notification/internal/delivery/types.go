@@ -10,15 +10,15 @@ import (
 type NotificationType string
 
 const (
-	TypeNewMessage      NotificationType = "new_message"
-	TypeMessageRequest  NotificationType = "message_request"
-	TypeMention         NotificationType = "mention"
-	TypeReply        NotificationType = "reply"
-	TypeReaction     NotificationType = "reaction"
-	TypeFriendReq    NotificationType = "friend_request"
-	TypeMatchFound      NotificationType = "match_found"
-	TypeSearchNudge     NotificationType = "search_nudge"
-	TypeSearchTimeout   NotificationType = "search_timeout"
+	TypeNewMessage        NotificationType = "new_message"
+	TypeMessageRequest    NotificationType = "message_request"
+	TypeMention           NotificationType = "mention"
+	TypeReply             NotificationType = "reply"
+	TypeReaction          NotificationType = "reaction"
+	TypeFriendReq         NotificationType = "friend_request"
+	TypeMatchFound        NotificationType = "match_found"
+	TypeSearchNudge       NotificationType = "search_nudge"
+	TypeSearchTimeout     NotificationType = "search_timeout"
 	TypeIncomingCall      NotificationType = "incoming_call"
 	TypeSystem            NotificationType = "system"
 	TypeVoiceMemberJoined NotificationType = "voice_member_joined"
@@ -34,6 +34,9 @@ type DeliveryInput struct {
 	Type               NotificationType
 	IsOnline           bool
 	At                 time.Time
+	GameApplicationID  uuid.UUID
+	GameEnvironmentID  uuid.UUID
+	GameCategory       string
 }
 
 // DeliveryDecision selects in-app vs push channels.
@@ -51,12 +54,12 @@ type SettingsSnapshot struct {
 
 // QuietHoursSnapshot is the effective DND schedule for a recipient.
 type QuietHoursSnapshot struct {
-	Enabled           bool
-	StartTime         string // HH:MM
-	EndTime           string // HH:MM
-	Timezone          string
-	OverrideMentions  bool
-	At                time.Time
+	Enabled          bool
+	StartTime        string // HH:MM
+	EndTime          string // HH:MM
+	Timezone         string
+	OverrideMentions bool
+	At               time.Time
 }
 
 // GroupingState tracks collapsed push metadata per chat.

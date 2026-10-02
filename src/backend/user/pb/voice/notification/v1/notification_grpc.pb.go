@@ -19,17 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NotificationService_RegisterDevice_FullMethodName             = "/voice.notification.v1.NotificationService/RegisterDevice"
-	NotificationService_UnregisterDevice_FullMethodName           = "/voice.notification.v1.NotificationService/UnregisterDevice"
-	NotificationService_GetNotificationSettings_FullMethodName    = "/voice.notification.v1.NotificationService/GetNotificationSettings"
-	NotificationService_UpdateNotificationSettings_FullMethodName = "/voice.notification.v1.NotificationService/UpdateNotificationSettings"
-	NotificationService_GetQuietHours_FullMethodName              = "/voice.notification.v1.NotificationService/GetQuietHours"
-	NotificationService_SetQuietHours_FullMethodName              = "/voice.notification.v1.NotificationService/SetQuietHours"
-	NotificationService_SendNotification_FullMethodName           = "/voice.notification.v1.NotificationService/SendNotification"
-	NotificationService_SendBulkNotification_FullMethodName       = "/voice.notification.v1.NotificationService/SendBulkNotification"
-	NotificationService_RelayNotification_FullMethodName          = "/voice.notification.v1.NotificationService/RelayNotification"
-	NotificationService_ApplySpaceLifecycleFence_FullMethodName   = "/voice.notification.v1.NotificationService/ApplySpaceLifecycleFence"
-	NotificationService_PurgeSpace_FullMethodName                 = "/voice.notification.v1.NotificationService/PurgeSpace"
+	NotificationService_ImportSpacePurgeManifestPage_FullMethodName = "/voice.notification.v1.NotificationService/ImportSpacePurgeManifestPage"
+	NotificationService_RegisterDevice_FullMethodName               = "/voice.notification.v1.NotificationService/RegisterDevice"
+	NotificationService_UnregisterDevice_FullMethodName             = "/voice.notification.v1.NotificationService/UnregisterDevice"
+	NotificationService_GetNotificationSettings_FullMethodName      = "/voice.notification.v1.NotificationService/GetNotificationSettings"
+	NotificationService_UpdateNotificationSettings_FullMethodName   = "/voice.notification.v1.NotificationService/UpdateNotificationSettings"
+	NotificationService_GetQuietHours_FullMethodName                = "/voice.notification.v1.NotificationService/GetQuietHours"
+	NotificationService_SetQuietHours_FullMethodName                = "/voice.notification.v1.NotificationService/SetQuietHours"
+	NotificationService_SendNotification_FullMethodName             = "/voice.notification.v1.NotificationService/SendNotification"
+	NotificationService_SendBulkNotification_FullMethodName         = "/voice.notification.v1.NotificationService/SendBulkNotification"
+	NotificationService_RelayNotification_FullMethodName            = "/voice.notification.v1.NotificationService/RelayNotification"
+	NotificationService_ApplySpaceLifecycleFence_FullMethodName     = "/voice.notification.v1.NotificationService/ApplySpaceLifecycleFence"
+	NotificationService_PurgeSpace_FullMethodName                   = "/voice.notification.v1.NotificationService/PurgeSpace"
 )
 
 // NotificationServiceClient is the client API for NotificationService service.
@@ -38,6 +39,8 @@ const (
 //
 // Push, email routing, device tokens. HTTP: /api/v1/notifications/**.
 type NotificationServiceClient interface {
+	// @voice.security=protected;callers=service:space
+	ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error)
 	RegisterDevice(ctx context.Context, in *RegisterDeviceRequest, opts ...grpc.CallOption) (*RegisterDeviceResponse, error)
 	UnregisterDevice(ctx context.Context, in *UnregisterDeviceRequest, opts ...grpc.CallOption) (*UnregisterDeviceResponse, error)
 	GetNotificationSettings(ctx context.Context, in *GetNotificationSettingsRequest, opts ...grpc.CallOption) (*GetNotificationSettingsResponse, error)
@@ -59,6 +62,16 @@ type notificationServiceClient struct {
 
 func NewNotificationServiceClient(cc grpc.ClientConnInterface) NotificationServiceClient {
 	return &notificationServiceClient{cc}
+}
+
+func (c *notificationServiceClient) ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImportSpacePurgeManifestPageResponse)
+	err := c.cc.Invoke(ctx, NotificationService_ImportSpacePurgeManifestPage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *notificationServiceClient) RegisterDevice(ctx context.Context, in *RegisterDeviceRequest, opts ...grpc.CallOption) (*RegisterDeviceResponse, error) {
@@ -177,6 +190,8 @@ func (c *notificationServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpa
 //
 // Push, email routing, device tokens. HTTP: /api/v1/notifications/**.
 type NotificationServiceServer interface {
+	// @voice.security=protected;callers=service:space
+	ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error)
 	RegisterDevice(context.Context, *RegisterDeviceRequest) (*RegisterDeviceResponse, error)
 	UnregisterDevice(context.Context, *UnregisterDeviceRequest) (*UnregisterDeviceResponse, error)
 	GetNotificationSettings(context.Context, *GetNotificationSettingsRequest) (*GetNotificationSettingsResponse, error)
@@ -200,6 +215,9 @@ type NotificationServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedNotificationServiceServer struct{}
 
+func (UnimplementedNotificationServiceServer) ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ImportSpacePurgeManifestPage not implemented")
+}
 func (UnimplementedNotificationServiceServer) RegisterDevice(context.Context, *RegisterDeviceRequest) (*RegisterDeviceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterDevice not implemented")
 }
@@ -252,6 +270,24 @@ func RegisterNotificationServiceServer(s grpc.ServiceRegistrar, srv Notification
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&NotificationService_ServiceDesc, srv)
+}
+
+func _NotificationService_ImportSpacePurgeManifestPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImportSpacePurgeManifestPageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotificationServiceServer).ImportSpacePurgeManifestPage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotificationService_ImportSpacePurgeManifestPage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotificationServiceServer).ImportSpacePurgeManifestPage(ctx, req.(*ImportSpacePurgeManifestPageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _NotificationService_RegisterDevice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -459,6 +495,10 @@ var NotificationService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.notification.v1.NotificationService",
 	HandlerType: (*NotificationServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ImportSpacePurgeManifestPage",
+			Handler:    _NotificationService_ImportSpacePurgeManifestPage_Handler,
+		},
 		{
 			MethodName: "RegisterDevice",
 			Handler:    _NotificationService_RegisterDevice_Handler,
