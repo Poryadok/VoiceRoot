@@ -187,9 +187,18 @@ def block_header(raw):
             "writer_version_verified": False, "native_checksum_verified": False}
 
 
+def open_regular(guard, path, dir_fd=None):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NOATIME | os.O_NONBLOCK | os.O_CLOEXEC,
+                 dir_fd=dir_fd)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise guard.Unsafe("SOURCE_ROW_CHANGED")
+    return fd
+
+
 def protected_report(guard, path=REPORT):
     guard.trusted_path(path, root_owned=True)
-    fd = guard.open_read(path)
+    fd = open_regular(guard, path)
     try:
         before = os.fstat(fd)
         gid = REPORT_GID if REPORT_GID is not None else guard.grp.getgrnam("pmd").gr_gid
@@ -252,7 +261,7 @@ def checked_read(guard, root_fd, row):
             child = guard.open_read(component, True, parent)
             os.close(parent)
             parent = child
-        fd = guard.open_read(components[-1], dir_fd=parent)
+        fd = open_regular(guard, components[-1], dir_fd=parent)
         before = os.fstat(fd)
         expected = tuple(row[key] for key in ("device", "inode", "size", "mtime_ns", "ctime_ns"))
         actual = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
@@ -290,6 +299,16 @@ def fresh_row_stat(guard, root_fd, components):
         os.close(parent)
 
 
+def bounded_names(guard, fd, already):
+    names = []
+    with os.scandir(fd) as iterator:
+        for entry in iterator:
+            if already + len(names) >= MAX_ENTRIES:
+                raise guard.Unsafe("SOURCE_BOUND")
+            names.append(entry.name)
+    return sorted(names)
+
+
 def source_census(guard):
     """Bounded metadata-only census; never open unselected or oversized bytes."""
     found, selected, entries = [], {}, 0
@@ -298,7 +317,7 @@ def source_census(guard):
         if depth > 12:
             raise guard.Unsafe("SOURCE_BOUND")
         before = os.fstat(fd)
-        names = sorted(os.listdir(fd))
+        names = bounded_names(guard, fd, entries)
         for name in names:
             entries += 1
             if entries > MAX_ENTRIES:
@@ -320,7 +339,7 @@ def source_census(guard):
                 if s.st_nlink != 1 or s.st_size > MAX_BYTES or len(selected) >= FILE_COUNT:
                     raise guard.Unsafe("SOURCE_BOUND")
                 selected[str(path)] = (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
-        if sorted(os.listdir(fd)) != names or guard.fingerprint(os.fstat(fd)) != guard.fingerprint(before):
+        if bounded_names(guard, fd, 0) != names or guard.fingerprint(os.fstat(fd)) != guard.fingerprint(before):
             raise guard.Unsafe("SOURCE_ROW_CHANGED")
     fd = guard.open_read(guard.SOURCE, True)
     try:

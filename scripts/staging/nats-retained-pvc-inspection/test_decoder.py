@@ -31,6 +31,35 @@ def uv(value):
 
 
 class DecoderTests(unittest.TestCase):
+    def test_fifo_source_and_report_reject_without_writer(self):
+        self.file.unlink()
+        os.mkfifo(self.file)
+        script = ("import signal; signal.alarm(2); __file__='/work/test_decoder.py'; "
+                  "exec(open('/work/test_decoder.py').read().split('class DecoderTests')[0]); "
+                  f"fd=g.open_read(Path({str(self.root)!r}),True); "
+                  f"m.checked_read(g,fd,{self.row!r})")
+        result = subprocess.run([sys.executable, "-I", "-S", "-c", script], capture_output=True, timeout=3)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b"Unsafe", result.stderr)
+        report = self.root / "metadata.json"
+        os.mkfifo(report, 0o440)
+        script = ("import signal; signal.alarm(2); __file__='/work/test_decoder.py'; "
+                  "exec(open('/work/test_decoder.py').read().split('class DecoderTests')[0]); "
+                  f"m.protected_report(g,Path({str(report)!r}))")
+        result = subprocess.run([sys.executable, "-I", "-S", "-c", script], capture_output=True, timeout=3)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b"Unsafe", result.stderr)
+
+    def test_directory_enumeration_stops_at_bound(self):
+        for name in ("a", "b", "c"):
+            (self.root / name).touch()
+        fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            with patch.object(m, "MAX_ENTRIES", 2), self.assertRaises(g.Unsafe):
+                m.bounded_names(g, fd, 0)
+        finally:
+            os.close(fd)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir="/root")
         self.addCleanup(self.tmp.cleanup)
