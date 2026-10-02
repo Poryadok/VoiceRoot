@@ -10,6 +10,7 @@ import (
 func EnvConfigFromOSEnv() S3R2Config {
 	return S3R2Config{
 		Endpoint:        strings.TrimSpace(os.Getenv("USER_R2_ENDPOINT")),
+		SigningEndpoint: strings.TrimSpace(os.Getenv("USER_R2_SIGNING_ENDPOINT")),
 		Region:          strings.TrimSpace(os.Getenv("USER_R2_REGION")),
 		AccessKeyID:     strings.TrimSpace(os.Getenv("USER_R2_ACCESS_KEY_ID")),
 		SecretAccessKey: strings.TrimSpace(os.Getenv("USER_R2_SECRET_ACCESS_KEY")),

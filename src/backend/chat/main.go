@@ -137,6 +137,7 @@ func main() {
 		}
 
 		var profiles grpcsvc.UserProfileLookup
+		var dmPeerDisplayNames grpcsvc.DMPeerDisplayNameLookup
 		var lifecycleOwners grpcsvc.LifecycleOwnerLookup
 		var privacy grpcsvc.PrivacyChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
@@ -168,6 +169,7 @@ func main() {
 			defer func() { _ = uconn.Close() }()
 			userClient := userv1.NewUserServiceClient(uconn)
 			profiles = &grpcsvc.UserGRPCProfiles{Client: userClient}
+			dmPeerDisplayNames = grpcsvc.NewUserGRPCDMPeerDisplayNames(userClient)
 			lifecycleOwners = &grpcsvc.UserGRPCLifecycleOwners{Client: userClient}
 			privacy = &grpcsvc.UserGRPCPrivacy{Client: userClient}
 			accountProfiles = grpcsvc.NewUserGRPCAccountProfiles(userClient)
@@ -248,6 +250,15 @@ func main() {
 					logger.Error("message activity consumer stopped", slog.String("error", err.Error()))
 				}
 			}()
+			if friends == nil {
+				logger.Warn("friend accepted consumer disabled: SOCIAL_GRPC_ADDR not set")
+			} else {
+				go func() {
+					if err := runFriendAcceptedConsumer(runCtx, natsURL, dmStore, friends, chatEvents, logger); err != nil && !errors.Is(err, context.Canceled) {
+						logger.Error("friend accepted consumer stopped", slog.String("error", err.Error()))
+					}
+				}()
+			}
 			if accountProfiles == nil {
 				logger.Warn("user.account_deleted consumer disabled: USER_GRPC_ADDR not set")
 			} else {
@@ -269,22 +280,23 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:                dmStore,
-			StickerPacks:      dmStore,
-			Profiles:          profiles,
-			LifecycleOwners:   lifecycleOwners,
-			Blocks:            blocks,
-			Privacy:           privacy,
-			Friends:           friends,
-			Contacts:          contacts,
-			SpaceCoMembership: spaceCoMembership,
-			ListEnrich:        listEnrich,
-			DeletedAccounts:   deletedAccounts,
-			E2EPreKeyGate:     e2ePreKeyGate,
-			ChatEvents:        chatEvents,
-			Roles:             roleClient,
-			SpaceMembers:      spaceMembers,
-			Logger:            logger,
+			DM:                 dmStore,
+			StickerPacks:       dmStore,
+			Profiles:           profiles,
+			DMPeerDisplayNames: dmPeerDisplayNames,
+			LifecycleOwners:    lifecycleOwners,
+			Blocks:             blocks,
+			Privacy:            privacy,
+			Friends:            friends,
+			Contacts:           contacts,
+			SpaceCoMembership:  spaceCoMembership,
+			ListEnrich:         listEnrich,
+			DeletedAccounts:    deletedAccounts,
+			E2EPreKeyGate:      e2ePreKeyGate,
+			ChatEvents:         chatEvents,
+			Roles:              roleClient,
+			SpaceMembers:       spaceMembers,
+			Logger:             logger,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))

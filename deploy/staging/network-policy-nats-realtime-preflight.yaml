@@ -1,0 +1,20 @@
+# Staging-only additive ingress for the temporary Realtime NATS preflight leaf.
+# The shared NATS hub policy remains unchanged for production.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-nats-realtime-preflight-ingress
+  namespace: voice-staging
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [voice-nats, voice-nats-pvc-candidate]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: voice-nats-realtime-permissions-preflight}
+      ports:
+        - {protocol: TCP, port: 7422}

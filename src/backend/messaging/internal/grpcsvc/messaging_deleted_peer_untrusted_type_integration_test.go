@@ -249,6 +249,7 @@ func TestMessagingDeletedPeer_AuthoritativeGroupAndChannelIgnoreForgedDMType(t *
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{acctB: {}}}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
 		UserProfiles:               profiles,
+		ProfilePairBlocks:          allowProfilePairBlocks{},
 		DeletedAccounts:            deleted,
 		RequireDeletedAccountsSeam: true,
 	})

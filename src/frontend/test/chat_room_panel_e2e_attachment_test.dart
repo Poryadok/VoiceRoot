@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -225,6 +225,95 @@ void main() {
 
     expect(find.text('Could not decrypt attachment'), findsNothing);
   });
+
+  for (final downloadUrl in [
+    'https://files.test/file-regular-doc?signature=short-lived',
+    'http://host.docker.internal:9000/file-regular-doc?signature=local-dev',
+  ]) {
+    testWidgets(
+      'regular document attachment opens its ${Uri.parse(downloadUrl).scheme} File URL on tap',
+      (tester) async {
+        const fileId = 'file-regular-doc';
+        final launchCalls = <MethodCall>[];
+        const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          launcher,
+          (call) async {
+            launchCalls.add(call);
+            return true;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            launcher,
+            null,
+          ),
+        );
+
+        var fileUrlRequests = 0;
+        final client = MockClient((req) async {
+          if (req.url.path == '/api/v1/messages') {
+            return http.Response(
+              jsonEncode({
+                'message_list': {
+                  'messages': [
+                    {
+                      'id': 'msg-regular-doc',
+                      'chat': {'id': chatId},
+                      'sender_profile_id': fixture.peerProfileId,
+                      'content': '',
+                      'attachments_json': jsonEncode([
+                        {
+                          'file_id': fileId,
+                          'type': 'document',
+                          'name': 'debug.md',
+                          'size_bytes': 11400,
+                        },
+                      ]),
+                      'created_at': '2024-01-01T00:00:02Z',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/read') {
+            return http.Response('{}', 200);
+          }
+          if (req.url.path == '/api/v1/files/$fileId/url') {
+            fileUrlRequests++;
+            return http.Response(
+              jsonEncode({'presigned_get_url': downloadUrl}),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        });
+
+        await tester.pumpWidget(attachmentApp(client: client));
+        await tester.pumpAndSettle();
+
+        final card = find.byKey(ChatRoomPanel.attachmentPreviewKey(fileId));
+        expect(card, findsOneWidget);
+
+        await tester.tap(find.text('debug.md'));
+        await tester.pumpAndSettle();
+
+        expect(fileUrlRequests, 1);
+        expect(launchCalls, hasLength(1));
+        final launchArguments = launchCalls.single.arguments as Map;
+        expect(launchArguments['url'], downloadUrl);
+        expect(
+          tester
+              .getSemantics(card)
+              .getSemanticsData()
+              .hasAction(ui.SemanticsAction.tap),
+          isTrue,
+        );
+      },
+    );
+  }
 }
 
 class _FixedVadVoiceInputSettings extends VoiceInputSettingsNotifier {

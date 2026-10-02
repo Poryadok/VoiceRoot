@@ -203,6 +203,7 @@ spec:
             - {name: S2S_UNKNOWN_KID_COOLDOWN, value: "5s"}
             - {name: USER_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
             - {name: USER_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ENDPOINT}}}
+            - {name: USER_R2_SIGNING_ENDPOINT, value: "__S3_SIGNING_ENDPOINT__"}
             - {name: USER_R2_REGION, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_REGION}}}
             - {name: USER_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_ACCESS_KEY_ID}}}
             - {name: USER_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: USER_R2_SECRET_ACCESS_KEY}}}
@@ -456,6 +457,7 @@ spec:
             - {name: USER_FILE_PRINCIPAL_TLS_CA_FILE, value: "/etc/voice/file-principal/ca/ca.crt"}
             - {name: USER_FILE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-user"}
             - {name: FILE_R2_ENDPOINT, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ENDPOINT}}}
+            - {name: FILE_R2_SIGNING_ENDPOINT, value: "__S3_SIGNING_ENDPOINT__"}
             - {name: FILE_R2_REGION, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_REGION}}}
             - {name: FILE_R2_ACCESS_KEY_ID, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_ACCESS_KEY_ID}}}
             - {name: FILE_R2_SECRET_ACCESS_KEY, valueFrom: {secretKeyRef: {name: voice-app-secrets, key: FILE_R2_SECRET_ACCESS_KEY}}}

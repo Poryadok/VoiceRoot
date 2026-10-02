@@ -103,6 +103,50 @@ func isLifecycleOwnerInternalCaller(ctx context.Context) bool {
 	return len(callers) == 1 && (callers[0] == "messaging" || callers[0] == "chat")
 }
 
+// GetDMPeerDisplayNames exposes only display-name projections to Chat for peers
+// whose DM membership has already been authorized by Chat.
+func (s *UserGRPC) GetDMPeerDisplayNames(ctx context.Context, req *userv1.GetDMPeerDisplayNamesRequest) (*userv1.GetDMPeerDisplayNamesResponse, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.PermissionDenied, "chat caller required")
+	}
+	callers := md.Get(authctx.HeaderInternalCaller)
+	if len(callers) != 1 || callers[0] != "chat" {
+		return nil, status.Error(codes.PermissionDenied, "chat caller required")
+	}
+	if s == nil || s.Profiles == nil {
+		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
+	}
+	if req == nil || len(req.GetProfileIds()) == 0 || len(req.GetProfileIds()) > 100 {
+		return nil, status.Error(codes.InvalidArgument, "profile_ids must contain 1 to 100 ids")
+	}
+	ids := make([]uuid.UUID, 0, len(req.GetProfileIds()))
+	seen := make(map[uuid.UUID]struct{}, len(req.GetProfileIds()))
+	for _, rawID := range req.GetProfileIds() {
+		id, err := uuid.Parse(strings.TrimSpace(rawID))
+		if err != nil || id == uuid.Nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	rows, err := s.Profiles.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "profile lookup failed")
+	}
+	out := &userv1.GetDMPeerDisplayNamesResponse{DisplayNames: make([]*userv1.DMPeerDisplayName, 0, len(rows))}
+	for _, row := range rows {
+		if row == nil || row.DeletedAt != nil || strings.TrimSpace(row.DisplayName) == "" {
+			continue
+		}
+		out.DisplayNames = append(out.DisplayNames, &userv1.DMPeerDisplayName{ProfileId: row.ID.String(), DisplayName: row.DisplayName})
+	}
+	return out, nil
+}
+
 // ListProfileIDsForAccount returns profile ids for an account (Social block cascade S2S).
 func (s *UserGRPC) ListProfileIDsForAccount(ctx context.Context, req *userv1.ListProfileIDsForAccountRequest) (*userv1.ListProfileIDsForAccountResponse, error) {
 	if !authctx.IsInternalService(ctx) {

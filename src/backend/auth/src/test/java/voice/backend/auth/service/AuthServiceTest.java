@@ -117,6 +117,34 @@ class AuthServiceTest {
   }
 
   @Test
+  void concurrentGuestReminderClaimsAllowOneDisplay() throws Exception {
+    AuthService service = service(CLOCK);
+    AuthSession guest = service.register(
+        new RegisterCommand(null, null, "Correct horse battery staple", true, "{}"));
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first = pool.submit(() -> service.markGuestReminderShown(guest.accessToken()).shouldShow());
+      var second = pool.submit(() -> service.markGuestReminderShown(guest.accessToken()).shouldShow());
+      int claimed = 0;
+      int suppressed = 0;
+      for (var future : java.util.List.of(first, second)) {
+        try {
+          if (!future.get()) claimed++;
+        } catch (java.util.concurrent.ExecutionException ex) {
+          assertThat(ex.getCause()).isInstanceOf(AuthException.class)
+              .hasMessage("guest_reminder_already_shown");
+          suppressed++;
+        }
+      }
+      assertThat(claimed).isEqualTo(1);
+      assertThat(suppressed).isEqualTo(1);
+      assertThat(service.getGuestReminder(guest.accessToken()).shouldShow()).isFalse();
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
   void concurrentRefreshAllowsOnlyOneRotation() throws Exception {
     AuthService service = service(CLOCK);
     AuthSession session = service.register(new RegisterCommand("race@example.com", null, "Correct horse battery staple", false, "{}"));

@@ -197,6 +197,7 @@
   "chatFoldersManageAction": "Управление папками",
   "chatFolderCreateLabel": "Название новой папки",
   "chatFolderCreateAction": "Создать папку",
+  "chatFolderReorderMayBePartial": "Порядок папок мог измениться частично. Откройте папки снова, чтобы проверить его.",
   "chatFoldersCustomEmpty": "Пользовательских папок пока нет. Создайте выше.",
   "chatFolderDeleteTitle": "Удалить папку?",
   "chatFolderDeleteMessage": "Удалить «{name}»? Чаты останутся в списке.",
@@ -473,6 +474,8 @@
   "chatAttachmentPickAnother": "Выбрать другой файл",
   "chatAttachmentScanFailed": "Не удалось проверить файл. Попробуйте снова.",
   "chatAttachmentUploadFailed": "Не удалось загрузить файл. Попробуйте снова.",
+  "chatAttachmentTapToDownload": "Нажмите, чтобы скачать файл",
+  "chatAttachmentDownloadFailed": "Не удалось открыть ссылку на файл. Попробуйте снова.",
   "composerEmojiPanelTitle": "Эмодзи",
   "composerAttachPhotoOrVideo": "Фото или видео",
   "composerAttachDocument": "Документ",
@@ -592,6 +595,46 @@
   "spaceTreeTextChat": "Текстовый чат",
   "spaceTreeVoiceRoom": "Голосовая комната",
   "spaceTreeUncategorized": "Каналы",
+  "spaceTreeCreateTextChat": "Создать текстовый чат",
+  "spaceTreeCreateCategory": "Создать категорию",
+  "spaceTreeCreateChannel": "Канал",
+  "spaceTreeCreateGroup": "Групповой чат",
+  "spaceTreeCategoryLabel": "Категория",
+  "spaceTreeNoCategory": "Без категории",
+  "spaceTreeReorderTooltip": "Удерживайте и перетаскивайте, чтобы изменить порядок",
+  "spaceTreeCreateNameLabel": "Название",
+  "spaceTreeCreateSubmit": "Создать",
+  "spaceTreeCreateError": "Не удалось создать элемент: {message}",
+  "spaceTreeCategoryAssignError": "Чат создан, но его не удалось поместить в выбранную категорию: {message}",
+  "spaceTreePlacementUnknown": "Чат создан, но подтвердить его размещение в категории не удалось. Обновите дерево и проверьте размещение, прежде чем повторять попытку или менять порядок: {message}",
+  "spaceTreeCreateOutcomeUnknown": "Не удалось подтвердить создание элемента. Обновите или проверьте дерево, прежде чем повторять попытку: {message}",
+  "spaceTreeCreateRefreshFailed": "Запрос выполнен, но дерево не удалось обновить. Обновите или проверьте дерево, прежде чем повторять попытку.",
+  "spaceTreeReorderError": "Не удалось изменить порядок каналов: {message}",
+  "@spaceTreeCreateError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCategoryAssignError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreePlacementUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCreateOutcomeUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeReorderError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "spaceSelectPrompt": "Выберите спейс",
   "spaceListTitle": "Мои спейсы",
   "spaceOpenAction": "Открыть спейс",
@@ -1247,6 +1290,7 @@
   "storyCreateVideoTooLong": "Видео должно быть не длиннее 60 секунд",
   "storyGameTagTapHint": "Открыть страницу игры",
   "onboardingSkip": "Пропустить",
+  "onboardingDismissFailed": "Не удалось сохранить выбор. Попробуйте ещё раз.",
   "onboardingGotIt": "Понятно",
   "onboardingLater": "Позже",
   "onboardingSaveAccountTitle": "Настрой профиль",

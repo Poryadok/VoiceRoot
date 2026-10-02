@@ -309,6 +309,13 @@ image-catalog-drift-check:
 	$(BASH) "$(ROOT)/scripts/ci/check-image-catalog-drift.sh"
 
 ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test staging-observability-test nats-leaf-topology-invariants-test staging-source-acquisition-workflow-test
+	$(BASH) "$(ROOT)/scripts/staging/nats-bootstrap-policy_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-generation-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/restore-nats-generation_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-root-rotation-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-live-acl-proof-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-root-diagnostics-contract_test.sh"
+	$(BASH) "$(ROOT)/scripts/staging/nats-legacy-recovery-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/e2e-manifest_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/compose-e2e-smoke_test.sh"
@@ -325,6 +332,7 @@ ci-script-tests: staging-matrix-test go-matrix-test verify-required-jobs-test bu
 	$(BASH) "$(ROOT)/scripts/ci/minio-mc-image-ci-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
+	python3 "$(ROOT)/scripts/staging/public-storage-ingress_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/a1-attachment-restart-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/a1-flutter-profile-handoff-ci-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/setup-github-runner_test.sh"

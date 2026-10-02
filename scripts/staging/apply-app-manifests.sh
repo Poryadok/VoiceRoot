@@ -5,15 +5,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/load-staging-domains.sh
 source "${ROOT}/scripts/staging/load-staging-domains.sh"
+# shellcheck source=scripts/staging/nats-generation.sh
+source "${ROOT}/scripts/staging/nats-generation.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:?VOICE_IMAGE_REGISTRY required}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+nats_generation_load
+acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+[[ "${VOICE_NATS_ACL_PROOF_SHA:-}" == "$acl_intent_sha" &&
+   "${VOICE_NATS_ACL_PROOF_GENERATION:-}" == "$NATS_GENERATION" ]] || {
+  echo 'ERROR: staging NATS ACL proof does not match the active generation' >&2
+  exit 1
+}
+S3_SIGNING_ENDPOINT="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRESS_HOST:-${VOICE_GATEWAY_INGRESS_HOST}}}"
 
 render() {
-  sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
+  nats_generation_render "$1" | sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
       -e "s|IMAGE_PLACEHOLDER|${REGISTRY}/gateway:${TAG}|g" \
-      "$1"
+      -e "s|__S3_SIGNING_ENDPOINT__|${S3_SIGNING_ENDPOINT}|g"
 }
 
 patch_image_pull_secrets() {
@@ -74,6 +84,14 @@ prepare_singleton_nats_recreate_transitions() {
 
 require_nats_bootstrap() {
   for job in voice-nats-realtime-bootstrap voice-nats-notification-bootstrap voice-nats-search-bootstrap voice-nats-analytics-chat-bootstrap; do
+    if [ "${NATS_MARKER_PRESENT}" = true ]; then
+      actual_generation="$(kubectl get job "${job}" -n "${NS}" -o json | jq -er '.metadata.annotations["voice.io/nats-generation"] // empty')" || {
+        echo "ERROR: NATS bootstrap ${job} has no generation evidence" >&2; exit 1;
+      }
+      [ "${actual_generation}" = "${NATS_GENERATION}" ] || {
+        echo "ERROR: NATS bootstrap ${job} belongs to another generation" >&2; exit 1;
+      }
+    fi
     if ! kubectl wait --for=condition=complete "job/${job}" -n "${NS}" --timeout=5s; then
       echo "ERROR: required NATS bootstrap ${job} is incomplete; run apply-infra before app rollout" >&2
       exit 1

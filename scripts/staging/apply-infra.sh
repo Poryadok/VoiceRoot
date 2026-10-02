@@ -5,9 +5,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/staging/load-staging-domains.sh
 source "${ROOT}/scripts/staging/load-staging-domains.sh"
+# shellcheck source=scripts/staging/nats-bootstrap-policy.sh
+source "${ROOT}/scripts/staging/nats-bootstrap-policy.sh"
+# shellcheck source=scripts/staging/nats-generation.sh
+source "${ROOT}/scripts/staging/nats-generation.sh"
 REGISTRY="${VOICE_IMAGE_REGISTRY:-ghcr.io/voiceroot/voiceroot}"
 TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required}"
 NS="${VOICE_K8S_NAMESPACE:-voice-staging}"
+[ "${NS}" = voice-staging ] || { echo 'ERROR: staging NATS bootstrap is restricted to voice-staging' >&2; exit 1; }
+nats_generation_load
+if [ "${VOICE_NATS_REQUIRE_APP_READY:-false}" = true ]; then
+  acl_intent_sha="$(sha256sum "${ROOT}/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
+  if ! nats_acl_proof_valid "${acl_intent_sha}" "${VOICE_NATS_ACL_PROOF_SHA:-}" ||
+     [[ "${VOICE_NATS_ACL_PROOF_GENERATION:-}" != "$NATS_GENERATION" ]]; then
+    echo 'ERROR: reviewed staging NATS ACL proof does not match the active generation; refusing app rollout' >&2
+    exit 1
+  fi
+fi
 NATS_STORAGE_CLASS="${VOICE_NATS_STORAGE_CLASS:?VOICE_NATS_STORAGE_CLASS must be set from the reviewed staging preflight}"
 NATS_STORAGE_SIZE="${VOICE_NATS_STORAGE_SIZE:?VOICE_NATS_STORAGE_SIZE must be set from the reviewed staging capacity evidence}"
 MINIO_IMAGE="${VOICE_MINIO_IMAGE:-ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0}"
@@ -18,6 +32,7 @@ MINIO_STORAGE_SIZE="${VOICE_MINIO_STORAGE_SIZE:-20Gi}"
 clean_install_mode=false
 clean_install_bootstrap=false
 clean_install_mode_value=""
+nats_service_selector=""
 fresh_install="${VOICE_NATS_FRESH_INSTALL:-false}"
 VOICE_NATS_PRESERVE_SERVICE_SELECTOR=false
 case "${fresh_install}" in
@@ -58,21 +73,42 @@ if [ -n "${clean_install_state_json}" ] && [ "${clean_install_state_json}" != nu
       echo 'ERROR: cannot safely preserve the live voice-nats Service selector; refusing staging infra apply' >&2
       exit 1
     fi
+    nats_service_selector="$(kubectl get service voice-nats -n "${NS}" -o jsonpath='{.spec.selector.app}')"
     VOICE_NATS_PRESERVE_SERVICE_SELECTOR=true
   fi
 elif [ "${fresh_install}" = true ]; then
   echo 'ERROR: clean-install opt-in requires the namespace reset marker' >&2
   exit 1
+else
+  nats_service_selector="$(kubectl get service voice-nats -n "${NS}" -o jsonpath='{.spec.selector.app}')" || {
+    echo 'ERROR: NATS source Service is missing; refusing staging infra apply' >&2
+    exit 1
+  }
+fi
+if [ "${NATS_MARKER_PRESENT}" = true ]; then
+  [ "${fresh_install}" = false ] || {
+    echo 'ERROR: active NATS generation cannot enter clean-install mode' >&2
+    exit 1
+  }
+  if ! kubectl get service voice-nats -n "${NS}" -o json | jq -e '
+    .spec.selector == {"app":"voice-nats-pvc-candidate"}
+  ' >/dev/null 2>&1; then
+    echo 'ERROR: active NATS generation has no accepted PVC hub Service selector' >&2
+    exit 1
+  fi
+  VOICE_NATS_PRESERVE_SERVICE_SELECTOR=true
 fi
 export VOICE_NATS_PRESERVE_SERVICE_SELECTOR
 
 render() {
-  sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
+  local image_pull_secrets
+  image_pull_secrets="$(nats_image_pull_secrets_fragment)" || return 1
+  nats_generation_render "$1" | sed -e "s|__IMAGE_REGISTRY__|${REGISTRY}|g" \
       -e "s|__IMAGE_TAG__|${TAG}|g" \
       -e "s|IMAGE_PLACEHOLDER|${REGISTRY}/gateway:${TAG}|g" \
+      -e "s|__IMAGE_PULL_SECRETS__|${image_pull_secrets}|g" \
       -e "s|__NATS_STORAGE_CLASS__|${NATS_STORAGE_CLASS}|g" \
-      -e "s|__NATS_STORAGE_SIZE__|${NATS_STORAGE_SIZE}|g" \
-      "$1"
+      -e "s|__NATS_STORAGE_SIZE__|${NATS_STORAGE_SIZE}|g"
 }
 
 kubectl apply -f "${ROOT}/deploy/staging/namespace.yaml"
@@ -98,33 +134,33 @@ if ! kubectl get secret voice-minio-credentials -n "${NS}" >/dev/null 2>&1; then
   exit 1
 fi
 
-for secret in voice-nats-operator voice-nats-hub-tls voice-nats-bootstrap-credentials voice-nats-service-credentials; do
+for secret in "$NATS_OPERATOR_SECRET" "$NATS_TLS_SECRET" "$NATS_BOOTSTRAP_SECRET" "$NATS_SERVICE_SECRET"; do
   if ! kubectl get secret "${secret}" -n "${NS}" >/dev/null 2>&1; then
     echo "ERROR: NATS activation secret ${secret} missing in ${NS}" >&2
     exit 1
   fi
 done
 for key in operator.jwt account.jwt system-account.jwt account.public system-account.public; do
-  if ! kubectl get secret voice-nats-operator -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+  if ! kubectl get secret "$NATS_OPERATOR_SECRET" -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
     echo "ERROR: voice-nats-operator missing required ${key} in ${NS}" >&2
     exit 1
   fi
 done
 for key in tls.crt tls.key ca.crt; do
-  if ! kubectl get secret voice-nats-hub-tls -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+  if ! kubectl get secret "$NATS_TLS_SECRET" -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
     echo "ERROR: voice-nats-hub-tls missing required ${key} in ${NS}" >&2
     exit 1
   fi
 done
 for key in bootstrap.creds; do
-  if ! kubectl get secret voice-nats-bootstrap-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+  if ! kubectl get secret "$NATS_BOOTSTRAP_SECRET" -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
     echo "ERROR: voice-nats-bootstrap-credentials missing required ${key} in ${NS}" >&2
     exit 1
   fi
 done
-for service in auth analytics bot chat file matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
+for service in auth analytics bot chat file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
   key="${service}.creds"
-  if ! kubectl get secret voice-nats-service-credentials -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
+  if ! kubectl get secret "$NATS_SERVICE_SECRET" -n "${NS}" -o "jsonpath={.data.${key//./\\.}}" | grep -q .; then
     echo "ERROR: voice-nats-service-credentials missing required ${key} in ${NS}" >&2
     exit 1
   fi
@@ -135,8 +171,8 @@ verify_nats_hub_tls() (
   cert_file="$(mktemp)"
   ca_file="$(mktemp)"
   trap 'rm -f "${cert_file}" "${ca_file}"' EXIT
-  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.tls\.crt}' | base64 -d >"${cert_file}" 2>/dev/null
-  kubectl get secret voice-nats-hub-tls -n "${NS}" -o jsonpath='{.data.ca\.crt}' | base64 -d >"${ca_file}" 2>/dev/null
+  kubectl get secret "$NATS_TLS_SECRET" -n "${NS}" -o jsonpath='{.data.tls\.crt}' | base64 -d >"${cert_file}" 2>/dev/null
+  kubectl get secret "$NATS_TLS_SECRET" -n "${NS}" -o jsonpath='{.data.ca\.crt}' | base64 -d >"${ca_file}" 2>/dev/null
   openssl verify -CAfile "${ca_file}" "${cert_file}" >/dev/null 2>&1 && \
     openssl x509 -in "${cert_file}" -noout -checkhost voice-nats >/dev/null 2>&1 || {
       echo "ERROR: voice-nats-hub-tls must form a trusted chain and include DNS SAN voice-nats" >&2
@@ -151,6 +187,7 @@ bash "${ROOT}/scripts/staging/patch-gateway-staff-token.sh"
 # Select the hub before it is created or restarted. An empty selector is safe;
 # applying this after the rollout would leave a direct-hub bypass window.
 sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/network-policy-nats-hub.yaml" | kubectl apply -f -
+kubectl apply -f "${ROOT}/deploy/staging/network-policy-nats-realtime-preflight.yaml"
 
 LIVEKIT_API_KEY="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)"
 LIVEKIT_API_SECRET="$(kubectl get secret voice-app-secrets -n "${NS}" -o jsonpath='{.data.LIVEKIT_API_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
@@ -159,12 +196,18 @@ if [ -z "${LIVEKIT_API_KEY}" ] || [ -z "${LIVEKIT_API_SECRET}" ]; then
   exit 1
 fi
 
-if [ -z "${clean_install_mode_value}" ]; then
+if [ -z "${clean_install_mode_value}" ] && [ "${NATS_MARKER_PRESENT}" = false ]; then
   NATS_MIGRATION_EVIDENCE="${VOICE_NATS_MIGRATION_EVIDENCE:-}" \
   NATS_SOURCE_CONTEXT="${NATS_SOURCE_CONTEXT:-}" \
   VOICE_NATS_STORAGE_CLASS="${NATS_STORAGE_CLASS}" \
   VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --prepare
+fi
+
+if kubectl get deployment voice-nats-pvc-candidate -n "${NS}" >/dev/null 2>&1; then
+  # Clear the server-defaulted rollingUpdate block before Recreate apply.
+  kubectl patch deployment voice-nats-pvc-candidate -n "${NS}" --type=strategic \
+    -p '{"spec":{"strategy":{"$retainKeys":["type"],"type":"Recreate"}}}'
 fi
 
 render "${ROOT}/deploy/staging/infra.yaml" | \
@@ -173,12 +216,27 @@ render "${ROOT}/deploy/staging/infra.yaml" | \
   bash "${ROOT}/scripts/staging/filter-staging-infra-source-nats.sh" | \
   kubectl apply -f -
 
+run_nats_realtime_preflight() {
+  # Probe with the new Realtime image and its existing leaf credential before
+  # apply-app-manifests can scale Auth down or replace any application pod.
+  kubectl delete job voice-nats-realtime-permissions-preflight -n "${NS}" --ignore-not-found
+  render "${ROOT}/deploy/templates/nats-realtime-permissions-preflight.yaml" | \
+    sed "s|__NAMESPACE__|${NS}|g" | kubectl apply -f -
+  kubectl annotate job voice-nats-realtime-permissions-preflight -n "${NS}" \
+    "voice.io/nats-generation=${NATS_GENERATION}" --overwrite
+  kubectl wait --for=condition=complete job/voice-nats-realtime-permissions-preflight -n "${NS}" --timeout=210s
+}
+
 run_nats_bootstrap_jobs() {
   for bootstrap in realtime notification search analytics-chat; do
     kubectl delete job "voice-nats-${bootstrap}-bootstrap" -n "${NS}" --ignore-not-found
-    sed "s|__NAMESPACE__|${NS}|g" "${ROOT}/deploy/templates/nats-${bootstrap}-bootstrap.yaml" | kubectl apply -f -
+    nats_generation_render "${ROOT}/deploy/templates/nats-${bootstrap}-bootstrap.yaml" | \
+      sed "s|__NAMESPACE__|${NS}|g" | kubectl apply -f -
+    kubectl annotate job "voice-nats-${bootstrap}-bootstrap" -n "${NS}" \
+      "voice.io/nats-generation=${NATS_GENERATION}" --overwrite
     kubectl wait --for=condition=complete "job/voice-nats-${bootstrap}-bootstrap" -n "${NS}" --timeout=120s
   done
+  run_nats_realtime_preflight
 }
 
 # Promote only when both the manual reset marker and explicit clean-install
@@ -195,8 +253,27 @@ elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then
   VOICE_NATS_STORAGE_SIZE="${NATS_STORAGE_SIZE}" \
     bash "${ROOT}/scripts/staging/guard-nats-pvc-migration.sh" --acceptance
   run_nats_bootstrap_jobs
+elif [ "${NATS_MARKER_PRESENT}" = true ]; then
+  # The active generation marker is written only after an accepted PVC hub,
+  # bootstrap and all NATS leaves have converged. Ordinary full deploys may
+  # reconcile that generation even if the old clean-install marker is absent.
+  [ "${nats_service_selector}" = voice-nats-pvc-candidate ] || {
+    echo 'ERROR: active NATS generation has no accepted PVC hub Service selector' >&2
+    exit 1
+  }
+  kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
+  run_nats_bootstrap_jobs
+elif nats_action="$(nats_bootstrap_action "${clean_install_mode_value}" "${nats_service_selector}" "${fresh_install}" "${VOICE_NATS_REQUIRE_APP_READY:-false}")"; then
+  if [ "${nats_action}" = bootstrap ]; then
+    # The accepted PVC hub is live. Reconcile fixed durables in place.
+    kubectl rollout status deployment/voice-nats-pvc-candidate -n "${NS}" --timeout=300s
+    run_nats_bootstrap_jobs
+  else
+    echo 'NATS PVC candidate prepared; bootstrap deferred until migration acceptance.'
+  fi
 else
-  echo 'NATS bootstrap jobs deferred: candidate must be restored and accepted before bootstrap.'
+  echo 'ERROR: NATS bootstrap deferred: PVC hub is not active and accepted; refusing full app rollout.' >&2
+  exit 1
 fi
 
 # Bucket Jobs have immutable pod templates. Replace only the known previous
@@ -207,6 +284,7 @@ sed -e "s|__VOICE_MINIO_IMAGE__|${MINIO_IMAGE}|g" \
     -e "s|__VOICE_MINIO_MC_IMAGE__|${MINIO_MC_IMAGE}|g" \
     -e "s|__VOICE_MINIO_STORAGE_CLASS__|${MINIO_STORAGE_CLASS}|g" \
     -e "s|__VOICE_MINIO_STORAGE_SIZE__|${MINIO_STORAGE_SIZE}|g" \
+    -e "s|__WEB_ORIGIN__|https://${VOICE_WEB_INGRESS_HOST}|g" \
   "${ROOT}/deploy/staging/minio.yaml" | kubectl apply -f -
 
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "${NS}" --timeout=120s

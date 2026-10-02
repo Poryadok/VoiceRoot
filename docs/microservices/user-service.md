@@ -38,6 +38,7 @@ service UserService {
   // Профили
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse); // S2S Auth bootstrap; см. primary-profile-bootstrap.md
   rpc ResolveAccountIDForProfile(ResolveAccountIDForProfileRequest) returns (ResolveAccountIDForProfileResponse); // internal Messaging/Chat: profile_id -> account_id for DM lifecycle
+  rpc GetDMPeerDisplayNames(GetDMPeerDisplayNamesRequest) returns (GetDMPeerDisplayNamesResponse); // internal Chat: title-only existing DM peer metadata
   rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse); // S2S Auth: batch account_id -> existing primary profile_id
   rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse); // S2S Auth: guest -> regular profile marker
   rpc GetSdkProfileEligibility(GetSdkProfileEligibilityRequest) returns (GetSdkProfileEligibilityResponse); // Auth-only signed listener: exact read-only SDK target profile state
@@ -85,6 +86,8 @@ SDK conversion uses two additional Auth-only methods on a dedicated signed-princ
 `GetSdkProfileEligibility` performs a read-only lookup of the exact `(account_id, profile_id)` pair. It returns that pair, the positive `profile_revision`, and the `deleted` and `frozen` flags; it never creates a profile. `RecordSdkAuthorTombstone` records an immutable historical SDK author alias without changing message authors or granting history. Its version-1 `request_hash` is lowercase SHA-256 hex over compact UTF-8 canonical JSON excluding `request_hash`, with keys sorted lexicographically: `expected_profile_revision`, `freeze_receipt_id`, `frozen_authority_epoch`, `frozen_binding_id`, `operation_id`, `source_account_id`, `source_actor_id`, `target_account_id`, `target_profile_id`, `version`. UUID values are canonical lowercase non-nil RFC 4122 strings; integer values use base-10 notation. A retry with the same operation and body returns the original receipt; a changed body or reused source actor conflicts. PostgreSQL rejects update, delete, and truncate of committed receipts.
 
 `ResolveAccountIDForProfile` — отдельный read-only internal lookup только для exact caller `messaging` или `chat`: возвращает только `account_id` владельца указанного `profile_id`, включая soft-deleted profile. Messaging использует его для lifecycle account check до DM write; Chat — для fresh `ListChats` snapshot, чтобы убрать DM с deleted peer. Он не возвращает `Profile`, не применяет public visibility/block filters и не имеет Gateway REST route. Missing, wrong, padded или multiple internal caller metadata отвергается; invalid UUID — `INVALID_ARGUMENT`, unknown profile — `NOT_FOUND`, ошибка store — `INTERNAL`.
+
+`GetDMPeerDisplayNames` — отдельный title-only internal lookup только для единственного exact caller `chat`. Chat передаёт лишь профили собеседников, уже полученные из `DMPeerProfileIDs` для авторизованных строк `ListChats`; User возвращает только `profile_id` и `display_name` активных профилей. Метод не возвращает account IDs, avatar, bio или verification data, ограничивает запрос 100 ID и не имеет Gateway REST route.
 
 `ApplyVerificationSourceState` — internal-only Auth seam. Он принимает `twitch` или
 `youtube`, положительную монотонную revision и применяет только более новое состояние

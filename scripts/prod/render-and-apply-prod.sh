@@ -22,23 +22,26 @@ echo "Applying Voice production: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${M
 
 case "${MODE}" in
   images-only)
-    bash "${ROOT}/scripts/staging/deploy-changed.sh"
     bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/staging/deploy-changed.sh"
+    bash "${ROOT}/scripts/storage/apply-signing-env.sh"
+    bash "${ROOT}/scripts/storage/apply-minio-cors.sh"
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     ;;
   app-only)
+    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/staging/apply-migrate-jobs.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-subset.sh"
-    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
+    bash "${ROOT}/scripts/storage/apply-minio-cors.sh"
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
     ;;
   full|*)
     bash "${ROOT}/scripts/prod/apply-infra.sh"
+    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
     bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
-    bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
     for dep in voice-developer-portal voice-web voice-admin; do

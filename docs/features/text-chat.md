@@ -373,6 +373,8 @@ Normative inbox classification для DM (`chat_members.inbox_bucket` per `profi
 
 **На CreateDM / EnsureDM:** инициатор → `main`; получатель → `requests` если stranger, иначе `main` для обоих.
 
+**После принятия дружбы:** существующий DM между этими профилями переходит из `requests` в `main` без отдельного `AcceptDMRequest`. Явно отклонённый (`declined`) DM остаётся скрытым.
+
 **Accept:** `AcceptDMRequest(chat_id)` → `inbox_bucket=main` для accepter; sender уже в `main`. Оба видят чат в main inbox; `is_stranger=false`.
 
 **Decline:** `DeclineDMRequest(chat_id)` → accepter `inbox_bucket=declined`; чат исчезает из requests. История сообщений **не** удаляется.

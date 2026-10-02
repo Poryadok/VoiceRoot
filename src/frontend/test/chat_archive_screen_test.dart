@@ -102,7 +102,90 @@ void main() {
 
     expect(find.byKey(ChatArchiveScreen.screenKey), findsOneWidget);
     expect(find.text('Archived chats'), findsOneWidget);
-    expect(find.byKey(ChatArchiveScreen.tileKey('chat-archived')), findsOneWidget);
+    expect(
+      find.byKey(ChatArchiveScreen.tileKey('chat-archived')),
+      findsOneWidget,
+    );
     expect(find.text('Old note'), findsOneWidget);
+  });
+
+  testWidgets('mobile swipe unarchives an archived chat', (tester) async {
+    final storage = _MemoryAuthStorage();
+    const session = AuthSession(
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      expiresInSeconds: 900,
+      accountId: 'account-1',
+      activeProfileId: 'profile-1',
+    );
+    await storage.write(session);
+    final unarchived = <String>[];
+    final mock = MockClient((req) async {
+      if (req.url.path == '/api/v1/chats' &&
+          req.url.queryParameters['inbox'] == 'archive') {
+        return http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                {
+                  'chat': {
+                    'id': 'chat-archived',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Archived group',
+                  },
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/chats/chat-archived/archive' &&
+          req.method == 'POST') {
+        if (jsonDecode(req.body)['archived'] == false) {
+          unarchived.add('chat-archived');
+        }
+        return http.Response('{}', 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceThemeTestOverrides(),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(mock),
+        authSessionStorageProvider.overrideWithValue(storage),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.notifier).applySession(session);
+    final router = createVoiceGoRouter(
+      shellBuilder: (context, state) =>
+          const Scaffold(body: Text('home shell')),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          theme: voiceTestTheme().copyWith(platform: TargetPlatform.android),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.go(VoiceAppRoutes.chatArchive);
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(ChatArchiveScreen.tileKey('chat-archived'));
+    expect(row, findsOneWidget);
+    await tester.drag(row, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+
+    expect(unarchived, ['chat-archived']);
+    expect(row, findsNothing);
   });
 }

@@ -110,7 +110,8 @@ message ChatListItem {
   int64 unread_count = 3;
   optional string inbox = 4;              // main | requests — ✓ from chat_members.inbox_bucket
   optional bool is_stranger = 5;          // ✓ true when inbox=requests
-  optional string dm_peer_profile_id = 6; // ✓ DM peer for list title/avatar
+  optional string dm_peer_profile_id = 6; // ✓ DM peer identity for authorized client lookups
+  optional string dm_peer_display_name = 8; // ✓ title-only nickname for existing DM when public profile is unavailable
 }
 ```
 
@@ -181,7 +182,7 @@ chat_members
 ├── joined_at
 ├── muted_until (nullable)
 ├── is_archived (bool)
-├── inbox_bucket (main | requests | declined) — per-member DM request state
+├── inbox_bucket (main | requests | declined) — per-member DM request state; `social.friend_accepted` promotes existing requests for that pair to main
 └── UNIQUE(chat_id, profile_id)
 
 folders
@@ -282,7 +283,7 @@ CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, s
 
 ## ListChats (список, превью, unread)
 
-**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests` \| `archive`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` (см. proto выше).
+**Контракт**: `ListChatsRequest` с `voice.common.v1.CursorPageRequest` (`cursor`, `page_size`); опционально `inbox` (`main` \| `requests` \| `archive`). Ответ `ListChatsResponse.chat_list` — `ChatList` с `items: ChatListItem[]` и `next_cursor`. Каждый `ChatListItem` содержит `chat`, `last_message_preview`, `unread_count`, `inbox`, `is_stranger`, `dm_peer_profile_id` и необязательный title-only `dm_peer_display_name` (см. proto выше). Chat запрашивает nickname у User только для peer profile IDs, подтверждённых членством в DM; это не раскрывает остальные данные заблокированного профиля.
 
 **Порядок и фильтр (shipped code)**:
 - членство в `chat_members`, `is_archived = false`, `inbox_bucket` = значение `inbox` (default `main`);
@@ -411,6 +412,7 @@ message ListQuickAccessResponse {
 message AddQuickAccessRequest {
   string chat_id = 1;
   optional int32 sort_order = 2;
+  string replace_chat_id = 3; // existing slot to replace atomically; empty for ordinary add
 }
 message RemoveQuickAccessRequest {
   string chat_id = 1;
@@ -420,9 +422,9 @@ message ReorderQuickAccessRequest {
 }
 ```
 
-**At-limit UX (normative):** When the profile already has 15 QA slots, the client shows a **replace picker** ([navigation.md](../features/navigation.md) § Quick Access, [screen-controls.md](../design/screen-controls.md) §1.1c #6): list current slots → user picks one to replace → atomic `RemoveQuickAccess` + `AddQuickAccess`. No dedicated `ReplaceQuickAccess` RPC.
+**At-limit UX (normative):** When the profile already has 15 QA slots, the client shows a **replace picker** ([navigation.md](../features/navigation.md) § Quick Access, [screen-controls.md](../design/screen-controls.md) §1.1c #6): list current slots → user picks one to replace → `AddQuickAccess(replace_chat_id=<selected chat>)` atomically replaces that slot while preserving its order. On failure the original slot remains. No dedicated `ReplaceQuickAccess` RPC.
 
-**Errors:** `AddQuickAccess` returns `FAILED_PRECONDITION` when count is already 15 **and** the client did not remove a slot first (server safety net). The product UX is **not** a hard error toast — client **must** open the replace picker instead ([navigation.md](../features/navigation.md) § Quick Access «Server at-limit error», [screen-controls.md](../design/screen-controls.md) §1.1c #6). `NOT_FOUND` if chat is not a membership of caller.
+**Errors:** `AddQuickAccess` returns `FAILED_PRECONDITION` when count is already 15 and no replacement slot was supplied (server safety net), or when the selected replacement slot changed on another device. The product UX at 15/15 is **not** a hard error toast — client **must** open the replace picker instead ([navigation.md](../features/navigation.md) § Quick Access «Server at-limit error», [screen-controls.md](../design/screen-controls.md) §1.1c #6). `NOT_FOUND` if the new chat is not a membership of caller; `ALREADY_EXISTS` if the new chat already occupies another Quick Access slot. Failed replacement leaves the selected slot unchanged.
 
 ## Archive
 

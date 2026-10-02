@@ -627,6 +627,15 @@ const ChatListItem$json = {
       '10': 'isPinned',
       '17': true
     },
+    {
+      '1': 'dm_peer_display_name',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '9': 5,
+      '10': 'dmPeerDisplayName',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_last_message_preview'},
@@ -634,6 +643,7 @@ const ChatListItem$json = {
     {'1': '_is_stranger'},
     {'1': '_dm_peer_profile_id'},
     {'1': '_is_pinned'},
+    {'1': '_dm_peer_display_name'},
   ],
 };
 
@@ -644,8 +654,10 @@ final $typed_data.Uint8List chatListItemDescriptor = $convert.base64Decode(
     'IQoMdW5yZWFkX2NvdW50GAMgASgDUgt1bnJlYWRDb3VudBIZCgVpbmJveBgEIAEoCUgBUgVpbm'
     'JveIgBARIkCgtpc19zdHJhbmdlchgFIAEoCEgCUgppc1N0cmFuZ2VyiAEBEjAKEmRtX3BlZXJf'
     'cHJvZmlsZV9pZBgGIAEoCUgDUg9kbVBlZXJQcm9maWxlSWSIAQESIAoJaXNfcGlubmVkGAcgAS'
-    'gISARSCGlzUGlubmVkiAEBQhcKFV9sYXN0X21lc3NhZ2VfcHJldmlld0IICgZfaW5ib3hCDgoM'
-    'X2lzX3N0cmFuZ2VyQhUKE19kbV9wZWVyX3Byb2ZpbGVfaWRCDAoKX2lzX3Bpbm5lZA==');
+    'gISARSCGlzUGlubmVkiAEBEjQKFGRtX3BlZXJfZGlzcGxheV9uYW1lGAggASgJSAVSEWRtUGVl'
+    'ckRpc3BsYXlOYW1liAEBQhcKFV9sYXN0X21lc3NhZ2VfcHJldmlld0IICgZfaW5ib3hCDgoMX2'
+    'lzX3N0cmFuZ2VyQhUKE19kbV9wZWVyX3Byb2ZpbGVfaWRCDAoKX2lzX3Bpbm5lZEIXChVfZG1f'
+    'cGVlcl9kaXNwbGF5X25hbWU=');
 
 @$core.Deprecated('Use chatListDescriptor instead')
 const ChatList$json = {
@@ -747,6 +759,7 @@ const AddQuickAccessRequest$json = {
       '10': 'sortOrder',
       '17': true
     },
+    {'1': 'replace_chat_id', '3': 3, '4': 1, '5': 9, '10': 'replaceChatId'},
   ],
   '8': [
     {'1': '_sort_order'},
@@ -756,7 +769,8 @@ const AddQuickAccessRequest$json = {
 /// Descriptor for `AddQuickAccessRequest`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List addQuickAccessRequestDescriptor = $convert.base64Decode(
     'ChVBZGRRdWlja0FjY2Vzc1JlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEiIKCnNvcn'
-    'Rfb3JkZXIYAiABKAVIAFIJc29ydE9yZGVyiAEBQg0KC19zb3J0X29yZGVy');
+    'Rfb3JkZXIYAiABKAVIAFIJc29ydE9yZGVyiAEBEiYKD3JlcGxhY2VfY2hhdF9pZBgDIAEoCVIN'
+    'cmVwbGFjZUNoYXRJZEINCgtfc29ydF9vcmRlcg==');
 
 @$core.Deprecated('Use removeQuickAccessRequestDescriptor instead')
 const RemoveQuickAccessRequest$json = {

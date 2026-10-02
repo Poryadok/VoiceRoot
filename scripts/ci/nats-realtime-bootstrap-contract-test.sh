@@ -41,18 +41,30 @@ for stream in \
   'stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined' \
   'stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response' \
   'stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
-  'stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
+  'stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
   'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
   'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
 done
+require 'stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' "$BOOTSTRAP"
+grep -Fq 'JS.API.STREAM.UPDATE.$name' "$BOOTSTRAP" || fail 'existing social_events stream must be updated in place without recreation'
+grep -Fq '.config | .duplicate_window = $duplicate_window' "$BOOTSTRAP" || fail 'existing social_events update must preserve stream data and all unrelated stream settings'
+grep -Fq 'actual_base' "$BOOTSTRAP" || fail 'existing social_events base configuration must be validated before the dedupe-window update'
+require '    - $JS.API.STREAM.UPDATE.social_events' "$ROOT/deploy/nats/acl-intent.yaml"
+social_stream_contract="$(awk -v name=social_events '
+  $0 == "  - name: " name { found = 1; next }
+  found && /^  - name:/ { exit }
+  found { print }
+' "$MANIFEST")"
+printf '%s\n' "$social_stream_contract" | grep -Fqx '    duplicate_window: 24h' || fail 'social_events must keep a 24h publisher deduplication window'
 
 for consumer in \
   "consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message" \
   "consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat" \
   'consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user' \
   'consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social' \
+  'consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request' \
   "consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role" \
   "consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice" \
   "consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking"; do

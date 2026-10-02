@@ -236,6 +236,8 @@ message ChatListItem {
   optional string dm_peer_profile_id = 6;
   // Per-folder pin state for this list result; absent outside folder-scoped lists.
   optional bool is_pinned = 7;
+  // Title-only name for an existing DM peer; safe to show if their public profile is unavailable.
+  optional string dm_peer_display_name = 8;
 }
 
 message ChatList {
@@ -262,6 +264,8 @@ message ListQuickAccessResponse {
 message AddQuickAccessRequest {
   string chat_id = 1;
   optional int32 sort_order = 2;
+  // Replaces this existing quick-access chat atomically when set.
+  string replace_chat_id = 3;
 }
 
 message RemoveQuickAccessRequest {

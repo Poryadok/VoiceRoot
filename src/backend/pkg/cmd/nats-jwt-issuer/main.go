@@ -205,7 +205,7 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 			allowed := bootstrap && subject == "$JS.API.INFO" ||
 				strings.HasPrefix(subject, "$JS.API.STREAM.INFO.") ||
 				strings.HasPrefix(subject, "$JS.API.CONSUMER.INFO.") ||
-				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
+				bootstrap && (strings.HasPrefix(subject, "$JS.API.STREAM.CREATE.") || subject == "$JS.API.STREAM.UPDATE.social_events" || strings.HasPrefix(subject, "$JS.API.CONSUMER.CREATE.")) ||
 				!bootstrap && strings.HasPrefix(subject, "$JS.API.CONSUMER.MSG.NEXT.")
 			if !allowed {
 				return false

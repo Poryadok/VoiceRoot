@@ -16,6 +16,7 @@ import 'package:voice_frontend/state/bot_deferred_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -23,6 +24,47 @@ import 'support/gateway_test_client.dart';
 
 void main() {
   group('ChatListController', () {
+    test('clears a chat unread badge after its read position is saved', () async {
+      final chats = _FakeChatsClient(
+        pages: [
+          const ChatListData(
+            items: [
+              ChatListItem(
+                chat: VoiceChat(
+                  id: 'chat-read',
+                  type: 'CHAT_TYPE_DM',
+                  creatorProfileId: 'peer-1',
+                ),
+                unreadCount: 1,
+              ),
+            ],
+          ),
+        ],
+      );
+      final container = _container(
+        chatsClient: chats,
+        messagesClient: _FakeMessagesClient(),
+        realtimeHubBuilder: _FakeRealtimeHub.new,
+      );
+      addTearDown(container.dispose);
+
+      container.read(chatListControllerProvider);
+      await pumpEventQueue();
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        1,
+      );
+
+      container
+          .read(chatListControllerProvider.notifier)
+          .markChatRead('chat-read');
+
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        0,
+      );
+    });
+
     test('loads chats after auth becomes available', () async {
       final chats = _FakeChatsClient(
         pages: [
@@ -194,6 +236,33 @@ void main() {
   });
 
   group('ChatRoomController', () {
+    test('inherits realtime status when opened after the socket connects', () async {
+      final container = _container(
+        chatsClient: _FakeChatsClient(),
+        messagesClient: _FakeMessagesClient(),
+        realtimeHubBuilder: _FakeRealtimeHub.new,
+      );
+      addTearDown(container.dispose);
+
+      // The app-level socket can connect during login before a chat room is
+      // opened. A newly created controller must start from that current state.
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+
+      final sub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      await pumpEventQueue();
+
+      expect(
+        container.read(chatRoomControllerProvider('chat-1')).realtimeStatus,
+        RealtimeLinkStatus.connected,
+      );
+    });
+
     test(
       'fetches REST delta on realtime message_create and de-duplicates',
       () async {
@@ -525,6 +594,150 @@ void main() {
         expect(hub.markReadCalls.single, ('chat-1', 'msg-9'));
       },
     );
+
+    test(
+      'persisted read refreshes the durable inbox preview and unread count',
+      () async {
+        var readPositionSaved = false;
+        final chats = _FakeChatsClient(
+          onListChats: (_) async => ChatsApiOk(
+            ChatListData(
+              items: [
+                ChatListItem(
+                  chat: const VoiceChat(
+                    id: 'chat-1',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'peer-1',
+                  ),
+                  lastMessagePreview:
+                      readPositionSaved ? 'latest message' : 'before',
+                  unreadCount: readPositionSaved ? 0 : 1,
+                ),
+              ],
+            ),
+          ),
+        );
+        final messages = _FakeMessagesClient(
+          pages: [MessageListData(messages: [_message('msg-9')])],
+          onMarkRead: () async {
+            readPositionSaved = true;
+            return const MessagesApiOk(null);
+          },
+        );
+        final container = _container(
+          chatsClient: chats,
+          messagesClient: messages,
+          realtimeHubBuilder: _FakeRealtimeHub.new,
+        );
+        addTearDown(container.dispose);
+
+        await container.read(inboxReconcilerProvider.notifier).reconcile();
+        expect(
+          container
+              .read(inboxReconcilerProvider)
+              .snapshotFor('prof-test')![InboxScope.main]
+              .items
+              .single
+              .unreadCount,
+          1,
+        );
+
+        final roomSub = container.listen<ChatRoomState>(
+          chatRoomControllerProvider('chat-1'),
+          (_, _) {},
+          fireImmediately: true,
+        );
+        addTearDown(roomSub.close);
+        await pumpEventQueue();
+
+        expect(messages.markReadCalls.single.messageId, 'msg-9');
+        final item = container
+            .read(inboxReconcilerProvider)
+            .snapshotFor('prof-test')![InboxScope.main]
+            .items
+            .single;
+        expect(item.lastMessagePreview, 'latest message');
+        expect(item.unreadCount, 0);
+      },
+    );
+
+    test('a pre-read inbox response cannot restore the unread badge', () async {
+      var readPositionSaved = false;
+      final refreshStarted = Completer<void>();
+      final finishRefresh = Completer<void>();
+      final readResult = Completer<MessagesApiResult<void>>();
+      final unreadChat = (int unreadCount) => ChatListItem(
+        chat: const VoiceChat(
+          id: 'chat-1',
+          type: 'CHAT_TYPE_DM',
+          creatorProfileId: 'peer-1',
+        ),
+        unreadCount: unreadCount,
+      );
+      final chats = _FakeChatsClient(
+        onListChats: (requestNumber) async {
+          if (requestNumber == 1) {
+            return ChatsApiOk(ChatListData(items: [unreadChat(1)]));
+          }
+          final countAtRequestStart = readPositionSaved ? 0 : 1;
+          if (!refreshStarted.isCompleted) refreshStarted.complete();
+          await finishRefresh.future;
+          return ChatsApiOk(
+            ChatListData(items: [unreadChat(countAtRequestStart)]),
+          );
+        },
+      );
+      final messages = _FakeMessagesClient(
+        pages: [
+          MessageListData(messages: [_message('msg-9')]),
+        ],
+        onMarkRead: () => readResult.future,
+      );
+      final container = _container(
+        chatsClient: chats,
+        messagesClient: messages,
+        realtimeHubBuilder: _FakeRealtimeHub.new,
+      );
+      addTearDown(container.dispose);
+
+      final chatsSub = container.listen<ChatListState>(
+        chatListControllerProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(chatsSub.close);
+      await pumpEventQueue();
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        1,
+      );
+
+      final pendingRefresh = container
+          .read(chatListControllerProvider.notifier)
+          .reloadInitial();
+      await refreshStarted.future;
+
+      final roomSub = container.listen<ChatRoomState>(
+        chatRoomControllerProvider('chat-1'),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(roomSub.close);
+      await pumpEventQueue();
+      expect(chats.calls, hasLength(2));
+      expect(messages.markReadCalls, hasLength(1));
+
+      readPositionSaved = true;
+      readResult.complete(const MessagesApiOk(null));
+      await pumpEventQueue();
+      finishRefresh.complete();
+      await pendingRefresh;
+
+      expect(
+        container.read(chatListControllerProvider).items.single.unreadCount,
+        0,
+      );
+    });
   });
 }
 
@@ -574,7 +787,7 @@ class _ChatListCall {
 }
 
 class _FakeChatsClient extends VoiceChatsClient {
-  _FakeChatsClient({List<ChatListData> pages = const []})
+  _FakeChatsClient({List<ChatListData> pages = const [], this.onListChats})
     : _pages = [...pages],
       super(
         gateway: gatewayHttpForTest(
@@ -583,6 +796,8 @@ class _FakeChatsClient extends VoiceChatsClient {
       );
 
   final List<ChatListData> _pages;
+  final Future<ChatsApiResult<ChatListData>> Function(int requestNumber)?
+      onListChats;
   final calls = <_ChatListCall>[];
   final createGroupCalls = <String>[];
   final addMembersCalls = <(String, List<String>)>[];
@@ -596,6 +811,8 @@ class _FakeChatsClient extends VoiceChatsClient {
     String? folderId,
   }) async {
     calls.add(_ChatListCall(cursor));
+    final override = onListChats;
+    if (override != null) return override(calls.length);
     if (_pages.isEmpty) {
       return const ChatsApiOk(ChatListData(items: []));
     }
@@ -645,7 +862,7 @@ class _MarkReadCall {
 }
 
 class _FakeMessagesClient extends VoiceMessagesClient {
-  _FakeMessagesClient({List<MessageListData> pages = const []})
+  _FakeMessagesClient({List<MessageListData> pages = const [], this.onMarkRead})
     : _pages = [...pages],
       super(
         gateway: gatewayHttpForTest(
@@ -654,6 +871,7 @@ class _FakeMessagesClient extends VoiceMessagesClient {
       );
 
   final List<MessageListData> _pages;
+  final Future<MessagesApiResult<void>> Function()? onMarkRead;
   final getCalls = <_MessageGetCall>[];
   final markReadCalls = <_MarkReadCall>[];
 
@@ -689,6 +907,8 @@ class _FakeMessagesClient extends VoiceMessagesClient {
     markReadCalls.add(
       _MarkReadCall(chatId: chatId, messageId: lastReadMessageId),
     );
+    final override = onMarkRead;
+    if (override != null) return override();
     return const MessagesApiOk(null);
   }
 }

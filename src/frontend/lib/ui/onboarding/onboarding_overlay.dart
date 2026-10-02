@@ -6,7 +6,6 @@ import '../../state/auth_providers.dart';
 import '../../state/onboarding_controller.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
-import '../profile/profile_edit_sheet.dart';
 import 'onboarding_anchor_keys.dart';
 import 'onboarding_coach_mark.dart';
 
@@ -22,7 +21,7 @@ class OnboardingOverlay extends ConsumerStatefulWidget {
 
 class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
   var _loaded = false;
-  var _saveAccountModalOpen = false;
+  String? _saveAccountCompletionAttemptedForKey;
   late final ProviderSubscription<NavigationSection> _navigationSubscription;
   OverlayEntry? _coachMark;
 
@@ -70,14 +69,24 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
   Future<void> _maybeShowStep() async {
     final onboarding = ref.read(onboardingControllerProvider);
+    if (!onboarding.loaded || onboarding.loading) return;
     if (!onboarding.shouldShowHints) return;
     final step = onboarding.currentStep;
     if (step == null) return;
 
     final l10n = AppLocalizations.of(context)!;
 
-    if (step == OnboardingStep.saveAccount &&
-        ref.read(authControllerProvider).isGuest) {
+    if (step == OnboardingStep.saveAccount) {
+      final auth = ref.read(authControllerProvider);
+      final attemptKey =
+          ref.read(activeProfileProvider).valueOrNull?.id ??
+          auth.session?.activeProfileId ??
+          auth.session?.accountId ??
+          'unknown';
+      if (_saveAccountCompletionAttemptedForKey == attemptKey) {
+        return;
+      }
+      _saveAccountCompletionAttemptedForKey = attemptKey;
       await _completeCurrentStepAndShowNext(retryOnFailure: false);
       return;
     }
@@ -89,7 +98,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
 
     switch (step) {
       case OnboardingStep.saveAccount:
-        _showSaveAccountModal(l10n);
+        return;
       case OnboardingStep.chatsNav:
         _showCoachMark(
           anchorKey: OnboardingAnchorKeys.chatsNav,
@@ -106,9 +115,9 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
           continueLabel: l10n.onboardingLater,
           secondaryLabel: l10n.onboardingSpacesFind,
           onSecondary: () async {
-            ref.read(shellNavigationProvider).setNavigationSection(
-              NavigationSection.chats,
-            );
+            ref
+                .read(shellNavigationProvider)
+                .setNavigationSection(NavigationSection.chats);
             ref.read(globalSearchFocusRequestProvider.notifier).state++;
             await _completeCurrentStepAndShowNext();
           },
@@ -188,50 +197,6 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
     );
   }
 
-  Future<void> _showSaveAccountModal(AppLocalizations l10n) async {
-    if (_saveAccountModalOpen) return;
-    final profile = ref.read(activeProfileProvider).valueOrNull;
-    if (profile == null) return;
-    if (!mounted) return;
-    _saveAccountModalOpen = true;
-    try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: Text(l10n.onboardingSaveAccountTitle),
-          content: Text(l10n.onboardingSaveAccountBody),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await ref.read(onboardingControllerProvider.notifier).dismiss();
-                if (ctx.mounted) Navigator.of(ctx).pop();
-              },
-              child: Text(l10n.onboardingSkip),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                if (!mounted) return;
-                await showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => ProfileEditSheet(profile: profile),
-                );
-                await ref.read(onboardingControllerProvider.notifier).completeCurrentStep();
-                _maybeShowStep();
-              },
-              child: Text(l10n.commonSave),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      _saveAccountModalOpen = false;
-    }
-    if (mounted) await _maybeShowStep();
-  }
-
   Future<void> _showHintDialog({
     required String title,
     required String body,
@@ -254,7 +219,7 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
             child: Text(l10n.onboardingSkip),
           ),
           FilledButton(
-          onPressed: () async {
+            onPressed: () async {
               await onContinue();
               if (!ctx.mounted) return;
               Navigator.of(ctx).pop();

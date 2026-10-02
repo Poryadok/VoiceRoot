@@ -714,9 +714,11 @@ The reviewed grants and issuer contract are in
 trusted Linux host from the exact release SHA; the issuer writes a protected
 four-Secret `secrets.json` restore List plus a separate operator/APP/SYS seed
 backup. The disposable fixture is not staging or production issuance material.
-Do not issue or store this material under the shared staging `pmd` UID;
+Do not issue or persist signing seeds under the shared staging `pmd` UID;
 perform issuance on an isolated trusted Linux runner and transport the restore
-List by secret-manager stdin, with signing seeds backed up separately.
+List by secret-manager stdin, with signing seeds backed up separately. The
+existing staging runner briefly decodes the uploaded restore List into a
+mode-0600 temporary file during the authorized rotation and deletes it on exit.
 
 Staging and production use an operator-signed APP account for JetStream and a
 distinct SYS account with no JetStream entitlement. The hub resolves both JWTs
@@ -750,7 +752,159 @@ account was observed with 566 consumers, exceeding the issued APP account's
 512-consumer limit. Inventory and classify legacy dynamic consumers and prove
 state-preserving migration of the eight existing stream messages before
 cutover. Do not silently increase the limit, discard consumer state, or start
-the JWT hub on empty storage.
+the JWT hub on empty storage during an ordinary migration.
+
+For the explicitly authorized staging-only **NATS root rotation**, the owner
+accepts an outage and loss of staging NATS streams, consumers, and messages.
+That maintenance operation must leave the namespace and all non-NATS resources
+and PVCs intact. Stop all 18 actual NATS leaf Deployments before changing the
+single PVC-backed hub; retain the previous NATS PVC and four Secrets for
+rollback, create a new NATS-only PVC and four immutable generation-named
+Secrets, and keep the existing `voice-nats` Service/DNS and TLS server name.
+Recreate all four fixed bootstrap Jobs and run the Realtime credential preflight
+against the new broker before restarting leaves in dependency order. Normal
+staging deploys must reject an in-progress rotation and use the active
+generation after cutover. This exception does not authorize a namespace reset
+or production rotation.
+
+Run this operation only after the rotation PR is merged and its exact `master`
+CI is green. In the protected local `.local/staging-nats` directory, use the
+already issued `staging-nats-secret.yaml` (the fixed-name JSON List) and
+`scripts/staging/prepare-nats-rotation-bundle.py GENERATION INPUT OUTPUT` to
+create the immutable, generation-named List. Keep both Lists and all three
+signing seeds in that protected, gitignored directory; never put a seed in a
+Kubernetes Secret or GitHub Environment. Choose a new token matching
+`rYYYYMMDD` followed by at most eight lowercase letters or digits. The
+packager refuses an existing output file and validates all four Secret names,
+namespace, keys and encodings before writing a mode-0600 file.
+
+Upload **only** the new versioned List as gzip+base64 to GitHub repository
+**Settings → Environments → staging → Environment secrets** under
+`STAGING_NATS_ROTATION_SECRETS_B64`. Base64 is transport encoding, not
+encryption; do not print the encoded bundle in a terminal or CI log. Keep the
+legacy `STAGING_NATS_SECRETS_B64` unchanged for rollback. Do not update app,
+Auth, Postgres, MinIO or another namespace's secrets. The trusted staging
+runner must be the existing `self-hosted`, `Linux`, `X64`, `voice-staging`
+runner. Its manual [Staging NATS root rotation](../.github/workflows/staging-nats-root-rotation.yml)
+workflow accepts `activate` plus that exact generation token, or `rollback`
+with an empty token. Its `voice-staging-maintenance` concurrency group prevents
+ordinary staging deploy from overlapping a rotation. The script derives the
+new PVC class/size from the current NATS PVC; it does not touch another PVC.
+For the Realtime permissions preflight and live ACL proof Jobs, the workflow
+checks that the Realtime image tagged with its exact `master` SHA exists in
+GHCR before any cluster mutation. Neither Job uses the previously deployed
+Realtime image, which may lack the preflight entrypoint.
+It checks anonymous pull with a clean Docker configuration. If that fails, the
+staging `VOICE_IMAGE_PULL_SECRET` variable must name a reviewed GHCR registry
+Secret in `voice-staging`; the script verifies that Secret can access the exact
+image and binds it explicitly to both one-shot Jobs before changing the marker.
+
+Immediately before activation, issue a short-lived `proof.creds` for the new
+APP account on an isolated trusted Linux issuer host and upload its base64 bytes as
+the staging Environment secret `STAGING_NATS_PROOF_CREDS_B64`. The issuer
+limits its lifetime to at most two hours (60 minutes by default). The rotation
+preflight verifies the credential signature, issuer, exact scoped ACL and at
+least 30 minutes of remaining validity against the versioned Secret List before
+writing the marker or creating any Secret/PVC. The account signing seed remains
+only in the protected external location; neither the Job nor GitHub receives
+it. Delete the GitHub proof credential secret after the run and retain only
+sanitized evidence. The workflow does not delete GitHub secrets itself.
+
+After the new hub and four bootstrap Jobs are ready, the script creates a
+unique immutable temporary `proof.creds` Secret, a staging-only additive
+NetworkPolicy, and a one-shot Realtime proof Job. The Job uses separate local
+leaves for the fixed Realtime and proof credentials; only that Job also mounts
+the fixed Realtime credential for a direct authenticated hub ACK check. The
+script requires the exact sanitized
+`NATS_LIVE_ACL_PROOF=PASS generation=<generation> acl_sha=<sha256>` result and
+verifies deletion of the Job, NetworkPolicy and Secret before restarting any
+leaf or writing `active`. A failure after the cutover begins leaves the marker
+at `rotating`. Before leaf restart all 18 leaves remain stopped; a User/Space
+startup or cleanup failure can leave some or all leaves running with the new
+credentials. Inspect the marker, User override and leaf references before
+dispatching `rollback` to restore the retained generation. If the runner is
+lost before its cleanup trap runs,
+rollback identifies only generation-labeled proof resources, verifies their
+names, annotations and namespace, then removes the Job and its Pod before the
+temporary NetworkPolicy and credential Secret. It verifies all are absent
+before changing the hub, leaves, or marker.
+If activation failed after creating its immutable generation Secrets and Bound
+PVC, do not rerun `activate` and do not remove those resources. The explicit
+`continue-activate` workflow operation is limited to the exact `rotating`
+marker generation: it verifies the retained source and target PVCs and Secret
+sets, accepts only known source/target hub and leaf references, repeats the
+bootstrap and live ACL proof, and restarts leaves only after that proof passes.
+The Realtime proof container runs as UID/GID 65532, so its projected service
+and proof credential files use group-read mode `0440` with Pod `fsGroup: 65532`.
+If continuation fails, leave the marker and resources intact, inspect sanitized
+workflow evidence, and choose the recovery path only after verifying the live
+resource state.
+If that rollback itself stops on a historical bootstrap Job after restoring
+the legacy hub, use `diagnose` first. For the interrupted
+`r20260930a1 → legacy` incident, `recover-legacy` with generation
+`r20260930a1` verifies the rotating marker, ready legacy hub and PVC, exact
+Service selector/client port, legacy Secret references and the partial
+state observed after run 36660139990: Auth and Social ready at one replica,
+User at one unready replica, and the other 15 leaves stopped with no Pods.
+On retry it accepts only a contiguous prefix of those same old-reference
+leaves, verifies any existing Pods also mount the old credentials/TLS, and
+rejects an out-of-order or mixed-generation deployment before mutation.
+For the interrupted `r20260930a2 → legacy` recovery, the same operation accepts
+either the observed state with all 18 legacy-reference leaves stopped and no
+Pods, or a completed rollout with all 18 leaves at one ready and updated replica
+on legacy refs. The completed-rollout path also requires exactly one Running,
+ready Pod per leaf with legacy credential/TLS mounts and no User override or
+override Pod. It skips workload changes and only compare-and-swaps the marker to
+`active/legacy` after those checks and a final User Pod check. Partial, mixed,
+missing, or unready state fails closed before mutation.
+Recovery paths skip bootstrap and proof Jobs and retain NATS PVCs and Secrets.
+When leaves are stopped, recovery starts the remaining leaves and temporarily
+overrides only User's `SPACE_GRPC_ADDR` to an empty value in its Pod template. User's
+space-membership privacy check denies when Space is unavailable. The operation
+waits for User and then Space, removes its exact owned override, waits for the
+normal User rollout, waits up to 30 seconds for exactly one Running, ready User
+Pod without the temporary override, and finally requires all 18 leaves ready
+before it compares and swaps the marker to `active/legacy`. A failed step attempts to
+remove the temporary override; a later `recover-legacy` run recognizes an
+owned override left by runner interruption and resumes its cleanup. Kubernetes
+may omit the serialized `value` field for an empty environment variable; the
+cleanup accepts only that omitted or exactly empty value with no `valueFrom`
+and CAS-tests the observed entry before removal. If all 18 legacy leaves are
+already started and the exact owned User override remains, dispatch
+`restore-user-cycle` with generation `r20260930a1`. This narrower operation
+requires the fully started old-reference state, removes only its owned User
+override, waits for restored User and all 18 leaves, then CAS-marks legacy
+active; it does not scale stopped leaves, run Jobs, or touch PVCs or Secrets. The
+read-only `diagnose` operation reports only booleans and counts for that
+override and its Pods; it never prints the environment value. A failed
+precondition, cleanup, or rollout leaves the marker rotating for investigation.
+Root `activate` and `rollback` now use the same reviewed fail-closed temporary
+User override after all 18 leaves are started. Each waits for temporary User,
+then Space, removes the exact owned override, waits for the restored User Pod,
+and only then permits the marker to become active. A failed step leaves the
+marker rotating; cleanup failures retain the owned annotation for diagnosis.
+The four bootstrap Jobs and the Realtime permissions preflight fail promptly
+when a Job reports `Failed` or `DeadlineExceeded`, with only a bounded failure
+category in CI output. Run staging smoke after recovery and
+leave A1 ACL proof variables unset unless a separate live proof passes.
+After successful proof and cleanup, set both staging Environment variables
+`VOICE_NATS_ACL_PROOF_SHA` (the reviewed ACL intent SHA-256) and
+`VOICE_NATS_ACL_PROOF_GENERATION` (the newly active generation). Ordinary
+`full` and `app-only` deploys require both values to match the reviewed
+intent and active generation before mutation. After a verified rollback,
+restore `VOICE_NATS_ACL_PROOF_GENERATION` to the retained active generation
+and `VOICE_NATS_ACL_PROOF_SHA` to its previously accepted reviewed digest;
+never leave either variable attesting to the abandoned target. Keep the old
+NATS PVC and Secrets until the replacement has passed NATS and HTTP smoke.
+
+After activation, verify the marker is `active` with the requested generation,
+`voice-nats` still selects `voice-nats-pvc-candidate`, the candidate hub mounts
+the new PVC/operator/TLS Secrets, all 18 leaves mount new service credentials
+and TLS CA, the four generation-annotated bootstrap Jobs and Realtime preflight
+are complete, and a staging smoke passes. The next ordinary `full`, `app-only`
+or `images-only` deploy reads that marker and must keep the active Secret/PVC
+references. A manual `rollback` keeps both generations' assets so a later
+attempt remains reviewable; it never deletes a versioned NATS PVC or Secret.
 
 When the owner explicitly authorizes a destructive staging reset, the manual
 `Staging deploy` workflow supports a separate clean-install path. It verifies
@@ -825,4 +979,6 @@ Rotation runbook:
 
 See [Object storage operations](OBJECT_STORAGE.md) for the self-hosted MinIO
 default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
-optional S3-provider migration procedure.
+optional S3-provider migration procedure. Its browser-facing signed URL contract
+uses the existing Gateway HTTPS host and bucket-specific MinIO ingress routes;
+the full staging rollout applies both the ingress and Web-origin CORS setting.

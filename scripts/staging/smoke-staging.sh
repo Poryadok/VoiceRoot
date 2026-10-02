@@ -8,6 +8,8 @@ source "${ROOT}/scripts/staging/load-staging-domains.sh"
 
 BASE="${VOICE_STAGING_URL:-https://${VOICE_GATEWAY_INGRESS_HOST}}"
 BASE="${BASE%/}"
+STORAGE_BASE="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRESS_HOST:-${VOICE_GATEWAY_INGRESS_HOST}}}"
+STORAGE_BASE="${STORAGE_BASE%/}"
 
 echo "Smoke: GET ${BASE}/health"
 # Gateway /health is plain text "ok" (not JSON like backend microservices).
@@ -28,6 +30,35 @@ if [ "${health_ok}" != "true" ]; then
   echo "health failed: expected HTTP 200 body ok; check gateway Ingress (voice-gateway-http/https) and DNS for ${BASE#https://}"
   exit 1
 fi
+
+# Browser preflight is read-only and proves public bucket routing plus MinIO CORS.
+# Never log or request a signed URL here.
+file_bucket="${VOICE_FILE_R2_BUCKET:-voice-staging-files}"
+avatar_bucket="${VOICE_AVATAR_R2_BUCKET:-voice-staging-avatars}"
+if command -v kubectl >/dev/null 2>&1; then
+  file_bucket="$(kubectl get secret voice-app-secrets -n "${VOICE_K8S_NAMESPACE:-voice-staging}" -o 'jsonpath={.data.FILE_R2_BUCKET}' | base64 -d)"
+  avatar_bucket="$(kubectl get secret voice-app-secrets -n "${VOICE_K8S_NAMESPACE:-voice-staging}" -o 'jsonpath={.data.USER_R2_BUCKET}' | base64 -d)"
+  [ -n "${file_bucket}" ] && [ -n "${avatar_bucket}" ] || { echo "storage bucket config missing"; exit 1; }
+fi
+for bucket in "${file_bucket}" "${avatar_bucket}"; do
+  cors_headers="$(mktemp)"
+  cors_code="$(curl -sS -D "${cors_headers}" -o /dev/null -w "%{http_code}" \
+    -X OPTIONS "${STORAGE_BASE}/${bucket}/codex-cors-probe" \
+    -H "Origin: https://${VOICE_WEB_INGRESS_HOST}" \
+    -H "Access-Control-Request-Method: PUT" \
+    -H "Access-Control-Request-Headers: content-type" || echo "000")"
+  cors_headers_clean="$(tr -d '\r' < "${cors_headers}")"
+  rm -f "${cors_headers}"
+  if [ "${cors_code}" != "200" ] && [ "${cors_code}" != "204" ]; then
+    echo "storage CORS preflight failed for ${bucket}: HTTP ${cors_code}"
+    exit 1
+  fi
+  if ! printf '%s\n' "${cors_headers_clean}" | grep -Fiqx "Access-Control-Allow-Origin: https://${VOICE_WEB_INGRESS_HOST}" || \
+     ! printf '%s\n' "${cors_headers_clean}" | grep -Eiq '^Access-Control-Allow-Methods:.*PUT'; then
+    echo "storage CORS preflight missing browser origin or PUT for ${bucket}"
+    exit 1
+  fi
+done
 
 echo "Smoke: GET ${BASE}/api/v1/version?platform=windows&version=1.0.0"
 version_tmp="$(mktemp)"

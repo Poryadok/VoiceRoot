@@ -1633,6 +1633,134 @@ class IsBlockedResponse extends $pb.GeneratedMessage {
   void clearBlocked() => $_clearField(1);
 }
 
+class IsProfilePairBlockedRequest extends $pb.GeneratedMessage {
+  factory IsProfilePairBlockedRequest({
+    $core.String? viewerProfileId,
+    $core.String? otherProfileId,
+  }) {
+    final result = create();
+    if (viewerProfileId != null) result.viewerProfileId = viewerProfileId;
+    if (otherProfileId != null) result.otherProfileId = otherProfileId;
+    return result;
+  }
+
+  IsProfilePairBlockedRequest._();
+
+  factory IsProfilePairBlockedRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsProfilePairBlockedRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsProfilePairBlockedRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'viewerProfileId')
+    ..aOS(2, _omitFieldNames ? '' : 'otherProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsProfilePairBlockedRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsProfilePairBlockedRequest copyWith(
+          void Function(IsProfilePairBlockedRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as IsProfilePairBlockedRequest))
+          as IsProfilePairBlockedRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsProfilePairBlockedRequest create() =>
+      IsProfilePairBlockedRequest._();
+  @$core.override
+  IsProfilePairBlockedRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsProfilePairBlockedRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsProfilePairBlockedRequest>(create);
+  static IsProfilePairBlockedRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get viewerProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set viewerProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasViewerProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearViewerProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get otherProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set otherProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOtherProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOtherProfileId() => $_clearField(2);
+}
+
+class IsProfilePairBlockedResponse extends $pb.GeneratedMessage {
+  factory IsProfilePairBlockedResponse({
+    $core.bool? blocked,
+  }) {
+    final result = create();
+    if (blocked != null) result.blocked = blocked;
+    return result;
+  }
+
+  IsProfilePairBlockedResponse._();
+
+  factory IsProfilePairBlockedResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory IsProfilePairBlockedResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'IsProfilePairBlockedResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.social.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'blocked')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsProfilePairBlockedResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  IsProfilePairBlockedResponse copyWith(
+          void Function(IsProfilePairBlockedResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as IsProfilePairBlockedResponse))
+          as IsProfilePairBlockedResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static IsProfilePairBlockedResponse create() =>
+      IsProfilePairBlockedResponse._();
+  @$core.override
+  IsProfilePairBlockedResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static IsProfilePairBlockedResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<IsProfilePairBlockedResponse>(create);
+  static IsProfilePairBlockedResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get blocked => $_getBF(0);
+  @$pb.TagNumber(1)
+  set blocked($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBlocked() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBlocked() => $_clearField(1);
+}
+
 class AreFriendsRequest extends $pb.GeneratedMessage {
   factory AreFriendsRequest({
     $core.String? profileIdA,

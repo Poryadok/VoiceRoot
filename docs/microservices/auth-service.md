@@ -14,6 +14,7 @@
 - Логин / логаут
 - JWT access token (15 мин) + opaque refresh token (30 дней)
 - Refresh token rotation (одноразовые)
+- Refresh rows retain the session's active `profile_id`; refreshing a switched-profile session keeps that profile instead of silently issuing a primary-profile token. Legacy refresh rows without a profile retain primary-profile fallback behavior.
 - Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)

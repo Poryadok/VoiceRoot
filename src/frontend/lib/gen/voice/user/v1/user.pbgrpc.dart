@@ -63,6 +63,14 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// S2S internal: title-only projection for DM peer profile IDs from authorized Chat memberships.
+  $grpc.ResponseFuture<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
+    $0.GetDMPeerDisplayNamesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getDMPeerDisplayNames, request, options: options);
+  }
+
   /// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
   /// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
   $grpc.ResponseFuture<$0.ResolvePrimaryProfileIDsResponse>
@@ -353,6 +361,11 @@ class UserServiceClient extends $grpc.Client {
       '/voice.user.v1.UserService/ResolveAccountIDForProfile',
       ($0.ResolveAccountIDForProfileRequest value) => value.writeToBuffer(),
       $0.ResolveAccountIDForProfileResponse.fromBuffer);
+  static final _$getDMPeerDisplayNames = $grpc.ClientMethod<
+          $0.GetDMPeerDisplayNamesRequest, $0.GetDMPeerDisplayNamesResponse>(
+      '/voice.user.v1.UserService/GetDMPeerDisplayNames',
+      ($0.GetDMPeerDisplayNamesRequest value) => value.writeToBuffer(),
+      $0.GetDMPeerDisplayNamesResponse.fromBuffer);
   static final _$resolvePrimaryProfileIDs = $grpc.ClientMethod<
           $0.ResolvePrimaryProfileIDsRequest,
           $0.ResolvePrimaryProfileIDsResponse>(
@@ -564,6 +577,15 @@ abstract class UserServiceBase extends $grpc.Service {
             $0.ResolveAccountIDForProfileRequest.fromBuffer(value),
         ($0.ResolveAccountIDForProfileResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetDMPeerDisplayNamesRequest,
+            $0.GetDMPeerDisplayNamesResponse>(
+        'GetDMPeerDisplayNames',
+        getDMPeerDisplayNames_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetDMPeerDisplayNamesRequest.fromBuffer(value),
+        ($0.GetDMPeerDisplayNamesResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ResolvePrimaryProfileIDsRequest,
             $0.ResolvePrimaryProfileIDsResponse>(
         'ResolvePrimaryProfileIDs',
@@ -894,6 +916,15 @@ abstract class UserServiceBase extends $grpc.Service {
   $async.Future<$0.ResolveAccountIDForProfileResponse>
       resolveAccountIDForProfile(
           $grpc.ServiceCall call, $0.ResolveAccountIDForProfileRequest request);
+
+  $async.Future<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetDMPeerDisplayNamesRequest> $request) async {
+    return getDMPeerDisplayNames($call, await $request);
+  }
+
+  $async.Future<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
+      $grpc.ServiceCall call, $0.GetDMPeerDisplayNamesRequest request);
 
   $async.Future<$0.ResolvePrimaryProfileIDsResponse>
       resolvePrimaryProfileIDs_Pre($grpc.ServiceCall $call,

@@ -4,6 +4,8 @@ import '../backend/chats_client.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 
+const kFolderReorderMayBePartial = 'folder_reorder_may_be_partial';
+
 final quickAccessListProvider = FutureProvider<QuickAccessListData>((
   ref,
 ) async {
@@ -82,6 +84,72 @@ class FolderActions {
       ChatsApiOk() => _invalidate(),
       ChatsApiFailure(:final message) => message,
     };
+  }
+
+  Future<String?> reorderCustomFolders(List<VoiceFolder> folders) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+    final session = _ref.read(authControllerProvider).session;
+    final client = _ref.read(voiceChatsClientProvider);
+    final changed = <VoiceFolder>[];
+
+    bool isCurrent() =>
+        identical(_ref.read(authControllerProvider).session, session) &&
+        _ref.read(authorizationHeaderProvider) == auth;
+
+    Future<bool> rollback() async {
+      var restored = true;
+      for (final folder in changed.reversed) {
+        if (!isCurrent()) {
+          restored = false;
+          break;
+        }
+        final result = await client.updateFolder(
+          authorization: auth,
+          folderId: folder.id,
+          sortOrder: folder.sortOrder,
+        );
+        if (result is ChatsApiFailure) restored = false;
+      }
+      _ref.invalidate(chatFoldersProvider);
+      return restored;
+    }
+
+    for (var index = 0; index < folders.length; index++) {
+      if (!isCurrent()) {
+        _ref.invalidate(chatFoldersProvider);
+        return changed.isEmpty
+            ? kChatActionStaleContext
+            : kFolderReorderMayBePartial;
+      }
+      final folder = folders[index];
+      if (folder.isSystem) return 'system_folder_immutable';
+      final sortOrder = 5 + index;
+      if (folder.sortOrder == sortOrder) continue;
+      final result = await client.updateFolder(
+        authorization: auth,
+        folderId: folder.id,
+        sortOrder: sortOrder,
+      );
+      if (result is ChatsApiOk<VoiceFolder>) changed.add(folder);
+      if (!isCurrent()) {
+        _ref.invalidate(chatFoldersProvider);
+        return changed.isEmpty
+            ? kChatActionStaleContext
+            : kFolderReorderMayBePartial;
+      }
+      if (result case ChatsApiFailure(:final message)) {
+        final restored = await rollback();
+        return restored ? message : kFolderReorderMayBePartial;
+      }
+    }
+    _ref.invalidate(chatFoldersProvider);
+    if (!isCurrent()) {
+      return changed.isEmpty
+          ? kChatActionStaleContext
+          : kFolderReorderMayBePartial;
+    }
+    return null;
   }
 
   Future<String?> addChatToFolder({

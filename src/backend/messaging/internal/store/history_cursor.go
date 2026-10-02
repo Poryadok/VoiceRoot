@@ -11,23 +11,24 @@ import (
 var ErrInvalidHistoryCursor = errors.New("invalid history cursor")
 
 type historyCursorPayload struct {
+	C string `json:"c"`           // chat that owns this history cursor
 	B string `json:"b,omitempty"` // load older than this message id
 	A string `json:"a,omitempty"` // load newer than this message id
 }
 
-func EncodeBeforeCursor(oldestMessageID uuid.UUID) string {
-	p := historyCursorPayload{B: oldestMessageID.String()}
+func EncodeBeforeCursor(chatID, oldestMessageID uuid.UUID) string {
+	p := historyCursorPayload{C: chatID.String(), B: oldestMessageID.String()}
 	b, _ := json.Marshal(p)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func EncodeAfterCursor(newestMessageID uuid.UUID) string {
-	p := historyCursorPayload{A: newestMessageID.String()}
+func EncodeAfterCursor(chatID, newestMessageID uuid.UUID) string {
+	p := historyCursorPayload{C: chatID.String(), A: newestMessageID.String()}
 	b, _ := json.Marshal(p)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func DecodeHistoryCursor(raw string) (beforeID, afterID *uuid.UUID, err error) {
+func DecodeHistoryCursor(raw string, chatID uuid.UUID) (beforeID, afterID *uuid.UUID, err error) {
 	if raw == "" {
 		return nil, nil, nil
 	}
@@ -37,6 +38,10 @@ func DecodeHistoryCursor(raw string) (beforeID, afterID *uuid.UUID, err error) {
 	}
 	var p historyCursorPayload
 	if err := json.Unmarshal(b, &p); err != nil {
+		return nil, nil, ErrInvalidHistoryCursor
+	}
+	cursorChatID, err := uuid.Parse(p.C)
+	if err != nil || cursorChatID != chatID {
 		return nil, nil, ErrInvalidHistoryCursor
 	}
 	if p.B != "" && p.A != "" {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend/api_errors.dart';
 import '../backend/roles_client.dart';
 import '../backend/spaces_client.dart';
+import '../gen/voice/chat/v1/chat.pbenum.dart';
 import 'auth_providers.dart';
 
 final voiceSpacesClientProvider = Provider<VoiceSpacesClient>((ref) {
@@ -34,8 +35,7 @@ final mySpacesProvider = FutureProvider<SpaceListData>((ref) async {
       .listMySpaces(authorization: auth);
   return switch (result) {
     SpacesApiOk(:final data) => data,
-    SpacesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    SpacesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     SpacesApiFailure(:final message) => throw Exception(message),
   };
@@ -54,8 +54,7 @@ final spaceProvider = FutureProvider.family<VoiceSpace, String>((
       .getSpace(authorization: auth, spaceId: spaceId);
   return switch (result) {
     SpacesApiOk(:final data) => data,
-    SpacesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    SpacesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     SpacesApiFailure(:final message) => throw Exception(message),
   };
@@ -79,14 +78,15 @@ class SpaceActions {
     if (trimmedName.isEmpty) return 'name_required';
 
     final trimmedDescription = description?.trim();
-    final createResult = await _ref.read(voiceSpacesClientProvider).createSpace(
-      authorization: auth,
-      name: trimmedName,
-      description:
-          trimmedDescription == null || trimmedDescription.isEmpty
+    final createResult = await _ref
+        .read(voiceSpacesClientProvider)
+        .createSpace(
+          authorization: auth,
+          name: trimmedName,
+          description: trimmedDescription == null || trimmedDescription.isEmpty
               ? null
               : trimmedDescription,
-    );
+        );
 
     return switch (createResult) {
       SpacesApiFailure(:final message) => message,
@@ -107,11 +107,9 @@ class SpaceActions {
       _invalidateMySpaces(_ref);
       return null;
     }
-    final updateResult = await _ref.read(voiceSpacesClientProvider).updateSpace(
-      authorization: auth,
-      spaceId: space.id,
-      iconUrl: iconUrl,
-    );
+    final updateResult = await _ref
+        .read(voiceSpacesClientProvider)
+        .updateSpace(authorization: auth, spaceId: space.id, iconUrl: iconUrl);
     return switch (updateResult) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -141,17 +139,140 @@ final spaceTreeProvider = FutureProvider.family<SpaceTreeData, String>((
       .listSpaceTree(authorization: auth, spaceId: spaceId);
   return switch (result) {
     SpacesApiOk(:final data) => data,
-    SpacesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    SpacesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     SpacesApiFailure(:final message) => throw Exception(message),
   };
 });
 
+enum SpaceTreeActionErrorKind {
+  rejected,
+  partialSuccess,
+  placementUncertain,
+  outcomeUncertain,
+  refreshFailed,
+}
+
+class SpaceTreeActionError {
+  const SpaceTreeActionError(
+    this.message, {
+    this.kind = SpaceTreeActionErrorKind.rejected,
+  });
+
+  final String message;
+  final SpaceTreeActionErrorKind kind;
+}
+
 class SpaceTreeActions {
   SpaceTreeActions(this._ref);
 
   final Ref _ref;
+
+  Future<SpaceTreeActionError?> createCategory({
+    required String spaceId,
+    required String name,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final trimmedName = name.trim();
+    if (auth == null) return const SpaceTreeActionError('not_authenticated');
+    if (trimmedName.isEmpty) return const SpaceTreeActionError('name_required');
+
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .createCategory(
+          authorization: auth,
+          spaceId: spaceId,
+          name: trimmedName,
+        );
+    return switch (result) {
+      SpacesApiFailure(:final message, :final outcomeUncertain) => () async {
+        if (outcomeUncertain) await _refreshAfterMutation(spaceId);
+        return SpaceTreeActionError(
+          message,
+          kind: outcomeUncertain
+              ? SpaceTreeActionErrorKind.outcomeUncertain
+              : SpaceTreeActionErrorKind.rejected,
+        );
+      }(),
+      SpacesApiOk() => _refreshAfterMutation(spaceId),
+    };
+  }
+
+  Future<SpaceTreeActionError?> createTextChat({
+    required String spaceId,
+    required String name,
+    required ChatType chatType,
+    String? categoryId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final trimmedName = name.trim();
+    if (auth == null) return const SpaceTreeActionError('not_authenticated');
+    if (trimmedName.isEmpty) return const SpaceTreeActionError('name_required');
+
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .createSpaceChat(
+          authorization: auth,
+          spaceId: spaceId,
+          name: trimmedName,
+          chatType: chatType,
+          categoryId: categoryId,
+        );
+    return switch (result) {
+      SpacesApiFailure(
+        :final message,
+        :final partialSuccess,
+        :final outcomeUncertain,
+      ) =>
+        () async {
+          if (partialSuccess || outcomeUncertain) {
+            await _refreshAfterMutation(spaceId);
+          }
+          return SpaceTreeActionError(
+            message,
+            kind: partialSuccess
+                ? outcomeUncertain
+                      ? SpaceTreeActionErrorKind.placementUncertain
+                      : SpaceTreeActionErrorKind.partialSuccess
+                : outcomeUncertain
+                ? SpaceTreeActionErrorKind.outcomeUncertain
+                : SpaceTreeActionErrorKind.rejected,
+          );
+        }(),
+      SpacesApiOk() => _refreshAfterMutation(spaceId),
+    };
+  }
+
+  Future<SpaceTreeActionError?> reorderTreeNodes({
+    required String spaceId,
+    required List<String> orderedNodeIds,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return const SpaceTreeActionError('not_authenticated');
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .reorderSpaceTree(
+          authorization: auth,
+          spaceId: spaceId,
+          orderedNodeIds: orderedNodeIds,
+        );
+    return switch (result) {
+      SpacesApiFailure(:final message) => SpaceTreeActionError(message),
+      SpacesApiOk() => _refreshAfterMutation(spaceId),
+    };
+  }
+
+  Future<SpaceTreeActionError?> _refreshAfterMutation(String spaceId) async {
+    try {
+      await refreshTree(spaceId);
+      return null;
+    } on Object catch (_) {
+      return SpaceTreeActionError(
+        'tree_refresh_failed',
+        kind: SpaceTreeActionErrorKind.refreshFailed,
+      );
+    }
+  }
 
   Future<void> refreshTree(String spaceId) async {
     _ref.invalidate(spaceTreeProvider(spaceId));
@@ -176,8 +297,7 @@ final spaceInvitesProvider = FutureProvider.family<List<SpaceInvite>, String>((
       .listInvites(authorization: auth, spaceId: spaceId);
   return switch (result) {
     SpacesApiOk(:final data) => data,
-    SpacesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    SpacesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     SpacesApiFailure(:final message) => throw Exception(message),
   };
@@ -196,12 +316,14 @@ class SpaceInviteActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceSpacesClientProvider).createInvite(
-      authorization: auth,
-      spaceId: spaceId,
-      maxUses: maxUses,
-      expiresAt: expiresAt,
-    );
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .createInvite(
+          authorization: auth,
+          spaceId: spaceId,
+          maxUses: maxUses,
+          expiresAt: expiresAt,
+        );
     return switch (result) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -218,11 +340,13 @@ class SpaceInviteActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceSpacesClientProvider).revokeInvite(
-      authorization: auth,
-      spaceId: spaceId,
-      inviteId: inviteId,
-    );
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .revokeInvite(
+          authorization: auth,
+          spaceId: spaceId,
+          inviteId: inviteId,
+        );
     return switch (result) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -262,24 +386,24 @@ final spaceInviteActionsProvider = Provider<SpaceInviteActions>((ref) {
 /// Space member roster with [SpaceMemberRosterEntry.roleNames] from `GET /api/v1/spaces/{id}/members`.
 final spaceMembersProvider =
     FutureProvider.family<List<SpaceMemberRosterEntry>, String>((
-  ref,
-  spaceId,
-) async {
-  final auth = ref.watch(authorizationHeaderProvider);
-  if (auth == null) {
-    throw StateError('not_authenticated');
-  }
-  final result = await ref
-      .read(voiceSpacesClientProvider)
-      .listMembers(authorization: auth, spaceId: spaceId);
-  return switch (result) {
-    SpacesApiOk(:final data) => data.members,
-    SpacesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
-      throw const BackendUnavailableException(),
-    SpacesApiFailure(:final message) => throw Exception(message),
-  };
-});
+      ref,
+      spaceId,
+    ) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) {
+        throw StateError('not_authenticated');
+      }
+      final result = await ref
+          .read(voiceSpacesClientProvider)
+          .listMembers(authorization: auth, spaceId: spaceId);
+      return switch (result) {
+        SpacesApiOk(:final data) => data.members,
+        SpacesApiFailure(:final statusCode)
+            when isBackendUnavailable(statusCode) =>
+          throw const BackendUnavailableException(),
+        SpacesApiFailure(:final message) => throw Exception(message),
+      };
+    });
 
 /// Role hierarchy for a space from `GET /api/v1/roles?space_id=`.
 final spaceRolesProvider = FutureProvider.family<List<SpaceRole>, String>((
@@ -290,14 +414,12 @@ final spaceRolesProvider = FutureProvider.family<List<SpaceRole>, String>((
   if (auth == null) {
     throw StateError('not_authenticated');
   }
-  final result = await ref.read(voiceRolesClientProvider).listRoles(
-    authorization: auth,
-    spaceId: spaceId,
-  );
+  final result = await ref
+      .read(voiceRolesClientProvider)
+      .listRoles(authorization: auth, spaceId: spaceId);
   return switch (result) {
     RolesApiOk(:final data) => data,
-    RolesApiFailure(:final statusCode)
-        when isBackendUnavailable(statusCode) =>
+    RolesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
       throw const BackendUnavailableException(),
     RolesApiFailure(:final message) => throw Exception(message),
   };
@@ -317,13 +439,15 @@ class SpaceMemberActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceSpacesClientProvider).banMember(
-      authorization: auth,
-      spaceId: spaceId,
-      accountId: accountId,
-      profileId: profileId,
-      reason: reason,
-    );
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .banMember(
+          authorization: auth,
+          spaceId: spaceId,
+          accountId: accountId,
+          profileId: profileId,
+          reason: reason,
+        );
     return switch (result) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -342,13 +466,15 @@ class SpaceMemberActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceSpacesClientProvider).timeoutMember(
-      authorization: auth,
-      spaceId: spaceId,
-      profileId: profileId,
-      durationSeconds: durationSeconds,
-      reason: reason,
-    );
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .timeoutMember(
+          authorization: auth,
+          spaceId: spaceId,
+          profileId: profileId,
+          durationSeconds: durationSeconds,
+          reason: reason,
+        );
     return switch (result) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -365,11 +491,13 @@ class SpaceMemberActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceSpacesClientProvider).kickMember(
-      authorization: auth,
-      spaceId: spaceId,
-      profileId: profileId,
-    );
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .kickMember(
+          authorization: auth,
+          spaceId: spaceId,
+          profileId: profileId,
+        );
     return switch (result) {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
@@ -387,12 +515,14 @@ class SpaceMemberActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceRolesClientProvider).assignRole(
-      authorization: auth,
-      spaceId: spaceId,
-      profileId: profileId,
-      roleId: roleId,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .assignRole(
+          authorization: auth,
+          spaceId: spaceId,
+          profileId: profileId,
+          roleId: roleId,
+        );
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {
@@ -410,12 +540,14 @@ class SpaceMemberActions {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
 
-    final result = await _ref.read(voiceRolesClientProvider).revokeRole(
-      authorization: auth,
-      spaceId: spaceId,
-      profileId: profileId,
-      roleId: roleId,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .revokeRole(
+          authorization: auth,
+          spaceId: spaceId,
+          profileId: profileId,
+          roleId: roleId,
+        );
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {
@@ -451,25 +583,26 @@ typedef SpacePermissionQuery = ({
   String? voiceRoomId,
 });
 
-final spacePermissionProvider = FutureProvider.family<bool, SpacePermissionQuery>(
-  (ref, query) async {
-    final auth = ref.watch(authorizationHeaderProvider);
-    final profileId = ref.watch(spaceViewerProfileIdProvider);
-    if (auth == null || profileId == null) return false;
-    final result = await ref.read(voiceRolesClientProvider).checkPermission(
-      authorization: auth,
-      spaceId: query.spaceId,
-      profileId: profileId,
-      permissionName: query.permission,
-      chatId: query.chatId,
-      voiceRoomId: query.voiceRoomId,
-    );
-    return switch (result) {
-      RolesApiOk(:final data) => data,
-      RolesApiFailure() => false,
-    };
-  },
-);
+final spacePermissionProvider =
+    FutureProvider.family<bool, SpacePermissionQuery>((ref, query) async {
+      final auth = ref.watch(authorizationHeaderProvider);
+      final profileId = ref.watch(spaceViewerProfileIdProvider);
+      if (auth == null || profileId == null) return false;
+      final result = await ref
+          .read(voiceRolesClientProvider)
+          .checkPermission(
+            authorization: auth,
+            spaceId: query.spaceId,
+            profileId: profileId,
+            permissionName: query.permission,
+            chatId: query.chatId,
+            voiceRoomId: query.voiceRoomId,
+          );
+      return switch (result) {
+        RolesApiOk(:final data) => data,
+        RolesApiFailure() => false,
+      };
+    });
 
 final defaultJoinRoleProvider = FutureProvider.family<SpaceRole?, String>((
   ref,
@@ -477,10 +610,9 @@ final defaultJoinRoleProvider = FutureProvider.family<SpaceRole?, String>((
 ) async {
   final auth = ref.watch(authorizationHeaderProvider);
   if (auth == null) return null;
-  final result = await ref.read(voiceRolesClientProvider).getDefaultJoinRole(
-    authorization: auth,
-    spaceId: spaceId,
-  );
+  final result = await ref
+      .read(voiceRolesClientProvider)
+      .getDefaultJoinRole(authorization: auth, spaceId: spaceId);
   return switch (result) {
     RolesApiOk(:final data) => data,
     RolesApiFailure() => null,
@@ -500,13 +632,15 @@ class SpaceRoleActions {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceRolesClientProvider).createRole(
-      authorization: auth,
-      spaceId: spaceId,
-      name: name,
-      permissionsMask: permissionsMask,
-      position: position,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .createRole(
+          authorization: auth,
+          spaceId: spaceId,
+          name: name,
+          permissionsMask: permissionsMask,
+          position: position,
+        );
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {
@@ -524,12 +658,14 @@ class SpaceRoleActions {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceRolesClientProvider).updateRole(
-      authorization: auth,
-      roleId: roleId,
-      name: name,
-      permissionsMask: permissionsMask,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .updateRole(
+          authorization: auth,
+          roleId: roleId,
+          name: name,
+          permissionsMask: permissionsMask,
+        );
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {
@@ -545,10 +681,9 @@ class SpaceRoleActions {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceRolesClientProvider).deleteRole(
-      authorization: auth,
-      roleId: roleId,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .deleteRole(authorization: auth, roleId: roleId);
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {
@@ -564,11 +699,13 @@ class SpaceRoleActions {
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
-    final result = await _ref.read(voiceRolesClientProvider).setDefaultJoinRole(
-      authorization: auth,
-      spaceId: spaceId,
-      roleId: roleId,
-    );
+    final result = await _ref
+        .read(voiceRolesClientProvider)
+        .setDefaultJoinRole(
+          authorization: auth,
+          spaceId: spaceId,
+          roleId: roleId,
+        );
     return switch (result) {
       RolesApiFailure(:final message) => message,
       RolesApiOk() => () {

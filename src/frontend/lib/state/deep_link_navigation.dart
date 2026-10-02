@@ -20,8 +20,7 @@ final voiceDeepLinksClientProvider = Provider<VoiceDeepLinksClient>((ref) {
 });
 
 void _scrollToMessage(Ref ref, String chatId, String messageId) {
-  ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
-      messageId;
+  ref.read(pendingChatMessageScrollProvider(chatId).notifier).state = messageId;
   ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
       messageId;
 }
@@ -52,7 +51,15 @@ class DeepLinkNavigator {
       case DeepLinkKind.invite:
         final code = target.inviteCode;
         if (code == null) return;
-        await _ref.read(spaceInviteActionsProvider).joinByInvite(code: code);
+        final result = await _ref
+            .read(spaceInviteActionsProvider)
+            .joinByInvite(code: code);
+        final spaceId = result.spaceId;
+        if (result.error == null &&
+            spaceId != null &&
+            _ref.read(selectedSpaceIdProvider) != spaceId) {
+          _ref.read(shellNavigationProvider).selectSpace(spaceId);
+        }
       case DeepLinkKind.space:
         final spaceId = target.spaceId;
         if (spaceId != null) {
@@ -110,10 +117,7 @@ final deepLinkNavigatorProvider = Provider<DeepLinkNavigator>(
 );
 
 /// Widget-tree entry point for deep link navigation.
-Future<void> applyDeepLinkNavigation(
-  WidgetRef ref,
-  DeepLinkTarget target,
-) =>
+Future<void> applyDeepLinkNavigation(WidgetRef ref, DeepLinkTarget target) =>
     ref.read(deepLinkNavigatorProvider).apply(target);
 
 Future<void> _openDmDeepLink(Ref ref, DeepLinkTarget target) async {

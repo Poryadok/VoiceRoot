@@ -24,7 +24,23 @@ func applyStoreMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool)
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
-	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql"} {
+	apply := func(name string) {
+		sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "social_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql", "000005_profile_favorites.up.sql", "000006_friend_request_outbox.up.sql"} {
+		apply(name)
+	}
+}
+
+func applyStoreMigrationsBeforeProfileFavorites(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
+	for _, name := range []string{"000001_init.up.sql", "000002_contacts.up.sql", "000003_blocked_profile_identity.up.sql", "000004_friend_accept_outbox.up.sql"} {
 		sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "social_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))
@@ -114,5 +130,37 @@ func TestContactStoreUpsertAndFavourite(t *testing.T) {
 	require.NoError(t, contacts.RemoveContact(ctx, owner, contact))
 	favourites, err = contacts.ListFavorites(ctx, owner)
 	require.NoError(t, err)
+	require.Len(t, favourites, 1)
+	require.Equal(t, contact, favourites[0].ContactProfileID)
+	require.NoError(t, contacts.SetFavorite(ctx, owner, contact, false))
+	favourites, err = contacts.ListFavorites(ctx, owner)
+	require.NoError(t, err)
 	require.Empty(t, favourites)
+}
+
+func TestProfileFavoritesMigrationBackfillsContactFavorites(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startStorePostgres(t, ctx)
+	applyStoreMigrationsBeforeProfileFavorites(t, ctx, pool)
+	owner, person := uuid.New(), uuid.New()
+	_, err := pool.Exec(ctx, `
+INSERT INTO contacts (owner_profile_id, contact_profile_id, source, is_favorite)
+VALUES ($1, $2, 'manual', true)`, owner, person)
+	require.NoError(t, err)
+
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
+	sqlBytes, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "social_db", "000005_profile_favorites.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(sqlBytes))
+	require.NoError(t, err)
+
+	favorites, err := (&ContactStore{Pool: pool}).ListFavorites(ctx, owner)
+	require.NoError(t, err)
+	require.Len(t, favorites, 1)
+	require.Equal(t, person, favorites[0].ContactProfileID)
 }

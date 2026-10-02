@@ -46,7 +46,7 @@ void main() {
     tester,
   ) async {
     final requests = <http.Request>[];
-    var onboardingDismissCalls = 0;
+    var onboardingSaveAccountCompletions = 0;
     final client = MockClient((request) async {
       requests.add(request);
       final path = request.url.path;
@@ -83,10 +83,13 @@ void main() {
       if (path == '/api/v1/users/me/onboarding/steps' &&
           request.method == 'POST') {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
-        expect(body['step_id'], 'dismiss');
-        onboardingDismissCalls++;
+        expect(body['step_id'], 'save_account');
+        onboardingSaveAccountCompletions++;
         return _jsonResponse(
-          _onboardingJson(completed: true, completedSteps: const ['dismiss']),
+          _onboardingJson(
+            completed: false,
+            completedSteps: const ['save_account'],
+          ),
         );
       }
       if (path == '/health') {
@@ -183,19 +186,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byKey(AuthScreen.screenKey), findsNothing);
-    expect(
-      find.text(AppLocalizationsEn().onboardingSaveAccountTitle),
-      findsOneWidget,
-    );
-
-    await tester.tap(
-      find.widgetWithText(TextButton, AppLocalizationsEn().onboardingSkip),
-    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(onboardingDismissCalls, 1);
+    expect(onboardingSaveAccountCompletions, 1);
     expect(
       find.text(AppLocalizationsEn().onboardingSaveAccountTitle),
       findsNothing,

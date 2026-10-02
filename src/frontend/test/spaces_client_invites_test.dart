@@ -133,8 +133,12 @@ void main() {
     );
 
     expect(result, isA<SpacesApiOk<SpaceInvite>>());
-    expect((result as SpacesApiOk<SpaceInvite>).data.inviteLink,
-        'https://voice.gg/invite/secret');
+    final invite = (result as SpacesApiOk<SpaceInvite>).data;
+    expect(invite.inviteLink, 'https://voice.gg/invite/secret');
+    expect(
+      invite.inviteLinkFor(Uri.parse('https://app.comrade.click/')),
+      'https://app.comrade.click/invite/secret',
+    );
   });
 
   test('joinByInvite posts join route', () async {

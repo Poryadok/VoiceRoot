@@ -134,6 +134,12 @@ func TestMessagingThreads_getThreadMessagesPaginates(t *testing.T) {
 		sendRegular(t, ctx, client, acctA, profA, chatDMRef(chatID), "reply", &parentID)
 	}
 
+	otherChatID := uuid.New()
+	seedDMChat(t, ctx, pool, otherChatID, profA, profB)
+	otherParent := sendRegular(t, ctx, client, acctA, profA, chatDMRef(otherChatID), "other thread root", nil)
+	otherParentID := otherParent.GetId()
+	sendRegular(t, ctx, client, acctA, profA, chatDMRef(otherChatID), "other reply", &otherParentID)
+
 	page1, err := client.GetThreadMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetThreadMessagesRequest{
 		Chat:           chatDMRef(chatID),
 		ThreadParentId: parentID,
@@ -157,6 +163,14 @@ func TestMessagingThreads_getThreadMessagesPaginates(t *testing.T) {
 	ml2 := page2.GetMessageList()
 	require.Len(t, ml2.GetMessages(), 1)
 	require.False(t, ml2.GetHasMore())
+
+	_, err = client.GetThreadMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetThreadMessagesRequest{
+		Chat:           chatDMRef(otherChatID),
+		ThreadParentId: otherParentID,
+		Page:           &commonv1.CursorPageRequest{Cursor: ml1.GetNextCursor(), PageSize: 2},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "thread cursor must be bound to its selected chat")
 }
 
 // TestMessagingThreads_groupThreadsDisabledRejectsReply documents group default threads_enabled=false.
@@ -250,6 +264,7 @@ func TestMessagingThreads_channelAllowsPostedAsChatMainFeed(t *testing.T) {
 	seedChannelChat(t, ctx, pool, chatID, profA)
 	setChatThreadSettings(t, ctx, pool, chatID, true, false)
 	svc := startMessagingDirect(t, pool)
+	svc.ProfilePairBlocks = allowProfilePairBlocks{}
 
 	sent, err := svc.SendMessage(incomingProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatChannelRef(chatID),

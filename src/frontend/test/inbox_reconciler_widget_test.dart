@@ -22,6 +22,65 @@ import 'support/inbox_reconciler_fakes.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('new DM appears in sender main conversations without reload', (
+    tester,
+  ) async {
+    final chats = _MutationChatsFake();
+    for (final inbox in ['main', 'requests', 'archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    await tester.pumpWidget(_chatListApp(chats: chats));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ChatListBody.tileKey('new-dm')), findsNothing);
+
+    for (var i = 0; i < 2; i++) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: 'main',
+          cursor: null,
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem('new-dm', inbox: 'main')]),
+          ),
+        ),
+      );
+      chats.enqueue(
+        const InboxChatPageScript(
+          inbox: 'requests',
+          cursor: null,
+          result: ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    for (final inbox in ['archive']) {
+      chats.enqueue(
+        InboxChatPageScript(
+          inbox: inbox,
+          cursor: null,
+          result: const ChatsApiOk(ChatListData(items: [])),
+        ),
+      );
+    }
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListBody)),
+    );
+    expect(
+      await container
+          .read(chatActionsProvider)
+          .openDmWithProfile('peer-profile'),
+      isNull,
+    );
+    await tester.pumpAndSettle();
+
+    expect(chats.createdDmPeers, ['peer-profile']);
+    expect(find.byKey(ChatListBody.tileKey('new-dm')), findsOneWidget);
+  });
+
   testWidgets(
     'keeps a cached row visible while offline reconciliation exposes error and retry',
     (tester) async {
@@ -875,13 +934,14 @@ void _acceptCurrentRealtimeHello(ProviderContainer container) {
     throw StateError('An accepted realtime hello requires an auth session.');
   }
   final generation = ++_nextAcceptedHelloGeneration;
-  container.read(realtimeHelloBindingProvider.notifier).state =
-      RealtimeHelloBinding(
-        generation: generation,
-        bindingGeneration: generation,
-        profileId: session.activeProfileId,
-        authorization: session.authorizationHeader,
-      );
+  container
+      .read(realtimeHelloBindingProvider.notifier)
+      .state = RealtimeHelloBinding(
+    generation: generation,
+    bindingGeneration: generation,
+    profileId: session.activeProfileId,
+    authorization: session.authorizationHeader,
+  );
 }
 
 class _ReconcilerDrivenChatListBody extends ConsumerStatefulWidget {
@@ -1063,8 +1123,24 @@ class _MutationChatsFake extends InboxReconcilerChatsFake {
   _MutationChatsFake({super.profileByAuthorization});
 
   final acceptedChatIds = <String>[];
+  final createdDmPeers = <String>[];
   final unarchivedChatIds = <String>[];
   Completer<ChatsApiResult<void>>? deferredAccept;
+
+  @override
+  Future<ChatsApiResult<VoiceChat>> createDm({
+    required String authorization,
+    required String otherProfileId,
+  }) async {
+    createdDmPeers.add(otherProfileId);
+    return const ChatsApiOk(
+      VoiceChat(
+        id: 'new-dm',
+        type: 'CHAT_TYPE_DM',
+        creatorProfileId: 'prof-test',
+      ),
+    );
+  }
 
   void enqueueAcceptedDmSnapshot(String chatId) {
     // Legacy chat-list refresh and the authoritative three-scope snapshot

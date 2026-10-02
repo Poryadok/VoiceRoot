@@ -39,6 +39,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 	moderationv1 "voice.app/voice/moderation/v1"
 	rolev1 "voice.app/voice/role/v1"
+	socialv1 "voice.app/voice/social/v1"
 	userv1 "voice.app/voice/user/v1"
 )
 
@@ -294,6 +295,8 @@ func main() {
 		}
 
 		var blocks grpcsvc.AccountPairBlockChecker
+		var accountBlocks grpcsvc.AccountBlockChecker
+		var profilePairBlocks grpcsvc.ProfilePairBlockChecker
 		var friends grpcsvc.ProfileFriendChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
 		if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
@@ -308,7 +311,10 @@ func main() {
 				log.Fatalf("social grpc dial: %v", err)
 			}
 			waitCancel()
-			blocks = s2s.NewSocialGRPCBlocks(sconn)
+			socialBlocks := s2s.NewSocialGRPCBlocks(sconn)
+			blocks = socialBlocks
+			accountBlocks = socialBlocks
+			profilePairBlocks = s2s.NewSocialGRPCProfileBlocks(socialv1.NewSocialServiceClient(sconn))
 			friends = s2s.NewSocialGRPCFriends(sconn)
 		}
 
@@ -484,6 +490,8 @@ func main() {
 			ChatGuard:         chatGuard,
 			ChatTypeResolver:  chatTypeResolver,
 			Blocks:            blocks,
+			AccountBlocks:     accountBlocks,
+			ProfilePairBlocks: profilePairBlocks,
 			UserProfiles:      profiles,
 			DeletedAccounts:   deletedAccounts,
 			Privacy:           privacy,

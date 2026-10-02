@@ -7,9 +7,11 @@ import 'deep_link_navigation.dart';
 import 'auth_providers.dart';
 import 'chat_providers.dart';
 import 'inbox_reconciler.dart';
+import 'message_requests_providers.dart';
 import 'matchmaking_match_controller.dart';
 import 'matchmaking_search_controller.dart';
 import 'push_notification_handler.dart';
+import 'social_providers.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -130,12 +132,27 @@ class InAppNotificationController {
       realtimeEventProvider,
       (_, next) => next.whenData(_onFrame),
     );
+    _helloSub = _ref.listen<RealtimeHelloBinding?>(
+      realtimeHelloBindingProvider,
+      (_, next) {
+        if (next != null &&
+            next.profileId ==
+                _ref.read(authControllerProvider).activeProfileId) {
+          // Events missed while offline are recovered from the REST snapshot.
+          _ref.invalidate(friendRequestsProvider);
+        }
+      },
+    );
   }
 
   final Ref _ref;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
+  ProviderSubscription<RealtimeHelloBinding?>? _helloSub;
 
-  void dispose() => _eventSub?.close();
+  void dispose() {
+    _eventSub?.close();
+    _helloSub?.close();
+  }
 
   /// Applies a push notification payload using the same path as WS `notification`.
   void onPushNotificationData(
@@ -155,6 +172,8 @@ class InAppNotificationController {
         _onMarkRead(frame.data);
       case 'archive_activity':
         _onArchiveActivity(frame.data);
+      case 'chat_update':
+        _onChatUpdate(frame.data);
       default:
         break;
     }
@@ -178,6 +197,15 @@ class InAppNotificationController {
           .onPushNotificationData(data);
       return;
     }
+    if (type == 'friend_request') {
+      _ref.invalidate(friendRequestsProvider);
+      return;
+    }
+
+    if (type == 'friend_removed') {
+      _ref.invalidate(friendsListProvider);
+      return;
+    }
 
     if (navigateToChat) {
       final normalized = data.map(
@@ -193,8 +221,25 @@ class InAppNotificationController {
     if (chatId == null || chatId.isEmpty) return;
 
     switch (type) {
+      case 'message_request':
+        if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        // Reconcile even when this notification is a replay. Center-row
+        // deduplication is local presentation state and must not gate the
+        // durable Chat/Messaging inbox snapshot.
+        _ref
+            .read(inboxReconcilerProvider.notifier)
+            .reconcileAfterInboxActivity();
+        if (!_recordCenterRow(
+          type: 'message_request',
+          chatId: chatId,
+          data: data,
+        )) {
+          return;
+        }
+        _ref.invalidate(messageRequestsSummaryProvider);
       case 'new_message':
         if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(
           type: 'new_message',
           chatId: chatId,
@@ -209,6 +254,7 @@ class InAppNotificationController {
         );
       case 'reaction':
         if (_isOwnActivity(data['reactor_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(type: 'reaction', chatId: chatId, data: data)) {
           return;
         }
@@ -220,6 +266,7 @@ class InAppNotificationController {
         );
       case 'mention':
         if (_isOwnActivity(data['sender_profile_id'] as String?)) return;
+        _reconcileInboxForActivity();
         if (!_recordCenterRow(type: 'mention', chatId: chatId, data: data)) {
           return;
         }
@@ -234,11 +281,33 @@ class InAppNotificationController {
     }
   }
 
+  void _reconcileInboxForActivity() {
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
+  }
+
   void _onMarkRead(Map<String, dynamic>? data) {
     final chatId = data?['chat_id'] as String?;
     if (chatId == null || chatId.isEmpty) return;
     _ref.read(inAppNotificationCenterProvider.notifier).markChatRead(chatId);
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
+  }
+
+  void _onChatUpdate(Map<String, dynamic>? data) {
+    final chatId = data?['chat_id'] as String?;
+    final change = data?['change'] as String?;
+    if (chatId == null ||
+        chatId.isEmpty ||
+        (change != 'joined' && change != 'inbox_bucket_changed')) {
+      return;
+    }
+    _ref.invalidate(messageRequestsSummaryProvider);
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterInboxActivity();
+    unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
+    if (change == 'inbox_bucket_changed') {
+      _ref.invalidate(friendsListProvider);
+      _ref.invalidate(friendRequestsProvider);
+    }
   }
 
   bool _recordCenterRow({
@@ -273,7 +342,6 @@ class InAppNotificationController {
     if (selectedChatId == chatId) return;
 
     _ref.read(chatListControllerProvider.notifier).bumpUnread(chatId);
-
     if (!_ref.read(inAppNotificationsSoundEnabledProvider)) return;
 
     final player = _ref.read(notificationSoundPlayerProvider);

@@ -254,3 +254,38 @@ func (s *SocialGRPC) IsBlocked(ctx context.Context, req *socialv1.IsBlockedReque
 	}
 	return &socialv1.IsBlockedResponse{Blocked: ok}, nil
 }
+
+// IsProfilePairBlocked is an internal directional visibility check for profile
+// pairs. Account identifiers remain inside Social; callers receive only a bool.
+func (s *SocialGRPC) IsProfilePairBlocked(ctx context.Context, req *socialv1.IsProfilePairBlockedRequest) (*socialv1.IsProfilePairBlockedResponse, error) {
+	viewerProfileID, err := parseUUIDField("viewer_profile_id", req.GetViewerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	otherProfileID, err := parseUUIDField("other_profile_id", req.GetOtherProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if viewerProfileID == otherProfileID {
+		return &socialv1.IsProfilePairBlockedResponse{Blocked: false}, nil
+	}
+	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	viewerAccountID, err := s.ProfileAccounts.AccountIDByProfileID(ctx, viewerProfileID)
+	if err != nil || viewerAccountID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	otherAccountID, err := s.ProfileAccounts.AccountIDByProfileID(ctx, otherProfileID)
+	if err != nil || otherAccountID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	if viewerAccountID == otherAccountID {
+		return &socialv1.IsProfilePairBlockedResponse{Blocked: false}, nil
+	}
+	blocked, err := s.Blocks.DirectedBlockExists(ctx, viewerAccountID, otherAccountID)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	return &socialv1.IsProfilePairBlockedResponse{Blocked: blocked}, nil
+}

@@ -14,7 +14,9 @@ final guestSaveAccountReminderProvider =
     });
 
 /// Whether the save-account banner should show for a returning guest (max 1×/day).
-final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((ref) async {
+final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((
+  ref,
+) async {
   final auth = ref.watch(authControllerProvider);
   if (!auth.isGuest || auth.needsGuestNickname || auth.session == null) {
     return false;
@@ -27,7 +29,7 @@ final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((ref) async
   }
   return ref
       .read(guestSaveAccountReminderProvider)
-      .shouldShow(accountId, authorization: auth.session!.authorizationHeader);
+      .showAndMark(accountId, authorization: auth.session!.authorizationHeader);
 });
 
 class GuestSaveAccountReminderController {
@@ -35,13 +37,18 @@ class GuestSaveAccountReminderController {
     required GuestCredentialsStorage guestStorage,
     VoiceAuthClient? authClient,
     SharedPreferences? prefs,
+    Future<void> Function(String accountId, int shownAtMillis)?
+    persistLastShown,
   }) : _guestStorage = guestStorage,
        _authClient = authClient,
-       _prefs = prefs;
+       _prefs = prefs,
+       _persistLastShown = persistLastShown;
 
   final GuestCredentialsStorage _guestStorage;
   final VoiceAuthClient? _authClient;
   SharedPreferences? _prefs;
+  final Future<void> Function(String accountId, int shownAtMillis)?
+  _persistLastShown;
 
   static const _lastShownKeyPrefix = 'voice.auth.guest_reminder_shown.';
   static const _firstEntryDonePrefix = 'voice.auth.guest_reminder_first_entry.';
@@ -61,15 +68,22 @@ class GuestSaveAccountReminderController {
       return false;
     }
 
-    final server = await _serverShouldShow(authorization);
-    if (server != null) {
-      return server;
-    }
-
     final lastMs = prefs.getInt('$_lastShownKeyPrefix$accountId');
-    if (lastMs == null) return true;
-    final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
-    return DateTime.now().difference(last).inHours >= 24;
+    if (lastMs != null) {
+      final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      if (DateTime.now().difference(last) < const Duration(hours: 24)) {
+        return false;
+      }
+    }
+    return await _serverShouldShow(authorization) ?? true;
+  }
+
+  /// Claims the display before the banner is exposed so re-entry cannot repeat it.
+  Future<bool> showAndMark(String accountId, {String? authorization}) async {
+    if (!await shouldShow(accountId, authorization: authorization)) {
+      return false;
+    }
+    return markShown(accountId, authorization: authorization);
   }
 
   Future<bool?> _serverShouldShow(String? authorization) async {
@@ -78,26 +92,38 @@ class GuestSaveAccountReminderController {
       return null;
     }
     try {
-      return await client.getGuestReminderShouldShow(authorization: authorization);
+      return await client.getGuestReminderShouldShow(
+        authorization: authorization,
+      );
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> markShown(String accountId, {String? authorization}) async {
-    final prefs = await _preferences();
-    await prefs.setInt(
-      '$_lastShownKeyPrefix$accountId',
-      DateTime.now().millisecondsSinceEpoch,
-    );
+  Future<bool> markShown(String accountId, {String? authorization}) async {
     final client = _authClient;
     if (client == null || authorization == null || authorization.isEmpty) {
-      return;
+      return false;
     }
     try {
-      await client.markGuestReminderShown(authorization: authorization);
+      if (!await client.markGuestReminderShown(authorization: authorization)) {
+        return false;
+      }
     } catch (_) {
-      // Keep local mark even if server mark fails.
+      return false;
     }
+    try {
+      final shownAtMillis = DateTime.now().millisecondsSinceEpoch;
+      final persistLastShown = _persistLastShown;
+      if (persistLastShown != null) {
+        await persistLastShown(accountId, shownAtMillis);
+      } else {
+        final prefs = await _preferences();
+        await prefs.setInt('$_lastShownKeyPrefix$accountId', shownAtMillis);
+      }
+    } catch (_) {
+      // The server owns the claim; local persistence is only a fast path.
+    }
+    return true;
   }
 }

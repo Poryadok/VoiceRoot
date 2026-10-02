@@ -163,6 +163,10 @@ func WithContactChecker(c ProfileContactChecker) chatServerOption {
 	return func(s *ChatGRPC) { s.Contacts = c }
 }
 
+func WithDMPeerDisplayNameLookup(lookup DMPeerDisplayNameLookup) chatServerOption {
+	return func(s *ChatGRPC) { s.DMPeerDisplayNames = lookup }
+}
+
 func WithLogger(l *slog.Logger) chatServerOption {
 	return func(c *ChatGRPC) { c.Logger = l }
 }

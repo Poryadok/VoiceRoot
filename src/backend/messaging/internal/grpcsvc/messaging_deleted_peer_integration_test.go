@@ -657,6 +657,7 @@ func TestMessagingGetMessages_GroupAndChannelLeaveDMStateUnspecifiedWithoutAccou
 	deleted := &recordingDeletedAccounts{deleted: map[uuid.UUID]struct{}{accountID: {}}}
 	client, _ := startMessagingServerWired(t, pool, messagingWire{
 		UserProfiles:               profiles,
+		ProfilePairBlocks:          allowProfilePairBlocks{},
 		DeletedAccounts:            deleted,
 		RequireDeletedAccountsSeam: true,
 	})

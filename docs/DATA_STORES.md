@@ -13,7 +13,7 @@
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
-| Social Service       | `social_db`       | —                         | —                                |
+| Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
@@ -105,7 +105,7 @@ proof receipts. Runtime configuration is documented in
 |---------|------------|
 | `accounts` | учётная запись, 2FA, soft delete; `session_epoch` — durable Auth source |
 | `ownership_transfer_proofs` | Auth-only hash, resource/factor binding and atomic durable transfer receipt (Flyway V12); `accounts.security_revision` revokes pending proofs |
-| `refresh_tokens` | opaque refresh, rotation |
+| `refresh_tokens` | opaque refresh, rotation; nullable `profile_id` binds new sessions to the active profile so refresh preserves profile switches; `NULL` supports legacy rows |
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
 

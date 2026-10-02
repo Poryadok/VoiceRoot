@@ -478,6 +478,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatFolderCreateAction => 'Create folder';
 
   @override
+  String get chatFolderReorderMayBePartial =>
+      'The folder order may have changed partly. Reopen folders to check it.';
+
+  @override
   String get chatFoldersCustomEmpty =>
       'No custom folders yet. Create one above.';
 
@@ -1062,6 +1066,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAttachmentUploadFailed => 'Could not upload file. Try again.';
 
   @override
+  String get chatAttachmentTapToDownload => 'Tap to download file';
+
+  @override
+  String get chatAttachmentDownloadFailed =>
+      'Could not open the file download. Try again.';
+
+  @override
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
@@ -1308,6 +1319,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spaceTreeUncategorized => 'Channels';
+
+  @override
+  String get spaceTreeCreateTextChat => 'Create text chat';
+
+  @override
+  String get spaceTreeCreateCategory => 'Create category';
+
+  @override
+  String get spaceTreeCreateChannel => 'Channel';
+
+  @override
+  String get spaceTreeCreateGroup => 'Group chat';
+
+  @override
+  String get spaceTreeCategoryLabel => 'Category';
+
+  @override
+  String get spaceTreeNoCategory => 'No category';
+
+  @override
+  String get spaceTreeReorderTooltip => 'Hold and drag to reorder';
+
+  @override
+  String get spaceTreeCreateNameLabel => 'Name';
+
+  @override
+  String get spaceTreeCreateSubmit => 'Create';
+
+  @override
+  String spaceTreeCreateError(String message) {
+    return 'Could not create item: $message';
+  }
+
+  @override
+  String spaceTreeCategoryAssignError(String message) {
+    return 'Chat was created but could not be placed in the selected category: $message';
+  }
+
+  @override
+  String spaceTreePlacementUnknown(String message) {
+    return 'Chat was created, but its category placement could not be confirmed. Refresh and check its current placement before retrying or reordering: $message';
+  }
+
+  @override
+  String spaceTreeCreateOutcomeUnknown(String message) {
+    return 'Could not confirm whether the item was created. Refresh or check the tree before trying again: $message';
+  }
+
+  @override
+  String get spaceTreeCreateRefreshFailed =>
+      'The request succeeded, but the tree could not be refreshed. Refresh or check the tree before trying again.';
+
+  @override
+  String spaceTreeReorderError(String message) {
+    return 'Could not reorder channels: $message';
+  }
 
   @override
   String get spaceSelectPrompt => 'Select a space';
@@ -3036,6 +3103,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingDismissFailed =>
+      'We couldn\'t save your choice. Please try again.';
 
   @override
   String get onboardingGotIt => 'Got it';

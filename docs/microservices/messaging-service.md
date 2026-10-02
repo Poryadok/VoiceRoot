@@ -357,6 +357,8 @@ List UI **must** complete the global `ListChats` inbox snapshot after reconnect 
 
 Для уже известного и выбранного DM `GetMessagesResponse.dm_peer_state` — response-level состояние второго участника: `ACTIVE` или `DELETED`; для не-DM и legacy producer остаётся `UNSPECIFIED`. При `DELETED` `message_list`, его cursor и существующая история не меняются. Messaging не создаёт system `Message`, tombstone author или иной persistent marker.
 
+История общих групповых и channel-чатов фильтруется по направлению «viewer account заблокировал sender account». Messaging передаёт viewer/sender profile IDs внутреннему Social checker, который сам разрешает их владельцев и возвращает только bool; Messaging не делает User account lookup для non-DM history. Ошибка Social или User ownership lookup скрывает страницу целиком с `UNAVAILABLE`.
+
 Клиент добавляет ровно один локальный, неперсистентный, локализованный terminal marker «Пользователь удалён» для данного `chat_id` и запрещает новые DM sends. Состояние не является profile lookup: оно доступно только участнику уже известного выбранного DM и не раскрывает ID либо другие данные удалённого account/profile. После reconnect этот вызов `GetMessages` — durable recovery; WebSocket replay для marker не используется.
 
 Полное 30-day erasure/tombstone/restore UX не является обязанностью этого контракта и остаётся A4.

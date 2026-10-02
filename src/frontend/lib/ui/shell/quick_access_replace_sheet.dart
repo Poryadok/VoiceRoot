@@ -45,13 +45,20 @@ class QuickAccessReplaceSheet extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            for (final item in items)
-              ListTile(
-                key: Key('quick_access_replace_${item.chatId}'),
-                leading: const Icon(Icons.star_outline),
-                title: Text(item.chat?.name ?? item.chatId),
-                onTap: () => Navigator.pop(context, item.chatId),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final item in items)
+                    ListTile(
+                      key: Key('quick_access_replace_${item.chatId}'),
+                      leading: const Icon(Icons.star_outline),
+                      title: Text(item.chat?.name ?? item.chatId),
+                      onTap: () => Navigator.pop(context, item.chatId),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),

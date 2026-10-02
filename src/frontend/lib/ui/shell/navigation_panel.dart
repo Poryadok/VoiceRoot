@@ -144,7 +144,7 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
           ),
           Expanded(
             child: section == NavigationSection.chats
-                ? const ChatListBody(showHeader: false)
+                ? const ChatListBody()
                 : const SocialPanel(),
           ),
         ],

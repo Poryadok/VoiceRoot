@@ -3,6 +3,7 @@ package r2avatar
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type PutPresigner interface {
 // S3R2Config holds Cloudflare R2 (S3 API) credentials and public URL base for avatars.
 type S3R2Config struct {
 	Endpoint        string // e.g. https://<accountid>.r2.cloudflarestorage.com
+	SigningEndpoint string // browser-facing HTTPS S3 API origin; defaults to Endpoint
 	Region          string // often "auto"
 	AccessKeyID     string
 	SecretAccessKey string
@@ -52,8 +54,17 @@ func NewS3R2PutPresigner(cfg S3R2Config) (*S3R2PutPresigner, error) {
 		Region:      region,
 		Credentials: credentials.NewStaticCredentialsProvider(ak, sk, ""),
 	}
+	signingEndpoint := strings.TrimSpace(cfg.SigningEndpoint)
+	if signingEndpoint != "" {
+		u, err := url.Parse(signingEndpoint)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			return nil, fmt.Errorf("r2avatar: signing endpoint must be an HTTPS origin")
+		}
+	} else {
+		signingEndpoint = endpoint
+	}
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		ep := strings.TrimRight(endpoint, "/")
+		ep := strings.TrimRight(signingEndpoint, "/")
 		o.BaseEndpoint = aws.String(ep)
 		o.UsePathStyle = true
 	})

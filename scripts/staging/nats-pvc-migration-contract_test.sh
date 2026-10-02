@@ -50,18 +50,11 @@ grep -Fq 'voice-nats-clean-install-state' "${APPLY}" || fail 'clean install must
 grep -Fq 'kubectl rollout status deployment/voice-nats-pvc-candidate' "${APPLY}" || fail 'clean install must wait for the PVC-backed NATS hub'
 grep -Fq 'kubectl patch service voice-nats' "${APPLY}" || fail 'clean install must route the app Service to the PVC-backed NATS hub'
 grep -Fq 'VOICE_NATS_FRESH_INSTALL' "${APPLY}" || fail 'NATS clean-install activation must be opt-in'
-grep -Fq 'wipe_voice_staging_data:' "${STAGING_WORKFLOW}" || fail 'workflow must expose explicit clean-install opt-in'
-grep -Fq 'default: false' "${STAGING_WORKFLOW}" || fail 'clean-install opt-in must default to false'
-grep -Fq 'Preflight staging NATS storage' "${STAGING_WORKFLOW}" || fail 'storage preflight must precede any clean-install wipe'
-grep -Fq 'Recreate Voice staging namespace (destructive)' "${STAGING_WORKFLOW}" || fail 'workflow must name the destructive action clearly'
-grep -Fq '[ "${GITHUB_REF}" = "refs/heads/master" ]' "${STAGING_WORKFLOW}" || fail 'clean install must be limited to master'
-grep -Fq '[ "${IMAGE_TAG}" = "${GITHUB_SHA}" ]' "${STAGING_WORKFLOW}" || fail 'clean install must use the exact master SHA image'
-grep -Fq 'NATS_CAPACITY_CONFIRMED' "${STAGING_WORKFLOW}" || fail 'clean install must require explicit capacity confirmation'
-preflight_line="$(grep -nF 'name: Preflight staging NATS storage' "${STAGING_WORKFLOW}" | cut -d: -f1)"
+grep -Fq 'VOICE_NATS_FRESH_INSTALL: "false"' "${STAGING_WORKFLOW}" || fail 'staging deploy must preserve NATS data'
+! grep -Fq 'Recreate Voice staging namespace (destructive)' "${STAGING_WORKFLOW}" || fail 'ordinary staging workflow must not expose namespace reset'
 image_line="$(grep -nF 'name: Verify staging images in GHCR' "${STAGING_WORKFLOW}" | cut -d: -f1)"
-reset_line="$(grep -nF 'name: Recreate Voice staging namespace (destructive)' "${STAGING_WORKFLOW}" | cut -d: -f1)"
 restore_line="$(grep -nF 'name: Restore NATS activation secrets' "${STAGING_WORKFLOW}" | cut -d: -f1)"
-[ "${image_line}" -lt "${preflight_line}" ] && [ "${preflight_line}" -lt "${reset_line}" ] && [ "${reset_line}" -lt "${restore_line}" ] || fail 'image/storage preflight and namespace reset must precede secret restoration'
+[ "${image_line}" -lt "${restore_line}" ] || fail 'image verification must precede secret restoration'
 for bootstrap in realtime notification search analytics-chat; do
   test -f "${ROOT}/deploy/templates/nats-${bootstrap}-bootstrap.yaml" || fail "${bootstrap} bootstrap template must exist"
 done
@@ -70,7 +63,7 @@ grep -Fq 'source-census.tsv' "${GUARD}" || fail 'guard must validate source cens
 awk '/kubectl (apply|create|delete|patch|rollout)/{if (!mutation) mutation=NR} /source_context=/{context=NR} /NATS_TARGET_CONTEXT.*source_context/{matchline=NR} END{exit !(context && matchline && mutation && context < mutation && matchline < mutation)}' "${MIGRATE}" || fail 'rollback context validation must precede every kubectl mutation'
 grep -Fq 'RESTORE_ACCEPTED' "${MIGRATE}" || fail 'selector cutover must require recorded candidate restore acceptance'
 grep -Fq 'voice-nats-pvc-candidate' "${MIGRATE}" || fail 'cutover target must be the isolated candidate'
-grep -Fq 'guard-nats-pvc-migration.sh' "${APPLY}" && grep -Fq 'bootstrap jobs deferred' "${APPLY}" || fail 'ordinary infra apply must defer NATS bootstrap until migration acceptance'
+grep -Fq 'guard-nats-pvc-migration.sh' "${APPLY}" && grep -Fq 'ERROR: NATS bootstrap deferred' "${APPLY}" || fail 'unaccepted NATS migration must fail before app rollout'
 clean_branch_line="$(grep -nF 'if [ "${clean_install_mode}" = true ]; then' "${APPLY}" | cut -d: -f1)"
 selector_line="$(grep -nF 'kubectl patch service voice-nats' "${APPLY}" | cut -d: -f1)"
 accepted_branch_line="$(grep -nF 'elif [ "${VOICE_NATS_BOOTSTRAP_AFTER_ACCEPTANCE:-false}" = true ]; then' "${APPLY}" | cut -d: -f1)"

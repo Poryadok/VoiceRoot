@@ -2,18 +2,28 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
     [string]$ApiBaseUrl = "http://127.0.0.1:18080",
+    [string]$WebIngressHost = $env:VOICE_WEB_INGRESS_HOST,
     [string]$OutputDir = "dist/windows",
     [switch]$SkipInstaller
 )
 
 $ErrorActionPreference = "Stop"
+$inviteShareOrigin = "https://voice.gg"
+if (-not [string]::IsNullOrWhiteSpace($WebIngressHost)) {
+    $hostValue = $WebIngressHost.Trim().TrimEnd('/')
+    if ($hostValue -notmatch '^https?://') {
+        $hostValue = "https://$hostValue"
+    }
+    $inviteShareOrigin = $hostValue
+}
 $frontend = Join-Path $PSScriptRoot "..\..\src\frontend"
 Push-Location $frontend
 try {
     flutter pub get
     flutter build windows --release `
         --dart-define=VOICE_APP_VERSION=$Version `
-        --dart-define=VOICE_API_BASE_URL=$ApiBaseUrl
+        --dart-define=VOICE_API_BASE_URL=$ApiBaseUrl `
+        --dart-define=VOICE_INVITE_SHARE_ORIGIN=$inviteShareOrigin
 
     $buildDir = Join-Path $frontend "build\windows\x64\runner\Release"
     $outRoot = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..\..")) $OutputDir

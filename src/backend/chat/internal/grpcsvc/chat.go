@@ -18,18 +18,19 @@ import (
 // ChatGRPC implements ChatService RPCs backed by chat_db (app stack: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
-	DM                DMStore
-	StickerPacks      StickerPackStore
-	Profiles          UserProfileLookup
-	LifecycleOwners   LifecycleOwnerLookup
-	Blocks            AccountBlockChecker
-	Privacy           PrivacyChecker
-	Friends           ProfileFriendChecker
-	Contacts          ProfileContactChecker
-	SpaceCoMembership SpaceCoMembershipChecker
-	ListEnrich        ListChatsEnrichment   // optional; Messaging S2S for preview + unread
-	DeletedAccounts   AccountDeletedChecker // mandatory for DM list/open gates; Auth S2S reports deleted peer accounts
-	E2EPreKeyGate     E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
+	DM                 DMStore
+	StickerPacks       StickerPackStore
+	Profiles           UserProfileLookup
+	DMPeerDisplayNames DMPeerDisplayNameLookup
+	LifecycleOwners    LifecycleOwnerLookup
+	Blocks             AccountBlockChecker
+	Privacy            PrivacyChecker
+	Friends            ProfileFriendChecker
+	Contacts           ProfileContactChecker
+	SpaceCoMembership  SpaceCoMembershipChecker
+	ListEnrich         ListChatsEnrichment   // optional; Messaging S2S for preview + unread
+	DeletedAccounts    AccountDeletedChecker // mandatory for DM list/open gates; Auth S2S reports deleted peer accounts
+	E2EPreKeyGate      E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.
@@ -38,6 +39,11 @@ type ChatGRPC struct {
 	SpaceMembers *store.SpaceMembersStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+}
+
+// DMPeerDisplayNameLookup returns title-only metadata for authorized DM peers.
+type DMPeerDisplayNameLookup interface {
+	LookupDMPeerDisplayNames(ctx context.Context, profileIDs []uuid.UUID) (map[uuid.UUID]string, error)
 }
 
 // StickerPackStore is intentionally narrow so catalog authorization is unit-testable
@@ -69,6 +75,7 @@ type ProfileFriendChecker interface {
 // DMStore persists chats and lists the caller's inbox (DM + standalone groups).
 type DMStore interface {
 	EnsureDM(ctx context.Context, callerProfileID, otherProfileID uuid.UUID, recipientInboxBucket string) (*store.ChatRow, bool, error)
+	PromoteFriendDMRequests(ctx context.Context, profileA, profileB uuid.UUID) error
 	ListChatsPage(ctx context.Context, viewerProfileID uuid.UUID, cursor string, limit int, inbox string, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListChatsPageByFolder(ctx context.Context, viewerProfileID, folderID uuid.UUID, cursor string, limit int, spaceIDs []uuid.UUID) (*store.ListChatsPage, error)
 	ListSpaceChatsForProfile(ctx context.Context, viewerProfileID uuid.UUID, spaceIDs []uuid.UUID) ([]*store.ChatRow, error)
@@ -86,6 +93,7 @@ type DMStore interface {
 	IsMemberDeletedForSelf(ctx context.Context, chatID, profileID uuid.UUID) (bool, error)
 	ListQuickAccess(ctx context.Context, profileID uuid.UUID) ([]store.QuickAccessRow, error)
 	AddQuickAccess(ctx context.Context, profileID, chatID uuid.UUID, sortOrder *int32) error
+	ReplaceQuickAccess(ctx context.Context, profileID, chatID, replacedChatID uuid.UUID) error
 	RemoveQuickAccess(ctx context.Context, profileID, chatID uuid.UUID) error
 	ReorderQuickAccess(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) error
 	ListFolders(ctx context.Context, profileID uuid.UUID) ([]store.FolderRow, error)

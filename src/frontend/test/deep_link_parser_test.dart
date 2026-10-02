@@ -128,8 +128,33 @@ void main() {
 
     for (final raw in invalid) {
       test('invalid: $raw', () {
-        expect(() => parseDeepLinkUrl(raw), throwsA(isA<DeepLinkParseException>()));
+        expect(
+          () => parseDeepLinkUrl(raw),
+          throwsA(isA<DeepLinkParseException>()),
+        );
       });
     }
+
+    test('accepts deep links on the current staging web origin', () {
+      final origin = Uri.parse('https://app.comrade.click/');
+      expect(
+        parseDeepLinkUrl(
+          'https://app.comrade.click/invite/$inviteCode',
+          currentOrigin: origin,
+        ),
+        DeepLinkTarget(
+          kind: DeepLinkKind.invite,
+          inviteCode: inviteCode,
+          rawUrl: 'https://app.comrade.click/invite/$inviteCode',
+        ),
+      );
+      expect(
+        () => parseDeepLinkUrl(
+          'https://foreign.example/invite/$inviteCode',
+          currentOrigin: origin,
+        ),
+        throwsA(isA<DeepLinkParseException>()),
+      );
+    });
   });
 }

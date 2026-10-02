@@ -83,6 +83,33 @@ func TestQuickAccess_ListAddRemoveReorder(t *testing.T) {
 	list, err = client.ListQuickAccess(ctxProf, &chatv1.ListQuickAccessRequest{})
 	require.NoError(t, err)
 	require.Len(t, list.GetItems(), 14)
+	_, err = client.AddQuickAccess(ctxProf, &chatv1.AddQuickAccessRequest{
+		ChatId:        chatIDs[15],
+		ReplaceChatId: chatIDs[2],
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	_, err = client.AddQuickAccess(ctxProf, &chatv1.AddQuickAccessRequest{ChatId: chatIDs[2]})
+	require.NoError(t, err)
+	_, err = client.AddQuickAccess(ctxProf, &chatv1.AddQuickAccessRequest{
+		ChatId:        chatIDs[0],
+		ReplaceChatId: chatIDs[7],
+	})
+	require.Equal(t, codes.AlreadyExists, status.Code(err))
+	_, err = client.AddQuickAccess(ctxProf, &chatv1.AddQuickAccessRequest{
+		ChatId:        chatIDs[15],
+		ReplaceChatId: chatIDs[7],
+	})
+	require.NoError(t, err)
+	list, err = client.ListQuickAccess(ctxProf, &chatv1.ListQuickAccessRequest{})
+	require.NoError(t, err)
+	require.Len(t, list.GetItems(), 15)
+	for _, item := range list.GetItems() {
+		if item.GetChatId() == chatIDs[15] {
+			require.Equal(t, int32(6), item.GetSortOrder())
+		}
+		require.NotEqual(t, chatIDs[7], item.GetChatId())
+	}
 }
 
 func TestQuickAccess_AddNonMember_NotFound(t *testing.T) {

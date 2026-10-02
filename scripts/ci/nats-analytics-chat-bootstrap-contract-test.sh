@@ -7,6 +7,7 @@ COMPOSE_BOOTSTRAP="${ROOT}/docker/nats/analytics-chat-bootstrap.sh"
 COMPOSE="${ROOT}/docker-compose.yml"
 ANALYTICS="${ROOT}/src/backend/analytics/internal/consumer/runner.go"
 CHAT="${ROOT}/src/backend/chat/account_deleted_consumer.go"
+CHAT_FRIEND="${ROOT}/src/backend/chat/friend_accepted_consumer.go"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 require() { grep -Fqx -- "    $1" "$BOOTSTRAP" || fail "missing exact bootstrap contract: $1"; }
@@ -25,7 +26,8 @@ for spec in \
   "consumer subscription_events analytics_v2_subscription 'subscription.>' _INBOX.voice.analytics.analytics_v2_subscription new analytics_v2_subscription" \
   "consumer moderation_events analytics_v2_moderation 'moderation.>' _INBOX.voice.analytics.analytics_v2_moderation new analytics_v2_moderation" \
   "consumer analytics_events analytics_v2_telemetry 'analytics.>' _INBOX.voice.analytics.analytics_v2_telemetry new analytics_v2_telemetry" \
-  "consumer user_events chat_account_deleted user.account_deleted _INBOX.voice.chat.chat_account_deleted all ''"; do
+  "consumer user_events chat_account_deleted user.account_deleted _INBOX.voice.chat.chat_account_deleted all ''" \
+  "consumer social_events chat_friend_accepted social.friend_accepted _INBOX.voice.chat.chat_friend_accepted all chat_friend_accepted"; do
   require "$spec"
 done
 
@@ -47,7 +49,7 @@ grep -Fq 'NATS_ANALYTICS_CHAT_BOOTSTRAP_TEMPLATE' "$COMPOSE_BOOTSTRAP" || fail '
 grep -Fq 'sed -n' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must extract the canonical ConfigMap script'
 grep -Fq 'mktemp' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must materialize the extracted script before NATS request/reply calls'
 grep -Fq '/bin/sh "$script" </dev/null' "$COMPOSE_BOOTSTRAP" || fail 'Compose bootstrap must keep NATS request/reply stdin away from shell source'
-for source in "$ANALYTICS" "$CHAT"; do
+for source in "$ANALYTICS" "$CHAT" "$CHAT_FRIEND"; do
   ! grep -Fq 'AddConsumer(' "$source" || fail "${source#"${ROOT}/"} must not create consumers"
   ! grep -Fq 'UpdateConsumer(' "$source" || fail "${source#"${ROOT}/"} must not update consumers"
 done

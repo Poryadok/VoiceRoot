@@ -14,6 +14,17 @@ type stubFriendChecker struct {
 	err error
 }
 
+type countingFriendChecker struct{ calls int }
+
+func (s *countingFriendChecker) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	s.calls++
+	return true, nil
+}
+
+func (s *countingFriendChecker) AreFriendsOfFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 func (s stubFriendChecker) AreFriends(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return s.ok, s.err
 }
@@ -58,4 +69,20 @@ func TestRecipientInboxBucket_contactMain(t *testing.T) {
 func TestRecipientInboxBucket_friendCheckerError(t *testing.T) {
 	_, err := recipientInboxBucket(context.Background(), uuid.New(), uuid.New(), stubFriendChecker{err: errors.New("boom")}, nil)
 	require.Error(t, err)
+}
+
+func TestRecipientInboxClassificationReusesFriendLookup(t *testing.T) {
+	friends := &countingFriendChecker{}
+	bucket, isFriend, err := recipientInboxClassification(context.Background(), uuid.New(), uuid.New(), friends, nil)
+	require.NoError(t, err)
+	require.Equal(t, inboxMain, bucket)
+	require.True(t, isFriend)
+	require.Equal(t, 1, friends.calls)
+}
+
+func TestRecipientInboxClassificationContactDoesNotImplyFriend(t *testing.T) {
+	bucket, isFriend, err := recipientInboxClassification(context.Background(), uuid.New(), uuid.New(), stubFriendChecker{ok: false}, stubContactChecker{ok: true})
+	require.NoError(t, err)
+	require.Equal(t, inboxMain, bucket)
+	require.False(t, isFriend)
 }

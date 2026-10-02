@@ -27,7 +27,23 @@ import (
 const serviceName = "realtime"
 
 func main() {
+	if os.Getenv("REALTIME_NATS_LIVE_ACL_PROOF") == "true" {
+		os.Exit(runNATSLiveACLProofMain())
+	}
 	logger := initServiceLogger(serviceName)
+	if os.Getenv("REALTIME_NATS_FRIEND_REQUEST_PREFLIGHT") == "true" {
+		if err := preflightFriendRequestConsumer(os.Getenv("NATS_URL"), strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))); err != nil {
+			logger.Error("Realtime NATS friend request preflight failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		logger.Info("Realtime NATS friend request preflight passed")
+		if err := preflightFriendRemovedConsumer(os.Getenv("NATS_URL"), strings.TrimSpace(os.Getenv("REALTIME_INSTANCE_ID"))); err != nil {
+			logger.Error("Realtime NATS friend removed preflight failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		logger.Info("Realtime NATS friend removed preflight passed")
+		return
+	}
 	addr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		addr = v

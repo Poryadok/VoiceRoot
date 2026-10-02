@@ -11,6 +11,7 @@ compose run --rm nats-realtime-bootstrap
 for spec in \
   'message_events rt_realtime1_msg message.>' 'chat_events rt_realtime1_chat chat.>' \
   'user_events rt_realtime1_user user.presence_changed' 'social_events rt_realtime1_social social.user_blocked' \
+  'social_events rt_realtime1_friend_request social.friend_request' \
   'role_events rt_realtime1_role role.>' 'voice_events rt_realtime1_voice voice.>' \
   'matchmaking_events rt_realtime1_matchmaking mm.>'; do
   set -- $spec

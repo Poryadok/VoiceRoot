@@ -608,6 +608,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     return switch (ex.getMessage()) {
       case "validation_failed" -> Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
       case "registration_conflict" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+      case "guest_reminder_already_shown" -> Status.ALREADY_EXISTS.withDescription(ex.getMessage());
       case "auth_unavailable" -> Status.UNAVAILABLE.withDescription(ex.getMessage());
       case "not_found" -> Status.NOT_FOUND.withDescription(ex.getMessage());
       default -> Status.UNAUTHENTICATED.withDescription(ex.getMessage());

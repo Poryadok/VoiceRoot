@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	defaultPageSize = 50
-	maxPageSize     = 100
-	fallbackSize    = 50
+	defaultPageSize            = 50
+	maxPageSize                = 100
+	fallbackSize               = 50
+	historyBlockScanMultiplier = 4
 )
 
 // MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
@@ -51,8 +52,10 @@ type MessagingGRPC struct {
 	SharedMedia    *store.SharedMediaStore
 	ChatGuard      ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
-	Blocks       AccountPairBlockChecker
-	UserProfiles ProfileAccountLookup
+	Blocks            AccountPairBlockChecker
+	AccountBlocks     AccountBlockChecker
+	UserProfiles      ProfileAccountLookup
+	ProfilePairBlocks ProfilePairBlockChecker
 	// DeletedAccounts is the Auth S2S gate for DM writes. It is deliberately
 	// separate from other optional S2S policy checks: a missing dependency must
 	// fail closed for DM sends and forwards.
@@ -819,7 +822,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		pageSize = maxPageSize
 	}
 
-	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor())
+	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor(), chatID)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
 	}
@@ -910,14 +913,34 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		refID = nil
 	}
 
-	rows, err := s.Messages.ListMessages(ctx, chatID, profileID, mode, refID, limit)
+	filterBlockedSenders := chatType == chatv1.ChatType_CHAT_TYPE_GROUP || chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL
+	scanLimit := limit
+	if filterBlockedSenders {
+		scanLimit = historyBlockScanLimit(limit)
+	}
+	rows, err := s.Messages.ListMessages(ctx, chatID, profileID, mode, refID, scanLimit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	hasMore := len(rows) > limit
+	hasMore := len(rows) > scanLimit
 	if hasMore {
-		rows = rows[:limit]
+		rows = rows[:scanLimit]
+	}
+	cursorRows := rows
+	if filterBlockedSenders {
+		visibleRows, err := s.filterBlockedHistoryRows(ctx, profileID, rows)
+		if err != nil {
+			return nil, err
+		}
+		if len(visibleRows) > limit {
+			hasMore = true
+			visibleRows = visibleRows[:limit]
+			cursorRows = visibleRows
+		} else if !hasMore {
+			cursorRows = visibleRows
+		}
+		rows = visibleRows
 	}
 
 	msgIDs := make([]uuid.UUID, len(rows))
@@ -946,7 +969,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(mode, rows)
+		next = nextCursorForPage(chatID, mode, cursorRows)
 	}
 
 	ml := &messagingv1.MessageList{
@@ -959,6 +982,48 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		},
 	}
 	return &messagingv1.GetMessagesResponse{MessageList: ml, DmPeerState: dmPeerState}, nil
+}
+
+func historyBlockScanLimit(pageLimit int) int {
+	if pageLimit < 1 {
+		pageLimit = defaultPageSize
+	}
+	limit := pageLimit * historyBlockScanMultiplier
+	if limit > maxPageSize*historyBlockScanMultiplier {
+		return maxPageSize * historyBlockScanMultiplier
+	}
+	return limit
+}
+
+func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProfileID uuid.UUID, rows []store.MessageRow) ([]store.MessageRow, error) {
+	if isNilDependency(s.ProfilePairBlocks) {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	blockedByProfile := make(map[uuid.UUID]bool)
+	visible := make([]store.MessageRow, 0, len(rows))
+	for i := range rows {
+		senderProfileID := rows[i].SenderProfileID
+		if senderProfileID == viewerProfileID {
+			visible = append(visible, rows[i])
+			continue
+		}
+		if senderProfileID == uuid.Nil {
+			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		blocked, ok := blockedByProfile[senderProfileID]
+		if !ok {
+			var err error
+			blocked, err = s.ProfilePairBlocks.ProfilePairBlocked(ctx, viewerProfileID, senderProfileID)
+			if err != nil {
+				return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+			}
+			blockedByProfile[senderProfileID] = blocked
+		}
+		if !blocked {
+			visible = append(visible, rows[i])
+		}
+	}
+	return visible, nil
 }
 
 // dmPeerStateForHistory resolves only the other participant's Auth state for a
@@ -1085,7 +1150,7 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
-	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor())
+	beforeFromCursor, afterFromCursor, err := store.DecodeHistoryCursor(req.GetPage().GetCursor(), chatID)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
 	}
@@ -1117,7 +1182,7 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	}
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(mode, rows)
+		next = nextCursorForPage(chatID, mode, rows)
 	}
 	ml := &messagingv1.MessageList{
 		Messages:   msgs,
@@ -1181,15 +1246,15 @@ func threadListUnavailable(cause error) error {
 	return status.Error(code, "thread list unavailable")
 }
 
-func nextCursorForPage(mode store.ListMode, rows []store.MessageRow) string {
+func nextCursorForPage(chatID uuid.UUID, mode store.ListMode, rows []store.MessageRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
 	switch mode {
 	case store.ListAfterID:
-		return store.EncodeAfterCursor(rows[len(rows)-1].ID)
+		return store.EncodeAfterCursor(chatID, rows[len(rows)-1].ID)
 	default:
-		return store.EncodeBeforeCursor(rows[len(rows)-1].ID)
+		return store.EncodeBeforeCursor(chatID, rows[len(rows)-1].ID)
 	}
 }
 

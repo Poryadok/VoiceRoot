@@ -33,7 +33,7 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 and the `refresh_tokens.access_jti` addition represented by golang-migrate
 `000001_init` followed by `000002_refresh_tokens_access_jti`; each later Flyway
 revision maps in order to the next golang-migrate revision (`V2` → `000003`, …,
-`V14` → `000015`). Keep these layouts aligned when adding Auth-owned DDL.
+`V14` → `000015`, `V15` → `000016`). Keep these layouts aligned when adding Auth-owned DDL.
 
 Do not mix both tools on one database without a deliberate Flyway baseline; Path A
 is the default. To check the repository layout before a change, run the following

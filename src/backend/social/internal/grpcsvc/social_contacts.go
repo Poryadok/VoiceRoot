@@ -174,9 +174,6 @@ func (s *SocialGRPC) SetFavorite(ctx context.Context, req *socialv1.SetFavoriteR
 		return nil, status.Error(codes.FailedPrecondition, "contacts not configured")
 	}
 	if err := s.Contacts.SetFavorite(ctx, caller, friend, req.GetFavorite()); err != nil {
-		if errors.Is(err, store.ErrContactNotFound) {
-			return nil, status.Error(codes.NotFound, "contact not found")
-		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &socialv1.SetFavoriteResponse{}, nil

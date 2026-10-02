@@ -40,15 +40,6 @@ class GuestSaveAccountReminderBanner extends ConsumerWidget {
                   onPressed: () async {
                     if (!context.mounted) return;
                     await GuestConvertSheet.show(context);
-                    final accountId = auth.session?.accountId;
-                    if (accountId != null) {
-                      await ref
-                          .read(guestSaveAccountReminderProvider)
-                          .markShown(
-                            accountId,
-                            authorization: auth.session?.authorizationHeader,
-                          );
-                    }
                   },
                   child: Text(l10n.guestSaveAccountReminderCta),
                 ),

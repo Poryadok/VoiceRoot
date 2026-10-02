@@ -1756,6 +1756,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     $core.bool? isStranger,
     $core.String? dmPeerProfileId,
     $core.bool? isPinned,
+    $core.String? dmPeerDisplayName,
   }) {
     final result = create();
     if (chat != null) result.chat = chat;
@@ -1766,6 +1767,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     if (isStranger != null) result.isStranger = isStranger;
     if (dmPeerProfileId != null) result.dmPeerProfileId = dmPeerProfileId;
     if (isPinned != null) result.isPinned = isPinned;
+    if (dmPeerDisplayName != null) result.dmPeerDisplayName = dmPeerDisplayName;
     return result;
   }
 
@@ -1789,6 +1791,7 @@ class ChatListItem extends $pb.GeneratedMessage {
     ..aOB(5, _omitFieldNames ? '' : 'isStranger')
     ..aOS(6, _omitFieldNames ? '' : 'dmPeerProfileId')
     ..aOB(7, _omitFieldNames ? '' : 'isPinned')
+    ..aOS(8, _omitFieldNames ? '' : 'dmPeerDisplayName')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1878,6 +1881,16 @@ class ChatListItem extends $pb.GeneratedMessage {
   $core.bool hasIsPinned() => $_has(6);
   @$pb.TagNumber(7)
   void clearIsPinned() => $_clearField(7);
+
+  /// Title-only name for an existing DM peer; safe to show if their public profile is unavailable.
+  @$pb.TagNumber(8)
+  $core.String get dmPeerDisplayName => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set dmPeerDisplayName($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasDmPeerDisplayName() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearDmPeerDisplayName() => $_clearField(8);
 }
 
 class ChatList extends $pb.GeneratedMessage {
@@ -2167,10 +2180,12 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
   factory AddQuickAccessRequest({
     $core.String? chatId,
     $core.int? sortOrder,
+    $core.String? replaceChatId,
   }) {
     final result = create();
     if (chatId != null) result.chatId = chatId;
     if (sortOrder != null) result.sortOrder = sortOrder;
+    if (replaceChatId != null) result.replaceChatId = replaceChatId;
     return result;
   }
 
@@ -2189,6 +2204,7 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'chatId')
     ..aI(2, _omitFieldNames ? '' : 'sortOrder')
+    ..aOS(3, _omitFieldNames ? '' : 'replaceChatId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2228,6 +2244,16 @@ class AddQuickAccessRequest extends $pb.GeneratedMessage {
   $core.bool hasSortOrder() => $_has(1);
   @$pb.TagNumber(2)
   void clearSortOrder() => $_clearField(2);
+
+  /// Replaces this existing quick-access chat atomically when set.
+  @$pb.TagNumber(3)
+  $core.String get replaceChatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set replaceChatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReplaceChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReplaceChatId() => $_clearField(3);
 }
 
 class RemoveQuickAccessRequest extends $pb.GeneratedMessage {

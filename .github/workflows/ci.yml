@@ -1147,10 +1147,17 @@ jobs:
       - name: Flutter Windows release build smoke
         working-directory: src/frontend
         env:
+          VOICE_WEB_INGRESS_HOST: ${{ vars.VOICE_WEB_INGRESS_HOST }}
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
+          $webIngressHost = $env:VOICE_WEB_INGRESS_HOST
+          if ([string]::IsNullOrWhiteSpace($webIngressHost)) {
+            $domainLine = Select-String -Path "../../deploy/staging/domains.defaults" -Pattern '^VOICE_WEB_INGRESS_HOST='
+            $webIngressHost = $domainLine.Line.Split('=', 2)[1]
+          }
+          $inviteOrigin = "https://$($webIngressHost.Trim().TrimEnd('/'))"
           flutter pub get
-          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0
+          flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0 --dart-define=VOICE_INVITE_SHARE_ORIGIN=$inviteOrigin
 
   ci-gate:
     needs:

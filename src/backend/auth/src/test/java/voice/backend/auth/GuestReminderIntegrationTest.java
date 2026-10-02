@@ -53,6 +53,11 @@ class GuestReminderIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.should_show", is(false)))
         .andExpect(jsonPath("$.last_shown_at").isNotEmpty());
+
+    mockMvc
+        .perform(post("/api/v1/auth/guest-reminder/mark").header("Authorization", "Bearer " + token))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error", is("guest_reminder_already_shown")));
   }
 
   @Test

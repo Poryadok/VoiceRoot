@@ -1,0 +1,396 @@
+name: Staging NATS root rotation
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Activate, continue an interrupted activation, roll back, diagnose, or recover the retained legacy NATS generation
+        required: true
+        type: choice
+        options:
+          - activate
+          - continue-activate
+          - rollback
+          - diagnose
+          - recover-legacy
+          - restore-user-cycle
+      generation:
+        description: Generation for activate or continue-activate; use r20260930a1 for prior recovery, r20260930a2 for stopped or fully-ready recovery, or r20260930a1 for restore-user-cycle; leave empty for rollback or diagnose
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: voice-staging-maintenance
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    runs-on: [self-hosted, Linux, X64, voice-staging]
+    environment: staging
+    timeout-minutes: 90
+    env:
+      VOICE_K8S_NAMESPACE: voice-staging
+    steps:
+      - name: Validate staging dispatch
+        shell: bash
+        env:
+          ROTATION_OPERATION: ${{ inputs.operation }}
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_CONFIGURED_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/master || ! "$GITHUB_SHA" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'NATS_ROTATION=FAIL_MASTER_REF'
+            exit 1
+          fi
+          if [[ -n "$STAGING_CONFIGURED_NAMESPACE" && "$STAGING_CONFIGURED_NAMESPACE" != voice-staging ]]; then
+            echo 'NATS_ROTATION=FAIL_NAMESPACE'
+            exit 1
+          fi
+          case "$ROTATION_OPERATION" in
+            activate|continue-activate)
+              if [[ ! "$ROTATION_GENERATION" =~ ^r[0-9]{8}[a-z0-9]{0,8}$ ]]; then
+                echo 'NATS_ROTATION=FAIL_GENERATION'
+                exit 1
+              fi
+              ;;
+            rollback|diagnose)
+              if [[ -n "$ROTATION_GENERATION" ]]; then
+                echo 'NATS_ROTATION=FAIL_UNUSED_GENERATION'
+                exit 1
+              fi
+              ;;
+            recover-legacy)
+              if [[ "$ROTATION_GENERATION" != r20260930a1 && "$ROTATION_GENERATION" != r20260930a2 ]]; then
+                echo 'NATS_ROTATION=FAIL_RECOVERY_GENERATION'
+                exit 1
+              fi
+              ;;
+            restore-user-cycle)
+              if [[ "$ROTATION_GENERATION" != r20260930a1 ]]; then
+                echo 'NATS_ROTATION=FAIL_RECOVERY_GENERATION'
+                exit 1
+              fi
+              ;;
+            *)
+              echo 'NATS_ROTATION=FAIL_OPERATION'
+              exit 1
+              ;;
+          esac
+
+      - name: Download exact master source archive
+        env:
+          STAGING_SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          source_sha="${STAGING_SOURCE_SHA:-}"
+          if [[ ! "$source_sha" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_INVALID_SHA'
+            exit 1
+          fi
+          source_sha="${source_sha,,}"
+          workspace="${GITHUB_WORKSPACE:-}"
+          runner_workspace="${RUNNER_WORKSPACE:-}"
+          if [[ -z "$workspace" || -z "$runner_workspace" || ! -d "$workspace" || "$workspace" == "/" || "$runner_workspace" == "/" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_WORKSPACE'
+            exit 1
+          fi
+          workspace="$(cd -- "$workspace" && pwd -P)"
+          runner_workspace="$(cd -- "$runner_workspace" && pwd -P)"
+          home="$(cd -- "${HOME:-/}" && pwd -P)"
+          if [[ "$workspace" == "$runner_workspace" || "$workspace" == "$home" || \
+            "$workspace" != "$runner_workspace/"* || "$runner_workspace" == "$home" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_WORKSPACE'
+            exit 1
+          fi
+          tmp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-staging-source.XXXXXX")"
+          trap 'rm -rf -- "$tmp"' EXIT
+          tmp="$(cd -- "$tmp" && pwd -P)"
+          if [[ "$tmp" == "$workspace" || "$tmp" == "$workspace/"* ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TEMP_PATH'
+            exit 1
+          fi
+          api="https://api.github.com/repos/Poryadok/VoiceRoot"
+          if ! curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 30 --output "$tmp/commit.json" "$api/commits/$source_sha"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_API'
+            exit 1
+          fi
+          commit_sha="$(jq -er '.sha | select(type == "string")' "$tmp/commit.json" 2>/dev/null || true)"
+          tree_sha="$(jq -er '.commit.tree.sha | select(type == "string")' "$tmp/commit.json" 2>/dev/null || true)"
+          if [[ "$commit_sha" != "$source_sha" || ! "$tree_sha" =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_COMMIT_IDENTITY'
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error --proto '=https' \
+            --connect-timeout 5 --max-time 120 --max-filesize 104857600 \
+            --output "$tmp/source.tar.gz" "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_DOWNLOAD'
+            exit 1
+          fi
+          expected_root="VoiceRoot-${source_sha}/"
+          if ! tar -tzf "$tmp/source.tar.gz" >"$tmp/archive-paths"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE'
+            exit 1
+          fi
+          while IFS= read -r archive_path; do
+            if [[ "$archive_path" != "$expected_root"* ]]; then
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+            fi
+            relative_path="${archive_path#"$expected_root"}"
+            if [[ "$relative_path" == *\\* || "$relative_path" == .. || "$relative_path" == ../* || \
+              "$relative_path" == */.. || "$relative_path" == */../* ]]; then
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+            fi
+            case "/$relative_path/" in */.git/*)
+              echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_PATH'
+              exit 1
+              ;;
+            esac
+          done <"$tmp/archive-paths"
+          if ! tar -tvzf "$tmp/source.tar.gz" >"$tmp/archive-types" || \
+            awk 'substr($0, 1, 1) != "-" && substr($0, 1, 1) != "d" { invalid = 1 } END { exit !invalid }' "$tmp/archive-types"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_ARCHIVE_TYPE'
+            exit 1
+          fi
+          mkdir "$tmp/source"
+          if ! tar -xzf "$tmp/source.tar.gz" -C "$tmp/source" --strip-components=1 --no-same-owner --no-same-permissions; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_EXTRACT'
+            exit 1
+          fi
+          if ! git init -q "$tmp/source"; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_CHECK'
+            exit 1
+          fi
+          preserve_exec_mode="$(git -C "$tmp/source" config --bool core.filemode)"
+          if ! (
+            cd "$tmp/source"
+            while IFS= read -r -d '' file; do
+              relative_path="${file#./}"
+              blob_sha="$(git hash-object -w --no-filters -- "$file")" || exit 1
+              file_mode=100644
+              if [[ "$preserve_exec_mode" == true && -x "$file" ]]; then file_mode=100755; fi
+              printf '%s %s\t%s\0' "$file_mode" "$blob_sha" "$relative_path"
+            done < <(find . -path './.git' -prune -o -type f -print0)
+          ) | git -C "$tmp/source" update-index -z --index-info; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_CHECK'
+            exit 1
+          fi
+          actual_tree="$(git -C "$tmp/source" write-tree 2>/dev/null || true)"
+          if [[ "$actual_tree" != "$tree_sha" ]]; then
+            echo 'STAGING_SOURCE_ARCHIVE=FAIL_TREE_MISMATCH'
+            exit 1
+          fi
+          rm -rf -- "$tmp/source/.git"
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          cp -a -- "$tmp/source/." "$workspace/"
+          echo 'STAGING_SOURCE_ARCHIVE=PASS'
+
+      - name: Verify source context and namespace
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          # The preceding archive step validates the commit's exact Git tree
+          # and removes its temporary .git directory before copying sources.
+          if [[ "$GITHUB_REF" != refs/heads/master || ! -f scripts/staging/rotate-nats-root.sh ]]; then
+            echo 'NATS_ROTATION=FAIL_SOURCE_SHA'
+            exit 1
+          fi
+          if [[ "$VOICE_K8S_NAMESPACE" != voice-staging ]]; then
+            echo 'NATS_ROTATION=FAIL_NAMESPACE'
+            exit 1
+          fi
+
+      - name: Verify exact-master Realtime proof image in GHCR
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate' || inputs.operation == 'rollback'
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGING_IMAGE_PULL_SECRET: ${{ vars.VOICE_IMAGE_PULL_SECRET }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != Poryadok/VoiceRoot || ! "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_IDENTITY'
+            exit 1
+          fi
+          registry=ghcr.io/poryadok/voiceroot
+          image="$registry/realtime:$GITHUB_SHA"
+          docker_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-ghcr.XXXXXX")"
+          anonymous_config="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-anonymous.XXXXXX")"
+          trap 'rm -rf -- "$docker_config" "$anonymous_config"' EXIT
+          if ! printf '%s' "$GHCR_TOKEN" | docker --config "$docker_config" login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GHCR_LOGIN'
+            exit 1
+          fi
+          unset GHCR_TOKEN
+          if ! docker --config "$docker_config" manifest inspect "$image" >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_MISSING'
+            exit 1
+          fi
+          if docker --config "$anonymous_config" manifest inspect "$image" >/dev/null 2>&1; then
+            printf 'VOICE_NATS_PROOF_IMAGE_PUBLIC=true\n' >>"$GITHUB_ENV"
+          else
+            if [[ ! "$STAGING_IMAGE_PULL_SECRET" =~ ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$ ]]; then
+              echo 'NATS_ROTATION=FAIL_PROOF_IMAGE_PULL_SECRET'
+              exit 1
+            fi
+            printf 'VOICE_NATS_PROOF_IMAGE_PULL_SECRET=%s\n' "$STAGING_IMAGE_PULL_SECRET" >>"$GITHUB_ENV"
+          fi
+          printf 'VOICE_NATS_PROOF_IMAGE_REGISTRY=%s\n' "$registry" >>"$GITHUB_ENV"
+          printf 'VOICE_NATS_PROOF_IMAGE_TAG=%s\n' "$GITHUB_SHA" >>"$GITHUB_ENV"
+
+      - uses: actions/setup-go@v5
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate'
+        with:
+          go-version-file: src/backend/pkg/go.mod
+          cache: false
+
+      - name: Verify NATS proof validator toolchain
+        if: inputs.operation == 'activate' || inputs.operation == 'continue-activate'
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          if ! command -v go >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GO_TOOLCHAIN'
+            exit 1
+          fi
+          validator="$(mktemp "${RUNNER_TEMP:-/tmp}/voice-nats-proof-validator.XXXXXX")"
+          trap 'rm -f -- "$validator"' EXIT
+          if ! (cd src/backend/pkg && go build -o "$validator" ./cmd/nats-proof-credential) >/dev/null 2>&1; then
+            echo 'NATS_ROTATION=FAIL_GO_VALIDATOR_BUILD'
+            exit 1
+          fi
+
+      - uses: azure/setup-kubectl@v5
+
+      - name: Configure staging kubectl
+        shell: bash
+        env:
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+        run: bash scripts/staging/configure-kubectl-ci.sh
+
+      - name: Activate NATS root generation
+        if: inputs.operation == 'activate'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+          STAGING_NATS_PROOF_CREDS_B64: ${{ secrets.STAGING_NATS_PROOF_CREDS_B64 }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" || -z "${STAGING_NATS_PROOF_CREDS_B64:-}" ]]; then
+            echo 'NATS_ROTATION=FAIL_MISSING_ACTIVATION_SECRET'
+            exit 1
+          fi
+          umask 077
+          temp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-rotation.XXXXXX")"
+          trap 'rm -f -- "$temp/bundle.json" "$temp/proof.creds"; rmdir -- "$temp"' EXIT
+          bundle="$temp/bundle.json"
+          proof="$temp/proof.creds"
+          : >"$bundle"
+          : >"$proof"
+          chmod 600 "$bundle" "$proof"
+          if ! printf '%s' "$STAGING_NATS_ROTATION_SECRETS_B64" | base64 --decode 2>/dev/null | gzip -dc 2>/dev/null >"$bundle"; then
+            echo 'NATS_ROTATION=FAIL_BUNDLE_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_ROTATION_SECRETS_B64
+          if ! printf '%s' "$STAGING_NATS_PROOF_CREDS_B64" | base64 --decode 2>/dev/null >"$proof"; then
+            echo 'NATS_ROTATION=FAIL_PROOF_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_PROOF_CREDS_B64
+          if [[ ! -s "$bundle" || ! -s "$proof" ]]; then
+            echo 'NATS_ROTATION=FAIL_EMPTY_ACTIVATION_SECRET'
+            exit 1
+          fi
+          bash scripts/staging/rotate-nats-root.sh --activate "$ROTATION_GENERATION" "$bundle" "$proof"
+
+      - name: Continue interrupted NATS root activation
+        if: inputs.operation == 'continue-activate'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+          STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}
+          STAGING_NATS_PROOF_CREDS_B64: ${{ secrets.STAGING_NATS_PROOF_CREDS_B64 }}
+        run: |
+          set +x
+          set -euo pipefail
+          if [[ -z "${STAGING_NATS_ROTATION_SECRETS_B64:-}" || -z "${STAGING_NATS_PROOF_CREDS_B64:-}" ]]; then
+            echo 'NATS_ROTATION=FAIL_MISSING_CONTINUATION_SECRET'
+            exit 1
+          fi
+          umask 077
+          temp="$(mktemp -d "${RUNNER_TEMP:-/tmp}/voice-nats-continuation.XXXXXX")"
+          trap 'rm -f -- "$temp/bundle.json" "$temp/proof.creds"; rmdir -- "$temp"' EXIT
+          bundle="$temp/bundle.json"
+          proof="$temp/proof.creds"
+          : >"$bundle"
+          : >"$proof"
+          chmod 600 "$bundle" "$proof"
+          if ! printf '%s' "$STAGING_NATS_ROTATION_SECRETS_B64" | base64 --decode 2>/dev/null | gzip -dc 2>/dev/null >"$bundle"; then
+            echo 'NATS_ROTATION=FAIL_CONTINUATION_BUNDLE_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_ROTATION_SECRETS_B64
+          if ! printf '%s' "$STAGING_NATS_PROOF_CREDS_B64" | base64 --decode 2>/dev/null >"$proof"; then
+            echo 'NATS_ROTATION=FAIL_CONTINUATION_PROOF_DECODE'
+            exit 1
+          fi
+          unset STAGING_NATS_PROOF_CREDS_B64
+          if [[ ! -s "$bundle" || ! -s "$proof" ]]; then
+            echo 'NATS_ROTATION=FAIL_EMPTY_CONTINUATION_SECRET'
+            exit 1
+          fi
+          bash scripts/staging/rotate-nats-root.sh --continue-activate "$ROTATION_GENERATION" "$bundle" "$proof"
+
+      - name: Roll back NATS root generation
+        if: inputs.operation == 'rollback'
+        shell: bash
+        run: |
+          set +x
+          set -euo pipefail
+          bash scripts/staging/rotate-nats-root.sh --rollback
+
+      - name: Diagnose NATS rotation state (read-only)
+        if: inputs.operation == 'diagnose'
+        shell: bash
+        run: bash scripts/staging/diagnose-nats-root.sh
+
+      - name: Recover retained legacy NATS generation
+        if: inputs.operation == 'recover-legacy'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+        run: |
+          set +x
+          set -euo pipefail
+          bash scripts/staging/rotate-nats-root.sh --recover-legacy "$ROTATION_GENERATION"
+
+      - name: Restore owned User Space bootstrap and retained legacy NATS
+        if: inputs.operation == 'restore-user-cycle'
+        shell: bash
+        env:
+          ROTATION_GENERATION: ${{ inputs.generation }}
+        run: |
+          set +x
+          set -euo pipefail
+          bash scripts/staging/rotate-nats-root.sh --restore-user-cycle "$ROTATION_GENERATION"

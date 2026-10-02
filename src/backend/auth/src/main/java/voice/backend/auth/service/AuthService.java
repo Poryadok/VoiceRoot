@@ -252,7 +252,11 @@ public class AuthService {
       refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
       tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
       touchLastOnline(account);
-      AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
+      String profileId = current.profileId() == null
+          ? primaryProfileProvisioner.ensurePrimaryProfile(
+              account.id(), displayHint(account), "guest".equals(account.type()))
+          : current.profileId().toString();
+      AuthSession session = issueSessionForProfile(account, prepared, profileId, command.deviceInfoJson());
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -730,7 +734,9 @@ public class AuthService {
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
     ensureAnonymousGuest(account);
     Instant now = Instant.now(clock);
-    accounts.markGuestReminderShown(account.id(), now);
+    if (!accounts.claimGuestReminder(account.id(), now, now.minus(Duration.ofHours(24)))) {
+      throw new AuthException("guest_reminder_already_shown");
+    }
     return new GuestReminderState(now, false);
   }
 
@@ -793,6 +799,7 @@ public class AuthService {
     String refreshToken = refreshTokenCodec.generate();
     refreshTokens.create(
         account.id(),
+        UUID.fromString(profileId),
         refreshTokenCodec.hash(refreshToken),
         deviceInfoJson,
         claims.jti(),

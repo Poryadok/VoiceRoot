@@ -12,6 +12,7 @@ import '../backend/files_client.dart';
 import '../backend/gateway_request_id.dart';
 import '../backend/messaging_read_sync.dart';
 import '../backend/messages_client.dart';
+import '../backend/message_cache/message_cache_store.dart';
 import '../backend/realtime_client.dart';
 import '../e2e/e2e_exceptions.dart';
 import '../e2e/e2e_file_crypto.dart';
@@ -166,6 +167,111 @@ final e2eDecryptedAttachmentThumbProvider =
 
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
+
+/// Changes when a successful block/unblock may change the visible DM history.
+final socialBlockVisibilityRevisionProvider = StateProvider<int>((ref) => 0);
+
+class SocialBlockVisibilityBarrier {
+  const SocialBlockVisibilityBarrier({
+    required this.revision,
+    this.hiddenProfileIds = const {},
+    this.releasingProfileIds = const {},
+    this.clearAllUntilServerRefresh = false,
+  });
+
+  final int revision;
+  final Set<String> hiddenProfileIds;
+  final Set<String> releasingProfileIds;
+  final bool clearAllUntilServerRefresh;
+}
+
+/// Global fail-closed barrier. A block is account-wide, so a room-local
+/// profile filter cannot safely protect sibling profiles or other rooms.
+final socialBlockVisibilityBarrierProvider =
+    StateProvider<SocialBlockVisibilityBarrier>(
+      (ref) => const SocialBlockVisibilityBarrier(revision: 0),
+    );
+final socialBlockMutationPendingProvider = StateProvider<bool>((ref) => false);
+final socialBlockCacheMutationEpochProvider = StateProvider<int>((ref) => 0);
+
+String _socialBlockCacheKey(String profileId, String chatId) =>
+    '$profileId\u0000$chatId';
+
+/// Rooms whose full server history was refreshed under the latest barrier.
+/// Cached history is unavailable for every other room until that refresh.
+final socialBlockFilteredHistoryRevisionByChatProvider =
+    StateProvider<Map<String, int>>((ref) => const {});
+
+class MessageCacheMutationQueue {
+  Future<void> _tail = Future<void>.value();
+
+  Future<void> enqueue(Future<void> Function() mutation) {
+    final operation = _tail.then((_) => mutation());
+    _tail = operation.catchError((Object _) {});
+    return operation;
+  }
+}
+
+final messageCacheMutationQueueProvider = Provider<MessageCacheMutationQueue>(
+  (ref) => MessageCacheMutationQueue(),
+);
+
+Future<void> prepareSocialBlockVisibilityChange(Ref ref) async {
+  ref.read(socialBlockCacheMutationEpochProvider.notifier).state++;
+  // Blocks are account-scoped while offline history is keyed by profile and
+  // chat. Purge every profile's old cache so switching profiles or restarting
+  // cannot restore a pre-block snapshot. The request must wait for this purge.
+  final store = ref.read(messageCacheStoreProvider);
+  try {
+    await ref.read(messageCacheMutationQueueProvider).enqueue(store.clearAll);
+  } catch (_) {
+    rethrow;
+  }
+}
+
+void recordSocialBlockVisibilityChange(
+  Ref ref, {
+  required bool blocked,
+  String? profileId,
+  bool refreshSelectedRoom = true,
+}) {
+  final previous = ref.read(socialBlockVisibilityBarrierProvider);
+  final hiddenProfileIds = {...previous.hiddenProfileIds};
+  final releasingProfileIds = {...previous.releasingProfileIds};
+  final knownProfileId = profileId?.trim();
+  if (knownProfileId != null && knownProfileId.isNotEmpty) {
+    if (blocked) {
+      hiddenProfileIds.add(knownProfileId);
+      releasingProfileIds.remove(knownProfileId);
+    } else {
+      hiddenProfileIds.remove(knownProfileId);
+      releasingProfileIds.add(knownProfileId);
+    }
+  }
+  ref.read(socialBlockFilteredHistoryRevisionByChatProvider.notifier).state =
+      const {};
+  ref
+      .read(socialBlockVisibilityBarrierProvider.notifier)
+      .state = SocialBlockVisibilityBarrier(
+    revision: previous.revision + 1,
+    hiddenProfileIds: hiddenProfileIds,
+    releasingProfileIds: releasingProfileIds,
+    // Account blocks cover sibling profiles; clear each room until its
+    // full server history has been reloaded under this revision.
+    clearAllUntilServerRefresh: true,
+  );
+  if (refreshSelectedRoom) {
+    ref.read(socialBlockVisibilityRevisionProvider.notifier).state++;
+  }
+}
+
+bool isDefinitiveSocialMutationRejection(int? statusCode) =>
+    statusCode != null &&
+    statusCode >= 400 &&
+    statusCode < 500 &&
+    statusCode != 408 &&
+    statusCode != 425 &&
+    statusCode != 429;
 
 /// Peer profile id per DM chat id (filled when opening DM from profile).
 final dmPeerProfileByChatIdProvider = StateProvider<Map<String, String>>(
@@ -653,6 +759,26 @@ class ChatListController extends StateNotifier<ChatListState> {
     items[index] = updated;
     state = state.copyWith(items: items);
   }
+
+  bool markChatRead(String chatId) {
+    final index = state.items.indexWhere((item) => item.chatId == chatId);
+    if (index < 0) {
+      _loadGeneration++;
+      state = state.copyWith(isLoading: false, isLoadingMore: false);
+      return false;
+    }
+    // A list response that began before the persisted read position may still
+    // contain the old unread count. Do not let it overwrite the local read.
+    _loadGeneration++;
+    final items = [...state.items];
+    items[index] = items[index].copyWith(unreadCount: 0);
+    state = state.copyWith(
+      items: items,
+      isLoading: false,
+      isLoadingMore: false,
+    );
+    return true;
+  }
 }
 
 List<ChatListItem> _mergeChatItems(
@@ -962,7 +1088,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           _isSelectedForAutomaticHistory()) {
         unawaited(_catchUpAfterReconnect());
       }
-    });
+    }, fireImmediately: true);
     _eventSub = _ref.listen<AsyncValue<RealtimeFrame>>(realtimeEventProvider, (
       _,
       next,
@@ -1117,6 +1243,34 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _scheduleAutomaticActivation();
       }
     });
+    _socialBlockVisibilitySub = _ref.listen<int>(
+      socialBlockVisibilityRevisionProvider,
+      (_, _) {
+        final barrier = _ref.read(socialBlockVisibilityBarrierProvider);
+        if (barrier.revision > _visibilityBarrierRevision) {
+          _applySocialBlockVisibilityBarrier(barrier);
+        } else if (_ref.read(selectedChatIdProvider) == chatId) {
+          unawaited(loadInitial());
+        }
+      },
+    );
+    _socialBlockBarrierSub = _ref.listen<SocialBlockVisibilityBarrier>(
+      socialBlockVisibilityBarrierProvider,
+      (_, barrier) =>
+          _applySocialBlockVisibilityBarrier(barrier, reload: false),
+    );
+    _socialBlockCacheEpochSub = _ref.listen<int>(
+      socialBlockCacheMutationEpochProvider,
+      (_, _) {
+        _loadGeneration++;
+        _historyGeneration++;
+        _loadedHistoryProfileId = null;
+      },
+    );
+    final existingBarrier = _ref.read(socialBlockVisibilityBarrierProvider);
+    if (existingBarrier.revision > 0) {
+      _applySocialBlockVisibilityBarrier(existingBarrier, reload: false);
+    }
     if (_isSelectedForAutomaticHistory()) {
       _scheduleAutomaticActivation();
     }
@@ -1128,8 +1282,81 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   ProviderSubscription<RealtimeLinkStatus>? _realtimeSub;
   ProviderSubscription<AsyncValue<RealtimeFrame>>? _eventSub;
   ProviderSubscription<String?>? _selectionSub;
+  ProviderSubscription<int>? _socialBlockVisibilitySub;
+  ProviderSubscription<SocialBlockVisibilityBarrier>? _socialBlockBarrierSub;
+  ProviderSubscription<int>? _socialBlockCacheEpochSub;
   String? _lastMarkedReadMessageId;
   bool _automaticActivationStarted = false;
+  final Set<String> _hiddenMessageSenderProfileIds = <String>{};
+  var _clearAllCachedHistoryUntilServerRefresh = false;
+  var _visibilityBarrierRevision = 0;
+
+  void _applySocialBlockVisibilityBarrier(
+    SocialBlockVisibilityBarrier barrier, {
+    bool reload = true,
+  }) {
+    if (barrier.revision <= _visibilityBarrierRevision) return;
+    final profileId = _activeProfileId();
+    final cacheKey = profileId == null
+        ? null
+        : _socialBlockCacheKey(profileId, chatId);
+    final filteredRevision = cacheKey == null
+        ? null
+        : _ref.read(socialBlockFilteredHistoryRevisionByChatProvider)[cacheKey];
+    _visibilityBarrierRevision = barrier.revision;
+    _hiddenMessageSenderProfileIds
+      ..clear()
+      ..addAll(barrier.hiddenProfileIds);
+    _clearAllCachedHistoryUntilServerRefresh =
+        filteredRevision != barrier.revision;
+    if (!_clearAllCachedHistoryUntilServerRefresh) return;
+    _loadGeneration++;
+    _historyGeneration++;
+    _loadedHistoryProfileId = null;
+    final activeProfileId = _activeProfileId();
+    state = state.copyWith(
+      messages: activeProfileId == null
+          ? const []
+          : state.messages
+                .where((message) => message.senderProfileId == activeProfileId)
+                .toList(),
+      pinnedMessages: activeProfileId == null
+          ? const []
+          : state.pinnedMessages
+                .where((message) => message.senderProfileId == activeProfileId)
+                .toList(),
+      isLoading: reload,
+      isOfflineCache: false,
+      hasMore: false,
+      clearNextCursor: true,
+      clearError: true,
+    );
+    unawaited(_rewriteCachedMessagesForCurrentBlockPolicy());
+    if (reload && _ref.read(selectedChatIdProvider) == chatId) {
+      unawaited(loadInitial());
+    }
+  }
+
+  List<VoiceMessage> _visibleForCurrentBlockPolicy(
+    Iterable<VoiceMessage> messages,
+  ) {
+    return _visibleForBlockPolicy(
+      messages,
+      _hiddenMessageSenderProfileIds,
+      _clearAllCachedHistoryUntilServerRefresh,
+    );
+  }
+
+  List<VoiceMessage> _visibleForBlockPolicy(
+    Iterable<VoiceMessage> messages,
+    Set<String> hiddenProfileIds,
+    bool clearAll,
+  ) {
+    if (clearAll) return const [];
+    return messages
+        .where((message) => !hiddenProfileIds.contains(message.senderProfileId))
+        .toList();
+  }
 
   bool _isSelectedForAutomaticHistory() {
     final selected = _ref.read(selectedChatIdProvider);
@@ -1192,6 +1419,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     _realtimeSub?.close();
     _eventSub?.close();
     _selectionSub?.close();
+    _socialBlockVisibilitySub?.close();
+    _socialBlockBarrierSub?.close();
+    _socialBlockCacheEpochSub?.close();
     super.dispose();
   }
 
@@ -1233,7 +1463,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
     switch (result) {
       case MessagesApiOk(:final data):
-        final sorted = await _finalizeMessages(_sortMessages(data.messages));
+        final finalized = await _finalizeMessages(_sortMessages(data.messages));
         if (!_isCurrentInitialLoad(
           profileId: profileId,
           authorization: auth,
@@ -1241,6 +1471,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         )) {
           return;
         }
+        _markFilteredServerHistoryLoaded(profileId);
+        final sorted = _visibleForCurrentBlockPolicy(finalized);
         final isDeleted =
             data.dmPeerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED;
         if (isDeleted && hadLoadedHistory) {
@@ -1265,7 +1497,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           historyProfileId: profileId,
           clearError: true,
         );
-        unawaited(_writeCache(sorted, profileId: profileId));
+        await _writeCache(sorted, profileId: profileId);
         unawaited(_markLatestRead());
         unawaited(
           _refreshPinnedMessages(
@@ -1307,7 +1539,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       return;
     }
     if (pinned case MessagesApiOk(:final data)) {
-      state = state.copyWith(pinnedMessages: data.messages);
+      state = state.copyWith(
+        pinnedMessages: _visibleForCurrentBlockPolicy(data.messages),
+      );
     }
   }
 
@@ -1364,7 +1598,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           merged.add(m);
         }
       }
-      final sorted = await _finalizeMessages(_sortMessages(merged));
+      final sorted = await _finalizeMessages(
+        _sortMessages(_visibleForCurrentBlockPolicy(merged)),
+      );
       if (!_isCurrentHistory(
         profileId: profileId,
         authorization: auth,
@@ -1416,7 +1652,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             merged.add(m);
           }
         }
-        final sorted = await _finalizeMessages(_sortMessages(merged));
+        final sorted = await _finalizeMessages(
+          _sortMessages(_visibleForCurrentBlockPolicy(merged)),
+        );
         if (!_isCurrentHistory(
           profileId: profileId,
           authorization: auth,
@@ -1518,7 +1756,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (!merged.any((m) => m.id == data.id)) {
           merged.add(data);
         }
-        final sorted = await _finalizeMessages(_sortMessages(merged));
+        final sorted = await _finalizeMessages(
+          _sortMessages(_visibleForCurrentBlockPolicy(merged)),
+        );
         if (!_isCurrentMutation(
           profileId: profileId,
           authorization: auth,
@@ -1611,6 +1851,14 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required String authorization,
     required int historyGeneration,
   }) async {
+    final barrier = _ref.read(socialBlockVisibilityBarrierProvider);
+    if (_ref.read(socialBlockMutationPendingProvider)) return false;
+    final filteredRevision = _ref.read(
+      socialBlockFilteredHistoryRevisionByChatProvider,
+    )[_socialBlockCacheKey(profileId, chatId)];
+    if (barrier.revision > 0 && filteredRevision != barrier.revision) {
+      return false;
+    }
     final cached = await _ref
         .read(messageCacheStoreProvider)
         .getMessages(profileId: profileId, chatId: chatId);
@@ -1622,8 +1870,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _historyGeneration != historyGeneration) {
       return false;
     }
-    if (cached.isEmpty) return false;
-    final sorted = await _finalizeMessages(_sortMessages(cached));
+    final visibleCached = _visibleForCurrentBlockPolicy(cached);
+    if (visibleCached.length != cached.length) {
+      await _writeCache(visibleCached, profileId: profileId);
+    }
+    if (visibleCached.isEmpty) return false;
+    final finalized = await _finalizeMessages(_sortMessages(visibleCached));
     if (!_isCurrentInitialLoad(
           profileId: profileId,
           authorization: authorization,
@@ -1632,6 +1884,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         _historyGeneration != historyGeneration) {
       return false;
     }
+    final sorted = _visibleForCurrentBlockPolicy(finalized);
     _loadedHistoryProfileId = profileId;
     state = state.copyWith(
       messages: sorted,
@@ -1645,19 +1898,80 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     return true;
   }
 
+  void _markFilteredServerHistoryLoaded(String profileId) {
+    final barrier = _ref.read(socialBlockVisibilityBarrierProvider);
+    if (barrier.revision == 0) return;
+    _hiddenMessageSenderProfileIds
+      ..clear()
+      ..addAll(barrier.hiddenProfileIds);
+    _clearAllCachedHistoryUntilServerRefresh = false;
+    _visibilityBarrierRevision = barrier.revision;
+    final revisions = {
+      ..._ref.read(socialBlockFilteredHistoryRevisionByChatProvider),
+      _socialBlockCacheKey(profileId, chatId): barrier.revision,
+    };
+    _ref.read(socialBlockFilteredHistoryRevisionByChatProvider.notifier).state =
+        revisions;
+  }
+
   Future<void> _writeCache(
     List<VoiceMessage> messages, {
     String? profileId,
   }) async {
     profileId ??= _activeProfileId();
-    if (profileId == null || messages.isEmpty) return;
-    await _ref
-        .read(messageCacheStoreProvider)
-        .replaceChatMessages(
-          profileId: profileId,
-          chatId: chatId,
-          messages: messages,
-        );
+    if (profileId == null) return;
+    final targetProfileId = profileId;
+    final sourceVisibilityRevision = _ref
+        .read(socialBlockVisibilityBarrierProvider)
+        .revision;
+    final sourceCacheEpoch = _ref.read(socialBlockCacheMutationEpochProvider);
+    return _enqueueCacheMutation((store) async {
+      final barrier = _ref.read(socialBlockVisibilityBarrierProvider);
+      final cacheEpoch = _ref.read(socialBlockCacheMutationEpochProvider);
+      final filteredRevision = _ref.read(
+        socialBlockFilteredHistoryRevisionByChatProvider,
+      )[_socialBlockCacheKey(targetProfileId, chatId)];
+      final isStaleHistory =
+          _ref.read(socialBlockMutationPendingProvider) ||
+          cacheEpoch != sourceCacheEpoch ||
+          barrier.revision != sourceVisibilityRevision ||
+          (barrier.revision > 0 &&
+              filteredRevision != sourceVisibilityRevision);
+      await store.replaceChatMessages(
+        profileId: targetProfileId,
+        chatId: chatId,
+        messages: isStaleHistory
+            ? const []
+            : _visibleForCurrentBlockPolicy(messages),
+      );
+    });
+  }
+
+  Future<void> _rewriteCachedMessagesForCurrentBlockPolicy() async {
+    final profileId = _activeProfileId();
+    if (profileId == null) return;
+    final hiddenProfileIds = {..._hiddenMessageSenderProfileIds};
+    final clearAll = _clearAllCachedHistoryUntilServerRefresh;
+    return _enqueueCacheMutation((store) async {
+      final cached = await store.getMessages(
+        profileId: profileId,
+        chatId: chatId,
+      );
+      await store.replaceChatMessages(
+        profileId: profileId,
+        chatId: chatId,
+        messages: _visibleForBlockPolicy(cached, hiddenProfileIds, clearAll),
+      );
+    });
+  }
+
+  Future<void> _enqueueCacheMutation(
+    Future<void> Function(MessageCacheStore store) mutation,
+  ) {
+    final store = _ref.read(messageCacheStoreProvider);
+    return _ref
+        .read(messageCacheMutationQueueProvider)
+        .enqueue(() => mutation(store));
   }
 
   Future<void> _markLatestRead() async {
@@ -1675,7 +1989,18 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!mounted) return;
     if (ok) {
       _lastMarkedReadMessageId = lastId;
-      _invalidateChatLists(_ref);
+      // The visible inbox is owned by InboxReconciler, not the legacy
+      // ChatListController cache updated below. Re-read Chat's durable row so
+      // the badge and preview converge after a successful REST MarkRead.
+      _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
+      if (state.lastMessageId == lastId) {
+        final wasListed = _ref
+            .read(chatListControllerProvider.notifier)
+            .markChatRead(chatId);
+        if (!wasListed) _invalidateChatLists(_ref);
+      } else {
+        _invalidateChatLists(_ref);
+      }
     }
   }
 
@@ -1949,8 +2274,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final messages = state.messages
         .map((m) => m.id == message.id ? message : m)
         .toList();
-    state = state.copyWith(messages: messages, clearError: true);
-    unawaited(_writeCache(messages, profileId: profileId));
+    final visible = _visibleForCurrentBlockPolicy(messages);
+    state = state.copyWith(messages: visible, clearError: true);
+    unawaited(_writeCache(visible, profileId: profileId));
     _invalidateChatLists(_ref);
     return null;
   }
@@ -1962,7 +2288,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (!merged.any((m) => m.id == message.id)) {
       merged.add(message);
     }
-    final sorted = _sortMessages(merged);
+    final sorted = _visibleForCurrentBlockPolicy(_sortMessages(merged));
     state = state.copyWith(messages: sorted, clearError: true);
     unawaited(_writeCache(sorted));
   }
@@ -2369,10 +2695,13 @@ class RealtimeHub {
   Future<void> reconnectWithNewSession() async {
     final auth = _ref.read(authControllerProvider).session;
     if (auth == null) return;
-    await _reconnect(_activateBinding(auth));
+    await _reconnect(_activateBinding(auth), isReconnectAttempt: true);
   }
 
-  Future<void> _reconnect(_RealtimeHubBinding binding) async {
+  Future<void> _reconnect(
+    _RealtimeHubBinding binding, {
+    bool isReconnectAttempt = false,
+  }) async {
     if (_disposed) return;
     _reconnectTimer?.cancel();
     _reconnectAttempt = 0;
@@ -2382,7 +2711,11 @@ class RealtimeHub {
     if (!_isCurrent(binding)) return;
     final config = _ref.read(gatewayConfigProvider);
     if (!config.hasBaseUrl) return;
-    await _connect(binding, config.baseUrl);
+    await _connect(
+      binding,
+      config.baseUrl,
+      isReconnectAttempt: isReconnectAttempt,
+    );
   }
 
   void _setStatus(RealtimeLinkStatus next, {_RealtimeHubBinding? binding}) {
@@ -2414,6 +2747,16 @@ final realtimeHubProvider = Provider<RealtimeHub>((ref) {
     if (!autoConnect) return;
     if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
       unawaited(hub.ensureConnected());
+    } else if (next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
+      final previousSession = prev?.session;
+      final nextSession = next.session;
+      if (previousSession != null &&
+          nextSession != null &&
+          previousSession.accountId == nextSession.accountId &&
+          previousSession.activeProfileId == nextSession.activeProfileId &&
+          previousSession.accessToken != nextSession.accessToken) {
+        unawaited(hub.reconnectWithNewSession());
+      }
     }
     if (!next.isAuthenticated && (prev?.isAuthenticated ?? false)) {
       unawaited(hub.disconnect());
@@ -2548,13 +2891,26 @@ class ChatActions {
   final Ref _ref;
 
   Future<String?> openDmWithProfile(String otherProfileId) async {
-    final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return 'not_authenticated';
     final result = await _ref
         .read(voiceChatsClientProvider)
-        .createDm(authorization: auth, otherProfileId: otherProfileId);
+        .createDm(
+          authorization: session.authorizationHeader,
+          otherProfileId: otherProfileId,
+        );
+    final current = _ref.read(authControllerProvider).session;
+    if (current?.activeProfileId != session.activeProfileId ||
+        current?.authorizationHeader != session.authorizationHeader) {
+      return kChatActionStaleContext;
+    }
     return switch (result) {
-      ChatsApiOk(:final data) => _selectDmChat(data.id, otherProfileId),
+      ChatsApiOk(:final data) => () {
+        final reconciler = _ref.read(inboxReconcilerProvider.notifier);
+        final error = _selectDmChat(data.id, otherProfileId);
+        if (error == null) unawaited(reconciler.reconcile());
+        return error;
+      }(),
       ChatsApiFailure(:final message) => message,
     };
   }

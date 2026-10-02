@@ -10,6 +10,8 @@ starts. Realtime has no stream or consumer administration path.
 | `chat_events` | `rt_realtime1_chat` | `chat.>` | `_INBOX.voice.realtime1.chat` |
 | `user_events` | `rt_realtime1_user` | `user.presence_changed` | `_INBOX.voice.realtime1.user` |
 | `social_events` | `rt_realtime1_social` | `social.user_blocked` | `_INBOX.voice.realtime1.social` |
+| `social_events` | `rt_realtime1_friend_request` | `social.friend_request` | `_INBOX.voice.realtime1.friend_request` |
+| `social_events` | `rt_realtime1_friend_removed` | `social.friend_removed` | `_INBOX.voice.realtime1.friend_removed` |
 | `role_events` | `rt_realtime1_role` | `role.>` | `_INBOX.voice.realtime1.role` |
 | `voice_events` | `rt_realtime1_voice` | `voice.>` | `_INBOX.voice.realtime1.voice` |
 | `matchmaking_events` | `rt_realtime1_matchmaking` | `mm.>` | `_INBOX.voice.realtime1.matchmaking` |

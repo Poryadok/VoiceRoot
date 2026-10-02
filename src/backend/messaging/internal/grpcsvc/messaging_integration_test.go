@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -116,6 +117,9 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if w.Blocks == nil {
 		w.Blocks = boolBlocks(false)
 	}
+	if w.AccountBlocks == nil {
+		w.AccountBlocks = allowAccountBlocks{}
+	}
 	if w.Privacy == nil {
 		w.Privacy = dmPrivacyStub{}
 	}
@@ -146,7 +150,9 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 		SharedMedia:         &store.SharedMediaStore{Pool: pool},
 		ChatGuard:           guard,
 		Blocks:              w.Blocks,
+		AccountBlocks:       w.AccountBlocks,
 		UserProfiles:        w.UserProfiles,
+		ProfilePairBlocks:   w.ProfilePairBlocks,
 		Privacy:             w.Privacy,
 		Friends:             w.Friends,
 		MessageEvents:       w.MessageEvents,
@@ -199,6 +205,8 @@ type messagingWire struct {
 	RequireDeletedAccountsSeam bool
 	ChatTypeResolver           testAuthoritativeChatTypeResolver
 	RequireChatTypeResolver    bool
+	AccountBlocks              AccountBlockChecker
+	ProfilePairBlocks          ProfilePairBlockChecker
 }
 
 // wireDeletedAccounts keeps the P3 fixture isolated from production while the
@@ -242,16 +250,17 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 	t.Helper()
 	guard := &store.SQLChatGuard{Pool: pool}
 	return &MessagingGRPC{
-		Messages:         &store.MessagesStore{Pool: pool},
-		Reactions:        &store.ReactionsStore{Pool: pool},
-		Pins:             &store.PinsStore{Pool: pool},
-		SharedMedia:      &store.SharedMediaStore{Pool: pool},
-		ChatGuard:        guard,
-		ChatTypeResolver: &store.SQLChatTypeResolver{Pool: pool},
-		Moderation:       &store.SQLModerationGuard{Pool: pool},
-		ChatMentionsMeta: &store.SQLChatMentionsMeta{Pool: pool},
-		ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: pool},
-		PreKeyBundles:    &store.E2EPreKeyStore{Pool: pool},
+		Messages:          &store.MessagesStore{Pool: pool},
+		Reactions:         &store.ReactionsStore{Pool: pool},
+		Pins:              &store.PinsStore{Pool: pool},
+		SharedMedia:       &store.SharedMediaStore{Pool: pool},
+		ChatGuard:         guard,
+		ChatTypeResolver:  &store.SQLChatTypeResolver{Pool: pool},
+		ProfilePairBlocks: allowProfilePairBlocks{},
+		Moderation:        &store.SQLModerationGuard{Pool: pool},
+		ChatMentionsMeta:  &store.SQLChatMentionsMeta{Pool: pool},
+		ChatThreadPolicy:  &store.SQLChatThreadPolicy{Pool: pool},
+		PreKeyBundles:     &store.E2EPreKeyStore{Pool: pool},
 	}
 }
 
@@ -366,6 +375,13 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(list.GetMessageList().GetMessages()), 2)
 
+	foreignCursor := store.EncodeBeforeCursor(uuid.New(), uuid.MustParse(list.GetMessageList().GetMessages()[0].GetId()))
+	_, err = client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
+		Chat: chatDMRef(chatID), Page: &commonv1.CursorPageRequest{Cursor: foreignCursor, PageSize: 2},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "cursor from a different chat must be rejected")
+
 	missing := uuid.New()
 	missingStr := missing.String()
 	gfb, err := client.GetMessages(withProfileCtx(ctx, acctA, profA), &messagingv1.GetMessagesRequest{
@@ -406,6 +422,156 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestMessagingGetMessages_filtersOneWayBlockedAccountInGroupHistory(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	viewerProfile := uuid.New()
+	blockedProfile := uuid.New()
+	viewerAccount := uuid.New()
+	blockedAccount := uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, viewerProfile, blockedProfile)
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{
+		ProfilePairBlocks: directionalProfilePairBlocks{{viewerProfile, blockedProfile}: true},
+	})
+	t.Cleanup(cleanup)
+
+	messageKind := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	send := func(targetChat *chatv1.ChatRef, profileID, accountID uuid.UUID, content string) string {
+		t.Helper()
+		var postedAsChat *bool
+		if targetChat.GetType() == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+			posted := true
+			postedAsChat = &posted
+		}
+		resp, err := client.SendMessage(withProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{
+			Chat:            targetChat,
+			Content:         content,
+			AttachmentsJson: "[]",
+			MentionsJson:    "[]",
+			MessageKind:     &messageKind,
+			PostedAsChat:    postedAsChat,
+		})
+		require.NoError(t, err)
+		return resp.GetMessage().GetId()
+	}
+
+	viewerMessageID := send(chatGroupRef(chatID), viewerProfile, viewerAccount, "viewer message")
+	blockedMessageID := send(chatGroupRef(chatID), blockedProfile, blockedAccount, "blocked sender message")
+	pageRequest := &messagingv1.GetMessagesRequest{
+		Chat: chatGroupRef(chatID),
+		Page: &commonv1.CursorPageRequest{PageSize: 10},
+	}
+
+	viewerHistory, err := client.GetMessages(withProfileCtx(ctx, viewerAccount, viewerProfile), pageRequest)
+	require.NoError(t, err)
+	viewerIDs := messageIDs(viewerHistory.GetMessageList().GetMessages())
+	require.Contains(t, viewerIDs, viewerMessageID, "blocking another account must not hide the viewer's own messages")
+	require.NotContains(t, viewerIDs, blockedMessageID, "viewer must not receive history from an account they blocked")
+
+	reverseHistory, err := client.GetMessages(withProfileCtx(ctx, blockedAccount, blockedProfile), pageRequest)
+	require.NoError(t, err)
+	reverseIDs := messageIDs(reverseHistory.GetMessageList().GetMessages())
+	require.Contains(t, reverseIDs, blockedMessageID)
+	require.Contains(t, reverseIDs, viewerMessageID, "one-way block must not hide the blocker's message from the blocked account")
+
+	// A bounded scan advances the cursor even when a whole scanned window is hidden.
+	pagedChatID := uuid.New()
+	seedGroupChat(t, ctx, pool, pagedChatID, viewerProfile, blockedProfile)
+	oldViewerMessageID := send(chatGroupRef(pagedChatID), viewerProfile, viewerAccount, "older visible viewer message")
+	// Message IDs are UUIDv7 and history orders by ID. Separate timestamps so
+	// the bounded hidden window is deterministically newer than the visible row.
+	time.Sleep(10 * time.Millisecond)
+	for i := 0; i < historyBlockScanMultiplier+1; i++ {
+		send(chatGroupRef(pagedChatID), blockedProfile, blockedAccount, "hidden message")
+	}
+	firstPage, err := client.GetMessages(withProfileCtx(ctx, viewerAccount, viewerProfile), &messagingv1.GetMessagesRequest{
+		Chat: chatGroupRef(pagedChatID), Page: &commonv1.CursorPageRequest{PageSize: 1},
+	})
+	require.NoError(t, err)
+	require.Empty(t, firstPage.GetMessageList().GetMessages())
+	require.True(t, firstPage.GetMessageList().GetHasMore())
+	require.NotEmpty(t, firstPage.GetMessageList().GetNextCursor())
+	secondPage, err := client.GetMessages(withProfileCtx(ctx, viewerAccount, viewerProfile), &messagingv1.GetMessagesRequest{
+		Chat: chatGroupRef(pagedChatID), Page: &commonv1.CursorPageRequest{PageSize: 1, Cursor: firstPage.GetMessageList().GetNextCursor()},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{oldViewerMessageID}, messageIDs(secondPage.GetMessageList().GetMessages()))
+	require.False(t, secondPage.GetMessageList().GetHasMore())
+
+	channelID := uuid.New()
+	seedChannelChat(t, ctx, pool, channelID, viewerProfile)
+	_, err = pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member')`, channelID, blockedProfile)
+	require.NoError(t, err)
+	channelSenderMessage := send(chatChannelRef(channelID), blockedProfile, blockedAccount, "blocked channel message")
+	channelHistory, err := client.GetMessages(withProfileCtx(ctx, viewerAccount, viewerProfile), &messagingv1.GetMessagesRequest{
+		Chat: chatChannelRef(channelID), Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, messageIDs(channelHistory.GetMessageList().GetMessages()), channelSenderMessage)
+}
+
+type directionalProfilePairBlocks map[[2]uuid.UUID]bool
+
+func (b directionalProfilePairBlocks) ProfilePairBlocked(_ context.Context, viewerProfileID, senderProfileID uuid.UUID) (bool, error) {
+	return b[[2]uuid.UUID{viewerProfileID, senderProfileID}], nil
+}
+
+type allowProfilePairBlocks struct{}
+
+func (allowProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+type failingProfilePairBlocks struct{}
+
+func (failingProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, errors.New("social unavailable")
+}
+
+type allowAccountBlocks struct{}
+
+func (allowAccountBlocks) AccountBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func messageIDs(messages []*messagingv1.Message) []string {
+	ids := make([]string, 0, len(messages))
+	for _, message := range messages {
+		ids = append(ids, message.GetId())
+	}
+	return ids
+}
+
+func TestFilterBlockedHistoryRows_FailsClosedOnSocialErrors(t *testing.T) {
+	viewerProfile, senderProfile := uuid.New(), uuid.New()
+	rows := []store.MessageRow{{ID: uuid.New(), SenderProfileID: senderProfile, Content: "private"}}
+
+	t.Run("missing social checker", func(t *testing.T) {
+		svc := &MessagingGRPC{
+			ProfilePairBlocks: nil,
+		}
+		visible, err := svc.filterBlockedHistoryRows(context.Background(), viewerProfile, rows)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Empty(t, visible)
+	})
+
+	t.Run("social lookup error", func(t *testing.T) {
+		svc := &MessagingGRPC{
+			ProfilePairBlocks: failingProfilePairBlocks{},
+		}
+		visible, err := svc.filterBlockedHistoryRows(context.Background(), viewerProfile, rows)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+		require.Empty(t, visible)
+	})
 }
 
 func TestMessagingSendAttachmentOnlyMessageValidatesReadyFile(t *testing.T) {
@@ -1551,7 +1717,7 @@ func TestMessagingGetMessages_afterPageNextCursor(t *testing.T) {
 	require.True(t, ml.GetHasMore())
 	thirdID, err := uuid.Parse(ids[2])
 	require.NoError(t, err)
-	require.Equal(t, store.EncodeAfterCursor(thirdID), ml.GetNextCursor())
+	require.Equal(t, store.EncodeAfterCursor(chatID, thirdID), ml.GetNextCursor())
 }
 
 func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
@@ -1581,6 +1747,9 @@ func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
 		Page:           &commonv1.CursorPageRequest{PageSize: 2},
 	})
 	require.NoError(t, err)
+	require.Len(t, first.GetMessageList().GetMessages(), 2)
+	require.Equal(t, ids[1], first.GetMessageList().GetMessages()[0].GetId())
+	require.Equal(t, ids[2], first.GetMessageList().GetMessages()[1].GetId())
 	cursor := first.GetMessageList().GetNextCursor()
 	require.NotEmpty(t, cursor)
 
@@ -1589,7 +1758,8 @@ func TestMessagingGetMessages_cursorFromPageAfterDirection(t *testing.T) {
 		Page: &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 2},
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, second.GetMessageList().GetMessages())
+	require.Len(t, second.GetMessageList().GetMessages(), 1)
+	require.Equal(t, ids[3], second.GetMessageList().GetMessages()[0].GetId())
 }
 
 func TestMessagingGetMessages_lastAndAfterDisagree(t *testing.T) {
