@@ -4,8 +4,10 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"voice/backend/messaging/internal/gameprotocol"
@@ -135,6 +137,74 @@ func TestGameMessageStoreConcurrentExactRetryCommitsOneRevision(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM game_message_operation_receipts WHERE operation_id=$1`, message.OperationID).Scan(&receipts))
 	require.Equal(t, 1, revisions)
 	require.Equal(t, 1, receipts)
+}
+
+// Commit a writer after the initial receipt read finishes. READ COMMITTED must
+// return one consistent receipt/revision snapshot, never a false orphan error.
+func TestGameReceiptConcurrentCommitUsesOneSnapshot(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	s := &MessagesStore{Pool: pool}
+	message := gameprotocol.Message{
+		Compact: "snapshot-create-jws", Operation: "create", KeyID: uuid.New(), DeviceID: uuid.New(), AuthorityRevision: 1,
+		ApplicationID: uuid.New(), EnvironmentID: uuid.New(), OperationID: uuid.New(), ChatID: uuid.New(), MessageID: uuid.New(), Revision: 1,
+		Content: []byte("hello"), ContentSHA256: hashContent([]byte("hello")),
+	}
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	reader := &commitAfterReceiptReadTx{Tx: tx, afterRead: func() {
+		_, writeErr := s.ApplyGameMessage(ctx, message, uuid.New())
+		require.NoError(t, writeErr)
+	}}
+	_, found, err := gameReceipt(ctx, reader, message)
+	require.NoError(t, err, "a concurrent atomic commit must not look like a missing receipt")
+	require.False(t, found, "the read started before the other transaction committed")
+	row, found, err := gameReceipt(ctx, tx, message)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "hello", row.Content)
+	key := gameprotocol.ReceiptKey{ApplicationID: message.ApplicationID, EnvironmentID: message.EnvironmentID,
+		OperationID: message.OperationID, ChatID: message.ChatID, MessageID: message.MessageID, Revision: message.Revision, Compact: message.Compact}
+	_, found, err = s.LookupGameMessageReceipt(ctx, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	// Real inconsistent persisted state must still fail closed on both paths.
+	_, err = pool.Exec(ctx, `DELETE FROM game_message_operation_receipts WHERE operation_id=$1`, message.OperationID)
+	require.NoError(t, err)
+	_, found, err = gameReceipt(ctx, tx, message)
+	require.ErrorContains(t, err, "revision exists without operation receipt")
+	require.False(t, found)
+	_, found, err = s.LookupGameMessageReceipt(ctx, key)
+	require.ErrorContains(t, err, "revision exists without operation receipt")
+	require.False(t, found)
+}
+
+type commitAfterReceiptReadTx struct {
+	pgx.Tx
+	afterRead func()
+}
+
+func (tx *commitAfterReceiptReadTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	row := tx.Tx.QueryRow(ctx, sql, args...)
+	after := tx.afterRead
+	tx.afterRead = nil
+	return commitAfterReceiptReadRow{Row: row, afterRead: after}
+}
+
+type commitAfterReceiptReadRow struct {
+	pgx.Row
+	afterRead func()
+}
+
+func (row commitAfterReceiptReadRow) Scan(dest ...any) error {
+	err := row.Row.Scan(dest...)
+	if row.afterRead != nil {
+		row.afterRead()
+	}
+	return err
 }
 
 func TestGameMessageStoreEnforcesMonotonicDeviceAuthorityRevision(t *testing.T) {

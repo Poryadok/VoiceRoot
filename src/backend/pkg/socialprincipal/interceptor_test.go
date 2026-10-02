@@ -98,6 +98,44 @@ func TestProtectedBoundary(t *testing.T) {
 	}
 }
 
+func TestVerifierDiagnosesDependencyFailureWithoutExposingDetails(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	signer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "auth", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	hash := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	method := "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	token, err := signer.IssueService(principal.ServiceInput{Audience: "user", RPC: method, RequestID: "request", RequestHash: hash})
+	require.NoError(t, err)
+	for _, dependency := range []struct {
+		name        string
+		failResolve bool
+		reason      VerificationReason
+	}{
+		{name: "JWKS", failResolve: true, reason: ReasonJWKSDocument},
+		{name: "replay Redis", reason: ReasonReplay},
+	} {
+		t.Run(dependency.name, func(t *testing.T) {
+			var reasons []VerificationReason
+			verifier := &Verifier{Target: "user", Capability: "auth", Issuers: map[string]bool{"auth": true},
+				Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) {
+					if dependency.failResolve {
+						return nil, Unavailable(errors.New("principal JWKS unavailable: sensitive upstream detail"))
+					}
+					return &key.PublicKey, nil
+				},
+				Replay: func(context.Context, string, string, time.Time) error {
+					return Unavailable(errors.New("principal replay Redis unavailable: sensitive upstream detail"))
+				},
+				Diagnostic: func(reason VerificationReason) { reasons = append(reasons, reason) },
+			}
+			_, verifyErr := verifier.Verify(context.Background(), token, method, "request", hash)
+			require.Error(t, verifyErr)
+			require.Equal(t, []VerificationReason{dependency.reason}, reasons)
+		})
+	}
+}
+
 func TestOrdinaryRejectsSocialOnlyOnPrivacy(t *testing.T) {
 	for _, target := range []string{"user", "space"} {
 		for _, marker := range []string{"social", " social ", "SOCIAL"} {

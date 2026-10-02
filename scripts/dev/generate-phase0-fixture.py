@@ -31,13 +31,13 @@ def generate(destination):
     try:
         with tempfile.TemporaryDirectory(prefix=".phase0-", dir=destination.parent) as scratch:
             root = Path(scratch)
-            for directory in ("gateway", "space", "gameintegration", "voice", "tls", "ca"):
+            for directory in ("gateway", "space", "gameintegration", "voice", "bot", "tls", "ca"):
                 (root / directory).mkdir(mode=0o700)
             for issuer in ("gateway", "space"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
                             "rsa_keygen_bits:2048", "-out", root / issuer / f"{kid}.pem")
-            for issuer in ("gameintegration", "voice"):
+            for issuer in ("gameintegration", "voice", "bot"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
                             "rsa_keygen_bits:2048", "-out", root / issuer / f"{kid}.pem")
@@ -53,10 +53,20 @@ def generate(destination):
                     "-subj", "/CN=Voice Phase0 GIS client CA",
                     "-addext", "basicConstraints=critical,CA:TRUE",
                     "-addext", "keyUsage=critical,keyCertSign,cRLSign")
+            lifecycle_ca_key = root / "ca/space-lifecycle-client-ca.key"
+            lifecycle_ca_cert = root / "ca/space-lifecycle-client-ca.crt"
+            command("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                    "-keyout", lifecycle_ca_key, "-out", lifecycle_ca_cert, "-days", "2",
+                    "-subj", "/CN=Voice Phase0 Space lifecycle client CA",
+                    "-addext", "basicConstraints=critical,CA:TRUE",
+                    "-addext", "keyUsage=critical,keyCertSign,cRLSign")
             for index, (leaf, hostname) in enumerate(
                     (("role", "role"), ("auth", "auth"), ("proxy", "phase0-jwks"),
                      ("gameintegration-jwks", "gameintegration"), ("voice-jwks", "voice"),
-                     ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice")), 1):
+                     ("chat-gis-grpc", "chat"), ("voice-game-grpc", "voice"),
+                     ("space-lifecycle", "space"), ("bot-game-event", "bot"),
+                     ("notification-lifecycle", "notification"),
+                     ("messaging-gameintegration-grpc", "messaging")), 1):
                 key, csr = root / f"tls/{leaf}.key", root / f"tls/{leaf}.csr"
                 extensions = root / "leaf.ext"
                 extensions.write_text(
@@ -71,7 +81,7 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice"), 6):
+            for serial, service in enumerate(("space", "gameintegration", "voice"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
@@ -86,8 +96,12 @@ def generate(destination):
                         "-extfile", client_extensions, "-out", root / f"tls/{service}-client.crt")
                 client_csr.unlink()
                 client_extensions.unlink()
-            for serial, service in enumerate(("chat", "voice"), 20):
-                leaf = f"gameintegration-{service}-client"
+            scoped_clients = [
+                (f"gameintegration-{service}-client", "gameintegration", gis_ca_cert, gis_ca_key)
+                for service in ("chat", "voice", "messaging")
+            ]
+            scoped_clients.append(("space-lifecycle-client", "space", lifecycle_ca_cert, lifecycle_ca_key))
+            for serial, (leaf, service, client_ca_cert, client_ca_key) in enumerate(scoped_clients, 200):
                 client_key = root / f"tls/{leaf}.key"
                 client_csr = root / f"tls/{leaf}.csr"
                 client_extensions = root / "client.ext"
@@ -96,14 +110,15 @@ def generate(destination):
                     "keyUsage=critical,digitalSignature\n"
                     "extendedKeyUsage=clientAuth\n", encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
-                        "-keyout", client_key, "-out", client_csr, "-subj", "/CN=gameintegration")
-                command("openssl", "x509", "-req", "-in", client_csr, "-CA", gis_ca_cert,
-                        "-CAkey", gis_ca_key, "-set_serial", str(serial), "-days", "2",
+                        "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
+                command("openssl", "x509", "-req", "-in", client_csr, "-CA", client_ca_cert,
+                        "-CAkey", client_ca_key, "-set_serial", str(serial), "-days", "2",
                         "-extfile", client_extensions, "-out", root / f"tls/{leaf}.crt")
                 client_csr.unlink()
                 client_extensions.unlink()
             ca_key.unlink()
             gis_ca_key.unlink()
+            lifecycle_ca_key.unlink()
             command("keytool", "-importcert", "-noprompt", "-alias", "phase0-fixture-ca",
                     "-file", ca_cert, "-keystore", root / "truststore.p12",
                     "-storetype", "PKCS12", "-storepass", "phase0-fixture")

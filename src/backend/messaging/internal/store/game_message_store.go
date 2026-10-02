@@ -385,39 +385,11 @@ func (s *MessagesStore) LookupGameMessageReceipt(ctx context.Context, key gamepr
 	if key.ApplicationID == uuid.Nil || key.EnvironmentID == uuid.Nil || key.OperationID == uuid.Nil || key.ChatID == uuid.Nil || key.MessageID == uuid.Nil || key.Revision <= 0 || key.Compact == "" {
 		return nil, false, errors.New("game message: invalid receipt key")
 	}
-	var receiptBytes string
-	var chatID, messageID uuid.UUID
-	var resultContent string
-	var resultDeleted bool
-	err := s.Pool.QueryRow(ctx, `
-SELECT compact_jws, chat_id, message_id, result_content, result_deleted
-FROM game_message_operation_receipts
-WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3
-`, key.ApplicationID, key.EnvironmentID, key.OperationID).Scan(&receiptBytes, &chatID, &messageID, &resultContent, &resultDeleted)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	receipt, err := readGameReceipt(ctx, s.Pool, key)
+	if err != nil || receipt == nil {
 		return nil, false, err
 	}
-	if err == nil {
-		if receiptBytes != key.Compact || chatID != key.ChatID || messageID != key.MessageID {
-			return nil, false, ErrGameOperationConflict
-		}
-		return s.loadGameReceiptResult(ctx, chatID, messageID, resultContent, resultDeleted)
-	}
-	var revisionBytes string
-	err = s.Pool.QueryRow(ctx, `
-SELECT compact_jws FROM game_message_revisions
-WHERE chat_id=$1 AND message_id=$2 AND revision=$3
-	`, key.ChatID, key.MessageID, key.Revision).Scan(&revisionBytes)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	if revisionBytes != key.Compact {
-		return nil, false, ErrGameOperationConflict
-	}
-	return nil, false, errors.New("game message: revision exists without operation receipt")
+	return s.loadGameReceiptResult(ctx, receipt.chatID, receipt.messageID, receipt.content, receipt.deleted)
 }
 
 func (s *MessagesStore) loadGameReceiptResult(ctx context.Context, chatID, messageID uuid.UUID, content string, deleted bool) (*MessageRow, bool, error) {
@@ -433,47 +405,68 @@ func (s *MessagesStore) loadGameReceiptResult(ctx context.Context, chatID, messa
 }
 
 func gameReceipt(ctx context.Context, tx pgx.Tx, message gameprotocol.Message) (*MessageRow, bool, error) {
-	var compact string
-	var chatID, messageID uuid.UUID
-	var content string
-	var deleted bool
-	err := tx.QueryRow(ctx, `
-SELECT compact_jws, chat_id, message_id, result_content, result_deleted
-FROM game_message_operation_receipts
-WHERE application_id = $1 AND environment_id = $2 AND operation_id = $3
-	`, message.ApplicationID, message.EnvironmentID, message.OperationID).Scan(&compact, &chatID, &messageID, &content, &deleted)
-	if errors.Is(err, pgx.ErrNoRows) {
-		var revisionBytes string
-		revisionErr := tx.QueryRow(ctx, `
-SELECT compact_jws FROM game_message_revisions
-WHERE chat_id=$1 AND message_id=$2 AND revision=$3
-`, message.ChatID, message.MessageID, message.Revision).Scan(&revisionBytes)
-		if errors.Is(revisionErr, pgx.ErrNoRows) {
-			return nil, false, nil
-		}
-		if revisionErr != nil {
-			return nil, false, revisionErr
-		}
-		if revisionBytes != message.Compact {
-			return nil, false, ErrGameOperationConflict
-		}
-		return nil, false, errors.New("game message: revision exists without operation receipt")
+	key := gameprotocol.ReceiptKey{ApplicationID: message.ApplicationID, EnvironmentID: message.EnvironmentID,
+		OperationID: message.OperationID, ChatID: message.ChatID, MessageID: message.MessageID, Revision: message.Revision, Compact: message.Compact}
+	receipt, err := readGameReceipt(ctx, tx, key)
+	if err != nil || receipt == nil {
+		return nil, false, err
 	}
+	row, err := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`FROM messages WHERE chat_id=$1 AND id=$2`, receipt.chatID, receipt.messageID))
 	if err != nil {
 		return nil, false, err
 	}
-	if compact != message.Compact {
-		return nil, false, ErrGameOperationConflict
-	}
-	row, err := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`FROM messages WHERE chat_id=$1 AND id=$2`, chatID, messageID))
-	if err != nil {
-		return nil, false, err
-	}
-	row.Content = content
-	if deleted {
+	row.Content = receipt.content
+	if receipt.deleted {
 		row.DeletedAt = &row.CreatedAt
 	}
 	return row, true, nil
+}
+
+type gameReceiptRecord struct {
+	chatID, messageID uuid.UUID
+	content           string
+	deleted           bool
+}
+
+// Both dedupe tuples must be read in one statement. At READ COMMITTED, two
+// queries can straddle another writer's atomic commit and invent an orphan.
+func readGameReceipt(ctx context.Context, reader interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, key gameprotocol.ReceiptKey) (*gameReceiptRecord, error) {
+	var compact, revisionCompact, content *string
+	var chatID, messageID *uuid.UUID
+	var deleted *bool
+	err := reader.QueryRow(ctx, `
+SELECT r.compact_jws,r.chat_id,r.message_id,r.result_content,r.result_deleted,v.compact_jws
+FROM (
+  SELECT compact_jws,chat_id,message_id,result_content,result_deleted
+  FROM game_message_operation_receipts
+  WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3
+) r FULL JOIN (
+  SELECT compact_jws FROM game_message_revisions
+  WHERE chat_id=$4 AND message_id=$5 AND revision=$6
+) v ON true
+`, key.ApplicationID, key.EnvironmentID, key.OperationID, key.ChatID, key.MessageID, key.Revision).
+		Scan(&compact, &chatID, &messageID, &content, &deleted, &revisionCompact)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if compact == nil {
+		if revisionCompact != nil && *revisionCompact != key.Compact {
+			return nil, ErrGameOperationConflict
+		}
+		return nil, errors.New("game message: revision exists without operation receipt")
+	}
+	if *compact != key.Compact || chatID == nil || messageID == nil || *chatID != key.ChatID || *messageID != key.MessageID {
+		return nil, ErrGameOperationConflict
+	}
+	if content == nil || deleted == nil {
+		return nil, errors.New("game message: incomplete operation receipt")
+	}
+	return &gameReceiptRecord{chatID: *chatID, messageID: *messageID, content: *content, deleted: *deleted}, nil
 }
 
 func (s *MessagesStore) insertGameMessage(ctx context.Context, tx pgx.Tx, message gameprotocol.Message, senderProfileID uuid.UUID) (*MessageRow, error) {

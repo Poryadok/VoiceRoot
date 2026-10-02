@@ -73,7 +73,7 @@ class FixtureTests(unittest.TestCase):
                 self.assertIsNotNone(bits)
                 self.assertGreaterEqual(int(bits.group(1)), 2048)
                 public_keys.add(public)
-        for issuer in ("gameintegration", "voice"):
+        for issuer in ("gameintegration", "voice", "bot"):
             for kid in ("current", "next"):
                 path = self.dest / issuer / f"{kid}.pem"
                 self.assertTrue(path.read_text().startswith("-----BEGIN PRIVATE KEY-----"),
@@ -84,16 +84,19 @@ class FixtureTests(unittest.TestCase):
                 self.assertIsNotNone(bits)
                 self.assertGreaterEqual(int(bits.group(1)), 2048)
                 public_keys.add(public)
-        self.assertEqual(len(public_keys), 8, "issuer and service signing keys must be independent")
+        self.assertEqual(len(public_keys), 10, "issuer and service signing keys must be independent")
 
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
-        self.assertEqual({p.name for p in ca.parent.iterdir()}, {"ca.crt", "gameintegration-client-ca.crt"},
+        self.assertEqual({p.name for p in ca.parent.iterdir()},
+                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt"},
                          "CA signing key must not survive issuance")
         for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
                                ("gameintegration-jwks", "gameintegration"),
                                 ("voice-jwks", "voice"), ("chat-gis-grpc", "chat"),
-                                ("voice-game-grpc", "voice")):
+                                ("voice-game-grpc", "voice"), ("space-lifecycle", "space"),
+                                ("bot-game-event", "bot"), ("notification-lifecycle", "notification"),
+                                ("messaging-gameintegration-grpc", "messaging")):
             with self.subTest(leaf=leaf):
                 cert = self.dest / "tls" / f"{leaf}.crt"
                 key = self.dest / "tls" / f"{leaf}.key"
@@ -132,7 +135,7 @@ class FixtureTests(unittest.TestCase):
 
     def test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice(self):
         ca = self.dest / "ca/gameintegration-client-ca.crt"
-        for leaf in ("gameintegration-chat-client", "gameintegration-voice-client"):
+        for leaf in ("gameintegration-chat-client", "gameintegration-voice-client", "gameintegration-messaging-client"):
             with self.subTest(leaf=leaf):
                 cert = self.dest / f"tls/{leaf}.crt"
                 self.openssl("verify", "-CAfile", ca, "-purpose", "sslclient", cert)
@@ -141,6 +144,26 @@ class FixtureTests(unittest.TestCase):
                 self.assertNotIn("TLS Web Server Authentication", eku)
                 self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca/ca.crt",
                                         "-purpose", "sslclient", cert).returncode, 0)
+
+    def test_space_lifecycle_client_uses_only_its_dedicated_ca(self):
+        cert = self.dest / "tls/space-lifecycle-client.crt"
+        self.openssl("verify", "-CAfile", self.dest / "ca/space-lifecycle-client-ca.crt",
+                     "-purpose", "sslclient", cert)
+        for foreign_ca in ("ca.crt", "gameintegration-client-ca.crt"):
+            self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca" / foreign_ca,
+                                    "-purpose", "sslclient", cert).returncode, 0)
+        subject = self.openssl("x509", "-in", cert, "-noout", "-subject")
+        self.assertEqual(re.sub(r"\s+", "", subject).removeprefix("subject="), "CN=space")
+        eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
+        self.assertIn("TLS Web Client Authentication", eku)
+        self.assertNotIn("TLS Web Server Authentication", eku)
+
+    def test_certificate_serials_are_distinct_within_each_issuer(self):
+        issued = set()
+        for cert in (self.dest / "tls").glob("*.crt"):
+            identity = self.openssl("x509", "-in", cert, "-noout", "-issuer", "-serial")
+            self.assertNotIn(identity, issued, "one CA must not issue duplicate serials")
+            issued.add(identity)
 
     def test_jvm_truststore_contains_fixture_ca_and_no_private_entry(self):
         listing = require_success(run("keytool", "-list", "-rfc", "-keystore",
@@ -274,6 +297,9 @@ class ComposeTests(unittest.TestCase):
         cls.fixture = Path(cls.temp.name) / "fixture"
         cls.empty_env = Path(cls.temp.name) / "empty.env"
         cls.empty_env.write_text("")
+        for binary in ("openssl", "keytool"):
+            require_binary(binary)
+        require_success(run(sys.executable, GENERATOR, cls.fixture))
         # Whitelist execution prerequisites, never inherit developer Compose secrets.
         cls.env = {k: v for k, v in os.environ.items()
                    if k.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE",
@@ -313,6 +339,18 @@ class ComposeTests(unittest.TestCase):
         env = dict(self.env)
         env.pop("PHASE0_FIXTURE_DIR")
         self.assertNotEqual(run(*self.command(True), env=env).returncode, 0)
+
+    def test_every_fixture_bind_source_is_generated(self):
+        for service in self.merged:
+            for source, volume in self.fixture_mounts(service):
+                with self.subTest(service=service, source=source):
+                    path = self.fixture / source
+                    self.assertTrue(path.exists(), "Compose bind source is absent from generated fixture")
+                    if path.is_dir():
+                        self.assertTrue(any(path.iterdir()), "signer directory is empty")
+                    else:
+                        self.assertGreater(path.stat().st_size, 0)
+                    self.assertTrue(volume.get("read_only"), "fixture credentials must be mounted read-only")
 
     def test_frozen_environment_and_mounted_paths(self):
         for issuer in ("gateway", "space"):

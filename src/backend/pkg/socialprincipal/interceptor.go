@@ -123,6 +123,7 @@ func (v *Verifier) Verify(ctx context.Context, token, method, requestID, hash st
 	}
 	verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: claim.Issuer, ExpectedAudience: v.Target, ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: v.Resolve, ReplayGuard: v.Replay})
 	if err != nil {
+		v.diagnose(classifyVerificationError(err))
 		return principal.Principal{}, err
 	}
 	if verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {

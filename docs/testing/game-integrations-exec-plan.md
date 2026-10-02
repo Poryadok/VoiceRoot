@@ -2987,3 +2987,31 @@ message advisory keys in pg_locks, with signed keys converted into masked
 the eight-equal-receipts assertion; Search lint also passes. Production purge
 behavior is unchanged. The exact-blob R22 scope oracle passes on this repair
 state, including its changed-path/blob and staging-path negative fixtures.
+
+The next hosted checkpoint exposed a separate Phase0 generator/overlay gap:
+20 bind sources referenced by Compose were absent, including Space JWKS TLS,
+Bot signer/TLS, Notification/Messaging TLS and purpose-bound client identities.
+A real generated-fixture/rendered-Compose regression reproduces those missing
+sources. The generator now issues all configured files, with a dedicated Space
+lifecycle client CA, distinct serials per issuer, two independent Bot signing
+keys, and no published CA private keys. The complete offline suite passes 17
+tests; the POSIX permission test is reserved for Linux CI. Independent security
+review accepts this fixture delta. These credentials remain disposable local/CI
+fixtures and do not enable staging or a live provider.
+
+Hosted Messaging integration also exposed a READ COMMITTED race: a receipt
+query could miss a concurrent writer, while the following revision query saw
+that writer's atomic commit and reported a false orphan. Both receipt paths
+now read both dedupe tuples in one SQL snapshot. A deterministic PostgreSQL
+test commits the concurrent writer after the reader's first Scan: red before
+the repair, green afterwards. Five receipt/revision roots pass three times
+without skips, retaining immutable results, changed-bytes conflicts and real
+orphan denial. Messaging and shared-package lint pass.
+
+The T16 first protected User admission returns dependency Unavailable; the
+saved hosted log does not establish whether JWKS or replay Redis failed. The
+existing internal diagnostic callback now receives the bounded rejection class
+from VerifyService errors, with no claim, bearer, header or raw dependency error
+logged. Its two dependency regressions are red before and green after; shared
+principal/security short suites pass. Public statuses and admission policy are
+unchanged. T16 and exact-head ci-gate remain open pending the next hosted run.
