@@ -21,7 +21,12 @@ the config. Config/binary/source ancestor trust and provenance guards must pass.
 Any Pod referencing this PVC, any process FD/mapping into it, or mount namespace
 bind/nested mount fails. Process races, permission errors, missing/malformed API
 fields, file changes, symlinks, hardlinks for selected files, or special files
-also fail. There is no automatic retry or weakened mode. Failure may leave a
+also fail. A numeric process that vanishes during a scan may cause a complete
+scan restart only after fresh `/proc/<pid>` directory lookup verifies absence;
+at most three complete passes are attempted. Live processes with missing or
+denied inner references fail immediately. A detected source handle, mapping or
+mount veto is preserved even if that process exits during error cleanup. There
+is no weakened mode. Failure may leave a
 root-only partial output directory; it does not publish completion metadata.
 
 Mount/handle checks map the source and each namespace path into coordinates on
@@ -82,7 +87,8 @@ either. Use the exact printed path with `scp voice-staging:<path> <local-path>`
 as pmd after completion. No payloads or account/operator/user seeds are retrieved.
 If the helper reports failure, provide only that failure status for review.
 Failure JSON contains only pinned public guard/class/function labels and bounded
-numeric PID/errno when available; exception text, paths and tracebacks stay private.
+numeric PID/errno and pinned process-operation labels when available; exception
+text, paths and tracebacks stay private.
 
 ## Disposable Linux checks
 
