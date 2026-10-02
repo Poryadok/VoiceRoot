@@ -15,4 +15,6 @@ func TestUserDBMigrationFiles_IncludesPrivacyShowLastSeenMigration(t *testing.T)
 		"integration fixtures must apply the User-authoritative search projection schema")
 	require.Contains(t, UserDBMigrationFiles, "000017_account_lifecycle_search_tombstone.up.sql",
 		"integration fixtures must apply the account-delete overlay before consumer activation")
+	require.Contains(t, UserDBMigrationFiles, "000019_authority_source_revision.up.sql",
+		"integration fixtures must preserve the permanent inactive fence and shared authority clock")
 }

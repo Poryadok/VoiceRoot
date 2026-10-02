@@ -69,6 +69,29 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- User now serves an exact complete profile/SDK actor source on its separately
+  enabled source-only mTLS listener. Clean catalog19 and one transactional global
+  floor cover profile statements, durable inactive overlays and immutable SDK
+  actor tombstones. Every requested profile has an explicit present/missing fact;
+  absence alone neither grants User rights nor marks an SDK account inactive.
+  Historical aliases only deny the exact source account/actor and never import
+  target permissions/history. Names, privacy, receipt/proof/hash bytes stay local.
+  Actual pinned migrate and protected application factory checks cover revocation,
+  rollback preservation and dirty maintenance refusal. Catalog drift and scope
+  errors deny reads. A new two-profile deletion regression exposed pgx conn busy
+  before Search deletes; the canonical writer now closes its returning cursor
+  before appending events in the same transaction. Exact event replay preserves
+  the original fence and clock; forced outbox failure rolls back inbox, overlay,
+  profiles, events and clock and permits retry. The isolated 17-file delivery
+  passes 38 selected roots without skips, including SDK/deleted-account/event
+  regressions and shared transport checks. User short passes 106 roots (96
+  explicit integration skips); User vet and shared source/fixture vet with
+  GOWORK=off pass. The existing local Game Integration protobuf dependency is
+  declared explicitly so the isolated User module resolves its generated Bot
+  types. Other go.mod WIP remains local. Scoped review clears this seam.
+  Auth/GIS owning readers, common-vector publisher, content ACL, permanent node
+  fences, bundle/media/capacity acceptance remain open. No live source activation
+  or history changes and no parent gate advances.
 - Space now has a complete owning source on a separately enabled source-only
   mTLS listener. Its schema24 state/floor cut includes membership, account bans,
   communication timeouts, lifecycle/ownership gates, scoped room/category/tree

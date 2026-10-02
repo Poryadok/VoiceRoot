@@ -227,9 +227,31 @@ settings are `REPLAY_REDIS_PASSWORD`, `JWKS_CA_FILE` and `GRPC_LISTEN`. Federati
 HTTPS endpoint comes from the `federation` entry in `S2S_JWKS_URLS_JSON`.
 Shared S2S settings alone never enable the source. Partial local settings without
 an explicit flag fail startup; explicit false disables the source. The source
-service is never registered on legacy/privacy/GIS/Gateway listeners. User/GIS
-can reuse this source-only runtime with their own audience and schema preflight;
-their complete owning readers remain prerequisites.
+service is never registered on legacy/privacy/GIS/Gateway listeners. Other owners
+reuse this source-only runtime with their own audience and schema preflight.
+
+User's implemented source requires clean catalog19 and returns one explicit fact
+for every requested profile ID, including IDs with no User row. Existing profiles
+carry only their account association, positive eligibility revision, deleted and
+frozen flags and the durable account-inactive overlay. A missing opaque SDK actor
+does not imply an inactive account or grant User eligibility; the publisher must
+establish its exact Auth/GIS SDK tuple separately. Immutable historical actor
+aliases carry exact source account/actor, target account/profile and revisions.
+They are permanent source-actor deny facts and never grant target history or
+import the target profile's permissions. Receipts, hashes, proofs, names and
+privacy data stay in User.
+
+User's global transactional floor covers profile, inactive-overlay and SDK
+tombstone statements, including insertions/deletions. A repeatable-read cut
+captures the floor and all scoped facts together; identity sequences are not
+used as revision clocks. Catalog19 makes inactive overlays append-only and
+preserves the floor and tombstones through refused downgrade; dirty maintenance
+also stops an already serving reader. `USER_AUTHORITY_SOURCE_ENABLED=true` and
+the corresponding `USER_AUTHORITY_SOURCE_` TLS/client-CA/replay settings activate
+the separate source-only mTLS listener at `:9097`, with fixed Federation trust.
+Ordinary, privacy, File, Search and Auth listeners never register the source.
+Auth/GIS owning sources, unchanged-vector publisher and combined native-media
+acceptance remain prerequisites; this source alone enables no node authority.
 
 Handshake: открыть scoped stream → получить snapshot на watermark R и буфер
 изменений после R → атомарно активировать snapshot → применить последовательные
