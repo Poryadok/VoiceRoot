@@ -226,7 +226,7 @@ class InAppNotificationController {
         // Reconcile even when this notification is a replay. Center-row
         // deduplication is local presentation state and must not gate the
         // durable Chat/Messaging inbox snapshot.
-        unawaited(_ref.read(inboxReconcilerProvider.notifier).reconcile());
+        _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
         if (!_recordCenterRow(
           type: 'message_request',
           chatId: chatId,
@@ -300,7 +300,7 @@ class InAppNotificationController {
       return;
     }
     _ref.invalidate(messageRequestsSummaryProvider);
-    unawaited(_ref.read(inboxReconcilerProvider.notifier).reconcile());
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
     unawaited(_ref.read(chatListControllerProvider.notifier).loadInitial());
     if (change == 'inbox_bucket_changed') {
       _ref.invalidate(friendsListProvider);
