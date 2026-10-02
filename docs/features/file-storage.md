@@ -143,3 +143,15 @@ it never discovers a replacement set. A blob enters `GC_PENDING` only at zero
 live references across all owner types. Logical deletion completes at durable
 access denial/GC handoff; physical R2 removal retries until every object key is
 confirmed absent.
+
+The protected Messaging owner runtime acquires references for ordinary sends
+and forwards before making the message visible. A durable send intent keeps
+the exact tuple and stable message ID across lost responses and concurrent
+client retries. A 15-minute abandoned intent is released by the authenticated
+recovery worker; a frozen Space defers that cleanup to its sealed producer.
+Pending acquisitions are included in the immutable Space producer manifest.
+File uses exact reference/fence checks for files already in this ledger even
+before full selector activation; unattached legacy upload validation remains
+available. Private purged-Space send intent data expires with the participant's
+30-day evidence window. This slice does not activate all legacy selectors or
+wire every game-owned attachment producer.

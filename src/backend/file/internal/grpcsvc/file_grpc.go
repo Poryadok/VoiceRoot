@@ -110,25 +110,29 @@ type Deps struct {
 	Events                   fileevents.Publisher
 	Entitlements             EntitlementResolver
 	ReferenceAuthorityActive bool
-	RevocableDownloadKey     []byte
-	RevocableDownloadBaseURL string
+	// During migration, files which have entered the reference ledger already
+	// require exact reference checks; unattached upload validation remains legacy.
+	ReferenceLifecycleEnabled bool
+	RevocableDownloadKey      []byte
+	RevocableDownloadBaseURL  string
 }
 
 type FileGRPC struct {
 	filev1.UnimplementedFileServiceServer
-	files                    *store.FilesStore
-	presigner                r2file.Presigner
-	deleter                  r2file.ObjectDeleter
-	clock                    Clock
-	chatGuard                ChatGuard
-	processor                ImageProcessor
-	reader                   ObjectReader
-	scanner                  Scanner
-	events                   fileevents.Publisher
-	entitlements             EntitlementResolver
-	referenceAuthorityActive bool
-	revocableDownloadKey     []byte
-	revocableDownloadBaseURL string
+	files                     *store.FilesStore
+	presigner                 r2file.Presigner
+	deleter                   r2file.ObjectDeleter
+	clock                     Clock
+	chatGuard                 ChatGuard
+	processor                 ImageProcessor
+	reader                    ObjectReader
+	scanner                   Scanner
+	events                    fileevents.Publisher
+	entitlements              EntitlementResolver
+	referenceAuthorityActive  bool
+	referenceLifecycleEnabled bool
+	revocableDownloadKey      []byte
+	revocableDownloadBaseURL  string
 }
 
 func New(deps Deps) *FileGRPC {
@@ -149,19 +153,20 @@ func New(deps Deps) *FileGRPC {
 		downloadBaseURL = "/api/v1/files/download"
 	}
 	return &FileGRPC{
-		files:                    deps.Files,
-		presigner:                deps.Presigner,
-		deleter:                  deps.Deleter,
-		clock:                    clock,
-		chatGuard:                deps.ChatGuard,
-		processor:                processor,
-		reader:                   deps.Reader,
-		scanner:                  deps.Scanner,
-		events:                   events,
-		entitlements:             deps.Entitlements,
-		referenceAuthorityActive: deps.ReferenceAuthorityActive,
-		revocableDownloadKey:     append([]byte(nil), deps.RevocableDownloadKey...),
-		revocableDownloadBaseURL: downloadBaseURL,
+		files:                     deps.Files,
+		presigner:                 deps.Presigner,
+		deleter:                   deps.Deleter,
+		clock:                     clock,
+		chatGuard:                 deps.ChatGuard,
+		processor:                 processor,
+		reader:                    deps.Reader,
+		scanner:                   deps.Scanner,
+		events:                    events,
+		entitlements:              deps.Entitlements,
+		referenceAuthorityActive:  deps.ReferenceAuthorityActive,
+		referenceLifecycleEnabled: deps.ReferenceLifecycleEnabled,
+		revocableDownloadKey:      append([]byte(nil), deps.RevocableDownloadKey...),
+		revocableDownloadBaseURL:  downloadBaseURL,
 	}
 }
 
@@ -585,6 +590,14 @@ func (s *FileGRPC) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetad
 	out := map[string]*filev1.FileMetadata{}
 	for _, id := range ids {
 		row, ok := rows[id]
+		if s.referenceLifecycleEnabled {
+			checked, err := s.fileAccessibleByProfile(ctx, id, profileID)
+			if err != nil {
+				return nil, err
+			}
+			out[id.String()] = fileRowToProto(checked)
+			continue
+		}
 		if !ok || row.Status == "deleted" || s.ensureFileAccess(ctx, row, profileID) != nil {
 			continue
 		}
@@ -831,7 +844,13 @@ func (s *FileGRPC) fileOwnedByUploader(ctx context.Context, fileID, profileID uu
 }
 
 func (s *FileGRPC) fileAccessibleByProfile(ctx context.Context, fileID, profileID uuid.UUID) (store.FileRow, error) {
-	if s.referenceAuthorityActive {
+	migrated := false
+	if s.referenceLifecycleEnabled {
+		if err := s.files.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_references WHERE file_id=$1)`, fileID).Scan(&migrated); err != nil {
+			return store.FileRow{}, status.Error(codes.Unavailable, "file reference authority unavailable")
+		}
+	}
+	if s.referenceAuthorityActive || migrated {
 		tx, err := s.files.Pool.Begin(ctx)
 		if err != nil {
 			return store.FileRow{}, status.Error(codes.Internal, err.Error())

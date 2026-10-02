@@ -23,6 +23,11 @@ func TestSpaceFileProducerSnapshotSurvivesPayloadDeletionAndRejectsUnfencedCaptu
 	space, operation, chat, message, file := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	_, err := pool.Exec(ctx, `INSERT INTO messages(id,chat_id,chat_type,sender_profile_id,content,attachments,created_at) VALUES($1,$2,'dm',$3,'fixture',$4::jsonb,clock_timestamp()-interval '1 hour')`, message, chat, uuid.New(), fmt.Sprintf(`[{"type":"image","file_id":"%s"}]`, file))
 	require.NoError(t, err)
+	// Completed sends retain exact intent bytes only within the same private
+	// lifecycle evidence window; a foreign Space intent must remain untouched.
+	foreignSpace := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO messaging_attachment_send_intents(operation_id,message_id,chat_id,scope_space_id,request_sha256,references_bytes,state,completed_at) VALUES($1,$2,$3,$4,$5,$6,'COMMITTED',clock_timestamp()),($7,$8,$9,$10,$5,$6,'COMMITTED',clock_timestamp())`, uuid.New(), message, chat, space, make([]byte, 32), []byte("private references"), uuid.New(), uuid.New(), uuid.New(), foreignSpace)
+	require.NoError(t, err)
 	_, err = s.SpaceFileProducerReferences(ctx, space, operation, 7)
 	require.Error(t, err)
 	manifest := &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ItemCount: 1, ManifestSha256: messagingChatManifestSHA(space, operation, 7, []uuid.UUID{chat})}
@@ -63,10 +68,16 @@ func TestSpaceFileProducerSnapshotSurvivesPayloadDeletionAndRejectsUnfencedCaptu
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messaging_space_file_producers WHERE space_id=$1`, space).Scan(&count))
 	require.Equal(t, 1, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messaging_attachment_send_intents WHERE scope_space_id=$1`, space).Scan(&count))
+	require.Equal(t, 1, count, "private send evidence remains within 30 days")
 	_, err = pool.Exec(ctx, `UPDATE messaging_space_purge_receipts SET completed_at=clock_timestamp()-interval '30 days 1 second' WHERE space_id=$1`, space)
 	require.NoError(t, err)
 	require.NoError(t, s.CleanupSpaceLifecycleEvidence(ctx))
 	require.NoError(t, s.CleanupSpaceLifecycleEvidence(ctx))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messaging_attachment_send_intents WHERE scope_space_id=$1`, space).Scan(&count))
+	require.Zero(t, count, "terminal private attachment tuples expire with parent evidence")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messaging_attachment_send_intents WHERE scope_space_id=$1`, foreignSpace).Scan(&count))
+	require.Equal(t, 1, count, "another Space's intent is preserved")
 	for _, table := range []string{"messaging_space_file_producers", "messaging_space_purge_receipts", "managed_chat_purge_operations", "managed_chat_purge_messages", "messaging_space_lifecycle_operations"} {
 		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&count))
 		require.Zero(t, count, table)

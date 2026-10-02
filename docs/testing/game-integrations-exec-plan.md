@@ -69,6 +69,26 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- T40 real public attachment fixture first failed at zero durable File refs
+  after a successful upload/send. The repair persists an exact pending send
+  intent before the protected File acquire RPC, serializes client retries and
+  recovery, and commits visibility plus intent completion under the Space
+  lock/fence. Both ordinary Send and Forward use it when the protected owner
+  runtime is enabled. Abandoned acquisitions expire after 15 minutes and use
+  authenticated exact release; frozen intents defer to the sealed producer,
+  and pending nonvisible refs are captured in that immutable set. Private
+  purged-Space intent data expires with the 30-day parent evidence window.
+  Seven PostgreSQL roots pass (retry/conflict, concurrency, abandoned recovery,
+  legacy dedupe, freeze during acquire, pending freeze capture, producer
+  replay/retention); migrated File metadata/bulk uploader denial passes.
+  Rebuilt owners pass actual public upload/send/forward/freeze/purge with
+  nonempty exclusive and shared blobs: Space `b24c1f1e-0386-4ec1-a707-73adbfbfb544`,
+  operation `d560b84f-7336-476e-91f3-44a91f3c1a92`, PURGED/G2, 10 fences/10
+  purges, 0 skips, 12.75s. The exclusive ref has durable GC handoff; the shared
+  file retains exactly the foreign Space ref, stays LIVE and downloads its
+  original bytes. Unchanged full selector activation, frontend propagation,
+  game-owned attachment producers and full T40 scenario matrix remain open.
+  No gate or parent accounting advanced.
 - Dependency-complete lifecycle checkpoint `0cb996890` is pushed: 450 runtime,
   migration, protocol/generated-Go, Compose and scoped documentation paths.
   Its isolated HEAD-plus-selected-source snapshot passes short suites and vet

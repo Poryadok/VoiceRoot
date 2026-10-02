@@ -75,6 +75,37 @@ func (s *MessagesStore) SpaceFileProducerReferences(ctx context.Context, space, 
 	if err != nil {
 		return nil, err
 	}
+	// An acquisition may have reached File before its message becomes visible.
+	// Keep that durable intent in the sealed purge set, including a crash after
+	// the File effect. Completed message identities are already captured above.
+	rows, err = tx.Query(ctx, `SELECT references_bytes FROM messaging_attachment_send_intents i WHERE scope_space_id=$1 AND state='PENDING' AND NOT EXISTS(SELECT 1 FROM messages m WHERE m.id=i.message_id) ORDER BY message_id`, space)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var pending []byte
+		if err = rows.Scan(&pending); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		var acquire filev1.AcquireFileReferencesRequest
+		if err = proto.Unmarshal(pending, &acquire); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		for _, ref := range acquire.References {
+			if ref.GetScopeSpaceId() != space.String() {
+				rows.Close()
+				return nil, ErrSpaceManifestBinding
+			}
+			refs = append(refs, ref)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].FileId != refs[j].FileId {
 			return refs[i].FileId < refs[j].FileId

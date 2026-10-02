@@ -36,7 +36,7 @@ func TestComposeSpaceLifecycleExpiredPurge_live(t *testing.T) {
 		require.NotEmpty(t, u.Port())
 		require.Nil(t, u.User)
 	}
-	client := &http.Client{Timeout: 90 * time.Second}
+	client := composeLiveObjectClient(90 * time.Second)
 	const password = "VoiceQaTest1!"
 	owner := registerComposeUser(t, client, base, formatComposeEmail("lifecycle-purge-owner", time.Now().UnixNano()), password)
 	const name = "Lifecycle expired purge QA"
@@ -44,6 +44,26 @@ func TestComposeSpaceLifecycleExpiredPurge_live(t *testing.T) {
 	chatID, _ := lifecycleComposePopulatedChat(t, client, base, owner.AccessToken, spaceID)
 	controlSpace := createComposeSpace(t, client, base, owner.AccessToken, "Lifecycle purge control", "must survive")
 	controlChat, controlMessage := lifecycleComposePopulatedChat(t, client, base, owner.AccessToken, controlSpace)
+	// These are public uploads, actual object PUTs and production Messaging
+	// reference acquisition. A foreign Space must retain both its reference and
+	// readable object when the target's saved nonempty manifest is purged.
+	targetContent := []byte("exclusive lifecycle attachment " + uuid.NewString())
+	controlContent := []byte("control lifecycle attachment " + uuid.NewString())
+	targetFile, _ := lifecycleComposeAttachment(t, client, base, owner.AccessToken, chatID, targetContent)
+	controlFile, _ := lifecycleComposeAttachment(t, client, base, owner.AccessToken, controlChat, controlContent)
+	lifecycleComposeDownload(t, client, base, owner.AccessToken, targetFile, targetContent)
+	lifecycleComposeDownload(t, client, base, owner.AccessToken, controlFile, controlContent)
+	postgres := lifecycleComposePostgres(t, project)
+	targetReference := "SELECT count(*) FROM file_references WHERE file_id='" + targetFile + "'::uuid AND scope_space_id='" + spaceID + "'::uuid AND released_at IS NULL;"
+	controlReference := "SELECT count(*) FROM file_references WHERE file_id='" + controlFile + "'::uuid AND scope_space_id='" + controlSpace + "'::uuid AND released_at IS NULL;"
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", targetReference), "public send must acquire a Space-scoped reference")
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", controlReference))
+	sharedContent := []byte("shared lifecycle attachment " + uuid.NewString())
+	sharedFile, sharedMessage := lifecycleComposeAttachment(t, client, base, owner.AccessToken, chatID, sharedContent)
+	forwardStatus, _ := forwardComposeMessageStatus(t, client, base, owner.AccessToken, sharedMessage, controlChat, "")
+	require.Equal(t, http.StatusOK, forwardStatus, "public forward must acquire the same blob under a new exact owner tuple")
+	sharedRefs := "SELECT count(*) FROM file_references WHERE file_id='" + sharedFile + "'::uuid AND released_at IS NULL;"
+	require.Equal(t, "2", lifecycleComposeDatabaseSQL(t, postgres, "file_db", sharedRefs))
 	operation := uuid.NewString()
 	path := "/api/v1/spaces/" + spaceID
 	status, body := lifecycleComposeRequest(t, client, base, owner.AccessToken, http.MethodPost, "/api/v1/auth/space-deletion-proof", map[string]string{
@@ -69,8 +89,10 @@ func TestComposeSpaceLifecycleExpiredPurge_live(t *testing.T) {
 	purgeAfter, err := time.Parse(time.RFC3339Nano, frozen.Space["purge_after"].(string))
 	require.NoError(t, err)
 	require.Equal(t, 7*24*time.Hour, purgeAfter.Sub(scheduled))
+	fileStatus, _ := composeGetFileURL(t, client, base, owner.AccessToken, targetFile)
+	require.Contains(t, []int{http.StatusForbidden, http.StatusNotFound, http.StatusGone, http.StatusPreconditionFailed}, fileStatus, "frozen target cannot refresh its download")
+	lifecycleComposeDownload(t, client, base, owner.AccessToken, controlFile, controlContent)
 
-	postgres := lifecycleComposePostgres(t, project)
 	spaceUUID, err := uuid.Parse(spaceID)
 	require.NoError(t, err)
 	require.Equal(t, spaceUUID.String(), spaceID)
@@ -113,11 +135,47 @@ func TestComposeSpaceLifecycleExpiredPurge_live(t *testing.T) {
 	require.Equal(t, "0", lifecycleComposeDatabaseSQL(t, postgres, "chat_db", "SELECT count(*) FROM chats WHERE id='"+chatID+"'::uuid;"), "saved nonempty Chat manifest must be purged")
 	require.Equal(t, "0", lifecycleComposeDatabaseSQL(t, postgres, "messaging_db", "SELECT count(*) FROM messages WHERE chat_id='"+chatID+"'::uuid;"), "all target message content must be removed")
 	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "chat_db", "SELECT count(*) FROM chats WHERE id='"+controlChat+"'::uuid;"), "another Space's Chat must survive")
+	require.Equal(t, "0", lifecycleComposeDatabaseSQL(t, postgres, "file_db", targetReference), "target references must be durably released")
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", controlReference), "foreign reference must remain live")
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", "SELECT count(*) FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id='"+targetFile+"'::uuid AND b.gc_operation_id IS NOT NULL AND b.state IN ('GC_PENDING','GC_COMPLETE');"), "unreferenced target blob must have durable GC handoff")
+	fileStatus, _ = composeGetFileURL(t, client, base, owner.AccessToken, targetFile)
+	require.Contains(t, []int{http.StatusForbidden, http.StatusNotFound, http.StatusGone}, fileStatus, "purged target cannot mint a download")
+	lifecycleComposeDownload(t, client, base, owner.AccessToken, controlFile, controlContent)
 	getComposeMessagesContains(t, client, base, owner.AccessToken, controlChat, controlMessage, "lifecycle message must retain its identity")
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", sharedRefs), "only the foreign Space's forwarded reference survives")
+	require.Equal(t, "1", lifecycleComposeDatabaseSQL(t, postgres, "file_db", "SELECT count(*) FROM file_references WHERE file_id='"+sharedFile+"'::uuid AND scope_space_id='"+controlSpace+"'::uuid AND released_at IS NULL;"))
+	require.Equal(t, "LIVE", lifecycleComposeDatabaseSQL(t, postgres, "file_db", "SELECT b.state FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id='"+sharedFile+"'::uuid;"), "shared binary must not enter GC")
+	lifecycleComposeDownload(t, client, base, owner.AccessToken, sharedFile, sharedContent)
 	status, _ = lifecycleComposeRequest(t, client, base, owner.AccessToken, http.MethodGet, path, nil)
 	require.Equal(t, http.StatusNotFound, status, "purged Space cannot expose a frozen projection")
 	status, _ = lifecycleComposeRequest(t, client, base, owner.AccessToken, http.MethodPost, path+"/restore", map[string]string{"operation_id": uuid.NewString()})
 	require.Equal(t, http.StatusNotFound, status, "purged Space must not be restored")
+}
+
+func lifecycleComposeAttachment(t *testing.T, client *http.Client, base, bearer, chatID string, content []byte) (string, string) {
+	t.Helper()
+	fileID, fileType := composeUploadTextFileInChat(t, client, base, bearer, chatID, "CHAT_TYPE_GROUP", "lifecycle.txt", content)
+	parsed, err := uuid.Parse(fileID)
+	require.NoError(t, err)
+	require.Equal(t, parsed.String(), fileID)
+	attachments, err := json.Marshal([]map[string]string{{"file_id": fileID, "type": fileType}})
+	require.NoError(t, err)
+	messageID := sendComposeMessageWithAttachmentsJSON(t, client, base, bearer, chatID, string(attachments))
+	return fileID, messageID
+}
+
+func lifecycleComposeDownload(t *testing.T, client *http.Client, base, bearer, fileID string, expected []byte) {
+	t.Helper()
+	status, downloadURL := composeGetFileURL(t, client, base, bearer, fileID)
+	require.Equal(t, http.StatusOK, status, "live reference must mint a download")
+	require.NotEmpty(t, downloadURL)
+	response, err := client.Get(downloadURL)
+	require.True(t, err == nil, "object download failed; signed URL withheld")
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	content, err := io.ReadAll(io.LimitReader(response.Body, int64(len(expected)+1)))
+	require.NoError(t, err)
+	require.Equal(t, expected, content, "actual uploaded object bytes must survive")
 }
 
 func lifecycleComposePostgres(t *testing.T, project string) string {
@@ -140,7 +198,7 @@ func lifecycleComposeSQL(t *testing.T, postgres, query string) string {
 
 func lifecycleComposeDatabaseSQL(t *testing.T, postgres, database, query string) string {
 	t.Helper()
-	require.Contains(t, []string{"space_db", "chat_db", "messaging_db"}, database)
+	require.Contains(t, []string{"space_db", "chat_db", "messaging_db", "file_db"}, database)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "rtk", "proxy", "docker", "exec", "-i", postgres,

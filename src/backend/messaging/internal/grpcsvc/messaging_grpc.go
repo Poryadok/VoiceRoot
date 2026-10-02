@@ -79,7 +79,8 @@ type MessagingGRPC struct {
 	Friends           ProfileFriendChecker
 	SpaceCoMembership SpaceCoMembershipChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
-	Files FileMetadataLookup
+	Files                FileMetadataLookup
+	AttachmentReferences *AttachmentReferenceCoordinator
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
 	MessageEvents messageevents.MessageEventsPublisher
 	// Moderation is optional; enforces space timeouts and chat slow mode before send.
@@ -305,8 +306,11 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 		ContentType:     contentType,
 		SendSilent:      req.GetSendSilent(),
 	}
-	saved, err := s.Messages.InsertMessage(ctx, row)
+	saved, err := s.insertMessageWithAttachments(ctx, row)
 	if err != nil {
+		if status.Code(err) != codes.Unknown {
+			return nil, err
+		}
 		if strings.Contains(err.Error(), "attachments_json") || strings.Contains(err.Error(), "mentions_json") {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
@@ -1548,8 +1552,11 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 		row.ForwardFromSender = originSender
 	}
 
-	saved, err := s.Messages.InsertMessage(ctx, row)
+	saved, err := s.insertMessageWithAttachments(ctx, row)
 	if err != nil {
+		if status.Code(err) != codes.Unknown {
+			return nil, err
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.MessageEvents != nil && !ghostOnly {

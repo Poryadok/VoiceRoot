@@ -1591,6 +1591,16 @@ func composeUploadTextFile(
 	content []byte,
 ) (fileID, fileType string) {
 	t.Helper()
+	return composeUploadTextFileInChat(t, client, base, accessToken, chatID, "CHAT_TYPE_DM", originalName, content)
+}
+
+func composeUploadTextFileInChat(
+	t *testing.T,
+	client *http.Client,
+	base, accessToken, chatID, chatType, originalName string,
+	content []byte,
+) (fileID, fileType string) {
+	t.Helper()
 	require.NotEmpty(t, content, "test upload content must be non-empty")
 	payload, err := json.Marshal(map[string]any{
 		"original_name": originalName,
@@ -1598,7 +1608,7 @@ func composeUploadTextFile(
 		"size_bytes":    len(content),
 		"context_chat": map[string]string{
 			"id":   chatID,
-			"type": "CHAT_TYPE_DM",
+			"type": chatType,
 		},
 	})
 	require.NoError(t, err)
@@ -1610,7 +1620,7 @@ func composeUploadTextFile(
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "upload request body=%s", string(body))
+	require.Equal(t, http.StatusOK, resp.StatusCode, "upload request status; signed response withheld")
 
 	var parsed struct {
 		UploadResponse struct {
@@ -1628,7 +1638,7 @@ func composeUploadTextFile(
 	require.NoError(t, err)
 	putReq.Header.Set("Content-Type", "text/plain")
 	putResp, err := client.Do(putReq)
-	require.NoError(t, err)
+	require.True(t, err == nil, "object upload failed; signed URL withheld")
 	defer putResp.Body.Close()
 	require.True(t, putResp.StatusCode >= 200 && putResp.StatusCode < 300, "PUT presigned status=%d", putResp.StatusCode)
 
@@ -1644,7 +1654,7 @@ func composeUploadTextFile(
 	require.NoError(t, err)
 	defer confirmResp.Body.Close()
 	confirmBody, _ := io.ReadAll(confirmResp.Body)
-	require.Equal(t, http.StatusOK, confirmResp.StatusCode, "confirm body=%s", string(confirmBody))
+	require.Equal(t, http.StatusOK, confirmResp.StatusCode, "confirm upload status; response withheld")
 	var confirmed struct {
 		FileMetadata struct {
 			FileType string `json:"file_type"`

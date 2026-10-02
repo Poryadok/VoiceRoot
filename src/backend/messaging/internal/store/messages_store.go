@@ -14,6 +14,7 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"voice/backend/messaging/internal/markdown"
@@ -322,6 +323,19 @@ func (s *MessagesStore) InsertMessage(ctx context.Context, row MessageRow) (*Mes
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
+	saved, err := insertMessageDB(ctx, s.Pool, row)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetMessageByID(ctx, saved.ID)
+}
+
+type messageInsertDB interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func insertMessageDB(ctx context.Context, db messageInsertDB, row MessageRow) (*MessageRow, error) {
 	if !json.Valid([]byte(row.AttachmentsJSON)) {
 		return nil, errors.New("attachments_json must be valid JSON")
 	}
@@ -373,7 +387,7 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
   WHERE client_message_id IS NOT NULL
   DO NOTHING
 `
-	ct, err := s.Pool.Exec(ctx, q,
+	ct, err := db.Exec(ctx, q,
 		row.ID, row.ChatID, chatType, row.SenderProfileID, row.PostedAsChat, displayAny,
 		row.Content, row.Type, threadAny, forwardFromAny, forwardSenderAny,
 		row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E, contentTypeAny, row.SendSilent,
@@ -385,13 +399,13 @@ ON CONFLICT (chat_id, sender_profile_id, client_message_id)
 		if row.ClientMessageID == nil {
 			return nil, errors.New("messages store: insert produced no row")
 		}
-		return scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
+		return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+`
 FROM messages
 WHERE chat_id = $1 AND sender_profile_id = $2 AND client_message_id = $3
 LIMIT 1
 `, row.ChatID, row.SenderProfileID, *row.ClientMessageID))
 	}
-	return s.GetMessageByID(ctx, row.ID)
+	return scanMessageRow(db.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, row.ID))
 }
 
 const messageSelectSQL = `

@@ -203,17 +203,18 @@ func main() {
 		options := append(ordinaryObservation, grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
 		grpcSrv = grpc.NewServer(options...)
 		service := grpcsvc.New(grpcsvc.Deps{
-			Files:                    filesStore,
-			Presigner:                presigner,
-			RevocableDownloadKey:     []byte(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_SIGNING_KEY"))),
-			RevocableDownloadBaseURL: strings.TrimRight(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_BASE_URL")), "/"),
-			Deleter:                  deleter,
-			ChatGuard:                chatGuard,
-			Reader:                   reader,
-			Processor:                processor,
-			Scanner:                  scanner,
-			Entitlements:             entitlements,
-			Events:                   eventPub,
+			Files:                     filesStore,
+			ReferenceLifecycleEnabled: protectedRuntime != nil,
+			Presigner:                 presigner,
+			RevocableDownloadKey:      []byte(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_SIGNING_KEY"))),
+			RevocableDownloadBaseURL:  strings.TrimRight(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_BASE_URL")), "/"),
+			Deleter:                   deleter,
+			ChatGuard:                 chatGuard,
+			Reader:                    reader,
+			Processor:                 processor,
+			Scanner:                   scanner,
+			Entitlements:              entitlements,
+			Events:                    eventPub,
 		})
 		revocableDownloadHTTP = grpcsvc.NewRevocableDownloadHTTPHandler(
 			[]byte(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_SIGNING_KEY"))), nil, service)

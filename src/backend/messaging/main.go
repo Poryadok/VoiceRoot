@@ -638,6 +638,7 @@ func main() {
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
 		if managedChatPurge != nil {
 			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
+			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			retentionCtx, retentionCancel := context.WithCancel(context.Background())
 			retentionDone := make(chan struct{})
 			defer func() { retentionCancel(); <-retentionDone }()
@@ -646,6 +647,9 @@ func main() {
 				ticker := time.NewTicker(time.Minute)
 				defer ticker.Stop()
 				for {
+					if err := (&store.MessagesStore{Pool: pool}).ReconcileAttachmentIntents(retentionCtx, messagingService.AttachmentReferences.Release); err != nil && retentionCtx.Err() == nil {
+						logger.Error("Messaging abandoned attachment recovery pass failed")
+					}
 					if err := (&store.MessagesStore{Pool: pool}).CleanupSpaceLifecycleEvidence(retentionCtx); err != nil && retentionCtx.Err() == nil {
 						logger.Error("Messaging Space lifecycle retention pass failed")
 					}
