@@ -49,6 +49,16 @@ func authorityRuntime(ctx context.Context) (*http.Server, *pgxpool.Pool, error) 
 		}
 		pins[pin] = true
 	}
+	mediaPins := map[string]bool{}
+	if configured := strings.TrimSpace(os.Getenv("FEDERATION_MEDIA_ISSUER_CERT_SHA256")); configured != "" {
+		for _, pin := range strings.Split(configured, ",") {
+			pin = strings.TrimSpace(pin)
+			if !validPin(pin) || pins[pin] || mediaPins[pin] {
+				return nil, nil, fmt.Errorf("invalid media issuer certificate pin")
+			}
+			mediaPins[pin] = true
+		}
+	}
 	cfg, err := pgxpool.ParseConfig(os.Getenv("FEDERATION_DATABASE_URL"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid federation database configuration")
@@ -70,11 +80,18 @@ func authorityRuntime(ctx context.Context) (*http.Server, *pgxpool.Pool, error) 
 		return nil, nil, fmt.Errorf("federation migration: %w", err)
 	}
 	store := &authorityStore{Pool: pool, Key: ed25519.NewKeyFromSeed(seed), KeyID: os.Getenv("FEDERATION_KEY_ID"), Issuer: os.Getenv("FEDERATION_ISSUER"), Environment: os.Getenv("FEDERATION_ENVIRONMENT")}
+	for pin := range mediaPins {
+		available, err := store.mediaIssuerPinAvailable(ctx, pin)
+		if err != nil || !available {
+			pool.Close()
+			return nil, nil, fmt.Errorf("media issuer identity unavailable")
+		}
+	}
 	addr := os.Getenv("FEDERATION_HTTPS_LISTEN")
 	if addr == "" {
 		addr = ":9443"
 	}
-	server := &http.Server{Addr: addr, Handler: &authorityAPI{Store: store, Operators: pins}, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots, Certificates: []tls.Certificate{cert}}, MaxHeaderBytes: 16 << 10}
+	server := &http.Server{Addr: addr, Handler: &authorityAPI{Store: store, Operators: pins, MediaIssuers: mediaPins}, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots, Certificates: []tls.Certificate{cert}}, MaxHeaderBytes: 16 << 10}
 	return server, pool, nil
 }
 

@@ -42,15 +42,16 @@ func TestFederationComposeIsOptInAndRequiresAllRuntimeSettings(t *testing.T) {
 		t.Fatalf("federation must be excluded from the standard app profile, got profiles %v", federation.Profiles)
 	}
 	expected := map[string]string{
-		"FEDERATION_DATABASE_URL":         "${FEDERATION_DATABASE_URL:-}",
-		"FEDERATION_TLS_CERT":             "/run/voice/federation/tls.crt",
-		"FEDERATION_TLS_KEY":              "/run/voice/federation/tls.key",
-		"FEDERATION_CLIENT_CA":            "/run/voice/federation/client-ca.crt",
-		"FEDERATION_SIGNING_SEED_FILE":    "/run/voice/federation/signing-seed",
-		"FEDERATION_KEY_ID":               "${FEDERATION_KEY_ID:-}",
-		"FEDERATION_ISSUER":               "${FEDERATION_ISSUER:-}",
-		"FEDERATION_ENVIRONMENT":          "${FEDERATION_ENVIRONMENT:-}",
-		"FEDERATION_OPERATOR_CERT_SHA256": "${FEDERATION_OPERATOR_CERT_SHA256:-}",
+		"FEDERATION_DATABASE_URL":             "${FEDERATION_DATABASE_URL:-}",
+		"FEDERATION_TLS_CERT":                 "/run/voice/federation/tls.crt",
+		"FEDERATION_TLS_KEY":                  "/run/voice/federation/tls.key",
+		"FEDERATION_CLIENT_CA":                "/run/voice/federation/client-ca.crt",
+		"FEDERATION_SIGNING_SEED_FILE":        "/run/voice/federation/signing-seed",
+		"FEDERATION_KEY_ID":                   "${FEDERATION_KEY_ID:-}",
+		"FEDERATION_ISSUER":                   "${FEDERATION_ISSUER:-}",
+		"FEDERATION_ENVIRONMENT":              "${FEDERATION_ENVIRONMENT:-}",
+		"FEDERATION_OPERATOR_CERT_SHA256":     "${FEDERATION_OPERATOR_CERT_SHA256:-}",
+		"FEDERATION_MEDIA_ISSUER_CERT_SHA256": "${FEDERATION_MEDIA_ISSUER_CERT_SHA256:-}",
 	}
 	for name, value := range expected {
 		if federation.Environment[name] != value {

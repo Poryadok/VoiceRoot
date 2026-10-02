@@ -6,7 +6,7 @@ and [`federation-authority-v1.md`](../../../docs/architecture/federation-authori
 It is intentionally not advertised through Gateway. Legacy S2S gRPC remains
 unimplemented. The production node controller and maintained node SFU now
 consume and enforce signed complete authority in owned local tests; production
-owner projection/media-grant issuance, node bundle and qualified capacity gates
+owning-service policy projection, node bundle and qualified capacity gates
 remain open, so the game merge/staging hold remains in force.
 
 `/health`, `/ready`, and `/metrics` listen on `:8080`. The separate mTLS API
@@ -37,3 +37,13 @@ PostgreSQL/API tests cover exact placement, room identity/collision, migration
 from schema 4, paged signed policy, revision/lease replay, mTLS controller
 consumption, suspension and Q11 clean-start audit. The node media fixture proves
 actual process death and watchdog enforcement; it uses a controlled signer.
+
+A separate pinned master Voice mTLS role can discover an unambiguous current
+media route and mint a private signed media credential. The Voice client then
+exchanges only that credential at the registered node's HTTPS `node-media`
+edge; the node signs the LiveKit JWT with its local secret. Route/application/
+binding/installation/session scope and publish permission are checked at master,
+exchange and SFU. See the authority contract for opt-in configuration and the
+explicit not-hosted result required for hosted fallback. Root PostgreSQL/mTLS
+tests and a separate production exchange/controller real-media fixture cover
+these mechanisms; combined owning-service projection acceptance remains open.

@@ -15,7 +15,7 @@ for module in ['federation', 'pkg']:
     target.mkdir(parents=True, exist_ok=True)
     for name in ['go.mod', 'go.sum']:
         shutil.copy2(root / 'src/backend' / module / name, target / name)
-for package in ['protocol', 'nodecache', 'mediaauthority', 'nodepublisher', 'cmd/node-authority']:
+for package in ['protocol', 'nodecache', 'mediaauthority', 'nodepublisher', 'cmd/node-authority', 'cmd/node-media']:
     target = context / 'src/backend/federation' / package
     target.mkdir(parents=True, exist_ok=True)
     for source in (root / 'src/backend/federation' / package).glob('*.go'):

@@ -6,7 +6,7 @@ context=pathlib.Path(tempfile.mkdtemp(prefix='build-',dir=working))
 for module in ['federation','pkg']:
     target=context/'src/backend'/module;target.mkdir(parents=True)
     for name in ['go.mod','go.sum']:shutil.copy2(root/'src/backend'/module/name,target/name)
-for package in ['protocol','nodecache','mediaauthority','nodepublisher','cmd/node-authority']:
+for package in ['protocol','nodecache','mediaauthority','nodepublisher','cmd/node-authority','cmd/node-media']:
     target=context/'src/backend/federation'/package;target.mkdir(parents=True,exist_ok=True)
     for source in (root/'src/backend/federation'/package).glob('*.go'):shutil.copy2(source,target/source.name)
 shutil.copy2(root/'docker/voice-node/authority/Dockerfile',context/'Dockerfile')

@@ -40,6 +40,9 @@ type Admission struct {
 	grant    Grant
 }
 
+// CanPublish is a verified master restriction, independent of the node's JWT.
+func (a Admission) CanPublish() bool { return a.registry != nil && a.grant.CanPublish }
+
 func NewRegistry(verifier Verifier, uncertainty time.Duration) (*Registry, error) {
 	if !safeText(verifier.Issuer, 128) || !safeText(verifier.Environment, 128) || !canonicalID(verifier.NodeID) ||
 		uncertainty < 0 || uncertainty > nodecache.MaxClockUncertainty || len(verifier.Keys) == 0 {
@@ -138,8 +141,11 @@ func (r *Registry) Check(admission Admission, now time.Time) error {
 	defer r.mu.RUnlock()
 	grant := admission.grant
 	policy, ok := r.spaces[grant.SpaceID]
+	expected := protocol.Permission{AccountID: grant.AccountID, ProfileID: grant.ProfileID, ResourceID: grant.ResourceID, SessionEpoch: grant.SessionEpoch, RoutingGeneration: grant.RoutingGeneration, RoomName: grant.RoomName,
+		ApplicationID: grant.ApplicationID, EnvironmentID: grant.EnvironmentID, BindingID: grant.BindingID, InstallationID: grant.InstallationID}
 	if !ok || policy.scope != grant.Scope() ||
-		policy.cache.Authorize(grant.AccountID, grant.ProfileID, grant.ResourceID, grant.SessionEpoch, "media", now, r.skew) != nil {
+		policy.cache.AuthorizeScoped(expected, "media", now, r.skew) != nil ||
+		(grant.CanPublish && policy.cache.AuthorizeScoped(expected, "media_publish", now, r.skew) != nil) {
 		return ErrDenied
 	}
 	return nil

@@ -217,6 +217,18 @@ metadata/attributes. Проверка на выбранном SFU узле вы�
 останавливает этот watchdog. Обычный refresh LiveKit JWT сохраняет исходный
 claim и не продлевает его срок либо authority lease.
 
+The current candidate also signs the positive routing generation, fresh nonce,
+optional complete app/environment/binding/installation tuple and publish right.
+A separated master Voice mTLS role resolves the canonical route and projected
+tuple, then issues the credential; the opt-in Voice consumer exchanges it at
+the node's HTTPS `node-media` edge for a locally signed LiveKit JWT. The master
+user token and Voice client certificate are never forwarded to the node.
+Publishing requires projected `media_publish` as well as `media`; exchange and
+SFU independently enforce this restriction and current complete policy. Only
+an explicit unhosted result for a globally unmapped resource permits hosted
+fallback. Production owning-service projection, full TLS node bundle and
+qualified capacity remain required activation gates.
+
 Candidate limits: signed snapshot/lease ≤2s; fixture refresh 100ms с lease
 1.5s; SFU watchdog 100ms; clock uncertainty ≤250ms; admission credential ≤30s.
 Deadline переводится в локальное monotonic time, точный replay не продлевает

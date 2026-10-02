@@ -321,6 +321,18 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - Voice Service создаёт/удаляет комнаты через LiveKit Server SDK
 - Voice Service генерирует JWT-токены для клиентов
 - Клиенты подключаются напрямую к LiveKit для медиа-потоков
+
+For mapped game-node Space rooms, the opt-in `VOICE_FEDERATED_MEDIA_CONFIG`
+client preserves the existing canonical Space/membership/Role and profile fence
+checks, resolves the exact current master route/application binding, obtains a
+private signed credential through a distinct Voice mTLS role, and exchanges
+only that credential at the registered HTTPS node media edge. The node's SFU
+secret stays local. Only an explicit version-1 not-hosted result permits hosted
+token issuance; denial, ambiguity, stale policy, generic HTTP error or unavailable
+authority fails closed. See [authority contract](../architecture/federation-authority-v1.md)
+and [runtime setup](../../docker/voice-node/authority/README.md). Owning-service
+projection, complete bundle and qualified capacity acceptance remain open.
+
 - WebRTC signaling (`offer`/`answer`/`ICE`) идёт внутри LiveKit SDK; собственный signaling через Realtime/Gateway не вводится в Фазе 2
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)

@@ -13,8 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice/backend/federation/mediaauthority"
 	"voice/backend/pkg/guestguard"
 	"voice/backend/voice/internal/authctx"
+	"voice/backend/voice/internal/federationmedia"
 	"voice/backend/voice/internal/gameprovision"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
@@ -37,6 +39,10 @@ type AccountVoiceProfileResolver interface {
 	AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error)
 }
 
+type FederatedMediaTokenIssuer interface {
+	JoinToken(context.Context, mediaauthority.RouteRequest) (mediaauthority.ExchangeResult, error)
+}
+
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
@@ -56,6 +62,7 @@ type VoiceGRPC struct {
 	Friends                  CallProfileFriendChecker
 	SpaceCoMembership        CallSpaceCoMembershipChecker
 	Tokens                   livekit.TokenIssuer
+	FederatedMedia           FederatedMediaTokenIssuer
 	Events                   voiceevents.Publisher
 	Now                      func() time.Time
 	RingTimeout              time.Duration
@@ -509,9 +516,6 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, err
 	}
-	if s.Tokens == nil {
-		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
-	}
 	if call.IsVoiceRoom() {
 		access, err := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
 		if err != nil {
@@ -527,6 +531,27 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	canPublish, err := s.voicePublishGrant(ctx, call, profileID)
 	if err != nil {
 		return nil, err
+	}
+	if call.IsVoiceRoom() && s.FederatedMedia != nil {
+		accountID, accountOK := authctx.AccountID(ctx)
+		epoch, epochOK := authctx.SessionEpoch(ctx)
+		md, _ := metadata.FromIncomingContext(ctx)
+		if !accountOK || !epochOK || len(md.Get(authctx.HeaderAccountID)) != 1 || len(md.Get(authctx.HeaderProfileID)) != 1 {
+			return nil, status.Error(codes.Unauthenticated, "verified media identity required")
+		}
+		result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{AccountID: accountID, ProfileID: profileID, SpaceID: call.SpaceID, ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName, SessionEpoch: epoch, CanPublish: canPublish != nil && *canPublish})
+		if mediaErr == nil {
+			return &callsv1.GetJoinTokenResponse{Jwt: result.JWT, LivekitUrl: result.LivekitURL, ExpiresAt: timestamppb.New(time.UnixMilli(result.ExpiresAt))}, nil
+		}
+		if !errors.Is(mediaErr, federationmedia.ErrNotHosted) {
+			if errors.Is(mediaErr, federationmedia.ErrDenied) {
+				return nil, status.Error(codes.PermissionDenied, "federated media denied")
+			}
+			return nil, status.Error(codes.Unavailable, "federated media unavailable")
+		}
+	}
+	if s.Tokens == nil {
+		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
 	}
 	jwt, expiresAt, err := s.Tokens.JoinToken(profileID, call.LivekitRoomName, canPublish, s.now())
 	if err != nil {

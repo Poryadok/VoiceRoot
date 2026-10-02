@@ -959,6 +959,7 @@ services:
       FEDERATION_ISSUER: ${FEDERATION_ISSUER:-}
       FEDERATION_ENVIRONMENT: ${FEDERATION_ENVIRONMENT:-}
       FEDERATION_OPERATOR_CERT_SHA256: ${FEDERATION_OPERATOR_CERT_SHA256:-}
+      FEDERATION_MEDIA_ISSUER_CERT_SHA256: ${FEDERATION_MEDIA_ISSUER_CERT_SHA256:-}
     volumes:
       - ${FEDERATION_LOCAL_SECRET_DIR:-./tmp/federation-local}:/run/voice/federation:ro
     depends_on:
@@ -1209,6 +1210,7 @@ services:
       LOG_LEVEL: debug
       VOICE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/voice_db?sslmode=disable
       VOICE_GRPC_LISTEN: :9090
+      VOICE_FEDERATED_MEDIA_CONFIG: ${VOICE_FEDERATED_MEDIA_CONFIG:-}
       VOICE_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090
       USER_GRPC_ADDR: user:9090
@@ -1220,6 +1222,8 @@ services:
       LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+    volumes:
+      - ${FEDERATION_MASTER_VOICE_SECRET_DIR:-./tmp/federation-master-voice}:/run/voice/federation-media:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -10,7 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -24,11 +28,38 @@ var ErrInvalid = errors.New("invalid authority protocol value")
 var ErrForbidden = errors.New("authority protocol verification failed")
 
 type Permission struct {
-	AccountID    string   `json:"account_id"`
-	ProfileID    string   `json:"profile_id"`
-	ResourceID   string   `json:"resource_id"`
-	SessionEpoch int64    `json:"session_epoch"`
-	Actions      []string `json:"actions"`
+	AccountID         string   `json:"account_id"`
+	ProfileID         string   `json:"profile_id"`
+	ResourceID        string   `json:"resource_id"`
+	SessionEpoch      int64    `json:"session_epoch"`
+	Actions           []string `json:"actions"`
+	RoutingGeneration int64    `json:"routing_generation,omitempty"`
+	RoomName          string   `json:"room_name,omitempty"`
+	ApplicationID     string   `json:"application_id,omitempty"`
+	EnvironmentID     string   `json:"environment_id,omitempty"`
+	BindingID         string   `json:"binding_id,omitempty"`
+	InstallationID    string   `json:"installation_id,omitempty"`
+}
+
+// Application scope is absent for ordinary Voice or complete for a game-bound
+// actor. Installation is optional only within that complete application scope.
+func ValidApplicationScope(application, environment, binding, installation string) bool {
+	if application == "" && environment == "" && binding == "" && installation == "" {
+		return true
+	}
+	return canonicalID(application) && canonicalID(environment) && canonicalID(binding) && (installation == "" || canonicalID(installation))
+}
+
+func ValidRoomName(value string) bool {
+	if value == "" || len(value) > 256 || strings.TrimSpace(value) != value || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
 }
 
 type Snapshot struct {
@@ -124,8 +155,15 @@ func (s Snapshot) Validate(now time.Time) error {
 		if !canonicalID(p.AccountID) || !canonicalID(p.ProfileID) || !canonicalID(p.ResourceID) || p.SessionEpoch < 1 || len(p.Actions) == 0 {
 			return ErrInvalid
 		}
+		media := slices.Contains(p.Actions, "media")
+		if slices.Contains(p.Actions, "media_publish") && !media {
+			return ErrInvalid
+		}
+		if !ValidApplicationScope(p.ApplicationID, p.EnvironmentID, p.BindingID, p.InstallationID) || p.RoutingGeneration < 0 || (p.RoomName != "" && (!media || !ValidRoomName(p.RoomName) || p.RoutingGeneration < 1)) || (media && p.RoutingGeneration > 0 && p.RoomName == "") {
+			return ErrInvalid
+		}
 		for _, action := range p.Actions {
-			if action != "read" && action != "write" && action != "subscribe" && action != "media" {
+			if action != "read" && action != "write" && action != "subscribe" && action != "media" && action != "media_publish" {
 				return ErrInvalid
 			}
 		}

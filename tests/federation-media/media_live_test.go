@@ -53,7 +53,11 @@ func (p *projectionPublisher) publish() error {
 		permissions := []protocol.Permission{}
 		if p.allow[space] {
 			for _, actor := range p.grants[space] {
-				permissions = append(permissions, protocol.Permission{AccountID: actor.AccountID, ProfileID: actor.ProfileID, ResourceID: actor.ResourceID, SessionEpoch: actor.SessionEpoch, Actions: []string{"media"}})
+				actions := []string{"media"}
+				if actor.CanPublish {
+					actions = append(actions, "media_publish")
+				}
+				permissions = append(permissions, protocol.Permission{AccountID: actor.AccountID, ProfileID: actor.ProfileID, ResourceID: actor.ResourceID, SessionEpoch: actor.SessionEpoch, Actions: actions, RoutingGeneration: actor.RoutingGeneration, RoomName: actor.RoomName, ApplicationID: actor.ApplicationID, EnvironmentID: actor.EnvironmentID, BindingID: actor.BindingID, InstallationID: actor.InstallationID})
 			}
 		}
 		p.revision[space]++
@@ -154,11 +158,12 @@ func fixtureJWT(t *testing.T, parameters fixtureParameters, private ed25519.Priv
 	t.Helper()
 	now := time.Now()
 	grant.IssuedAt, grant.ExpiresAt = now.UnixMilli(), now.Add(validity).UnixMilli()
+	grant.Nonce = uuid.NewString()
 	credential, err := mediaauthority.Sign(private, "fixture-1", grant, now)
 	require.NoError(t, err)
 	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
 	claims, _ := json.Marshal(map[string]any{"iss": parameters.APIKey, "sub": grant.ProfileID, "iat": now.Unix(), "nbf": now.Unix(), "exp": now.Add(time.Hour).Unix(),
-		"video": map[string]any{"roomJoin": true, "room": grant.RoomName}, mediaauthority.GrantClaim: credential})
+		"video": map[string]any{"roomJoin": true, "room": grant.RoomName, "canPublish": true, "canPublishData": false}, mediaauthority.GrantClaim: credential})
 	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	mac := hmac.New(sha256.New, []byte(parameters.APISecret))
 	_, _ = mac.Write([]byte(unsigned))
@@ -190,14 +195,18 @@ func runMediaAuthorityFixture(t *testing.T, controllerProcess bool) {
 	publisher := &projectionPublisher{private: private, directory: filepath.Join(directory, "authority"), allow: [2]bool{true, true}}
 	for space := range publisher.grants {
 		spaceID, resourceID, room := uuid.NewString(), uuid.NewString(), "authority-"+uuid.NewString()
+		applicationID, environmentID, installationID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 		for range 2 {
 			publisher.grants[space] = append(publisher.grants[space], mediaauthority.Grant{Version: 1, Issuer: "fixture-master", Audience: "voice-node-media", Environment: "sandbox", NodeID: parameters.NodeID,
-				SpaceID: spaceID, Generation: 1, AuthorityEpoch: 1, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: resourceID, SessionEpoch: 1, RoomName: room})
+				SpaceID: spaceID, Generation: 1, AuthorityEpoch: 1, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: resourceID, SessionEpoch: 1, RoomName: room, CanPublish: true, RoutingGeneration: 1, Nonce: uuid.NewString(),
+				ApplicationID: applicationID, EnvironmentID: environmentID, InstallationID: installationID, BindingID: uuid.NewString()})
 		}
 	}
 	var stopController func() time.Time
+	var exchange func(mediaauthority.Grant, time.Duration) (string, int)
 	if controllerProcess {
 		stopController = startControllerProcess(t, directory, parameters, publisher)
+		exchange = startNodeMediaProcess(t, directory, parameters, publisher)
 	} else {
 		require.NoError(t, publisher.publish())
 	}
@@ -233,6 +242,11 @@ func runMediaAuthorityFixture(t *testing.T, controllerProcess bool) {
 				validity = 3 * time.Second
 			}
 			token := fixtureJWT(t, parameters, private, grant, validity)
+			if exchange != nil {
+				var status int
+				token, status = exchange(grant, validity)
+				require.Equal(t, http.StatusOK, status, "production node edge must issue the LiveKit bearer")
+			}
 			peer, err := connectPeer(ctx, url, token)
 			require.True(t, err == nil, "real media admission must succeed")
 			defer peer.room.Disconnect()
@@ -245,6 +259,24 @@ func runMediaAuthorityFixture(t *testing.T, controllerProcess bool) {
 			require.Eventually(t, func() bool { return peer.packets.Load() >= 10 }, 15*time.Second, 20*time.Millisecond, "bidirectional nonempty RTP required")
 		}
 	}
+	for name, change := range map[string]func(*mediaauthority.Grant){
+		"application":        func(g *mediaauthority.Grant) { g.ApplicationID = uuid.NewString() },
+		"environment":        func(g *mediaauthority.Grant) { g.EnvironmentID = uuid.NewString() },
+		"binding":            func(g *mediaauthority.Grant) { g.BindingID = uuid.NewString() },
+		"installation":       func(g *mediaauthority.Grant) { g.InstallationID = uuid.NewString() },
+		"route":              func(g *mediaauthority.Grant) { g.RoutingGeneration++ },
+		"publish escalation": func(g *mediaauthority.Grant) { g.CanPublish = false },
+		"unscoped downgrade": func(g *mediaauthority.Grant) {
+			g.ApplicationID, g.EnvironmentID, g.BindingID, g.InstallationID = "", "", "", ""
+		},
+	} {
+		changed := publisher.grants[0][0]
+		change(&changed)
+		_, err := connectPeer(ctx, url, fixtureJWT(t, parameters, private, changed, 30*time.Second))
+		require.True(t, err != nil, "fresh signed %s mismatch cannot enter or replace an existing media participant", name)
+	}
+	beforeDenied := peers[0][0].packets.Load()
+	require.Eventually(t, func() bool { return peers[0][0].packets.Load() > beforeDenied+10 }, 2*time.Second, 20*time.Millisecond, "denied reconnect cannot displace the legitimate participant")
 	for _, group := range peers {
 		for _, peer := range group {
 			for _, remote := range peer.room.GetRemoteParticipants() {
@@ -301,6 +333,10 @@ func runMediaAuthorityFixture(t *testing.T, controllerProcess bool) {
 	}
 	_, err = connectPeer(ctx, url, freshBearer)
 	require.True(t, err != nil, "fresh unexpired bearer cannot reconnect while authority is expired")
+	if exchange != nil {
+		_, status := exchange(publisher.grants[1][0], 30*time.Second)
+		require.Equal(t, http.StatusForbidden, status, "node media edge remains alive but cannot issue after controller authority expires")
+	}
 	if controllerProcess {
 		publisher.mu.Lock()
 		current := publisher.revision

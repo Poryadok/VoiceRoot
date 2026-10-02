@@ -24,6 +24,7 @@ import (
 	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
+	"voice/backend/voice/internal/federationmedia"
 	"voice/backend/voice/internal/gameprincipal"
 	"voice/backend/voice/internal/gameprovision"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
@@ -317,6 +318,13 @@ func main() {
 	}
 
 	tokenTTL := time.Hour
+	federatedMedia, err := federationmedia.LoadFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatal("federated media configuration invalid")
+	}
+	if federatedMedia != nil {
+		defer federatedMedia.Close()
+	}
 	voiceSvc := &grpcsvc.VoiceGRPC{
 		Calls:                    callStore,
 		ManagedGameSessionRooms:  managedGameSessionRooms,
@@ -342,6 +350,9 @@ func main() {
 		Events:      events,
 		RingTimeout: 30 * time.Second,
 		Logger:      logger,
+	}
+	if federatedMedia != nil {
+		voiceSvc.FederatedMedia = federatedMedia
 	}
 	lis, err := net.Listen("tcp", grpcListen)
 	if err != nil {

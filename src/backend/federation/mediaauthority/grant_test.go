@@ -17,7 +17,7 @@ func TestMediaGrantBindsEveryAuthorityAndRoomDimension(t *testing.T) {
 	grant := Grant{Version: 1, Issuer: "master", Audience: "voice-node-media", Environment: "sandbox",
 		NodeID: uuid.NewString(), SpaceID: uuid.NewString(), Generation: 1, AuthorityEpoch: 2,
 		AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: uuid.NewString(), SessionEpoch: 7,
-		RoomName: "explicit-authoritative-room", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * time.Second).UnixMilli()}
+		RoomName: "explicit-authoritative-room", RoutingGeneration: 1, Nonce: uuid.NewString(), IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * time.Second).UnixMilli()}
 	verifier := Verifier{Issuer: grant.Issuer, Environment: grant.Environment, NodeID: grant.NodeID,
 		Keys: map[string]ed25519.PublicKey{"current": public}}
 	token, err := Sign(private, "current", grant, now)
@@ -26,13 +26,17 @@ func TestMediaGrantBindsEveryAuthorityAndRoomDimension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, grant, accepted)
 	for name, change := range map[string]func(*Grant){
-		"issuer":             func(g *Grant) { g.Issuer = "foreign" },
-		"audience":           func(g *Grant) { g.Audience = "voice-node" },
-		"node":               func(g *Grant) { g.NodeID = uuid.NewString() },
-		"environment":        func(g *Grant) { g.Environment = "prod" },
-		"missing account":    func(g *Grant) { g.AccountID = "" },
-		"zero epoch":         func(g *Grant) { g.SessionEpoch = 0 },
-		"unbounded validity": func(g *Grant) { g.ExpiresAt = now.Add(time.Minute).UnixMilli() },
+		"issuer":              func(g *Grant) { g.Issuer = "foreign" },
+		"audience":            func(g *Grant) { g.Audience = "voice-node" },
+		"node":                func(g *Grant) { g.NodeID = uuid.NewString() },
+		"environment":         func(g *Grant) { g.Environment = "prod" },
+		"missing account":     func(g *Grant) { g.AccountID = "" },
+		"zero epoch":          func(g *Grant) { g.SessionEpoch = 0 },
+		"zero route":          func(g *Grant) { g.RoutingGeneration = 0 },
+		"missing nonce":       func(g *Grant) { g.Nonce = "" },
+		"partial application": func(g *Grant) { g.ApplicationID = uuid.NewString() },
+		"orphan installation": func(g *Grant) { g.InstallationID = uuid.NewString() },
+		"unbounded validity":  func(g *Grant) { g.ExpiresAt = now.Add(time.Minute).UnixMilli() },
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed := grant

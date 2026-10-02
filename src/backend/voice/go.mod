@@ -28,7 +28,8 @@ require (
 	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
-	voice/backend/pkg v0.0.0-00010101000000-000000000000
+	voice/backend/federation v0.0.0
+	voice/backend/pkg v0.0.0
 )
 
 require (
@@ -151,6 +152,8 @@ require (
 )
 
 replace voice/backend/pkg => ../pkg
+
+replace voice/backend/federation => ../federation
 
 replace voice.app/voice/calls => ./pb/voice/calls
 

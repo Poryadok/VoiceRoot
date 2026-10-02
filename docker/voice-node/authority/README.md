@@ -6,7 +6,7 @@ Build the production command and its dependency closure:
 rtk proxy python scripts/federation/build-node-controller.py
 ```
 
-The image runs as UID/GID `10001`. Start `/usr/local/bin/node-authority --config
+The image runs as UID/GID `10001`. Start `/usr/local/bin/voice-node-authority --config
 /etc/voice-node/controller.json`. The strict JSON configuration names an HTTPS
 master root URL, pinned public trust, a node bearer credential file, CA and client
 certificate/key files, the shared authority directory, canonical Space UUIDs and
@@ -55,7 +55,53 @@ and a still-valid admission credential cannot reconnect. Run
 `TestSFUEnforcesControllerProcessDeathForRealMedia_live` through the opt-in media
 Compose fixture after building its client and SFU images.
 
-Production owner projection and media-grant issuance, persisted online boot and
+Production owning-service policy projection, persisted online boot and
 permanent fences, bundle deployment/rotation automation, and qualified worker
 load remain open. A local controller/media test does not complete T73–T78 or
 capacity acceptance. See the [ExecPlan](../../../docs/testing/game-integrations-exec-plan.md).
+
+## Node-local Voice media edge
+
+The same image includes `/usr/local/bin/node-media`. Run it as a separate
+container/process, overriding the entrypoint and passing `--config` to this
+strict JSON file (all paths below are node-local; no master private key):
+
+```json
+{
+  "listen_address": ":8443",
+  "trust_file": "/etc/voice-node/trust.json",
+  "authority_directory": "/var/lib/voice-node/authority",
+  "credentials_file": "/run/secrets/livekit.json",
+  "tls_cert_file": "/run/secrets/media.crt",
+  "tls_key_file": "/run/secrets/media.key",
+  "media_url": "wss://media.node.example.test"
+}
+```
+
+`livekit.json` contains only `api_key` and `api_secret` for this node's SFU.
+Mount that file and the HTTPS server key read-only for UID/GID 10001. Mount the
+controller's authority directory read-only; its same complete signed Bundles
+are rechecked every 100ms. The edge needs pinned master public trust, its own
+HTTPS key and its local SFU secret. It does not need the controller's bearer,
+node client key or a master user token. The edge speaks TLS 1.3 end-to-end;
+forwarded TLS headers do not enable plain HTTP. Its registered canonical root
+endpoint serves `POST /v1/media/token` with the narrow master-signed credential,
+explicit room and profile. Wrong/stale scope is denied and responses are no-store.
+
+The master Voice configuration is separate. `VOICE_FEDERATED_MEDIA_CONFIG`
+names strict JSON with `master_url`, `master_ca_file`, `client_cert_file`,
+`client_key_file`, `node_ca_file`, and `trust_file`. Its trust JSON contains
+`issuer`, `environment`, and `keys` (unpadded base64url Ed25519 public keys).
+Provision the distinct master Voice certificate pin in
+`FEDERATION_MEDIA_ISSUER_CERT_SHA256`. Compose mounts these master-only files
+from `FEDERATION_MASTER_VOICE_SECRET_DIR` at `/run/voice/federation-media:ro`.
+An absent configuration leaves hosted baseline active; an incomplete configured
+runtime fails startup. Federation-enabled deployments must configure this path
+before exposing mapped rooms. Rotation of files currently requires restart.
+
+The real media fixture starts the unmodified node-media child as UID/GID 10001,
+exchanges each admitted credential over verified HTTPS and uses its actual JWT
+at the SFU. Only its internal test media URL is substituted for the returned
+public WSS URL; clean-host public TLS bundle acceptance remains open. After
+controller death the exchange stays alive but refuses new tokens, independently
+of the SFU expiry watchdog.

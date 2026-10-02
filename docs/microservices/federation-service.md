@@ -3,8 +3,10 @@
 Game federation remains deferred and is not advertised through Gateway. The
 master now has a bounded HTTPS authority foundation for enrollment, operator
 approval, certificate rotation, complete snapshots, and signed short leases.
-This does not implement the legacy S2S gRPC contract, a snapshot publisher, a
-Voice Node consumer, or media enforcement. The activation boundary and wire
+This does not implement the legacy S2S gRPC contract or owning-service snapshot
+publisher. A production node controller, master Voice media client, node-local
+HTTPS media exchange and maintained SFU enforcement now have scoped tests; full
+combined projection/bundle/capacity activation remains open. The wire
 details are in [Federation authority v1](../architecture/federation-authority-v1.md)
 and the [ExecPlan](../testing/federation-authority-exec-plan.md).
 
@@ -13,7 +15,7 @@ and the [ExecPlan](../testing/federation-authority-exec-plan.md).
 S2S-федерация: подключение внешних нод, синхронизация событий, маршрутизация уведомлений. Master ↔ Node архитектура.
 
 **Язык**: Go
-**БД**: PostgreSQL `federation_db`; schema version 1 is embedded in the Go
+**БД**: PostgreSQL `federation_db`; schema version 5 is embedded in the Go
 service and applied transactionally under a PostgreSQL advisory lock.
 **Current control plane**: dedicated TLS 1.3 HTTPS on `:9443`, mandatory
 verified client certificates, separate operator DER pins, node certificate
@@ -76,8 +78,8 @@ material through the environment secret manager; never commit it.
 
 Snapshots are complete effective allowlists, not partial deltas. There is no
 production owning-service publisher yet, and the service does not advertise a
-media capability. The future Voice Node policy projection and media verifier
-must validate the envelope and fail closed; full propagation and media ejection
+media capability. The node controller, HTTPS exchange and maintained SFU validate
+the envelope and fail closed; full owning-service propagation and qualified media ejection
 under the five-second budget are not acceptance claims for this foundation.
 
 The following legacy sections describe deferred product/data-plane targets.

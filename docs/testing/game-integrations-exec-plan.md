@@ -69,6 +69,56 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- T73/T74 now has a master Voice consumer and node-local HTTPS exchange candidate.
+  A separated pinned Voice mTLS role resolves the exact current global resource
+  route plus one unambiguous projected app/environment/binding/installation
+  tuple, then issues the narrow signed credential under canonical locks. Node
+  `node-media` holds only public master trust, local HTTPS identity and its SFU
+  secret; it checks current Bundle before wrapping the original credential in a
+  private LiveKit JWT. Signed `can_publish` also needs scoped `media_publish`;
+  SFU rejects wrapper escalation and active publishers close when that permission
+  disappears. Voice preserves canonical owner/membership/Role/fence checks and
+  never sends a master user token or Voice client certificate to the node. Only
+  explicit version-1 not-hosted lookup permits baseline fallback. Independent
+  review reproduced a foreign-Space resource mistaken for not-hosted (0 pass,
+  1 fail, no skips); global resource lookup now denies it. The same reviewer
+  clears the repair. Full Federation root: 19 pass/0 skip; Voice short: 184 pass/
+  113 intentionally skipped integration roots, 16 packages; both vets and master
+  Voice Docker build pass. Actual separate UID 10001 node-media HTTPS child
+  returns every admitted JWT in the controlled-signer/controller/SFU RTP run:
+  1 pass/0 skip, 8.97s; revoke eject 237/237ms, controller death 1,168/1,170ms,
+  live exchange refuses a fresh credential after authority expires. Its public
+  WSS URL is substituted only for fixture-internal media transport, so full
+  bundle TLS/owning-service projection/capacity acceptance remains open. New
+  master/client tests and this media run are separate proofs, not a combined
+  production owning-source run. Deployment must set the opt-in Voice config
+  before exposing mapped rooms; incomplete configuration fails startup. Graphify
+  update on these changed inputs again times out at 45.4s (own process only);
+  graph freshness remains unverified. Accounting remains 43/60.
+- The complete routed/application tuple passes real SFU admission negatives and
+  controller process-death acceptance: 1 root, 0 skips, 7.99s; Space revoke eject
+  188/189ms, controller SIGKILL eject 1,173/1,174ms. Master issuance passes full
+  Federation root suite (19 roots, 0 skips) and vet, including actual mTLS roles,
+  canonical route and expiry during a blocked resource lock. Next consumer is
+  node-local HTTPS token exchange: only the master-signed narrow credential may
+  choose subject/room/publish permission, node secret stays local, both exchange
+  and SFU independently check current policy. Add signed `can_publish` and scoped
+  `media_publish` permission before exchange so listen-only access cannot be
+  escalated by node JWT claims. Regression order: master/cache publish denial,
+  exchange token/privacy/expiry negatives, real runtime and media. Root is sole
+  writer; bounded luna auditor traces trusted caller binding/route context for
+  master Voice integration. Sources: game-federation §§5–7 and Voice canonical
+  Role publish checks. Full producer projection, permanent boot fences, capacity
+  and whole-sprint gates remain open; accounting stays 43/60.
+- Next T74 consumer: extend the private media admission and projected permission
+  tuple with positive routing generation, fresh grant nonce and optional complete
+  app/environment/binding scope (installation where applicable). Admission and
+  active-media checks require exact projected tuple/RTC room; legacy unscoped
+  policy cannot authorize routed media. Master issuance must derive node/Space/
+  room/generation from the current canonical route, use current complete policy,
+  and accept only a separate trusted Voice mTLS caller, never a node/operator or
+  client-supplied signing identity. The Voice/node exchange remains part of this
+  consumer; no full T73/T74 claim before actual issuer plus media acceptance.
 - T73/T74 next-consumer repair reproduced an active foreign-node resource
   registration (0 pass/1 fail, no skips) and now locks the exact node/Space
   placement before append/replay. Voice routes require the canonical owner's

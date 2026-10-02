@@ -51,6 +51,9 @@ replace(room, '\tsessionStartTime := time.Now()', '''	sessionStartTime := time.N
 		if err != nil {
 			return err
 		}
+		if pi.Grants.Video == nil || (pi.Grants.Video.GetCanPublish() && !voiceAdmission.CanPublish()) || pi.Grants.Video.GetCanPublishData() {
+			return mediaauthority.ErrDenied
+		}
 	}''')
 replace(room, '\t\t\tif err = room.ResumeParticipant(', '''			if r.voiceAuthority != nil {
 				if r.voiceAuthority.registry.Check(voiceAdmission, time.Now()) != nil {

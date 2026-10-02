@@ -68,6 +68,19 @@ func (c *Cache) Current() protocol.Snapshot {
 // Clock uncertainty is subtracted from the authority deadline, so it can only
 // cause early denial. A partial refresh never changes the policy being read.
 func (c *Cache) Authorize(accountID, profileID, resourceID string, sessionEpoch int64, action string, now time.Time, uncertainty time.Duration) error {
+	return c.authorize(protocol.Permission{AccountID: accountID, ProfileID: profileID, ResourceID: resourceID, SessionEpoch: sessionEpoch}, false, action, now, uncertainty)
+}
+
+// AuthorizeScoped compares the complete route/application tuple while holding
+// the policy lock. It does not clone or expose the whole policy on each check.
+func (c *Cache) AuthorizeScoped(expected protocol.Permission, action string, now time.Time, uncertainty time.Duration) error {
+	if expected.RoutingGeneration < 1 || !protocol.ValidApplicationScope(expected.ApplicationID, expected.EnvironmentID, expected.BindingID, expected.InstallationID) || (action == "media" && !protocol.ValidRoomName(expected.RoomName)) {
+		return ErrPermissionDenied
+	}
+	return c.authorize(expected, true, action, now, uncertainty)
+}
+
+func (c *Cache) authorize(expected protocol.Permission, scoped bool, action string, now time.Time, uncertainty time.Duration) error {
 	if c == nil || uncertainty < 0 || uncertainty > MaxClockUncertainty {
 		return ErrClockUncertain
 	}
@@ -94,7 +107,10 @@ func (c *Cache) Authorize(accountID, profileID, resourceID string, sessionEpoch 
 		return ErrAuthorityExpired
 	}
 	for _, permission := range snapshot.Permissions {
-		if permission.AccountID != accountID || permission.ProfileID != profileID || permission.ResourceID != resourceID || permission.SessionEpoch != sessionEpoch {
+		if permission.AccountID != expected.AccountID || permission.ProfileID != expected.ProfileID || permission.ResourceID != expected.ResourceID || permission.SessionEpoch != expected.SessionEpoch {
+			continue
+		}
+		if scoped && (permission.RoutingGeneration != expected.RoutingGeneration || permission.RoomName != expected.RoomName || permission.ApplicationID != expected.ApplicationID || permission.EnvironmentID != expected.EnvironmentID || permission.BindingID != expected.BindingID || permission.InstallationID != expected.InstallationID) {
 			continue
 		}
 		for _, granted := range permission.Actions {

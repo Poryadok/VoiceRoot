@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"voice/backend/federation/protocol"
 )
 
 var errInvalidHostedResource = errors.New("invalid hosted resource mapping")
@@ -125,13 +123,8 @@ func normalizeHostedResource(input HostedResourceMapping) (HostedResourceMapping
 		return HostedResourceMapping{}, errInvalidHostedResource
 	}
 	if input.ResourceType == "voice_room" {
-		if input.RoomName == "" || len(input.RoomName) > 256 || strings.TrimSpace(input.RoomName) != input.RoomName || !utf8.ValidString(input.RoomName) || !slices.Contains(input.Capabilities, "voice") {
+		if !protocol.ValidRoomName(input.RoomName) || !slices.Contains(input.Capabilities, "voice") {
 			return HostedResourceMapping{}, errInvalidHostedResource
-		}
-		for _, character := range input.RoomName {
-			if unicode.IsControl(character) {
-				return HostedResourceMapping{}, errInvalidHostedResource
-			}
 		}
 	} else if input.RoomName != "" {
 		return HostedResourceMapping{}, errInvalidHostedResource

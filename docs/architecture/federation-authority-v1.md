@@ -35,6 +35,8 @@ HTTP 400/403/409/503. Requests have a three-second database deadline.
 | GET /v1/nodes/{node}/spaces/{space}/snapshot/pages/{index} | Node certificate + Bearer | Signed exact-scope snapshot page |
 | GET /v1/nodes/{node}/spaces/{space}/revisions?after_revision=N | Node certificate + Bearer | Bounded signed revision stream or resnapshot requirement |
 | POST /v1/nodes/{node}/spaces/{space}/lease | Node certificate + Bearer | `{revision,hash,nonce}` returns signed lease Envelope |
+| POST /internal/v1/media-routes | Separate master Voice certificate | Account/profile/Space/resource/explicit RTC room/session epoch/publish request → versioned hosted result and exact current projected grant request |
+| POST /internal/v1/media-grants | Separate master Voice certificate | Exact resolved subject/application/binding/installation/room/route → private signed narrow media credential and registered node endpoint |
 
 Successful mutations without a credential/envelope return `{status:"ok"}`.
 Credentials are 32 cryptographically random bytes encoded base64url; only their
@@ -75,6 +77,55 @@ retry of a foreign historical route is denied. A room-less historical voice
 route requires a new owner-supplied generation with its explicit canonical room
 before media grant issuance. No migration guesses a room, rewrites a saved
 route, or makes historical mismatches authoritative. `/ready` requires version 5.
+
+## Master Voice media discovery and node exchange
+
+`FEDERATION_MEDIA_ISSUER_CERT_SHA256` optionally pins a separate master Voice
+mTLS role. An empty list enables no media callers. Pins cannot overlap operator
+or enrolled node certificates, including suspended nodes. This role cannot call
+node/operator routes; operator/node credentials cannot mint user media grants.
+
+Voice first rechecks canonical Space room ownership, active lifecycle,
+membership, Role join/speak and its existing account/profile admission fences.
+It passes only the authenticated account/profile/session epoch and canonical
+Space/resource/RTC room to `/internal/v1/media-routes`. The lookup derives the
+positive routing generation and complete optional application/environment/
+binding/installation scope from one unambiguous current projected permission.
+It never chooses arbitrary client application fields or infers room identity.
+Only absence of a global canonical resource mapping returns
+`{"version":1,"hosted":false}`. A resource mapped under another Space is denied.
+Mapped but frozen, denied, stale, ambiguous or unavailable authority does not
+allow hosted fallback. A hosted result contains `request` with the exact
+expected tuple; grant issuance revalidates it under node → placement → latest
+resource locks. A change between lookup and issuance denies rather than selecting
+a different binding/route.
+
+The signed private `voice_media_grant` binds issuer/environment/node, Space
+generation/authority epoch, account/profile/resource/session epoch, positive
+routing generation, explicit RTC room, fresh UUID nonce, optional complete
+application scope and `can_publish`. Grant validity is at most 30 seconds and
+the remaining node credential validity. `media` permits listening; publishing
+also requires `media_publish` on that same scoped permission. Grant issuance
+resamples the database clock after query/lock waits. Legacy unrouted policy
+cannot authorize this path.
+
+The opt-in master Voice client uses `VOICE_FEDERATED_MEDIA_CONFIG`, pinned
+master public keys, a dedicated Voice client certificate and explicit master/
+node CA files. Only the narrow credential is sent to the registered HTTPS node
+endpoint's `POST /v1/media/token`; the master user token and Voice client
+certificate are never forwarded. The node-local `node-media` executable checks
+the signed credential against its current complete controller Bundle and signs
+the LiveKit JWT with its local SFU secret. Subject, room and publish rights come
+only from the verified grant. JWT expiry rounds down to the grant deadline;
+data publication is disabled. The credential stays in a private JWT claim,
+never participant metadata/attributes. The SFU independently checks current
+authority and denies a wrapper that broadens publish/data permissions. An
+active publisher loses admission when projected `media_publish` disappears.
+
+See [node media setup](../../docker/voice-node/authority/README.md). This runtime
+does not yet supply the owning-service policy projector, fresh-online boot
+fences, full node bundle or qualified capacity evidence. Those gates remain
+required before capability activation.
 
 ## HTTP request correlation and Q11 denial audit
 
@@ -127,7 +178,10 @@ most 256 permission entries. An empty permission list is one empty page and
 denies all. Permissions
 is the complete effective allowlist of objects with `account_id`, `profile_id`,
 `resource_id`, positive `session_epoch`, and `actions` containing `read`,
-`write`, `subscribe` or `media`. Missing entry means deny; missing/null
+`write`, `subscribe`, `media` or `media_publish` (the latter requires `media`).
+Routed media permissions carry positive `routing_generation`, canonical
+`room_name`, and either no application scope for ordinary Voice or complete
+application/environment/binding UUIDs plus optional installation UUID. Missing entry means deny; missing/null
 permissions is invalid. Publisher reconciles Space lifecycle, membership, Role
 overrides, bans, binding/profile/session state before producing this projection.
 Federation cannot write owning stores. There is no production owning-service

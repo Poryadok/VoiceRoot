@@ -20,7 +20,7 @@ func TestRegistryIsolatesSpacesAndNeverActivatesPartialOrRolledBackPolicy(t *tes
 	require.NoError(t, err)
 	grant := Grant{Version: 1, Issuer: verifier.Issuer, Audience: "voice-node-media", Environment: verifier.Environment,
 		NodeID: verifier.NodeID, SpaceID: uuid.NewString(), Generation: 1, AuthorityEpoch: 1, AccountID: uuid.NewString(),
-		ProfileID: uuid.NewString(), ResourceID: uuid.NewString(), SessionEpoch: 7, RoomName: "explicit-room-a", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * time.Second).UnixMilli()}
+		ProfileID: uuid.NewString(), ResourceID: uuid.NewString(), SessionEpoch: 7, RoomName: "explicit-room-a", RoutingGeneration: 1, Nonce: uuid.NewString(), IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * time.Second).UnixMilli()}
 	second := grant
 	second.SpaceID, second.ResourceID, second.RoomName = uuid.NewString(), uuid.NewString(), "explicit-room-b"
 	firstBundle := authorityBundle(t, private, grant, 1, now.Add(time.Second), now, true)
@@ -73,7 +73,7 @@ func TestRegistryDoesNotReplayExpiredGrantAcrossBoundedClockRollback(t *testing.
 	now := time.Now()
 	grant := Grant{Version: 1, Issuer: "master", Audience: "voice-node-media", Environment: "sandbox", NodeID: uuid.NewString(), SpaceID: uuid.NewString(),
 		Generation: 1, AuthorityEpoch: 1, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: uuid.NewString(), SessionEpoch: 1,
-		RoomName: "exact-room", IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Second).UnixMilli()}
+		RoomName: "exact-room", RoutingGeneration: 1, Nonce: uuid.NewString(), IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(time.Second).UnixMilli()}
 	registry, err := NewRegistry(Verifier{Issuer: grant.Issuer, Environment: grant.Environment, NodeID: grant.NodeID, Keys: map[string]ed25519.PublicKey{"current": public}}, 250*time.Millisecond)
 	require.NoError(t, err)
 	require.NoError(t, registry.Apply(authorityBundle(t, private, grant, 1, now.Add(2*time.Second), now, true), now))
@@ -92,7 +92,10 @@ func authorityBundle(t *testing.T, private ed25519.PrivateKey, grant Grant, revi
 	t.Helper()
 	permissions := []protocol.Permission{}
 	if allow {
-		permissions = append(permissions, protocol.Permission{AccountID: grant.AccountID, ProfileID: grant.ProfileID, ResourceID: grant.ResourceID, SessionEpoch: grant.SessionEpoch, Actions: []string{"media"}})
+		permissions = append(permissions, protocol.Permission{AccountID: grant.AccountID, ProfileID: grant.ProfileID, ResourceID: grant.ResourceID, SessionEpoch: grant.SessionEpoch, Actions: []string{"media"}, RoutingGeneration: grant.RoutingGeneration, RoomName: grant.RoomName, ApplicationID: grant.ApplicationID, EnvironmentID: grant.EnvironmentID, BindingID: grant.BindingID, InstallationID: grant.InstallationID})
+		if grant.CanPublish {
+			permissions[0].Actions = append(permissions[0].Actions, "media_publish")
+		}
 	}
 	snapshot := protocol.Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: revision, ValidUntil: until.UnixMilli(), Permissions: permissions}
 	manifest, err := protocol.SignSnapshotManifest(private, "current", grant.Scope(), protocol.ManifestFor(snapshot), now)
@@ -104,4 +107,51 @@ func authorityBundle(t *testing.T, private ed25519.PrivateKey, grant Grant, revi
 		Epoch: grant.AuthorityEpoch, Revision: revision, IssuedAt: now.UnixMilli(), ExpiresAt: until.UnixMilli(), Hash: protocol.SnapshotDigest(snapshot)})
 	require.NoError(t, err)
 	return Bundle{Scope: grant.Scope(), Manifest: manifest, Pages: pages, Lease: lease}
+}
+
+func TestRegistryChecksApplicationBindingRoomAndRouteOnAdmissionAndActiveMedia(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	now := time.Now()
+	grant := Grant{Version: 1, Issuer: "master", Audience: "voice-node-media", Environment: "sandbox", NodeID: uuid.NewString(), SpaceID: uuid.NewString(), Generation: 1, AuthorityEpoch: 1,
+		AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: uuid.NewString(), SessionEpoch: 3, RoomName: "canonical-game-room", RoutingGeneration: 7, Nonce: uuid.NewString(),
+		ApplicationID: uuid.NewString(), EnvironmentID: uuid.NewString(), BindingID: uuid.NewString(), InstallationID: uuid.NewString(), IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(30 * time.Second).UnixMilli()}
+	registry, err := NewRegistry(Verifier{Issuer: grant.Issuer, Environment: grant.Environment, NodeID: grant.NodeID, Keys: map[string]ed25519.PublicKey{"current": public}}, 250*time.Millisecond)
+	require.NoError(t, err)
+	require.NoError(t, registry.Apply(authorityBundle(t, private, grant, 1, now.Add(2*time.Second), now, true), now))
+	token, err := Sign(private, "current", grant, now)
+	require.NoError(t, err)
+	admission, err := registry.Admit(token, grant.RoomName, grant.ProfileID, now)
+	require.NoError(t, err)
+	for name, change := range map[string]func(*Grant){
+		"application":        func(g *Grant) { g.ApplicationID = uuid.NewString() },
+		"environment ID":     func(g *Grant) { g.EnvironmentID = uuid.NewString() },
+		"binding":            func(g *Grant) { g.BindingID = uuid.NewString() },
+		"installation":       func(g *Grant) { g.InstallationID = uuid.NewString() },
+		"room":               func(g *Grant) { g.RoomName += "-substituted" },
+		"route":              func(g *Grant) { g.RoutingGeneration++ },
+		"unscoped downgrade": func(g *Grant) { g.ApplicationID, g.EnvironmentID, g.BindingID, g.InstallationID = "", "", "", "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := grant
+			change(&changed)
+			credential, err := Sign(private, "current", changed, now)
+			require.NoError(t, err, "use a fresh valid master signature, not malformed input")
+			_, err = registry.Admit(credential, changed.RoomName, changed.ProfileID, now)
+			require.ErrorIs(t, err, ErrDenied)
+		})
+	}
+	advanced := grant
+	advanced.RoutingGeneration++
+	require.NoError(t, registry.Apply(authorityBundle(t, private, advanced, 2, now.Add(2*time.Second), now, true), now))
+	require.ErrorIs(t, registry.Check(admission, now), ErrDenied, "active admission cannot retain an earlier route generation")
+	credential, err := Sign(private, "current", advanced, now)
+	require.NoError(t, err)
+	_, err = registry.Admit(credential, advanced.RoomName, advanced.ProfileID, now)
+	require.NoError(t, err)
+	legacy := advanced
+	legacy.RoutingGeneration, legacy.RoomName = 0, ""
+	require.NoError(t, registry.Apply(authorityBundle(t, private, legacy, 3, now.Add(2*time.Second), now, true), now))
+	_, err = registry.Admit(credential, advanced.RoomName, advanced.ProfileID, now)
+	require.ErrorIs(t, err, ErrDenied, "legacy unscoped allowlist cannot authorize routed media")
 }

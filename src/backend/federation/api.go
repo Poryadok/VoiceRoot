@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"voice/backend/federation/mediaauthority"
 )
 
 type authorityAPI struct {
-	Store     *authorityStore
-	Operators map[string]bool
+	Store        *authorityStore
+	Operators    map[string]bool
+	MediaIssuers map[string]bool
 }
 
 func validPin(s string) bool {
@@ -145,6 +147,39 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 	if err != nil {
 		return nil, err
 	}
+	if (r.URL.Path == "/internal/v1/media-grants" || r.URL.Path == "/internal/v1/media-routes") && r.Method == http.MethodPost {
+		if !a.MediaIssuers[pin] || a.Operators[pin] {
+			return nil, errForbidden
+		}
+		if r.URL.RawQuery != "" {
+			return nil, errInvalid
+		}
+		if a.Store == nil || a.Store.Pool == nil {
+			return nil, errors.New("media authority unavailable")
+		}
+		available, err := a.Store.mediaIssuerPinAvailable(r.Context(), pin)
+		if err != nil {
+			return nil, err
+		}
+		if !available {
+			return nil, errForbidden
+		}
+		if r.URL.Path == "/internal/v1/media-routes" {
+			var request mediaauthority.RouteRequest
+			if decodeRequest(w, r, &request) != nil || request.Validate() != nil {
+				return nil, errInvalid
+			}
+			return a.Store.resolveMediaRoute(r.Context(), request)
+		}
+		var request mediaauthority.Request
+		if decodeRequest(w, r, &request) != nil || request.Validate() != nil {
+			return nil, errInvalid
+		}
+		return a.Store.issueMediaGrant(r.Context(), request)
+	}
+	if a.MediaIssuers[pin] {
+		return nil, errForbidden
+	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) < 2 || parts[0] != "v1" || parts[1] != "nodes" {
 		return nil, errInvalid
@@ -160,7 +195,7 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 			Endpoint   string `json:"endpoint"`
 			Pin        string `json:"certificate_sha256"`
 		}
-		if decodeRequest(w, r, &req) != nil || !canonicalID(req.NodeID) || !canonicalID(req.OperatorID) || !validPin(req.Pin) || a.Operators[req.Pin] {
+		if decodeRequest(w, r, &req) != nil || !canonicalID(req.NodeID) || !canonicalID(req.OperatorID) || !validPin(req.Pin) || a.Operators[req.Pin] || a.MediaIssuers[req.Pin] {
 			return nil, errInvalid
 		}
 		u, err := url.Parse(req.Endpoint)
@@ -191,7 +226,7 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 			var req struct {
 				Pin string `json:"certificate_sha256"`
 			}
-			if decodeRequest(w, r, &req) != nil || !validPin(req.Pin) || a.Operators[req.Pin] {
+			if decodeRequest(w, r, &req) != nil || !validPin(req.Pin) || a.Operators[req.Pin] || a.MediaIssuers[req.Pin] {
 				return nil, errInvalid
 			}
 			pin = req.Pin
