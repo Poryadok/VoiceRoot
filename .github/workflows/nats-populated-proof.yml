@@ -46,4 +46,13 @@ jobs:
       - name: Opaque inputs, exact grants, populated delivery and denial checks
         run: go test -count=1 -timeout=90s ./...
       - name: Pinned Docker boundary, retained source and failure cleanup proof
-        run: go test -tags=dockerproof -run TestDockerPopulatedProof -count=1 -timeout=4m ./...
+        run: |
+          # This fixture-only root custody is restricted to an ephemeral hosted VM.
+          # Root-owned 0600 copies remain readable by the capability-free UID0 clone.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          fixture_home=$(sudo mktemp -d "$RUNNER_TEMP/nats-populated-fixture.XXXXXX")
+          case "$fixture_home" in "$RUNNER_TEMP"/nats-populated-fixture.*) ;; *) exit 1 ;; esac
+          trap 'sudo rm -r -- "$fixture_home"' EXIT
+          sudo env -i PATH="$PATH" HOME="$fixture_home" TMPDIR="$fixture_home" \
+            GOCACHE="$fixture_home/cache" GOPATH="$fixture_home/go" GOTOOLCHAIN=local \
+            go test -tags=dockerproof -run TestDockerPopulatedProof -count=1 -timeout=4m ./...
