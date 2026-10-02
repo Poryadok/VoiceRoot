@@ -222,7 +222,7 @@ func TestNewRoleGRPCServers_ConfiguredRuntimeEnforcesListenerMatrix(t *testing.T
 	require.Equal(t, int64(len(v2Calls)), service.ownershipCalls.Load())
 }
 
-func newMainPrincipalRuntime(t *testing.T) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey, tls.Certificate) {
+func newMainPrincipalRuntime(t *testing.T, enableAuthority ...bool) (*principalruntime.Runtime, *x509.CertPool, *rsa.PrivateKey, tls.Certificate) {
 	t.Helper()
 	current, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -259,8 +259,13 @@ func newMainPrincipalRuntime(t *testing.T) (*principalruntime.Runtime, *x509.Cer
 	clientCertificate, err := tls.X509KeyPair(clientCertPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientKeyDER}))
 	require.NoError(t, err)
 	replay := miniredis.RunT(t)
+	sourceEnabled := len(enableAuthority) == 1 && enableAuthority[0]
+	urls := map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}
+	if sourceEnabled {
+		urls["federation"] = server.URL
+	}
 	runtime, err := principalruntime.New(context.Background(), principalruntime.Config{
-		JWKSURLs: map[string]string{"space": server.URL, "gameintegration": server.URL, "voice": server.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
+		JWKSURLs: urls, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute, AuthoritySourceEnabled: sourceEnabled,
 		UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
 		TLSCertFile: certFile, TLSKeyFile: keyFile, ClientCAFile: clientCAFile, ListenAddr: "127.0.0.1:0",
 	})

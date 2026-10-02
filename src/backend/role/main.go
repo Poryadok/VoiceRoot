@@ -85,6 +85,11 @@ func main() {
 				log.Fatalf("principal runtime: %v", err)
 			}
 			defer func() { _ = principal.Close() }()
+			if principalConfig.AuthoritySourceEnabled {
+				if err := principal.ActivateAuthoritySource(context.Background(), roleStore); err != nil {
+					log.Fatalf("authority source activation: %v", err)
+				}
+			}
 		}
 		// Construct shared metrics once; both listeners use the same collectors.
 		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events}, principal)

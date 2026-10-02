@@ -9,10 +9,30 @@ import (
 )
 
 var runtimeEnvNames = []string{
+	"ROLE_AUTHORITY_SOURCE_ENABLED",
 	"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY",
 	"S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE",
 	"ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
 	"ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN",
+}
+
+func TestLoadFromEnvAuthoritySourceRequiresExplicitFederationTrust(t *testing.T) {
+	validRuntimeEnv(t)
+	t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", "true")
+	_, _, err := LoadFromEnv()
+	require.Error(t, err, "source activation requires Federation trust")
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks","federation":"https://federation.internal/jwks"}`)
+	_, enabled, err := LoadFromEnv()
+	require.NoError(t, err)
+	require.True(t, enabled)
+	t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", "false")
+	_, _, err = LoadFromEnv()
+	require.Error(t, err, "a disabled source cannot add an unrelated trusted issuer")
+	for _, value := range []string{"", "yes", "1", "TRUE", " true "} {
+		t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", value)
+		_, _, err = LoadFromEnv()
+		require.Error(t, err, "activation must use an exact boolean")
+	}
 }
 
 func clearRuntimeEnv(t *testing.T) {

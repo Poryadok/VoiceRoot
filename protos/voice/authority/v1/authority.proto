@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package voice.authority.v1;
+
+option go_package = "voice/backend/pkg/pb/voice/authority/v1;authorityv1";
+
+// Internal owner reads. No public Gateway route or game-node caller is allowed.
+// Each server verifies its own audience and exact signed request binding.
+service AuthoritySourceService {
+  // @voice.security=protected;callers=service:federation
+  rpc ReadSnapshot(ReadSnapshotRequest) returns (ReadSnapshotResponse);
+  // @voice.security=protected;callers=service:federation
+  rpc ReadRevision(ReadRevisionRequest) returns (ReadRevisionResponse);
+}
+
+enum AuthorityOwner {
+  AUTHORITY_OWNER_UNSPECIFIED = 0;
+  AUTHORITY_OWNER_SPACE = 1;
+  AUTHORITY_OWNER_ROLE = 2;
+  AUTHORITY_OWNER_AUTH = 3;
+  AUTHORITY_OWNER_USER = 4;
+  AUTHORITY_OWNER_GAME_INTEGRATION = 5;
+}
+
+// Subject lists are canonical UUIDs, sorted and unique. Empty lists are explicit.
+// An owner rejects fields outside its declared scope shape; it never widens it.
+message SourceScope {
+  uint32 schema_version = 1;
+  string space_id = 2;
+  string environment_id = 3;
+  repeated string profile_ids = 4;
+  repeated string account_ids = 5;
+  // Role's exact SDK grant resource set, derived from complete owning resource
+  // state and checked again by the publisher. Other owners reject this field.
+  repeated string voice_room_ids = 6;
+}
+
+// @voice.unknown_fields=reject
+message ReadSnapshotRequest {
+  SourceScope scope = 1;
+}
+
+// canonical_state is the fixed, versioned owner JSON schema. Clients reject
+// unknown authority fields, missing fields, wrong owner/scope and partial state.
+message ReadSnapshotResponse {
+  SourceScope scope = 1;
+  AuthorityOwner owner = 2;
+  uint64 revision = 3;
+  bool complete = 4;
+  bytes canonical_state = 5;
+  // Zero means no earlier time-dependent cutoff than the publisher's own bound.
+  int64 valid_until_unix_millis = 6;
+}
+
+// @voice.unknown_fields=reject
+message ReadRevisionRequest {
+  SourceScope scope = 1;
+}
+
+message ReadRevisionResponse {
+  SourceScope scope = 1;
+  AuthorityOwner owner = 2;
+  uint64 revision = 3;
+}

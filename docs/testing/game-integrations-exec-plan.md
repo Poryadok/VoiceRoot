@@ -69,6 +69,28 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- The protected `voice.authority.v1.AuthoritySourceService` contract and first
+  Role owner are implemented. Role's complete canonical snapshot reads roles,
+  assignments, chat/voice overrides, lifecycle/ownership/deletion gates and active
+  room-scoped SDK grants with a read-only repeatable-read state/revision cut.
+  Additive Role16 protects a global SDK revision; its sum with the per-Space Role
+  floor detects both source classes, with conservative unrelated SDK invalidation.
+  Exact schema/relations/triggers/function bodies, known bits, subject bounds and
+  cross-Space assignment/session conflicts are checked before completeness.
+  Registration is opt-in on the existing private mTLS listener, requires exact
+  Federation trust and a clean schema16 preflight; subsequent reads repeat guards.
+  Legacy and disabled listeners never expose the source RPCs. Actual pinned-driver
+  PostgreSQL plus application-factory mTLS/JWKS/Redis tests cover snapshots,
+  membership removal, replay/request tamper, bad transport and live maintenance.
+  Source, activation and SDK floor regressions have saved red/green evidence.
+  The isolated 27-file delivery passes 21 selected roots without skips, the
+  complete Role short suite passes 97 roots (127 explicit integration skips),
+  and Role/shared-source vet and buf lint pass. A scoped independent review
+  clears this Role seam. Nothing is enabled in the
+  live Compose runtime. Full Space/Auth/User/GIS owner reads and durable counters,
+  exact owning room-set validation, publisher unchanged-vector common cut anchored
+  before its first read, production masterVoice/node/SFU chain, permanent fences
+  and measured capacity remain open. No parent T73/T74/T75/T77/T91 gate advances.
 - Auth source catalogs now retain canonical refresh-token profile binding at
   Flyway V15 / golang-migrate 000016 and shift the complete SDK chain to
   V16-25 / 000017-26. All ten SDK UP bodies are unchanged and mirrored exactly;

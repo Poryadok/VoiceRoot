@@ -17,6 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"voice/backend/pkg/integrationtest"
+	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 )
 
 // Exercise complete deployment catalogs, including driver-managed dirty state.
@@ -25,7 +26,7 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 		t.Skip("requires PostgreSQL and pinned migration driver")
 	}
 	integrationtest.ConfigureDockerTesting()
-	for _, owner := range []string{"space", "role"} {
+	for _, owner := range []string{"space", "role", "role_sdk"} {
 		t.Run(owner, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
@@ -44,7 +45,11 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 			require.True(t, err == nil, "connect private fixture")
 			t.Cleanup(pool.Close)
 			privateURL := &url.URL{Scheme: "postgres", User: url.UserPassword("migration_fixture", "fixture_only"), Host: "127.0.0.1:5432", Path: "/authority_driver", RawQuery: "sslmode=disable"}
-			directory := filepath.Join(repoRoot(t), "src/backend/migrations", owner+"_db")
+			directoryOwner := owner
+			if owner == "role_sdk" {
+				directoryOwner = "role"
+			}
+			directory := filepath.Join(repoRoot(t), "src/backend/migrations", directoryOwner+"_db")
 			files, err := os.ReadDir(directory)
 			require.NoError(t, err)
 			copied := []testcontainers.ContainerFile{}
@@ -74,8 +79,13 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 				}
 			}
 			previous, current, table, epoch := "23", int64(24), "space_voice_access_epochs", "access_epoch"
+			activationBump := int64(1)
 			if owner == "role" {
 				previous, current, table, epoch = "14", 15, "role_voice_policy_epochs", "policy_epoch"
+			}
+			if owner == "role_sdk" {
+				previous, current, table, epoch = "15", 16, "role_voice_policy_epochs", "policy_epoch"
+				activationBump = 0
 			}
 			migrate(true, "goto", previous)
 			space := uuid.New()
@@ -94,12 +104,26 @@ func TestAuthorityRevisionActualMigratorUpgradesBothOwnerCatalogs(t *testing.T) 
 			require.Equal(t, current, version)
 			require.False(t, dirty)
 			require.NoError(t, pool.QueryRow(ctx, "SELECT "+epoch+" FROM "+table+" WHERE space_id=$1", space).Scan(&after))
-			require.Equal(t, before+1, after)
+			require.Equal(t, before+activationBump, after)
+			if owner == "role_sdk" {
+				var sdk int64
+				require.NoError(t, pool.QueryRow(ctx, `SELECT revision FROM role_sdk_authority_revision WHERE singleton`).Scan(&sdk))
+				require.Equal(t, int64(1), sdk)
+				reader := &RoleStore{Pool: pool}
+				revision, err := reader.ReadAuthorityRevision(ctx, &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: space.String()})
+				require.NoError(t, err)
+				require.Equal(t, uint64(before+sdk), revision)
+			}
 			migrate(false, "down", "1")
 			require.NoError(t, pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
 			require.True(t, dirty, "refused downgrade must retain maintenance state")
 			require.NoError(t, pool.QueryRow(ctx, "SELECT "+epoch+" FROM "+table+" WHERE space_id=$1", space).Scan(&after))
-			require.Equal(t, before+1, after, "refused rollback must preserve floors")
+			require.Equal(t, before+activationBump, after, "refused rollback must preserve floors")
+			if owner == "role_sdk" {
+				var sdk int64
+				require.NoError(t, pool.QueryRow(ctx, `SELECT revision FROM role_sdk_authority_revision WHERE singleton`).Scan(&sdk))
+				require.Equal(t, int64(1), sdk)
+			}
 		})
 	}
 }

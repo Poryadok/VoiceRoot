@@ -82,6 +82,18 @@ Path B for `auth_db` only (then set `AUTH_FLYWAY_ENABLED=false` for Auth):
 migrate -path src/backend/migrations/auth_db -database "postgres://voice:voice@localhost:5432/auth_db?sslmode=disable" up
 ```
 
+## Role protected authority reads
+
+Role `000016_sdk_authority_revision` adds a global, permanent SDK session/grant
+revision alongside the existing per-Space Role floor. Both sources invalidate
+protected Role reads; SDK/session TRUNCATE and counter rewind/removal are refused.
+Its DOWN refuses downgrade with SQLSTATE55000 and preserves all source data and
+floors. Protected source registration requires a clean exact catalog16; a dirty
+or unknown later marker keeps complete reads unavailable until an explicitly
+compatible runtime is installed. Recover with a verified matching database/runtime
+backup rather than forcing metadata or removing guards. Actual pinned-driver and
+private-listener tests cover upgrade, refusal, and post-registration maintenance.
+
 ## Without local CLI (Docker)
 
 If the `migrate` binary is not installed, use the official image [`migrate/migrate`](https://hub.docker.com/r/migrate/migrate) on the same Docker network as Compose Postgres (project network is usually `voice_default` when started from the repo root; service hostname is `postgres`).

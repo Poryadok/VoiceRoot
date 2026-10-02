@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/principalgrpc"
 )
@@ -36,6 +38,9 @@ type Runtime struct {
 	closeOnce                     sync.Once
 	closeErr                      error
 	ownershipV2CapabilitiesActive atomic.Bool
+	authoritySourceEnabled        bool
+	authoritySourceServer         *authoritysource.Server
+	authoritySourceInterceptor    grpc.UnaryServerInterceptor
 }
 
 type OwnershipV2Activation struct {
@@ -130,6 +135,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	runtime := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{
 		MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs,
 	})}
+	runtime.authoritySourceEnabled = config.AuthoritySourceEnabled
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {

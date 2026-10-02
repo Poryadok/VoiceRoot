@@ -171,6 +171,36 @@ hash/completeness marker и подпись. Pages staged отдельно; activ
 после проверки всех частей. Truncated/failed page не означает отсутствие bans.
 Неизвестный authority field/version → fail closed + upgrade/reconcile.
 
+The protected owning-read contract is `voice.authority.v1.AuthoritySourceService`
+with `ReadSnapshot` and `ReadRevision`. Requests bind schema1, exact Space and
+owner-specific subject sets to a deterministic signed request hash. Only a
+`service:federation` principal with the exact owner audience/RPC is accepted on
+the private mTLS listener, with replay protection. A successful snapshot echoes
+the exact scope and returns explicit completeness, a positive durable revision,
+canonical authorization-only state and an optional earlier validity cutoff.
+Unknown request fields, malformed/sorted-duplicate IDs, incomplete reads,
+oversized state and an unavailable/dirty/noncanonical source catalog fail closed.
+
+Role's implemented source reads its per-Space Role floor and a global SDK grant
+floor in the same read-only repeatable-read transaction as all Role authority.
+Their monotonic sum invalidates the source for both kinds of writes; unrelated
+SDK changes may conservatively invalidate other Spaces. The Role request's
+sorted room IDs must come from the publisher's complete owning Space/resource
+state and match that set before activation. Role cannot establish cross-store
+room ownership. The payload includes roles, assignments, chat/voice overrides,
+retirement/ownership/deletion fences and active SDK session grants, with no
+receipt/proof/token material. Permission folding retains canonical Role defaults
+and Owner behavior; SDK grants supply only `VOICE_JOIN`.
+
+Role registration requires `ROLE_AUTHORITY_SOURCE_ENABLED=true`, its existing
+private listener TLS/client CA/Redis configuration, and an additional exact
+`federation` HTTPS entry in `S2S_JWKS_URLS_JSON`. A clean catalog16 preflight runs
+before registration; every read checks the same catalog again. Absent/false
+activation exposes no source service, and the legacy listener never registers it.
+This owner implementation does not activate federation voice: complete remaining
+owners, the publisher's unchanged-vector common cut, node bundle and measured
+capacity/revocation gates are still required.
+
 Handshake: открыть scoped stream → получить snapshot на watermark R и буфер
 изменений после R → атомарно активировать snapshot → применить последовательные
 изменения → ACK applied revision → получить свежую lease. Если буфер переполнен,
