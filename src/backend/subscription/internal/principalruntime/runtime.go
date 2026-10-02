@@ -39,6 +39,14 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
+	clientCAPEM, err := os.ReadFile(config.ClientCAFile)
+	if err != nil {
+		return nil, errors.New("principal client CA unavailable")
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+		return nil, errors.New("principal client CA has no certificates")
+	}
 	cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("principal listener TLS: %w", err)
@@ -110,7 +118,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: config.ReplayAddr, Password: config.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	runtime := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	runtime := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
