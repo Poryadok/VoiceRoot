@@ -149,6 +149,10 @@ def no_open_handles(source, proc=Path("/proc")):
             if len(matches) != 1:
                 raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
             dev, root, target = matches[0]
+            if not root.startswith("/"):
+                if dev == device:
+                    raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
+                return False  # Recognized nsfs objects have no filesystem subtree.
             physical = posixpath.normpath(posixpath.join(root, posixpath.relpath(path, target)))
             return dev == device and inside(physical, coordinate)
         for fd in (process / "fd").iterdir():
@@ -166,9 +170,16 @@ def mount_records(path):
         fields = line.split()
         if len(fields) < 10 or "-" not in fields or not re.fullmatch(r"\d+:\d+", fields[2]):
             raise Unsafe("MOUNTINFO_UNCERTAIN")
+        separator = fields.index("-", 6)
+        if len(fields) != separator + 4:
+            raise Unsafe("MOUNTINFO_UNCERTAIN")
         decoded = []
-        for field in (fields[3], fields[4]):
+        for index, field in enumerate((fields[3], fields[4])):
             value = re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), field)
+            if (index == 0 and fields[separator + 1] == "nsfs"
+                    and fields[2].startswith("0:") and re.fullmatch(r"net:\[\d+\]", value)):
+                decoded.append(value)
+                continue  # Kernel network namespace object, not a filesystem root.
             if not value.startswith("/") or posixpath.normpath(value) != value:
                 raise Unsafe("MOUNTINFO_UNCERTAIN")
             decoded.append(value)
@@ -188,6 +199,8 @@ def source_mount(source):
         raise Unsafe("SOURCE_MAPPING_UNCERTAIN")
     backing = matches[0]
     device, root, target = backing
+    if not root.startswith("/"):
+        raise Unsafe("SOURCE_MAPPING_UNCERTAIN")
     if target == str(source) or inside(target, source):
         raise Unsafe("SOURCE_MOUNTED")
     s = source.stat()
@@ -209,8 +222,11 @@ def no_mounts(source):
                 raise Unsafe("SOURCE_MOUNTED")
             if record == backing:
                 continue  # Canonical host backing mount is expected.
-            if dev == device and (inside(root, coordinate) or inside(coordinate, root)):
-                raise Unsafe("SOURCE_MOUNTED")
+            if dev == device:
+                if not root.startswith("/"):
+                    raise Unsafe("SOURCE_MAPPING_UNCERTAIN")
+                if inside(root, coordinate) or inside(coordinate, root):
+                    raise Unsafe("SOURCE_MOUNTED")
 
 
 def validate_kube(pvc, pv, pods):
