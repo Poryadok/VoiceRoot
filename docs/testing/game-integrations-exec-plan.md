@@ -67,6 +67,55 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ## Detailed steps
 
+### Active continuation checkpoint — 2026-10-02
+
+- Worktree remains `.treehouse/Voice-451d38/24/Voice`, branch
+  `codex/game-sdk-federation-docs`; last pushed runtime checkpoint is
+  `083eaedec` (Notification). Inherited staged Dart bindings and other sprint
+  WIP are preserved. One writer owns this worktree; the same bounded Luna
+  reviewer checks changed purge/security inputs.
+- The shared `pkg/filerefmanifest` digest now has an independent empty-producer
+  golden value and binding/invalid-input coverage (`go test ./filerefmanifest`,
+  one passing test). Its checkpoint is a foundation for owner declarations;
+  it does not mark a lifecycle runtime or parent gate accepted.
+- Current uncommitted T40 integration adds Space runtime configuration and all
+  ten typed owner clients, exact Chat-page import into Messaging/Notification,
+  explicit SPACE/CHAT/MESSAGING File declarations, DB-time expiry decision,
+  durable retry/stall tracking, local atomic purge and an explicitly development
+  HMAC fixture. It corrects the purge dependency order to Role, Messaging, Chat,
+  File, then remaining owners. Nonempty Messaging children now require the
+  verified sealed producer release and cannot call File's LIVE-only ordinary
+  release. Ordinary requests cannot bypass frozen mutation guards.
+- Accepted component evidence for these current inputs: Space short suite
+  340 tests/14 packages; Messaging short suite 402 tests/16 packages; both
+  modules' vet; Messaging producer/child/purge selection 7 tests; PostgreSQL
+  snapshot/expired-child denial, restored producer expiry, Space fresh-clock
+  expiry, atomic local purge/30-day compaction/365-day expiry, durable retry/stall
+  and exact outbox acknowledgement regressions. File's real PostgreSQL purge,
+  restore and foreign durable tuple selection passes 3 tests. Real JetStream
+  lifecycle delivery/deduplication and invalid-ack selection passes 2 tests.
+  Results apply only to their covered inputs; subsequent edits need affected
+  checks before a coherent runtime checkpoint.
+- New Space migrations 000022/000023 retain ten compact completion tuples,
+  remove private participant/operation evidence after PURGED +30 days, and
+  expire tombstone/account HMACs after 365 days. READY delivery rows survive
+  aggregate expiry independently; DELIVERED rows expire after their first ACK
+  +30 days. This latest outbox change has passing PostgreSQL regression evidence
+  and awaits the same reviewer. Production KMS/HSM integration is not claimed
+  by the development key fixture.
+- Remaining dependency blockers include all-ten protected transport/Phase0
+  activation and actual public freeze/restore/purge acceptance. File, Search and
+  Subscription protected runtimes currently configure server TLS without
+  verified client certificates; repair their mTLS boundaries before activation.
+  Repeated deletion after restore, clean checkpoint packaging and the remaining
+  T40/T58/T59/T73–T78/T90–T94 matrix stay open. No parent checkbox advances.
+- No owned acceptance stack is running; component PostgreSQL containers and
+  JetStream servers were test-owned and cleaned up. A1 resources remain
+  untouched. The bounded Graphify attempt stalled after extraction and was
+  stopped; diagnostics remain under `tmp/graphify-continuation-20261002` and
+  graph refresh is unverified. Master merge, staging, live providers, physical
+  devices and the unavailable Windows-host iOS simulator remain excluded.
+
 Each `T-*` is a reviewable work item, generally one PR or a narrow cluster of
 related PRs. In each behavior PR: freeze docs/contract, write failing
 contract/integration test, implement, run affected checks, update status and
