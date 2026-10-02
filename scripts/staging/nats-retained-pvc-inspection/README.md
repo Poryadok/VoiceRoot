@@ -104,3 +104,43 @@ Fixtures are generated under container `/root`, contain synthetic bytes only,
 and never reference a real volume/config/broker. Tests do not run `main()` against
 staging. The host repository mount is read-only; the container has no published
 ports or network. This command does not require a privileged container.
+
+## Exact retained stored-layout observations
+
+`decoder.py` is a separate bounded diagnostic for the successful original-PV
+inventory at `/var/lib/voice-nats-preservation/original-pv-sckcykyd/metadata.json`,
+SHA256 `12d2b844a3af68362abe3614c4119eb677fb243eb0c2a982137bd9dfc910c2c6`.
+The protected report path/hash and existing inspector SHA are compiled into
+reviewed code; a pmd-owned manifest cannot authorize source reads. The decoder
+requires root:pmd0440 report protection, exact PV/PVC identities,165 selected
+files and maximum2MiB selected bytes per pass (two byte passes). Its metadata-only
+census caps4096 entries and12 directory levels. FD-relative NOFOLLOW/NOATIME
+reads match inode/device/size/times/SHA and fresh path identity. Existing node,
+Kubernetes, source, mount and handle guards surround the bounded read passes.
+
+Output contains numeric/bool/literal enums and subject/filter counts, never raw
+names, subjects, descriptions, custom metadata or payloads. Files use inventory
+row index and path SHA. Consumer `o.dat` versions1/2 require bounded complete
+varint validation; empty/unrecognized state is explicit. Unknown JSON/enum
+layouts are unsupported. Native `meta.sum` is HighwayHash64: recognizing its
+hexadecimal syntax is `NOT_VERIFIED_HIGHWAYHASH64`, distinct from inventory SHA256.
+Block output is `HEADER_IDENTIFICATION_ONLY`, with no interpreted sequences or
+payloads. It establishes no plaintext, writer version, message count, native
+checksum, deletion map or index state. Compressed/encrypted/unknown input is
+unsupported or compatibility-only, never certified.
+
+Format references are NATS [v2.12.12](https://github.com/nats-io/nats-server/blob/v2.12.12/server/filestore.go)
+and [v2.11.9](https://github.com/nats-io/nats-server/blob/v2.11.9/server/filestore.go).
+Layout observations do not establish the historical566 consumers/eight messages,
+ownership/disposition, archive, replay, idempotency/fences or preservation PASS.
+
+Independently review decoder, tests and `decoder-launch.template.sh`. Replace
+`REVIEWED_DECODER_SHA256`, upload only public decoder and instantiated launcher
+as pmd, and have the operator use the reviewed captured-memory shell shape with
+the exact launcher SHA. The bootstrap pins both public code captures into fresh
+root0700 private storage before execution. Output is root:pmd0440
+`observations.json` within a root:pmd0750 directory. No broker, key/seed read,
+decryption, mount, source mutation or automatic root run occurs.
+
+Run `/work/test_decoder.py` in the same pinned disposable root/networkless Python
+fixture container. The hosted fixture workflow runs both suites.
