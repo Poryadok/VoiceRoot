@@ -250,8 +250,41 @@ also stops an already serving reader. `USER_AUTHORITY_SOURCE_ENABLED=true` and
 the corresponding `USER_AUTHORITY_SOURCE_` TLS/client-CA/replay settings activate
 the separate source-only mTLS listener at `:9097`, with fixed Federation trust.
 Ordinary, privacy, File, Search and Auth listeners never register the source.
-Auth/GIS owning sources, unchanged-vector publisher and combined native-media
+GIS owning source, unchanged-vector publisher and combined native-media
 acceptance remain prerequisites; this source alone enables no node authority.
+
+Auth's implemented owning reader requires exactly one clean loader history:
+Flyway V26 or golang-migrate 000027. Both catalogs install the same transactional
+global revision over account eligibility/epochs, SDK identities, devices, keys,
+sessions, linked sessions, authorizations, conversions, message grants and
+handoff claims. The floor cannot be reset or removed. Source statements and
+TRUNCATE advance it; refused downgrade preserves authority and enters maintenance.
+The reader pins source tables, triggers and function bodies and reads the floor
+and all scoped facts in one repeatable-read cut with a one-second whole-read
+budget, including owning-pool checkout. Each requested account has explicit
+ordinary-account and SDK-identity facts; standalone SDK identities need no
+ordinary account row. Device/key generations, raw lease times, binding targets,
+conversion states and durable message-grant revisions remain scoped to their
+source account. Credentials, public keys, provider subjects, proof/receipt bytes,
+token hashes and display data are omitted. The Go publisher codec shares an
+exact byte fixture with the actual Java JDBC reader and rejects partial or
+conflicting tuples. Time-only expiry keeps raw bytes and the revision stable;
+the earliest upcoming key/session/linked-session boundary caps renewal.
+
+`AUTH_AUTHORITY_SOURCE_ENABLED=true` activates a separate source-only mTLS
+listener (default `:9097`). Its `AUTH_AUTHORITY_SOURCE_` settings require readable
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE` and `REPLAY_REDIS_ADDR`; optional
+`REPLAY_REDIS_PASSWORD`, `JWKS_CA_FILE`, `GRPC_LISTEN` and JWKS cache durations
+follow the other owning source runtimes. Fixed Federation HTTPS trust comes from
+`S2S_JWKS_URLS_JSON`. Exact Federation service principals bind the source RPC,
+request ID and deterministic protobuf hash; Redis replay and principal expiry
+are checked before admission and expiry is checked again after the database read.
+Partial implicit activation is refused; explicit false disables retained settings.
+The source is never registered on the legacy Auth or private proof listeners.
+An SDK session row proves no particular caller credential, and an Auth binding
+or message grant creates no Voice room permission. Exact caller/session admission,
+Role/GIS rights, the unchanged-vector publisher and native node enforcement are
+still required. This source alone activates no node authority.
 
 Handshake: открыть scoped stream → получить snapshot на watermark R и буфер
 изменений после R → атомарно активировать snapshot → применить последовательные

@@ -69,6 +69,30 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Auth now serves complete owning account/SDK facts through a separately enabled
+  source-only mTLS listener. Flyway26 and Go27 install byte-identical global
+  transactional clock coverage over the ten source tables, with retained floor,
+  trigger/function catalog pinning and forward-only downgrade refusal. Exactly
+  one clean loader history is required. The reader bounds the whole operation,
+  including pool checkout, to one second and reads state plus clock in one
+  repeatable-read cut. Ordinary and standalone SDK identities remain distinct;
+  every requested account has explicit present/missing facts. Raw key/session/
+  linked-session leases keep bytes stable at time-only expiry and cap renewal.
+  Passwords, token hashes, JWKs, provider subjects and proof/receipt bytes stay
+  local. Java JDBC and Go decode the same exact all-eight-group golden bytes,
+  including bindings, conversions and durable message grants. Both validate
+  exact grant environment and authorization source. Auth facts alone neither
+  prove a caller's SDK bearer nor establish Voice permission. Actual protected
+  factory tests cover mTLS, replay, JWKS recovery, dependency failure, revocation
+  and serving maintenance; source RPCs are absent from both legacy listeners.
+  The isolated 27-path delivery passes 142 selected Java roots and 16 shared Go
+  source roots without skips; GOWORK=off authoritysource/integrationtest vet passes.
+  Current conversion protocol WIP and its authority_epoch test fixture repair
+  remain local; isolated verification uses HEAD's matching older client/fixture.
+  Scoped review clears the reader/runtime and the repaired Java/Go parity seam.
+  GIS, unchanged-vector publisher, content ACL, permanent node fences and combined
+  native-media/capacity acceptance remain open. No live source flag, schema or
+  migration history is changed and no parent gate advances.
 - User now serves an exact complete profile/SDK actor source on its separately
   enabled source-only mTLS listener. Clean catalog19 and one transactional global
   floor cover profile statements, durable inactive overlays and immutable SDK
