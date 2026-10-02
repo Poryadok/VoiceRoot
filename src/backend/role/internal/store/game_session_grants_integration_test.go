@@ -20,6 +20,13 @@ func applyRoleGrantMigrations(t *testing.T, ctx context.Context, st *RoleStore) 
 		"000012_space_retirement.up.sql",
 		"000013_game_session_grants.up.sql",
 	} {
+		if name == "000013_game_session_grants.up.sql" {
+			var alreadyApplied bool
+			require.NoError(t, st.Pool.QueryRow(ctx, `SELECT to_regclass('public.game_session_grant_sessions') IS NOT NULL`).Scan(&alreadyApplied))
+			if alreadyApplied {
+				continue
+			}
+		}
 		sql, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
 		_, err = st.Pool.Exec(ctx, string(sql))

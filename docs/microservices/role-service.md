@@ -553,13 +553,38 @@ after LIVE; old exact receipt replay cannot reopen current authority. Prepared
 ownership operations prevent a new deletion fence. Exact immutable receipt
 replay preserves the original ID and database application time; changed bindings
 conflict. Permanent retirement takes precedence over every stale LIVE request.
-Migration `000013_space_deletion_fence` persists the head and immutable receipt
+Migration `000014_space_deletion_fence` persists the head and immutable receipt
 tuple. Receipts bind the full typed participant RPC with a domain-separated
 SHA-256, independently of transport credential hashing. Startup checks the
 schema and runs bounded compaction; full bytes compact only 30 days after
 permanent retirement, while the semantic tuple and stable receipt remain.
 Focused real PostgreSQL, mTLS/JWKS and restart/negative checks verify this
 participant; integrated all-participant acceptance remains tracked in T40.
+
+Version 13 is reserved for `000013_game_session_grants`; its original bytes
+remain unchanged. Version 14 also handles the pre-repair local version-13 fence
+catalog: exact legacy fences/receipts are retained and canonical grant tables
+are added. A canonical grant-only v13 receives the fence schema. A combined
+exact catalog is adopted without row changes. The upgrade requires one recorded
+clean v13 marker, or the dirty v14 marker set by the executing golang-migrate
+driver. Missing/old/dirty v13 state, partial schemas, different columns/defaults/
+checks/keys/indexes/FKs, or an altered immutable function/trigger are refused.
+RLS (including forced RLS), saved policies, rewrite rules, inheritance and
+unlogged tables also prevent adoption, even when columns and keys match.
+This includes schema validation against temporary canonical tables before any
+upgrade can commit; `IF NOT EXISTS` is not used to trust saved objects.
+
+The actual pinned golang-migrate acceptance loads the complete unique source
+catalog, runs to clean v13, then upgrades canonical and legacy fixture states
+to clean v14. Direct-SQL store fixtures record their input marker separately;
+they do not replace that deployment evidence. DOWN locks both fence tables,
+rechecks after concurrent writes complete and refuses while either holds saved
+evidence. The locked catalog check rejects filtering or rewriting behavior;
+`row_security=off` makes hidden-row access fail instead of authorizing an empty
+rollback. A non-superuser forced-RLS regression verifies saved receipts survive.
+Empty DOWN removes only fence objects and retains canonical v13 game
+grants. Never force a dirty version marker to bypass a refused catalog; preserve
+the database and diagnose/recover the exact source state before rollout.
 
 `RetireSpace` is protected-listener only and accepts `protocol_version=1`,
 canonical Space/deletion IDs, positive generation, `purge_decided_at` and exact

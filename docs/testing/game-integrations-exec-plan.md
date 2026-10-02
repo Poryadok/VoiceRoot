@@ -69,6 +69,38 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Role migration repair retains canonical game-grant v13 bytes and places
+  lifecycle fences at unique v14. Real PostgreSQL checks pass all six migration
+  roots without skips: unique source loading, exact historical/combined schema
+  adoption, invalid catalog/version refusal, concurrent rollback barrier,
+  forced-RLS non-superuser rollback and the pinned golang-migrate transition.
+  The RLS regression failed before hardening: hidden receipts let DOWN succeed.
+  Both directions now reject filtering/rewriting, inheritance and non-durable
+  tables under locks; saved evidence is retained. Independent risk review finds
+  no remaining blocker in this repair. The isolated committed dependency closure
+  passes 23 PostgreSQL/runtime roots without skips (migration six, game grants
+  four, retirement/ownership thirteen), all 96 Role short roots with 114 explicit
+  PostgreSQL skips, and full module vet. Current WIP affected roots also pass.
+  Next source-revision regressions reproduce missing bans/lifecycle/owner changes,
+  both-scope updates and removable/rewindable revision floors. Repairing these is
+  prerequisite to the real owning-source publisher; no parent accounting advances.
+- Checkpoint `84d432357` delivers 22 boot/protocol/runtime/fixture/documentation
+  paths. Remote HEAD and every delivered byte are verified; original 26 staged
+  blobs equal the initial index. Next owning-source path uses each owner's
+  monotonic per-Space revision captured with complete state in a repeatable-read
+  transaction, then rereads all source tokens before publication. Unchanged
+  vector gives a common stable cut; validity is anchored before first read and
+  never exceeds two seconds. Missing/stale/changed owner state denies renewal.
+  First batched blocker is duplicated Role migration 13: keep canonical game
+  grant migration bytes unchanged; move lifecycle fence schema to unique 14 and
+  safely adopt exact preexisting local schemas without changing rows/receipts.
+  Reject partial/noncanonical schemas and retain evidence on rollback. Test
+  clean upgrade, either historical-13 shape, exact bytes, source loading and
+  rollback barriers. Then extend missing Space bans/lifecycle/ownership and
+  Role lifecycle/chat-override/OLD+NEW scope revision coverage before exposing
+  complete owner snapshots. Active Voice invalidation is the immediate revision
+  consumer; the real Federation source publisher is the acceptance consumer.
+  Source: game-federation §6 and T73/T74/T77; no parent accounting advances.
 - Checkpoint `b4bf53caf` delivers seven Messaging preflight paths; exact delivered
   bytes, pushed remote and original 26 staged blobs are verified. Next T75/T77
   slice uses the actual independent SFU and node-media receivers: each process

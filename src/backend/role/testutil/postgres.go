@@ -44,7 +44,12 @@ func ApplyRoleMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		"000011_voice_policy_epoch.up.sql",
 		"000012_space_retirement.up.sql",
 		"000013_game_session_grants.up.sql",
+		"000014_space_deletion_fence.up.sql",
 	} {
+		if name == "000014_space_deletion_fence.up.sql" {
+			_, err := pool.Exec(ctx, `CREATE TABLE public.schema_migrations(version BIGINT PRIMARY KEY, dirty BOOLEAN NOT NULL); INSERT INTO public.schema_migrations VALUES(13,false)`)
+			require.NoError(t, err)
+		}
 		sqlBytes, err := os.ReadFile(filepath.Join(dir, name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))
