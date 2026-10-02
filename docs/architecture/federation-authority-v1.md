@@ -78,6 +78,18 @@ route requires a new owner-supplied generation with its explicit canonical room
 before media grant issuance. No migration guesses a room, rewrites a saved
 route, or makes historical mismatches authoritative. `/ready` requires version 5.
 
+A new resource routing/lifecycle generation invalidates its placement's saved
+authority expiry. The next complete owner revision must reconcile every routed
+permission to the current active route before manifests, pages, leases or
+revision streams can renew. Exact historical publication retries remain inert.
+Any `purging` or `tombstoned` resource history permanently denies active/frozen
+registration and policy access, including legacy generation-zero permissions
+and a later active row saved before this guard. Immutable history is retained.
+Freeze can restore through a new generation before purge starts. Issuance
+resamples the database clock after blocking queries and immediately before
+signing; elapsed source or node credentials cannot renew authority. This guard
+does not yet prove fresh-online node boot or old-backup reconciliation.
+
 ## Master Voice media discovery and node exchange
 
 `FEDERATION_MEDIA_ISSUER_CERT_SHA256` optionally pins a separate master Voice

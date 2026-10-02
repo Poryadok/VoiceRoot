@@ -59,6 +59,16 @@ func (s *authorityStore) registerHostedResource(ctx context.Context, input Hoste
 				&current.RoutingGeneration, &current.LifecycleState, &currentCapabilities, &current.RoomName, &current.CreatedAt)
 		if lookupErr == nil {
 			current.Capabilities = currentCapabilities
+			purging, tombstoned, err := resourcePurgeFence(ctx, tx, mapping.ResourceID)
+			if err != nil {
+				return err
+			}
+			if (purging || tombstoned) && (mapping.LifecycleState == "active" || mapping.LifecycleState == "frozen") {
+				return errConflict
+			}
+			if tombstoned && mapping.LifecycleState != "tombstoned" {
+				return errConflict
+			}
 			if mapping.RoutingGeneration == current.RoutingGeneration {
 				if sameHostedResource(current, mapping) {
 					mapping = current
@@ -69,6 +79,9 @@ func (s *authorityStore) registerHostedResource(ctx context.Context, input Hoste
 			if mapping.RoutingGeneration != current.RoutingGeneration+1 ||
 				mapping.ResourceType != current.ResourceType || mapping.SpaceID != current.SpaceID ||
 				mapping.HomeNodeID != current.HomeNodeID || (current.RoomName != "" && mapping.RoomName != current.RoomName) {
+				return errConflict
+			}
+			if tombstoned || (purging && mapping.LifecycleState != "purging" && mapping.LifecycleState != "tombstoned") {
 				return errConflict
 			}
 		} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
@@ -103,6 +116,13 @@ func (s *authorityStore) registerHostedResource(ctx context.Context, input Hoste
 			if isUniqueViolation(err) {
 				return errConflict
 			}
+			return err
+		}
+		// Retain the last immutable source bytes/hash/revision, but prevent any
+		// manifest, page or lease from renewing a now-stale registry projection.
+		// The owner must publish the next complete reconciled revision.
+		if _, err = tx.Exec(ctx, `UPDATE federation_placements SET valid_until=NULL,updated_at=clock_timestamp()
+			WHERE space_id=$1 AND node_id=$2`, mapping.SpaceID, mapping.HomeNodeID); err != nil {
 			return err
 		}
 		return tx.QueryRow(ctx, `SELECT created_at FROM federation_hosted_resources WHERE resource_id=$1 AND routing_generation=$2`,

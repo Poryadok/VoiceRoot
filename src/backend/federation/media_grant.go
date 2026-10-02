@@ -93,6 +93,13 @@ func (s *authorityStore) issueMediaGrantWithRoute(ctx context.Context, request m
 		if (resolved == nil && route != request.RoutingGeneration) || kind != "voice_room" || state != "active" || room != request.RoomName || placedHome != home || !slices.Contains(capabilities, "voice") {
 			return errForbidden
 		}
+		purging, tombstoned, err := resourcePurgeFence(ctx, tx, request.ResourceID)
+		if err != nil {
+			return err
+		}
+		if purging || tombstoned {
+			return errForbidden
+		}
 		var bound bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM federation_voice_room_bindings WHERE resource_id=$1 AND node_id=$2 AND space_id=$3 AND room_name=$4)`, request.ResourceID, home, request.SpaceID, room).Scan(&bound); err != nil {
 			return err

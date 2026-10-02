@@ -265,6 +265,15 @@ func (s *authorityStore) publish(ctx context.Context, node, space string, snap S
 		if err = snap.Validate(now); err != nil {
 			return err
 		}
+		if err = validateRoutedPolicy(ctx, tx, node, space, snap); err != nil {
+			return err
+		}
+		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return err
+		}
+		if snap.Validate(now) != nil {
+			return errForbidden
+		}
 		hash := digest(raw)
 		_, err = tx.Exec(ctx, `UPDATE federation_placements SET revision=$3,snapshot=$4,snapshot_hash=$5,valid_until=$6,updated_at=clock_timestamp() WHERE space_id=$1 AND node_id=$2`, space, node, snap.Revision, raw, hash, time.UnixMilli(snap.ValidUntil))
 		if err != nil {
@@ -310,17 +319,26 @@ func (s *authorityStore) issueSnapshot(ctx context.Context, node, space, pin, se
 			}
 			return err
 		}
+		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return err
+		}
+		if !now.Before(n.Expiry) {
+			return errQ11CredentialRevoked
+		}
 		if until == nil || hash == nil || !now.Before(*until) || revision < 1 {
 			return errForbidden
 		}
+		var snap Snapshot
+		if strictJSON(raw, &snap) != nil || snap.Validate(now) != nil || digest(raw) != *hash || snap.Revision != revision || snap.ValidUntil != until.UnixMilli() {
+			return errForbidden
+		}
+		if err = validateRoutedPolicy(ctx, tx, node, space, snap); err != nil {
+			return err
+		}
+		if err = refreshAuthorityClock(ctx, tx, &now, n.Expiry, *until); err != nil {
+			return err
+		}
 		if ack == nil {
-			var snap Snapshot
-			if err = strictJSON(raw, &snap); err != nil {
-				return err
-			}
-			if snap.Validate(now) != nil || digest(raw) != *hash {
-				return errForbidden
-			}
 			scope := protocol.Scope{Issuer: s.Issuer, Environment: s.Environment, NodeID: node, SpaceID: space, Generation: generation, Epoch: n.Epoch}
 			if pageIndex == nil {
 				envelope, err = protocol.SignSnapshotManifest(s.Key, s.KeyID, scope, protocol.ManifestFor(snap), now)
@@ -348,6 +366,9 @@ func (s *authorityStore) issueSnapshot(ctx context.Context, node, space, pin, se
 				return errConflict
 			}
 		}
+		if err = refreshAuthorityClock(ctx, tx, &now, n.Expiry, *until); err != nil {
+			return err
+		}
 		c := Claims{Version: 1, Kind: "lease", Issuer: s.Issuer, Audience: "voice-node", Environment: s.Environment, NodeID: node, SpaceID: space, Generation: generation, Epoch: n.Epoch, Revision: revision, IssuedAt: now.UnixMilli(), ExpiresAt: min(until.UnixMilli(), now.Add(2*time.Second).UnixMilli(), n.Expiry.UnixMilli()), Hash: *hash}
 		envelope, err = signEnvelope(s.Key, s.KeyID, c)
 		return err
@@ -368,7 +389,8 @@ func (s *authorityStore) issueRevisionStream(ctx context.Context, node, space, p
 		var generation, revision int64
 		var hash *string
 		var validUntil *time.Time
-		if err = tx.QueryRow(ctx, `SELECT generation,revision,snapshot_hash,valid_until FROM federation_placements WHERE space_id=$1 AND node_id=$2 FOR UPDATE`, space, node).Scan(&generation, &revision, &hash, &validUntil); err != nil {
+		var raw []byte
+		if err = tx.QueryRow(ctx, `SELECT generation,revision,snapshot_hash,valid_until,snapshot FROM federation_placements WHERE space_id=$1 AND node_id=$2 FOR UPDATE`, space, node).Scan(&generation, &revision, &hash, &validUntil, &raw); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return errQ11ScopeMismatch
 			}
@@ -376,6 +398,16 @@ func (s *authorityStore) issueRevisionStream(ctx context.Context, node, space, p
 		}
 		if revision < 1 || hash == nil || validUntil == nil || !now.Before(*validUntil) {
 			return errForbidden
+		}
+		if err = refreshAuthorityClock(ctx, tx, &now, n.Expiry, *validUntil); err != nil {
+			return err
+		}
+		var snap Snapshot
+		if strictJSON(raw, &snap) != nil || snap.Validate(now) != nil || digest(raw) != *hash || snap.Revision != revision || snap.ValidUntil != validUntil.UnixMilli() {
+			return errForbidden
+		}
+		if err = validateRoutedPolicy(ctx, tx, node, space, snap); err != nil {
+			return err
 		}
 		stream := protocol.RevisionStream{AfterRevision: after, CurrentRevision: revision, Events: []protocol.RevisionEvent{}}
 		if after > revision {
@@ -412,12 +444,29 @@ func (s *authorityStore) issueRevisionStream(ctx context.Context, node, space, p
 				stream.ResnapshotRequired = true
 			}
 		}
+		// Placement and event queries can wait past the source or credential TTL.
+		if err = refreshAuthorityClock(ctx, tx, &now, n.Expiry, *validUntil); err != nil {
+			return err
+		}
 		expiresAt := min(validUntil.UnixMilli(), now.Add(2*time.Second).UnixMilli(), n.Expiry.UnixMilli())
 		scope := protocol.Scope{Issuer: s.Issuer, Environment: s.Environment, NodeID: node, SpaceID: space, Generation: generation, Epoch: n.Epoch}
 		envelope, err = protocol.SignRevisionStream(s.Key, s.KeyID, scope, stream, expiresAt, now)
 		return err
 	})
 	return envelope, err
+}
+
+func refreshAuthorityClock(ctx context.Context, tx pgx.Tx, now *time.Time, credentialExpiry, sourceExpiry time.Time) error {
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(now); err != nil {
+		return err
+	}
+	if !now.Before(credentialExpiry) {
+		return errQ11CredentialRevoked
+	}
+	if !now.Before(sourceExpiry) {
+		return errForbidden
+	}
+	return nil
 }
 
 func contiguousRevisionEvents(after, current int64, events []protocol.RevisionEvent) bool {

@@ -69,6 +69,23 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Verified checkpoint `fc2ff6b6d` delivers 42 media issuer/client/exchange paths;
+  isolated Federation root (19/0) plus authority/cache/protocol (6+9+1/0), Voice
+  short (184/113) and both vets pass. Normal hooks/push preserve all 26 staged
+  Dart blobs. T75 master issuer/controller repair now invalidates saved authority
+  on a new canonical resource generation and requires a new complete reconciled
+  owner policy. Purging/tombstoned history permanently denies revival, including
+  pre-repair later active rows and generation-zero legacy content permissions;
+  immutable rows stay intact. All snapshot/lease/revision/media issuance paths
+  enforce these fences. Source and credential clocks are checked after blocking
+  queries and before signing. Three new real-PG roots prove retirement, legacy
+  backup-row denial and expired-source lock waits for lease/manifest/page/
+  revisions; full Federation root 22 pass/0 skip and module short/vet pass.
+  Same reviewer found the legacy-generation bypass; reproduced red, repaired
+  and green. Source: game-federation §9 and T75 permanent-fence acceptance.
+  Fresh-online boot/backup fencing and complete owning-source projection remain
+  open; parent T75 and historical 43/60 accounting do not advance. A new bounded
+  graph refresh timed out at 45.3s; only its owned process tree was stopped.
 - T73/T74 now has a master Voice consumer and node-local HTTPS exchange candidate.
   A separated pinned Voice mTLS role resolves the exact current global resource
   route plus one unambiguous projected app/environment/binding/installation
