@@ -180,6 +180,34 @@ class InspectorTests(unittest.TestCase):
             with self.assertRaisesRegex(m.Unsafe, "MOUNTINFO_UNCERTAIN"):
                 m.no_mounts(self.root)
 
+    def test_valid_network_namespace_object_mount(self):
+        record = "370 28 0:4 net:[4026532754] /run/netns/fixture rw shared:336 - nsfs nsfs rw"
+        with patch.object(m.Path, "read_text", return_value=record):
+            self.assertEqual(m.mount_records(Path("fixture")),
+                             [("0:4", "net:[4026532754]", "/run/netns/fixture")])
+
+    def test_namespace_unknown_or_malformed_records_fail(self):
+        for record in (
+            "370 28 0:4 net:[invalid] /run/netns/fixture rw - nsfs nsfs rw",
+            "370 28 0:4 unknown:[123] /run/netns/fixture rw - nsfs nsfs rw",
+            "370 28 259:7 net:[123] /run/netns/fixture rw - nsfs nsfs rw",
+            "370 28 0:4 net:[123] /run/netns/fixture rw - ext4 /dev/fake rw",
+            "370 28 0:4 / /run/netns/fixture rw - nsfs",
+        ):
+            with self.subTest(record=record), patch.object(m.Path, "read_text", return_value=record):
+                with self.assertRaisesRegex(m.Unsafe, "MOUNTINFO_UNCERTAIN"):
+                    m.mount_records(Path("fixture"))
+
+    def test_namespace_object_mount_at_source_still_fails(self):
+        host = Path("/proc/self/mountinfo").read_text()
+        alias = "370 28 0:4 net:[4026532754] " + str(self.root) + " rw - nsfs nsfs rw"
+        def records(path):
+            return host if str(path) == "/proc/self/mountinfo" else alias
+        with patch.object(m.Path, "iterdir", return_value=[Path("/proc/123")]), patch.object(
+                m.Path, "read_text", autospec=True, side_effect=records):
+            with self.assertRaisesRegex(m.Unsafe, "SOURCE_MOUNTED"):
+                m.no_mounts(self.root)
+
     def test_mount_exactly_at_source_fails(self):
         source_stat = self.root.stat()
         device = str(os.major(source_stat.st_dev)) + ":" + str(os.minor(source_stat.st_dev))

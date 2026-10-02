@@ -28,6 +28,10 @@ Mount/handle checks map the source and each namespace path into coordinates on
 the same backing device. This includes a separate `/var/lib` filesystem, ancestor
 binds exposing the source, and FD/mapping aliases such as `/data`. Only the
 canonical backing mount is allowed; ambiguous/unknown coordinate mapping fails.
+Recognized Linux `nsfs` network namespace object roots (`net:[inode]`, virtual
+device major 0) are retained as object records, not filesystem coordinates.
+Their mount targets still reject mounting at/inside the source. Malformed or
+unknown non-filesystem roots fail; filesystem alias checks remain unchanged.
 
 The walk opens the source read-only with `O_NOFOLLOW` and `O_NOATIME`; failure to
 use these flags fails inspection. Only JetStream `meta.inf`, `meta.sum`, `o.dat`
