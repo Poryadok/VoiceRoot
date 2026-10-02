@@ -31,7 +31,22 @@ func newMetricsCollector(reg prometheus.Registerer) *metricsCollector {
 			Buckets: DefaultHistogramBuckets,
 		}, []string{"grpc_service", "grpc_method"}),
 	}
-	reg.MustRegister(c.handled, c.handling)
+	// Multiple listeners in one service expose their metrics through one registry.
+	// Reuse its vectors so every listener contributes to the same counters.
+	if err := reg.Register(c.handled); err != nil {
+		if existing, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			c.handled = existing.ExistingCollector.(*prometheus.CounterVec)
+		} else {
+			panic(err)
+		}
+	}
+	if err := reg.Register(c.handling); err != nil {
+		if existing, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			c.handling = existing.ExistingCollector.(*prometheus.HistogramVec)
+		} else {
+			panic(err)
+		}
+	}
 	return c
 }
 
