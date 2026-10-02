@@ -246,6 +246,20 @@ class InboxReconcilerController extends StateNotifier<InboxReconcilerState> {
     unawaited(reconcile());
   }
 
+  /// Reconciles after durable inbox activity, initializing the active profile
+  /// snapshot if no shell or accepted realtime hello has loaded it yet.
+  /// Existing snapshots still use the mutation path so activity cannot
+  /// silently retry a failed page.
+  void reconcileAfterInboxActivity() {
+    final profileId = _ref.read(authControllerProvider).activeProfileId;
+    if (profileId == null) return;
+    if (!state.profileSnapshots.containsKey(profileId)) {
+      unawaited(reconcile());
+      return;
+    }
+    reconcileAfterMutation();
+  }
+
   /// Retries precisely the page which last failed for [scope].
   Future<void> retry(InboxScope scope) async {
     final session = _ref.read(authControllerProvider).session;

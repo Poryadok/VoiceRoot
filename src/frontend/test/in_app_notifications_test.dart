@@ -134,55 +134,67 @@ void main() {
       ]);
     });
 
-    test('message_request updates the requests inbox and in-app row', () async {
-      final sound = _RecordingSoundPlayer();
-      final hub = _FakeRealtimeHub();
-      final chats = _RequestChatsClient();
-      final container = _container(sound: sound, hub: hub, chats: chats);
-      addTearDown(container.dispose);
+    for (final initializeSnapshot in [false, true]) {
+      test(
+        'message_request updates the requests inbox and in-app row (snapshot=$initializeSnapshot)',
+        () async {
+          final sound = _RecordingSoundPlayer();
+          final hub = _FakeRealtimeHub();
+          final chats = _RequestChatsClient();
+          final container = _container(sound: sound, hub: hub, chats: chats);
+          addTearDown(container.dispose);
 
-      container.read(inAppNotificationControllerProvider);
-      expect(
-        (await container.read(
-          messageRequestsSummaryProvider.future,
-        )).pendingCount,
-        0,
-      );
-      await container.read(inboxReconcilerProvider.notifier).reconcile();
-      chats.requestVisible = true;
+          container.read(inAppNotificationControllerProvider);
+          expect(
+            (await container.read(
+              messageRequestsSummaryProvider.future,
+            )).pendingCount,
+            0,
+          );
+          if (initializeSnapshot) {
+            await container.read(inboxReconcilerProvider.notifier).reconcile();
+          } else {
+            expect(
+              container.read(inboxReconcilerProvider).snapshotFor('prof-test'),
+              isNull,
+            );
+          }
+          chats.requestVisible = true;
 
-      hub.emit(
-        const RealtimeFrame(
-          op: 'notification',
-          data: {
-            'type': 'message_request',
-            'chat_id': 'new-request',
-            'message_id': 'first-message',
-            'sender_profile_id': 'peer-1',
-          },
-        ),
-      );
-      await pumpEventQueue();
+          hub.emit(
+            const RealtimeFrame(
+              op: 'notification',
+              data: {
+                'type': 'message_request',
+                'chat_id': 'new-request',
+                'message_id': 'first-message',
+                'sender_profile_id': 'peer-1',
+              },
+            ),
+          );
+          await pumpEventQueue();
 
-      expect(
-        (await container.read(
-          messageRequestsSummaryProvider.future,
-        )).pendingCount,
-        1,
+          expect(
+            (await container.read(
+              messageRequestsSummaryProvider.future,
+            )).pendingCount,
+            1,
+          );
+          expect(
+            container
+                .read(inboxReconcilerProvider)
+                .snapshotFor('prof-test')![InboxScope.requests]
+                .items
+                .map((item) => item.chatId),
+            contains('new-request'),
+          );
+          expect(
+            container.read(inAppNotificationCenterProvider).items.single.type,
+            'message_request',
+          );
+        },
       );
-      expect(
-        container
-            .read(inboxReconcilerProvider)
-            .snapshotFor('prof-test')![InboxScope.requests]
-            .items
-            .map((item) => item.chatId),
-        contains('new-request'),
-      );
-      expect(
-        container.read(inAppNotificationCenterProvider).items.single.type,
-        'message_request',
-      );
-    });
+    }
 
     test(
       'chat_update reveals a newly created DM request without reload',

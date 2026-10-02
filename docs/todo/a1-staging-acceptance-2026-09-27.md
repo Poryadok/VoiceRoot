@@ -359,3 +359,38 @@ NATS proof and state-preserving migration gate are satisfied.
   `STAGING_NATS_PROOF_CREDS_B64` is absent. No deployment or staging data
   changes were made; the active-generation ACL proof and state-preserving
   migration gate remain unresolved.
+
+## 2026-10-02 continuation — notification snapshot initialization
+
+- PR #596 run [36946946345](https://github.com/Poryadok/VoiceRoot/actions/runs/36946946345)
+  at `c6d81b2` failed two notification tests: `joined` and
+  `inbox_bucket_changed` did not initialize an absent inbox snapshot.
+  `reconcileAfterInboxActivity()` now initializes the active profile snapshot
+  for `message_request` and qualifying `chat_update`; existing snapshots use
+  the unchanged loading/error guard. MarkRead and ordinary activity retain
+  their guarded path.
+- Pre-fix caller wiring reproduced those two failures and the new first-use
+  `message_request` case. Restored wiring passes all 45 focused notification/
+  reconciler tests. Regression coverage also verifies activity initializes
+  profile B with B credentials while late profile A responses cannot publish,
+  and activity cannot implicitly retry any scope's failed cursor.
+- Final `make flutter-ci` passed: 1,243 passed, 98 existing opt-in skips,
+  eight informational lints. Independent read-only session/concurrency review
+  found no blockers. `graphify update .` completed successfully; HTML preview
+  remains over the graph size limit.
+- Required isolated `make compose-a1-flutter-profile-handoff` passed all five
+  live tests (T055, T106, T107, pending-email), with cleanup enabled, against
+  the current checkout and rebuilt local Compose services. Containers/network
+  were removed by the runner; the 14 generated project volumes were removed
+  separately after completion. Exact-head GitHub CI remains required.
+- Non-blocker, P3: `VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true` runs
+  `compose down --remove-orphans` and leaves project-scoped named volumes.
+  Reproduce with the isolated runner, then list volumes using its generated
+  Compose project label. Expected: disposable proof data is removed; actual:
+  14 volumes remain until explicit scoped cleanup. Impact: local disk and
+  disposable credential/data accumulation. No runner change in this fix.
+- A1 remains open. This evidence is local/CI, not acceptance of the actual
+  staging build. No staging deployment, proof credential issuance, or staging
+  NATS resource changes occurred. The reported census of 566 consumers and
+  evidence for 8 messages still require verification/classification and
+  retention/replay/idempotency proof before the separate migration gate passes.
