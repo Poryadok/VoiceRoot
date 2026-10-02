@@ -22,6 +22,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
@@ -31,6 +33,7 @@ import javax.crypto.spec.SecretKeySpec;
 /** Authenticated, response-verified read of Game Integration's current SDK policy. */
 public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPolicy, SdkBindingChallengeAuthority,
     SdkGameIntegrationExecutionPermitAuthority {
+  private static final Logger LOG = LoggerFactory.getLogger(SdkGameIntegrationPolicyClient.class);
   private static final int MAX_RESPONSE_BYTES = 65_536;
   private static final Duration EXECUTION_PERMIT_TIMEOUT = Duration.ofSeconds(1);
   private static final ObjectMapper JSON = new ObjectMapper()
@@ -119,14 +122,19 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
   }
 
   private Policy resolve(UUID applicationId, UUID environmentId, Duration callTimeout) {
+    String stage = "INPUT";
+    int responseStatus = 0;
     try {
       if (applicationId == null || environmentId == null || clock == null || http == null
           || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) throw denied();
+      stage = "ENDPOINT";
       URI endpoint = endpoint(configuredBaseUrl, environmentId, allowInternalHttp);
+      stage = "KEY";
       byte[] key = key(configuredKey);
       String path = endpoint.getRawPath();
       String timestamp = Long.toString(clock.instant().getEpochSecond());
       String nonce = UUID.randomUUID().toString();
+      stage = "REQUEST";
       HttpRequest request = HttpRequest.newBuilder(endpoint)
           .timeout(callTimeout)
           .header("X-Voice-Workload", "auth")
@@ -134,23 +142,32 @@ public final class SdkGameIntegrationPolicyClient implements SdkAuthorizationPol
           .header("X-Voice-Nonce", nonce)
           .header("X-Voice-Signature", requestSignature(key, path, timestamp, nonce))
           .GET().build();
+      stage = "TRANSPORT";
       HttpResponse<byte[]> response = http.send(request,
           responseInfo -> new BoundedBodySubscriber(MAX_RESPONSE_BYTES));
+      stage = "STATUS";
+      responseStatus = response.statusCode();
       if (response.statusCode() != 200) throw denied();
+      stage = "HEADERS";
       requireHeader(response, "Cache-Control", "no-store");
       requireHeader(response, "Content-Type", "application/json");
       requireHeader(response, "X-Voice-Response-Timestamp", timestamp);
       requireHeader(response, "X-Voice-Response-Nonce", nonce);
       String signature = uniqueHeader(response, "X-Voice-Response-Signature");
       byte[] raw = response.body();
+      stage = "SIGNATURE";
       verifyResponse(key, path, timestamp, nonce, signature, raw);
+      stage = "BODY";
       return parsePolicy(raw, applicationId, environmentId);
     } catch (InterruptedException interrupted) {
       Thread.currentThread().interrupt();
+      LOG.debug("SDK registry policy denied stage={} status={}", stage, responseStatus);
       throw denied();
     } catch (SdkIdentityDeniedException denied) {
+      LOG.debug("SDK registry policy denied stage={} status={}", stage, responseStatus);
       throw denied;
     } catch (Exception invalidOrUnavailable) {
+      LOG.debug("SDK registry policy denied stage={} status={}", stage, responseStatus);
       throw denied();
     }
   }

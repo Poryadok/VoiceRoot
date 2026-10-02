@@ -128,10 +128,11 @@ assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timest
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <user>'
 assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <compose-db-init>'
 ps_line="$(grep -n 'compose.*<ps> <--all>' "$case_dir/commands.log" | cut -d: -f1)"
-user_logs_line="$(grep -n 'compose.*<logs>.*<user>' "$case_dir/commands.log" | cut -d: -f1)"
+user_logs_line="$(grep -n 'compose.*<logs> <--no-color> <--timestamps> <user>' "$case_dir/commands.log" | cut -d: -f1)"
 search_logs_line="$(grep -n 'compose.*<logs>.*<search>' "$case_dir/commands.log" | cut -d: -f1)"
 logs_line="$(grep -n 'compose.*<logs>.*<compose-db-init>' "$case_dir/commands.log" | cut -d: -f1)"
 (( ps_line < search_logs_line && search_logs_line < user_logs_line && user_logs_line < logs_line )) || fail 'ps --all must precede search, user and compose-db-init logs'
+assert_contains "$case_dir/commands.log" 'compose.*<logs> <--no-color> <--timestamps> <--tail=100>.*<voice> <bot> <notification>'
 
 echo '== diagnostic failures and cleanup failure cannot replace original status =='
 case_dir="$(new_case diagnostic-failure)"
@@ -147,7 +148,7 @@ assert_not_contains "$case_dir/commands.log" '--volumes|<-v>|volume prune|system
 assert_not_contains "$case_dir/stdout" 'do-not-leak-attachment-secret'
 assert_not_contains "$case_dir/stderr" 'do-not-leak-attachment-secret'
 ps_line="$(grep -n 'compose.*<ps> <--all>' "$case_dir/commands.log" | cut -d: -f1)"
-user_logs_line="$(grep -n 'compose.*<logs>.*<user>' "$case_dir/commands.log" | cut -d: -f1)"
+user_logs_line="$(grep -n 'compose.*<logs> <--no-color> <--timestamps> <user>' "$case_dir/commands.log" | cut -d: -f1)"
 search_logs_line="$(grep -n 'compose.*<logs>.*<search>' "$case_dir/commands.log" | cut -d: -f1)"
 logs_line="$(grep -n 'compose.*<logs>.*<compose-db-init>' "$case_dir/commands.log" | cut -d: -f1)"
 down_line="$(grep -n 'compose.*<down> <--remove-orphans>' "$case_dir/commands.log" | cut -d: -f1)"

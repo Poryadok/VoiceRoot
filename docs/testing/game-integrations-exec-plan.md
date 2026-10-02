@@ -3059,3 +3059,22 @@ session, claims, identifiers or throwable are logged. A logging regression is re
 before and green after, with all nine REST controller and forty-seven durable
 identity integration tests passing without skips. The exact Auth denial stage
 and next Phase0 owner startup causes remain pending hosted diagnostics.
+
+The expanded logs identify the next Phase0 defect: Voice/Bot/Notification fetch
+Space keys through a proxy still targeting its plain :8080 health listener,
+which returns 404 for JWKS. The proxy now reaches Space's actual :8443 TLS
+listener with SNI/name pinned to space and root-CA verification enabled. A real
+isolated Nginx proof reproduces old HTTP 404, then new HTTPS 200; a wrong CA or
+peer name yields 502 and POST remains 405. Its owned containers/network and
+temporary credential files are removed. Independent review accepts this fix.
+The attachment diagnostic test now selects its exact dedicated User log command,
+avoiding the second User occurrence in the bounded owner batch while retaining
+exit-status, ordering, secret and cleanup assertions.
+Auth's next hosted denial stage is ADMISSION, so input parsing, session lookup
+and matching device state pass. The client now logs only a fixed policy-stage
+label and integer HTTP status at DEBUG; local allowlist denial has a separate
+fixed label. Its secret-free log regression is red before/green after and all
+sixteen policy-client roots pass without skips. Wire review found no concrete
+Auth/GIS signature or route mismatch; zero recorded nonce alone does not prove
+whether GIS was called. No admission-policy repair is claimed before these
+bounded diagnostics establish the cause.

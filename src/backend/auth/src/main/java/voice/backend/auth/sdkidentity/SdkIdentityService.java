@@ -744,6 +744,7 @@ public class SdkIdentityService {
     if (app == null || env == null) throw new SdkIdentityDeniedException();
     SdkApplication admission = applications.get(app + "/" + env);
     if (admission == null || !app.equals(admission.applicationId()) || !env.equals(admission.environmentId())) {
+      LOG.debug("SDK application admission denied stage=ALLOWLIST");
       throw new SdkIdentityDeniedException();
     }
     try {
