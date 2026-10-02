@@ -88,6 +88,14 @@ jobs:
       - name: Stop GIS for the live Auth fail-closed check
         id: stop-gis
         run: |
+          compose=(docker compose --env-file tmp/t16-cross-service/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.t16-cross-service-acceptance.yml
+            -p "$T16_COMPOSE_PROJECT")
+          auth_id="$("${compose[@]}" ps -q auth)"
+          proxy_id="$("${compose[@]}" ps -q auth-principal-jwks)"
+          test -n "$auth_id" && test -n "$proxy_id"
+          echo "auth_container_id=$auth_id" >> "$GITHUB_OUTPUT"
+          echo "proxy_container_id=$proxy_id" >> "$GITHUB_OUTPUT"
           docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
             -f docker-compose.yml \
             -f docker-compose.t16-cross-service-acceptance.yml \
@@ -111,10 +119,17 @@ jobs:
         id: restore-gis
         if: always() && steps.stop-gis.outcome == 'success'
         run: |
+          # Reconcile only the stopped service. Replacing Auth would strand its
+          # network_mode: service:auth JWKS sidecar in the old network namespace.
           docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
             -f docker-compose.yml \
             -f docker-compose.t16-cross-service-acceptance.yml \
-            -p "$T16_COMPOSE_PROJECT" up -d --wait gameintegration
+            -p "$T16_COMPOSE_PROJECT" up -d --no-deps --wait gameintegration
+          compose=(docker compose --env-file tmp/t16-cross-service/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.t16-cross-service-acceptance.yml
+            -p "$T16_COMPOSE_PROJECT")
+          test "$("${compose[@]}" ps -q auth)" = "${{ steps.stop-gis.outputs.auth_container_id }}"
+          test "$("${compose[@]}" ps -q auth-principal-jwks)" = "${{ steps.stop-gis.outputs.proxy_container_id }}"
 
       - name: Run integrated Messaging gRPC acceptance against live Auth and GIS
         if: steps.auth-gis-unavailable.outcome == 'success' && steps.restore-gis.outcome == 'success'

@@ -3015,3 +3015,20 @@ from VerifyService errors, with no claim, bearer, header or raw dependency error
 logged. Its two dependency regressions are red before and green after; shared
 principal/security short suites pass. Public statuses and admission policy are
 unchanged. T16 and exact-head ci-gate remain open pending the next hosted run.
+
+The diagnostic hosted T16 run identifies a fixture lifecycle mismatch: the
+GIS outage restore command recreated Auth but left its network-mode JWKS
+sidecar attached to the previous container's network namespace. User's first
+protected admission then reported JWKS dependency Unavailable. Restoration now
+reconciles only GIS with --no-deps and asserts that Auth and proxy container IDs
+remain unchanged. The proxy healthcheck probes the actual TLS-pinned JWKS route,
+requiring a bounded 200 response containing distinct current/next RSA entries.
+Local restore Bash syntax, rendered Compose and Node probe syntax pass;
+independent review accepts the lifecycle/readiness change. Hosted T16 remains
+the required runtime proof; production admission and refresh policy are unchanged.
+
+Space/Messaging still exit during the latest Phase0 Compose startup, and the
+existing T31/A1 failure branches omitted their container stdout. Those branches
+now capture bounded startup logs for the two owners while retaining the original
+failure status. The exact next startup cause remains open until these diagnostics
+run; no guessed source-policy or startup repair is claimed.

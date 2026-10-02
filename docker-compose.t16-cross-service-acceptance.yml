@@ -88,7 +88,7 @@ services:
         - CMD
         - node
         - -e
-        - "const fs=require('node:fs'),https=require('node:https');const r=https.get({hostname:'auth',port:9444,path:'/health',ca:fs.readFileSync('/run/t16/ca.crt')},s=>process.exit(s.statusCode===200?0:1));r.on('error',()=>process.exit(1));"
+        - "const fs=require('node:fs'),https=require('node:https');const r=https.get({hostname:'auth',port:9444,path:'/api/v1/auth/.well-known/principal-jwks.json',ca:fs.readFileSync('/run/t16/ca.crt')},s=>{if(s.statusCode!==200)process.exit(1);let body='';s.on('data',b=>{body+=b;if(body.length>65536)process.exit(1)});s.on('error',()=>process.exit(1));s.on('end',()=>{try{const k=JSON.parse(body).keys;process.exit(Array.isArray(k)&&k.length===2&&k.every(x=>x.kty==='RSA'&&typeof x.kid==='string'&&typeof x.n==='string'&&typeof x.e==='string')&&k[0].kid!==k[1].kid&&k[0].n!==k[1].n?0:1)}catch{process.exit(1)}})});r.setTimeout(1000,()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1));"
       interval: 3s
       timeout: 2s
       retries: 20

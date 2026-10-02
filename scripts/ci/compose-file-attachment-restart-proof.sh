@@ -155,6 +155,7 @@ if (( initial_up_status != 0 )); then
   compose logs --no-color --timestamps search >&2 || true
   compose logs --no-color --timestamps user >&2 || true
   compose logs --no-color --timestamps compose-db-init >&2 || true
+  compose logs --no-color --timestamps --tail=100 space messaging >&2 || true
   exit "$initial_up_status"
 fi
 wait_healthy file
