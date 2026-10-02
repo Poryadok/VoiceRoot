@@ -120,7 +120,7 @@ func (s *SubscriptionGRPC) ApplySpaceLifecycleFence(ctx context.Context, req *su
 	if err != nil {
 		return nil, err
 	}
-	requestHash, requestBytes, err := lifecycleDomainHash(fence)
+	requestHash, requestBytes, err := lifecycleDomainHash(req)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid lifecycle fence")
 	}
@@ -186,7 +186,7 @@ func (s *SubscriptionGRPC) PurgeSpace(ctx context.Context, req *subscriptionv1.P
 	if err := validateManifest(purge.GetManifest()); err != nil {
 		return nil, err
 	}
-	requestHash, requestBytes, err := lifecycleDomainHash(purge)
+	requestHash, requestBytes, err := lifecycleDomainHash(req)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid purge request")
 	}

@@ -255,7 +255,7 @@ WHERE space_id=$1 AND operation_kind='PURGE'`, spaceID).Scan(&boundedFullEvidenc
 SELECT state='PURGED' AND generation=$2 AND deletion_operation_id=$3
    AND manifest_sha256=$4 AND request_sha256=$5
 FROM subscription_space_lifecycle_fences WHERE space_id=$1`, spaceID, purgeRequest.GetPurge().GetGeneration(), deletionID,
-		purgeRequest.GetPurge().GetManifest().GetManifestSha256(), r23DomainHash(t, purgeRequest.GetPurge())).Scan(&compactPurged))
+		purgeRequest.GetPurge().GetManifest().GetManifestSha256(), r23DomainHash(t, purgeRequest)).Scan(&compactPurged))
 	require.True(t, compactPurged, "successful cleanup must first commit the compact permanent PURGED authority")
 	_, err = pool.Exec(ctx, `UPDATE subscription_space_lifecycle_fences SET state='LIVE' WHERE space_id=$1`, spaceID)
 	r23RequireGRPCSQLState(t, err, "55000")
@@ -661,7 +661,7 @@ func r23AssertFenceReceipt(t *testing.T, receipt *commonv1.SpaceLifecycleFenceRe
 	require.Equal(t, request.GetGeneration(), receipt.GetGeneration())
 	require.Equal(t, commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION, receipt.GetParticipantId())
 	require.Equal(t, state, receipt.GetAppliedState())
-	require.Equal(t, r23DomainHash(t, request), receipt.GetRequestSha256())
+	require.Equal(t, r23DomainHash(t, &subscriptionv1.ApplySpaceLifecycleFenceRequest{Fence: request}), receipt.GetRequestSha256(), "Space validates the participant RPC type and full wrapper")
 	require.Equal(t, request.GetManifest().GetManifestSha256(), receipt.GetManifestSha256())
 	require.True(t, receipt.GetAppliedAt().IsValid())
 }
@@ -676,7 +676,7 @@ func r23AssertPurgeReceipt(t *testing.T, receipt *commonv1.SpacePurgeReceipt, re
 	require.Equal(t, request.GetGeneration(), receipt.GetGeneration())
 	require.Equal(t, commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION, receipt.GetParticipantId())
 	require.Equal(t, commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, receipt.GetState())
-	require.Equal(t, r23DomainHash(t, request), receipt.GetRequestSha256())
+	require.Equal(t, r23DomainHash(t, &subscriptionv1.PurgeSpaceRequest{Purge: request}), receipt.GetRequestSha256(), "Space validates the participant RPC type and full wrapper")
 	require.True(t, receipt.GetCompletedAt().IsValid())
 }
 
