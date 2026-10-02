@@ -33,6 +33,15 @@ device major 0) are retained as object records, not filesystem coordinates.
 Their mount targets still reject mounting at/inside the source. Malformed or
 unknown non-filesystem roots fail; filesystem alias checks remain unchanged.
 
+An exactly empty process mount table may be chroot filtering. It can use the
+inspector's complete runtime table only when the target shares the inspector's
+mount namespace, PID 1 shares its namespace and root, and the inspector root is
+the runtime `/` with a matching `/` mount record. The helper pins process,
+namespace and root descriptors and checks fresh process references, start times
+and all three mount-table byte snapshots before and after the FD/maps scan.
+Missing, denied, different or changing evidence fails closed. Every FD/mapping
+and source mount/alias check still runs, using the kernel's caller-root paths.
+
 The walk opens the source read-only with `O_NOFOLLOW` and `O_NOATIME`; failure to
 use these flags fails inspection. Only JetStream `meta.inf`, `meta.sum`, `o.dat`
 and `*.blk` file bytes are hashed; credential/seed files are not opened. Reports
@@ -72,6 +81,8 @@ Successful inspection prints one metadata path under
 either. Use the exact printed path with `scp voice-staging:<path> <local-path>`
 as pmd after completion. No payloads or account/operator/user seeds are retrieved.
 If the helper reports failure, provide only that failure status for review.
+Failure JSON contains only pinned public guard/class/function labels and bounded
+numeric PID/errno when available; exception text, paths and tracebacks stay private.
 
 ## Disposable Linux checks
 
