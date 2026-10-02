@@ -201,6 +201,36 @@ This owner implementation does not activate federation voice: complete remaining
 owners, the publisher's unchanged-vector common cut, node bundle and measured
 capacity/revocation gates are still required.
 
+Space's implemented source uses clean catalog24 and its permanent per-Space
+floor. It includes lifecycle/ownership gates, the current owner, complete manual
+memberships, account bans, communication timeouts, voice rooms/categories/tree
+references and raw community owner/member lease state. Cross-Space category or
+room references refuse completeness. An unknown missing floor is unavailable;
+a retained known floor with no Space row returns complete closed state.
+Names, moderation reasons, audit/receipt bytes and game corporation keys are not
+part of the authority payload. These owning references do not establish a Chat
+content ACL or Federation resource hosting/routing by themselves.
+
+Community membership requires active owner authority, exact owner generation,
+an unrevoked member, and both owner/member leases still valid. The raw canonical
+payload stays stable at a revision, including expired rows; the response's earlier
+validity cutoff bounds any currently active managed grant. Publisher evaluation
+must apply expiry even if no database write changes a revision. Public visibility
+and `allow_guests` do not supply existing membership. Manual membership remains
+independent of an expired managed roster; bans/profile/account and Role checks
+still apply separately. Timeouts are projected as communication restrictions.
+
+Space uses a source-only listener, enabled by `SPACE_AUTHORITY_SOURCE_ENABLED=true`
+(default private address `:9097`). Its `SPACE_AUTHORITY_SOURCE_` settings require
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE` and `REPLAY_REDIS_ADDR`; optional
+settings are `REPLAY_REDIS_PASSWORD`, `JWKS_CA_FILE` and `GRPC_LISTEN`. Federation's
+HTTPS endpoint comes from the `federation` entry in `S2S_JWKS_URLS_JSON`.
+Shared S2S settings alone never enable the source. Partial local settings without
+an explicit flag fail startup; explicit false disables the source. The source
+service is never registered on legacy/privacy/GIS/Gateway listeners. User/GIS
+can reuse this source-only runtime with their own audience and schema preflight;
+their complete owning readers remain prerequisites.
+
 Handshake: открыть scoped stream → получить snapshot на watermark R и буфер
 изменений после R → атомарно активировать snapshot → применить последовательные
 изменения → ACK applied revision → получить свежую lease. Если буфер переполнен,

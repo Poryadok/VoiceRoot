@@ -1,0 +1,46 @@
+// Code generated from the owner migration function bodies; DO NOT EDIT.
+package store
+
+import "voice/backend/pkg/authoritysource"
+
+var spaceAuthorityCatalog = authoritysource.Catalog{Version: 24, Tables: []string{"spaces", "space_members", "voice_rooms", "space_bans", "space_member_timeouts", "space_lifecycle_aggregates", "space_deletion_tombstones", "ownership_journal", "space_subscriptions", "community_owner_authority", "community_owner_recovery_operations", "community_roster_members", "space_tree_nodes", "categories", "space_voice_access_epochs", "space_voice_access_outbox"}, Triggers: []authoritysource.CatalogTrigger{
+	{Table: "spaces", Name: "space_authority_revision_spaces", Function: "space_authority_revision_changed", Type: 29, Argument: "id"},
+	{Table: "spaces", Name: "space_authority_revision_spaces_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_members", Name: "space_authority_revision_space_members", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_members", Name: "space_authority_revision_space_members_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "voice_rooms", Name: "space_authority_revision_voice_rooms", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "voice_rooms", Name: "space_authority_revision_voice_rooms_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_bans", Name: "space_authority_revision_space_bans", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_bans", Name: "space_authority_revision_space_bans_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_member_timeouts", Name: "space_authority_revision_space_member_timeouts", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_member_timeouts", Name: "space_authority_revision_space_member_timeouts_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_lifecycle_aggregates", Name: "space_authority_revision_space_lifecycle_aggregates", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_lifecycle_aggregates", Name: "space_authority_revision_space_lifecycle_aggregates_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_deletion_tombstones", Name: "space_authority_revision_space_deletion_tombstones", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_deletion_tombstones", Name: "space_authority_revision_space_deletion_tombstones_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "ownership_journal", Name: "space_authority_revision_ownership_journal", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "ownership_journal", Name: "space_authority_revision_ownership_journal_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_subscriptions", Name: "space_authority_revision_space_subscriptions", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_subscriptions", Name: "space_authority_revision_space_subscriptions_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "community_owner_authority", Name: "space_authority_revision_community_owner_authority", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "community_owner_authority", Name: "space_authority_revision_community_owner_authority_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "community_owner_recovery_operations", Name: "space_authority_revision_community_owner_recovery_operations", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "community_owner_recovery_operations", Name: "space_authority_revision_community_owner_recovery_operations_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "community_roster_members", Name: "space_authority_revision_community_roster_members", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "community_roster_members", Name: "space_authority_revision_community_roster_members_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_tree_nodes", Name: "space_authority_revision_space_tree_nodes", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "space_tree_nodes", Name: "space_authority_revision_space_tree_nodes_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "categories", Name: "space_authority_revision_categories", Function: "space_authority_revision_changed", Type: 29, Argument: "space_id"},
+	{Table: "categories", Name: "space_authority_revision_categories_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_voice_access_epochs", Name: "space_authority_revision_floor_change", Function: "space_authority_revision_floor_guard", Type: 31},
+	{Table: "space_voice_access_epochs", Name: "space_authority_revision_floor_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "space_voice_access_outbox", Name: "space_authority_revision_outbox_truncate", Function: "space_authority_revision_floor_guard", Type: 34},
+	{Table: "spaces", Name: "space_voice_access_space_initialize", Function: "space_voice_access_initialize", Type: 5},
+	{Table: "space_voice_access_outbox", Name: "space_voice_access_outbox_no_change", Function: "space_voice_access_outbox_immutable", Type: 27},
+}, Functions: []authoritysource.CatalogFunction{
+	{Name: "space_voice_access_initialize", Arguments: 0, ReturnType: "trigger", BodySHA256: "df0d50b1214c4b67e76097fad65c0f523a5e291c89102670bc87e307a2162d4a"},
+	{Name: "space_voice_access_bump", Arguments: 3, ReturnType: "bigint", BodySHA256: "2068c8111d021af9a79fe5b018dceacfdc3053288e69e99696056c07128e53f3"},
+	{Name: "space_voice_access_outbox_immutable", Arguments: 0, ReturnType: "trigger", BodySHA256: "5ac80f1cc4b0b141e84a0d1bb0a4bb4d6d66e9c94afa1c9d4702e33e782035d2"},
+	{Name: "space_authority_revision_floor_guard", Arguments: 0, ReturnType: "trigger", BodySHA256: "a3dd36eb6cf721bcd48f65e40a7b24f06197c79f11b10a0ef7c1d648df560528"},
+	{Name: "space_authority_revision_changed", Arguments: 0, ReturnType: "trigger", BodySHA256: "d49fb228b2450377e6b818dd8f2c2dcecc3396b31aecde74aec34ae492a47c97"},
+}}

@@ -69,6 +69,28 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Space now has a complete owning source on a separately enabled source-only
+  mTLS listener. Its schema24 state/floor cut includes membership, account bans,
+  communication timeouts, lifecycle/ownership gates, scoped room/category/tree
+  references and raw community owner/member leases. Public/guest settings do not
+  invent membership. Current-generation managed membership requires both leases;
+  the earlier validity cutoff prevents stale renewal even with no counter write.
+  Expired raw rows remain stable at the same revision, while manual membership
+  survives managed-roster expiry. Unknown missing floors and cross-Space tree
+  references fail closed; known retained floors return complete closed state.
+  The shared source-only runtime checks owning schema before registration and
+  requires explicit per-owner activation, Federation trust, mTLS and Redis replay.
+  Actual pinned migrate plus application factory tests prove complete reads,
+  membership revocation and maintenance after refused downgrade. Shared transport
+  checks cover TLS rejection, JWKS recovery and replay dependency failure; four
+  PostgreSQL reader roots cover complete state, bans/timeouts/lifecycle common cut,
+  scopes/floors and time-only expiry. The isolated 17-file delivery passes
+  17 selected roots without skips and the complete Space short suite passes
+  190 roots (335 explicit integration skips). Space vet and shared source/fixture
+  vet with GOWORK=off pass. Scoped review finds no blocker in this seam.
+  No source flag or live schema/history is changed. Complete User/Auth/GIS readers,
+  production publisher/common vector, content ACL, permanent fences, native-media
+  combined acceptance and measured capacity remain open; no parent gate advances.
 - The protected `voice.authority.v1.AuthoritySourceService` contract and first
   Role owner are implemented. Role's complete canonical snapshot reads roles,
   assignments, chat/voice overrides, lifecycle/ownership/deletion gates and active

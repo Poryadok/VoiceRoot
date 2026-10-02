@@ -3,6 +3,7 @@ module voice/backend/pkg
 go 1.26
 
 require (
+	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/nats-io/jwt/v2 v2.7.3
@@ -23,6 +24,8 @@ require (
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

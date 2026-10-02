@@ -20,9 +20,11 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
@@ -47,6 +49,13 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_SPACE, ":9097")
+	if err != nil {
+		log.Fatalf("Space authority source config: %v", err)
+	}
+	if sourceEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space authority source requires DATABASE_URL")
+	}
 	lifecycleConfig, lifecycleEnabled, err := loadLifecycleRuntimeConfig(os.Getenv)
 	if err != nil {
 		log.Fatalf("Space lifecycle config: %v", err)
@@ -99,6 +108,7 @@ func main() {
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var publicServer *grpc.Server
+	var sourceServer *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
 	var deletionRuntime *lifecycleRuntime
@@ -199,6 +209,24 @@ func main() {
 		}
 
 		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		if sourceEnabled {
+			var sourceRuntime *authoritysource.Runtime
+			sourceServer, sourceRuntime, err = newSpaceAuthorityServer(runCtx, sharedOptions, sourceConfig, spaceStore)
+			if err != nil {
+				log.Fatalf("Space authority source activation: %v", err)
+			}
+			defer func() { _ = sourceRuntime.Close() }()
+			sourceListener, err := net.Listen("tcp", sourceConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Space authority source listen: %v", err)
+			}
+			defer sourceServer.Stop()
+			go func() {
+				if err := sourceServer.Serve(sourceListener); err != nil {
+					log.Fatalf("Space authority source serve: %v", err)
+				}
+			}()
+		}
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
 			lifecycleprincipal.OrdinaryUnary(),
@@ -392,6 +420,9 @@ func main() {
 		}
 		if publicServer != nil {
 			publicServer.GracefulStop()
+		}
+		if sourceServer != nil {
+			sourceServer.Stop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
