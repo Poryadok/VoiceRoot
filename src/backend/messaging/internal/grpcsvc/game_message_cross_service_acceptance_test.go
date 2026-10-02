@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -66,6 +67,7 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 
 	fixture := seedT16AcceptFixture(t, ctx, authDB, gisDB, userDB, chatDB)
 	seedT16GISOwnerSession(t, ctx, fixture)
+	waitT16AuthGISRecovery(t, ctx, authDB, fixture)
 	assertT16AuthDeviceAuthorityFailsClosed(t, ctx, authDB, gisDB, fixture)
 	workloadNonceCount := countT16GISWorkloadNonces(t, ctx)
 	assertion, authorityProof := requestT16AuthDeviceAuthority(t, ctx, fixture)
@@ -1173,6 +1175,63 @@ VALUES($1,$2,$3,$4,1,'active',$5)`, fixture.appID, fixture.envID, fixture.bindin
 	require.NoError(t, err)
 	fixture.compactMessage = signT16Message(t, fixture, deviceKey, now)
 	return fixture
+}
+
+// Probe the same Auth JVM that observed the GIS outage. Docker health alone does
+// not establish recovery of its HTTP client (including cached DNS failures).
+// This enrollment challenge cannot mint a session or device-authority assertion.
+func waitT16AuthGISRecovery(t *testing.T, ctx context.Context, authDB *pgxpool.Pool, fixture t16AcceptFixture) {
+	t.Helper()
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	jwk, _ := t16PublicJWK(t, fixture.deviceKey)
+	id, err := probeT16AuthGISReadiness(probeCtx, &http.Client{Timeout: 2 * time.Second}, requiredT16Env(t, "T16_AUTH_BASE_URL"), fixture.appID, fixture.envID, string(jwk), 250*time.Millisecond)
+	require.NoError(t, err)
+	// Delete only the probe's enrollment challenge before nonce/receipt baselines.
+	result, err := authDB.Exec(ctx, `DELETE FROM sdk_challenges WHERE challenge_id=$1 AND application_id=$2 AND environment_id=$3`, id, fixture.appID, fixture.envID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.RowsAffected())
+}
+
+func probeT16AuthGISReadiness(ctx context.Context, client *http.Client, baseURL string, application, environment uuid.UUID, jwk string, interval time.Duration) (uuid.UUID, error) {
+	body, err := json.Marshal(map[string]string{"applicationId": application.String(), "environmentId": environment.String(), "devicePublicJwk": jwk})
+	if err != nil {
+		return uuid.Nil, errors.New("Auth GIS readiness request encoding failed")
+	}
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/v1/auth/sdk/challenges", strings.NewReader(string(body)))
+		if err != nil {
+			return uuid.Nil, errors.New("Auth GIS readiness request creation failed")
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, callErr := client.Do(request)
+		if callErr == nil {
+			data, readErr := io.ReadAll(io.LimitReader(response.Body, 16*1024))
+			_ = response.Body.Close()
+			if readErr != nil {
+				return uuid.Nil, errors.New("Auth GIS readiness response read failed")
+			}
+			if response.StatusCode == http.StatusOK {
+				var challenge struct {
+					ChallengeID uuid.UUID `json:"challengeId"`
+				}
+				if json.Unmarshal(data, &challenge) != nil || challenge.ChallengeID == uuid.Nil {
+					return uuid.Nil, errors.New("Auth GIS readiness response has no valid challenge")
+				}
+				return challenge.ChallengeID, nil
+			}
+			if response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusServiceUnavailable {
+				return uuid.Nil, fmt.Errorf("Auth GIS readiness unexpected HTTP status %d", response.StatusCode)
+			}
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return uuid.Nil, errors.New("Auth GIS readiness deadline reached")
+		case <-timer.C:
+		}
+	}
 }
 
 func requestT16AuthDeviceAuthority(t *testing.T, ctx context.Context, fixture t16AcceptFixture) (string, string) {

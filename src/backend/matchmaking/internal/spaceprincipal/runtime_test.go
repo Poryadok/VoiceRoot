@@ -2,8 +2,12 @@ package spaceprincipal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -13,6 +17,36 @@ import (
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 	"voice/backend/pkg/principal"
 )
+
+func TestComposeSpaceJWKSUsesPublishedIssuerRoute(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("test source location unavailable")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../"))
+	compose, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := strings.SplitN(string(compose), "\n  matchmaking:\n", 2)
+	if len(service) != 2 {
+		t.Fatal("Compose Matchmaking service missing")
+	}
+	section := strings.SplitN(service[1], "\n  search:\n", 2)[0]
+	for _, line := range strings.Split(section, "\n") {
+		if value, found := strings.CutPrefix(strings.TrimSpace(line), "S2S_JWKS_URLS_JSON: "); found {
+			var endpoints map[string]string
+			if err := json.Unmarshal([]byte(strings.Trim(value, "'")), &endpoints); err != nil {
+				t.Fatal(err)
+			}
+			if endpoints["space"] != "https://space:8443/.well-known/jwks.json" {
+				t.Fatal("Compose must fetch Space's published public JWKS route before enabling the principal listener")
+			}
+			return
+		}
+	}
+	t.Fatal("Compose Space JWKS trust missing")
+}
 
 func TestConfigRequiresCompleteTLSReplayAndSpaceJWKS(t *testing.T) {
 	cfg := Config{

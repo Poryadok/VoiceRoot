@@ -54,13 +54,17 @@ func TestComposeSpaceJWKSURLMatchesPinnedIssuerRoute(t *testing.T) {
 	service := strings.SplitN(string(compose), "\n  messaging:\n", 2)
 	require.Len(t, service, 2)
 	section := strings.SplitN(service[1], "\n  file:\n", 2)[0]
-	var endpoint string
+	values := map[string]string{}
 	for _, line := range strings.Split(section, "\n") {
-		if value, found := strings.CutPrefix(strings.TrimSpace(line), "SPACE_PRINCIPAL_JWKS_URL: "); found {
-			endpoint = value
-			break
+		if key, value, found := strings.Cut(strings.TrimSpace(line), ": "); found {
+			values[key] = value
 		}
 	}
+	endpoint := values["SPACE_PRINCIPAL_JWKS_URL"]
 	require.NotEmpty(t, endpoint)
 	require.True(t, validPrincipalJWKSURL(endpoint, "space"), "Compose must use the issuer-pinned public JWKS route")
+	for _, key := range []string{"SPACE_PRINCIPAL_JWKS_CA_FILE", "MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE", "MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"} {
+		require.NotEmpty(t, values[key], "Compose must supply %s to the protected runtime", key)
+	}
+	require.Equal(t, "redis://redis:6379/0", values["MESSAGING_PRINCIPAL_REPLAY_REDIS_URL"], "Compose must enable the runtime's replay guard")
 }

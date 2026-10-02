@@ -155,7 +155,7 @@ if (( initial_up_status != 0 )); then
   compose logs --no-color --timestamps search >&2 || true
   compose logs --no-color --timestamps user >&2 || true
   compose logs --no-color --timestamps compose-db-init >&2 || true
-  compose logs --no-color --timestamps --tail=100 auth user role chat space messaging voice bot notification gameintegration gateway >&2 || true
+  compose logs --no-color --timestamps --tail=100 auth user role chat space messaging voice bot notification gameintegration gateway matchmaking search file moderation social subscription presence story realtime analytics >&2 || true
   exit "$initial_up_status"
 fi
 wait_healthy file

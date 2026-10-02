@@ -335,6 +335,13 @@ class ComposeTests(unittest.TestCase):
                 return source
         self.fail(f"{service} config path has no fixture mount: {target}")
 
+    def test_matchmaking_trusts_replaced_space_jwks_certificate(self):
+        environment = self.merged["matchmaking"]["environment"]
+        self.assertEqual(json.loads(environment["S2S_JWKS_URLS_JSON"])["space"],
+                         "https://space:8443/.well-known/jwks.json")
+        self.assertEqual(self.source_at("matchmaking", environment["S2S_JWKS_CA_FILE"]),
+                         "ca/ca.crt")
+
     def test_fixture_directory_is_required(self):
         env = dict(self.env)
         env.pop("PHASE0_FIXTURE_DIR")
@@ -443,6 +450,7 @@ class ComposeTests(unittest.TestCase):
 
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
         fixture_overrides = {
+            ("matchmaking", "S2S_JWKS_CA_FILE"): "ca/ca.crt",
             ("space", "SPACE_PRINCIPAL_SIGNING_KEYS_DIR"): "space",
             ("space", "SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"): "tls/space-lifecycle.crt",
             ("space", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"): "tls/space-lifecycle.key",
@@ -480,6 +488,7 @@ class ComposeTests(unittest.TestCase):
                           "ca/ca.crt", "ca/gameintegration-client-ca.crt", "ca/space-lifecycle-client-ca.crt"}
         allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
                                    "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"}
+        allowed["matchmaking"] = {"ca/ca.crt"}
         allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
                                 "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key",
                                 "tls/gameintegration-client.crt", "tls/gameintegration-client.key",
@@ -488,7 +497,8 @@ class ComposeTests(unittest.TestCase):
             for source, mount in self.fixture_mounts(service):
                 self.assertIn(source, allowed.get(service, set()), f"fixture exposed to {service}")
                 self.assertTrue(mount.get("read_only"), f"writable fixture: {service}/{source}")
-            if service in allowed:
+            if service in allowed and service != "matchmaking":
+                # Matchmaking receives only a public CA, so needs no root override.
                 self.assertIn(str(self.merged[service].get("user")), ("0", "0:0", "root"))
         for service in ("role", "auth", PROXY):
             self.assertFalse(self.merged[service].get("ports"), f"private port published: {service}")
@@ -538,7 +548,17 @@ class ComposeTests(unittest.TestCase):
             self.assertIn("$", target, "proxy must resolve issuer DNS lazily")
             for variable, value in re.findall(r"set\s+(\$\w+)\s+([^;]+);", config):
                 target = target.replace(variable, value.strip().strip('\"'))
-            self.assertEqual(target, f"http://{issuer}:8080{upstream}")
+            if issuer == "space":
+                self.assertEqual(target, f"https://space:8443{upstream}")
+                for directive, value in (("proxy_ssl_server_name", "on"),
+                                         ("proxy_ssl_name", "space"),
+                                         ("proxy_ssl_verify", "on")):
+                    self.assertEqual(re.findall(rf"\b{directive}\s+([^;\s]+)\s*;", body), [value])
+                trusted_ca = re.search(r"proxy_ssl_trusted_certificate\s+([^;\s]+)\s*;", body)
+                self.assertIsNotNone(trusted_ca)
+                self.assertEqual(self.source_at(PROXY, trusted_ca.group(1)), "ca/ca.crt")
+            else:
+                self.assertEqual(target, f"http://{issuer}:8080{upstream}")
             method_guard = re.search(
                 r"if\s*\(\s*\$request_method\s*!=\s*[\"']?GET[\"']?\s*\)"
                 r"\s*\{\s*return\s+(?:403|405)\s*;\s*\}", body)

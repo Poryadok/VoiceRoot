@@ -119,7 +119,7 @@ jobs:
           if ! "${compose[@]}" up -d --build --wait \
             gateway chat gameintegration t31-session-event-receiver-db; then
             "${compose[@]}" ps --all || true
-            "${compose[@]}" logs --no-color --timestamps --tail=100 auth user role chat space messaging voice bot notification gameintegration gateway || true
+            "${compose[@]}" logs --no-color --timestamps --tail=100 auth user role chat space messaging voice bot notification gameintegration gateway matchmaking search file moderation social subscription presence story realtime analytics || true
             exit 1
           fi
 

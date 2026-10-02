@@ -528,6 +528,7 @@ services:
       SPACE_PRINCIPAL_JWKS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
       MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
       MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_PRINCIPAL_REPLAY_REDIS_URL: redis://redis:6379/0
       MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN: :9093
       MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
       MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
@@ -657,7 +658,7 @@ services:
       MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
       MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/principal/ca/ca.crt
       MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/principal-jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       MATCHMAKING_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090

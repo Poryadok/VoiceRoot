@@ -3078,3 +3078,24 @@ sixteen policy-client roots pass without skips. Wire review found no concrete
 Auth/GIS signature or route mismatch; zero recorded nonce alone does not prove
 whether GIS was called. No admission-policy repair is claimed before these
 bounded diagnostics establish the cause.
+
+The latest hosted Auth policy diagnostic is TRANSPORT/status 0 after GIS was
+restored. The failure timing overlaps the unchanged JVM negative-DNS cache;
+container health alone does not prove that client recovery. T16 now bounds an
+actual Auth challenge-route recovery probe at 30 seconds, removes its exact
+challenge before nonce/receipt baselines, and leaves every outage/denial/replay
+assertion strict. Three meaningful readiness regressions pass without skips.
+Main Compose logs additionally prove Messaging lacked its required principal
+replay Redis URL. Its complete-configuration regression fails before and passes
+after the base setting. Matchmaking has a source-backed initial-refresh defect:
+its old Space route is unpublished and Phase0 replaces the issuer CA without
+overriding this consumer trust. Both route and CA regressions fail before their
+respective repairs; Matchmaking now receives only the public read-only fixture
+CA. Five Matchmaking and three Messaging runtime roots pass. The Phase0 suite
+passes eighteen roots with only the host POSIX-mode check deferred to Linux CI.
+Both affected Go linters report zero issues; independent auditors accept scope
+and security. Startup diagnostics now cover all application owners with bounded
+tails, retaining exact original failure status and existing dedicated-log order.
+Graphify AST extraction finishes, but graph build exceeds the 60-second owned
+process bound again; graph freshness remains unverified. Hosted exact-head
+T16/T31 and required ci-gate remain prerequisites to the authorized merge.
