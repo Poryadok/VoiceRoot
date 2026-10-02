@@ -459,10 +459,19 @@ is pending. It does not close A1 or authorize deployment.
   publish/delivery/ACK, which can alter its ACK state and deliver a business
   subject to other consumers. An isolated proof identity or synthetic ACK
   would test different grants or fail to prove persisted ACK. No minimal repair
-  was accepted. A separate safety review is considering whether an additive
-  compositional proof can cover new grants without mutation; until a proof
-  contract is explicitly accepted and its historical migration evidence passes,
-  the gate remains closed.
+  is supported under the current contract/prohibitions. Independent safety
+  review confirms that INFO, malformed-API, and unroutable-ACK authorization
+  probes cannot prove positive delivery or persisted ACK; ordinary production
+  SUB can create interest and change consumer state. The only possible
+  compositional route needs explicit owner acceptance of a versioned contract:
+  retain the old full PASS for unchanged inputs, verify current mounted claims
+  and relevant configuration fail-closed, and label new-grant authorization
+  evidence without claiming positive production delivery/ACK. It must never
+  relabel the old PASS with the new digest. See the accepted
+  `tmp/slave-driver/a1-acceptance-continuation/proof-safety-review.md` for the
+  decision boundary. No implementation is authorized or started. Historical
+  migration evidence remains independent; until both decisions/evidence gates
+  pass, deployment remains closed.
 
 ### Accepted A1 contract evidence and P2 boundary
 
