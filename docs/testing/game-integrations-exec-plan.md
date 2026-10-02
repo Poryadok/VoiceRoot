@@ -69,9 +69,49 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Handoff continuation preserves pushed HEAD `fb91bf9a1`, all inherited WIP
+  and the 26 staged Dart bindings; the initial index/hash inventory is saved
+  in `tmp/continuation-20261002`. The nonempty purge repair is now verified:
+  Search admits only the authenticated request-bound Messaging child matching
+  its sealed Space manifest and `PURGE_DECIDED` fence. Per-operation locking
+  preserves the first receipt on concurrent retry; foreign Chat IDs fail
+  atomically, ordinary frozen access stays denied, and exact terminal replay
+  survives private-manifest compaction. Messaging atomically removes scoped
+  reactions, hides, pins, game sidecars, read/delivery positions and scheduled
+  payloads as well as messages; verified nanosecond cutoffs replay exactly
+  despite PostgreSQL microsecond storage. Its Space adapter validates the
+  existing T33 raw deterministic-protobuf digest, keeping the P3 parent digest
+  domain separate. Red/green real-PostgreSQL and real-coordinator regressions,
+  affected short suites/vet and the same bounded independent risk review pass.
+  Public `TestComposeSpaceLifecycleExpiredPurge_live` passes without skips
+  (9.95s): fresh Space `7b8d2d34-cc5b-41ed-8b41-6fbf42003328`, operation
+  `74334e6a-fc9f-4ea6-b445-2775082f25fc`, `PURGED/G2`, ten fences and ten
+  purge receipts, physical removal/tombstone/GET+restore404 and preserved
+  control Space. No saved evidence was rewritten. This fixture advances only
+  the guarded mutable aggregate deadline, as documented below; it does not
+  claim seven elapsed days. Attachment-reference purge and the full T40
+  messenger/game matrix remain open. Parent accounting remains 43/60.
+- The expanded public freeze/restore fixture passes owner and joined-member
+  ordinary Chat/history/Search reads before freeze; all content reads and sends
+  receive policy denials while frozen, and restore reopens reads with the exact
+  original message. Chat now excludes non-LIVE Space rows at direct lookup and
+  inbox/archive/Space/custom+system-folder/quick-access SQL reads. The same
+  reviewer found and cleared the frozen-shortcut whole-list failure; the new
+  PostgreSQL regression proves control/standalone preservation and restored
+  slots. The combined navigation PostgreSQL selection passes 10 root tests with
+  no skips; full Chat short suite and vet pass. Refreshing the owned Social
+  image from merged source resolved the previously stale member-history 503;
+  this is steady-state evidence, not container replacement fault acceptance.
+
 - Worktree remains `.treehouse/Voice-451d38/24/Voice`, branch
-  `codex/game-sdk-federation-docs`; last pushed runtime checkpoint is
-  `083eaedec` (Notification). Inherited staged Dart bindings and other sprint
+  `codex/game-sdk-federation-docs`; current HEAD is pushed Search checkpoint
+  `fb91bf9a1`, after master merge `3aab07d4d`, incorporating `origin/master`
+  at `9ef2c6de6` (138 new commits,
+  including merged A1 PRs #596/#597). Last pushed runtime checkpoint is
+  `d51d5b6bc` (Subscription typed receipt digest), after `82b19242f`
+  (Role durable authenticated lifecycle barrier), `35fec71a6`
+  (shared gRPC metrics registry), `0086b418e` (Subscription mTLS), `083eaedec` (Notification) and
+  `2a26c9d36` (canonical File producer digest). Inherited staged Dart bindings and other sprint
   WIP are preserved. One writer owns this worktree; the same bounded Luna
   reviewer checks changed purge/security inputs.
 - The shared `pkg/filerefmanifest` digest now has an independent empty-producer
@@ -87,7 +127,7 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
   verified sealed producer release and cannot call File's LIVE-only ordinary
   release. Ordinary requests cannot bypass frozen mutation guards.
 - Accepted component evidence for these current inputs: Space short suite
-  340 tests/14 packages; Messaging short suite 402 tests/16 packages; both
+  340 tests/14 packages; Messaging short suite 403 tests/16 packages; both
   modules' vet; Messaging producer/child/purge selection 7 tests; PostgreSQL
   snapshot/expired-child denial, restored producer expiry, Space fresh-clock
   expiry, atomic local purge/30-day compaction/365-day expiry, durable retry/stall
@@ -100,21 +140,223 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
   remove private participant/operation evidence after PURGED +30 days, and
   expire tombstone/account HMACs after 365 days. READY delivery rows survive
   aggregate expiry independently; DELIVERED rows expire after their first ACK
-  +30 days. This latest outbox change has passing PostgreSQL regression evidence
-  and awaits the same reviewer. Production KMS/HSM integration is not claimed
+  +30 days. Outbox and retention changes have passing PostgreSQL regression
+  evidence and the same reviewer's clearance. Repeat-cycle PostgreSQL coverage
+  now proves freeze/restore at G1/G2 followed by G3/G4, with prior operation
+  outcomes preserved and old exact receipts inert. Completed restored outcomes
+  expire after 30 days using DB time, including a Space that stays LIVE; active
+  deletion proof remains available for finalization. The combined cycle,
+  restored-outcome retention and atomic finalizer selection passed 3 tests.
+  Production KMS/HSM integration is not claimed
   by the development key fixture.
-- Remaining dependency blockers include all-ten protected transport/Phase0
-  activation and actual public freeze/restore/purge acceptance. File, Search and
-  Subscription protected runtimes currently configure server TLS without
-  verified client certificates; repair their mTLS boundaries before activation.
-  Repeated deletion after restore, clean checkpoint packaging and the remaining
+- File, Search and Subscription now require verified client certificates on
+  their protected listeners. Subscription's clean checkpoint passed 92 short
+  tests/13 packages and vet before its pushed commit. Current File inputs pass
+  197 short tests/12 packages and vet, including real TLS lifecycle/producer,
+  receipt and capability owner routes; Search passes 147/11 and vet. A new
+  Search-only Chat page listener repairs both the missing transport and Search's
+  incorrect fresh request-ID binding. Chat passes 124/8 and vet, including real
+  HTTPS JWKS, mTLS, replay, wrong-owner/hash and mutation-denial coverage. The
+  same independent reviewer found no blocker in this transport batch.
+- The opt-in `docker-compose.space-lifecycle.yml` adds all ten protected
+  endpoints, separate owner keys/certificates and the development tombstone
+  key. Public Search fixture keys bootstrap Chat without the base stack's
+  Search/Chat dependency cycle. A read-only combined public-CA volume preserves
+  existing User/Social/Story trust; Story's protected File consumer now presents
+  its own client certificate. Story's 48 short tests/9 packages pass; template
+  and full transport acceptance remain part of the consolidated gate. All
+  ten participant images and the new Space dependency closure build on these
+  WIP inputs. The latest fixture suite passes 27 runnable tests with one
+  Linux-only POSIX permission skip. Runtime startup exposed and repaired raw
+  NATS bootstrap subject drift, the Chat/Space eager JWKS dependency cycle,
+  Space's HTTPS proxy upstream, the missing proxy readiness dependency and
+  Messaging's incorrect issuer-specific Space JWKS path. Messaging now passes
+  404 short tests/16 packages and vet. The shared metrics fix prevents Voice
+  and Matchmaking listener startup panics; shared packages pass 369 tests/30
+  packages and vet, with 8 race tests and vet on an isolated grpcmw snapshot.
+  An attempted full shared-suite run in that partial snapshot lacked repository
+  deployment fixtures and is not acceptance evidence. Independent review found
+  no remaining blocker in the TLS bootstrap or metrics fixes.
+- Remaining dependency blockers include the complete public lifecycle matrix
+  and actual all-ten purge acceptance. Clean dependency-closed checkpoint
+  packaging, fresh all-ten repeat-cycle recovery and the remaining
   T40/T58/T59/T73–T78/T90–T94 matrix stay open. No parent checkbox advances.
-- No owned acceptance stack is running; component PostgreSQL containers and
+- The owned `voice-game-lifecycle-20261002` acceptance project is being created
+  from this worktree with random loopback Gateway/PostgreSQL ports. Compose
+  startup now passes for Space, all ten participants, Gateway and dependencies
+  on WIP images; the passing freeze/restore slice is recorded below and does
+  not close lifecycle acceptance. Public deletion-proof,
+  delete, restore and existing GetSpace routes now use strict JSON and a separate
+  Gateway-to-Space mTLS listener. Delegated-user signatures bind the verified
+  actor, positive session epoch, exact method/body and request ID. Shared Redis
+  enforces Auth's durable epoch floor and replay rejection across restarts.
+  Ordinary Space listeners deny lifecycle mutations; the protected frozen read
+  returns only the recorded owner's minimal projection and hides nonowners.
+  Space passes 352 short tests/15 packages and vet; Gateway passes 683 short
+  tests and vet before the latest route cases. Additional real TLS/replay/epoch
+  runtime selection passes 12 tests including race; real PostgreSQL public read
+  selection passes 2 tests; Gateway signed route selection passes 14 tests,
+  including SDK/guest writes with forged regular-account headers and signed
+  LIVE reads. The same security reviewer found no material bypass, and requested
+  the combined real Gateway/TLS/frozen-store path now being tested. Fixture
+  generation passes 28 runnable tests with one Linux-only permission skip.
+  The opt-in live acceptance test is guarded by both explicit flags, an owned
+  `voice-game-lifecycle-*` project and explicit loopback API/mail-fixture URLs.
+  Its first run stopped before lifecycle writes because the member's default
+  invite privacy denied joining; the fixture now explicitly opts into invitations.
+  Real acceptance then exposed an extra protobuf wrapper between the Auth
+  consumer and Store. The consumer now saves the exact deterministic typed
+  response; the corrected wire regression failed before the fix, then three
+  focused tests including real PostgreSQL persistence/retry passed. Space's
+  updated short suite passes 353 tests/15 packages and vet; the same reviewer
+  cleared this repair. The rebuilt Space image is
+  `sha256:3ffa3d1f7e55ac02128a4a0053fca799fc599d659999f216e97041596b0b8a0d`.
+  The next run exposed Role's absent fence RPC. Checkpoint `82b19242f` now adds
+  the protected handler, durable generation/manifest fence, ordinary/ownership
+  admission guards, exact receipts, retention worker and migration 000013.
+  Retirement now requires the matching durable PURGE_DECIDED tuple before
+  mutation. Actual mTLS/JWKS/PostgreSQL freeze/restore/restart, compact replay
+  and retirement barrier selection passes 3 tests; earlier affected lock and
+  migration selection passes 14. A clean dependency-closed Role snapshot passes
+  319 short tests/10 packages and vet. The same reviewer cleared the barrier
+  and full typed request digest. The checkpoint contains exactly 20 Role/docs
+  paths; inherited staged Dart bindings remain outside it.
+  Public acceptance then exposed inconsistent participant receipt digests:
+  Role, Chat, Voice, Matchmaking and Subscription must all bind their full
+  typed RPC wrapper, using its protobuf FQN + NUL + deterministic bytes.
+  This is distinct from transport credential hashing. Role's repair is in the
+  checkpoint; the other four are current WIP. Their PostgreSQL regressions
+  failed before repair and now pass: Chat 1, Voice 1, Matchmaking 1 and
+  Subscription 2 (including purge and exact restart replay). Affected suites,
+  independent review and combined public acceptance remain in progress.
+  Their current short suites pass Chat 124/8, Voice 368/25, Matchmaking 141/18
+  and Subscription 92/13; all four vet checks pass after correcting an
+  inherited Voice test stub to clone rather than copy protobuf internal locks.
+  The same reviewer cleared the four digest repairs. Pre-fix disposable
+  participant receipts remain immutable and cannot satisfy the repaired
+  protocol; fresh fixture Spaces are used instead of deleting old evidence.
+  No production/staging activation is claimed. Any non-disposable rollout
+  with earlier receipts requires a non-destructive compatibility plan first.
+  Subscription's isolated two-path checkpoint separately passes 92 short
+  tests/13 packages, vet and the same 2 PostgreSQL regressions, and is pushed
+  as `d51d5b6bc`; no unrelated staged bindings entered it.
+  The next run stopped at CreateSpace HTTP 500 after container replacement:
+  Space's ordinary Role connection remained on its old Docker IP, while
+  the protected Role client had resolved the new address. Only the owned
+  Space consumer was restarted to refresh ordinary connections. This is an
+  open recovery concern; steady-state acceptance cannot satisfy that gate.
+  The following public attempt creates/invites/reads successfully and persists
+  Role's actual fence receipt, then remains pending before Chat. A test-owned
+  diagnostic confirms the aggregate reloads and constructs the Chat request.
+  Chat's protected listener requires request_id equal deletion_operation_id,
+  while the generic caller derived a separate namespace UUID. A new outgoing
+  metadata regression fails before repair; the caller now preserves the
+  business operation ID without relaxing listener checks or token replay.
+  The actual combined flow still needs another run after the Space rebuild.
+  The rebuilt generic caller passed focused metadata tests, Space's 353 short
+  tests/15 packages and vet, with the same reviewer's clearance. The next
+  public run recorded six receipts, then exposed Search manifest compatibility:
+  zero-count rejection, source/global-root equality, and producer digest drift.
+  Search now imports the canonical empty/nonempty Chat source independently
+  while persisting and rechecking its authenticated Space root. Migration
+  000010 retains both bindings, backfills only the previously enforced equality,
+  refuses evidence-dropping rollback, and gates enabled startup. Independent
+  zero/one golden regressions fail before and pass after repair; actual
+  PostgreSQL restart/root-conflict/purge/replay/unrelated-document preservation
+  and rollback refusal selection passes 3 tests, prior participant selection
+  passes 17, short suite 151/11 and vet pass. The same reviewer cleared this
+  batch. Only owned search_db received the migration (no prior rows), and local
+  Search image `sha256:01db44d6eecd72a85591faad6be060ae065b0fae51135211b4b8f6bc55ee06a5`
+  started healthy. Public run space `de4f7f29-0c40-452b-aba3-e66c1f0429cd`
+  persisted participants 1–8; deletion stayed pending before Bot's handler.
+  The manifest repair is now a dependency-closed nine-path checkpoint
+  `fb91bf9a1`, independently built with the affected Search gRPC short suite,
+  full module vet, and actual PostgreSQL empty/nonempty source/root restart,
+  conflict, purge, exact replay, unrelated-index preservation and rollback
+  refusal evidence. Unrelated managed-chat runtime/fixture edits remain WIP;
+  only the root-binding main/docs/fixture portions entered the checkpoint.
+  All 26 inherited generated-binding staged paths were preserved.
+  That run exposed Bot's lifecycle interceptor selecting the generic GIS
+  verifier instead of the separate Space verifier. The interceptor now requires
+  `VerifySpace`; its regression stub rejects the same credential through
+  generic `Verify`, preserving the issuer boundary. Focused principal transport
+  and runtime tests and Bot vet pass; the same reviewer cleared the repair.
+  Only the owned Bot container was rebuilt to image
+  `sha256:abeec0c2d56f6b0e880b2c3adb741c18b291dde021fd74f0fcd102e24b360b5f`.
+  The next actual Gateway-to-Space Compose test passed through all ten
+  participants: regular owner/member/outsider reads, authenticated deletion
+  proof, freeze, the owner's exact minimal frozen projection, nonowner denial,
+  restore, exact retries and restored member visibility. This is an empty-chat
+  steady-state freeze/restore slice on the owned stack. A new expired-deletion
+  test first performs fresh public admission/freeze and verifies the seven-day
+  deadline, then advances only that exact disposable aggregate's mutable dates
+  with a guarded Space/operation/phase/generation SQL fixture. Original Auth,
+  participant, File and outbox evidence remains untouched; the schedule event
+  retains its original deadline, so no real seven-day wait is claimed. The
+  production worker completed all ten generation-2 fences and all ten purge
+  receipts, physically removed Space and retained the minimal tombstone. That
+  first run exposed restore-after-purge returning HTTP 500: missing rows,
+  nonowner and invalid lifecycle states fell through the generic internal-error
+  mapping. A negative regression failed four cases before repair; scoped
+  lifecycle mapping now returns NOT_FOUND, PERMISSION_DENIED and
+  FAILED_PRECONDITION respectively, preserving fail-closed DB errors. Focused
+  handler tests and vet pass. Owned Space image
+  `sha256:121eac7f2d712a02932daea49213b2ed4985ea04a14f96616bb6dbfe54f074d6`
+  was rebuilt/replaced; both public freeze/restore and expiry/purge tests pass,
+  including post-purge GET/restore 404. The same independent reviewer cleared
+  the fixture scope, status mapping and preserved immutable evidence.
+  Nonempty messenger flows, explicit container-replacement fault recovery and
+  the broader T40 matrix remain open. Some runtime images precede the master
+  merge and must be rebuilt
+  for its affected inputs before final combined runtime acceptance.
+  Latest nonempty continuation: Chat, Messaging and Gateway were rebuilt from
+  the combined master/WIP inputs and started healthy. Gateway's current random
+  loopback port is 56040 (the earlier 54389 is stale); mail fixture remains
+  54436. The public fixture now creates a real Space Chat/message and a separate
+  control Space. Its tree decoder uses the canonical nested `linked_chat` ref.
+  Nonempty freeze/restore passes and preserves the original message identity
+  and content. Nonempty expired purge fails after 129.77 seconds: Space
+  `bbdce4db-605e-4762-ac2b-4709bb219aa5`, operation
+  `e2a04592-fede-479e-8d76-8722511c03fa`, remains `PURGING` at generation 2 with
+  all ten fence receipts and only the Role retirement receipt. Messaging is
+  the next purge participant and its nonempty child cleanup is the next
+  investigation; no specific cause is established yet. Do not treat the
+  earlier empty-manifest purge pass as nonempty acceptance. The exact binary
+  run completed (1 passed, 1 failed); no test process remains active.
+  New active image IDs: Chat
+  `sha256:7082a090174f117b167f71795c1639f3b11ad04323ab67e82889584f6c179d40`,
+  Messaging `sha256:393e79f8bcf2ae499b5861e6171560e97bc8ac9b1ce24e37c09097396c37e7f3`,
+  Gateway `sha256:066b47796821361b9abd334d08ab55b57ed3e5c3d6af31038a08d5cd09f31777`.
+  The primary writer stopped implementation for the owner's requested handoff.
+  Master synchronization used a retained named stash plus hashes for all 1595
+  inherited WIP paths and a staged patch. All original paths were restored;
+  the 26 generated Dart paths remain the sole staged set. Manual resolutions
+  preserve A1 chat-bound history cursors and block policies alongside GIS
+  entitlement/consent checks, request-inbox discovery and lifecycle wiring.
+  Generated Go/Dart bindings were rebuilt from the combined contracts. On the
+  committed merge, Chat/Messaging/User/Voice compile, buf lint and 63 inbox
+  Flutter tests pass. With restored WIP, Messaging short 412/16, Gateway 687,
+  Realtime's complete short binary run, all three vet checks, 76 focused
+  Flutter tests, scoped analyzer, buf lint and diff check pass. The same
+  reviewer cleared manual compatibility resolutions. This does not replace
+  the remaining PostgreSQL and final consolidated sprint gates.
+  Following repeated Windows firewall prompts, owned Go tests can use the
+  fixed-path runner under ignored `tmp/test-bin`; local-only inbound TCP rules
+  are prepared in `Allow-LocalTests.ps1` for user execution as administrator.
+  No firewall settings were changed by the agent. The pre-sync stash and
+  `tmp/master-sync-20261002` recovery inventory remain retained.
+  Only the named local Docker Desktop Compose project is rebuilt/restarted;
+  no staging endpoint, deployment or A1 resource is used.
+  Component PostgreSQL containers and
   JetStream servers were test-owned and cleaned up. A1 resources remain
   untouched. The bounded Graphify attempt stalled after extraction and was
   stopped; diagnostics remain under `tmp/graphify-continuation-20261002` and
   graph refresh is unverified. Master merge, staging, live providers, physical
   devices and the unavailable Windows-host iOS simulator remain excluded.
+  After the master sync and current code repairs, one fresh Graphify attempt
+  reached its 45-second bound; only its owned process tree was stopped.
+  Diagnostics are retained in `tmp/graphify-after-sync-20261002`; graph freshness
+  remains unverified and repeated stalled runs are not used as sprint evidence.
 
 Each `T-*` is a reviewable work item, generally one PR or a narrow cluster of
 related PRs. In each behavior PR: freeze docs/contract, write failing

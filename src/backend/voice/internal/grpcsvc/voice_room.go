@@ -76,6 +76,9 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 	if replay, found, err := s.Calls.FindVoiceRoomMove(ctx, moveReq); err != nil {
 		return voicestore.VoiceRoomMoveResult{}, moveStoreErr(err)
 	} else if found {
+		if err := s.transferAccountVoiceProfile(ctx, target, replay.Source.RoomID, replay.Destination.RoomID, actor); err != nil {
+			return voicestore.VoiceRoomMoveResult{}, err
+		}
 		return replay, nil
 	}
 
@@ -122,6 +125,9 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 	result, err := s.Calls.MoveVoiceRoomParticipant(ctx, moveReq)
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, moveStoreErr(err)
+	}
+	if err := s.transferAccountVoiceProfile(ctx, target, result.Source.RoomID, result.Destination.RoomID, actor); err != nil {
+		return voicestore.VoiceRoomMoveResult{}, err
 	}
 	if !result.Replayed {
 		s.publishVoiceMemberJoined(ctx, result.Destination, target)
@@ -184,6 +190,10 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	if errors.Is(err, voicestore.ErrNotFound) {
 		now := s.now()
 		roomID := uuid.NewString()
+		fences, reserveErr := s.reserveAccountVoiceProfiles(ctx, roomID, []string{profileID}, profileID)
+		if reserveErr != nil {
+			return nil, reserveErr
+		}
 		call, err = s.Calls.CreateCall(ctx, voicestore.Call{
 			RoomID:             roomID,
 			LivekitRoomName:    "voice-room-" + voiceRoomID,
@@ -196,28 +206,46 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 			StartedAt:          now,
 		})
 		if err != nil {
+			s.releaseAccountVoiceReservations(ctx, fences)
 			return nil, storeErr(err)
+		}
+		if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+			_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+			s.releaseAccountVoiceReservations(ctx, fences)
+			return nil, err
 		}
 		s.publishCallStarted(ctx, call)
 		s.publishVoiceMemberJoined(ctx, call, profileID)
+		return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
 	} else if err != nil {
 		return nil, storeErr(err)
 	} else if call.SpaceID != access.SpaceID {
 		return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
 	}
-
-	if !call.IsParticipant(profileID) {
-		maxParticipants := voicestore.MaxVoiceRoomParticipants
-		if s.SpacePro != nil {
-			if ok, err := s.SpacePro.HasSpacePro(ctx, spaceID); err == nil && ok {
-				maxParticipants = voicestore.MaxSpaceProVoiceParticipants
+	if err == nil {
+		fences, reserveErr := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+		if reserveErr != nil {
+			return nil, reserveErr
+		}
+		if !call.IsParticipant(profileID) {
+			maxParticipants := voicestore.MaxVoiceRoomParticipants
+			if s.SpacePro != nil {
+				if ok, err := s.SpacePro.HasSpacePro(ctx, spaceID); err == nil && ok {
+					maxParticipants = voicestore.MaxSpaceProVoiceParticipants
+				}
 			}
+			call, err = s.Calls.AddParticipant(ctx, call.RoomID, profileID, maxParticipants)
+			if err != nil {
+				s.releaseAccountVoiceReservations(ctx, fences)
+				return nil, storeErr(err)
+			}
+			s.publishVoiceMemberJoined(ctx, call, profileID)
 		}
-		call, err = s.Calls.AddParticipant(ctx, call.RoomID, profileID, maxParticipants)
-		if err != nil {
-			return nil, storeErr(err)
+		if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+			s.releaseAccountVoiceReservations(ctx, fences)
+			return nil, err
 		}
-		s.publishVoiceMemberJoined(ctx, call, profileID)
+		return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
 	}
 
 	return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil

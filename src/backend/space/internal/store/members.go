@@ -37,11 +37,18 @@ func (s *SpaceStore) ListSpaceMembersPage(ctx context.Context, spaceID uuid.UUID
 	var err error
 	if cursor == "" {
 		rows, err = s.db().Query(ctx, `
-SELECT space_id, profile_id, joined_at, nickname
-FROM space_members
-WHERE space_id = $1
-ORDER BY joined_at ASC, profile_id ASC
-LIMIT $2
+WITH effective_members AS (
+  SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1
+  UNION ALL
+  SELECT m.space_id,m.profile_id,o.created_at,NULL::text FROM community_roster_members m
+  JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+  JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
+  WHERE m.space_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
+    AND a.roster_lease_expires_at>clock_timestamp()
+    AND NOT EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
+)
+SELECT space_id,profile_id,joined_at,nickname FROM effective_members
+ORDER BY joined_at ASC,profile_id ASC LIMIT $2
 `, spaceID, pageSize+1)
 	} else {
 		cursorProfile, parseErr := uuid.Parse(cursor)
@@ -49,11 +56,18 @@ LIMIT $2
 			return nil, "", ErrInvalidListCursor
 		}
 		rows, err = s.db().Query(ctx, `
-SELECT space_id, profile_id, joined_at, nickname
-FROM space_members
-WHERE space_id = $1 AND profile_id > $2
-ORDER BY joined_at ASC, profile_id ASC
-LIMIT $3
+WITH effective_members AS (
+  SELECT space_id,profile_id,joined_at,nickname FROM space_members WHERE space_id=$1
+  UNION ALL
+  SELECT m.space_id,m.profile_id,o.created_at,NULL::text FROM community_roster_members m
+  JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+  JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
+  WHERE m.space_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
+    AND a.roster_lease_expires_at>clock_timestamp()
+    AND NOT EXISTS (SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
+)
+SELECT space_id,profile_id,joined_at,nickname FROM effective_members WHERE profile_id>$2
+ORDER BY joined_at ASC,profile_id ASC LIMIT $3
 `, spaceID, cursorProfile, pageSize+1)
 	}
 	if err != nil {

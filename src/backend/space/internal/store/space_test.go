@@ -35,6 +35,17 @@ func applySpaceMigrationForStoreTest(t *testing.T, ctx context.Context, pool *pg
 	applyLifecycleMigration(t, ctx, pool, "up")
 	_, err := pool.Exec(ctx, restoreMigrationSQL(t, "up"))
 	require.NoError(t, err)
+	for _, name := range []string{
+		"000019_t37_community_bootstrap.up.sql",
+		"000020_t37_owner_recovery.up.sql",
+		"000021_t38_community_roster.up.sql",
+	} {
+		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
+		sqlBytes, readErr := os.ReadFile(migrationPath)
+		require.NoError(t, readErr)
+		_, err = pool.Exec(ctx, string(sqlBytes))
+		require.NoError(t, err)
+	}
 }
 
 func applySpaceMigrationsThrough12ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/messaging/internal/authctx"
@@ -20,12 +21,14 @@ import (
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/guestguard"
+	"voice/backend/pkg/principal"
 	"voice/backend/pkg/privacy"
 	"voice/backend/role/permissions"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	filev1 "voice.app/voice/file/v1"
+	gameintegrationv1 "voice.app/voice/gameintegration/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 )
 
@@ -39,7 +42,12 @@ const (
 // MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
 type MessagingGRPC struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	Messages *store.MessagesStore
+	Messages              *store.MessagesStore
+	SpacePurgeReceipts    SpacePurgeReceiptLookup
+	SpaceManifestImporter SpaceManifestPageImporter
+	SpaceLifecycleFences  SpaceLifecycleFenceApplier
+	SpaceLifecyclePurger  SpaceLifecyclePurgeStore
+	SpaceFileProducer     *SpaceFileProducerCoordinator
 	// GameMessages owns strict JWS/Auth assertion verification, T16 binding and
 	// chat authorization, File provenance checks, then the receipt transaction.
 	// Missing authority dependencies leave this deliberately nil and fail closed.
@@ -47,10 +55,13 @@ type MessagingGRPC struct {
 	// GameTombstones is populated only when Messaging's service-owned signing
 	// key is configured; the RPC also requires a verified moderation principal.
 	GameTombstones GameTombstoneProcessor
-	Reactions      *store.ReactionsStore
-	Pins           *store.PinsStore
-	SharedMedia    *store.SharedMediaStore
-	ChatGuard      ChatGuard
+	// ManagedChatPurger owns the durable content work set and calls File/Search
+	// owner APIs before Messaging physically removes message payloads.
+	ManagedChatPurger ManagedChatPurgeProcessor
+	Reactions         *store.ReactionsStore
+	Pins              *store.PinsStore
+	SharedMedia       *store.SharedMediaStore
+	ChatGuard         ChatGuard
 	// Blocks and UserProfiles are optional S2S gates for SendMessage (Social + User); both must be set to enforce.
 	Blocks            AccountPairBlockChecker
 	AccountBlocks     AccountBlockChecker
@@ -315,7 +326,8 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids, saved.SendSilent); err != nil {
+			appID, envID := gameMessageEventScope(saved.GameAppID, saved.GameEnvironmentID)
+			if err := s.MessageEvents.PublishMentionAdded(ctx, saved.ID.String(), saved.ChatID.String(), saved.SenderProfileID.String(), ids, saved.SendSilent, appID, envID); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", saved.ID.String()), slog.String("chat_id", saved.ChatID.String()))
 			}
 		}
@@ -553,6 +565,20 @@ func chatTypeName(chatType chatv1.ChatType) string {
 	}
 }
 
+// Game event scope is copied only from the immutable app/environment fields
+// already persisted on the source Message row by the GIS ingress path. Preserve
+// a partial pair so downstream consent enforcement can fail closed.
+func gameMessageEventScope(applicationID, environmentID *uuid.UUID) (string, string) {
+	var appID, envID string
+	if applicationID != nil {
+		appID = applicationID.String()
+	}
+	if environmentID != nil {
+		envID = environmentID.String()
+	}
+	return appID, envID
+}
+
 func isNilDependency(dependency any) bool {
 	if dependency == nil {
 		return true
@@ -674,6 +700,9 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if row.SenderProfileID != profileID {
 		return nil, status.Error(codes.PermissionDenied, "only the message author can edit")
 	}
+	if err := s.requireMessageReadEntitlement(ctx, row.ChatID, profileID, row.CreatedAt); err != nil {
+		return nil, err
+	}
 	if err := s.validateE2EEdit(ctx, row.ChatID, row.IsE2E); err != nil {
 		return nil, err
 	}
@@ -715,7 +744,8 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			for _, pid := range mentionTargets {
 				ids = append(ids, pid.String())
 			}
-			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids, updated.SendSilent); err != nil {
+			appID, envID := gameMessageEventScope(updated.GameAppID, updated.GameEnvironmentID)
+			if err := s.MessageEvents.PublishMentionAdded(ctx, updated.ID.String(), updated.ChatID.String(), updated.SenderProfileID.String(), ids, updated.SendSilent, appID, envID); err != nil {
 				s.logPublishError(ctx, "message.mention_added", err, slog.String("message_id", updated.ID.String()), slog.String("chat_id", updated.ChatID.String()))
 			}
 		}
@@ -922,7 +952,6 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-
 	hasMore := len(rows) > scanLimit
 	if hasMore {
 		rows = rows[:scanLimit]
@@ -942,6 +971,18 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 		}
 		rows = visibleRows
 	}
+	paginationRows := append([]store.MessageRow(nil), cursorRows...)
+	visibleRows := rows[:0]
+	for i := range rows {
+		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, rows[i].CreatedAt); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return nil, err
+		}
+		visibleRows = append(visibleRows, rows[i])
+	}
+	rows = visibleRows
 
 	msgIDs := make([]uuid.UUID, len(rows))
 	for i := range rows {
@@ -969,7 +1010,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(chatID, mode, cursorRows)
+		next = nextCursorForPage(chatID, mode, paginationRows)
 	}
 
 	ml := &messagingv1.MessageList{
@@ -1094,6 +1135,9 @@ func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMess
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 		}
+		if err := s.requireMessageReadEntitlement(ctx, row.ChatID, profileID, row.CreatedAt); err != nil {
+			return nil, err
+		}
 		if row.GhostOnly && row.SenderProfileID != profileID {
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
@@ -1103,6 +1147,44 @@ func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMess
 		kind = messagingv1.MessageKind_MESSAGE_KIND_FORWARD
 	}
 	return &messagingv1.GetMessageResponse{Message: messageRowToProto(row, kind, "", false)}, nil
+}
+
+// ResolveGameAction is a narrow GIS-to-Messaging authority read. GIS has
+// already validated the player's live session; Messaging independently checks
+// the profile's current chat membership before returning the immutable card.
+func (s *MessagingGRPC) ResolveGameAction(ctx context.Context, req *messagingv1.ResolveGameActionRequest) (*messagingv1.ResolveGameActionResponse, error) {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "gameintegration" || verified.Subject != "service:gameintegration" {
+		return nil, status.Error(codes.PermissionDenied, "GIS service principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || verified.Audience != "messaging" || verified.RPC != messagingv1.MessagingService_ResolveGameAction_FullMethodName ||
+		verified.RequestID == "" || verified.RequestHash != hash {
+		return nil, status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	if s == nil || s.Messages == nil || isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "game action read unavailable")
+	}
+	messageID, err := parseUUIDField("message_id", req.GetMessageId())
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "game action unavailable")
+	}
+	profileID, err := parseUUIDField("profile_id", req.GetProfileId())
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "game action unavailable")
+	}
+	row, err := s.Messages.GetMessageByID(ctx, messageID)
+	if err != nil || row.DeletedAt != nil || row.GameCardJSON == nil || row.GameAppID == nil || row.GameEnvironmentID == nil ||
+		row.GameInstallationID == nil || row.GameBotID == nil {
+		return nil, status.Error(codes.NotFound, "game action unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.NotFound, "game action unavailable")
+		}
+		return nil, status.Error(codes.Unavailable, "game action read unavailable")
+	}
+	return &messagingv1.ResolveGameActionResponse{Message: messageRowToProto(row, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 }
 
 func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.GetThreadMessagesRequest) (*messagingv1.GetThreadMessagesResponse, error) {
@@ -1142,6 +1224,9 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if parent.DeletedAt != nil || parent.ChatID != chatID || parent.ThreadParentID != nil {
 		return nil, status.Error(codes.NotFound, "thread parent not found")
 	}
+	if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, parent.CreatedAt); err != nil {
+		return nil, err
+	}
 
 	pageSize := int(req.GetPage().GetPageSize())
 	if pageSize <= 0 {
@@ -1176,13 +1261,25 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if hasMore {
 		rows = rows[:pageSize]
 	}
+	paginationRows := append([]store.MessageRow(nil), rows...)
+	visibleRows := rows[:0]
+	for i := range rows {
+		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, rows[i].CreatedAt); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return nil, err
+		}
+		visibleRows = append(visibleRows, rows[i])
+	}
+	rows = visibleRows
 	msgs := make([]*messagingv1.Message, 0, len(rows))
 	for i := range rows {
 		msgs = append(msgs, messageRowToProto(&rows[i], messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "[]", false))
 	}
 	next := ""
 	if hasMore {
-		next = nextCursorForPage(chatID, mode, rows)
+		next = nextCursorForPage(chatID, mode, paginationRows)
 	}
 	ml := &messagingv1.MessageList{
 		Messages:   msgs,
@@ -1304,6 +1401,9 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 	}
 	if source.DeletedAt != nil {
 		return nil, status.Error(codes.NotFound, "message not found")
+	}
+	if err := s.requireMessageReadEntitlement(ctx, source.ChatID, profileID, source.CreatedAt); err != nil {
+		return nil, err
 	}
 	if source.GhostOnly {
 		return nil, status.Error(codes.PermissionDenied, "cannot forward shadow-banned messages")
@@ -1552,7 +1652,8 @@ func (s *MessagingGRPC) mutateReaction(ctx context.Context, messageIDStr, emoji 
 			return uuid.Nil, status.Error(codes.Internal, err.Error())
 		}
 		if s.MessageEvents != nil {
-			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji); err != nil {
+			appID, envID := gameMessageEventScope(msg.GameAppID, msg.GameEnvironmentID)
+			if err := s.MessageEvents.PublishReactionAdded(ctx, messageID.String(), msg.ChatID.String(), profileID.String(), msg.SenderProfileID.String(), emoji, appID, envID); err != nil {
 				s.logPublishError(ctx, "reaction.added", err, slog.String("message_id", messageID.String()), slog.String("chat_id", msg.ChatID.String()))
 			}
 		}
@@ -1622,6 +1723,12 @@ func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.
 		if row.DeletedAt != nil || row.ChatID != chatID {
 			continue
 		}
+		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, row.CreatedAt); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return nil, err
+		}
 		reactionsJSON := ""
 		if s.Reactions != nil {
 			byMsg, err := s.Reactions.ReactionsJSONByMessageIDs(ctx, []uuid.UUID{row.ID}, profileID)
@@ -1676,6 +1783,11 @@ func (s *MessagingGRPC) mutatePin(ctx context.Context, chatRef *chatv1.ChatRef, 
 	}
 	if msg.DeletedAt != nil || msg.ChatID != chatID {
 		return status.Error(codes.NotFound, "message not found")
+	}
+	if pin {
+		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, msg.CreatedAt); err != nil {
+			return err
+		}
 	}
 	if pin {
 		if err := s.Pins.UpsertPin(ctx, chatID, messageID, profileID); err != nil {
@@ -1938,6 +2050,17 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	out := make(map[string]*messagingv1.ChatListMetadata, len(rows))
 	for _, chatID := range chatIDs {
 		row := rows[chatID]
+		if row.LastMessageAt != nil {
+			if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, *row.LastMessageAt); err != nil {
+				if status.Code(err) != codes.NotFound {
+					return nil, err
+				}
+				row.LastMessagePreview = ""
+				row.LastMessageAt = nil
+				row.LastMessageContentType = ""
+				row.LastMessageDeliveryState = ""
+			}
+		}
 		// A previously published receipt must also disappear from the durable
 		// list response after either DM participant opts out. Delivery remains.
 		if row.LastMessageDeliveryState == "read" && !s.shouldPublishReadReceipt(ctx, chatID, profileID) {
@@ -2104,6 +2227,28 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 	if m.ForwardFromSender != "" {
 		out.ForwardFromSender = ptrString(m.ForwardFromSender)
 	}
+	if m.GameCardJSON != nil && m.GameAppID != nil && m.GameEnvironmentID != nil && m.GameInstallationID != nil && m.GameBotID != nil {
+		card := new(gameintegrationv1.GameCard)
+		if err := protojson.Unmarshal([]byte(*m.GameCardJSON), card); err == nil {
+			out.GameCard = card
+			out.GameAppId = m.GameAppID.String()
+			out.GameEnvironmentId = m.GameEnvironmentID.String()
+			out.GameInstallationId = m.GameInstallationID.String()
+			out.GameBotId = m.GameBotID.String()
+			if m.GameCharacterBindingID != nil {
+				out.GameCharacterBindingId = ptrString(m.GameCharacterBindingID.String())
+			}
+			actionsEnabled := m.GameCardActionsEnabled
+			out.GameCardActionsEnabled = actionsEnabled
+		}
+	}
+	for _, result := range m.GameActionResults {
+		out.GameActionResults = append(out.GameActionResults, &messagingv1.GameActionResult{
+			OperationId: result.OperationID.String(), ActionId: result.ActionID, ResultId: result.ResultID.String(),
+			StateVersion: result.StateVersion, Status: result.Status, SafeSummary: result.SafeSummary,
+			RecordedAt: timestamppb.New(result.RecordedAt.UTC()),
+		})
+	}
 	if kind != messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED {
 		k := kind
 		out.MessageKind = &k
@@ -2120,6 +2265,10 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 			out.MessageKind = &k
 		}
 	}
+	if out.GameCard != nil {
+		cardKind := messagingv1.MessageKind_MESSAGE_KIND_GAME_CARD
+		out.MessageKind = &cardKind
+	}
 	if ct := mapLastMessageContentType(store.EffectiveContentType(m.ContentType, m.Content, m.AttachmentsJSON)); ct != messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_UNSPECIFIED {
 		out.ContentType = &ct
 	}
@@ -2129,6 +2278,9 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.ListSharedMediaRequest) (*messagingv1.ListSharedMediaResponse, error) {
 	if s == nil || s.SharedMedia == nil {
 		return nil, status.Error(codes.FailedPrecondition, "shared media not configured")
+	}
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat history entitlement unavailable")
 	}
 	profileID, ok := authctx.ProfileID(ctx)
 	if !ok {
@@ -2141,13 +2293,11 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	kind, err := protoSharedMediaKind(req.GetKind())
 	if err != nil {
@@ -2172,6 +2322,17 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	visibleRows := rows[:0]
+	for i := range rows {
+		allowed, err := s.messageReadEntitled(ctx, chatID, profileID, rows[i].CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			visibleRows = append(visibleRows, rows[i])
+		}
+	}
+	rows = visibleRows
 
 	fileIDs := make([]string, 0, len(rows))
 	for _, row := range rows {

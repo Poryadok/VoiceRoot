@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	voicejwt "voice/backend/pkg/jwt"
@@ -12,6 +13,8 @@ import (
 
 // tokenClaims mirrors JWT access token claims (voice/backend/pkg/jwt).
 type tokenClaims = voicejwt.Claims
+
+type verifiedUserClaimsKey struct{}
 
 type tokenValidator interface {
 	Validate(r *http.Request) (tokenClaims, string)
@@ -114,8 +117,10 @@ func isNilSessionEpochFloor(floor sessionEpochFloor) bool {
 }
 
 func applyClaims(r *http.Request, claims tokenClaims) {
+	*r = *r.WithContext(context.WithValue(r.Context(), verifiedUserClaimsKey{}, claims))
 	r.Header.Set("X-Voice-User-Id", claims.UserID)
 	r.Header.Set("X-Voice-Profile-Id", claims.ProfileID)
+	r.Header.Set("X-Voice-Session-Epoch", strconv.FormatInt(claims.SessionEpoch, 10))
 	r.Header.Set("X-Voice-Roles", strings.Join(claims.Roles, ","))
 	r.Header.Set("X-Voice-Subscription-Tier", claims.SubscriptionTier)
 	accountType := strings.TrimSpace(claims.AccountType)

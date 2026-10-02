@@ -63,11 +63,15 @@ func TestOwnershipAuthTLSConfigFailsClosed(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSpacePrincipalJWKSRouteIsPublicReadOnlyAndAbsentWhenDisabled(t *testing.T) {
+func TestSpacePrincipalJWKSIsAbsentFromPlainHTTPAndReadOnlyOnTLSHandler(t *testing.T) {
 	disabled := httptest.NewRecorder()
 	spaceHTTPHandler("space", principalJWKS{}).ServeHTTP(disabled, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
 	require.Equal(t, http.StatusNotFound, disabled.Code)
-	handler := spaceHTTPHandler("space", principalJWKS{Keys: []principalJWK{{Kty: "RSA", Kid: "current", Use: "sig", Alg: "RS256", N: "public-n", E: "AQAB"}, {Kty: "RSA", Kid: "next", Use: "sig", Alg: "RS256", N: "other-public-n", E: "AQAB"}}})
+	keys := principalJWKS{Keys: []principalJWK{{Kty: "RSA", Kid: "current", Use: "sig", Alg: "RS256", N: "public-n", E: "AQAB"}, {Kty: "RSA", Kid: "next", Use: "sig", Alg: "RS256", N: "other-public-n", E: "AQAB"}}}
+	plain := httptest.NewRecorder()
+	spaceHTTPHandler("space", principalJWKS{}).ServeHTTP(plain, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
+	require.Equal(t, http.StatusNotFound, plain.Code, "signing keys are only served over the dedicated TLS endpoint")
+	handler := spaceJWKSHandler(keys)
 	get := httptest.NewRecorder()
 	handler.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
 	require.Equal(t, http.StatusOK, get.Code)

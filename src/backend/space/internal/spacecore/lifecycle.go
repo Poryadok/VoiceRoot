@@ -48,6 +48,12 @@ var participantRequestPackages = map[commonv1.ParticipantId]string{
 	commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
 }
 
+// CanonicalLifecycleParticipants returns a detached copy of the fixed P3
+// participant set in protocol order. Missing owners are never omitted.
+func CanonicalLifecycleParticipants() []commonv1.ParticipantId {
+	return append([]commonv1.ParticipantId(nil), canonicalParticipants[:]...)
+}
+
 // LifecycleOutboxRecord is the stable event identity committed by a terminal
 // aggregate transition. Persistence and delivery are owned by later layers.
 type LifecycleOutboxRecord struct {
@@ -390,6 +396,67 @@ func (a *LifecycleAggregate) expectedFenceState() (commonv1.LifecycleFenceState,
 	default:
 		return commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_UNSPECIFIED, false
 	}
+}
+
+// FenceRequest returns the exact immutable request whose wrapped hash is
+// committed in this aggregate for the participant's current lifecycle phase.
+func (a *LifecycleAggregate) FenceRequest(participantID commonv1.ParticipantId) (*commonv1.SpaceLifecycleFenceRequest, error) {
+	if a == nil || !isCanonicalParticipant(participantID) {
+		return nil, errors.New("canonical lifecycle participant is required")
+	}
+	state, ok := a.expectedFenceState()
+	if !ok || a.manifest == nil {
+		return nil, fmt.Errorf("fence request is not available in phase %s", a.phase)
+	}
+	return &commonv1.SpaceLifecycleFenceRequest{
+		ProtocolVersion:     1,
+		SpaceId:             a.spaceID,
+		DeletionOperationId: a.deletionOperationID,
+		Generation:          a.generation,
+		DesiredState:        state,
+		Manifest:            proto.Clone(a.manifest).(*commonv1.ManifestBinding),
+	}, nil
+}
+
+// PurgeRequest reconstructs the immutable participant request from the durable
+// lifecycle decision. It is available only after the irreversible purge
+// decision has entered PURGING, so callers can safely retry it after restart.
+func (a *LifecycleAggregate) PurgeRequest(participantID commonv1.ParticipantId) (*commonv1.SpacePurgeRequest, error) {
+	if a == nil || !isCanonicalParticipant(participantID) || participantID == commonv1.ParticipantId_PARTICIPANT_ID_ROLE {
+		return nil, errors.New("canonical non-Role lifecycle participant is required")
+	}
+	if a.phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGING || a.manifest == nil || a.purgeDecidedAt.IsZero() {
+		return nil, fmt.Errorf("purge request is not available in phase %s", a.phase)
+	}
+	return &commonv1.SpacePurgeRequest{
+		ProtocolVersion:     1,
+		SpaceId:             a.spaceID,
+		DeletionOperationId: a.deletionOperationID,
+		Generation:          a.generation,
+		PurgeDecidedAt:      timestamppb.New(a.purgeDecidedAt),
+		ParticipantId:       participantID,
+		Manifest:            proto.Clone(a.manifest).(*commonv1.ManifestBinding),
+	}, nil
+}
+
+// RoleRetirementRequest reconstructs the typed Role retirement request. Role
+// retirement is a distinct first step in the purge barrier, not a generic purge.
+func (a *LifecycleAggregate) RoleRetirementRequest() (*rolev1.RetireSpaceRequest, error) {
+	if a == nil || a.phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGING || a.manifest == nil || a.purgeDecidedAt.IsZero() {
+		phase := spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_UNSPECIFIED
+		if a != nil {
+			phase = a.phase
+		}
+		return nil, fmt.Errorf("Role retirement request is not available in phase %s", phase)
+	}
+	return &rolev1.RetireSpaceRequest{
+		ProtocolVersion:     1,
+		SpaceId:             a.spaceID,
+		DeletionOperationId: a.deletionOperationID,
+		Generation:          a.generation,
+		PurgeDecidedAt:      timestamppb.New(a.purgeDecidedAt),
+		Manifest:            proto.Clone(a.manifest).(*commonv1.ManifestBinding),
+	}, nil
 }
 
 func (a *LifecycleAggregate) validateFenceReceipt(receipt *commonv1.SpaceLifecycleFenceReceipt, expectedState commonv1.LifecycleFenceState) error {

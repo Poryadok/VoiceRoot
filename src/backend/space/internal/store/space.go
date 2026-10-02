@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -22,8 +23,19 @@ var (
 	// ErrTransferToSelf is returned when TransferOwnership targets the current owner.
 	ErrTransferToSelf = errors.New("cannot transfer ownership to current owner")
 	// ErrNotSpaceOwner is returned when the caller is not spaces.owner_profile_id.
-	ErrNotSpaceOwner = errors.New("space owner required")
+	ErrNotSpaceOwner              = errors.New("space owner required")
+	ErrCommunityBootstrapConflict = errors.New("community bootstrap operation conflicts")
 )
+
+type CommunityBootstrapSpaceInput struct {
+	OperationID    uuid.UUID
+	ApplicationID  uuid.UUID
+	EnvironmentID  uuid.UUID
+	OwnerAccountID uuid.UUID
+	OwnerProfileID uuid.UUID
+	CorporationKey string
+	TemplateID     string
+}
 
 // SpaceRow is a row from spaces.
 type SpaceRow struct {
@@ -134,6 +146,91 @@ VALUES ($1, $2)
 	return row, nil
 }
 
+// CreateCommunityBootstrapSpace atomically binds one GIS-authorized operation to
+// exactly one private Space and owner membership. Replays return the same row.
+func (s *SpaceStore) CreateCommunityBootstrapSpace(ctx context.Context, in CommunityBootstrapSpaceInput) (*SpaceRow, bool, error) {
+	if s == nil || s.Pool == nil || in.OperationID == uuid.Nil || in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.OwnerAccountID == uuid.Nil ||
+		in.OwnerProfileID == uuid.Nil || strings.TrimSpace(in.CorporationKey) == "" || len(in.CorporationKey) > 256 ||
+		strings.TrimSpace(in.TemplateID) == "" || len(in.TemplateID) > 128 {
+		return nil, false, errors.New("invalid community bootstrap")
+	}
+	requestBytes, err := json.Marshal(struct {
+		ApplicationID  uuid.UUID `json:"application_id"`
+		EnvironmentID  uuid.UUID `json:"environment_id"`
+		OwnerAccountID uuid.UUID `json:"owner_account_id"`
+		OwnerProfileID uuid.UUID `json:"owner_profile_id"`
+		CorporationKey string    `json:"corporation_key"`
+		TemplateID     string    `json:"template_id"`
+	}{in.ApplicationID, in.EnvironmentID, in.OwnerAccountID, in.OwnerProfileID, in.CorporationKey, in.TemplateID})
+	if err != nil {
+		return nil, false, err
+	}
+	hash := sha256.Sum256(requestBytes)
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `INSERT INTO community_bootstrap_operations
+(operation_id,application_id,environment_id,owner_account_id,owner_profile_id,corporation_key,template_id,request_hash,status)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT(operation_id) DO NOTHING`,
+		in.OperationID, in.ApplicationID, in.EnvironmentID, in.OwnerAccountID, in.OwnerProfileID, in.CorporationKey, in.TemplateID, hash[:])
+	if err != nil {
+		if isPGUniqueViolation(err) {
+			return nil, false, ErrCommunityBootstrapConflict
+		}
+		return nil, false, err
+	}
+	var savedHash []byte
+	var opStatus string
+	var spaceID sql.NullString
+	if err := tx.QueryRow(ctx, `SELECT request_hash,status,space_id::text FROM community_bootstrap_operations WHERE operation_id=$1 FOR UPDATE`, in.OperationID).Scan(&savedHash, &opStatus, &spaceID); err != nil {
+		return nil, false, err
+	}
+	if string(savedHash) != string(hash[:]) {
+		return nil, false, ErrCommunityBootstrapConflict
+	}
+	if opStatus == "succeeded" && spaceID.Valid {
+		id, parseErr := uuid.Parse(spaceID.String)
+		if parseErr != nil {
+			return nil, false, parseErr
+		}
+		row, getErr := scanSpaceRow(tx.QueryRow(ctx, `SELECT `+spaceSelectColumns+` FROM spaces WHERE id=$1`, id))
+		if getErr != nil {
+			return nil, false, getErr
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, err
+		}
+		return row, false, nil
+	}
+	row, err := scanSpaceRow(tx.QueryRow(ctx, `INSERT INTO spaces (name,description,visibility,owner_profile_id,member_count)
+VALUES('Game community','Created through an approved Voice game integration','private',$1,1) RETURNING `+spaceSelectColumns, in.OwnerProfileID))
+	if err != nil {
+		return nil, false, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, in.OwnerProfileID); err != nil {
+		return nil, false, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE community_bootstrap_operations SET status='succeeded',space_id=$2,updated_at=clock_timestamp() WHERE operation_id=$1`, in.OperationID, row.ID); err != nil {
+		return nil, false, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status)
+		VALUES($1,$2,$3,$4,$5,$6,1,'active')`, row.ID, in.ApplicationID, in.EnvironmentID, in.CorporationKey, in.OwnerAccountID, in.OwnerProfileID); err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
+	}
+	return row, true, nil
+}
+
+func isPGUniqueViolation(err error) bool {
+	type sqlStater interface{ SQLState() string }
+	var state sqlStater
+	return errors.As(err, &state) && state.SQLState() == "23505"
+}
+
 // GetSpace loads a space by id.
 func (s *SpaceStore) GetSpace(ctx context.Context, spaceID uuid.UUID) (*SpaceRow, error) {
 	if s == nil || s.Pool == nil {
@@ -161,11 +258,18 @@ func (s *SpaceStore) IsSpaceMember(ctx context.Context, spaceID, profileID uuid.
 			return scoped.IsSpaceMember(ctx, spaceID, profileID)
 		})
 	}
-	var n int
+	var exists bool
 	err := s.db().QueryRow(ctx, `
-SELECT COUNT(*)::int FROM space_members WHERE space_id = $1 AND profile_id = $2
-`, spaceID, profileID).Scan(&n)
-	return n > 0, err
+SELECT EXISTS (
+  SELECT 1 FROM space_members WHERE space_id=$1 AND profile_id=$2
+  UNION ALL
+  SELECT 1 FROM community_roster_members m JOIN community_owner_authority a
+    ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+  WHERE m.space_id=$1 AND m.profile_id=$2 AND m.revoked_at IS NULL
+    AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+)
+`, spaceID, profileID).Scan(&exists)
+	return exists, err
 }
 
 // DeleteSpace removes a space row; child tables cascade via FK ON DELETE CASCADE.
@@ -515,24 +619,31 @@ func (s *SpaceStore) ListMySpacesPage(ctx context.Context, profileID uuid.UUID, 
 	var rows pgx.Rows
 	if joinedAt.IsZero() {
 		rows, err = s.db().Query(ctx, `
-SELECT `+spaceListSelectColumns+`, m.joined_at
-FROM space_members m
-JOIN spaces s ON s.id = m.space_id
-WHERE m.profile_id = $1
-  AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
-ORDER BY m.joined_at DESC, s.id DESC
-LIMIT $2
+WITH effective AS (
+  SELECT space_id,profile_id,joined_at FROM space_members
+  UNION ALL SELECT m.space_id,m.profile_id,o.created_at FROM community_roster_members m
+    JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+    JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
+    WHERE m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+      AND NOT EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
+)
+SELECT `+spaceListSelectColumns+`, m.joined_at FROM effective m JOIN spaces s ON s.id=m.space_id
+WHERE m.profile_id=$1 AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
+ORDER BY m.joined_at DESC, s.id DESC LIMIT $2
 `, profileID, fetch)
 	} else {
 		rows, err = s.db().Query(ctx, `
-SELECT `+spaceListSelectColumns+`, m.joined_at
-FROM space_members m
-JOIN spaces s ON s.id = m.space_id
-WHERE m.profile_id = $1
-  AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
-  AND (m.joined_at, s.id) < ($2, $3)
-ORDER BY m.joined_at DESC, s.id DESC
-LIMIT $4
+WITH effective AS (
+  SELECT space_id,profile_id,joined_at FROM space_members
+  UNION ALL SELECT m.space_id,m.profile_id,o.created_at FROM community_roster_members m
+    JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+    JOIN community_roster_operations o ON o.space_id=m.space_id AND o.owner_generation=m.owner_generation AND o.source_revision=m.source_revision
+    WHERE m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+      AND NOT EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.profile_id=m.profile_id)
+)
+SELECT `+spaceListSelectColumns+`, m.joined_at FROM effective m JOIN spaces s ON s.id=m.space_id
+WHERE m.profile_id=$1 AND NOT EXISTS (SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=s.id AND a.phase <> 'LIVE')
+  AND (m.joined_at,s.id)<($2,$3) ORDER BY m.joined_at DESC,s.id DESC LIMIT $4
 `, profileID, joinedAt, spaceID, fetch)
 	}
 	if err != nil {
@@ -572,7 +683,13 @@ func (s *SpaceStore) listMySpacesPageWithOwnershipScope(ctx context.Context, pro
 			defer cancel()
 			_ = tx.Rollback(cleanupCtx)
 		}
-		rows, err := tx.Query(ctx, `SELECT space_id FROM space_members WHERE profile_id=$1 ORDER BY space_id`, profileID)
+		rows, err := tx.Query(ctx, `SELECT space_id FROM (
+			SELECT space_id FROM space_members WHERE profile_id=$1
+			UNION SELECT m.space_id FROM community_roster_members m JOIN community_owner_authority a
+			ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+			WHERE m.profile_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
+			AND a.roster_lease_expires_at>clock_timestamp()
+		) active_spaces ORDER BY space_id`, profileID)
 		if err != nil {
 			rollback()
 			return nil, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
@@ -603,6 +720,10 @@ func (s *SpaceStore) listMySpacesPageWithOwnershipScope(ctx context.Context, pro
 		var frozen bool
 		err = tx.QueryRow(ctx, `WITH candidate AS (
 			SELECT space_id FROM space_members WHERE profile_id=$1
+			UNION SELECT m.space_id FROM community_roster_members m JOIN community_owner_authority a
+			ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+			WHERE m.profile_id=$1 AND m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp()
+			AND a.roster_lease_expires_at>clock_timestamp()
 		) SELECT COALESCE(array_agg(space_id ORDER BY space_id),'{}'::uuid[]),
 			EXISTS(SELECT 1 FROM ownership_journal j JOIN candidate c ON c.space_id=j.space_id WHERE j.state NOT IN ('completed','aborted'))
 			FROM candidate`, profileID).Scan(&verified, &frozen)

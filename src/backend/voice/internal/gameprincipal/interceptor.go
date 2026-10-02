@@ -15,10 +15,13 @@ import (
 )
 
 const (
-	ProvisionMethod = callsv1.GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName
-	CloseMethod     = callsv1.GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName
-	trustedIssuer   = "gameintegration"
-	trustedAudience = "voice"
+	ProvisionMethod       = callsv1.GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName
+	CloseMethod           = callsv1.GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName
+	ApplyRosterMethod     = callsv1.GameSessionProvisioningService_ApplyGameSessionRoster_FullMethodName
+	FenceConversionMethod = callsv1.GameSessionProvisioningService_FenceSdkConversion_FullMethodName
+	CompleteConversionActivationMethod = callsv1.GameSessionProvisioningService_CompleteSdkConversionActivation_FullMethodName
+	trustedIssuer         = "gameintegration"
+	trustedAudience       = "voice"
 )
 
 type Verifier struct {
@@ -26,7 +29,9 @@ type Verifier struct {
 	Replay  principal.ReplayGuard
 }
 
-func AllowsMethod(method string) bool { return method == ProvisionMethod || method == CloseMethod }
+func AllowsMethod(method string) bool {
+	return method == ProvisionMethod || method == CloseMethod || method == ApplyRosterMethod || method == FenceConversionMethod || method == CompleteConversionActivationMethod
+}
 
 func UnaryServerInterceptor(verifier *Verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -93,6 +98,18 @@ func RequireClose(ctx context.Context, request *callsv1.CloseGameSessionRoomRequ
 	return requireGameSessionPrincipal(ctx, request, CloseMethod)
 }
 
+func RequireApplyRoster(ctx context.Context, request *callsv1.ApplyGameSessionRosterRequest) error {
+	return requireGameSessionPrincipal(ctx, request, ApplyRosterMethod)
+}
+
+func RequireFenceSdkConversion(ctx context.Context, request *callsv1.FenceSdkConversionRequest) error {
+	return requireGameSessionPrincipal(ctx, request, FenceConversionMethod)
+}
+
+func RequireCompleteSdkConversionActivation(ctx context.Context, request *callsv1.CompleteSdkConversionActivationRequest) error {
+	return requireGameSessionPrincipal(ctx, request, CompleteConversionActivationMethod)
+}
+
 func requireGameSessionPrincipal(ctx context.Context, message proto.Message, method string) error {
 	if message == nil || hasUnknownFields(message.ProtoReflect()) || !AllowsMethod(method) || gameSessionOperationID(message) == "" {
 		return status.Error(codes.InvalidArgument, "invalid request")
@@ -119,6 +136,18 @@ func gameSessionOperationID(message any) string {
 			return strings.TrimSpace(request.GetOperationId())
 		}
 	case *callsv1.CloseGameSessionRoomRequest:
+		if request != nil {
+			return strings.TrimSpace(request.GetOperationId())
+		}
+	case *callsv1.ApplyGameSessionRosterRequest:
+		if request != nil {
+			return strings.TrimSpace(request.GetOperationId())
+		}
+	case *callsv1.FenceSdkConversionRequest:
+		if request != nil {
+			return strings.TrimSpace(request.GetOperationId())
+		}
+	case *callsv1.CompleteSdkConversionActivationRequest:
 		if request != nil {
 			return strings.TrimSpace(request.GetOperationId())
 		}

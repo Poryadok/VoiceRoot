@@ -5,8 +5,18 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
+
+const revocableDownloadPathPrefix = "/api/v1/files/download/"
+
+func accessLogPath(path string) string {
+	if strings.HasPrefix(path, revocableDownloadPathPrefix) {
+		return "/api/v1/files/download/:capability"
+	}
+	return path
+}
 
 // AccessLog writes one structured line per request (method, path, status, duration, request id).
 // If extra is non-nil, its attrs are appended (e.g. route_group, remote_addr).
@@ -24,7 +34,7 @@ func AccessLog(logger *slog.Logger, requestIDHeader string, extra func(*http.Req
 			}
 			attrs := []slog.Attr{
 				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
+				slog.String("path", accessLogPath(r.URL.Path)),
 				slog.Int("status", wrapped.status),
 				slog.Int64("duration_ms", time.Since(start).Milliseconds()),
 				slog.String("request_id", r.Header.Get(requestIDHeader)),

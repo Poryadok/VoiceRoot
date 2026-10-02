@@ -94,6 +94,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profil
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true AND m.deleted_for_self = false
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch)
@@ -105,6 +106,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profil
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = $3
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
 ORDER BY sort_at DESC, c.id DESC
 LIMIT $2
 `, viewerProfileID, fetch, inbox)
@@ -117,6 +119,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profil
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = true AND m.deleted_for_self = false
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -135,6 +138,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profil
 FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = $5
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
   AND (
     COALESCE(c.last_message_at, c.created_at) < $2::timestamptz
     OR (
@@ -200,6 +204,7 @@ WITH candidates AS (
   FROM chats c
   INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
   WHERE c.type IN ('dm', 'group', 'channel') AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'
+    AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
 
   UNION ALL
 
@@ -208,6 +213,7 @@ WITH candidates AS (
          COALESCE(c.last_message_at, c.created_at) AS sort_at
   FROM chats c
   WHERE c.space_id = ANY($2) AND c.type IN ('group', 'channel')
+    AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
     AND NOT EXISTS (
       SELECT 1 FROM chat_members m
       WHERE m.chat_id = c.id AND m.profile_id = $1 AND (m.is_archived = true OR m.deleted_for_self = true)
@@ -326,6 +332,7 @@ SELECT c.id, c.type, c.space_id, c.name, c.avatar_url, c.topic, c.creator_profil
        COALESCE(c.last_message_at, c.created_at) AS sort_at
 FROM chats c
 WHERE c.space_id = ANY($1) AND c.type IN ('group', 'channel')
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
   AND NOT EXISTS (
     SELECT 1 FROM chat_members m
     WHERE m.chat_id = c.id AND m.profile_id = $2 AND (m.is_archived = true OR m.deleted_for_self = true)

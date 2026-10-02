@@ -576,7 +576,10 @@ func TestR23FileRestore_ReusesSavedManifestAndReleasesNothing(t *testing.T) {
 	reference := r23MessageReference(fileID, uuid.New(), spaceID)
 	insertR23Reference(t, ctx, pool, reference)
 	client := r23FileServer(pool)
-	rootManifest := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
+	chatManifest, rootManifest := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
+	var savedRootHash []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT final_manifest_hash FROM file_space_lifecycle_fences WHERE space_id=$1`, spaceID).Scan(&savedRootHash))
+	require.Equal(t, rootManifest.GetManifestSha256(), savedRootHash, "File retains the complete producer root internally")
 
 	restoreRequest := &filev1.ApplySpaceLifecycleFenceRequest{Fence: &commonv1.SpaceLifecycleFenceRequest{
 		ProtocolVersion:     1,
@@ -584,7 +587,7 @@ func TestR23FileRestore_ReusesSavedManifestAndReleasesNothing(t *testing.T) {
 		DeletionOperationId: deletionID.String(),
 		Generation:          2,
 		DesiredState:        commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE,
-		Manifest:            rootManifest,
+		Manifest:            chatManifest,
 	}}
 	restored, err := client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, restoreRequest), restoreRequest)
 	require.NoError(t, err)
@@ -612,11 +615,14 @@ func TestR23FilePurge_ExactReleaseAndGCRowClassification(t *testing.T) {
 
 	deletionID := uuid.New()
 	client := r23FileServer(pool)
-	rootManifest := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 4, []*filev1.FileReferenceKey{
+	chatManifest, rootManifest := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 4, []*filev1.FileReferenceKey{
 		exclusiveReference,
 		sharedSpaceReference,
 	})
-	applyR23PurgeDecision(t, ctx, client, deletionID, spaceID, 5, rootManifest)
+	var savedRootHash []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT final_manifest_hash FROM file_space_lifecycle_fences WHERE space_id=$1`, spaceID).Scan(&savedRootHash))
+	require.Equal(t, rootManifest.GetManifestSha256(), savedRootHash, "purge still requires File's complete reference root")
+	applyR23PurgeDecision(t, ctx, client, deletionID, spaceID, 5, chatManifest)
 	request := &filev1.PurgeSpaceRequest{Purge: &commonv1.SpacePurgeRequest{
 		ProtocolVersion:     1,
 		SpaceId:             spaceID.String(),
@@ -624,7 +630,7 @@ func TestR23FilePurge_ExactReleaseAndGCRowClassification(t *testing.T) {
 		Generation:          5,
 		PurgeDecidedAt:      timestamppb.New(time.Now().UTC()),
 		ParticipantId:       commonv1.ParticipantId_PARTICIPANT_ID_FILE,
-		Manifest:            rootManifest,
+		Manifest:            chatManifest,
 	}}
 	_, err := client.PurgeSpace(r23ServiceContext(t, ctx, "space", filev1.FileService_PurgeSpace_FullMethodName, request), request)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err), "File cannot emit its purge receipt before every sealed producer is released")
@@ -668,16 +674,64 @@ func TestR23FilePurge_ExactReleaseAndGCRowClassification(t *testing.T) {
 		DeletionOperationId: deletionID.String(),
 		Generation:          5,
 		PurgeRequestSha256:  r23RequestHash(t, request),
-		ManifestSha256:      request.GetPurge().GetManifest().GetManifestSha256(),
+		ManifestSha256:      chatManifest.GetManifestSha256(),
 	}
 	recovered, err := restarted.GetSpacePurgeReceipt(r23ServiceContext(t, ctx, "space", filev1.FileService_GetSpacePurgeReceipt_FullMethodName, lookupRequest), lookupRequest)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(receipt.GetReceipt(), recovered.GetReceipt()), "response-loss lookup after restart must return the durable purge receipt")
 
 	changed := proto.Clone(request).(*filev1.PurgeSpaceRequest)
-	changed.Purge.Manifest.ManifestSha256 = bytes32("changed-root")
+	changed.Purge.Manifest.ManifestSha256 = bytes32("changed-chat-manifest")
 	_, err = client.PurgeSpace(r23ServiceContext(t, ctx, "space", filev1.FileService_PurgeSpace_FullMethodName, changed), changed)
 	require.Equal(t, codes.AlreadyExists, status.Code(err), "same purge generation with changed body cannot release a replacement set")
+}
+
+func TestR23FileReferenceGCStatusWaitsForPhysicalGCAndRetainsSharedBlob(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := startR23FilePostgres(t, ctx)
+	exclusiveFile := insertR23ReadyFile(t, ctx, pool, "managed-purge-exclusive")
+	sharedFile := insertR23ReadyFile(t, ctx, pool, "managed-purge-shared")
+	messageOne, messageTwo := uuid.New(), uuid.New()
+	exclusive := &filev1.FileReferenceKey{FileId: exclusiveFile.String(), OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, OwnerId: messageOne.String()}
+	shared := &filev1.FileReferenceKey{FileId: sharedFile.String(), OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, OwnerId: messageTwo.String()}
+	insertR23Reference(t, ctx, pool, exclusive)
+	insertR23Reference(t, ctx, pool, shared)
+	insertR23Reference(t, ctx, pool, &filev1.FileReferenceKey{FileId: sharedFile.String(), OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY, OwnerId: uuid.NewString()})
+	refs := []*filev1.FileReferenceKey{exclusive, shared}
+	sort.Slice(refs, func(i, j int) bool { return compareReferences(refs[i], refs[j]) < 0 })
+	operationID := uuid.New()
+	release := &filev1.ReleaseFileReferencesRequest{ProtocolVersion: 1, OperationId: operationID.String(), ProducerId: filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, References: refs}
+	client := r23FileServer(pool)
+	released, err := client.ReleaseFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_ReleaseFileReferences_FullMethodName, release), release)
+	require.NoError(t, err)
+	statusRequest := &filev1.GetFileReferenceGCStatusRequest{ProtocolVersion: 1, OperationId: operationID.String(), ProducerId: release.GetProducerId(), References: refs, ReleaseRequestSha256: released.GetReceipt().GetRequestSha256()}
+	pending, err := client.GetFileReferenceGCStatus(r23ServiceContext(t, ctx, "messaging", filev1.FileService_GetFileReferenceGCStatus_FullMethodName, statusRequest), statusRequest)
+	require.NoError(t, err)
+	require.Empty(t, pending.GetReceiptId(), "no completion receipt is allowed before physical deletion")
+	stateByFile := map[string]filev1.FileReferenceGCState{}
+	for _, item := range pending.GetReferences() {
+		stateByFile[item.GetReference().GetFileId()] = item.GetState()
+	}
+	require.Equal(t, filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_PENDING, stateByFile[exclusiveFile.String()])
+	require.Equal(t, filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_RETAINED_SHARED, stateByFile[sharedFile.String()])
+	deleter := &r23ScriptedDeleter{}
+	processed, err := client.files.RunReferenceGCOnce(ctx, deleter, 10)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, processed)
+	completed, err := client.GetFileReferenceGCStatus(r23ServiceContext(t, ctx, "messaging", filev1.FileService_GetFileReferenceGCStatus_FullMethodName, statusRequest), statusRequest)
+	require.NoError(t, err)
+	require.NotEmpty(t, completed.GetReceiptId())
+	require.NotNil(t, completed.GetCompletedAt())
+	require.Len(t, completed.GetReferences(), 2)
+	stateByFile = map[string]filev1.FileReferenceGCState{}
+	for _, item := range completed.GetReferences() {
+		stateByFile[item.GetReference().GetFileId()] = item.GetState()
+	}
+	require.Equal(t, filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_GC_COMPLETE, stateByFile[exclusiveFile.String()])
+	require.Equal(t, filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_RETAINED_SHARED, stateByFile[sharedFile.String()])
+	replayed, err := client.GetFileReferenceGCStatus(r23ServiceContext(t, ctx, "messaging", filev1.FileService_GetFileReferenceGCStatus_FullMethodName, statusRequest), statusRequest)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(completed, replayed), "the immutable GC receipt survives owner restart")
 }
 
 func TestR23FileReferenceGC_RetryAmbiguousDeletePartialDerivativesAndCrashRecovery(t *testing.T) {
@@ -800,14 +854,14 @@ func TestR23FileLifecycleMigration_DOWNRefusesDurableEvidenceAndGC(t *testing.T)
 	_, err := client.AcquireFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_AcquireFileReferences_FullMethodName, acquire), acquire)
 	require.NoError(t, err)
 	require.Equal(t, "LIVE", r23SpaceFenceState(t, ctx, pool, spaceID), "guarded-DOWN Space evidence begins from a canonical LIVE fence")
-	root := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
-	applyR23PurgeDecision(t, ctx, client, deletionID, spaceID, 2, root)
+	chatManifest, _ := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
+	applyR23PurgeDecision(t, ctx, client, deletionID, spaceID, 2, chatManifest)
 	r23ReleaseProducerReference(t, ctx, client, deletionID, spaceID, 1, 2, "space", filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_SPACE, nil)
 	r23ReleaseProducerReference(t, ctx, client, deletionID, spaceID, 1, 2, "chat", filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_CHAT, nil)
 	r23ReleaseProducerReference(t, ctx, client, deletionID, spaceID, 1, 2, "messaging", filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, []*filev1.FileReferenceKey{reference})
 	purge := &filev1.PurgeSpaceRequest{Purge: &commonv1.SpacePurgeRequest{
 		ProtocolVersion: 1, SpaceId: spaceID.String(), DeletionOperationId: deletionID.String(), Generation: 2,
-		PurgeDecidedAt: timestamppb.New(time.Now().UTC()), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_FILE, Manifest: root,
+		PurgeDecidedAt: timestamppb.New(time.Now().UTC()), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_FILE, Manifest: chatManifest,
 	}}
 	_, err = client.PurgeSpace(r23ServiceContext(t, ctx, "space", filev1.FileService_PurgeSpace_FullMethodName, purge), purge)
 	require.NoError(t, err)
@@ -903,6 +957,7 @@ func startR23FilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	pool := startFileGatePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000004_file_reference_lifecycle.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000005_reference_gc_receipts.up.sql"))
 	return pool
 }
 
@@ -1114,7 +1169,7 @@ VALUES ($1, $2, $3, $4, $5)`, reference.GetFileId(), int32(reference.GetOwnerTyp
 	require.NoError(t, err)
 }
 
-func prepareR23SealedManifest(t *testing.T, ctx context.Context, client *FileGRPC, deletionID, spaceID uuid.UUID, sourceGeneration uint64, references []*filev1.FileReferenceKey) *commonv1.ManifestBinding {
+func prepareR23SealedManifest(t *testing.T, ctx context.Context, client *FileGRPC, deletionID, spaceID uuid.UUID, sourceGeneration uint64, references []*filev1.FileReferenceKey) (*commonv1.ManifestBinding, *commonv1.ManifestBinding) {
 	t.Helper()
 	chatManifest := r23ManifestBinding("chat-root", 3)
 	prepare := &filev1.PrepareSpaceDeletionReferenceManifestRequest{
@@ -1154,11 +1209,12 @@ func prepareR23SealedManifest(t *testing.T, ctx context.Context, client *FileGRP
 		DeletionOperationId: deletionID.String(),
 		Generation:          sourceGeneration,
 		DesiredState:        commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN,
-		Manifest:            manifest,
+		Manifest:            chatManifest,
 	}}
-	_, err = client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, fence), fence)
+	response, err := client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, fence), fence)
 	require.NoError(t, err)
-	return manifest
+	require.Equal(t, chatManifest.GetManifestSha256(), response.GetReceipt().GetManifestSha256())
+	return chatManifest, manifest
 }
 
 func issueR23MetadataCapability(t *testing.T, ctx context.Context, client *FileGRPC, subject uuid.UUID, reference *filev1.FileReferenceKey) string {

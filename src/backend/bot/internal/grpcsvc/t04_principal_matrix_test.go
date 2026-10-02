@@ -17,13 +17,14 @@ import (
 	botv1 "voice.app/voice/bot/v1"
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
+	"voice/backend/bot/internal/principalgrpc"
 	"voice/backend/bot/internal/ratelimit"
 )
 
 func TestT04PublishGameEventDoesNotAcceptOtherAuthorities(t *testing.T) {
 	t.Setenv("BOT_GRPC_GATEWAY_ONLY", "true")
 	listener := bufconn.Listen(1024 * 1024)
-	server := grpc.NewServer(grpc.UnaryInterceptor(ratelimit.GatewayAccessFromEnv()))
+	server := grpc.NewServer(grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor(), ratelimit.GatewayAccessFromEnv()))
 	botv1.RegisterBotServiceServer(server, grpcsvc.NewBotGRPC(nil, dispatch.NewHub()))
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { server.Stop() })
@@ -47,7 +48,7 @@ func TestT04PublishGameEventDoesNotAcceptOtherAuthorities(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := metadata.NewOutgoingContext(context.Background(), tc.md)
 			err := conn.Invoke(ctx, "/voice.bot.v1.BotService/PublishGameEvent", &emptypb.Empty{}, &emptypb.Empty{})
-			require.Equal(t, codes.Unimplemented, status.Code(err), "no principal type may create authority before T51 is implemented")
+			require.Equal(t, codes.Unavailable, status.Code(err), "game event ingress is available only on its dedicated mTLS listener")
 		})
 	}
 }

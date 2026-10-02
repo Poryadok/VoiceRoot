@@ -578,6 +578,9 @@ type composeSpaceTree struct {
 		SortOrder    int32  `json:"sort_order"`
 		VoiceRoomID  string `json:"voice_room_id"`
 		LinkedChatID string `json:"linked_chat_id"`
+		LinkedChat   struct {
+			ID string `json:"id"`
+		} `json:"linked_chat"`
 	} `json:"nodes"`
 }
 
@@ -1080,9 +1083,9 @@ func startComposeCall(
 ) composeCallSession {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
-		"linked_chat":        map[string]string{"id": chatID},
-		"callee_profile_id":  calleeProfileID,
-		"media_kind":         "audio",
+		"linked_chat":       map[string]string{"id": chatID},
+		"callee_profile_id": calleeProfileID,
+		"media_kind":        "audio",
 	})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/voice/calls", bytes.NewReader(payload))
@@ -1306,8 +1309,8 @@ func composeProtectedRouteStatus(t *testing.T, client *http.Client, base, access
 func markReadComposeMessage(t *testing.T, client *http.Client, base, accessToken, chatID, messageID string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
-		"chat":                  map[string]string{"id": chatID},
-		"last_read_message_id":  messageID,
+		"chat":                 map[string]string{"id": chatID},
+		"last_read_message_id": messageID,
 	})
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/messages/read", bytes.NewReader(payload))

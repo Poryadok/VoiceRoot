@@ -3,11 +3,13 @@ package s2s
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/messaging/internal/store"
 
@@ -28,7 +30,7 @@ func (g *GRPCChatGuard) dmMembers(ctx context.Context, chatID uuid.UUID) ([]*cha
 	if g == nil || g.Client == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat service not configured")
 	}
-	ctx = ForwardIncomingMetadata(ctx)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "messaging"))
 	resp, err := g.Client.ListMembers(ctx, &chatv1.ListMembersRequest{
 		ChatId: chatID.String(),
 		Page:   &commonv1.CursorPageRequest{PageSize: 100},
@@ -82,6 +84,23 @@ func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid
 		}
 	}
 	return store.ErrNotChatMember
+}
+
+// MessageReadEntitled asks Chat to evaluate the immutable creation time against
+// the managed membership interval ledger. The caller identity is set locally;
+// user supplied metadata cannot select the internal service principal.
+func (g *GRPCChatGuard) MessageReadEntitled(ctx context.Context, chatID, profileID uuid.UUID, createdAt time.Time) (bool, error) {
+	if g == nil || g.Client == nil {
+		return false, status.Error(codes.FailedPrecondition, "chat service not configured")
+	}
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "messaging"))
+	resp, err := g.Client.CheckMessageReadEntitlement(ctx, &chatv1.CheckMessageReadEntitlementRequest{
+		ChatId: chatID.String(), ProfileId: profileID.String(), MessageCreatedAt: timestamppb.New(createdAt),
+	})
+	if err != nil {
+		return false, grpcMemberErr(err)
+	}
+	return resp.GetEntitled(), nil
 }
 
 func (g *GRPCChatGuard) DMOtherProfileID(ctx context.Context, chatID, profileID uuid.UUID) (uuid.UUID, error) {

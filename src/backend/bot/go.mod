@@ -17,6 +17,7 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
+	voice.app/voice/gameintegration v0.0.0
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/role v0.0.0
 	voice.app/voice/space v0.0.0
@@ -101,6 +102,8 @@ replace voice.app/voice/bot => ../voice/pb/voice/bot
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
 
 replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
 

@@ -21,16 +21,17 @@ type MessageHit struct {
 	ChatID    uuid.UUID
 	Snippet   string
 	Score     float64
+	CreatedAt time.Time
 }
 
 // ProfileDocument is a projection row for profile discovery search.
 type ProfileDocument struct {
-	ProfileID         uuid.UUID
-	AccountID         uuid.UUID
-	Username          string
-	Discriminator     string
-	DisplayName       string
-	VerificationType  string
+	ProfileID        uuid.UUID
+	AccountID        uuid.UUID
+	Username         string
+	Discriminator    string
+	DisplayName      string
+	VerificationType string
 }
 
 // ProfileHit is a profile search result row.

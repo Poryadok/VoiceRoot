@@ -117,6 +117,8 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/gameintegration v0.0.0
 )
 
 replace voice/backend/pkg => ../pkg
@@ -158,3 +160,5 @@ replace voice.app/voice/file => ../file/pb/voice/file
 replace voice.app/voice/analytics => ../analytics/pb/voice/analytics
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration

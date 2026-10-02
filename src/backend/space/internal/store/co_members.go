@@ -12,6 +12,17 @@ import (
 // AreCoMembers reports whether two profiles share at least one space membership.
 // When spaceIDs is non-empty, only those spaces are considered.
 func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []uuid.UUID) (bool, error) {
+	return s.areCoMembers(ctx, profileA, profileB, spaceIDs, nil)
+}
+
+// AreCoMembersWithAccountBans reports shared membership only when neither
+// trusted account is banned from the matching Space. Account IDs must come
+// from the User-owned profile mapping, never from the request payload.
+func (s *SpaceStore) AreCoMembersWithAccountBans(ctx context.Context, profileA, profileB uuid.UUID, accountIDs []uuid.UUID, spaceIDs []uuid.UUID) (bool, error) {
+	return s.areCoMembers(ctx, profileA, profileB, spaceIDs, accountIDs)
+}
+
+func (s *SpaceStore) areCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs, accountIDs []uuid.UUID) (bool, error) {
 	if s == nil || s.Pool == nil {
 		return false, nil
 	}
@@ -24,10 +35,15 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 				return true, nil
 			}
 			var exists bool
-			err := scoped.db().QueryRow(ctx, `SELECT EXISTS (
-				SELECT 1 FROM space_members m1 JOIN space_members m2 ON m1.space_id=m2.space_id
+			err := scoped.db().QueryRow(ctx, `WITH effective AS (
+				SELECT space_id,profile_id FROM space_members
+				UNION SELECT m.space_id,m.profile_id FROM community_roster_members m JOIN community_owner_authority a
+				ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+				WHERE m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+			) SELECT EXISTS (SELECT 1 FROM effective m1 JOIN effective m2 ON m1.space_id=m2.space_id
 				WHERE m1.profile_id=$1 AND m2.profile_id=$2 AND m1.space_id=ANY($3::uuid[])
-			)`, profileA, profileB, normalizedOwnershipSpaceIDs(spaceIDs)).Scan(&exists)
+				AND NOT EXISTS (SELECT 1 FROM space_bans b WHERE b.space_id=m1.space_id AND b.account_id=ANY($4::uuid[])))`,
+				profileA, profileB, normalizedOwnershipSpaceIDs(spaceIDs), accountIDs).Scan(&exists)
 			return exists, err
 		})
 	}
@@ -42,7 +58,7 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 			defer cancel()
 			_ = tx.Rollback(cleanupCtx)
 		}
-		candidates, err := sharedMembershipSpaceIDs(ctx, tx, profileA, profileB)
+		candidates, err := sharedMembershipSpaceIDs(ctx, tx, profileA, profileB, accountIDs)
 		if err != nil {
 			rollback()
 			return false, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
@@ -55,14 +71,20 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 		}
 		var verified []uuid.UUID
 		var frozen, sharedLive bool
-		err = tx.QueryRow(ctx, `WITH candidate AS (
-			SELECT m1.space_id FROM space_members m1 JOIN space_members m2 ON m1.space_id=m2.space_id
+		err = tx.QueryRow(ctx, `WITH effective AS (
+			SELECT space_id,profile_id FROM space_members
+			UNION SELECT m.space_id,m.profile_id FROM community_roster_members m JOIN community_owner_authority a
+			ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+			WHERE m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+		), candidate AS (
+			SELECT m1.space_id FROM effective m1 JOIN effective m2 ON m1.space_id=m2.space_id
 			WHERE m1.profile_id=$1 AND m2.profile_id=$2
+			AND NOT EXISTS (SELECT 1 FROM space_bans b WHERE b.space_id=m1.space_id AND b.account_id=ANY($3::uuid[]))
 		) SELECT COALESCE(array_agg(space_id ORDER BY space_id),'{}'::uuid[]),
 			EXISTS(SELECT 1 FROM ownership_journal j JOIN candidate c ON c.space_id=j.space_id WHERE j.state NOT IN ('completed','aborted')),
 			EXISTS(SELECT 1 FROM candidate c WHERE NOT EXISTS (
 				SELECT 1 FROM space_lifecycle_aggregates a WHERE a.space_id=c.space_id AND a.phase <> 'LIVE'))
-			FROM candidate`, profileA, profileB).Scan(&verified, &frozen, &sharedLive)
+			FROM candidate`, profileA, profileB, accountIDs).Scan(&verified, &frozen, &sharedLive)
 		if err != nil {
 			rollback()
 			return false, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
@@ -84,9 +106,16 @@ func (s *SpaceStore) AreCoMembers(ctx context.Context, profileA, profileB uuid.U
 	return false, ErrOwnershipFrozen
 }
 
-func sharedMembershipSpaceIDs(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := tx.Query(ctx, `SELECT m1.space_id FROM space_members m1 JOIN space_members m2 ON m1.space_id=m2.space_id
-		WHERE m1.profile_id=$1 AND m2.profile_id=$2 ORDER BY m1.space_id`, profileA, profileB)
+func sharedMembershipSpaceIDs(ctx context.Context, tx pgx.Tx, profileA, profileB uuid.UUID, accountIDs []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := tx.Query(ctx, `WITH effective AS (
+		SELECT space_id,profile_id FROM space_members
+		UNION SELECT m.space_id,m.profile_id FROM community_roster_members m JOIN community_owner_authority a
+		ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation AND a.status='active'
+		WHERE m.revoked_at IS NULL AND m.lease_expires_at>clock_timestamp() AND a.roster_lease_expires_at>clock_timestamp()
+	) SELECT m1.space_id FROM effective m1 JOIN effective m2 ON m1.space_id=m2.space_id
+		WHERE m1.profile_id=$1 AND m2.profile_id=$2
+		AND NOT EXISTS (SELECT 1 FROM space_bans b WHERE b.space_id=m1.space_id AND b.account_id=ANY($3::uuid[]))
+		ORDER BY m1.space_id`, profileA, profileB, accountIDs)
 	if err != nil {
 		return nil, err
 	}

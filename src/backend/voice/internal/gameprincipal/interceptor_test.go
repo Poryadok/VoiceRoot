@@ -154,6 +154,38 @@ func TestCloseInterceptorBindsGISPrincipalToExactCloseRequest(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
+func TestApplyRosterInterceptorBindsGISPrincipalToExactRosterRequest(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gameintegration", KeyID: "gis-key", PrivateKey: key})
+	require.NoError(t, err)
+	request := &callsv1.ApplyGameSessionRosterRequest{OperationId: "00000000-0000-4000-8000-000000000031"}
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	token := issueGameServiceToken(t, issuer, "voice", ApplyRosterMethod, request.OperationId, hash)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", request.OperationId))
+	called := false
+	_, err = UnaryServerInterceptor(&Verifier{
+		Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+		Replay:  newTestReplayGuard().record,
+	})(ctx, request, &grpc.UnaryServerInfo{FullMethod: ApplyRosterMethod}, func(verified context.Context, received any) (any, error) {
+		called = true
+		require.NoError(t, RequireApplyRoster(verified, received.(*callsv1.ApplyGameSessionRosterRequest)))
+		return nil, nil
+	})
+	require.NoError(t, err)
+	require.True(t, called)
+	require.True(t, AllowsMethod(ApplyRosterMethod))
+	_, err = UnaryServerInterceptor(&Verifier{
+		Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+		Replay:  newTestReplayGuard().record,
+	})(ctx, request, &grpc.UnaryServerInfo{FullMethod: ProvisionMethod}, func(context.Context, any) (any, error) {
+		t.Fatal("roster assertion must not authorize provisioning")
+		return nil, nil
+	})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
 func TestGamePrincipalConfig_FailsClosedWhenPartiallyConfigured(t *testing.T) {
 	t.Setenv("VOICE_GAME_PRINCIPAL_GRPC_LISTEN", ":9191")
 	t.Setenv("VOICE_GAME_PRINCIPAL_TLS_CERT_FILE", "")

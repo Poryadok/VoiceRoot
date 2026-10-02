@@ -17,6 +17,25 @@ import (
 	"voice/backend/file/internal/store"
 )
 
+func TestR23FileGC_MissingObjectDeleterCannotMarkBlobComplete(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := startR23FilePostgres(t, ctx)
+	client := r23FileServer(pool)
+	fileID, spaceID := insertR23ReadyFile(t, ctx, pool, "gc-missing-deleter"), uuid.New()
+	reference := r23MessageReference(fileID, uuid.New(), spaceID)
+	acquire := r23AcquireRequest(reference)
+	_, err := client.AcquireFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_AcquireFileReferences_FullMethodName, acquire), acquire)
+	require.NoError(t, err)
+	release := &filev1.ReleaseFileReferencesRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), ProducerId: filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, References: []*filev1.FileReferenceKey{reference}}
+	_, err = client.ReleaseFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_ReleaseFileReferences_FullMethodName, release), release)
+	require.NoError(t, err)
+
+	processed, err := client.files.RunReferenceGCOnce(ctx, nil, 1)
+	require.Error(t, err, "GC cannot claim physical deletion without an ObjectStore deleter")
+	require.Zero(t, processed)
+	require.Equal(t, "GC_PENDING", r23BlobGCState(t, ctx, pool, fileID))
+}
+
 func TestR23FileGC_QueuedReferenceResurrectionPreventsPhysicalDelete(t *testing.T) {
 	ctx := r23TestContext(t)
 	pool := startR23FilePostgres(t, ctx)
@@ -362,7 +381,7 @@ func TestR23FileRelease_DefendsAgainstForeignTupleInDurableManifest(t *testing.T
 	insertR23Reference(t, ctx, pool, target)
 	insertR23Reference(t, ctx, pool, foreign)
 	insertR23Reference(t, ctx, pool, substitute)
-	root := prepareR23SealedManifest(t, ctx, client, deletionID, targetSpace, 1, []*filev1.FileReferenceKey{target})
+	root, _ := prepareR23SealedManifest(t, ctx, client, deletionID, targetSpace, 1, []*filev1.FileReferenceKey{target})
 
 	tampered := r23RegisterChunk(deletionID, targetSpace, 1, filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, 0, []*filev1.FileReferenceKey{foreign}, true)
 	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(tampered)
@@ -447,7 +466,7 @@ func TestR23FileLifecycle_ReplayMonotonicityAndPurgeDecisionGate(t *testing.T) {
 	acquire := r23AcquireRequest(reference)
 	_, err = client.AcquireFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_AcquireFileReferences_FullMethodName, acquire), acquire)
 	require.NoError(t, err)
-	root := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
+	root, _ := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
 
 	finalFreeze := &filev1.ApplySpaceLifecycleFenceRequest{Fence: &commonv1.SpaceLifecycleFenceRequest{
 		ProtocolVersion: 1, SpaceId: spaceID.String(), DeletionOperationId: deletionID.String(), Generation: 1,
@@ -492,14 +511,14 @@ func TestR23FilePurgeBarrier_BindsCurrentScheduleGeneration(t *testing.T) {
 	acquire := r23AcquireRequest(reference)
 	_, err := client.AcquireFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_AcquireFileReferences_FullMethodName, acquire), acquire)
 	require.NoError(t, err)
-	firstRoot := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
+	firstRoot, _ := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 1, []*filev1.FileReferenceKey{reference})
 	restore := &filev1.ApplySpaceLifecycleFenceRequest{Fence: &commonv1.SpaceLifecycleFenceRequest{
 		ProtocolVersion: 1, SpaceId: spaceID.String(), DeletionOperationId: deletionID.String(), Generation: 2,
 		DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE, Manifest: firstRoot,
 	}}
 	_, err = client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, restore), restore)
 	require.NoError(t, err)
-	currentRoot := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 3, []*filev1.FileReferenceKey{reference})
+	currentRoot, _ := prepareR23SealedManifest(t, ctx, client, deletionID, spaceID, 3, []*filev1.FileReferenceKey{reference})
 	applyR23PurgeDecision(t, ctx, client, deletionID, spaceID, 4, currentRoot)
 
 	oldScheduleRelease := &filev1.ReleaseSpaceDeletionProducerReferencesRequest{

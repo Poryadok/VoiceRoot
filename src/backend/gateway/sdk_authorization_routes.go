@@ -22,10 +22,33 @@ type sdkAuthorizationRoutePolicy struct {
 }
 
 const sdkAuthorizationRouteBase = "/api/v1/auth/sdk/authorizations"
+const sdkConversionRouteBase = "/api/v1/auth/sdk/conversions"
 
-// sdkAuthorizationPolicy classifies only the frozen T14 Auth routes. Auth still
-// validates the code, PKCE verifier, device possession, and linked credential.
+// sdkAuthorizationPolicy classifies the frozen Auth authorization and conversion
+// routes. Auth remains authoritative for device possession, conversion proof,
+// PKCE, linked credentials, ownership and profile selection.
 func sdkAuthorizationPolicy(method, path string) (sdkAuthorizationRoutePolicy, bool) {
+	if method == http.MethodPost && path == sdkConversionRouteBase+"/new" {
+		return sdkAuthorizationRoutePolicy{principal: sdkAuthorizationSDKAccount, rateGroup: "AuthOAuth"}, true
+	}
+	if method == http.MethodPost && path == sdkConversionRouteBase+"/existing" {
+		return sdkAuthorizationRoutePolicy{principal: sdkAuthorizationLinkedBearer, rateGroup: "AuthOAuth"}, true
+	}
+	conversionPath := strings.TrimPrefix(path, sdkConversionRouteBase+"/")
+	if conversionPath != path {
+		parts := strings.Split(conversionPath, "/")
+		if len(parts) == 2 {
+			if _, err := uuid.Parse(parts[0]); err == nil && method == http.MethodPost {
+				switch parts[1] {
+				case "status":
+					return sdkAuthorizationRoutePolicy{principal: sdkAuthorizationCodeProof, rateGroup: "AuthOAuth"}, true
+				case "attach-new-target":
+					return sdkAuthorizationRoutePolicy{principal: sdkAuthorizationRegularAccount, rateGroup: "AuthOAuth"}, true
+				}
+			}
+		}
+		return sdkAuthorizationRoutePolicy{}, false
+	}
 	if method == http.MethodPost && path == sdkAuthorizationRouteBase {
 		return sdkAuthorizationRoutePolicy{principal: sdkAuthorizationSDKAccount, rateGroup: "AuthOAuth"}, true
 	}

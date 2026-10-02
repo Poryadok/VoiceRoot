@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -16,7 +15,6 @@ func TestGameMessageStoreReceiptFirstAndRevisionChain(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
 	s := &MessagesStore{Pool: pool}
 	app, env, op, chat, msg := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	profile := uuid.New()
@@ -95,7 +93,6 @@ func TestGameMessageStoreConcurrentExactRetryCommitsOneRevision(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
 	s := &MessagesStore{Pool: pool}
 	message := gameprotocol.Message{
 		Compact: "concurrent-create-jws", Operation: "create", KeyID: uuid.New(), DeviceID: uuid.New(), AuthorityRevision: 1, ApplicationID: uuid.New(), EnvironmentID: uuid.New(),
@@ -144,7 +141,6 @@ func TestGameMessageStoreEnforcesMonotonicDeviceAuthorityRevision(t *testing.T) 
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
 	s := &MessagesStore{Pool: pool}
 	app, env, device, key := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	apply := func(name string, revision int64, keyID uuid.UUID) error {
@@ -173,7 +169,6 @@ func TestGameMessageStoreAppendsOneImmutableModeratorTombstone(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
 	s := &MessagesStore{Pool: pool}
 	app, env, chat, msg, action := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	create := gameprotocol.Message{Compact: "create-signed", Operation: "create", KeyID: uuid.New(), DeviceID: uuid.New(), AuthorityRevision: 1, ApplicationID: app, EnvironmentID: env, OperationID: uuid.New(), ChatID: chat, MessageID: msg, Revision: 1, Content: []byte("message"), ContentSHA256: hashContent([]byte("message"))}

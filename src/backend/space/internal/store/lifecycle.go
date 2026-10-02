@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -104,14 +105,17 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if ownerID != actorProfileID || currentName != request.GetConfirmationName() {
 		return nil, ErrLifecycleConflict
 	}
-	// A new intent cannot replace a durable operation at the same phase and
-	// generation. A subsequent deletion cycle needs a separate generation flow.
-	var hasLifecycle bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_lifecycle_aggregates WHERE space_id=$1)`, spaceID).Scan(&hasLifecycle); err != nil {
-		return nil, err
-	}
-	if hasLifecycle {
-		return nil, ErrLifecycleConflict
+	// Restoring does not reset the generation. A fresh, separately authorized
+	// intent may replace only a completed LIVE cycle under the same Space lock.
+	generation := uint64(1)
+	previous, loadErr := loadLifecycle(ctx, tx, spaceID, true)
+	if loadErr == nil {
+		if previous.Phase() != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_LIVE || previous.Generation() >= math.MaxInt64 {
+			return nil, ErrLifecycleConflict
+		}
+		generation = previous.Generation() + 1
+	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
+		return nil, loadErr
 	}
 
 	command, err := tx.Exec(ctx, `INSERT INTO space_lifecycle_operations(
@@ -132,7 +136,7 @@ func (s *SpaceStore) ReserveLifecycleSchedule(ctx context.Context, accountID, ac
 	if err != nil {
 		return nil, err
 	}
-	if err := aggregate.BeginSchedule(1); err != nil {
+	if err := aggregate.BeginSchedule(generation); err != nil {
 		return nil, err
 	}
 	if err := persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
@@ -608,17 +612,14 @@ func persistLifecycleSnapshot(ctx context.Context, db spaceStoreDB, snapshot spa
 	if err := lockLifecycleSpace(ctx, db, spaceID); err != nil {
 		return err
 	}
-	if err := guardAdmittedLifecycleRestoreSnapshot(ctx, db, snapshot); err != nil {
-		return err
-	}
-
 	phase := lifecyclePhaseName(snapshot.Phase)
 	if phase == "" {
 		return ErrLifecycleEvidenceInvalid
 	}
 	var existingPhase string
 	var existingGeneration int64
-	err = db.QueryRow(ctx, `SELECT phase,generation FROM space_lifecycle_aggregates WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&existingPhase, &existingGeneration)
+	var existingOperationID uuid.UUID
+	err = db.QueryRow(ctx, `SELECT phase,generation,deletion_operation_id FROM space_lifecycle_aggregates WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&existingPhase, &existingGeneration, &existingOperationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING && snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_FREEZE_PENDING {
 			return ErrLifecycleStateTransition
@@ -639,6 +640,25 @@ func persistLifecycleSnapshot(ctx context.Context, db spaceStoreDB, snapshot spa
 	} else if err != nil {
 		return err
 	} else {
+		if operationID != existingOperationID {
+			if existingPhase != "LIVE" || existingGeneration >= math.MaxInt64 || snapshot.Generation != uint64(existingGeneration)+1 || snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING {
+				return ErrLifecycleStateTransition
+			}
+			// Generic persistence cannot invent a replacement intent. Reservation
+			// has already checked owner/name and stored the authenticated binding.
+			operation, err := loadLifecycleOperation(ctx, db, operationID)
+			if err != nil {
+				return err
+			}
+			if err := operation.validate(); err != nil {
+				return err
+			}
+			if operation.spaceID != spaceID || operation.method != "DELETE" || operation.state != "SCHEDULE_PENDING" {
+				return ErrLifecycleConflict
+			}
+		} else if err := guardAdmittedLifecycleRestoreSnapshot(ctx, db, snapshot); err != nil {
+			return err
+		}
 		if !allowedLifecycleTransition(existingPhase, existingGeneration, snapshot.Phase, snapshot.Generation) {
 			return ErrLifecycleStateTransition
 		}
@@ -912,6 +932,15 @@ func loadLifecycle(ctx context.Context, db spaceStoreDB, spaceID uuid.UUID, forU
 	if err := loadLifecycleParticipants(ctx, db, &snapshot, spaceID, operationID); err != nil {
 		return nil, err
 	}
+	if phase == spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGED && (snapshot.RoleReceipt == nil || len(snapshot.PurgeReceipts) != 9) {
+		var compactValid bool
+		if err := db.QueryRow(ctx, `SELECT a.evidence_compacted AND a.local_purge_completed AND EXISTS(SELECT 1 FROM space_deletion_tombstones t WHERE t.space_id=a.space_id) AND (SELECT count(*) FROM space_lifecycle_completions c WHERE c.space_id=a.space_id AND c.deletion_operation_id=a.deletion_operation_id AND c.generation=a.generation)=10 FROM space_lifecycle_aggregates a WHERE a.space_id=$1`, spaceID).Scan(&compactValid); err != nil {
+			return nil, err
+		}
+		if !compactValid {
+			return nil, ErrLifecycleEvidenceInvalid
+		}
+	}
 	if err := loadLifecycleOutbox(ctx, db, &snapshot, spaceID, operationID); err != nil {
 		return nil, err
 	}
@@ -1150,6 +1179,8 @@ func allowedLifecycleTransition(existing string, generation int64, target spacev
 		return true
 	}
 	switch target {
+	case spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING:
+		return existing == "LIVE" && generation < math.MaxInt64 && tg == generation+1
 	case spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_FREEZE_PENDING:
 		return existing == "SCHEDULE_PENDING" && generation == tg
 	case spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULED:

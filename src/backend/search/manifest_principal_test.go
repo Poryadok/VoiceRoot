@@ -41,6 +41,7 @@ func TestSignedManifestClientUsesFreshExactSearchPrincipal(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, md.Get("authorization"), 1)
 	require.Len(t, md.Get("x-request-id"), 1)
+	require.Equal(t, req.DeletionOperationId, md.Get("x-request-id")[0], "Chat binds the signed request ID to the deletion operation")
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
 	_, err = principal.VerifyService(context.Background(), md.Get("authorization")[0][len("Bearer "):], principal.VerifyConfig{ExpectedIssuer: "search", ExpectedAudience: "chat", ExpectedRPC: chatv1.ChatService_GetSpacePurgeManifestPage_FullMethodName, ExpectedRequestID: md.Get("x-request-id")[0], ExpectedRequestHash: hash, KeyResolver: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }})
@@ -73,7 +74,7 @@ func TestLoadSignedChatManifestClientFromEnv_RejectsPartialChatConfiguration(t *
 
 func clearChatManifestEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"} {
+	for _, name := range []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME", "SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE", "SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE"} {
 		value, set := os.LookupEnv(name)
 		if err := os.Unsetenv(name); err != nil {
 			t.Fatalf("clear %s: %v", name, err)

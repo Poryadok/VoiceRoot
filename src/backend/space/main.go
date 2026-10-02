@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,6 +28,7 @@ import (
 	"voice/backend/pkg/socialprincipal"
 	"voice/backend/space/internal/authctx"
 	grpcsvc "voice/backend/space/internal/grpcsvc"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/s2s"
 	"voice/backend/space/internal/spaceevents"
 	"voice/backend/space/internal/store"
@@ -44,6 +47,23 @@ const (
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	lifecycleConfig, lifecycleEnabled, err := loadLifecycleRuntimeConfig(os.Getenv)
+	if err != nil {
+		log.Fatalf("Space lifecycle config: %v", err)
+	}
+	if lifecycleEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space lifecycle requires DATABASE_URL")
+	}
+	publicConfig, publicEnabled, err := lifecycleprincipal.FromEnv()
+	if err != nil {
+		log.Fatalf("Space Gateway lifecycle config: %v", err)
+	}
+	if lifecycleEnabled && !publicEnabled {
+		log.Fatal("Space lifecycle requires the protected Gateway listener")
+	}
+	if publicEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Space Gateway lifecycle listener requires DATABASE_URL")
+	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("space")
 	if err != nil {
 		log.Fatalf("space privacy principal config: %v", err)
@@ -78,8 +98,10 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var publicServer *grpc.Server
 	var outboxRuntime *ownershipOutboxRuntime
 	var recoveryRuntime *ownershipRecoveryRuntime
+	var deletionRuntime *lifecycleRuntime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -107,6 +129,7 @@ func main() {
 		defer mutationLockPool.Close()
 
 		spaceStore := &store.SpaceStore{Pool: pool}
+		go store.RunCommunityRosterExpiryWorker(runCtx, spaceStore, time.Second)
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
 		var spaceEvents spaceevents.Publisher
 		var jsPub *spaceevents.JetStreamPublisher
@@ -178,8 +201,10 @@ func main() {
 		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
 		grpcOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		grpcOptions = append(grpcOptions, grpc.ChainUnaryInterceptor(
+			lifecycleprincipal.OrdinaryUnary(),
 			socialprincipal.OrdinaryUnaryInterceptor("space"),
 			authctx.VerifiedServiceIdentityUnaryInterceptor(os.Getenv("SPACE_VOICE_S2S_TOKEN")),
+			authctx.VerifiedGameIntegrationUnaryInterceptor(os.Getenv("SPACE_GAME_INTEGRATION_S2S_TOKEN")),
 		))
 		grpcSrv = grpc.NewServer(grpcOptions...)
 		spaceSvc := &grpcsvc.SpaceGRPC{
@@ -263,7 +288,35 @@ func main() {
 		if recoveryRuntime != nil {
 			defer recoveryRuntime.Stop()
 		}
+		if lifecycleEnabled {
+			deletionRuntime, err = newLifecycleRuntime(runCtx, lifecycleConfig, spaceStore, spaceSvc, jsPub, logger)
+			if err != nil {
+				log.Fatalf("Space lifecycle runtime: %v", err)
+			}
+			defer deletionRuntime.Stop()
+		}
 		spacev1.RegisterSpaceServiceServer(grpcSrv, spaceSvc)
+		if publicEnabled {
+			publicRuntime, err := lifecycleprincipal.New(runCtx, publicConfig)
+			if err != nil {
+				log.Fatalf("Space Gateway lifecycle runtime: %v", err)
+			}
+			defer func() { _ = publicRuntime.Close() }()
+			publicListener, err := net.Listen("tcp", publicConfig.Listen)
+			if err != nil {
+				log.Fatalf("Space Gateway lifecycle listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, publicRuntime.ServerOptions()...)
+			publicServer = grpc.NewServer(options...)
+			spacev1.RegisterSpaceServiceServer(publicServer, &grpcsvc.PublicLifecycleSpace{SpaceGRPC: spaceSvc})
+			go func() {
+				logger.Info("Gateway lifecycle principal listener started", slog.String("addr", publicConfig.Listen))
+				if err := publicServer.Serve(publicListener); err != nil {
+					logger.Error("Gateway lifecycle principal listener stopped", slog.String("error", err.Error()))
+				}
+			}()
+		}
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {
@@ -292,10 +345,25 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(spaceHTTPHandler(serviceName, publicJWKS), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(spaceHTTPHandler(serviceName, principalJWKS{}), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
+	var jwksServer *http.Server
+	errCh := make(chan error, 2)
+	if len(publicJWKS.Keys) > 0 {
+		certificate, err := tls.LoadX509KeyPair(strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE")), strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE")))
+		if err != nil {
+			log.Fatalf("space principal JWKS TLS: %v", err)
+		}
+		jwksAddr := strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN"))
+		if jwksAddr == "" {
+			jwksAddr = ":8443"
+		}
+		jwksServer = &http.Server{Addr: jwksAddr, Handler: spaceJWKSHandler(publicJWKS), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}}
+		httpserver.ApplyHTTPServerTimeouts(jwksServer)
+		go func() { errCh <- jwksServer.ListenAndServeTLS("", "") }()
+		logger.Info("space principal JWKS listening", slog.String("addr", jwksAddr))
+	}
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -308,6 +376,7 @@ func main() {
 		runCancel()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
+		deletionRuntime.Stop()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
@@ -315,13 +384,22 @@ func main() {
 		runCancel()
 		outboxRuntime.Stop()
 		recoveryRuntime.Stop()
+		deletionRuntime.Stop()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
+		if publicServer != nil {
+			publicServer.GracefulStop()
+		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if jwksServer != nil {
+			if err := jwksServer.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }

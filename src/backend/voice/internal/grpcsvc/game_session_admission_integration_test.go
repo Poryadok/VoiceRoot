@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/pkg/integrationtest"
@@ -41,6 +42,14 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 	}
 	provisioned, err := rooms.Provision(ctx, request)
 	require.NoError(t, err)
+	profileMember := "00000000-0000-4000-8000-000000000111"
+	profileOutsider := "00000000-0000-4000-8000-000000000112"
+	_, err = rooms.ApplyGameSessionRoster(ctx, &callsv1.ApplyGameSessionRosterRequest{
+		OperationId: uuid.NewString(), ApplicationId: request.ApplicationId, EnvironmentId: request.EnvironmentId,
+		SessionId: request.SessionId, VoiceRoomId: provisioned.RoomId, RosterRevision: 1,
+		ProfileIds: []string{profileMember}, LeaseExpiresAt: timestamppb.New(time.Now().UTC().Add(time.Minute)),
+	}, nil)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	newService := func() *VoiceGRPC {
@@ -49,14 +58,14 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 		service.ManagedGameSessionRooms = rooms
 		service.setManagedGameSessionGrantChecker(&managedGameSessionGrantStub{})
 		service.ChatMembers = &mapChatMembers{members: map[string]map[string]bool{
-			chatID: {"profile-member": true},
+			chatID: {profileMember: true},
 		}}
 		return service
 	}
 
 	t.Run("JoinCall recovers room into an empty CallStore", func(t *testing.T) {
 		service := newService()
-		joined, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		joined, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.NoError(t, err)
 		require.Equal(t, provisioned.RoomId, joined.GetCallSession().GetRoomId())
 		require.Equal(t, chatID, joined.GetCallSession().GetLinkedChat().GetId())
@@ -65,11 +74,11 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 
 	t.Run("token uses current Chat membership", func(t *testing.T) {
 		service := newService()
-		memberToken, err := service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
+		memberToken, err := service.GetJoinToken(voiceTestCtx(profileMember), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
 		require.NoError(t, err)
 		require.NotEmpty(t, memberToken.GetJwt())
 
-		_, err = service.GetJoinToken(voiceTestCtx("profile-outsider"), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
+		_, err = service.GetJoinToken(voiceTestCtx(profileOutsider), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
@@ -78,11 +87,11 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 		denied := &managedGameSessionGrantStub{err: status.Error(codes.PermissionDenied, "managed session grant missing")}
 		installManagedGameSessionGrantChecker(t, service, denied)
 
-		_, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.Equal(t, codes.PermissionDenied, status.Code(err), "Chat membership alone must not admit a game-session member")
 
 		denied.err = nil
-		joined, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		joined, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.NoError(t, err, "a current Role grant plus Chat membership should admit")
 		require.Equal(t, provisioned.RoomId, joined.GetCallSession().GetRoomId())
 	})
@@ -90,7 +99,7 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 	t.Run("missing Role checker fails closed", func(t *testing.T) {
 		service := newService()
 		service.ManagedGameSessionGrants = nil
-		_, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	})
 
@@ -98,13 +107,13 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 		service := newService()
 		grant := &managedGameSessionGrantStub{}
 		installManagedGameSessionGrantChecker(t, service, grant)
-		_, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.NoError(t, err, "initial grant should warm the CallStore")
 
 		grant.err = status.Error(codes.PermissionDenied, "managed session grant revoked")
-		_, err = service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err = service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.Equal(t, codes.PermissionDenied, status.Code(err), "warm CallStore must not bypass grant revocation")
-		_, err = service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
+		_, err = service.GetJoinToken(voiceTestCtx(profileMember), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
 		require.Equal(t, codes.PermissionDenied, status.Code(err), "revoked grant must not issue a token")
 	})
 
@@ -112,14 +121,14 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 		service := newService()
 		grant := &managedGameSessionGrantStub{}
 		installManagedGameSessionGrantChecker(t, service, grant)
-		_, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.NoError(t, err, "initial grant should warm the CallStore")
 
 		closed := &closedManagedGameSessionRoomLookup{delegate: rooms, closed: true}
 		service.ManagedGameSessionRooms = closed // represents the durable close receipt
-		_, err = service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err = service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.Error(t, err, "warm CallStore must not bypass a durable Voice close")
-		_, err = service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
+		_, err = service.GetJoinToken(voiceTestCtx(profileMember), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
 		require.Error(t, err, "a durable Voice close must not issue a token from a warm CallStore entry")
 	})
 
@@ -129,9 +138,9 @@ func TestProvisionedManagedGameSessionCanBeAdmittedAfterCallStoreMiss(t *testing
 		service.ManagedGameSessionRooms = closed
 		closed.closed = true // represents a durable CloseGameSessionRoom receipt
 
-		_, err := service.JoinCall(voiceTestCtx("profile-member"), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
+		_, err := service.JoinCall(voiceTestCtx(profileMember), &callsv1.JoinCallRequest{RoomId: provisioned.RoomId})
 		require.Error(t, err, "closed durable room must not project into an empty CallStore")
-		_, err = service.GetJoinToken(voiceTestCtx("profile-member"), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
+		_, err = service.GetJoinToken(voiceTestCtx(profileMember), &callsv1.GetJoinTokenRequest{RoomId: provisioned.RoomId})
 		require.Error(t, err, "closed durable room must not issue a token after a cold lookup")
 	})
 
@@ -300,7 +309,7 @@ func startManagedGameSessionAdmissionPostgres(t *testing.T, ctx context.Context)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	migrations := filepath.Join(root, "src", "backend", "migrations", "voice_db")
 	pool := integrationtest.StartPostgres(t, ctx, "voice_managed_admission", filepath.Join(migrations, "000001_room_lifecycle.up.sql"))
-	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close"} {
+	for _, name := range []string{"000002_redis_divergence", "000003_matchmaking_membership", "000004_game_session_rooms", "000005_game_session_close", "000006_game_session_roster_lease", "000007_t17_sdk_conversion_fence"} {
 		body, err := os.ReadFile(filepath.Join(migrations, name+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(body))

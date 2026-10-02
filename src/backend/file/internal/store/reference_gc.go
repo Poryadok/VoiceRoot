@@ -27,6 +27,9 @@ func (s *FilesStore) RunReferenceGCOnce(ctx context.Context, deleter r2file.Obje
 	if s == nil || s.Pool == nil {
 		return 0, fmt.Errorf("file persistence not configured")
 	}
+	if deleter == nil {
+		return 0, fmt.Errorf("file reference GC object deleter not configured")
+	}
 	if limit <= 0 {
 		limit = 100
 	}

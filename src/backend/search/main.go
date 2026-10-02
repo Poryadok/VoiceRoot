@@ -156,10 +156,11 @@ func main() {
 		}
 
 		svc := &grpcsvc.SearchGRPC{
-			Messages:     &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},
-			Profiles:     &grpcsvc.ProfileStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
-			Spaces:       &grpcsvc.SpaceStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
-			ChatManifest: manifestClient,
+			Messages:          &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},
+			ManagedChatPurger: msgStore,
+			Profiles:          &grpcsvc.ProfileStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
+			Spaces:            &grpcsvc.SpaceStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
+			ChatManifest:      manifestClient,
 		}
 
 		if conn, err := dialOptional(os.Getenv("MESSAGING_GRPC_ADDR")); err == nil && conn != nil {
@@ -254,6 +255,7 @@ func main() {
 			defer func() { _ = conn.Close() }()
 			chatClient = chatv1.NewChatServiceClient(conn)
 			svc.Roles = &deps.ChatReadAccess{Client: chatClient}
+			svc.ChatEntitlement = chatClient
 		}
 		var socialClient socialv1.SocialServiceClient
 		if conn, err := dialOptional(os.Getenv("SOCIAL_GRPC_ADDR")); err == nil && conn != nil {

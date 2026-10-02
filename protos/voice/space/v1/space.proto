@@ -59,6 +59,18 @@ service SpaceService {
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
   rpc CreateFromTemplate(CreateFromTemplateRequest) returns (CreateFromTemplateResponse);
 
+  // GIS-only versioned complete roster projection. Membership remains source-scoped and expires fail-closed.
+  // @voice.security=protected;callers=service:gameintegration
+  rpc ApplyCommunityRoster(ApplyCommunityRosterRequest) returns (ApplyCommunityRosterResponse);
+
+  // GIS-only idempotent community bootstrap. Owner identity is asserted by the authenticated GIS workload.
+  // @voice.security=protected;callers=service:gameintegration
+  rpc CreateCommunityBootstrap(CreateCommunityBootstrapRequest) returns (CreateCommunityBootstrapResponse);
+
+  // GIS-only durable Owner succession after a distinct operator approval.
+  // @voice.security=protected;callers=service:gameintegration
+  rpc RecoverCommunityOwner(RecoverCommunityOwnerRequest) returns (RecoverCommunityOwnerResponse);
+
   rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
 
   // @voice.security=protected;callers=service:role,service:chat
@@ -393,6 +405,59 @@ message CreateFromTemplateRequest {
   string name = 2;
 }
 
+// @voice.unknown_fields=reject
+// @voice.unknown_fields=reject
+message ApplyCommunityRosterRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string corporation_key = 4;
+  string space_id = 5;
+  int64 owner_generation = 6;
+  int64 source_revision = 7;
+  bytes snapshot_sha256 = 8;
+  repeated string profile_ids = 9;
+  google.protobuf.Timestamp lease_expires_at = 10;
+}
+
+message ApplyCommunityRosterResponse {
+  string operation_id = 1;
+  string space_id = 2;
+  int64 owner_generation = 3;
+  int64 source_revision = 4;
+  bytes snapshot_sha256 = 5;
+  string receipt_id = 6;
+  int32 member_count = 7;
+  bool replayed = 8;
+  bytes request_sha256 = 9;
+}
+
+message CreateCommunityBootstrapRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string owner_profile_id = 4;
+  string corporation_key = 5;
+  string template_id = 6;
+  string owner_account_id = 7;
+}
+
+// @voice.unknown_fields=reject
+message RecoverCommunityOwnerRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string corporation_key = 4;
+  string space_id = 5;
+  string previous_owner_account_id = 6;
+  string previous_owner_profile_id = 7;
+  string replacement_account_id = 8;
+  string replacement_profile_id = 9;
+  int64 expected_generation = 10;
+  string reason_code = 11;
+  bytes evidence_sha256 = 12;
+}
+
 message GetAuditLogRequest {
   string space_id = 1;
   voice.common.v1.CursorPageRequest page = 2;
@@ -522,6 +587,15 @@ message ListTemplatesResponse {
 }
 message CreateFromTemplateResponse {
   Space space = 1;
+}
+message CreateCommunityBootstrapResponse {
+  Space space = 1;
+  bool replayed = 2;
+}
+message RecoverCommunityOwnerResponse {
+  string space_id = 1;
+  int64 owner_generation = 2;
+  bool replayed = 3;
 }
 message GetAuditLogResponse {
   AuditLogList audit_log_list = 1;

@@ -5,6 +5,7 @@ package voice.bot.v1;
 import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/space_lifecycle.proto";
+import "voice/gameintegration/v1/game_event.proto";
 import "voice/messaging/v1/messaging.proto";
 import "voice/role/v1/role.proto";
 
@@ -20,6 +21,8 @@ enum BotLifecycleStatus {
 
 // Bot platform. HTTP: /api/v1/bots/**.
 service BotService {
+  // @voice.security=protected;callers=service:gameintegration
+  rpc PublishGameEvent(PublishGameEventRequest) returns (PublishGameEventResponse);
   rpc RegisterBot(RegisterBotRequest) returns (RegisterBotResponse);
   rpc UpdateBot(UpdateBotRequest) returns (UpdateBotResponse);
   rpc DeleteBot(DeleteBotRequest) returns (DeleteBotResponse);
@@ -78,6 +81,15 @@ service BotService {
 
   // @voice.security=protected;callers=service:space
   rpc PurgeSpace(voice.bot.v1.PurgeSpaceRequest) returns (voice.bot.v1.PurgeSpaceResponse);
+}
+
+message PublishGameEventRequest {
+  voice.gameintegration.v1.VerifiedGameEventIntent intent = 1;
+}
+
+message PublishGameEventResponse {
+  voice.gameintegration.v1.GameEventPublicationStatus status = 1;
+  optional string message_id = 2;
 }
 
 message Bot {

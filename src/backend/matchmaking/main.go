@@ -26,6 +26,8 @@ import (
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/runtimeconfig"
 	"voice/backend/matchmaking/internal/s2s"
+	"voice/backend/matchmaking/internal/spacelifecycle"
+	"voice/backend/matchmaking/internal/spaceprincipal"
 	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
 	"voice/backend/matchmaking/internal/storyconsume"
@@ -62,6 +64,10 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	principalConfig, principalEnabled, err := spaceprincipal.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Matchmaking Space principal config: %v", err)
+	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -74,6 +80,7 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var lifecycleSrv *grpc.Server
 	var redisQueue *queue.RedisQueue
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), pkgruntimeconfig.PostgresConnectTimeoutFromEnv())
@@ -109,6 +116,22 @@ func main() {
 				Password: strings.TrimSpace(os.Getenv("MATCHMAKING_REDIS_PASSWORD")),
 			})
 			redisQueue = &queue.RedisQueue{Client: rdb, Prefix: "mm"}
+		}
+		var principalRuntime *spaceprincipal.Runtime
+		var lifecycleListener net.Listener
+		if principalEnabled {
+			if redisQueue == nil {
+				log.Fatal("Matchmaking Space principal listener requires MATCHMAKING_REDIS_ADDR")
+			}
+			principalRuntime, err = spaceprincipal.New(context.Background(), principalConfig)
+			if err != nil {
+				log.Fatalf("Matchmaking Space principal runtime: %v", err)
+			}
+			defer func() { _ = principalRuntime.Close() }()
+			lifecycleListener, err = net.Listen("tcp", principalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("Matchmaking Space principal listen: %v", err)
+			}
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -197,7 +220,9 @@ func main() {
 			spaceQueueGate = s2s.NewGRPCSpaceQueueGate(spconn)
 		}
 
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		ordinaryOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(spaceprincipal.OrdinaryUnaryInterceptor()))
+		grpcSrv = grpc.NewServer(ordinaryOptions...)
 		mmSvc := &grpcsvc.MatchmakingGRPC{
 			Games:                   gameStore,
 			ProfileGames:            profileStore,
@@ -215,6 +240,12 @@ func main() {
 			SpaceQueue:              spaceQueueGate,
 			Parties:                 &store.PartyStore{Pool: pool},
 			Lfp:                     &store.LfpStore{Pool: pool},
+		}
+		if principalRuntime != nil {
+			mmSvc.SpaceLifecycle = spacelifecycle.New(pool)
+			lifecycleOptions := append(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), principalRuntime.ServerOptions()...)
+			lifecycleSrv = grpc.NewServer(lifecycleOptions...)
+			matchmakingv1.RegisterMatchmakingServiceServer(lifecycleSrv, mmSvc)
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
 
@@ -277,7 +308,18 @@ func main() {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
+		if lifecycleSrv != nil {
+			go func() {
+				logger.Info("Space lifecycle gRPC listening", slog.String("addr", principalConfig.ListenAddr))
+				if err := lifecycleSrv.Serve(lifecycleListener); err != nil {
+					log.Fatalf("Matchmaking Space principal serve: %v", err)
+				}
+			}()
+		}
 	} else {
+		if principalEnabled {
+			log.Fatal("Matchmaking Space principal listener requires DATABASE_URL")
+		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
@@ -309,6 +351,9 @@ func main() {
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
+		}
+		if lifecycleSrv != nil {
+			lifecycleSrv.GracefulStop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

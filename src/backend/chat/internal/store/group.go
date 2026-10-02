@@ -45,14 +45,25 @@ func (s *DMStore) CreateSpaceChannelChat(ctx context.Context, creatorProfileID, 
 	if name == "" {
 		return nil, errors.New("channel name is required")
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lockSpaceLifecycleMutation(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
-	err := s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, threads_enabled, allow_user_main_feed, topic)
 VALUES ('channel', $1, $2, $3, 0, true, false, $4)
 RETURNING id, created_at, updated_at
 `, spaceID, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	n := name
@@ -80,14 +91,25 @@ func (s *DMStore) CreateSpaceGroupChat(ctx context.Context, creatorProfileID, sp
 	if name == "" {
 		return nil, errors.New("group name is required")
 	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lockSpaceLifecycleMutation(ctx, tx, spaceID); err != nil {
+		return nil, err
+	}
 	var chatID uuid.UUID
 	var createdAt, updatedAt time.Time
-	err := s.Pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 INSERT INTO chats (type, space_id, name, creator_profile_id, slow_mode_seconds, topic)
 VALUES ('group', $1, $2, $3, 0, $4)
 RETURNING id, created_at, updated_at
 `, spaceID, name, creatorProfileID, optionalTopicArg(topic)).Scan(&chatID, &createdAt, &updatedAt)
 	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	n := name
@@ -210,6 +232,7 @@ SELECT id, type, space_id, name, avatar_url, topic, creator_profile_id, managed_
        last_message_at, created_at, updated_at, threads_enabled, allow_user_main_feed, e2e_enabled, allow_guests
 FROM chats
 WHERE id = $1
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=chats.space_id AND f.state<>'LIVE')
 `, chatID))
 }
 

@@ -2,11 +2,13 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"voice/backend/voice/internal/spacelifecycle"
 )
 
 type CanonicalVoiceRoomAccess struct {
@@ -36,6 +38,15 @@ func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, voiceRo
 	}
 	if _, err := uuid.Parse(access.SpaceID); err != nil {
 		return CanonicalVoiceRoomAccess{}, status.Error(codes.PermissionDenied, "canonical voice room access denied")
+	}
+	if s.SpaceLifecycle == nil {
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space lifecycle admission unavailable")
+	}
+	if err := s.SpaceLifecycle.CheckAdmission(ctx, access.SpaceID); err != nil {
+		if errors.Is(err, spacelifecycle.ErrSpaceFrozen) {
+			return CanonicalVoiceRoomAccess{}, status.Error(codes.FailedPrecondition, "Space voice admission is fenced")
+		}
+		return CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "Space lifecycle admission unavailable")
 	}
 	return access, nil
 }

@@ -1,0 +1,2 @@
+DROP TABLE voice_account_voice_fences;
+DROP TABLE voice_profile_account_mappings;

@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ func TestMessageSearchStore_UpsertAndFTSSearch_postgres(t *testing.T) {
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
 	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
 
 	chatA := uuid.New()
 	chatB := uuid.New()
@@ -90,6 +93,7 @@ func TestMessageSearchStore_DeleteRemovesFromIndex_postgres(t *testing.T) {
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
 	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
 
 	chatID := uuid.New()
 	msgID := uuid.New()
@@ -110,6 +114,48 @@ func TestMessageSearchStore_DeleteRemovesFromIndex_postgres(t *testing.T) {
 	require.Empty(t, hits)
 }
 
+func TestMessageSearchStore_ManagedChatPurgeTombstonesExactSetAndBlocksLateUpsert_postgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx := context.Background()
+	root := searchModuleRepoRoot(t)
+	pool := integrationtest.StartPostgres(t, ctx, "searchdb", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
+	st := NewMessageSearchStore(pool)
+	chatID, senderID := uuid.New(), uuid.New()
+	ids := []uuid.UUID{uuid.New(), uuid.New()}
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, id := range ids {
+		require.NoError(t, st.Upsert(ctx, MessageDocument{MessageID: id, ChatID: chatID, SenderProfileID: senderID, Body: "managed purge secret", CreatedAt: now}))
+	}
+	requestHash := sha256.Sum256([]byte("exact managed purge request"))
+	opID := uuid.New()
+	receipt, err := st.PurgeManagedChatMessages(ctx, opID, chatID, ids, requestHash[:])
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), receipt.DeletedCount)
+	hits, _, err := st.SearchInChat(ctx, chatID, "managed purge secret", nil, 20)
+	require.NoError(t, err)
+	require.Empty(t, hits)
+
+	// A delayed message.sent delivery cannot resurrect a row deleted by purge.
+	require.NoError(t, st.Upsert(ctx, MessageDocument{MessageID: ids[0], ChatID: chatID, SenderProfileID: senderID, Body: "managed purge secret", CreatedAt: now}))
+	hits, _, err = st.SearchInChat(ctx, chatID, "managed purge secret", nil, 20)
+	require.NoError(t, err)
+	require.Empty(t, hits)
+
+	replayed, err := st.PurgeManagedChatMessages(ctx, opID, chatID, ids, requestHash[:])
+	require.NoError(t, err)
+	require.Equal(t, receipt, replayed)
+	changed := append([]uuid.UUID(nil), ids...)
+	changed[1] = uuid.New()
+	sort.Slice(changed, func(i, j int) bool { return changed[i].String() < changed[j].String() })
+	_, err = st.PurgeManagedChatMessages(ctx, opID, chatID, changed, requestHash[:])
+	require.ErrorIs(t, err, ErrManagedChatSearchPurgeConflict)
+}
+
 func TestMessageSearchStore_SearchPaginationDefault20_postgres(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -118,6 +164,7 @@ func TestMessageSearchStore_SearchPaginationDefault20_postgres(t *testing.T) {
 	migrationPath := filepath.Join(searchModuleRepoRoot(t), "src", "backend", "migrations", "search_db", "000001_init.up.sql")
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", migrationPath)
 	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, searchModuleRepoRoot(t), filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
 
 	chatID := uuid.New()
 	st := NewMessageSearchStore(pool)

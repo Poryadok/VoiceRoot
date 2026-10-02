@@ -46,11 +46,20 @@ func TestRoomLifecycleRejectsBlankRoomWithoutCallingSDK(t *testing.T) {
 	require.Empty(t, fake.deleted)
 }
 
+func TestRoomLifecycleRemovesParticipantIdempotently(t *testing.T) {
+	fake := &fakeRoomService{removeErr: twirp.NotFound.Error("participant not found")}
+	err := NewRoomLifecycle(fake).RemoveParticipant(context.Background(), "room-a", "profile-a")
+	require.NoError(t, err)
+	require.Equal(t, []string{"room-a/profile-a"}, fake.removed)
+}
+
 type fakeRoomService struct {
 	created   []string
 	deleted   []string
 	createErr error
 	deleteErr error
+	removeErr error
+	removed   []string
 }
 
 func (f *fakeRoomService) CreateRoom(_ context.Context, request *protocol.CreateRoomRequest) (*protocol.Room, error) {
@@ -61,4 +70,9 @@ func (f *fakeRoomService) CreateRoom(_ context.Context, request *protocol.Create
 func (f *fakeRoomService) DeleteRoom(_ context.Context, request *protocol.DeleteRoomRequest) (*protocol.DeleteRoomResponse, error) {
 	f.deleted = append(f.deleted, request.Room)
 	return &protocol.DeleteRoomResponse{}, f.deleteErr
+}
+
+func (f *fakeRoomService) RemoveParticipant(_ context.Context, request *protocol.RoomParticipantIdentity) (*protocol.RemoveParticipantResponse, error) {
+	f.removed = append(f.removed, request.Room+"/"+request.Identity)
+	return &protocol.RemoveParticipantResponse{}, f.removeErr
 }

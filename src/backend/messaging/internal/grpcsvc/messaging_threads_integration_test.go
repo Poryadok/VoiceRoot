@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +15,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
+	"voice/backend/messaging/internal/store"
 )
 
 // applyThreadMessagingMigrations applies chat + messaging schemas used by roles/threads (docs/features/roles.md) thread tests.
@@ -27,6 +29,8 @@ func applyThreadMessagingMigrations(t *testing.T, ctx context.Context, pool *pgx
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000007_thread_index.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 }
 
 func setChatThreadSettings(t *testing.T, ctx context.Context, pool *pgxpool.Pool, chatID uuid.UUID, threadsEnabled, allowUserMainFeed bool) {
@@ -171,6 +175,52 @@ func TestMessagingThreads_getThreadMessagesPaginates(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err), "thread cursor must be bound to its selected chat")
+}
+
+func TestMessagingThreadsSinceJoinHidesOldQuoteAndReplies(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applyThreadMessagingMigrations(t, ctx, pool)
+
+	chatID, sender, viewer, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, chatID, sender, viewer)
+	cutoff := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	guard := &cutoffMessageReadGuard{
+		entitledSQLChatGuard: entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}},
+		cutoff:               cutoff,
+	}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{ChatGuard: guard})
+	requestContext := withProfileCtx(ctx, account, viewer)
+
+	oldQuote := sendRegular(t, ctx, client, account, sender, chatDMRef(chatID), "> quoted private text", nil)
+	_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, uuid.MustParse(oldQuote.GetId()), cutoff.Add(-time.Nanosecond))
+	require.NoError(t, err)
+	_, err = client.GetMessage(requestContext, &messagingv1.GetMessageRequest{MessageId: oldQuote.GetId()})
+	require.Equal(t, codes.NotFound, status.Code(err), "a Markdown quote remains protected by its containing message timestamp")
+	_, err = client.GetThreadMessages(requestContext, &messagingv1.GetThreadMessagesRequest{
+		Chat: chatDMRef(chatID), ThreadParentId: oldQuote.GetId(),
+	})
+	require.Equal(t, codes.NotFound, status.Code(err), "an old thread root cannot be used to reveal quoted context")
+
+	root := sendRegular(t, ctx, client, account, sender, chatDMRef(chatID), "joined root", nil)
+	rootID := uuid.MustParse(root.GetId())
+	_, err = pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, rootID, cutoff)
+	require.NoError(t, err)
+	oldReply := sendRegular(t, ctx, client, account, sender, chatDMRef(chatID), "private old reply", &root.Id)
+	visibleReply := sendRegular(t, ctx, client, account, sender, chatDMRef(chatID), "visible reply", &root.Id)
+	_, err = pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, uuid.MustParse(oldReply.GetId()), cutoff.Add(-time.Nanosecond))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, uuid.MustParse(visibleReply.GetId()), cutoff)
+	require.NoError(t, err)
+
+	thread, err := client.GetThreadMessages(requestContext, &messagingv1.GetThreadMessagesRequest{
+		Chat: chatDMRef(chatID), ThreadParentId: root.GetId(), Page: &commonv1.CursorPageRequest{PageSize: 20},
+	})
+	require.NoError(t, err)
+	require.Len(t, thread.GetMessageList().GetMessages(), 1)
+	require.Equal(t, visibleReply.GetId(), thread.GetMessageList().GetMessages()[0].GetId())
+	_, err = client.GetMessage(requestContext, &messagingv1.GetMessageRequest{MessageId: oldReply.GetId()})
+	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
 // TestMessagingThreads_groupThreadsDisabledRejectsReply documents group default threads_enabled=false.

@@ -56,6 +56,15 @@ type ManagedChatMemberSyncResult struct {
 	Replayed    bool
 }
 
+type ManagedChatMemberAddition struct {
+	ApplicationID uuid.UUID
+	EnvironmentID uuid.UUID
+	OperationID   uuid.UUID
+	ChatID        uuid.UUID
+	RequestHash   string
+	ProfileIDs    []uuid.UUID
+}
+
 type managedChatReceipt struct {
 	ChatID     string   `json:"chat_id"`
 	ProfileIDs []string `json:"profile_ids,omitempty"`
@@ -188,7 +197,22 @@ func (s *DMStore) SyncManagedChatMembers(ctx context.Context, request ManagedCha
 	if err != nil {
 		return ManagedChatMemberSyncResult{}, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND NOT (profile_id = ANY($2::uuid[]))`, request.ChatID, request.ProfileIDs); err != nil {
+	profileIDs := request.ProfileIDs
+	if profileIDs == nil {
+		profileIDs = []uuid.UUID{}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE managed_chat_member_intervals
+		SET revoked_at=clock_timestamp()
+		WHERE chat_id=$1 AND revoked_at IS NULL AND NOT (profile_id=ANY($2::uuid[]))`, request.ChatID, profileIDs); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO managed_chat_member_intervals(chat_id,profile_id,joined_at)
+		SELECT $1,member.profile_id,clock_timestamp() FROM unnest($2::uuid[]) AS member(profile_id)
+		WHERE NOT EXISTS(SELECT 1 FROM managed_chat_member_intervals active
+			WHERE active.chat_id=$1 AND active.profile_id=member.profile_id AND active.revoked_at IS NULL)`, request.ChatID, profileIDs); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND NOT (profile_id = ANY($2::uuid[]))`, request.ChatID, profileIDs); err != nil {
 		return ManagedChatMemberSyncResult{}, err
 	}
 	for _, profileID := range request.ProfileIDs {
@@ -213,6 +237,127 @@ func (s *DMStore) SyncManagedChatMembers(ctx context.Context, request ManagedCha
 		return ManagedChatMemberSyncResult{}, err
 	}
 	return ManagedChatMemberSyncResult{ProfileIDs: profiles, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
+}
+
+// AddManagedChatMembers applies consented members without removing or rewriting
+// existing party membership state.
+func (s *DMStore) AddManagedChatMembers(ctx context.Context, request ManagedChatMemberAddition) (ManagedChatMemberSyncResult, error) {
+	if s == nil || s.Pool == nil {
+		return ManagedChatMemberSyncResult{}, errors.New("dm store: pool not configured")
+	}
+	if request.ApplicationID == uuid.Nil || request.EnvironmentID == uuid.Nil || request.OperationID == uuid.Nil || request.ChatID == uuid.Nil ||
+		!managedRequestHashPattern.MatchString(request.RequestHash) || len(request.ProfileIDs) > GroupMemberLimit {
+		return ManagedChatMemberSyncResult{}, errors.New("invalid managed chat member addition")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(request.ProfileIDs))
+	for _, profileID := range request.ProfileIDs {
+		if profileID == uuid.Nil {
+			return ManagedChatMemberSyncResult{}, errors.New("invalid managed chat member addition")
+		}
+		if _, duplicate := seen[profileID]; duplicate {
+			return ManagedChatMemberSyncResult{}, errors.New("duplicate managed chat member")
+		}
+		seen[profileID] = struct{}{}
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockManagedOperation(ctx, tx, request.ApplicationID, request.EnvironmentID, request.OperationID); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if saved, exists, err := readManagedOperation(ctx, tx, request.ApplicationID, request.EnvironmentID, request.OperationID, "add_members", request.RequestHash); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	} else if exists {
+		var receipt managedChatReceipt
+		if err := json.Unmarshal(saved.Bytes, &receipt); err != nil {
+			return ManagedChatMemberSyncResult{}, ErrManagedOperationConflict
+		}
+		profiles, err := parseManagedProfileIDs(receipt.ProfileIDs)
+		if err != nil || receipt.ChatID != request.ChatID.String() {
+			return ManagedChatMemberSyncResult{}, ErrManagedOperationConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return ManagedChatMemberSyncResult{}, err
+		}
+		return ManagedChatMemberSyncResult{ProfileIDs: profiles, ReceiptID: request.OperationID, RequestHash: saved.RequestHash, Replayed: true}, nil
+	}
+	var managedApplication, managedEnvironment uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT managed_by_application_id, managed_environment_id FROM chats WHERE id=$1 FOR UPDATE`, request.ChatID).
+		Scan(&managedApplication, &managedEnvironment)
+	if errors.Is(err, pgx.ErrNoRows) || err == nil && (managedApplication != request.ApplicationID || managedEnvironment != request.EnvironmentID) {
+		return ManagedChatMemberSyncResult{}, ErrManagedChatNotFound
+	}
+	if err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	var activeCount, newCount int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM managed_chat_member_intervals WHERE chat_id=$1 AND revoked_at IS NULL`, request.ChatID).Scan(&activeCount); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM unnest($2::uuid[]) AS member(profile_id)
+		WHERE NOT EXISTS(SELECT 1 FROM managed_chat_member_intervals active
+			WHERE active.chat_id=$1 AND active.profile_id=member.profile_id AND active.revoked_at IS NULL)`, request.ChatID, request.ProfileIDs).Scan(&newCount); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if activeCount+newCount > GroupMemberLimit {
+		return ManagedChatMemberSyncResult{}, ErrGroupMemberLimit
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO managed_chat_member_intervals(chat_id,profile_id,joined_at)
+		SELECT $1,member.profile_id,clock_timestamp() FROM unnest($2::uuid[]) AS member(profile_id)
+		WHERE NOT EXISTS(SELECT 1 FROM managed_chat_member_intervals active
+			WHERE active.chat_id=$1 AND active.profile_id=member.profile_id AND active.revoked_at IS NULL)`, request.ChatID, request.ProfileIDs); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	for _, profileID := range request.ProfileIDs {
+		if _, err := tx.Exec(ctx, `INSERT INTO chat_members(chat_id,profile_id,role,inbox_bucket) VALUES($1,$2,'member','main') ON CONFLICT(chat_id,profile_id) DO NOTHING`, request.ChatID, profileID); err != nil {
+			return ManagedChatMemberSyncResult{}, err
+		}
+	}
+	profiles := append([]uuid.UUID(nil), request.ProfileIDs...)
+	sort.Slice(profiles, func(i, j int) bool { return profiles[i].String() < profiles[j].String() })
+	profileStrings := make([]string, len(profiles))
+	for i, profileID := range profiles {
+		profileStrings[i] = profileID.String()
+	}
+	receipt, err := json.Marshal(managedChatReceipt{ChatID: request.ChatID.String(), ProfileIDs: profileStrings})
+	if err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if err := saveManagedOperation(ctx, tx, request.ApplicationID, request.EnvironmentID, request.OperationID, "add_members", request.RequestHash, request.ChatID, receipt); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ManagedChatMemberSyncResult{}, err
+	}
+	return ManagedChatMemberSyncResult{ProfileIDs: profiles, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
+}
+
+// ManagedChatMessageEntitled applies the active since_join interval at message
+// fetch time. Rejoining opens a fresh interval and never restores older history.
+func (s *DMStore) ManagedChatMessageEntitled(ctx context.Context, chatID, profileID uuid.UUID, messageCreatedAt time.Time) (bool, error) {
+	if s == nil || s.Pool == nil || chatID == uuid.Nil || profileID == uuid.Nil || messageCreatedAt.IsZero() {
+		return false, errors.New("invalid message entitlement request")
+	}
+	var managed *uuid.UUID
+	if err := s.Pool.QueryRow(ctx, `SELECT managed_by_application_id FROM chats WHERE id=$1`, chatID).Scan(&managed); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrManagedChatNotFound
+		}
+		return false, err
+	}
+	if managed == nil {
+		return true, nil
+	}
+	var entitled bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM managed_chat_member_intervals
+		WHERE chat_id=$1 AND profile_id=$2
+		AND joined_at <= $3 AND (revoked_at IS NULL OR $3 < revoked_at)
+		AND $3 < clock_timestamp()
+		AND NOT EXISTS (SELECT 1 FROM managed_chat_retention r
+			WHERE r.chat_id=$1 AND r.purge_after<=clock_timestamp()))`, chatID, profileID, messageCreatedAt.UTC()).Scan(&entitled)
+	return entitled, err
 }
 
 type savedManagedOperation struct {

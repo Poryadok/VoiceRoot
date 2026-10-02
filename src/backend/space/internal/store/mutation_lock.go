@@ -2,16 +2,13 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"voice/backend/pkg/spacemutationlock"
 )
-
-const spaceMutationLockNamespace = "voice.space.mutation.v1\x00"
 
 // SpaceMutationLocker holds a PostgreSQL session advisory lock for the full
 // duration of a space mutation. Its pool must be dedicated to leases: every
@@ -66,11 +63,7 @@ func (l *SpaceMutationLocker) Acquire(ctx context.Context, spaceID uuid.UUID) (f
 }
 
 func spaceMutationAdvisoryKey(spaceID uuid.UUID) int64 {
-	input := make([]byte, len(spaceMutationLockNamespace)+len(spaceID))
-	copy(input, spaceMutationLockNamespace)
-	copy(input[len(spaceMutationLockNamespace):], spaceID[:])
-	sum := sha256.Sum256(input)
-	return int64(binary.BigEndian.Uint64(sum[:8]))
+	return spacemutationlock.Key(spaceID)
 }
 
 func closeHijackedMutationLockConn(ctx context.Context, conn *pgxpool.Conn) {

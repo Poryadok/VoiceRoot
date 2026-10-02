@@ -55,6 +55,67 @@ func (s *SpaceGRPC) CreateSpace(ctx context.Context, req *spacev1.CreateSpaceReq
 	return &spacev1.CreateSpaceResponse{Space: spaceRowToProto(row)}, nil
 }
 
+// CreateCommunityBootstrap is callable only through the GIS-authenticated
+// service identity. GIS has already verified the human Owner and separate
+// operator approval; this RPC only creates the private Space owner baseline.
+func (s *SpaceGRPC) CreateCommunityBootstrap(ctx context.Context, req *spacev1.CreateCommunityBootstrapRequest) (*spacev1.CreateCommunityBootstrapResponse, error) {
+	identity, ok := authctx.VerifiedServiceIdentity(ctx)
+	if !ok || identity != authctx.ServiceIdentityGameIntegration {
+		return nil, status.Error(codes.Unauthenticated, "verified GIS service identity required")
+	}
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	operationID, err := parseUUIDField("operation_id", req.GetOperationId())
+	if err != nil {
+		return nil, err
+	}
+	applicationID, err := parseUUIDField("application_id", req.GetApplicationId())
+	if err != nil {
+		return nil, err
+	}
+	environmentID, err := parseUUIDField("environment_id", req.GetEnvironmentId())
+	if err != nil {
+		return nil, err
+	}
+	ownerProfileID, err := parseUUIDField("owner_profile_id", req.GetOwnerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	ownerAccountID, err := parseUUIDField("owner_account_id", req.GetOwnerAccountId())
+	if err != nil {
+		return nil, err
+	}
+	corporationKey, templateID := strings.TrimSpace(req.GetCorporationKey()), strings.TrimSpace(req.GetTemplateId())
+	if corporationKey == "" || len(corporationKey) > 256 || templateID == "" || len(templateID) > 128 {
+		return nil, status.Error(codes.InvalidArgument, "invalid community bootstrap binding")
+	}
+	if templateID != "guild-default" {
+		return nil, status.Error(codes.PermissionDenied, "community template is not supported")
+	}
+	row, created, err := s.Store.CreateCommunityBootstrapSpace(ctx, store.CommunityBootstrapSpaceInput{
+		OperationID: operationID, ApplicationID: applicationID, EnvironmentID: environmentID,
+		OwnerAccountID: ownerAccountID, OwnerProfileID: ownerProfileID, CorporationKey: corporationKey, TemplateID: templateID,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrCommunityBootstrapConflict) {
+			return nil, status.Error(codes.AlreadyExists, "community operation conflicts")
+		}
+		return nil, mapSpaceStoreError(err)
+	}
+	// BootstrapSpaceRoles is an idempotent Role-owned operation. Replays repeat
+	// it so a lost response after the Space transaction can recover the owner baseline.
+	if err := s.bootstrapSpaceRoles(ctx, row.ID, ownerProfileID); err != nil {
+		return nil, status.Error(codes.Unavailable, "community owner roles are unavailable")
+	}
+	if created && s.SpaceEvents != nil {
+		if err := s.SpaceEvents.PublishSpaceCreated(ctx, row.ID.String(), row.OwnerProfileID.String()); err != nil {
+			s.logPublishError(ctx, "space.created", err, slog.String("space_id", row.ID.String()))
+		}
+	}
+	return &spacev1.CreateCommunityBootstrapResponse{Space: spaceRowToProto(row), Replayed: !created}, nil
+}
+
 func (s *SpaceGRPC) UpdateSpace(ctx context.Context, req *spacev1.UpdateSpaceRequest) (*spacev1.UpdateSpaceResponse, error) {
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
@@ -168,33 +229,147 @@ func (s *SpaceGRPC) UpdateSpaceMmConfig(ctx context.Context, req *spacev1.Update
 }
 
 func (s *SpaceGRPC) DeleteSpace(ctx context.Context, req *spacev1.DeleteSpaceRequest) (*spacev1.DeleteSpaceResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
-		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
+		return nil, status.Error(codes.Unavailable, "Space lifecycle store unavailable")
+	}
+	accountID, accountOK := authctx.AccountID(ctx)
+	profileID, profileOK := authctx.ProfileID(ctx)
+	epoch, epochOK := authctx.SessionEpoch(ctx)
+	if !accountOK || !profileOK || !epochOK {
+		return nil, status.Error(codes.Unauthenticated, "authenticated account, profile and session are required")
+	}
+	// A completed exact replay wins before present-day owner/name checks, but it
+	// still validates the original full authenticated request binding in Store.
+	response, err := s.Store.ReplayLifecycleScheduleOutcome(ctx, accountID, profileID, epoch, req)
+	if err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	if response != nil {
+		return response, nil
+	}
+	if s.DeletionLifecycle == nil || s.OwnershipAuth == nil || s.PrincipalIssuer == nil {
+		return nil, status.Error(codes.Unavailable, "Space deletion lifecycle transport is not configured")
 	}
 	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
 	if err != nil {
 		return nil, err
 	}
-	release, err := s.lockSpaceMutation(ctx, spaceID)
+	if _, err := s.Store.ReserveLifecycleSchedule(ctx, accountID, profileID, epoch, req); err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	receiptBytes, receiptHash, err := s.consumeSpaceDeletionProof(ctx, accountID, profileID, epoch, req)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	if err := s.requireSpaceOwner(ctx, spaceID); err != nil {
-		return nil, err
+	operationID, err := uuid.Parse(req.GetOperationId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid operation_id")
 	}
-	if err := s.Store.DeleteSpace(ctx, spaceID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, status.Error(codes.NotFound, "space not found")
-		}
-		return nil, mapSpaceStoreError(err)
+	if _, err := s.Store.RecordLifecycleDeletionProofReceipt(ctx, profileID, operationID, receiptBytes, receiptHash); err != nil {
+		return nil, status.Error(codes.Unavailable, "Space deletion proof receipt could not be persisted")
 	}
-	if s.SpaceEvents != nil {
-		if pubErr := s.SpaceEvents.PublishSpaceDeleted(ctx, spaceID.String()); pubErr != nil {
-			s.logPublishError(ctx, "space.deleted", pubErr, slog.String("space_id", spaceID.String()))
-		}
+	if err := s.DeletionLifecycle.ScheduleDeletion(ctx, spaceID); err != nil {
+		return nil, status.Error(codes.Unavailable, "Space deletion is pending; retry with the same operation_id")
 	}
 	return &spacev1.DeleteSpaceResponse{}, nil
+}
+
+// RestoreSpace admits an authenticated owner request, advances only the saved
+// restore decision through every participant fence, then returns its durable
+// idempotent outcome.
+func (s *SpaceGRPC) RestoreSpace(ctx context.Context, req *spacev1.RestoreSpaceRequest) (*spacev1.RestoreSpaceResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.Unavailable, "Space lifecycle store unavailable")
+	}
+	accountID, accountOK := authctx.AccountID(ctx)
+	profileID, profileOK := authctx.ProfileID(ctx)
+	epoch, epochOK := authctx.SessionEpoch(ctx)
+	if !accountOK || !profileOK || !epochOK {
+		return nil, status.Error(codes.Unauthenticated, "authenticated account, profile and session are required")
+	}
+	response, err := s.Store.ReplayLifecycleRestoreOutcome(ctx, accountID, profileID, epoch, req)
+	if err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	if response != nil {
+		return response, nil
+	}
+	if s.DeletionLifecycle == nil {
+		return nil, status.Error(codes.Unavailable, "Space deletion lifecycle transport is not configured")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.Store.ReserveLifecycleRestore(ctx, accountID, profileID, epoch, req); err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	if err := s.DeletionLifecycle.RestoreSpace(ctx, spaceID); err != nil {
+		return nil, status.Error(codes.Unavailable, "Space restore is pending; retry with the same operation_id")
+	}
+	response, err = s.Store.ReplayLifecycleRestoreOutcome(ctx, accountID, profileID, epoch, req)
+	if err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	if response == nil || response.GetSpace() == nil {
+		return nil, status.Error(codes.Unavailable, "Space restore outcome is not yet durable")
+	}
+	return response, nil
+}
+
+// GetSpaceDeletionCoordinatorStatus returns the original deletion operation's
+// durable owner-scoped participant receipts, including after the Space row is
+// purged while its lifecycle evidence is retained.
+func (s *SpaceGRPC) GetSpaceDeletionCoordinatorStatus(ctx context.Context, req *spacev1.GetSpaceDeletionCoordinatorStatusRequest) (*spacev1.GetSpaceDeletionCoordinatorStatusResponse, error) {
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		return nil, err
+	}
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.Unavailable, "Space lifecycle store unavailable")
+	}
+	accountID, accountOK := authctx.AccountID(ctx)
+	profileID, profileOK := authctx.ProfileID(ctx)
+	_, epochOK := authctx.SessionEpoch(ctx)
+	if !accountOK || !profileOK || !epochOK {
+		return nil, status.Error(codes.Unauthenticated, "authenticated account, profile and session are required")
+	}
+	if req == nil || req.GetProtocolVersion() != 1 || len(req.ProtoReflect().GetUnknown()) != 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid Space lifecycle status request")
+	}
+	spaceID, err := parseUUIDField("space_id", req.GetSpaceId())
+	if err != nil {
+		return nil, err
+	}
+	operationID, err := parseUUIDField("deletion_operation_id", req.GetDeletionOperationId())
+	if err != nil {
+		return nil, err
+	}
+	statusView, err := s.Store.GetLifecycleCoordinatorStatus(ctx, accountID, profileID, spaceID, operationID)
+	if err != nil {
+		return nil, mapLifecycleAdmissionError(err)
+	}
+	return &spacev1.GetSpaceDeletionCoordinatorStatusResponse{Status: statusView}, nil
+}
+
+func mapLifecycleAdmissionError(err error) error {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return status.Error(codes.NotFound, "space not found")
+	case errors.Is(err, store.ErrNotSpaceOwner):
+		return status.Error(codes.PermissionDenied, "current Space owner is required")
+	case errors.Is(err, store.ErrLifecycleConflict), errors.Is(err, store.ErrLifecycleStateTransition):
+		return status.Error(codes.FailedPrecondition, "Space deletion request conflicts with saved lifecycle state")
+	case errors.Is(err, store.ErrLifecycleEvidenceInvalid):
+		return status.Error(codes.InvalidArgument, "invalid Space deletion request")
+	default:
+		return mapSpaceStoreError(err)
+	}
 }
 
 func (s *SpaceGRPC) TransferOwnership(ctx context.Context, req *spacev1.TransferOwnershipRequest) (*spacev1.TransferOwnershipResponse, error) {

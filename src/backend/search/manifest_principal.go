@@ -32,11 +32,18 @@ type signedChatManifestClient struct {
 }
 
 func (c *signedChatManifestClient) GetSpacePurgeManifestPage(ctx context.Context, req *chatv1.GetSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*chatv1.GetSpacePurgeManifestPageResponse, error) {
+	if req == nil {
+		return nil, errors.New("Chat manifest request is required")
+	}
+	operation, err := uuid.Parse(req.DeletionOperationId)
+	if err != nil || operation == uuid.Nil || operation.String() != req.DeletionOperationId {
+		return nil, errors.New("canonical deletion operation ID is required")
+	}
 	hash, err := principal.RequestHash(req)
 	if err != nil {
 		return nil, err
 	}
-	requestID := uuid.NewString()
+	requestID := req.DeletionOperationId
 	token, err := c.issuer.IssueService(principal.ServiceInput{Audience: "chat", RPC: chatv1.ChatService_GetSpacePurgeManifestPage_FullMethodName, RequestID: requestID, RequestHash: hash})
 	if err != nil {
 		return nil, err
@@ -62,7 +69,7 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 	// rotation keys.  Those shared variables must not activate manifest delivery:
 	// a deployment that only enables the protected User projection listener has
 	// no Chat manifest endpoint to dial.
-	names := []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"}
+	names := []string{"SEARCH_CHAT_MANIFEST_GRPC_ADDR", "SEARCH_CHAT_MANIFEST_TLS_CA_FILE", "SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME", "SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE", "SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
@@ -82,6 +89,11 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 	if addr == "" || dir == "" || kid == "" {
 		return nil, nil, nil, errors.New("chat manifest address and Search principal key directory/active kid are required")
 	}
+	caFile, serverName := strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_CA_FILE")), strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"))
+	certFile, keyFile := strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE")), strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE"))
+	if caFile == "" || serverName == "" || certFile == "" || keyFile == "" {
+		return nil, nil, nil, errors.New("Chat manifest TLS CA, server name, client certificate and key are required")
+	}
 	keys, err := loadSearchSigningKeys(dir)
 	if err != nil {
 		return nil, nil, nil, err
@@ -94,17 +106,16 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	roots, err := x509.SystemCertPool()
+	roots := x509.NewCertPool()
+	contents, err := os.ReadFile(caFile)
+	if err != nil || !roots.AppendCertsFromPEM(contents) {
+		return nil, nil, nil, errors.New("invalid Chat manifest TLS CA")
+	}
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("Chat manifest TLS client identity: %w", err)
 	}
-	if path := strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_CA_FILE")); path != "" {
-		contents, readErr := os.ReadFile(path)
-		if readErr != nil || !roots.AppendCertsFromPEM(contents) {
-			return nil, nil, nil, errors.New("invalid Chat manifest TLS CA")
-		}
-	}
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"))}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName, Certificates: []tls.Certificate{certificate}}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
 		return nil, nil, nil, err

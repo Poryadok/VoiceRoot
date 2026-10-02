@@ -184,6 +184,63 @@ func TestSDKAuthorizationGatewayPrincipalPolicies(t *testing.T) {
 	})
 }
 
+func TestSDKConversionGatewayPrincipalPolicies(t *testing.T) {
+	const (
+		base        = "/api/v1/auth/sdk/conversions"
+		operationID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+		sdkToken    = "conversion-sdk-token"
+		voiceToken  = "conversion-voice-token"
+		linkedToken = "linked-bootstrap-credential"
+	)
+	forwarded := []string{}
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			sdkToken:        {UserID: "sdk-1", AccountType: "sdk-account"},
+			voiceToken:      {UserID: "voice-1", AccountType: "regular"},
+			"service-token": {UserID: "service:auth", AccountType: "service"},
+		},
+		restUpstreams: map[string]http.Handler{"auth": http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			forwarded = append(forwarded, r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusNoContent)
+		})},
+	})
+	forward := func(method, path, token string, wantStatus int, wantForwarded string) {
+		t.Helper()
+		before := len(forwarded)
+		headers := map[string]string{}
+		if token != "" {
+			headers["Authorization"] = "Bearer " + token
+		}
+		response := performRequest(h, method, path, `{}`, headers)
+		if response.Code != wantStatus {
+			t.Fatalf("%s %s status=%d want=%d body=%s", method, path, response.Code, wantStatus, response.Body.String())
+		}
+		if wantStatus == http.StatusNoContent {
+			if len(forwarded) != before+1 || forwarded[len(forwarded)-1] != wantForwarded {
+				t.Fatalf("%s %s forwarded authorization=%q want=%q", method, path, forwarded, wantForwarded)
+			}
+		} else if len(forwarded) != before {
+			t.Fatalf("%s %s unexpectedly reached Auth", method, path)
+		}
+	}
+	forward(http.MethodPost, base+"/new", sdkToken, http.StatusNoContent, "Bearer "+sdkToken)
+	forward(http.MethodPost, base+"/new", "service-token", http.StatusForbidden, "")
+	forward(http.MethodPost, base+"/existing", linkedToken, http.StatusNoContent, "Bearer "+linkedToken)
+	forward(http.MethodPost, base+"/existing", "", http.StatusUnauthorized, "")
+	forward(http.MethodPost, base+"/"+operationID+"/attach-new-target", voiceToken, http.StatusNoContent, "Bearer "+voiceToken)
+	forward(http.MethodPost, base+"/"+operationID+"/attach-new-target", sdkToken, http.StatusForbidden, "")
+	forward(http.MethodPost, base+"/"+operationID+"/status", "untrusted-token", http.StatusNoContent, "")
+
+	for _, path := range []string{base + "/new", base + "/existing", base + "/" + operationID + "/status", base + "/" + operationID + "/attach-new-target"} {
+		if group := rateLimitGroup(http.MethodPost, path); group != "AuthOAuth" {
+			t.Errorf("rateLimitGroup(POST %s)=%q want AuthOAuth", path, group)
+		}
+	}
+	if _, ok := sdkAuthorizationPolicy(http.MethodPost, base+"/not-a-uuid/status"); ok {
+		t.Fatal("malformed conversion operation ID must not receive the code-proof policy")
+	}
+}
+
 type sdkAuthorizationRateCall struct {
 	key, group string
 }

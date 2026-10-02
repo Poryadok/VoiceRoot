@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"regexp"
@@ -45,6 +46,10 @@ var (
 type ChatGuard interface {
 	EnsureMember(ctx context.Context, chatID, profileID uuid.UUID) error
 	ChatE2EState(ctx context.Context, chatID uuid.UUID) (chatType string, e2eEnabled bool, err error)
+}
+
+type MessageHistoryEntitlement interface {
+	MessageReadEntitledForMessage(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
 type ImageProcessingResult struct {
@@ -105,6 +110,8 @@ type Deps struct {
 	Events                   fileevents.Publisher
 	Entitlements             EntitlementResolver
 	ReferenceAuthorityActive bool
+	RevocableDownloadKey     []byte
+	RevocableDownloadBaseURL string
 }
 
 type FileGRPC struct {
@@ -120,6 +127,8 @@ type FileGRPC struct {
 	events                   fileevents.Publisher
 	entitlements             EntitlementResolver
 	referenceAuthorityActive bool
+	revocableDownloadKey     []byte
+	revocableDownloadBaseURL string
 }
 
 func New(deps Deps) *FileGRPC {
@@ -135,6 +144,10 @@ func New(deps Deps) *FileGRPC {
 	if events == nil {
 		events = fileevents.NoopPublisher{}
 	}
+	downloadBaseURL := strings.TrimRight(strings.TrimSpace(deps.RevocableDownloadBaseURL), "/")
+	if downloadBaseURL == "" {
+		downloadBaseURL = "/api/v1/files/download"
+	}
 	return &FileGRPC{
 		files:                    deps.Files,
 		presigner:                deps.Presigner,
@@ -147,6 +160,8 @@ func New(deps Deps) *FileGRPC {
 		events:                   events,
 		entitlements:             deps.Entitlements,
 		referenceAuthorityActive: deps.ReferenceAuthorityActive,
+		revocableDownloadKey:     append([]byte(nil), deps.RevocableDownloadKey...),
+		revocableDownloadBaseURL: downloadBaseURL,
 	}
 }
 
@@ -269,6 +284,20 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	if row.Status != "ready" {
 		return nil, status.Error(codes.FailedPrecondition, "file is not ready")
 	}
+	if isMessageReferenceSelector(req.GetAccess()) {
+		if len(s.revocableDownloadKey) < minimumDownloadCapabilityKeyBytes || s.revocableDownloadBaseURL == "" || s.reader == nil {
+			return nil, status.Error(codes.FailedPrecondition, "revocable message download is not configured")
+		}
+		expiresAt := s.clock.Now().UTC().Add(r2file.DefaultURLTTL)
+		capability := revocableDownloadCapability{ProfileID: profileID, FileID: row.ID,
+			Variant: req.GetVariant(), Access: req.GetAccess(), ExpiresAt: expiresAt}
+		token, signErr := signRevocableDownloadCapability(capability, s.revocableDownloadKey)
+		if signErr != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid revocable message download selector")
+		}
+		return &filev1.GetFileURLResponse{PresignedGetUrl: s.revocableDownloadBaseURL + "/" + token,
+			ExpiresAt: timestamppb.New(expiresAt)}, nil
+	}
 	key, err := fileURLKey(row, req.GetVariant())
 	if err != nil {
 		return nil, err
@@ -291,6 +320,45 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 		PresignedGetUrl: getURL,
 		ExpiresAt:       timestamppb.New(s.clock.Now().Add(ttl)),
 	}, nil
+}
+
+func isMessageReferenceSelector(selector *filev1.FileAccessSelector) bool {
+	reference, ok := selector.GetSelector().(*filev1.FileAccessSelector_Reference)
+	return ok && reference.Reference.GetOwnerType() == filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE
+}
+
+func (s *FileGRPC) FetchRevocableDownload(ctx context.Context, capability revocableDownloadCapability) (store.FileRow, []byte, error) {
+	if s == nil || s.files == nil || s.reader == nil || s.chatGuard == nil {
+		return store.FileRow{}, nil, status.Error(codes.Unavailable, "download authority unavailable")
+	}
+	if capability.ProfileID == uuid.Nil || capability.FileID == uuid.Nil ||
+		!s.clock.Now().UTC().Before(capability.ExpiresAt) ||
+		validateMessageDownloadSelector(capability.FileID, capability.Access) != nil {
+		return store.FileRow{}, nil, status.Error(codes.PermissionDenied, "download capability denied")
+	}
+	row, err := s.fileAccessibleBySelector(ctx, capability.FileID, capability.ProfileID,
+		capability.Access, filev1.FileReadSurface_FILE_READ_SURFACE_URL)
+	if err != nil {
+		return store.FileRow{}, nil, err
+	}
+	if row.Status != "ready" {
+		return store.FileRow{}, nil, status.Error(codes.NotFound, "download unavailable")
+	}
+	key, err := fileURLKey(row, capability.Variant)
+	if err != nil {
+		return store.FileRow{}, nil, err
+	}
+	body, err := s.reader.ReadObject(ctx, key, row.SizeBytes)
+	if err != nil {
+		return store.FileRow{}, nil, status.Error(codes.Unavailable, "download unavailable")
+	}
+	if capability.Variant == filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED {
+		if err := s.events.PublishFileDownloaded(ctx, row.ID.String(), capability.ProfileID.String()); err != nil {
+			slog.Default().WarnContext(ctx, "file.downloaded publish failed",
+				slog.String("file_id", row.ID.String()), slog.String("error", fmt.Sprint(err)))
+		}
+	}
+	return row, body, nil
 }
 
 func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadRequest) (*filev1.ConfirmUploadResponse, error) {

@@ -1,0 +1,14 @@
+DROP TRIGGER IF EXISTS messaging_space_reactions_mutation_gate ON reactions;
+DROP TRIGGER IF EXISTS messaging_space_message_hides_mutation_gate ON message_hides;
+DROP TRIGGER IF EXISTS messaging_space_game_cards_mutation_gate ON message_game_cards;
+DROP TRIGGER IF EXISTS messaging_space_game_action_results_mutation_gate ON message_game_action_results;
+DROP TRIGGER IF EXISTS messaging_space_game_message_revisions_mutation_gate ON game_message_revisions;
+DROP TRIGGER IF EXISTS messaging_space_game_message_receipts_mutation_gate ON game_message_operation_receipts;
+DROP TRIGGER IF EXISTS messaging_space_game_message_tombstones_mutation_gate ON game_message_tombstone_actions;
+DROP TRIGGER IF EXISTS messaging_space_scheduled_messages_mutation_gate ON scheduled_messages;
+DROP TRIGGER IF EXISTS messaging_space_read_receipts_mutation_gate ON read_receipts;
+DROP TRIGGER IF EXISTS messaging_space_read_positions_mutation_gate ON read_positions;
+DROP TRIGGER IF EXISTS messaging_space_pins_mutation_gate ON pins;
+DROP FUNCTION IF EXISTS messaging_guard_reaction_mutation();
+DROP FUNCTION IF EXISTS messaging_guard_related_chat_mutation();
+DROP FUNCTION IF EXISTS messaging_assert_space_chat_write(UUID, BOOLEAN);

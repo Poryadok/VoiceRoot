@@ -16,6 +16,7 @@ require (
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
 	voice.app/voice/file v0.0.0
+	voice.app/voice/gameintegration v0.0.0
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/moderation v0.0.0
 	voice.app/voice/role v0.0.0
@@ -38,6 +39,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
+	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
@@ -96,6 +98,7 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	voice.app/voice/search v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
 )
 
@@ -125,6 +128,10 @@ replace voice.app/voice/user => ../user/pb/voice/user
 
 replace voice.app/voice/file => ../file/pb/voice/file
 
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
+
 replace voice.app/voice/moderation => ../voice/pb/voice/moderation
 
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/search => ../voice/pb/voice/search

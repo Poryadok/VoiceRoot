@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"log"
 	"log/slog"
@@ -30,6 +32,7 @@ import (
 
 	authv1 "voice.app/voice/auth/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
 	userv1 "voice.app/voice/user/v1"
@@ -50,6 +53,10 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	chatPrincipalIssuer, chatPrincipalJWKS, principalErr := loadChatPrincipalIssuerFromEnv()
+	if principalErr != nil {
+		log.Fatalf("Chat principal issuer: %v", principalErr)
+	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -67,11 +74,34 @@ func main() {
 	if (gisListen != "") != gisPrincipalConfigured {
 		log.Fatal("CHAT_GIS_GRPC_LISTEN and complete GIS principal configuration must be set together")
 	}
+	spaceLifecycleConfig, spaceLifecycleListen, spaceLifecycleConfigured, spaceLifecycleConfigErr := gisprincipal.SpaceLifecycleConfigFromEnv()
+	if spaceLifecycleConfigErr != nil {
+		log.Fatalf("Space lifecycle principal configuration: %v", spaceLifecycleConfigErr)
+	}
+	spacePurgeOwners := spacePurgeOwnerConfigFromEnv(os.Getenv)
+	searchManifestConfig, searchManifestListen, searchManifestConfigured, searchManifestConfigErr := gisprincipal.SearchManifestConfigFromEnv()
+	if searchManifestConfigErr != nil {
+		log.Fatalf("Search manifest principal configuration: %v", searchManifestConfigErr)
+	}
+	if spacePurgeOwners.configured() && !spaceLifecycleConfigured {
+		log.Fatal("Chat Space purge owner clients require the Space lifecycle principal listener")
+	}
+	if spaceLifecycleConfigured {
+		if chatPrincipalIssuer == nil {
+			log.Fatal("Chat Space purge requires the Chat service-principal signing keys")
+		}
+		if err := spacePurgeOwners.validate(); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
 	var gisGRPCSrv *grpc.Server
 	var gisPrincipalRuntime *gisprincipal.Runtime
+	var spaceLifecycleGRPCSrv *grpc.Server
+	var spaceLifecyclePrincipalRuntime *gisprincipal.Runtime
+	var searchManifestGRPCSrv *grpc.Server
 	var accountDeletedConsumerDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -273,7 +303,58 @@ func main() {
 				}()
 			}
 		}
+		if spaceLifecycleConfigured {
+			spaceLifecyclePrincipalRuntime, err = gisprincipal.New(context.Background(), spaceLifecycleConfig)
+			if err != nil {
+				log.Fatalf("Space lifecycle principal runtime: %v", err)
+			}
+			defer func() { _ = spaceLifecyclePrincipalRuntime.Close() }()
+			lifecycleLis, listenErr := net.Listen("tcp", spaceLifecycleListen)
+			if listenErr != nil {
+				log.Fatalf("Space lifecycle gRPC listen: %v", listenErr)
+			}
+			messagingConn, dialErr := dialSpacePurgeOwner(spacePurgeOwners.MessagingAddr, spacePurgeOwners.MessagingCA, spacePurgeOwners.MessagingServerName, spacePurgeOwners.ClientCert, spacePurgeOwners.ClientKey)
+			if dialErr != nil {
+				log.Fatalf("Chat purge Messaging mTLS client: %v", dialErr)
+			}
+			defer func() { _ = messagingConn.Close() }()
+			fileConn, dialErr := dialSpacePurgeOwner(spacePurgeOwners.FileAddr, spacePurgeOwners.FileCA, spacePurgeOwners.FileServerName, spacePurgeOwners.ClientCert, spacePurgeOwners.ClientKey)
+			if dialErr != nil {
+				log.Fatalf("Chat purge File mTLS client: %v", dialErr)
+			}
+			defer func() { _ = fileConn.Close() }()
+			spaceLifecycleGRPCSrv = grpc.NewServer(spaceLifecyclePrincipalRuntime.ServerOptions()...)
+			chatv1.RegisterChatServiceServer(spaceLifecycleGRPCSrv, &grpcsvc.SpaceLifecycleGRPC{
+				Store: &store.SpaceLifecycleStore{Pool: pool}, Issuer: chatPrincipalIssuer,
+				Messaging: messagingv1.NewMessagingServiceClient(messagingConn), File: filev1.NewFileServiceClient(fileConn),
+			})
+			go func() {
+				logger.Info("Space lifecycle mTLS gRPC listening", slog.String("addr", spaceLifecycleListen))
+				if err := spaceLifecycleGRPCSrv.Serve(lifecycleLis); err != nil {
+					log.Fatalf("Space lifecycle gRPC serve: %v", err)
+				}
+			}()
+		}
 
+		if searchManifestConfigured {
+			searchRuntime, runtimeErr := gisprincipal.New(runCtx, searchManifestConfig)
+			if runtimeErr != nil {
+				log.Fatalf("Search manifest principal runtime: %v", runtimeErr)
+			}
+			defer func() { _ = searchRuntime.Close() }()
+			listener, listenErr := net.Listen("tcp", searchManifestListen)
+			if listenErr != nil {
+				log.Fatalf("Search manifest gRPC listen: %v", listenErr)
+			}
+			searchManifestGRPCSrv = grpc.NewServer(searchRuntime.ServerOptions()...)
+			chatv1.RegisterChatServiceServer(searchManifestGRPCSrv, &grpcsvc.SpaceLifecycleGRPC{Store: &store.SpaceLifecycleStore{Pool: pool}})
+			go func() {
+				logger.Info("Search manifest mTLS gRPC listening", slog.String("addr", searchManifestListen))
+				if err := searchManifestGRPCSrv.Serve(listener); err != nil {
+					log.Fatalf("Search manifest gRPC serve: %v", err)
+				}
+			}()
+		}
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -305,8 +386,8 @@ func main() {
 			}
 		}()
 	} else {
-		if gisPrincipalConfigured {
-			log.Fatal("GIS principal listener requires DATABASE_URL")
+		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured {
+			log.Fatal("protected principal listeners require DATABASE_URL")
 		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
@@ -316,7 +397,39 @@ func main() {
 		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
+	var principalJWKSHTTPServer *http.Server
+	if len(chatPrincipalJWKS.Keys) > 0 {
+		certFile := strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE"))
+		keyFile := strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE"))
+		clientCAFile := strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_CLIENT_CA_FILE"))
+		if certFile == "" || keyFile == "" || clientCAFile == "" {
+			log.Fatal("Chat principal JWKS TLS server certificate, key, and client CA are required")
+		}
+		certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			log.Fatalf("Chat principal JWKS TLS identity: %v", err)
+		}
+		caPEM, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			log.Fatalf("Chat principal JWKS client CA: %v", err)
+		}
+		clientCAs := x509.NewCertPool()
+		if !clientCAs.AppendCertsFromPEM(caPEM) {
+			log.Fatal("Chat principal JWKS client CA contains no certificates")
+		}
+		addr := strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_HTTPS_LISTEN"))
+		if addr == "" {
+			addr = ":8443"
+		}
+		principalJWKSHTTPServer = &http.Server{
+			Addr: addr, Handler: chatPrincipalJWKSHandler(chatPrincipalJWKS),
+			TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs},
+		}
+		httpserver.ApplyHTTPServerTimeouts(principalJWKSHTTPServer)
+		go func() { errCh <- principalJWKSHTTPServer.ListenAndServeTLS("", "") }()
+		logger.Info("Chat principal JWKS mTLS endpoint listening", slog.String("addr", addr))
+	}
 	logger.Info("listening", slog.String("addr", httpAddr))
 	go func() {
 		errCh <- server.ListenAndServe()
@@ -338,6 +451,12 @@ func main() {
 	defer cancel()
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
+		if searchManifestGRPCSrv != nil {
+			searchManifestGRPCSrv.GracefulStop()
+		}
+		if spaceLifecycleGRPCSrv != nil {
+			spaceLifecycleGRPCSrv.GracefulStop()
+		}
 		if gisGRPCSrv != nil {
 			gisGRPCSrv.GracefulStop()
 		}
@@ -346,6 +465,11 @@ func main() {
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+		if principalJWKSHTTPServer != nil {
+			if err := principalJWKSHTTPServer.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }

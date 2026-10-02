@@ -3,15 +3,19 @@ package grpcsvc
 import (
 	"context"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/pkg/guestguard"
 	"voice/backend/pkg/privacy"
 	"voice/backend/search/internal/authctx"
+	"voice/backend/search/internal/store"
 
 	commonv1 "voice.app/voice/common/v1"
 	searchv1 "voice.app/voice/search/v1"
@@ -40,12 +44,17 @@ type MessageHit struct {
 	ChatID    uuid.UUID
 	Snippet   string
 	Score     float64
+	CreatedAt time.Time
 }
 
 // MessageSearcher queries indexed messages.
 type MessageSearcher interface {
 	SearchInChat(ctx context.Context, chatID uuid.UUID, query string, cursor *string, limit int) ([]MessageHit, string, error)
 	SearchGlobalMessages(ctx context.Context, viewer uuid.UUID, query string, cursor *string, limit int, accessibleChatIDs []uuid.UUID) ([]MessageHit, string, error)
+}
+
+type ManagedChatMessagePurger interface {
+	PurgeManagedChatMessages(context.Context, uuid.UUID, uuid.UUID, []uuid.UUID, []byte) (*store.ManagedChatSearchPurgeReceipt, error)
 }
 
 // ProfileSearchHit is a profile discovery search result.
@@ -94,18 +103,20 @@ type ChatReindexer interface {
 // SearchGRPC implements voice.search.v1.SearchService.
 type SearchGRPC struct {
 	searchv1.UnimplementedSearchServiceServer
-	Messages        MessageSearcher
-	Profiles        ProfileSearcher
-	Spaces          SpaceSearcher
-	Chats           ChatAccess
-	Roles           RoleChecker
-	Blocks          BlockList
-	Discoverability ProfileDiscoverability
-	Social          privacy.SocialGraph
-	SpaceMembers    privacy.SpaceCoMembership
-	Reindex         ChatReindexer
-	ChatManifest    chatv1.ChatServiceClient
-	Analytics       interface {
+	Messages          MessageSearcher
+	ManagedChatPurger ManagedChatMessagePurger
+	Profiles          ProfileSearcher
+	Spaces            SpaceSearcher
+	Chats             ChatAccess
+	Roles             RoleChecker
+	Blocks            BlockList
+	Discoverability   ProfileDiscoverability
+	Social            privacy.SocialGraph
+	SpaceMembers      privacy.SpaceCoMembership
+	Reindex           ChatReindexer
+	ChatManifest      chatv1.ChatServiceClient
+	ChatEntitlement   chatv1.ChatServiceClient
+	Analytics         interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
 	}
 }
@@ -258,6 +269,29 @@ func toProtoHits(hits []MessageHit) []*searchv1.SearchHit {
 	return out
 }
 
+func (s *SearchGRPC) filterManagedHistoryHits(ctx context.Context, viewer uuid.UUID, hits []MessageHit) ([]MessageHit, error) {
+	filtered := make([]MessageHit, 0, len(hits))
+	for _, hit := range hits {
+		if hit.CreatedAt.IsZero() {
+			return nil, status.Error(codes.Unavailable, "message history timestamp unavailable")
+		}
+		if s.ChatEntitlement == nil {
+			return nil, status.Error(codes.Unavailable, "chat history entitlement unavailable")
+		}
+		internal := metadata.NewOutgoingContext(ctx, metadata.Pairs("x-voice-internal-caller", "search"))
+		resp, err := s.ChatEntitlement.CheckMessageReadEntitlement(internal, &chatv1.CheckMessageReadEntitlementRequest{
+			ChatId: hit.ChatID.String(), ProfileId: viewer.String(), MessageCreatedAt: timestamppb.New(hit.CreatedAt),
+		})
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "chat history entitlement unavailable")
+		}
+		if resp.GetEntitled() {
+			filtered = append(filtered, hit)
+		}
+	}
+	return filtered, nil
+}
+
 func (s *SearchGRPC) SearchInChat(ctx context.Context, req *searchv1.SearchInChatRequest) (*searchv1.SearchInChatResponse, error) {
 	viewer, err := requireProfile(ctx)
 	if err != nil {
@@ -290,6 +324,10 @@ func (s *SearchGRPC) SearchInChat(ctx context.Context, req *searchv1.SearchInCha
 	hits, next, err := s.Messages.SearchInChat(ctx, chatID, q, cursorPtr(req.GetPage()), limit)
 	if err != nil {
 		return nil, searchStoreError(err)
+	}
+	hits, err = s.filterManagedHistoryHits(ctx, viewer, hits)
+	if err != nil {
+		return nil, err
 	}
 	return &searchv1.SearchInChatResponse{
 		SearchResults: &searchv1.SearchResults{
@@ -365,6 +403,10 @@ func (s *SearchGRPC) SearchGlobal(ctx context.Context, req *searchv1.SearchGloba
 		hits, cursor, err := s.Messages.SearchGlobalMessages(ctx, viewer, q, cursorPtr(req.GetPage()), limit, accessible)
 		if err != nil {
 			return nil, searchStoreError(err)
+		}
+		hits, err = s.filterManagedHistoryHits(ctx, viewer, hits)
+		if err != nil {
+			return nil, err
 		}
 		msgHits = toProtoHits(hits)
 		next = cursor

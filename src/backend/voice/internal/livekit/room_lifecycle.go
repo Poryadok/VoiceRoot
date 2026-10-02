@@ -21,6 +21,7 @@ var (
 type RoomServiceSDK interface {
 	CreateRoom(context.Context, *protocol.CreateRoomRequest) (*protocol.Room, error)
 	DeleteRoom(context.Context, *protocol.DeleteRoomRequest) (*protocol.DeleteRoomResponse, error)
+	RemoveParticipant(context.Context, *protocol.RoomParticipantIdentity) (*protocol.RemoveParticipantResponse, error)
 }
 
 // RoomLifecycle manages only the LiveKit room resource. It intentionally does
@@ -65,6 +66,25 @@ func (a *RoomLifecycle) CloseRoom(ctx context.Context, roomName string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("livekit delete room %q: %w", roomName, err)
+	}
+	return nil
+}
+
+// RemoveParticipant ejects one identity from a managed room. NotFound is an
+// idempotent success so a retry after an ambiguous response is safe.
+func (a *RoomLifecycle) RemoveParticipant(ctx context.Context, roomName, identity string) error {
+	if err := a.validate(roomName); err != nil {
+		return err
+	}
+	if strings.TrimSpace(identity) == "" {
+		return errors.New("livekit participant identity is required")
+	}
+	_, err := a.sdk.RemoveParticipant(ctx, &protocol.RoomParticipantIdentity{Room: roomName, Identity: identity})
+	if isTwirpCode(err, twirp.NotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("livekit remove participant %q from %q: %w", identity, roomName, err)
 	}
 	return nil
 }

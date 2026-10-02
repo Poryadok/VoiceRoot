@@ -1,0 +1,281 @@
+# Opt-in LOCAL development lifecycle fixture, layered after Phase0.
+# Requires scripts/dev/generate-phase0-fixture.py output. No production KMS claim.
+services:
+  space:
+    expose: ["9094"]
+    environment:
+      SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN: :9094
+      SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
+      SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR: redis:6379
+      SPACE_LIFECYCLE_ENABLED: "true"
+      SPACE_LIFECYCLE_MODE: development
+      SPACE_LIFECYCLE_DEV_TOMBSTONE_KEY_FILE: /run/phase0/tombstone-key.json
+      SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
+      AUTH_PRINCIPAL_GRPC_ADDR: auth:9091
+      AUTH_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
+      AUTH_PRINCIPAL_TLS_SERVER_NAME: auth
+      SPACE_LIFECYCLE_ROLE_GRPC_ADDR: role:9091
+      SPACE_LIFECYCLE_CHAT_GRPC_ADDR: chat:9092
+      SPACE_LIFECYCLE_MESSAGING_GRPC_ADDR: messaging:9093
+      SPACE_LIFECYCLE_FILE_GRPC_ADDR: file:9091
+      SPACE_LIFECYCLE_VOICE_GRPC_ADDR: voice:9092
+      SPACE_LIFECYCLE_MATCHMAKING_GRPC_ADDR: matchmaking:9092
+      SPACE_LIFECYCLE_SEARCH_GRPC_ADDR: search:9091
+      SPACE_LIFECYCLE_SUBSCRIPTION_GRPC_ADDR: subscription:9091
+      SPACE_LIFECYCLE_BOT_GRPC_ADDR: bot:9444
+      SPACE_LIFECYCLE_NOTIFICATION_GRPC_ADDR: notification:9445
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/space-tombstone/key.json:/run/phase0/tombstone-key.json:ro
+  gateway:
+    environment:
+      GATEWAY_SESSION_EPOCH_STRICT: "true"
+      GATEWAY_REDIS_ADDR: redis:6379
+      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9094
+      GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME: space
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.crt:/run/phase0/gateway-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.key:/run/phase0/gateway-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  chat:
+    expose: ["9092", "9093", "8443"]
+    depends_on:
+      phase0-jwks:
+        condition: service_healthy
+    environment:
+      CHAT_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/chat
+      CHAT_PRINCIPAL_ACTIVE_KID: current
+      CHAT_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/chat-lifecycle.crt
+      CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/chat-lifecycle.key
+      CHAT_PRINCIPAL_JWKS_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_SPACE_LIFECYCLE_GRPC_LISTEN: :9092
+      CHAT_SPACE_LIFECYCLE_TLS_CERT_FILE: /run/phase0/chat-lifecycle.crt
+      CHAT_SPACE_LIFECYCLE_TLS_KEY_FILE: /run/phase0/chat-lifecycle.key
+      CHAT_SPACE_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      CHAT_SPACE_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/lifecycle-space/jwks.json
+      CHAT_SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      CHAT_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      CHAT_SPACE_PURGE_MESSAGING_GRPC_ADDR: messaging:9092
+      CHAT_SPACE_PURGE_MESSAGING_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_SPACE_PURGE_MESSAGING_TLS_SERVER_NAME: messaging
+      CHAT_SPACE_PURGE_FILE_GRPC_ADDR: file:9091
+      CHAT_SPACE_PURGE_FILE_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_SPACE_PURGE_FILE_TLS_SERVER_NAME: file
+      CHAT_SPACE_PURGE_CLIENT_CERT_FILE: /run/phase0/chat-owner-client.crt
+      CHAT_SPACE_PURGE_CLIENT_KEY_FILE: /run/phase0/chat-owner-client.key
+      CHAT_SEARCH_MANIFEST_GRPC_LISTEN: :9093
+      CHAT_SEARCH_MANIFEST_TLS_CERT_FILE: /run/phase0/chat-lifecycle.crt
+      CHAT_SEARCH_MANIFEST_TLS_KEY_FILE: /run/phase0/chat-lifecycle.key
+      CHAT_SEARCH_MANIFEST_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_SEARCH_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/search/jwks.json
+      CHAT_SEARCH_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      CHAT_SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/chat:/run/phase0/chat:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-lifecycle.crt:/run/phase0/chat-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-lifecycle.key:/run/phase0/chat-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-owner-client.crt:/run/phase0/chat-owner-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-owner-client.key:/run/phase0/chat-owner-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+  messaging:
+    expose: ["9092", "9093", "8444"]
+    environment:
+      MESSAGING_PURGE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/messaging
+      MESSAGING_PURGE_PRINCIPAL_ACTIVE_KID: current
+      MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN: :8444
+      MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/messaging-lifecycle.crt
+      MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/messaging-lifecycle.key
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE: /run/phase0/messaging-owner-client.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE: /run/phase0/messaging-owner-client.key
+      SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/jwks.json
+      SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/messaging-owner-client.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/messaging-owner-client.key
+      MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN: :9093
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_CERT_FILE: /run/phase0/messaging-lifecycle.crt
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_KEY_FILE: /run/phase0/messaging-lifecycle.key
+      MESSAGING_SPACE_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      CHAT_PRINCIPAL_JWKS_URL: https://chat:8443/.well-known/principal-jwks.json
+      CHAT_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/messaging-owner-client.crt
+      MESSAGING_CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/messaging-owner-client.key
+      MESSAGING_CHAT_LIFECYCLE_GRPC_LISTEN: :9092
+      MESSAGING_CHAT_LIFECYCLE_SERVER_TLS_CERT_FILE: /run/phase0/messaging-lifecycle.crt
+      MESSAGING_CHAT_LIFECYCLE_SERVER_TLS_KEY_FILE: /run/phase0/messaging-lifecycle.key
+      MESSAGING_CHAT_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      FILE_MANAGED_CHAT_PURGE_GRPC_ADDR: file:9091
+      FILE_MANAGED_CHAT_PURGE_TLS_CA_FILE: /run/phase0/ca.crt
+      FILE_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: file
+      SEARCH_MANAGED_CHAT_PURGE_GRPC_ADDR: search:9091
+      SEARCH_MANAGED_CHAT_PURGE_TLS_CA_FILE: /run/phase0/ca.crt
+      SEARCH_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: search
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/messaging:/run/phase0/messaging:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-lifecycle.crt:/run/phase0/messaging-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-lifecycle.key:/run/phase0/messaging-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-owner-client.crt:/run/phase0/messaging-owner-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-owner-client.key:/run/phase0/messaging-owner-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+  file:
+    user: "0:0"
+    expose: ["9091", "8443"]
+    environment:
+      FILE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/file
+      FILE_PRINCIPAL_ACTIVE_KID: current
+      FILE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/file-lifecycle.crt
+      FILE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/file-lifecycle.key
+      FILE_PRINCIPAL_GRPC_LISTEN: :9091
+      FILE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/file-lifecycle.crt
+      FILE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/file-lifecycle.key
+      FILE_PRINCIPAL_CLIENT_CA_FILE: /run/lifecycle-trust/clients.crt
+      FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","chat":"https://chat:8443/.well-known/principal-jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json","story":"https://story:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/lifecycle-trust/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/file-owner-client.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/file-owner-client.key
+      USER_FILE_PRINCIPAL_TLS_CA_FILE: /run/lifecycle-trust/ca.crt
+    depends_on:
+      lifecycle-trust-init:
+        condition: service_completed_successfully
+    volumes:
+      - phase0_lifecycle_trust:/run/lifecycle-trust:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/file:/run/phase0/file:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/file-lifecycle.crt:/run/phase0/file-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/file-lifecycle.key:/run/phase0/file-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/file-owner-client.crt:/run/phase0/file-owner-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/file-owner-client.key:/run/phase0/file-owner-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/lifecycle-owner-client-ca.crt:/run/phase0/lifecycle-owner-client-ca.crt:ro
+  search:
+    user: "0:0"
+    expose: ["9091", "8443"]
+    environment:
+      SEARCH_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/search
+      SEARCH_PRINCIPAL_ACTIVE_KID: current
+      SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/search-lifecycle.crt
+      SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/search-lifecycle.key
+      SEARCH_PRINCIPAL_GRPC_LISTEN: :9091
+      SEARCH_PRINCIPAL_TLS_CERT_FILE: /run/phase0/search-lifecycle.crt
+      SEARCH_PRINCIPAL_TLS_KEY_FILE: /run/phase0/search-lifecycle.key
+      SEARCH_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/lifecycle-owner-client-ca.crt
+      SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/search-owner-client.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/search-owner-client.key
+      SEARCH_CHAT_MANIFEST_GRPC_ADDR: chat:9093
+      SEARCH_CHAT_MANIFEST_TLS_CA_FILE: /run/phase0/ca.crt
+      SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME: chat
+      SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE: /run/phase0/search-owner-client.crt
+      SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE: /run/phase0/search-owner-client.key
+      SEARCH_USER_PROJECTION_TLS_CA_FILE: /run/lifecycle-trust/ca.crt
+    depends_on:
+      lifecycle-trust-init:
+        condition: service_completed_successfully
+    volumes:
+      - phase0_lifecycle_trust:/run/lifecycle-trust:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/search:/run/phase0/search:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/search-lifecycle.crt:/run/phase0/search-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/search-lifecycle.key:/run/phase0/search-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/search-owner-client.crt:/run/phase0/search-owner-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/search-owner-client.key:/run/phase0/search-owner-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/lifecycle-owner-client-ca.crt:/run/phase0/lifecycle-owner-client-ca.crt:ro
+  subscription:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      SUBSCRIPTION_PRINCIPAL_GRPC_LISTEN: :9091
+      SUBSCRIPTION_PRINCIPAL_TLS_CERT_FILE: /run/phase0/subscription-lifecycle.crt
+      SUBSCRIPTION_PRINCIPAL_TLS_KEY_FILE: /run/phase0/subscription-lifecycle.key
+      SUBSCRIPTION_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    depends_on:
+      redis:
+        condition: service_healthy
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/subscription-lifecycle.crt:/run/phase0/subscription-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/subscription-lifecycle.key:/run/phase0/subscription-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  matchmaking:
+    user: "0:0"
+    expose: ["9092"]
+    environment:
+      MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN: :9092
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/matchmaking-lifecycle.crt
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/matchmaking-lifecycle.key
+      MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-lifecycle.crt:/run/phase0/matchmaking-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/matchmaking-lifecycle.key:/run/phase0/matchmaking-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  phase0-jwks:
+    healthcheck:
+      # Loopback liveness only; all workload JWKS clients still verify their CA.
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:8443/lifecycle-space/jwks.json"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/public/search-jwks.json:/run/phase0/search-jwks.json:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/public/space-jwks.json:/run/phase0/space-jwks.json:ro
+  # Existing User/Social/Story identities use the base bootstrap CA. Combine
+  # public roots only; no workload receives a CA or another owner's private key.
+  lifecycle-trust-init:
+    profiles: ["app"]
+    image: alpine:3.20
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        test -s /base/ca.crt
+        test -s /phase0/ca.crt
+        test -s /phase0/producer-ca.crt
+        cat /base/ca.crt /phase0/ca.crt > /output/ca.crt
+        cat /base/ca.crt /phase0/producer-ca.crt > /output/clients.crt
+        chmod 444 /output/ca.crt /output/clients.crt
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
+    volumes:
+      - social_principal_ca:/base:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/lifecycle-owner-client-ca.crt:/phase0/producer-ca.crt:ro
+      - phase0_lifecycle_trust:/output
+  user:
+    environment:
+      S2S_JWKS_CA_FILE: /run/lifecycle-trust/ca.crt
+    depends_on:
+      lifecycle-trust-init:
+        condition: service_completed_successfully
+    volumes:
+      - phase0_lifecycle_trust:/run/lifecycle-trust:ro
+  story:
+    environment:
+      FILE_PRINCIPAL_TLS_CA_FILE: /run/lifecycle-trust/ca.crt
+    depends_on:
+      lifecycle-trust-init:
+        condition: service_completed_successfully
+    volumes:
+      - phase0_lifecycle_trust:/run/lifecycle-trust:ro
+
+volumes:
+  phase0_lifecycle_trust:

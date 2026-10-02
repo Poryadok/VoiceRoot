@@ -34,6 +34,10 @@ func (s *DMStore) ListQuickAccess(ctx context.Context, profileID uuid.UUID) ([]Q
 SELECT chat_id, sort_order, added_at
 FROM quick_access_chats
 WHERE profile_id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM chats c JOIN chat_space_lifecycle_fences f ON f.space_id=c.space_id
+    WHERE c.id=quick_access_chats.chat_id AND f.state<>'LIVE'
+  )
 ORDER BY sort_order ASC, added_at ASC
 `, profileID)
 	if err != nil {

@@ -113,6 +113,25 @@ generation/page integers. Page tokens bind the next index to the source hash.
 Migration `000010_chat_manifest_root_binding` is required before enabling the
 protected listener; rollback refuses while any imported evidence remains.
 
+The canonical page client requires `SEARCH_CHAT_MANIFEST_GRPC_ADDR`,
+`SEARCH_CHAT_MANIFEST_TLS_CA_FILE`, `SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME`,
+`SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE`, and
+`SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE`, together with Search's two rotating
+signing keys and active KID. It targets Chat's dedicated Search page listener.
+Each exact page request signs the deletion operation ID as its request ID and
+the full request hash with a fresh JWT ID; an exact retry preserves the
+operation binding without reusing the replay token. Partial configuration or
+invalid TLS identity fails startup.
+
+Messaging's T33 managed-chat purge may delete through a `PURGE_DECIDED` Search
+fence only with its verified, request-bound service principal and the exact
+deterministic child operation derived from the saved Space/deletion/chat tuple.
+The Chat must belong to the sealed source manifest at the preceding generation.
+Ordinary frozen access stays denied. An indexed message from another Chat
+rejects the complete work set before any permanent message fences are installed.
+Operation locking precedes sorted message locking; concurrent exact retries and
+restart replay return the first saved receipt, including after parent purge.
+
 ## User-authoritative profile projection
 
 Search signs the protected User bootstrap calls with its rotating principal

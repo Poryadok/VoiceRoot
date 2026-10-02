@@ -39,7 +39,7 @@ func TestAreCoMembers_SharedSpace(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "spacedb", "")
-	applySpaceMigrations(t, ctx, pool)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
 	store := &SpaceStore{Pool: pool}
 
 	owner := uuid.New()

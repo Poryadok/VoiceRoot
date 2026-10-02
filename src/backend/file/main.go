@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,6 +36,7 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 	subscriptionv1 "voice.app/voice/subscription/v1"
 )
 
@@ -104,6 +106,7 @@ func main() {
 
 	var grpcSrv *grpc.Server
 	var protectedSrv *grpc.Server
+	var revocableDownloadHTTP http.Handler
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -120,6 +123,7 @@ func main() {
 		}
 
 		var chatGuard grpcsvc.ChatGuard
+		var chatClient chatv1.ChatServiceClient
 		if chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); chatAddr != "" {
 			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
@@ -132,7 +136,24 @@ func main() {
 				log.Fatalf("chat grpc dial: %v", err)
 			}
 			waitCancel()
-			chatGuard = s2s.NewGRPCChatGuard(chatv1.NewChatServiceClient(cconn))
+			chatClient = chatv1.NewChatServiceClient(cconn)
+			chatGuard = s2s.NewGRPCChatGuard(chatClient)
+		}
+		if messagingAddr := strings.TrimSpace(os.Getenv("MESSAGING_GRPC_ADDR")); messagingAddr != "" {
+			mconn, err := grpc.NewClient(grpcclient.DialTarget(messagingAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				log.Fatalf("messaging grpc: %v", err)
+			}
+			defer func() { _ = mconn.Close() }()
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
+			if err := waitForGRPCReady(waitCtx, mconn); err != nil {
+				waitCancel()
+				log.Fatalf("messaging grpc dial: %v", err)
+			}
+			waitCancel()
+			if chatClient != nil {
+				chatGuard = s2s.NewGRPCChatGuard(chatClient, messagingv1.NewMessagingServiceClient(mconn))
+			}
 		}
 		var scanner grpcsvc.Scanner
 		if clamAddr := strings.TrimSpace(os.Getenv("CLAMAV_ADDR")); clamAddr != "" {
@@ -173,6 +194,7 @@ func main() {
 		}
 		filesStore := store.NewFilesStore(pool)
 		jobs.StartExpiryWorker(context.Background(), filesStore, deleter, eventPub, logger)
+		jobs.StartReferenceGCWorker(context.Background(), filesStore, deleter, fileReferenceGCIntervalFromEnv(), logger)
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -181,16 +203,20 @@ func main() {
 		options := append(ordinaryObservation, grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
 		grpcSrv = grpc.NewServer(options...)
 		service := grpcsvc.New(grpcsvc.Deps{
-			Files:        filesStore,
-			Presigner:    presigner,
-			Deleter:      deleter,
-			ChatGuard:    chatGuard,
-			Reader:       reader,
-			Processor:    processor,
-			Scanner:      scanner,
-			Entitlements: entitlements,
-			Events:       eventPub,
+			Files:                    filesStore,
+			Presigner:                presigner,
+			RevocableDownloadKey:     []byte(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_SIGNING_KEY"))),
+			RevocableDownloadBaseURL: strings.TrimRight(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_BASE_URL")), "/"),
+			Deleter:                  deleter,
+			ChatGuard:                chatGuard,
+			Reader:                   reader,
+			Processor:                processor,
+			Scanner:                  scanner,
+			Entitlements:             entitlements,
+			Events:                   eventPub,
 		})
+		revocableDownloadHTTP = grpcsvc.NewRevocableDownloadHTTPHandler(
+			[]byte(strings.TrimSpace(os.Getenv("FILE_DOWNLOAD_SIGNING_KEY"))), nil, service)
 		filev1.RegisterFileServiceServer(grpcSrv, service)
 		if protectedRuntime != nil {
 			protectedListener, err := net.Listen("tcp", principalConfig.ListenAddr)
@@ -219,10 +245,12 @@ func main() {
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
 
-	server := &http.Server{
-		Addr:    addr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg), logger),
+	httpMux := http.NewServeMux()
+	if revocableDownloadHTTP != nil {
+		httpMux.Handle("/api/v1/files/download/", revocableDownloadHTTP)
 	}
+	httpMux.Handle("/", voiceprom.MountMetricsOnHealth(healthHandler(serviceName), metricsReg))
+	server := &http.Server{Addr: addr, Handler: httpserver.Wrap(httpMux, logger)}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
 	logger.Info("listening", slog.String("addr", addr))
@@ -250,6 +278,18 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func fileReferenceGCIntervalFromEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("FILE_REFERENCE_GC_INTERVAL"))
+	if raw == "" {
+		return time.Minute
+	}
+	interval, err := time.ParseDuration(raw)
+	if err != nil || interval <= 0 {
+		log.Fatalf("FILE_REFERENCE_GC_INTERVAL must be a positive Go duration")
+	}
+	return interval
 }
 
 func fileObservability(logger *slog.Logger, registry *prometheus.Registry) ([]grpc.ServerOption, []grpc.ServerOption) {

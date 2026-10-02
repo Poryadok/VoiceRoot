@@ -709,18 +709,49 @@ Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyB
 
 ## P3 Space lifecycle participant (target)
 
+The participant implementation has Space-authenticated manifest-page import,
+lifecycle-fence, and purge RPCs on a dedicated mutual-TLS listener. Manifest pages
+are validated for domain-separated hashes, canonical sorted Chat IDs, page
+size, sequence, and final seal position. PostgreSQL retains deterministic page,
+request, and receipt bytes, and seals only after the ordered root matches.
+Exact retries return the first receipt; changed bytes and gaps fail closed.
+The fence accepts only a sealed matching manifest, records monotonic FROZEN and
+LIVE transitions with immutable operation receipts, and acknowledges stale
+generations with the current saved receipt. Database triggers currently block
+message, reaction, pin, read-position/read-receipt, and scheduled-message
+mutations while the Space is frozen or terminal, under the shared Space
+mutation lock. Additional triggers cover message hides, game-message
+revisions/operation receipts, game cards, and game-action results. Thread edits
+flow through the guarded message row; read and delivery cursors share the
+guarded receipt tables. Purge pages the sealed Chat manifest, derives a stable
+child operation per chat, and invokes the managed-chat purge coordinator. Each
+child must return valid File and Search receipt hashes before Messaging commits
+its exact participant receipt and terminal fence. The Space coordinator and a
+separate File Space-producer release receipt remain outstanding.
+
+The app Compose profile configures `MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN`,
+the Messaging server certificate/client CA, and the Space principal JWKS
+client. The listener defaults to `:9093` when enabled and startup fails on
+partial TLS or principal configuration.
+
 Messaging stores its generation fence, imported immutable Chat manifest pages,
-message-reference producer pages and request/receipt evidence. `FROZEN` imports
-and seals the exact Chat binding, blocks message/reaction/thread/schedule/read/
-delivery mutations for that Space work set, and enumerates exact Space-scoped
-`FileReferenceKey` values as the fixed `MESSAGING` producer. A final receipt is
-valid only after the root manifest matches local saved evidence.
+and exact request/receipt evidence. `FROZEN` imports and seals the exact Chat
+binding and blocks message/reaction/thread/schedule/read/delivery mutations for
+that Space work set. Each managed-chat purge snapshots its frozen attachment
+references and submits them to File as the `MESSAGING` producer. A separate
+Space-level producer manifest is still outstanding.
 
 Reads and attachment refresh authorize the message domain first, then request a
 subject-bound File capability for its exact live reference. Attachment visibility
-waits for `AcquireFileReferences`. Purge deletes messages, reactions, read and
-delivery state, pins, hides, threads and scheduled rows in bounded FK order,
-then asks File to release the saved producer manifest. Completion requires
-File's exact release receipt. Restore reuses the saved manifest and releases
-nothing. Full request/receipt bytes retain 30 days from this participant's
-completion and the compact `PURGED` fence is permanent.
+waits for `AcquireFileReferences`. Each managed-chat purge deletes messages,
+reactions, read and delivery state, pins, hides, threads and scheduled rows in
+bounded FK order, then waits for File reference-release and Search purge
+receipts. Space-level Messaging completion follows only after every manifest
+chat returns both owner receipts. Full request/receipt bytes retain 30 days from
+this participant's completion and the compact `PURGED` fence is permanent.
+
+The child uses the existing T33 `PurgeManagedChatContent` protocol:
+`request_sha256` is SHA-256 of its deterministic protobuf request bytes, matching
+its service-principal request binding. The P3 adapter verifies that digest;
+it does not replace the saved child evidence with the parent's message-name
+domain. The Space participant request/receipt remains domain-separated P3.

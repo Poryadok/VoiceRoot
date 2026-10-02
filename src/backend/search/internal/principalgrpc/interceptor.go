@@ -18,7 +18,7 @@ type Verifier interface {
 }
 
 func IsLifecycleMethod(method string) bool {
-	return method == searchv1.SearchService_ApplySpaceLifecycleFence_FullMethodName || method == searchv1.SearchService_PurgeSpace_FullMethodName
+	return method == searchv1.SearchService_ApplySpaceLifecycleFence_FullMethodName || method == searchv1.SearchService_PurgeSpace_FullMethodName || method == searchv1.SearchService_PurgeManagedChatMessages_FullMethodName
 }
 
 // OrdinaryUnaryInterceptor keeps protected lifecycle authority off the normal listener.

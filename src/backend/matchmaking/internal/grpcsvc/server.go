@@ -15,6 +15,7 @@ import (
 	"voice/backend/matchmaking/internal/config"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
+	"voice/backend/matchmaking/internal/spacelifecycle"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -23,23 +24,24 @@ import (
 // MatchmakingGRPC implements catalog and search RPCs for matchmaking (docs/features/matchmaking.md).
 type MatchmakingGRPC struct {
 	matchmakingv1.UnimplementedMatchmakingServiceServer
-	Games                 *store.GameStore
-	ProfileGames          *store.ProfileGamesStore
-	Sessions              *store.SessionStore
-	Matches               *store.MatchStore
-	Ratings               *store.RatingStore
-	Bans                  *store.BanStore
-	Queue                 *queue.RedisQueue
-	Events                mmevents.Publisher
-	Squad                 SquadProvisioner
-	SquadCleanup          SquadCleanup
-	Logger                *slog.Logger
-	RatingPrivacy         MmRatingPrivacyChecker
-	RatingFriends         MmRatingProfileFriendChecker
+	Games                   *store.GameStore
+	ProfileGames            *store.ProfileGamesStore
+	Sessions                *store.SessionStore
+	Matches                 *store.MatchStore
+	Ratings                 *store.RatingStore
+	Bans                    *store.BanStore
+	Queue                   *queue.RedisQueue
+	Events                  mmevents.Publisher
+	Squad                   SquadProvisioner
+	SquadCleanup            SquadCleanup
+	Logger                  *slog.Logger
+	RatingPrivacy           MmRatingPrivacyChecker
+	RatingFriends           MmRatingProfileFriendChecker
 	RatingSpaceCoMembership MmRatingSpaceCoMembershipChecker
-	SpaceQueue            SpaceQueueGate
-	Parties               *store.PartyStore
-	Lfp                   *store.LfpStore
+	SpaceQueue              SpaceQueueGate
+	Parties                 *store.PartyStore
+	Lfp                     *store.LfpStore
+	SpaceLifecycle          *spacelifecycle.Store
 }
 
 func (s *MatchmakingGRPC) ListGames(ctx context.Context, req *matchmakingv1.ListGamesRequest) (*matchmakingv1.ListGamesResponse, error) {
@@ -317,11 +319,11 @@ func toProtoGames(games []store.Game) []*matchmakingv1.Game {
 
 func toProtoGame(g store.Game) *matchmakingv1.Game {
 	pg := &matchmakingv1.Game{
-		Id:                 g.ID.String(),
-		Name:               g.Name,
-		ConfigJson:         g.ConfigRaw,
-		Status:             g.Status,
-		CreatedAt:          timestamppb.New(g.CreatedAt),
+		Id:         g.ID.String(),
+		Name:       g.Name,
+		ConfigJson: g.ConfigRaw,
+		Status:     g.Status,
+		CreatedAt:  timestamppb.New(g.CreatedAt),
 	}
 	if g.IconURL != nil {
 		pg.IconUrl = g.IconURL

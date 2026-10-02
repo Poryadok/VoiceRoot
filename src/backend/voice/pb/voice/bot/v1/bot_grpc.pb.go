@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	BotService_PublishGameEvent_FullMethodName         = "/voice.bot.v1.BotService/PublishGameEvent"
 	BotService_RegisterBot_FullMethodName              = "/voice.bot.v1.BotService/RegisterBot"
 	BotService_UpdateBot_FullMethodName                = "/voice.bot.v1.BotService/UpdateBot"
 	BotService_DeleteBot_FullMethodName                = "/voice.bot.v1.BotService/DeleteBot"
@@ -68,6 +69,8 @@ const (
 //
 // Bot platform. HTTP: /api/v1/bots/**.
 type BotServiceClient interface {
+	// @voice.security=protected;callers=service:gameintegration
+	PublishGameEvent(ctx context.Context, in *PublishGameEventRequest, opts ...grpc.CallOption) (*PublishGameEventResponse, error)
 	RegisterBot(ctx context.Context, in *RegisterBotRequest, opts ...grpc.CallOption) (*RegisterBotResponse, error)
 	UpdateBot(ctx context.Context, in *UpdateBotRequest, opts ...grpc.CallOption) (*UpdateBotResponse, error)
 	DeleteBot(ctx context.Context, in *DeleteBotRequest, opts ...grpc.CallOption) (*DeleteBotResponse, error)
@@ -123,6 +126,16 @@ type botServiceClient struct {
 
 func NewBotServiceClient(cc grpc.ClientConnInterface) BotServiceClient {
 	return &botServiceClient{cc}
+}
+
+func (c *botServiceClient) PublishGameEvent(ctx context.Context, in *PublishGameEventRequest, opts ...grpc.CallOption) (*PublishGameEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PublishGameEventResponse)
+	err := c.cc.Invoke(ctx, BotService_PublishGameEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *botServiceClient) RegisterBot(ctx context.Context, in *RegisterBotRequest, opts ...grpc.CallOption) (*RegisterBotResponse, error) {
@@ -550,6 +563,8 @@ func (c *botServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceRequest
 //
 // Bot platform. HTTP: /api/v1/bots/**.
 type BotServiceServer interface {
+	// @voice.security=protected;callers=service:gameintegration
+	PublishGameEvent(context.Context, *PublishGameEventRequest) (*PublishGameEventResponse, error)
 	RegisterBot(context.Context, *RegisterBotRequest) (*RegisterBotResponse, error)
 	UpdateBot(context.Context, *UpdateBotRequest) (*UpdateBotResponse, error)
 	DeleteBot(context.Context, *DeleteBotRequest) (*DeleteBotResponse, error)
@@ -607,6 +622,9 @@ type BotServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedBotServiceServer struct{}
 
+func (UnimplementedBotServiceServer) PublishGameEvent(context.Context, *PublishGameEventRequest) (*PublishGameEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishGameEvent not implemented")
+}
 func (UnimplementedBotServiceServer) RegisterBot(context.Context, *RegisterBotRequest) (*RegisterBotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterBot not implemented")
 }
@@ -749,6 +767,24 @@ func RegisterBotServiceServer(s grpc.ServiceRegistrar, srv BotServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&BotService_ServiceDesc, srv)
+}
+
+func _BotService_PublishGameEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishGameEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BotServiceServer).PublishGameEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BotService_PublishGameEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BotServiceServer).PublishGameEvent(ctx, req.(*PublishGameEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _BotService_RegisterBot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1489,6 +1525,10 @@ var BotService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "voice.bot.v1.BotService",
 	HandlerType: (*BotServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "PublishGameEvent",
+			Handler:    _BotService_PublishGameEvent_Handler,
+		},
 		{
 			MethodName: "RegisterBot",
 			Handler:    _BotService_RegisterBot_Handler,

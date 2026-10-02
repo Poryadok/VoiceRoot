@@ -26,6 +26,7 @@ type SpaceGRPC struct {
 	OwnershipRoles          rolev1.RoleServiceClient // dedicated authenticated Role lifecycle transport
 	OwnershipAuth           authv1.AuthServiceClient // dedicated authenticated Auth proof transport
 	PrincipalIssuer         *principal.Issuer
+	DeletionLifecycle       DeletionLifecycleCoordinator
 	ProfileAccounts         ProfileAccountLookup // optional; resolves profile_id → account_id for bans
 	Chats                   ChatLookup           // optional; enriches text_chat nodes in ListSpaceTree
 	Privacy                 InvitePrivacyChecker
@@ -51,6 +52,13 @@ type SpaceGRPC struct {
 	// ownershipTransfers serializes the full ownership transition per space.
 	// It deliberately does not serialize transfers for different spaces.
 	ownershipTransfers ownershipTransferLocker
+}
+
+// DeletionLifecycleCoordinator runs the durable schedule-side participant
+// barrier after Space has saved the Auth proof receipt.
+type DeletionLifecycleCoordinator interface {
+	ScheduleDeletion(context.Context, uuid.UUID) error
+	RestoreSpace(context.Context, uuid.UUID) error
 }
 
 type voiceRoomAccessResolver interface {

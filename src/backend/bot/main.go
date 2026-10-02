@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/bot/internal/botevents"
@@ -22,6 +23,8 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/gameintegrationproof"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
+	"voice/backend/bot/internal/principalgrpc"
+	"voice/backend/bot/internal/principalruntime"
 	"voice/backend/bot/internal/ratelimit"
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/grpcclient"
@@ -53,8 +56,28 @@ func main() {
 	if v := strings.TrimSpace(os.Getenv("BOT_GRPC_LISTEN")); v != "" {
 		grpcAddr = v
 	}
+	principalConfig, principalEnabled, err := principalruntime.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("Bot service-principal configuration: %v", err)
+	}
+	var botPrincipalRuntime *principalruntime.Runtime
+	if principalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("Bot service-principal runtime requires DATABASE_URL")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		botPrincipalRuntime, err = principalruntime.New(ctx, principalConfig)
+		cancel()
+		if err != nil {
+			log.Fatalf("Bot service-principal runtime: %v", err)
+		}
+		defer func() { _ = botPrincipalRuntime.Close() }()
+	}
 
 	var grpcSrv *grpc.Server
+	var gameEventGRPC *grpc.Server
+	var spaceLifecycleGRPC *grpc.Server
+	var botPrincipalJWKS *http.Server
 	var authorityBots gameintegrationproof.BotLookup
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL != "" {
@@ -74,6 +97,52 @@ func main() {
 		authorityBots = st
 		hub := dispatch.NewHub()
 		svc := grpcsvc.NewBotGRPC(st, hub)
+		if botPrincipalRuntime != nil {
+			svc.PrincipalIssuer = botPrincipalRuntime.Issuer()
+			tlsConfig, err := botPrincipalRuntime.GameEventServerTLSConfig()
+			if err != nil {
+				log.Fatalf("Bot game-event TLS: %v", err)
+			}
+			listener, err := net.Listen("tcp", principalConfig.BotGameEventListen)
+			if err != nil {
+				log.Fatalf("Bot game-event listen: %v", err)
+			}
+			gameEventGRPC = grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(principalgrpc.GameEventUnaryInterceptor(botPrincipalRuntime)))
+			botv1.RegisterBotServiceServer(gameEventGRPC, svc)
+			go func() {
+				if err := gameEventGRPC.Serve(listener); err != nil {
+					log.Fatalf("Bot game-event grpc serve: %v", err)
+				}
+			}()
+			botPrincipalJWKS, err = botPrincipalRuntime.JWKSHTTPServer()
+			if err != nil {
+				log.Fatalf("Bot principal JWKS: %v", err)
+			}
+			go func() {
+				if err := botPrincipalJWKS.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+					log.Fatalf("Bot principal JWKS serve: %v", err)
+				}
+			}()
+			logger.Info("Bot game-event mTLS listener and principal JWKS enabled", slog.String("grpc_addr", principalConfig.BotGameEventListen), slog.String("jwks_addr", principalConfig.BotJWKSListen))
+			if principalConfig.SpaceLifecycleEnabled() {
+				lifecycleTLS, err := botPrincipalRuntime.SpaceLifecycleServerTLSConfig()
+				if err != nil {
+					log.Fatalf("Bot Space lifecycle TLS: %v", err)
+				}
+				lifecycleListener, err := net.Listen("tcp", botPrincipalRuntime.SpaceLifecycleListenAddr())
+				if err != nil {
+					log.Fatalf("Bot Space lifecycle listen: %v", err)
+				}
+				spaceLifecycleGRPC = grpc.NewServer(grpc.Creds(credentials.NewTLS(lifecycleTLS)), grpc.UnaryInterceptor(principalgrpc.SpaceLifecycleUnaryInterceptor(botPrincipalRuntime)))
+				botv1.RegisterBotServiceServer(spaceLifecycleGRPC, svc)
+				go func() {
+					if err := spaceLifecycleGRPC.Serve(lifecycleListener); err != nil {
+						log.Fatalf("Bot Space lifecycle grpc serve: %v", err)
+					}
+				}()
+				logger.Info("Bot Space lifecycle mTLS listener enabled", slog.String("grpc_addr", principalConfig.BotSpaceLifecycleListen))
+			}
+		}
 		wireDownstream(svc, logger)
 		svc.RehydrateDeferred(context.Background())
 		startDeferredTTLSweeper(svc, logger)
@@ -105,6 +174,7 @@ func main() {
 		}
 		grpcSrv = grpc.NewServer(
 			grpc.ChainUnaryInterceptor(
+				principalgrpc.OrdinaryUnaryInterceptor(),
 				ratelimit.GatewayAccessFromEnv(),
 				ratelimit.ServerLimiterFromEnv().UnaryServerInterceptor(),
 				grpcmw.UnaryRecovery(logger),
@@ -165,6 +235,17 @@ func main() {
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
+		}
+		if gameEventGRPC != nil {
+			gameEventGRPC.GracefulStop()
+		}
+		if spaceLifecycleGRPC != nil {
+			spaceLifecycleGRPC.GracefulStop()
+		}
+		if botPrincipalJWKS != nil {
+			if err := botPrincipalJWKS.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

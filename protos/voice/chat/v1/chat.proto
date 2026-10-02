@@ -63,6 +63,10 @@ service ChatService {
   // route and requires the trusted Messaging service identity.
   rpc ListDMReceiptVisibilityTargets(ListDMReceiptVisibilityTargetsRequest) returns (ListDMReceiptVisibilityTargetsResponse);
 
+  // Internal-only: messaging/search/file must recheck managed-chat since-join
+  // history entitlement using the immutable message creation timestamp.
+  rpc CheckMessageReadEntitlement(CheckMessageReadEntitlementRequest) returns (CheckMessageReadEntitlementResponse);
+
   // @voice.security=protected;callers=service:space
   rpc ApplySpaceLifecycleFence(voice.chat.v1.ApplySpaceLifecycleFenceRequest) returns (voice.chat.v1.ApplySpaceLifecycleFenceResponse);
 
@@ -81,6 +85,7 @@ service ChatService {
 service GameIntegrationChatService {
   rpc ProvisionManagedChat(ProvisionManagedChatRequest) returns (ProvisionManagedChatResponse);
   rpc SyncManagedChatMembers(SyncManagedChatMembersRequest) returns (SyncManagedChatMembersResponse);
+  rpc SetManagedChatRetention(SetManagedChatRetentionRequest) returns (SetManagedChatRetentionResponse);
 }
 
 enum ChatType {
@@ -132,6 +137,8 @@ message SyncManagedChatMembersRequest {
   string operation_id = 3;
   string chat_id = 4;
   repeated string profile_ids = 5;
+  // When true, add only the listed profiles without removing current members.
+  bool add_only = 6;
 }
 message SyncManagedChatMembersResponse {
   repeated string profile_ids = 1;
@@ -139,6 +146,21 @@ message SyncManagedChatMembersResponse {
   // Stable managed_chat_operations identity and the exact persisted request hash.
   string receipt_id = 3;
   string request_hash = 4;
+}
+message SetManagedChatRetentionRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string operation_id = 3;
+  string external_chat_key = 4;
+  google.protobuf.Timestamp purge_after = 5;
+}
+message SetManagedChatRetentionResponse {
+  string chat_id = 1;
+  string receipt_id = 2;
+  string request_hash = 3;
+  google.protobuf.Timestamp purge_after = 4;
+  google.protobuf.Timestamp completed_at = 5;
+  bool replayed = 6;
 }
 
 message CreateDMRequest {
@@ -414,6 +436,16 @@ message DMReceiptVisibilityTarget {
 message ListDMReceiptVisibilityTargetsResponse {
   repeated DMReceiptVisibilityTarget targets = 1;
   string next_cursor = 2;
+}
+
+message CheckMessageReadEntitlementRequest {
+  string chat_id = 1;
+  string profile_id = 2;
+  google.protobuf.Timestamp message_created_at = 3;
+}
+
+message CheckMessageReadEntitlementResponse {
+  bool entitled = 1;
 }
 
 // Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.

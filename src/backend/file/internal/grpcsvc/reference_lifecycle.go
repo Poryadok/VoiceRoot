@@ -180,6 +180,140 @@ func (s *FileGRPC) ReleaseFileReferences(ctx context.Context, req *filev1.Releas
 	return response, nil
 }
 
+// GetFileReferenceGCStatus reports the durable object-GC outcome for the exact
+// references in a prior Messaging release operation. PENDING is observable
+// until the asynchronous R2 worker finishes; terminal outcomes are immutable.
+func (s *FileGRPC) GetFileReferenceGCStatus(ctx context.Context, req *filev1.GetFileReferenceGCStatusRequest) (*filev1.GetFileReferenceGCStatusResponse, error) {
+	caller, err := requireFileService(ctx, "messaging", filev1.FileService_GetFileReferenceGCStatus_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireLifecycleStore(s); err != nil {
+		return nil, err
+	}
+	if req.GetProtocolVersion() != 1 || req.GetProducerId() != filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING || len(req.GetReferences()) == 0 || len(req.GetReleaseRequestSha256()) != sha256.Size {
+		return nil, status.Error(codes.InvalidArgument, "protocol_version=1, Messaging references and release hash are required")
+	}
+	operationID, err := parseUUID("operation_id", req.GetOperationId())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateSortedReferences(req.GetReferences()); err != nil {
+		return nil, err
+	}
+	_, requestHash, err := lifecycleRequest(req)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "could not hash File GC status request")
+	}
+	releaseRequest := &filev1.ReleaseFileReferencesRequest{ProtocolVersion: 1, OperationId: req.GetOperationId(), ProducerId: req.GetProducerId(), References: req.GetReferences()}
+	releaseBytes, releaseHash, err := lifecycleRequest(releaseRequest)
+	if err != nil || !bytes.Equal(releaseHash, req.GetReleaseRequestSha256()) {
+		return nil, status.Error(codes.FailedPrecondition, "release request hash does not match exact references")
+	}
+	tx, err := s.files.Pool.Begin(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "File GC status is unavailable")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var savedReleaseBytes, savedReleaseHash, releaseReceiptBytes []byte
+	err = tx.QueryRow(ctx, `SELECT request_bytes,request_sha256,receipt_bytes FROM file_reference_operations WHERE caller_service=$1 AND operation_id=$2 FOR UPDATE`, caller, operationID).Scan(&savedReleaseBytes, &savedReleaseHash, &releaseReceiptBytes)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, status.Error(codes.FailedPrecondition, "File reference release operation is not complete")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !bytes.Equal(savedReleaseBytes, releaseBytes) || !bytes.Equal(savedReleaseHash, req.GetReleaseRequestSha256()) {
+		return nil, status.Error(codes.AlreadyExists, "File reference release operation changed")
+	}
+	var releaseResponse filev1.ReleaseFileReferencesResponse
+	if err := proto.Unmarshal(releaseReceiptBytes, &releaseResponse); err != nil || releaseResponse.GetReceipt() == nil || releaseResponse.GetReceipt().GetOperationId() != req.GetOperationId() || releaseResponse.GetReceipt().GetProducerId() != req.GetProducerId() || !bytes.Equal(releaseResponse.GetReceipt().GetRequestSha256(), req.GetReleaseRequestSha256()) {
+		return nil, status.Error(codes.Internal, "saved File release receipt is invalid")
+	}
+	var savedStatusHash, savedStatusBytes []byte
+	err = tx.QueryRow(ctx, `SELECT request_sha256,response_bytes FROM file_reference_gc_receipts WHERE caller_service=$1 AND operation_id=$2`, caller, operationID).Scan(&savedStatusHash, &savedStatusBytes)
+	if err == nil {
+		if !bytes.Equal(savedStatusHash, requestHash) {
+			return nil, status.Error(codes.AlreadyExists, "File GC status operation changed")
+		}
+		var response filev1.GetFileReferenceGCStatusResponse
+		if err := proto.Unmarshal(savedStatusBytes, &response); err != nil {
+			return nil, status.Error(codes.Internal, "saved File GC receipt is invalid")
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, status.Error(codes.Unavailable, "File GC status is unavailable")
+		}
+		return &response, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	response := &filev1.GetFileReferenceGCStatusResponse{OperationId: req.GetOperationId(), ProducerId: req.GetProducerId(), ReleaseRequestSha256: append([]byte(nil), req.GetReleaseRequestSha256()...), RequestSha256: append([]byte(nil), requestHash...)}
+	terminal := true
+	for _, ref := range req.GetReferences() {
+		ids, parseErr := parseReference(ref)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		if !producerOwnsReference(req.GetProducerId(), ref.GetOwnerType()) {
+			return nil, status.Error(codes.PermissionDenied, "Messaging cannot inspect this File reference owner")
+		}
+		var savedOperation *uuid.UUID
+		var releasedAt *time.Time
+		var blobState string
+		var shared bool
+		err := tx.QueryRow(ctx, `SELECT r.release_operation_id,r.released_at,b.state,EXISTS(
+			SELECT 1 FROM files other_file JOIN file_references other_ref ON other_ref.file_id=other_file.id
+			WHERE other_file.blob_id=b.blob_id AND other_ref.released_at IS NULL)
+			FROM file_references r JOIN files f ON f.id=r.file_id JOIN file_blobs b ON b.blob_id=f.blob_id
+			WHERE r.file_id=$1 AND r.owner_type=$2 AND r.owner_id=$3
+			AND r.subresource_id IS NOT DISTINCT FROM $4 AND r.scope_space_id IS NOT DISTINCT FROM $5
+			FOR SHARE OF r,b`, ids.file, int32(ref.GetOwnerType()), ids.owner, ids.subresource, ids.scope).Scan(&savedOperation, &releasedAt, &blobState, &shared)
+		if errors.Is(err, pgx.ErrNoRows) || savedOperation == nil || *savedOperation != operationID || releasedAt == nil {
+			return nil, status.Error(codes.FailedPrecondition, "exact File reference was not released by this operation")
+		}
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		state := filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_PENDING
+		switch {
+		case blobState == "GC_COMPLETE":
+			state = filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_GC_COMPLETE
+		case shared:
+			state = filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_RETAINED_SHARED
+		case blobState != "GC_PENDING":
+			return nil, status.Error(codes.FailedPrecondition, "released File object has no durable GC state")
+		default:
+			terminal = false
+		}
+		response.References = append(response.References, &filev1.FileReferenceGCStatus{Reference: proto.Clone(ref).(*filev1.FileReferenceKey), State: state})
+	}
+	if !terminal {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, status.Error(codes.Unavailable, "File GC status is unavailable")
+		}
+		return response, nil
+	}
+	var completedAt time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completedAt); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	response.ReceiptId = uuid.NewString()
+	response.CompletedAt = timestamppb.New(completedAt)
+	responseBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(response)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "could not encode File GC receipt")
+	}
+	responseHash := sha256.Sum256(responseBytes)
+	if _, err := tx.Exec(ctx, `INSERT INTO file_reference_gc_receipts(caller_service,operation_id,request_sha256,response_bytes,response_sha256,completed_at) VALUES($1,$2,$3,$4,$5,$6)`, caller, operationID, requestHash, responseBytes, responseHash[:], completedAt); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, status.Error(codes.Unavailable, "File GC receipt could not be committed")
+	}
+	return response, nil
+}
+
 func (s *FileGRPC) IssueFileAccessCapability(ctx context.Context, req *filev1.IssueFileAccessCapabilityRequest) (*filev1.IssueFileAccessCapabilityResponse, error) {
 	caller, err := requireFileService(ctx, ownerService(req.GetReference().GetOwnerType()), filev1.FileService_IssueFileAccessCapability_FullMethodName, req)
 	if err != nil {
@@ -496,20 +630,22 @@ func (s *FileGRPC) ApplySpaceLifecycleFence(ctx context.Context, req *filev1.App
 		if rootErr != nil {
 			return nil, rootErr
 		}
-		if !proto.Equal(root, f.GetManifest()) {
-			return nil, status.Error(codes.FailedPrecondition, "manifest root mismatch")
+		if !matchesPreparedChatManifest(chatBytes, f.GetManifest()) {
+			return nil, status.Error(codes.FailedPrecondition, "Chat manifest binding mismatch")
 		}
 		finalHash = root.GetManifestSha256()
 		current = "FROZEN"
 	case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_LIVE:
 		root, rootErr := loadSpaceManifestRoot(ctx, tx, spaceID, deletionID, currentGeneration, chatBytes)
-		if rootErr != nil || current != "FROZEN" || len(finalHash) == 0 || f.GetGeneration() != currentGeneration+1 || !proto.Equal(root, f.GetManifest()) {
+		if rootErr != nil || current != "FROZEN" || len(finalHash) == 0 || f.GetGeneration() != currentGeneration+1 ||
+			!matchesPreparedChatManifest(chatBytes, f.GetManifest()) || !bytes.Equal(root.GetManifestSha256(), finalHash) {
 			return nil, status.Error(codes.FailedPrecondition, "restore binding mismatch")
 		}
 		current = "LIVE"
 	case commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_PURGE_DECIDED:
 		root, rootErr := loadSpaceManifestRoot(ctx, tx, spaceID, deletionID, currentGeneration, chatBytes)
-		if rootErr != nil || current != "FROZEN" || len(finalHash) == 0 || f.GetGeneration() != currentGeneration+1 || !proto.Equal(root, f.GetManifest()) {
+		if rootErr != nil || current != "FROZEN" || len(finalHash) == 0 || f.GetGeneration() != currentGeneration+1 ||
+			!matchesPreparedChatManifest(chatBytes, f.GetManifest()) || !bytes.Equal(root.GetManifestSha256(), finalHash) {
 			return nil, status.Error(codes.FailedPrecondition, "purge decision binding mismatch")
 		}
 		current = "PURGE_DECIDED"
@@ -664,7 +800,7 @@ func (s *FileGRPC) PurgeSpace(ctx context.Context, req *filev1.PurgeSpaceRequest
 		return nil, status.Error(codes.FailedPrecondition, "purge decision manifest mismatch")
 	}
 	root, rootErr := loadSpaceManifestRoot(ctx, tx, spaceID, deletionID, p.GetGeneration()-1, chatBytes)
-	if rootErr != nil || !proto.Equal(root, p.GetManifest()) || !bytes.Equal(finalHash, root.GetManifestSha256()) {
+	if rootErr != nil || !matchesPreparedChatManifest(chatBytes, p.GetManifest()) || !bytes.Equal(finalHash, root.GetManifestSha256()) {
 		return nil, status.Error(codes.FailedPrecondition, "purge decision manifest mismatch")
 	}
 	var releaseCount int
@@ -687,7 +823,7 @@ WHERE r.space_id=$1 AND r.deletion_operation_id=$2
 	}
 	response := &filev1.PurgeSpaceResponse{Receipt: &commonv1.SpacePurgeReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), SpaceId: spaceID.String(), DeletionOperationId: deletionID.String(), Generation: p.GetGeneration(), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_FILE, State: commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, RequestSha256: requestHash, CompletedAt: timestamppb.Now()}}
 	receiptBytes, _ = proto.MarshalOptions{Deterministic: true}.Marshal(response)
-	if _, err := tx.Exec(ctx, `INSERT INTO file_space_purge_receipts(space_id,deletion_operation_id,generation,request_bytes,request_sha256,manifest_sha256,receipt_bytes) VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, deletionID, p.GetGeneration(), requestBytes, requestHash, finalHash, receiptBytes); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO file_space_purge_receipts(space_id,deletion_operation_id,generation,request_bytes,request_sha256,manifest_sha256,receipt_bytes) VALUES($1,$2,$3,$4,$5,$6,$7)`, spaceID, deletionID, p.GetGeneration(), requestBytes, requestHash, p.GetManifest().GetManifestSha256(), receiptBytes); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if _, err := tx.Exec(ctx, `UPDATE file_space_lifecycle_fences SET generation=$2,state='PURGED',updated_at=clock_timestamp() WHERE space_id=$1`, spaceID, p.GetGeneration()); err != nil {
@@ -792,6 +928,18 @@ WHERE capability_id=$1 AND expires_at > clock_timestamp()`, capabilityID).Scan(&
 		delegated = true
 	default:
 		return store.FileRow{}, status.Error(codes.PermissionDenied, "exact access selector required")
+	}
+	if ref.GetOwnerType() == filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE {
+		referenceIDs, parseErr := parseReference(ref)
+		if parseErr != nil || referenceIDs.file != fileID {
+			return store.FileRow{}, status.Error(codes.PermissionDenied, "reference does not match file")
+		}
+		if err := requireMessageReferenceEntitlement(ctx, s.chatGuard, referenceIDs.owner, profileID); err != nil {
+			return store.FileRow{}, err
+		}
+		// A message reference is readable through the Messaging/Chat entitlement,
+		// not only by the profile that originally uploaded the bytes.
+		delegated = true
 	}
 	return s.authorizeExactReferenceTx(ctx, tx, fileID, profileID, ref, delegated)
 }
@@ -1099,6 +1247,15 @@ func loadSpaceManifestRoot(ctx context.Context, tx pgx.Tx, space, deletion uuid.
 	}
 	return spaceManifestRoot(deletion, space, generation, &chat, declarations), nil
 }
+
+func matchesPreparedChatManifest(chatBytes []byte, candidate *commonv1.ManifestBinding) bool {
+	if candidate == nil {
+		return false
+	}
+	var saved commonv1.ManifestBinding
+	return proto.Unmarshal(chatBytes, &saved) == nil && proto.Equal(&saved, candidate)
+}
+
 func spaceManifestRoot(deletion, space uuid.UUID, generation uint64, chat *commonv1.ManifestBinding, declarations []*filev1.FileReferenceProducerDeclaration) *commonv1.ManifestBinding {
 	var wire []byte
 	wire = protowire.AppendTag(wire, 1, protowire.VarintType)

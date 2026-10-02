@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/principal"
@@ -16,6 +17,8 @@ import (
 type ManagedChatStore interface {
 	ProvisionManagedChat(context.Context, store.ManagedChatCreate) (store.ManagedChatCreateResult, error)
 	SyncManagedChatMembers(context.Context, store.ManagedChatMemberSync) (store.ManagedChatMemberSyncResult, error)
+	AddManagedChatMembers(context.Context, store.ManagedChatMemberAddition) (store.ManagedChatMemberSyncResult, error)
+	SetManagedChatRetention(context.Context, store.ManagedChatRetention) (store.ManagedChatRetentionResult, error)
 }
 
 // GameIntegrationChatGRPC is registered only on Chat's GIS mTLS listener.
@@ -66,7 +69,13 @@ func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, re
 		}
 		profileIDs = append(profileIDs, id)
 	}
-	result, err := s.Store.SyncManagedChatMembers(ctx, store.ManagedChatMemberSync{ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID, ChatID: chatID, RequestHash: mustGISHash(req), ProfileIDs: profileIDs})
+	requestHash := mustGISHash(req)
+	var result store.ManagedChatMemberSyncResult
+	if req.GetAddOnly() {
+		result, err = s.Store.AddManagedChatMembers(ctx, store.ManagedChatMemberAddition{ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID, ChatID: chatID, RequestHash: requestHash, ProfileIDs: profileIDs})
+	} else {
+		result, err = s.Store.SyncManagedChatMembers(ctx, store.ManagedChatMemberSync{ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID, ChatID: chatID, RequestHash: requestHash, ProfileIDs: profileIDs})
+	}
 	if err != nil {
 		return nil, managedChatStatus(err)
 	}
@@ -76,6 +85,33 @@ func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, re
 		response.ProfileIds[i] = id.String()
 	}
 	return response, nil
+}
+
+func (s *GameIntegrationChatGRPC) SetManagedChatRetention(ctx context.Context, req *chatv1.SetManagedChatRetentionRequest) (*chatv1.SetManagedChatRetentionResponse, error) {
+	if s == nil || s.Store == nil {
+		return nil, status.Error(codes.FailedPrecondition, "chat persistence not configured")
+	}
+	if err := requireGISBinding(ctx, req, req.GetOperationId()); err != nil {
+		return nil, err
+	}
+	applicationID, environmentID, operationID, err := parseGISIDs(req.GetApplicationId(), req.GetEnvironmentId(), req.GetOperationId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid managed chat retention request")
+	}
+	if req.GetPurgeAfter() == nil || req.GetPurgeAfter().CheckValid() != nil {
+		return nil, status.Error(codes.InvalidArgument, "valid purge_after required")
+	}
+	result, err := s.Store.SetManagedChatRetention(ctx, store.ManagedChatRetention{
+		ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID,
+		ExternalKey: req.GetExternalChatKey(), RequestHash: mustGISHash(req), PurgeAfter: req.GetPurgeAfter().AsTime(),
+	})
+	if err != nil {
+		return nil, managedChatStatus(err)
+	}
+	return &chatv1.SetManagedChatRetentionResponse{
+		ChatId: result.ChatID.String(), ReceiptId: result.ReceiptID.String(), RequestHash: result.RequestHash,
+		PurgeAfter: timestamppb.New(result.PurgeAfter), CompletedAt: timestamppb.New(result.CompletedAt), Replayed: result.Replayed,
+	}, nil
 }
 
 func requireGISBinding(ctx context.Context, request proto.Message, operationID string) error {
@@ -90,6 +126,8 @@ func requireGISBinding(ctx context.Context, request proto.Message, operationID s
 		expectedRPC = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
 	case *chatv1.SyncManagedChatMembersRequest:
 		expectedRPC = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
+	case *chatv1.SetManagedChatRetentionRequest:
+		expectedRPC = "/voice.chat.v1.GameIntegrationChatService/SetManagedChatRetention"
 	}
 	if err != nil || expectedRPC == "" || verified.Audience != "chat" || verified.RPC != expectedRPC || verified.RequestID != operationID || verified.RequestHash != hash {
 		return status.Error(codes.Unauthenticated, "invalid principal binding")

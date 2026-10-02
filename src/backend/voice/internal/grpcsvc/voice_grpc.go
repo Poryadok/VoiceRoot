@@ -29,15 +29,27 @@ type SpaceProLookup interface {
 	HasSpacePro(ctx context.Context, spaceID string) (bool, error)
 }
 
+type SdkConversionAdmissionGuard interface {
+	IsSdkConversionProfileFenced(context.Context, string) (bool, error)
+}
+
+type AccountVoiceProfileResolver interface {
+	AccountIDByProfileID(context.Context, uuid.UUID) (uuid.UUID, error)
+}
+
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
 	Calls                    voicestore.CallStore
 	ManagedGameSessionRooms  ManagedGameSessionRoomLookup
 	ManagedGameSessionGrants ManagedGameSessionGrantChecker
+	SdkConversionAdmission   SdkConversionAdmissionGuard
+	AccountVoiceFences       gameprovision.AccountVoiceFenceStore
+	AccountVoiceProfiles     AccountVoiceProfileResolver
 	ChatMembers              ChatMembership
 	SpaceMembers             SpaceMembership
 	VoiceRoomAccessResolver  AuthoritativeVoiceRoomAccessResolver
+	SpaceLifecycle           SpaceLifecycleController
 	SpacePro                 SpaceProLookup
 	Roles                    RolePermissionChecker
 	Privacy                  CallPrivacyChecker
@@ -73,6 +85,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 	}
 	if s == nil || s.Calls == nil {
 		return nil, status.Error(codes.FailedPrecondition, "voice persistence not configured")
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+		return nil, err
 	}
 	if sessionKind(req) == callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE {
 		return s.startGroupVoice(ctx, req, profileID)
@@ -113,6 +128,10 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 
 	now := s.now()
 	roomID := uuid.NewString()
+	fences, err := s.reserveAccountVoiceProfiles(ctx, roomID, []string{profileID, calleeID}, profileID)
+	if err != nil {
+		return nil, err
+	}
 	call, err := s.Calls.CreateCall(ctx, voicestore.Call{
 		RoomID:             roomID,
 		LivekitRoomName:    "voice-dm-" + roomID,
@@ -125,7 +144,18 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 		ExpiresAt:          now.Add(s.ringTimeout()),
 	})
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, storeErr(err)
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+		_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
 	}
 	if err := s.publishIncoming(ctx, call); err != nil {
 		return nil, status.Errorf(codes.Unavailable, "call signaling unavailable: %v", err)
@@ -136,6 +166,9 @@ func (s *VoiceGRPC) StartCall(ctx context.Context, req *callsv1.StartCallRequest
 func (s *VoiceGRPC) AcceptCall(ctx context.Context, req *callsv1.AcceptCallRequest) (*callsv1.AcceptCallResponse, error) {
 	profileID, err := callerProfile(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 		return nil, err
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
@@ -151,9 +184,20 @@ func (s *VoiceGRPC) AcceptCall(ctx context.Context, req *callsv1.AcceptCallReque
 	if !call.ExpiresAt.IsZero() && s.now().After(call.ExpiresAt) {
 		return nil, status.Error(codes.FailedPrecondition, "call expired")
 	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		return nil, err
+	}
 	call, err = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ACTIVE, time.Time{})
 	if err != nil {
 		return nil, storeErr(err)
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+		_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		return nil, err
 	}
 	s.publishAccepted(ctx, call, profileID)
 	return &callsv1.AcceptCallResponse{CallSession: callToProto(call)}, nil
@@ -171,9 +215,19 @@ func (s *VoiceGRPC) DeclineCall(ctx context.Context, req *callsv1.DeclineCallReq
 	if profileID != call.CalleeProfileID {
 		return nil, status.Error(codes.PermissionDenied, "only callee can decline call")
 	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		return nil, err
+	}
 	call, err = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_DECLINED, s.now())
 	if err != nil {
 		return nil, storeErr(err)
+	}
+	if err := s.releaseAccountVoiceCall(ctx, call); err != nil {
+		return nil, err
 	}
 	s.publishDeclined(ctx, call, profileID)
 	s.publishEnded(ctx, call, "declined", profileID)
@@ -183,6 +237,9 @@ func (s *VoiceGRPC) DeclineCall(ctx context.Context, req *callsv1.DeclineCallReq
 func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) (*callsv1.JoinCallResponse, error) {
 	profileID, err := callerProfile(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 		return nil, err
 	}
 	if s == nil || s.Calls == nil {
@@ -210,9 +267,24 @@ func (s *VoiceGRPC) JoinCall(ctx context.Context, req *callsv1.JoinCallRequest) 
 		} else if err := s.ensureChatMember(ctx, call.ChatID, profileID); err != nil {
 			return nil, err
 		}
+		fences, reserveErr := s.reserveAccountVoiceProfiles(ctx, roomID, []string{profileID}, profileID)
+		if reserveErr != nil {
+			return nil, reserveErr
+		}
 		call, err = s.Calls.AddParticipant(ctx, roomID, profileID, voicestore.MaxGroupVoiceParticipants)
 		if err != nil {
+			s.releaseAccountVoiceReservations(ctx, fences)
 			return nil, storeErr(err)
+		}
+		if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+			_, _ = s.Calls.RemoveParticipant(ctx, roomID, profileID)
+			s.releaseAccountVoiceReservations(ctx, fences)
+			return nil, err
+		}
+		if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+			_, _ = s.Calls.RemoveParticipant(ctx, roomID, profileID)
+			s.releaseAccountVoiceReservations(ctx, fences)
+			return nil, err
 		}
 		return &callsv1.JoinCallResponse{CallSession: callToProto(call)}, nil
 	}
@@ -239,10 +311,21 @@ func (s *VoiceGRPC) LeaveCall(ctx context.Context, req *callsv1.LeaveCallRequest
 }
 
 func (s *VoiceGRPC) leaveOpenVoiceSession(ctx context.Context, call voicestore.Call, profileID string) (*callsv1.LeaveCallResponse, error) {
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		return nil, err
+	}
 	s.clearScreenShareForProfile(ctx, call, profileID)
 	updated, err := s.Calls.RemoveParticipant(ctx, call.RoomID, profileID)
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, storeErr(err)
+	}
+	if err := s.releaseAccountVoiceProfile(ctx, profileID, call.RoomID); err != nil {
+		return nil, err
 	}
 	if len(updated.ProfileIDs()) == 0 && !updated.ManagedGameSession {
 		updated, err = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
@@ -266,9 +349,20 @@ func (s *VoiceGRPC) EndCall(ctx context.Context, req *callsv1.EndCallRequest) (*
 	if call.ManagedGameSession {
 		return nil, status.Error(codes.FailedPrecondition, "managed game session lifecycle is owned by GIS")
 	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		return nil, err
+	}
 	call, err = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, storeErr(err)
+	}
+	if err := s.releaseAccountVoiceCall(ctx, call); err != nil {
+		return nil, err
 	}
 	s.publishEnded(ctx, call, "hangup", profileID)
 	return &callsv1.EndCallResponse{}, nil
@@ -291,6 +385,10 @@ func (s *VoiceGRPC) joinManagedGameSession(ctx context.Context, roomID, profileI
 	}, profileID); err != nil {
 		return voicestore.Call{}, true, err
 	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, room.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return voicestore.Call{}, true, err
+	}
 	call := voicestore.Call{
 		RoomID: room.RoomID, LivekitRoomName: room.LiveKitRoomName, ChatID: room.ChatID,
 		ApplicationID: room.ApplicationID, EnvironmentID: room.EnvironmentID, SessionID: room.SessionID,
@@ -303,19 +401,28 @@ func (s *VoiceGRPC) joinManagedGameSession(ctx context.Context, roomID, profileI
 	created, err := s.Calls.CreateCall(ctx, call)
 	if err != nil {
 		if !errors.Is(err, voicestore.ErrInvalidState) && !errors.Is(err, voicestore.ErrActiveCall) {
+			s.releaseAccountVoiceReservations(ctx, fences)
 			return voicestore.Call{}, true, storeErr(err)
 		}
 		created, err = s.Calls.GetCall(ctx, room.RoomID)
 		if err != nil || !created.ManagedGameSession || created.ChatID != room.ChatID || created.LivekitRoomName != room.LiveKitRoomName {
+			s.releaseAccountVoiceReservations(ctx, fences)
 			return voicestore.Call{}, true, status.Error(codes.Aborted, "managed game session projection conflicts")
 		}
 	}
 	if created.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return voicestore.Call{}, true, status.Error(codes.FailedPrecondition, "managed game session is inactive")
 	}
 	joined, err := s.Calls.AddParticipant(ctx, room.RoomID, profileID, voicestore.MaxGroupVoiceParticipants)
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return voicestore.Call{}, true, storeErr(err)
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		_, _ = s.Calls.RemoveParticipant(ctx, room.RoomID, profileID)
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return voicestore.Call{}, true, err
 	}
 	return joined, true, nil
 }
@@ -343,6 +450,9 @@ func (s *VoiceGRPC) ensureManagedGameSessionMember(ctx context.Context, call voi
 		room.ApplicationID != call.ApplicationID || room.EnvironmentID != call.EnvironmentID {
 		return status.Error(codes.PermissionDenied, "managed game session identity mismatch")
 	}
+	if !containsProfile(room.ProfileIDs, profileID) {
+		return status.Error(codes.PermissionDenied, "profile is not in the accepted game session roster")
+	}
 	if err := s.ManagedGameSessionGrants.CheckGameSessionGrant(ctx, room.ApplicationID,
 		room.EnvironmentID, room.SessionID, room.RoomID, profileID); err != nil {
 		if status.Code(err) == codes.Unavailable || status.Code(err) == codes.DeadlineExceeded {
@@ -353,9 +463,21 @@ func (s *VoiceGRPC) ensureManagedGameSessionMember(ctx context.Context, call voi
 	return s.ensureChatMember(ctx, room.ChatID, profileID)
 }
 
+func containsProfile(profiles []string, profileID string) bool {
+	for _, candidate := range profiles {
+		if candidate == profileID {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenRequest) (*callsv1.GetJoinTokenResponse, error) {
 	profileID, err := callerProfile(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
 		return nil, err
 	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
@@ -378,6 +500,14 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	}
 	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		return nil, status.Error(codes.FailedPrecondition, "call is not active")
+	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
 	}
 	if s.Tokens == nil {
 		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
@@ -525,6 +655,9 @@ func (s *VoiceGRPC) MarkExpiredCallsMissed(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		if err := s.releaseAccountVoiceCall(ctx, updated); err != nil {
+			return 0, err
+		}
 		s.publishMissed(ctx, updated)
 		s.publishEnded(ctx, updated, "missed", "")
 	}
@@ -551,6 +684,20 @@ func callerProfile(ctx context.Context) (string, error) {
 		return "", status.Error(codes.Unauthenticated, "missing profile")
 	}
 	return profileID, nil
+}
+
+func (s *VoiceGRPC) ensureSdkConversionAdmission(ctx context.Context, profileID string) error {
+	if s == nil || s.SdkConversionAdmission == nil {
+		return nil
+	}
+	fenced, err := s.SdkConversionAdmission.IsSdkConversionProfileFenced(ctx, profileID)
+	if err != nil {
+		return status.Error(codes.Unavailable, "SDK conversion admission state unavailable")
+	}
+	if fenced {
+		return status.Error(codes.FailedPrecondition, "profile is fenced during SDK identity conversion")
+	}
+	return nil
 }
 
 func (s *VoiceGRPC) now() time.Time {
@@ -631,6 +778,10 @@ func (s *VoiceGRPC) startGroupVoice(ctx context.Context, req *callsv1.StartCallR
 
 	now := s.now()
 	roomID := uuid.NewString()
+	fences, err := s.reserveAccountVoiceProfiles(ctx, roomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
 	call, err := s.Calls.CreateCall(ctx, voicestore.Call{
 		RoomID:             roomID,
 		LivekitRoomName:    "voice-group-" + roomID,
@@ -642,7 +793,18 @@ func (s *VoiceGRPC) startGroupVoice(ctx context.Context, req *callsv1.StartCallR
 		StartedAt:          now,
 	})
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, storeErr(err)
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+		_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
 	}
 	s.publishAccepted(ctx, call, profileID)
 	s.publishCallStarted(ctx, call)

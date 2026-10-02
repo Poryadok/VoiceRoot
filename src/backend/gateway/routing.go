@@ -9,6 +9,9 @@ import (
 )
 
 func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/v1/auth/space-deletion-proof" {
+		w = &noStoreResponseWriter{ResponseWriter: w}
+	}
 	if blocked, updateURL := g.forceUpdateDecision(r); blocked {
 		g.metrics.ObserveForceUpdateBlock(r.Header.Get("X-Voice-Client-Platform"))
 		writeJSON(w, http.StatusUpgradeRequired, map[string]string{
@@ -115,7 +118,41 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if isGamePlayerProfileRoute(r.Method, r.URL.Path) {
+		upstream.ServeHTTP(&noStoreResponseWriter{ResponseWriter: w}, r)
+		return
+	}
 	upstream.ServeHTTP(w, r)
+}
+
+type noStoreResponseWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *noStoreResponseWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Add("Vary", "Authorization")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *noStoreResponseWriter) Write(body []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func isGamePlayerProfileRoute(method, path string) bool {
+	if method != http.MethodGet && method != http.MethodPut && method != http.MethodDelete {
+		return false
+	}
+	return strings.HasPrefix(path, "/api/v1/game-integrations/applications/") && strings.Contains(path, "/profiles/")
 }
 
 func restNamespace(path string) string {
@@ -125,8 +162,12 @@ func restNamespace(path string) string {
 	}
 	namespace, _, _ := strings.Cut(rest, "/")
 	switch namespace {
-	case "sessions", "operations", "session-events":
+	case "sessions", "operations", "session-events", "community-bindings":
 		return "game-integrations"
+	case "player":
+		if path == "/api/v1/player/sessions/me" {
+			return "game-integrations"
+		}
 	}
 	return namespace
 }
@@ -144,11 +185,15 @@ func isGameIntegrationSessionCredentialRoute(method, path string) bool {
 		return true
 	case method == http.MethodPost && len(segments) == 6 && segments[3] == "sessions" && segments[4] != "" && segments[5] == "close":
 		return true
+	case method == http.MethodPut && len(segments) == 6 && segments[3] == "sessions" && segments[4] != "" && segments[5] == "roster":
+		return true
 	case method == http.MethodGet && len(segments) == 5 && segments[3] == "operations" && segments[4] != "":
 		return true
 	case method == http.MethodPost && len(segments) == 5 && segments[3] == "session-events" && segments[4] == "claim":
 		return true
 	case method == http.MethodPost && len(segments) == 6 && segments[3] == "session-events" && segments[4] != "" && segments[5] == "ack":
+		return true
+	case (method == http.MethodGet || method == http.MethodPut) && len(segments) == 6 && segments[3] == "community-bindings" && segments[4] != "" && segments[5] == "roster":
 		return true
 	default:
 		return false

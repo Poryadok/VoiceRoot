@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/principal"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
 	authv1 "voice.app/voice/auth/v1"
@@ -35,31 +36,35 @@ import (
 )
 
 type grpcClients struct {
-	connections    []*grpc.ClientConn
-	userConn       *grpc.ClientConn
-	userRequired   bool
-	userConnectErr error
-	user           userv1.UserServiceClient
-	social         socialv1.SocialServiceClient
-	chat           chatv1.ChatServiceClient
-	messaging      messagingv1.MessagingServiceClient
-	voice          callsv1.VoiceServiceClient
-	file           filev1.FileServiceClient
-	space          spacev1.SpaceServiceClient
-	role           rolev1.RoleServiceClient
-	notification   notificationv1.NotificationServiceClient
-	matchmaking    matchmakingv1.MatchmakingServiceClient
-	moderation     moderationv1.ModerationServiceClient
-	subscription   subscriptionv1.SubscriptionServiceClient
-	bot            botv1.BotServiceClient
-	story          storyv1.StoryServiceClient
-	search         searchv1.SearchServiceClient
-	auth           authv1.AuthServiceClient
-	analytics      analyticsv1.AnalyticsQueryServiceClient
+	connections        []*grpc.ClientConn
+	userConn           *grpc.ClientConn
+	userRequired       bool
+	userConnectErr     error
+	user               userv1.UserServiceClient
+	social             socialv1.SocialServiceClient
+	chat               chatv1.ChatServiceClient
+	messaging          messagingv1.MessagingServiceClient
+	voice              callsv1.VoiceServiceClient
+	file               filev1.FileServiceClient
+	space              spacev1.SpaceServiceClient
+	spaceLifecycle     spacev1.SpaceServiceClient
+	spaceLifecycleConn *grpc.ClientConn
+	spaceLifecycleErr  error
+	role               rolev1.RoleServiceClient
+	notification       notificationv1.NotificationServiceClient
+	matchmaking        matchmakingv1.MatchmakingServiceClient
+	moderation         moderationv1.ModerationServiceClient
+	subscription       subscriptionv1.SubscriptionServiceClient
+	bot                botv1.BotServiceClient
+	story              storyv1.StoryServiceClient
+	search             searchv1.SearchServiceClient
+	auth               authv1.AuthServiceClient
+	analytics          analyticsv1.AnalyticsQueryServiceClient
 }
 
 type transcoder struct {
-	clients grpcClients
+	clients         grpcClients
+	lifecycleIssuer *principal.Issuer
 }
 
 func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
@@ -74,6 +79,17 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 	}
 
 	clients := &grpcClients{}
+	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
+		clients.spaceLifecycleErr = err
+	} else if enabled {
+		conn, err := cfg.dial()
+		clients.spaceLifecycleErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.spaceLifecycleConn = conn
+			clients.spaceLifecycle = spacev1.NewSpaceServiceClient(conn)
+		}
+	}
 	dial := func(addr string) (*grpc.ClientConn, error) {
 		addr = grpcclient.DialTarget(addr)
 		if addr == "" {
@@ -187,6 +203,17 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // generated client would otherwise defer a cold connection failure to the
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
+	if c != nil {
+		if c.spaceLifecycleErr != nil {
+			return c.spaceLifecycleErr
+		}
+		if c.spaceLifecycleConn != nil {
+			c.spaceLifecycleConn.Connect()
+			if err := grpcclient.WaitForReady(ctx, c.spaceLifecycleConn); err != nil {
+				return fmt.Errorf("Space lifecycle readiness: %w", err)
+			}
+		}
+	}
 	if c == nil || !c.userRequired {
 		return nil
 	}
@@ -285,6 +312,9 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveFiles(w, r, rest)
 	case "spaces":
+		if t.serveSpaceLifecycle(w, r, rest) {
+			return true
+		}
 		if t.clients.space == nil {
 			// Space-scoped MM queue only needs the matchmaking client.
 			if t.clients.matchmaking == nil {

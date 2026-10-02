@@ -2,14 +2,18 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	"voice/backend/messaging/internal/store"
 )
@@ -23,6 +27,8 @@ func TestMessagingListSharedMedia_listsImageAttachment(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -61,6 +67,109 @@ func TestMessagingListSharedMedia_listsImageAttachment(t *testing.T) {
 	require.Equal(t, "image", items[0].GetAttachmentType())
 }
 
+func TestMessagingListSharedMediaEnforcesMessageTimeEntitlementForEveryAttachmentKind(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID, sender, viewer, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedDMChat(t, ctx, pool, chatID, sender, viewer)
+	cutoff := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	attachments := []string{
+		"image", "video", "document", "other", "audio", "voice_message", "sticker",
+	}
+	oldMessageID, joinedMessageID := uuid.New(), uuid.New()
+	oldFileIDs := make([]string, 0, len(attachments))
+	joinedFileIDs := make([]string, 0, len(attachments))
+	makeAttachments := func(ids *[]string) []map[string]string {
+		items := make([]map[string]string, 0, len(attachments))
+		for _, attachmentType := range attachments {
+			fileID := uuid.NewString()
+			*ids = append(*ids, fileID)
+			items = append(items, map[string]string{"file_id": fileID, "type": attachmentType})
+		}
+		return items
+	}
+	require.NoError(t, store.InsertMessageAttachments(ctx, pool, oldMessageID, chatID, sender, makeAttachments(&oldFileIDs), " "))
+	require.NoError(t, store.InsertMessageAttachments(ctx, pool, joinedMessageID, chatID, sender, makeAttachments(&joinedFileIDs), " "))
+	_, err := pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, oldMessageID, cutoff.Add(-time.Nanosecond))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE messages SET created_at = $2 WHERE id = $1`, joinedMessageID, cutoff)
+	require.NoError(t, err)
+
+	metadata := &recordingFileMetadataLookup{metadata: fileMetadataMap{}}
+	for i := range attachments {
+		for _, id := range []string{oldFileIDs[i], joinedFileIDs[i]} {
+			metadata.metadata[id] = &filev1.FileMetadata{
+				Id: id, Status: "ready", FileType: attachments[i], ScanResult: "clean", Chat: chatDMRef(chatID),
+			}
+		}
+	}
+	guard := &cutoffMessageReadGuard{
+		entitledSQLChatGuard: entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}},
+		cutoff:               cutoff,
+	}
+	client, _ := startMessagingServerWired(t, pool, messagingWire{ChatGuard: guard, Files: metadata})
+	kinds := []messagingv1.SharedMediaKind{
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_FILES,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS,
+	}
+	expectedCounts := map[messagingv1.SharedMediaKind]int{
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA:    2,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_FILES:    2,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_VOICE:    2,
+		messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_STICKERS: 1,
+	}
+	for _, kind := range kinds {
+		response, err := client.ListSharedMedia(withProfileCtx(ctx, account, viewer), &messagingv1.ListSharedMediaRequest{
+			Chat: chatDMRef(chatID), Kind: kind,
+		})
+		require.NoError(t, err)
+		items := response.GetSharedMediaList().GetItems()
+		require.Len(t, items, expectedCounts[kind])
+		for _, item := range items {
+			require.Equal(t, joinedMessageID.String(), item.GetMessageId(), "join boundary is inclusive")
+		}
+	}
+	for _, requested := range metadata.requested {
+		require.NotContains(t, oldFileIDs, requested, "denied attachment IDs must not be sent to File for metadata enrichment")
+	}
+
+	guard.err = errors.New("chat entitlement unavailable")
+	requestedBeforeFailure := len(metadata.requested)
+	_, err = client.ListSharedMedia(withProfileCtx(ctx, account, viewer), &messagingv1.ListSharedMediaRequest{
+		Chat: chatDMRef(chatID), Kind: messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_MEDIA,
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Len(t, metadata.requested, requestedBeforeFailure, "File metadata lookup must not run when Chat cannot decide entitlement")
+}
+
+type cutoffMessageReadGuard struct {
+	entitledSQLChatGuard
+	cutoff time.Time
+	err    error
+}
+
+func (g *cutoffMessageReadGuard) MessageReadEntitled(_ context.Context, _, _ uuid.UUID, createdAt time.Time) (bool, error) {
+	if g.err != nil {
+		return false, g.err
+	}
+	return !createdAt.Before(g.cutoff), nil
+}
+
+type recordingFileMetadataLookup struct {
+	metadata  fileMetadataMap
+	requested []string
+}
+
+func (m *recordingFileMetadataLookup) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetadataRequest, opts ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error) {
+	m.requested = append(m.requested, req.GetFileIds()...)
+	return m.metadata.GetBulkMetadata(ctx, req, opts...)
+}
+
 func TestMessagingListSharedMedia_nonMemberDenied(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
@@ -70,6 +179,8 @@ func TestMessagingListSharedMedia_nonMemberDenied(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -95,6 +206,8 @@ func TestMessagingListSharedMedia_excludesDeletedMessage(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -133,6 +246,8 @@ func TestMessagingListSharedMedia_linksTab(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -168,6 +283,8 @@ func TestMessagingListSharedMedia_voiceTab(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -205,6 +322,8 @@ func TestMessagingListSharedMedia_stickersTabFiltersStickerAttachments(t *testin
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -237,6 +356,8 @@ func TestMessagingListSharedMedia_invalidKind(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -261,6 +382,8 @@ func TestMessagingListSharedMedia_filesKindFiltersDocument(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()
@@ -306,6 +429,8 @@ func TestMessagingListSharedMedia_returnsE2eKeyWire(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	chatID := uuid.New()
 	profA := uuid.New()
 	profB := uuid.New()

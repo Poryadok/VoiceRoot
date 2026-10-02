@@ -305,11 +305,17 @@ services:
       - social_principal_keys:/signing
       - file_principal_keys:/file-signing
       - search_principal_keys:/search-signing
+      - space_principal_keys:/space-signing
+      - story_principal_keys:/story-signing
+      - messaging_principal_keys:/messaging-signing
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
       - file_principal_tls:/file
       - search_principal_tls:/search
+      - story_principal_tls:/story
+      - messaging_principal_tls:/messaging
+      - matchmaking_principal_tls:/matchmaking
       - social_principal_ca:/ca
 
   social:
@@ -510,7 +516,36 @@ services:
       ROLE_GRPC_ADDR: role:9090
       MODERATION_GRPC_ADDR: moderation:9090
       NATS_URL: nats://nats:4222
+      MESSAGING_PURGE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/messaging-principal/keys
+      MESSAGING_PURGE_PRINCIPAL_ACTIVE_KID: current
+      MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN: :8444
+      MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/principal-jwks.json
+      SPACE_PRINCIPAL_JWKS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN: :9093
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_SPACE_LIFECYCLE_CLIENT_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      FILE_MANAGED_CHAT_PURGE_GRPC_ADDR: file:9091
+      FILE_MANAGED_CHAT_PURGE_TLS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      FILE_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: file
+      SEARCH_MANAGED_CHAT_PURGE_GRPC_ADDR: search:9091
+      SEARCH_MANAGED_CHAT_PURGE_TLS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      SEARCH_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: search
+    volumes:
+      - messaging_principal_keys:/etc/voice/messaging-principal/keys:ro
+      - messaging_principal_tls:/etc/voice/messaging-principal/tls:ro
+      - social_principal_ca:/etc/voice/messaging-principal/ca:ro
+      - file_principal_tls:/etc/voice/file-principal/tls:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       nats:
@@ -556,6 +591,15 @@ services:
       FILE_PRINCIPAL_JWKS_LISTEN: :8443
       FILE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
       FILE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      FILE_PRINCIPAL_GRPC_LISTEN: :9091
+      FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      FILE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/file-principal/ca/ca.crt
+      FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"story":"https://story:8443/.well-known/jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /etc/voice/file-principal/tls/tls.key
       USER_FILE_PRINCIPAL_GRPC_ADDR: user:9092
       USER_FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
       USER_FILE_PRINCIPAL_TLS_SERVER_NAME: user
@@ -586,6 +630,8 @@ services:
         condition: service_completed_successfully
       social-principal-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       user:
         condition: service_healthy
       nats-realtime-bootstrap:
@@ -606,6 +652,13 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/matchmaking_db?sslmode=disable
       MATCHMAKING_GRPC_LISTEN: :9090
+      MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN: :9092
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/principal/ca/ca.crt
+      MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       MATCHMAKING_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090
       VOICE_GRPC_ADDR: voice:9090
@@ -615,6 +668,9 @@ services:
       NATS_URL: nats://nats:4222
       MATCHMAKING_SEARCH_NUDGE_AFTER: ${MATCHMAKING_SEARCH_NUDGE_AFTER:-15m}
       MATCHMAKING_SEARCH_TIMEOUT: ${MATCHMAKING_SEARCH_TIMEOUT:-30m}
+    volumes:
+      - matchmaking_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -670,6 +726,15 @@ services:
       SEARCH_PRINCIPAL_JWKS_LISTEN: :8443
       SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
       SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/search-projection/tls/tls.key
+      SEARCH_PRINCIPAL_GRPC_LISTEN: :9091
+      SEARCH_PRINCIPAL_TLS_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
+      SEARCH_PRINCIPAL_TLS_KEY_FILE: /etc/voice/search-projection/tls/tls.key
+      SEARCH_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/search-projection/ca/ca.crt
+      SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/search-projection/ca/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /etc/voice/search-projection/tls/tls.key
       SPACE_GRPC_ADDR: space:9090
     depends_on:
       social-principal-init:
@@ -683,6 +748,8 @@ services:
       nats-search-bootstrap:
         condition: service_completed_successfully
       messaging:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       chat:
         condition: service_healthy
@@ -720,6 +787,10 @@ services:
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
       MESSAGING_GRPC_ADDR: messaging:9090
+      GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
+      GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64:-YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=}
+      GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
+      SOCIAL_GRPC_ADDR: social:9090
     depends_on:
       postgres:
         condition: service_healthy
@@ -736,6 +807,10 @@ services:
       chat:
         condition: service_healthy
       messaging:
+        condition: service_healthy
+      gameintegration:
+        condition: service_healthy
+      social:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -850,6 +925,7 @@ services:
       GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS: ${GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS:-}
       GAME_INTEGRATION_CREDENTIAL_KEY_B64: ${GAME_INTEGRATION_CREDENTIAL_KEY_B64:-}
       GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64:-}
+      GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64:-YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=}
     depends_on:
       postgres:
         condition: service_healthy
@@ -951,6 +1027,16 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/story_db?sslmode=disable
       STORY_GRPC_LISTEN: :9090
+      STORY_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/story-principal/keys
+      STORY_PRINCIPAL_ACTIVE_KID: current
+      STORY_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/story-principal/tls/tls.crt
+      STORY_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/story-principal/tls/tls.key
+      STORY_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      FILE_PRINCIPAL_GRPC_ADDR: file:9091
+      FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/story-principal/ca/ca.crt
+      FILE_PRINCIPAL_TLS_SERVER_NAME: file
+      FILE_PRINCIPAL_CLIENT_CERT_FILE: /etc/voice/story-principal/tls/tls.crt
+      FILE_PRINCIPAL_CLIENT_KEY_FILE: /etc/voice/story-principal/tls/tls.key
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
@@ -960,6 +1046,10 @@ services:
       GRPC_DIAL_TIMEOUT: ${GRPC_DIAL_TIMEOUT:-15s}
       NATS_URL: nats://nats:4222
       STORY_TTL_DEV: ${STORY_TTL_DEV:-}
+    volumes:
+      - story_principal_keys:/etc/voice/story-principal/keys:ro
+      - story_principal_tls:/etc/voice/story-principal/tls:ro
+      - social_principal_ca:/etc/voice/story-principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -969,6 +1059,10 @@ services:
         condition: service_healthy
       user:
         condition: service_healthy
+      file:
+        condition: service_healthy
+      social-principal-init:
+        condition: service_completed_successfully
       nats:
         condition: service_healthy
       nats-realtime-bootstrap:
@@ -994,6 +1088,8 @@ services:
       REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       REALTIME_JWT_ISSUER: voice-auth
       REALTIME_JWT_AUDIENCE: voice-client
+      GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
+      GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
       REALTIME_CHAT_GRPC_ADDR: chat:9090
       REALTIME_USER_GRPC_ADDR: user:9090
       REALTIME_SOCIAL_GRPC_ADDR: social:9090
@@ -1031,6 +1127,11 @@ services:
       SPACE_PRINCIPAL_GRPC_LISTEN: :9091
       SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      SPACE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/principal/keys
+      SPACE_PRINCIPAL_ACTIVE_KID: current
+      SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
       SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
@@ -1040,6 +1141,7 @@ services:
       SOCIAL_GRPC_ADDR: social:9090
       NATS_URL: nats://nats:4222
     volumes:
+      - space_principal_keys:/etc/voice/principal/keys:ro
       - space_principal_tls:/etc/voice/principal/tls:ro
       - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
@@ -1368,11 +1470,17 @@ volumes:
   social_principal_keys:
   file_principal_keys:
   search_principal_keys:
+  space_principal_keys:
+  story_principal_keys:
+  messaging_principal_keys:
   social_principal_tls:
   user_principal_tls:
   space_principal_tls:
   file_principal_tls:
   search_principal_tls:
+  story_principal_tls:
+  messaging_principal_tls:
+  matchmaking_principal_tls:
   social_principal_ca:
   voice_pgdata:
   voice_redis:

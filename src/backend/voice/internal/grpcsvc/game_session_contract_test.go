@@ -13,7 +13,7 @@ func TestGameSessionProvisioningContract_IsDedicatedSingleMethodService(t *testi
 	file := callsv1.File_voice_calls_v1_calls_proto
 	service := file.Services().ByName("GameSessionProvisioningService")
 	require.NotNil(t, service, "GIS provisioning must have a dedicated private service")
-	require.Equal(t, 2, service.Methods().Len(), "private GIS listener exposes only provisioning and close")
+	require.Equal(t, 5, service.Methods().Len(), "private GIS listener exposes provisioning, close, roster apply, conversion fencing and activation")
 	method := service.Methods().ByName("ProvisionGameSessionRoom")
 	require.NotNil(t, method)
 	require.Equal(t, "ProvisionGameSessionRoomRequest", string(method.Input().Name()))
@@ -23,6 +23,16 @@ func TestGameSessionProvisioningContract_IsDedicatedSingleMethodService(t *testi
 	require.NotNil(t, closeMethod)
 	require.Equal(t, "CloseGameSessionRoomRequest", string(closeMethod.Input().Name()))
 	require.Equal(t, "CloseGameSessionRoomResponse", string(closeMethod.Output().Name()))
+	applyRoster := service.Methods().ByName("ApplyGameSessionRoster")
+	require.NotNil(t, applyRoster)
+	require.Equal(t, "ApplyGameSessionRosterRequest", string(applyRoster.Input().Name()))
+	require.Equal(t, "ApplyGameSessionRosterResponse", string(applyRoster.Output().Name()))
+	for _, name := range []string{"operation_id", "application_id", "environment_id", "session_id", "voice_room_id", "roster_revision", "profile_ids", "lease_expires_at"} {
+		require.NotNil(t, applyRoster.Input().Fields().ByName(protoreflect.Name(name)), name)
+	}
+	for _, name := range []string{"receipt_id", "request_hash", "accepted_revision", "lease_expires_at"} {
+		require.NotNil(t, applyRoster.Output().Fields().ByName(protoreflect.Name(name)), name)
+	}
 }
 
 func TestGameSessionProvisioningRequest_BindsOperationScopeResourceAndChatReceipt(t *testing.T) {

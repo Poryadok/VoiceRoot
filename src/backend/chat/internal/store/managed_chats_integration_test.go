@@ -144,6 +144,103 @@ func TestSyncManagedChatMembersReplacesRosterWithMemberRolesAndReplaysReceipt(t 
 	require.ErrorIs(t, err, ErrManagedChatNotFound)
 }
 
+func TestAddManagedChatMembersPreservesPartyRosterAndReplaysReceipt(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	chatStore := &DMStore{Pool: pool}
+	applicationID, environmentID := uuid.New(), uuid.New()
+	created, err := chatStore.ProvisionManagedChat(ctx, ManagedChatCreate{
+		ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: uuid.New(),
+		ExternalKey: "party:keep-group-test", RequestHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Party",
+	})
+	require.NoError(t, err)
+	existingMember, consentingMember := uuid.New(), uuid.New()
+	_, err = chatStore.SyncManagedChatMembers(ctx, ManagedChatMemberSync{
+		ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: uuid.New(), ChatID: created.ChatID,
+		RequestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ProfileIDs: []uuid.UUID{existingMember},
+	})
+	require.NoError(t, err)
+	request := ManagedChatMemberAddition{
+		ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: uuid.New(), ChatID: created.ChatID,
+		RequestHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", ProfileIDs: []uuid.UUID{consentingMember},
+	}
+	first, err := chatStore.AddManagedChatMembers(ctx, request)
+	require.NoError(t, err)
+	require.False(t, first.Replayed)
+	require.Equal(t, request.OperationID, first.ReceiptID)
+	require.ElementsMatch(t, []uuid.UUID{consentingMember}, first.ProfileIDs)
+	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, existingMember))
+	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, consentingMember))
+	require.Equal(t, 2, countMembers(t, chatStore, created.ChatID), "existing party members must stay in place")
+
+	replayed, err := chatStore.AddManagedChatMembers(ctx, request)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, first.ReceiptID, replayed.ReceiptID)
+	require.Equal(t, first.RequestHash, replayed.RequestHash)
+	require.Equal(t, 2, countMembers(t, chatStore, created.ChatID), "retry must not duplicate membership")
+
+	changed := request
+	changed.RequestHash = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	changed.ProfileIDs = []uuid.UUID{uuid.New()}
+	_, err = chatStore.AddManagedChatMembers(ctx, changed)
+	require.ErrorIs(t, err, ErrManagedOperationConflict)
+}
+
+func TestManagedChatSinceJoinIntervalsPreserveOldHistoryButDenyGaps(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	chatStore := &DMStore{Pool: pool}
+	applicationID, environmentID, profileID := uuid.New(), uuid.New(), uuid.New()
+	created, err := chatStore.ProvisionManagedChat(ctx, ManagedChatCreate{ApplicationID: applicationID, EnvironmentID: environmentID,
+		OperationID: uuid.New(), ExternalKey: "match:since-join", RequestHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Since join"})
+	require.NoError(t, err)
+	syncRoster := func(profiles []uuid.UUID) {
+		t.Helper()
+		_, syncErr := chatStore.SyncManagedChatMembers(ctx, ManagedChatMemberSync{ApplicationID: applicationID, EnvironmentID: environmentID,
+			OperationID: uuid.New(), ChatID: created.ChatID, RequestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ProfileIDs: profiles})
+		require.NoError(t, syncErr)
+	}
+	syncRoster([]uuid.UUID{profileID})
+	var firstJoin time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT joined_at FROM managed_chat_member_intervals WHERE chat_id=$1 AND profile_id=$2 AND revoked_at IS NULL`, created.ChatID, profileID).Scan(&firstJoin))
+	allowed, err := chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, firstJoin)
+	require.NoError(t, err)
+	require.True(t, allowed, "joined_at is inclusive")
+	allowed, err = chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, firstJoin.Add(-time.Microsecond))
+	require.NoError(t, err)
+	require.False(t, allowed, "messages before first join are hidden")
+	syncRoster(nil)
+	allowed, err = chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, firstJoin.Add(time.Microsecond))
+	require.NoError(t, err)
+	require.True(t, allowed, "revocation preserves reads within the closed membership interval")
+	var firstRevoked time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT revoked_at FROM managed_chat_member_intervals WHERE chat_id=$1 AND profile_id=$2 AND revoked_at IS NOT NULL`, created.ChatID, profileID).Scan(&firstRevoked))
+	syncRoster([]uuid.UUID{profileID})
+	var secondJoin time.Time
+	require.NoError(t, pool.QueryRow(ctx, `SELECT joined_at FROM managed_chat_member_intervals WHERE chat_id=$1 AND profile_id=$2 AND revoked_at IS NULL`, created.ChatID, profileID).Scan(&secondJoin))
+	require.True(t, secondJoin.After(firstJoin))
+	allowed, err = chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, firstJoin.Add(time.Microsecond))
+	require.NoError(t, err)
+	require.True(t, allowed, "rejoin preserves access to the earlier interval")
+	gapMessageAt := firstRevoked.Add(time.Microsecond)
+	require.True(t, gapMessageAt.Before(secondJoin))
+	allowed, err = chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, gapMessageAt)
+	require.NoError(t, err)
+	require.False(t, allowed, "rejoin does not grant access during the membership gap")
+	allowed, err = chatStore.ManagedChatMessageEntitled(ctx, created.ChatID, profileID, secondJoin)
+	require.NoError(t, err)
+	require.True(t, allowed, "second joined_at is inclusive")
+}
+
 func TestPlayerRosterMutationsCannotChangeManagedChat(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

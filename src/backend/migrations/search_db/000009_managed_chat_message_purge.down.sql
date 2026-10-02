@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS search_managed_chat_message_purge_fences;
+DROP TABLE IF EXISTS search_managed_chat_purge_operations;

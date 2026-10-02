@@ -11,6 +11,7 @@ COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
@@ -24,6 +25,7 @@ COPY chat/pb ./chat/pb
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
+COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY role/pb/voice/role ./role/pb/voice/role
 COPY file/pb/voice/file ./file/pb/voice/file
 COPY voice ./voice

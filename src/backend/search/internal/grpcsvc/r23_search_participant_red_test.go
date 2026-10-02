@@ -641,6 +641,7 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 	pool := integrationtest.StartPostgres(t, ctx, "search_r23_lifecycle", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000002_verification_type.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000010_chat_manifest_root_binding.up.sql"))
 
 	messages := store.NewMessageSearchStore(pool)
@@ -660,9 +661,11 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 		freshMessages := store.NewMessageSearchStore(pool)
 		freshProjections := store.NewProfileSpaceSearchStore(pool)
 		return &SearchGRPC{
-			Messages:     &MessageStoreAdapter{MessageSearchStore: freshMessages},
-			Spaces:       &SpaceStoreAdapter{ProfileSpaceSearchStore: freshProjections},
-			ChatManifest: manifestClient,
+			Messages:          &MessageStoreAdapter{MessageSearchStore: freshMessages},
+			ManagedChatPurger: freshMessages,
+			Spaces:            &SpaceStoreAdapter{ProfileSpaceSearchStore: freshProjections},
+			ChatManifest:      manifestClient,
+			ChatEntitlement:   &entitlementChatClient{allowed: true},
 			Chats: &ProjectionChatAccess{Store: freshProjections, Accessible: func(context.Context, uuid.UUID) ([]uuid.UUID, error) {
 				return []uuid.UUID{targetChat, controlChat}, nil
 			}},

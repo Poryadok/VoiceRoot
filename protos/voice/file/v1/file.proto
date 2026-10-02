@@ -83,6 +83,9 @@ service FileService {
   // @voice.security=protected;callers=service:space,service:chat,service:messaging
   rpc ReleaseFileReferences(voice.file.v1.ReleaseFileReferencesRequest) returns (voice.file.v1.ReleaseFileReferencesResponse);
 
+  // @voice.security=protected;callers=service:messaging
+  rpc GetFileReferenceGCStatus(voice.file.v1.GetFileReferenceGCStatusRequest) returns (voice.file.v1.GetFileReferenceGCStatusResponse);
+
   // @voice.security=protected;callers=service:space
   rpc GetSpacePurgeReceipt(voice.file.v1.GetSpacePurgeReceiptRequest) returns (voice.file.v1.GetSpacePurgeReceiptResponse);
 }
@@ -496,6 +499,40 @@ message ReleaseFileReferencesReceipt {
 // @voice.hash=domain_separated_sha256
 message ReleaseFileReferencesResponse {
   voice.file.v1.ReleaseFileReferencesReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetFileReferenceGCStatusRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  voice.file.v1.FileReferenceProducerId producer_id = 3;
+  repeated voice.file.v1.FileReferenceKey references = 4;
+  bytes release_request_sha256 = 5;
+}
+
+enum FileReferenceGCState {
+  FILE_REFERENCE_GC_STATE_UNSPECIFIED = 0;
+  FILE_REFERENCE_GC_STATE_PENDING = 1;
+  FILE_REFERENCE_GC_STATE_GC_COMPLETE = 2;
+  FILE_REFERENCE_GC_STATE_RETAINED_SHARED = 3;
+}
+
+message FileReferenceGCStatus {
+  voice.file.v1.FileReferenceKey reference = 1;
+  voice.file.v1.FileReferenceGCState state = 2;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetFileReferenceGCStatusResponse {
+  string receipt_id = 1;
+  string operation_id = 2;
+  voice.file.v1.FileReferenceProducerId producer_id = 3;
+  bytes release_request_sha256 = 4;
+  bytes request_sha256 = 5;
+  repeated voice.file.v1.FileReferenceGCStatus references = 6;
+  google.protobuf.Timestamp completed_at = 7;
 }
 
 // @voice.unknown_fields=reject

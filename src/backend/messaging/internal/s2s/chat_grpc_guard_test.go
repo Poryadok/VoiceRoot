@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -22,9 +23,13 @@ type stubChatListMembers struct {
 	chatv1.UnimplementedChatServiceServer
 	members []*chatv1.ChatMember
 	err     error
+	internalCaller []string
 }
 
-func (s *stubChatListMembers) ListMembers(_ context.Context, _ *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+func (s *stubChatListMembers) ListMembers(ctx context.Context, _ *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		s.internalCaller = md.Get("x-voice-internal-caller")
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -68,13 +73,15 @@ func TestGRPCChatGuard_EnsureMember(t *testing.T) {
 
 	t.Run("member ok", func(t *testing.T) {
 		t.Parallel()
-		conn, cleanup := startBufconnChat(t, &stubChatListMembers{members: []*chatv1.ChatMember{
+		server := &stubChatListMembers{members: []*chatv1.ChatMember{
 			{ProfileId: self.String()},
 			{ProfileId: peer.String()},
-		}})
+		}}
+		conn, cleanup := startBufconnChat(t, server)
 		t.Cleanup(cleanup)
 		g := NewGRPCChatGuard(chatv1.NewChatServiceClient(conn))
 		require.NoError(t, g.EnsureMember(context.Background(), chatID, self))
+		require.Equal(t, []string{"messaging"}, server.internalCaller)
 	})
 
 	t.Run("not member", func(t *testing.T) {

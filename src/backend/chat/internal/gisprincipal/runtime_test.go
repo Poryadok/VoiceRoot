@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	chatv1 "voice.app/voice/chat/v1"
+	commonv1 "voice.app/voice/common/v1"
 	"voice/backend/pkg/principal"
 )
 
@@ -100,6 +101,80 @@ func TestGISAllowlistIsExact(t *testing.T) {
 	require.False(t, AllowsMethod("/voice.chat.v1.GameIntegrationChatService/DeleteManagedChat"))
 }
 
+func TestSpaceLifecyclePrincipalBindsNestedOperationAndRequest(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "space", KeyID: "space-key", PrivateKey: key})
+	require.NoError(t, err)
+	request := &chatv1.ApplySpaceLifecycleFenceRequest{Fence: &commonv1.SpaceLifecycleFenceRequest{
+		ProtocolVersion: 1, SpaceId: "00000000-0000-4000-8000-000000000001",
+		DeletionOperationId: "00000000-0000-4000-8000-000000000002", Generation: 4,
+		DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN,
+		Manifest:     &commonv1.ManifestBinding{ManifestId: "00000000-0000-4000-8000-000000000003", ManifestSha256: []byte("manifest")},
+	}}
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	token, err := issuer.IssueService(principal.ServiceInput{Audience: "chat", RPC: "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence", RequestID: request.GetFence().GetDeletionOperationId(), RequestHash: hash})
+	require.NoError(t, err)
+	called := false
+	runtime := &Runtime{
+		issuer: "space", audience: "chat", keyResolver: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+		replayGuard: func(context.Context, string, string, time.Time) error { return nil },
+	}
+	interceptor := strictInterceptor{runtime: runtime}.intercept
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", request.GetFence().GetDeletionOperationId()))
+	_, err = interceptor(ctx, request, &grpc.UnaryServerInfo{FullMethod: "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"}, func(ctx context.Context, _ any) (any, error) {
+		verified, ok := principal.FromContext(ctx)
+		require.True(t, ok)
+		require.Equal(t, "space", verified.Issuer)
+		called = true
+		return nil, nil
+	})
+	require.NoError(t, err)
+	require.True(t, called)
+
+	wrongID := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "00000000-0000-4000-8000-000000000004"))
+	_, err = interceptor(wrongID, request, &grpc.UnaryServerInfo{FullMethod: "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"}, func(context.Context, any) (any, error) { t.Fatal("wrong request id reached handler"); return nil, nil })
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestSpaceLifecycleMethodAllowlistDoesNotExposeChatAPIs(t *testing.T) {
+	methods := map[string]struct{}{}
+	for _, method := range spaceLifecycleMethods() {
+		methods[method] = struct{}{}
+	}
+	for _, method := range spaceLifecycleMethods() {
+		_, err := (&Runtime{methods: methods}).allowlist(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return nil, nil })
+		require.NoError(t, err)
+	}
+	for _, method := range []string{ProvisionMethod, "/voice.chat.v1.ChatService/CreateChat", "/voice.chat.v1.ChatService/DeleteChat"} {
+		_, err := (&Runtime{methods: methods}).allowlist(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { return nil, nil })
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+	}
+}
+
+func TestConfiguredMethodsKeepGISAndSpaceLifecycleAllowlistSeparate(t *testing.T) {
+	gis, err := configuredMethods(Issuer, []string{ProvisionMethod, SyncMembersMethod})
+	require.NoError(t, err)
+	require.Len(t, gis, 2)
+	space, err := configuredMethods("space", spaceLifecycleMethods())
+	require.NoError(t, err)
+	require.Len(t, space, 4)
+	search, err := configuredMethods("search", []string{GetManifestPageMethod})
+	require.NoError(t, err)
+	require.Len(t, search, 1)
+	for _, method := range []string{ApplyLifecycleMethod, PurgeSpaceMethod, PrepareManifestMethod, ProvisionMethod} {
+		_, err = configuredMethods("search", []string{method})
+		require.Error(t, err)
+	}
+	_, err = configuredMethods("space", []string{ProvisionMethod})
+	require.Error(t, err)
+	_, err = configuredMethods(Issuer, spaceLifecycleMethods())
+	require.Error(t, err)
+	_, err = configuredMethods("gateway", []string{ProvisionMethod})
+	require.Error(t, err)
+}
+
 func TestNoGISConfigDisablesProtectedListener(t *testing.T) {
 	for _, key := range []string{"CHAT_GIS_TLS_CERT_FILE", "CHAT_GIS_TLS_KEY_FILE", "CHAT_GIS_CLIENT_CA_FILE", "GAME_INTEGRATION_PRINCIPAL_JWKS_URL", "GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE", "GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_ADDR", "GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_PASSWORD"} {
 		t.Setenv(key, "")
@@ -107,6 +182,21 @@ func TestNoGISConfigDisablesProtectedListener(t *testing.T) {
 	_, configured, err := ConfigFromEnv()
 	require.NoError(t, err)
 	require.False(t, configured)
+}
+
+func TestSpaceLifecyclePrincipalConfigurationFailsClosedWhenPartial(t *testing.T) {
+	keys := []string{"CHAT_SPACE_LIFECYCLE_GRPC_LISTEN", "CHAT_SPACE_LIFECYCLE_TLS_CERT_FILE", "CHAT_SPACE_LIFECYCLE_TLS_KEY_FILE", "CHAT_SPACE_LIFECYCLE_CLIENT_CA_FILE", "CHAT_SPACE_PRINCIPAL_JWKS_URL", "CHAT_SPACE_PRINCIPAL_JWKS_CA_FILE", "CHAT_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR", "CHAT_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD"}
+	for _, key := range keys {
+		t.Setenv(key, "")
+	}
+	_, _, configured, err := SpaceLifecycleConfigFromEnv()
+	require.NoError(t, err)
+	require.False(t, configured)
+
+	t.Setenv("CHAT_SPACE_LIFECYCLE_GRPC_LISTEN", ":9092")
+	_, _, configured, err = SpaceLifecycleConfigFromEnv()
+	require.True(t, configured)
+	require.ErrorContains(t, err, "configuration is incomplete")
 }
 
 func TestRuntimeRejectsNonTLSJWKSURLBeforeLoadingSecrets(t *testing.T) {

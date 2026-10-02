@@ -28,9 +28,12 @@ import (
 	"voice/backend/voice/internal/gameprovision"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/principalgrpc"
 	"voice/backend/voice/internal/principaljwks"
 	"voice/backend/voice/internal/rolegrant"
 	"voice/backend/voice/internal/s2s"
+	"voice/backend/voice/internal/spacelifecycle"
+	"voice/backend/voice/internal/spaceprincipalruntime"
 	voicestore "voice/backend/voice/internal/store"
 	"voice/backend/voice/internal/voiceevents"
 
@@ -60,7 +63,7 @@ func main() {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 
-	lifecycleStore, closeLifecycleDatabase, lifecycleEnabled, err := openLifecycleDatabase(runCtx)
+	lifecycleStore, lifecyclePool, closeLifecycleDatabase, lifecycleEnabled, err := openLifecycleDatabase(runCtx)
 	if err != nil {
 		log.Fatalf("voice lifecycle database: %v", err)
 	}
@@ -82,17 +85,68 @@ func main() {
 	if err != nil {
 		log.Fatalf("voice Role grant checker configuration: %v", err)
 	}
+	spacePrincipalConfig, spacePrincipalEnabled, err := spaceprincipalruntime.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("voice Space lifecycle principal configuration: %v", err)
+	}
+	var spaceLifecycleStore *spacelifecycle.PostgresStore
+	var spaceLifecycleRuntime *spaceprincipalruntime.Runtime
+	var spaceLifecycleController grpcsvc.SpaceLifecycleController
+	if spacePrincipalEnabled {
+		if !lifecycleEnabled || lifecyclePool == nil {
+			log.Fatal("Voice Space lifecycle principal requires VOICE_DATABASE_URL")
+		}
+		spaceLifecycleStore = spacelifecycle.NewPostgresStore(lifecyclePool)
+		if err := spaceLifecycleStore.CheckSchema(runCtx); err != nil {
+			log.Fatalf("voice Space lifecycle database schema: %v", err)
+		}
+		media := livekit.NewSDKRoomLifecycle(
+			strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
+		)
+		spaceLifecycleController = &spacelifecycle.Service{
+			Store:   spaceLifecycleStore,
+			Effects: spacelifecycle.NewEffects(lifecyclePool, media),
+		}
+		spaceLifecycleRuntime, err = spaceprincipalruntime.New(runCtx, spacePrincipalConfig)
+		if err != nil {
+			log.Fatalf("voice Space lifecycle principal runtime: %v", err)
+		}
+		defer func() { _ = spaceLifecycleRuntime.Close() }()
+		lifecycleReadiness = func(ctx context.Context) error {
+			if err := lifecycleStore.CheckSchema(ctx); err != nil {
+				return err
+			}
+			return spaceLifecycleStore.CheckSchema(ctx)
+		}
+	}
 	if gamePrincipalEnabled != roleGrantEnabled {
 		log.Fatal("Voice managed game-session admission requires both GIS provisioning and Role grant checker configuration")
 	}
 	if roleGrantEnabled && !principalJWKSEnabled {
 		log.Fatal("Voice Role grant checker requires the Voice service principal signer")
 	}
+	var callStore voicestore.CallStore
+	if redisAddr := strings.TrimSpace(os.Getenv("VOICE_REDIS_ADDR")); redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{
+			Addr:     redisAddr,
+			Password: strings.TrimSpace(os.Getenv("VOICE_REDIS_PASSWORD")),
+		})
+		defer func() { _ = rdb.Close() }()
+		callStore = voicestore.NewRedisCallStore(rdb, strings.TrimSpace(os.Getenv("VOICE_REDIS_PREFIX")))
+	} else {
+		callStore = voicestore.NewMemoryCallStore()
+		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
+	}
 	var gamePrincipalRuntime *gameprincipal.Runtime
 	var gameProvisionServer *grpc.Server
 	var gameProvisionListener net.Listener
 	var managedGameSessionRooms grpcsvc.ManagedGameSessionRoomLookup
 	var managedGameSessionGrants grpcsvc.ManagedGameSessionGrantChecker
+	var conversionAdmission grpcsvc.SdkConversionAdmissionGuard
+	var accountVoiceFences gameprovision.AccountVoiceFenceStore = gameprovision.UnavailableAccountVoiceFenceStore{}
+	var accountVoiceProfiles grpcsvc.AccountVoiceProfileResolver
 	if roleGrantEnabled {
 		voiceIssuer, issuerErr := principal.NewIssuer(principal.IssuerConfig{
 			Issuer: "voice", KeyID: principalJWKSConfig.KeyID, PrivateKey: principalJWKSConfig.SigningKey,
@@ -126,22 +180,44 @@ func main() {
 		if err := gameStore.CheckSchema(runCtx); err != nil {
 			log.Fatalf("voice GIS database schema: %v", err)
 		}
+		accountVoiceFences = gameprovision.NewPostgresAccountVoiceFenceStore(pool)
+		if err := gameprovision.ApplyAccountVoiceFenceSchema(runCtx, pool); err != nil {
+			log.Fatalf("voice account fence schema: %v", err)
+		}
 		managedGameSessionRooms = gameStore
-		mediaFencer := gameprovision.NewLiveKitRoomFencer(gameStore,
-			livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
-				strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))))
+		conversionAdmission = gameStore
+		roomCloser := livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")))
+		mediaFencer := gameprovision.NewLiveKitRoomFencer(gameStore, roomCloser)
 		gameProvisionListener, err = net.Listen("tcp", gamePrincipalConfig.ListenAddr)
 		if err != nil {
 			log.Fatalf("voice GIS listener: %v", err)
 		}
 		gameProvisionServer = grpc.NewServer(gamePrincipalRuntime.ServerOptions()...)
 		callsv1.RegisterGameSessionProvisioningServiceServer(gameProvisionServer, &grpcsvc.GameSessionProvisioningGRPC{
-			Store: gameStore, Closer: gameStore, Fencer: mediaFencer,
+			Store: gameStore, Roster: gameStore, Closer: gameStore, Fencer: mediaFencer,
+			Conversion: gameStore, Calls: callStore, CallCloser: roomCloser, Now: time.Now,
 		})
 		go func() {
 			logger.Info("GIS room provisioning listener started", slog.String("addr", gamePrincipalConfig.ListenAddr))
 			if serveErr := gameProvisionServer.Serve(gameProvisionListener); serveErr != nil {
 				logger.Error("GIS room provisioning listener stopped", slog.String("error", serveErr.Error()))
+			}
+		}()
+		go func() {
+			ticker := time.NewTicker(200 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					fenceCtx, cancel := context.WithTimeout(runCtx, 4*time.Second)
+					if err := gameStore.FenceExpiredGameSessionLeases(fenceCtx, mediaFencer); err != nil {
+						logger.Warn("expired managed game session media fence failed", slog.String("error", err.Error()))
+					}
+					cancel()
+				}
 			}
 		}()
 	} else if dsn := strings.TrimSpace(os.Getenv("VOICE_DATABASE_URL")); dsn != "" {
@@ -156,21 +232,14 @@ func main() {
 			} else {
 				defer pool.Close()
 				managedGameSessionRooms = gameStore
+				conversionAdmission = gameStore
+				if schemaErr := gameprovision.ApplyAccountVoiceFenceSchema(runCtx, pool); schemaErr != nil {
+					logger.Warn("account-wide Voice admission unavailable", slog.String("error", schemaErr.Error()))
+				} else {
+					accountVoiceFences = gameprovision.NewPostgresAccountVoiceFenceStore(pool)
+				}
 			}
 		}
-	}
-
-	var callStore voicestore.CallStore
-	if redisAddr := strings.TrimSpace(os.Getenv("VOICE_REDIS_ADDR")); redisAddr != "" {
-		rdb := redis.NewClient(&redis.Options{
-			Addr:     redisAddr,
-			Password: strings.TrimSpace(os.Getenv("VOICE_REDIS_PASSWORD")),
-		})
-		defer func() { _ = rdb.Close() }()
-		callStore = voicestore.NewRedisCallStore(rdb, strings.TrimSpace(os.Getenv("VOICE_REDIS_PREFIX")))
-	} else {
-		callStore = voicestore.NewMemoryCallStore()
-		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
 	}
 
 	var events voiceevents.Publisher
@@ -207,7 +276,9 @@ func main() {
 			log.Fatalf("user grpc: %v", err)
 		}
 		defer func() { _ = uconn.Close() }()
-		callPrivacy = &s2s.GRPCUserPrivacy{Client: userv1.NewUserServiceClient(uconn)}
+		userClient := userv1.NewUserServiceClient(uconn)
+		callPrivacy = &s2s.GRPCUserPrivacy{Client: userClient}
+		accountVoiceProfiles = &s2s.GRPCProfileAccountResolver{Client: userClient}
 	}
 	if socialAddr := strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR")); socialAddr != "" {
 		sconn, err := grpc.NewClient(grpcclient.DialTarget(socialAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -250,9 +321,13 @@ func main() {
 		Calls:                    callStore,
 		ManagedGameSessionRooms:  managedGameSessionRooms,
 		ManagedGameSessionGrants: managedGameSessionGrants,
+		SdkConversionAdmission:   conversionAdmission,
+		AccountVoiceFences:       accountVoiceFences,
+		AccountVoiceProfiles:     accountVoiceProfiles,
 		ChatMembers:              chatMembers,
 		SpaceMembers:             spaceMembers,
 		VoiceRoomAccessResolver:  voiceRoomAccessResolver,
+		SpaceLifecycle:           spaceLifecycleController,
 		SpacePro:                 spacePro,
 		Roles:                    rolePerms,
 		Privacy:                  callPrivacy,
@@ -272,7 +347,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("grpc listen: %v", err)
 	}
-	grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+	ordinaryOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+	ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor()))
+	grpcSrv = grpc.NewServer(ordinaryOptions...)
 	callsv1.RegisterVoiceServiceServer(grpcSrv, voiceSvc)
 	go func() {
 		logger.Info("gRPC listening", slog.String("addr", grpcListen))
@@ -280,6 +357,25 @@ func main() {
 			log.Fatalf("grpc serve: %v", err)
 		}
 	}()
+	var spaceLifecycleServer *grpc.Server
+	var spaceLifecycleListener net.Listener
+	if spaceLifecycleRuntime != nil {
+		spaceLifecycleListener, err = net.Listen("tcp", spacePrincipalConfig.ListenAddr)
+		if err != nil {
+			log.Fatalf("voice Space lifecycle principal listen: %v", err)
+		}
+		protectedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		protectedOptions = append(protectedOptions, spaceLifecycleRuntime.ServerOptions()...)
+		spaceLifecycleServer = grpc.NewServer(protectedOptions...)
+		callsv1.RegisterVoiceServiceServer(spaceLifecycleServer, voiceSvc)
+		go func() {
+			logger.Info("Space lifecycle principal listener started", slog.String("addr", spacePrincipalConfig.ListenAddr))
+			if serveErr := spaceLifecycleServer.Serve(spaceLifecycleListener); serveErr != nil {
+				logger.Error("Space lifecycle principal listener stopped", slog.String("error", serveErr.Error()))
+			}
+		}()
+		go runSpaceLifecycleReceiptSweeper(runCtx, spaceLifecycleStore, logger)
+	}
 	go runMissedCallSweeper(runCtx, voiceSvc, logger)
 
 	server := &http.Server{
@@ -331,6 +427,12 @@ func main() {
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
+		if spaceLifecycleServer != nil {
+			spaceLifecycleServer.GracefulStop()
+		}
+		if spaceLifecycleListener != nil {
+			_ = spaceLifecycleListener.Close()
+		}
 		if gameProvisionServer != nil {
 			gameProvisionServer.GracefulStop()
 		}
@@ -351,6 +453,23 @@ func runMissedCallSweeper(ctx context.Context, svc *grpcsvc.VoiceGRPC, logger *s
 			if _, err := svc.MarkExpiredCallsMissed(ctx); err != nil {
 				logger.Error("voice missed-call sweeper", slog.String("error", err.Error()))
 			}
+		}
+	}
+}
+
+func runSpaceLifecycleReceiptSweeper(ctx context.Context, store *spacelifecycle.PostgresStore, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sweepCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := store.ExpireReceipts(sweepCtx, time.Now().UTC().Add(-30*24*time.Hour)); err != nil {
+				logger.Error("Voice Space lifecycle receipt retention", slog.String("error", err.Error()))
+			}
+			cancel()
 		}
 	}
 }

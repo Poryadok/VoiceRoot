@@ -6,6 +6,7 @@ import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
+import "voice/gameintegration/v1/game_event.proto";
 
 option go_package = "voice.app/voice/messaging/v1;messagingv1";
 
@@ -15,6 +16,7 @@ enum MessageKind {
   MESSAGE_KIND_REGULAR = 1;
   MESSAGE_KIND_SYSTEM = 2;
   MESSAGE_KIND_FORWARD = 3;
+  MESSAGE_KIND_GAME_CARD = 4;
 }
 
 enum DeleteScope {
@@ -29,6 +31,8 @@ enum DeleteScope {
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 service MessagingService {
+  // @voice.security=protected;callers=service:bot
+  rpc SendGameEventMessage(SendGameEventMessageRequest) returns (SendGameEventMessageResponse);
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   // @voice.security=protected;callers=service:gateway
   // T15 internal ingress: the exact device-signed compact JWS and Auth
@@ -41,6 +45,15 @@ service MessagingService {
   rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
   rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
   rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  // Re-resolves immutable game card authority under Messaging chat ACL.
+  rpc ResolveGameAction(ResolveGameActionRequest) returns (ResolveGameActionResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  // Projects a committed immutable result onto the separately stored card status.
+  rpc ProjectGameActionResult(ProjectGameActionResultRequest) returns (ProjectGameActionResultResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  // Starts or resumes the exact durable managed-chat retention purge operation.
+  rpc PurgeManagedChatContent(PurgeManagedChatContentRequest) returns (PurgeManagedChatContentResponse);
 
   rpc GetThreadMessages(GetThreadMessagesRequest) returns (GetThreadMessagesResponse);
   rpc ListThreads(ListThreadsRequest) returns (ListThreadsResponse);
@@ -79,8 +92,23 @@ service MessagingService {
   // @voice.security=protected;callers=service:space
   rpc PurgeSpace(voice.messaging.v1.PurgeSpaceRequest) returns (voice.messaging.v1.PurgeSpaceResponse);
 
+  // Chat may only read Messaging's already committed participant receipt. This
+  // lookup never starts or advances Messaging purge.
+  // @voice.security=protected;callers=service:chat
+  rpc GetSpacePurgeReceipt(voice.messaging.v1.GetSpacePurgeReceiptRequest) returns (voice.messaging.v1.GetSpacePurgeReceiptResponse);
+
   // @voice.security=protected;callers=service:space
   rpc ImportSpacePurgeManifestPage(voice.messaging.v1.ImportSpacePurgeManifestPageRequest) returns (voice.messaging.v1.ImportSpacePurgeManifestPageResponse);
+}
+
+message SendGameEventMessageRequest {
+  voice.gameintegration.v1.VerifiedGameEventIntent intent = 1;
+  string sender_profile_id = 2;
+}
+
+message SendGameEventMessageResponse {
+  voice.gameintegration.v1.GameEventPublicationStatus status = 1;
+  optional string message_id = 2;
 }
 
 // Shared media tabs in chat info (docs/features/text-chat.md, docs/features/search.md).
@@ -200,6 +228,54 @@ message GetMessageRequest {
   string message_id = 1;
 }
 
+message ResolveGameActionRequest {
+  string message_id = 1;
+  string profile_id = 2;
+}
+
+message ResolveGameActionResponse {
+  Message message = 1;
+}
+
+message ProjectGameActionResultRequest {
+  string message_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string operation_id = 4;
+  string action_id = 5;
+  string result_id = 6;
+  string state_version = 7;
+  string status = 8; // succeeded | failed
+  string safe_summary = 9;
+}
+
+message ProjectGameActionResultResponse {
+  bool replayed = 1;
+  GameActionResult result = 2;
+}
+
+// @voice.unknown_fields=reject
+message PurgeManagedChatContentRequest {
+  string operation_id = 1;
+  string chat_id = 2;
+  google.protobuf.Timestamp purge_after = 3;
+}
+
+message PurgeManagedChatContentResponse {
+  string receipt_id = 1;
+  string operation_id = 2;
+  string chat_id = 3;
+  google.protobuf.Timestamp purge_after = 4;
+  uint64 message_count = 5;
+  uint64 file_reference_count = 6;
+  uint64 search_document_count = 7;
+  bytes file_receipt_sha256 = 8;
+  bytes search_receipt_sha256 = 9;
+  bytes request_sha256 = 10;
+  google.protobuf.Timestamp completed_at = 11;
+  bool replayed = 12;
+}
+
 message MessageList {
   repeated Message messages = 1;
   string next_cursor = 2;
@@ -231,6 +307,24 @@ message Message {
   optional bool is_pinned = 19;
   bool is_e2e = 20;
   optional MessageContentType content_type = 21;
+  voice.gameintegration.v1.GameCard game_card = 22;
+  string game_app_id = 23;
+  string game_environment_id = 24;
+  string game_installation_id = 25;
+  string game_bot_id = 26;
+  optional string game_character_binding_id = 27;
+  bool game_card_actions_enabled = 28;
+  repeated GameActionResult game_action_results = 29;
+}
+
+message GameActionResult {
+  string operation_id = 1;
+  string action_id = 2;
+  string result_id = 3;
+  string state_version = 4;
+  string status = 5;
+  string safe_summary = 6;
+  google.protobuf.Timestamp recorded_at = 7;
 }
 
 message GetThreadMessagesRequest {
@@ -536,4 +630,20 @@ message ImportSpacePurgeManifestPageReceipt {
 // @voice.hash=domain_separated_sha256
 message ImportSpacePurgeManifestPageResponse {
   voice.messaging.v1.ImportSpacePurgeManifestPageReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeReceiptRequest {
+  string space_id = 1;
+  string deletion_operation_id = 2;
+  uint64 purge_generation = 3;
+  uint64 source_schedule_generation = 4;
+  bytes messaging_request_sha256 = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetSpacePurgeReceiptResponse {
+  voice.common.v1.SpacePurgeReceipt receipt = 1;
 }

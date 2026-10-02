@@ -2,13 +2,16 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,31 +21,261 @@ import (
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
 type MessageRow struct {
-	ID                uuid.UUID
-	ChatID            uuid.UUID
-	ChatType          string
-	SenderProfileID   uuid.UUID
-	PostedAsChat      bool
-	DisplayChatID     *uuid.UUID
-	Content           string
-	Type              string
-	ThreadParentID    *uuid.UUID
-	ForwardFromID     *uuid.UUID
-	ForwardFromSender string
-	AttachmentsJSON   string
-	MentionsJSON      string
-	ClientMessageID   *uuid.UUID
-	EditedAt          *time.Time
-	DeletedAt         *time.Time
-	GhostOnly         bool
-	IsE2E             bool
-	ContentType       string // text | photo | …; empty → infer from attachments on read
-	SendSilent        bool
-	CreatedAt         time.Time
+	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	ChatType               string
+	SenderProfileID        uuid.UUID
+	PostedAsChat           bool
+	DisplayChatID          *uuid.UUID
+	Content                string
+	Type                   string
+	ThreadParentID         *uuid.UUID
+	ForwardFromID          *uuid.UUID
+	ForwardFromSender      string
+	AttachmentsJSON        string
+	MentionsJSON           string
+	ClientMessageID        *uuid.UUID
+	EditedAt               *time.Time
+	DeletedAt              *time.Time
+	GhostOnly              bool
+	IsE2E                  bool
+	ContentType            string // text | photo | …; empty → infer from attachments on read
+	SendSilent             bool
+	GameCardJSON           *string
+	GameCardSHA256         string
+	GameAppID              *uuid.UUID
+	GameEnvironmentID      *uuid.UUID
+	GameInstallationID     *uuid.UUID
+	GameBotID              *uuid.UUID
+	GameCharacterBindingID *uuid.UUID
+	GameCardActionsEnabled bool
+	GameActionResults      []GameActionResult
+	CreatedAt              time.Time
 }
 
 type MessagesStore struct {
 	Pool *pgxpool.Pool
+}
+
+var ErrGameEventMessageConflict = errors.New("game event message idempotency conflict")
+
+// InsertGameEventMessage commits a game event message only while its expiry is
+// live. A retry with the same key returns the exact existing message; a changed
+// normalized payload under that key is a conflict.
+func (s *MessagesStore) InsertGameEventMessage(ctx context.Context, row MessageRow, expiresAt *time.Time) (*MessageRow, bool, bool, error) {
+	if s == nil || s.Pool == nil || row.ChatID == uuid.Nil || row.SenderProfileID == uuid.Nil ||
+		row.ClientMessageID == nil || *row.ClientMessageID == uuid.Nil || row.ID == uuid.Nil {
+		return nil, false, false, errors.New("game event message has invalid identity")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, false, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	saved, err := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`
+FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3 FOR UPDATE`,
+		row.ChatID, row.SenderProfileID, *row.ClientMessageID))
+	if err == nil {
+		if err := loadGameCardTx(ctx, tx, saved); err != nil {
+			return nil, false, false, err
+		}
+		if !sameGameEventMessage(*saved, row) {
+			return nil, false, false, ErrGameEventMessageConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, false, err
+		}
+		return saved, false, false, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, false, err
+	}
+	if expiresAt != nil {
+		var expired bool
+		if err := tx.QueryRow(ctx, `SELECT $1::timestamptz<=clock_timestamp()`, *expiresAt).Scan(&expired); err != nil {
+			return nil, false, false, err
+		}
+		if expired {
+			return nil, true, false, nil
+		}
+	}
+	var clientAny any = *row.ClientMessageID
+	command, err := tx.Exec(ctx, `INSERT INTO messages (
+		id,chat_id,chat_type,sender_profile_id,posted_as_chat,display_chat_id,content,type,thread_parent_id,
+		forward_from_id,forward_from_sender,attachments,mentions,client_message_id,ghost_only,is_e2e,content_type,send_silent
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,NULL,$10::jsonb,$11::jsonb,$12,$13,$14,$15,$16)
+	ON CONFLICT (chat_id,sender_profile_id,client_message_id) WHERE client_message_id IS NOT NULL DO NOTHING`,
+		row.ID, row.ChatID, row.ChatType, row.SenderProfileID, row.PostedAsChat, row.DisplayChatID, row.Content,
+		row.Type, row.ThreadParentID, row.AttachmentsJSON, row.MentionsJSON, clientAny, row.GhostOnly, row.IsE2E,
+		row.ContentType, row.SendSilent)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if command.RowsAffected() == 0 {
+		saved, err = scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`
+FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3 FOR UPDATE`,
+			row.ChatID, row.SenderProfileID, *row.ClientMessageID))
+		if err != nil {
+			return nil, false, false, err
+		}
+		if err := loadGameCardTx(ctx, tx, saved); err != nil {
+			return nil, false, false, err
+		}
+		if !sameGameEventMessage(*saved, row) {
+			return nil, false, false, ErrGameEventMessageConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, false, false, err
+		}
+		return saved, false, false, nil
+	}
+	saved, err = scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1 FOR UPDATE`, row.ID))
+	if err != nil {
+		return nil, false, false, err
+	}
+	if expiresAt != nil {
+		var expired bool
+		if err := tx.QueryRow(ctx, `SELECT $1::timestamptz<=clock_timestamp()`, *expiresAt).Scan(&expired); err != nil {
+			return nil, false, false, err
+		}
+		if expired {
+			return nil, true, false, nil
+		}
+	}
+	if row.GameCardJSON != nil {
+		if err := insertGameCardTx(ctx, tx, row); err != nil {
+			return nil, false, false, err
+		}
+	}
+	if err := loadGameCardTx(ctx, tx, saved); err != nil {
+		return nil, false, false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, false, err
+	}
+	return saved, false, true, nil
+}
+
+func sameGameEventMessage(saved, requested MessageRow) bool {
+	return saved.ChatID == requested.ChatID && saved.SenderProfileID == requested.SenderProfileID &&
+		saved.Content == requested.Content && saved.Type == requested.Type && saved.ChatType == requested.ChatType &&
+		saved.PostedAsChat == requested.PostedAsChat && sameUUIDPointer(saved.ThreadParentID, requested.ThreadParentID) &&
+		saved.AttachmentsJSON == requested.AttachmentsJSON && saved.MentionsJSON == requested.MentionsJSON &&
+		saved.ContentType == requested.ContentType && saved.SendSilent == requested.SendSilent && saved.IsE2E == requested.IsE2E &&
+		sameStringPointer(saved.GameCardJSON, requested.GameCardJSON) && sameUUIDPointer(saved.GameAppID, requested.GameAppID) &&
+		sameUUIDPointer(saved.GameEnvironmentID, requested.GameEnvironmentID) && sameUUIDPointer(saved.GameInstallationID, requested.GameInstallationID) &&
+		sameUUIDPointer(saved.GameBotID, requested.GameBotID) && sameUUIDPointer(saved.GameCharacterBindingID, requested.GameCharacterBindingID) &&
+		saved.GameCardActionsEnabled == requested.GameCardActionsEnabled
+}
+
+func sameStringPointer(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	canonicalA, errA := jsoncanonicalizer.Transform([]byte(*a))
+	canonicalB, errB := jsoncanonicalizer.Transform([]byte(*b))
+	return errA == nil && errB == nil && string(canonicalA) == string(canonicalB)
+}
+
+func insertGameCardTx(ctx context.Context, tx pgx.Tx, row MessageRow) error {
+	if row.GameCardJSON == nil || row.GameAppID == nil || row.GameEnvironmentID == nil || row.GameInstallationID == nil || row.GameBotID == nil || row.GameCardActionsEnabled {
+		return errors.New("game card authority metadata is incomplete")
+	}
+	canonical, err := jsoncanonicalizer.Transform([]byte(*row.GameCardJSON))
+	if err != nil {
+		return errors.New("game card payload is not canonicalizable JSON")
+	}
+	digest := sha256.Sum256(canonical)
+	cardHash := hex.EncodeToString(digest[:])
+	_, err = tx.Exec(ctx, `INSERT INTO message_game_cards (
+		message_id,app_id,environment_id,installation_id,bot_id,character_binding_id,card_json,card_sha256,actions_enabled
+	) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,false)`, row.ID, *row.GameAppID, *row.GameEnvironmentID,
+		*row.GameInstallationID, *row.GameBotID, row.GameCharacterBindingID, *row.GameCardJSON, cardHash)
+	return err
+}
+
+func loadGameCardTx(ctx context.Context, tx pgx.Tx, row *MessageRow) error {
+	if row == nil {
+		return nil
+	}
+	var appID, envID, installationID, botID uuid.UUID
+	var characterID *uuid.UUID
+	var raw string
+	var actionsEnabled bool
+	err := tx.QueryRow(ctx, `SELECT app_id,environment_id,installation_id,bot_id,character_binding_id,card_json::text,card_sha256,actions_enabled
+		FROM message_game_cards WHERE message_id=$1`, row.ID).Scan(&appID, &envID, &installationID, &botID, &characterID, &raw, &row.GameCardSHA256, &actionsEnabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	row.GameCardJSON = &raw
+	row.GameAppID, row.GameEnvironmentID, row.GameInstallationID, row.GameBotID = &appID, &envID, &installationID, &botID
+	row.GameCharacterBindingID, row.GameCardActionsEnabled = characterID, actionsEnabled
+	return nil
+}
+
+func hydrateGameCards(ctx context.Context, db interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}, messages []MessageRow) error {
+	if len(messages) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(messages))
+	index := make(map[uuid.UUID]int, len(messages))
+	for i := range messages {
+		ids = append(ids, messages[i].ID)
+		index[messages[i].ID] = i
+	}
+	rows, err := db.Query(ctx, `SELECT message_id,app_id,environment_id,installation_id,bot_id,character_binding_id,card_json::text,card_sha256,actions_enabled
+		FROM message_game_cards WHERE message_id=ANY($1)`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, appID, envID, installationID, botID uuid.UUID
+		var characterID *uuid.UUID
+		var raw string
+		var actionsEnabled bool
+		var cardHash string
+		if err := rows.Scan(&id, &appID, &envID, &installationID, &botID, &characterID, &raw, &cardHash, &actionsEnabled); err != nil {
+			return err
+		}
+		message := &messages[index[id]]
+		message.GameCardJSON = &raw
+		message.GameCardSHA256 = cardHash
+		message.GameAppID, message.GameEnvironmentID, message.GameInstallationID, message.GameBotID = &appID, &envID, &installationID, &botID
+		message.GameCharacterBindingID, message.GameCardActionsEnabled = characterID, actionsEnabled
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	results, err := db.Query(ctx, `SELECT message_id,operation_id,action_id,result_id,state_version,status,safe_summary,recorded_at
+		FROM message_game_action_results WHERE message_id=ANY($1) ORDER BY recorded_at,action_id`, ids)
+	if err != nil {
+		return err
+	}
+	defer results.Close()
+	for results.Next() {
+		var id uuid.UUID
+		var item GameActionResult
+		if err := results.Scan(&id, &item.OperationID, &item.ActionID, &item.ResultID, &item.StateVersion, &item.Status, &item.SafeSummary, &item.RecordedAt); err != nil {
+			return err
+		}
+		if index, ok := index[id]; ok {
+			messages[index].GameActionResults = append(messages[index].GameActionResults, item)
+		}
+	}
+	return results.Err()
+}
+
+func sameUUIDPointer(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 type ChatListMetadataRow struct {
@@ -208,9 +441,18 @@ func (s *MessagesStore) GetMessageByID(ctx context.Context, id uuid.UUID) (*Mess
 	if s == nil || s.Pool == nil {
 		return nil, errors.New("messages store: pool not configured")
 	}
-	return scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
+	row, err := scanMessageRow(s.Pool.QueryRow(ctx, messageSelectSQL+`
 FROM messages WHERE id = $1
 `, id))
+	if err != nil {
+		return nil, err
+	}
+	single := []MessageRow{*row}
+	if err := hydrateGameCards(ctx, s.Pool, single); err != nil {
+		return nil, err
+	}
+	*row = single[0]
+	return row, nil
 }
 
 // UpdateMessageContent sets content and edited_at for a non-deleted row owned by senderProfileID.
@@ -228,6 +470,7 @@ func (s *MessagesStore) UpdateMessageContentAndMentions(ctx context.Context, mes
 UPDATE messages
 SET content = $1, edited_at = now()
 WHERE id = $2 AND sender_profile_id = $3 AND deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM message_game_cards gc WHERE gc.message_id = messages.id)
 RETURNING `+messageReturningCols+`
 `, content, messageID, senderProfileID))
 	}
@@ -235,6 +478,7 @@ RETURNING `+messageReturningCols+`
 UPDATE messages
 SET content = $1, mentions = $2::jsonb, edited_at = now()
 WHERE id = $3 AND sender_profile_id = $4 AND deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM message_game_cards gc WHERE gc.message_id = messages.id)
 RETURNING `+messageReturningCols+`
 `, content, *mentionsJSON, messageID, senderProfileID))
 }
@@ -446,7 +690,13 @@ LIMIT $`+itoa(argN+1)+`
 		m.ClientMessageID = clientID
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := hydrateGameCards(ctx, s.Pool, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func itoa(n int) string {

@@ -43,6 +43,33 @@ type allowAllChatMembers struct{}
 
 type denyChatMembers struct{}
 
+type sdkConversionAdmissionStub struct {
+	fenced bool
+	err    error
+}
+
+type fixtureSpaceLifecycle struct {
+	SpaceLifecycleController
+	err error
+}
+
+func (f *fixtureSpaceLifecycle) CheckAdmission(context.Context, string) error { return f.err }
+
+func (s sdkConversionAdmissionStub) IsSdkConversionProfileFenced(context.Context, string) (bool, error) {
+	return s.fenced, s.err
+}
+
+func TestVoiceAdmissionGuardBlocksFencedProfilesAndFailsClosed(t *testing.T) {
+	service := &VoiceGRPC{SdkConversionAdmission: sdkConversionAdmissionStub{fenced: true}}
+	err := service.ensureSdkConversionAdmission(context.Background(), uuid.NewString())
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	service.SdkConversionAdmission = sdkConversionAdmissionStub{err: fmt.Errorf("database unavailable")}
+	err = service.ensureSdkConversionAdmission(context.Background(), uuid.NewString())
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	service.SdkConversionAdmission = nil
+	require.NoError(t, service.ensureSdkConversionAdmission(context.Background(), uuid.NewString()))
+}
+
 type fixtureManagedGameSessionRooms struct{ room gameprovision.Room }
 
 func (allowAllChatMembers) EnsureMember(context.Context, string, string) error {
@@ -131,12 +158,13 @@ func mediaPtr(v callsv1.CallMediaKind) *callsv1.CallMediaKind {
 
 func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 	return &VoiceGRPC{
-		Calls:       voicestore.NewMemoryCallStore(),
-		ChatMembers: allowAllChatMembers{},
-		Tokens:      livekit.NewHS256TokenIssuer("dev-key", "dev-secret", "ws://livekit:7880", time.Hour),
-		Events:      events,
-		Now:         func() time.Time { return now },
-		RingTimeout: 30 * time.Second,
+		Calls:          voicestore.NewMemoryCallStore(),
+		ChatMembers:    allowAllChatMembers{},
+		SpaceLifecycle: &fixtureSpaceLifecycle{},
+		Tokens:         livekit.NewHS256TokenIssuer("dev-key", "dev-secret", "ws://livekit:7880", time.Hour),
+		Events:         events,
+		Now:            func() time.Time { return now },
+		RingTimeout:    30 * time.Second,
 	}
 }
 
@@ -167,7 +195,7 @@ func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC
 
 func TestVoiceGRPC_ManagedGameSessionUsesLiveUserAdmissionForJoinAndToken(t *testing.T) {
 	now := time.Now().UTC()
-	room := gameprovision.Room{RoomID: uuid.NewString(), ChatID: uuid.NewString(), LiveKitRoomName: "voice-game-session-managed-room-1", ApplicationID: uuid.NewString(), EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), CreatedAt: now}
+	room := gameprovision.Room{RoomID: uuid.NewString(), ChatID: uuid.NewString(), LiveKitRoomName: "voice-game-session-managed-room-1", ApplicationID: uuid.NewString(), EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), CreatedAt: now, ProfileIDs: []string{"profile-member"}}
 	service := newTestVoiceService(now, &recordingEvents{})
 	service.ManagedGameSessionRooms = fixtureManagedGameSessionRooms{room: room}
 	grant := &managedGameSessionGrantStub{}

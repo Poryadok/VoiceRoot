@@ -12,8 +12,9 @@ require (
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1
-	voice.app/voice/chat v0.0.0
 	voice.app/voice/auth v0.0.0
+	voice.app/voice/calls v0.0.0
+	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
 	voice.app/voice/role v0.0.0
@@ -22,6 +23,12 @@ require (
 	voice.app/voice/user v0.0.0
 	voice/backend/pkg v0.0.0
 	voice/backend/role v0.0.0
+)
+
+require (
+	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
+	github.com/alicebob/miniredis/v2 v2.34.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 )
 
 require (
@@ -91,8 +98,15 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
-	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/bot v0.0.0
+	voice.app/voice/file v0.0.0
+	voice.app/voice/gameintegration v0.0.0 // indirect
+	voice.app/voice/matchmaking v0.0.0
+	voice.app/voice/messaging v0.0.0
+	voice.app/voice/notification v0.0.0
+	voice.app/voice/search v0.0.0
 	voice.app/voice/story v0.0.0 // indirect
+	voice.app/voice/subscription v0.0.0
 )
 
 replace voice/backend/pkg => ../pkg
@@ -107,6 +121,8 @@ replace voice.app/voice/common => ../user/pb/voice/common
 
 replace voice.app/voice/chat => ../chat/pb/voice/chat
 
+replace voice.app/voice/calls => ../voice/pb/voice/calls
+
 replace voice.app/voice/auth => ../voice/pb/voice/auth
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
@@ -117,4 +133,18 @@ replace voice.app/voice/social => ../user/pb/voice/social
 
 replace voice.app/voice/file => ../file/pb/voice/file
 
+replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/notification => ../voice/pb/voice/notification
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
+
 replace voice.app/voice/story => ../voice/pb/voice/story
+
+replace voice.app/voice/matchmaking => ../voice/pb/voice/matchmaking
+
+replace voice.app/voice/bot => ../voice/pb/voice/bot
+
+replace voice.app/voice/search => ../voice/pb/voice/search
+
+replace voice.app/voice/subscription => ../voice/pb/voice/subscription

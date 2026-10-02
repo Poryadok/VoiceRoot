@@ -44,6 +44,14 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	clientCAPEM, err := os.ReadFile(cfg.ClientCAFile)
+	if err != nil {
+		return nil, errors.New("principal client CA unavailable")
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+		return nil, errors.New("principal client CA has no certificates")
+	}
 	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("principal listener TLS: %w", err)
@@ -63,6 +71,14 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if cfg.JWKSClientCertFile != "" {
+		clientCert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
+		if err != nil {
+			transport.CloseIdleConnections()
+			return nil, fmt.Errorf("principal JWKS client TLS: %w", err)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
@@ -115,7 +131,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: cfg.ReplayAddr, Password: cfg.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	r := &Runtime{issuers: cfg.JWKSURLs, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	r := &Runtime{issuers: cfg.JWKSURLs, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {

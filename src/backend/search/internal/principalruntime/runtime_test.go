@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "voice.app/voice/common/v1"
 	searchv1 "voice.app/voice/search/v1"
@@ -56,6 +57,10 @@ func (protectedSearchFixture) ApplySpaceLifecycleFence(context.Context, *searchv
 	return &searchv1.ApplySpaceLifecycleFenceResponse{}, nil
 }
 
+func (protectedSearchFixture) PurgeManagedChatMessages(_ context.Context, request *searchv1.PurgeManagedChatMessagesRequest) (*searchv1.PurgeManagedChatMessagesResponse, error) {
+	return &searchv1.PurgeManagedChatMessagesResponse{OperationId: request.GetOperationId(), ChatId: request.GetChatId(), CompletedAt: timestamppb.Now()}, nil
+}
+
 func TestProtectedListenerRequiresTLSVerifiesExactPrincipalAndRejectsReplay(t *testing.T) {
 	active, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -78,7 +83,7 @@ func TestProtectedListenerRequiresTLSVerifiesExactPrincipalAndRejectsReplay(t *t
 	require.NoError(t, err)
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	require.NoError(t, err)
-	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "localhost"}, DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "localhost"}, DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &serverKey.PublicKey, serverKey)
 	require.NoError(t, err)
 	certPath, keyPath := filepath.Join(temp, "server.pem"), filepath.Join(temp, "server-key.pem")
@@ -87,7 +92,7 @@ func TestProtectedListenerRequiresTLSVerifiesExactPrincipalAndRejectsReplay(t *t
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encodedKey}), 0o600))
 	redisServer := miniredis.RunT(t)
-	runtime, err := New(context.Background(), Config{JWKSURLs: map[string]string{"space": jwksServer.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: redisServer.Addr(), JWKSCAFile: jwksCA, TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: "127.0.0.1:0"})
+	runtime, err := New(context.Background(), Config{JWKSURLs: map[string]string{"space": jwksServer.URL, "messaging": jwksServer.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: redisServer.Addr(), JWKSCAFile: jwksCA, JWKSClientCertFile: certPath, JWKSClientKeyFile: keyPath, ClientCAFile: certPath, TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: "127.0.0.1:0"})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, runtime.Close()) }()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -98,7 +103,9 @@ func TestProtectedListenerRequiresTLSVerifiesExactPrincipalAndRejectsReplay(t *t
 	defer server.Stop()
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})))
-	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost"})))
+	clientCertificate, err := tls.LoadX509KeyPair(certPath, keyPath)
+	require.NoError(t, err)
+	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost", Certificates: []tls.Certificate{clientCertificate}})))
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	client := searchv1.NewSearchServiceClient(conn)
@@ -110,8 +117,28 @@ func TestProtectedListenerRequiresTLSVerifiesExactPrincipalAndRejectsReplay(t *t
 	token, err := issuer.IssueService(principal.ServiceInput{Audience: "search", RPC: searchv1.SearchService_ApplySpaceLifecycleFence_FullMethodName, RequestID: "request-1", RequestHash: hash})
 	require.NoError(t, err)
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "request-1"))
+	noCertificate, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost"})))
+	require.NoError(t, err)
+	defer noCertificate.Close()
+	unauthenticated, cancel := context.WithTimeout(ctx, time.Second)
+	_, err = searchv1.NewSearchServiceClient(noCertificate).ApplySpaceLifecycleFence(unauthenticated, req)
+	cancel()
+	require.Equal(t, codes.Unavailable, status.Code(err), "valid JWT cannot replace a verified client certificate")
 	_, err = client.ApplySpaceLifecycleFence(ctx, req)
 	require.NoError(t, err)
 	_, err = client.ApplySpaceLifecycleFence(ctx, req)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	managedRequest := &searchv1.PurgeManagedChatMessagesRequest{OperationId: "018f7c2a-6c36-7f05-8a21-a4a8ce4186c0", ChatId: "018f7c2a-6c36-7f05-8a21-a4a8ce4186c1"}
+	managedHash, err := principal.RequestHash(managedRequest)
+	require.NoError(t, err)
+	messagingIssuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "messaging", KeyID: "current", PrivateKey: active})
+	require.NoError(t, err)
+	managedToken, err := messagingIssuer.IssueService(principal.ServiceInput{Audience: "search", RPC: searchv1.SearchService_PurgeManagedChatMessages_FullMethodName, RequestID: managedRequest.GetOperationId(), RequestHash: managedHash})
+	require.NoError(t, err)
+	managedCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+managedToken, "x-request-id", managedRequest.GetOperationId()))
+	_, err = client.PurgeManagedChatMessages(managedCtx, managedRequest)
+	require.NoError(t, err, "Messaging has only the narrow chat-message purge authority")
+	_, err = client.ApplySpaceLifecycleFence(managedCtx, req)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "Messaging cannot call Space lifecycle methods")
 }

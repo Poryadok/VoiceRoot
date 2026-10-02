@@ -114,6 +114,7 @@ FROM folder_chats fc
 INNER JOIN chats c ON c.id = fc.chat_id
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 WHERE fc.profile_id = $1 AND fc.folder_id = $2
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
   AND m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'` + cursorFilter + `
 ORDER BY
   CASE WHEN fc.is_pinned THEN 0 ELSE 1 END ASC,
@@ -167,6 +168,7 @@ FROM chats c
 INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
 LEFT JOIN folder_chats fc ON fc.profile_id = $1 AND fc.folder_id = $2 AND fc.chat_id = c.id
 WHERE m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'
+  AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
   AND c.type = ANY($3)` + spaceFilter + cursorFilter + `
 ORDER BY
   CASE WHEN COALESCE(fc.is_pinned, false) THEN 0 ELSE 1 END ASC,
@@ -223,6 +225,7 @@ WITH candidates AS (
   INNER JOIN chat_members m ON m.chat_id = c.id AND m.profile_id = $1
   LEFT JOIN folder_chats fc ON fc.profile_id = $1 AND fc.folder_id = $2 AND fc.chat_id = c.id
   WHERE m.is_archived = false AND m.deleted_for_self = false AND m.inbox_bucket = 'main'
+    AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
     AND c.type = ANY($3)` + spaceFilterMembership + `
 
   UNION ALL
@@ -234,6 +237,7 @@ WITH candidates AS (
   FROM chats c
   LEFT JOIN folder_chats fc ON fc.profile_id = $1 AND fc.folder_id = $2 AND fc.chat_id = c.id
   WHERE c.space_id = ANY($4) AND c.type = ANY($3)` + spaceFilterUnion + `
+    AND NOT EXISTS (SELECT 1 FROM chat_space_lifecycle_fences f WHERE f.space_id=c.space_id AND f.state<>'LIVE')
     AND NOT EXISTS (
       SELECT 1 FROM chat_members m
       WHERE m.chat_id = c.id AND m.profile_id = $1 AND (m.is_archived = true OR m.deleted_for_self = true)

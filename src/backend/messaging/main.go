@@ -13,12 +13,14 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
@@ -66,7 +68,7 @@ func loadModerationPrincipalRuntime(ctx context.Context) (*principalruntime.Runt
 		CAFile:      strings.TrimSpace(os.Getenv("MODERATION_PRINCIPAL_JWKS_CA_FILE")),
 		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
 	}
-	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" && config.RedisURL == "" {
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
 		return nil, nil
 	}
 	return principalruntime.New(ctx, config)
@@ -80,10 +82,66 @@ func loadGatewayPrincipalRuntime(ctx context.Context) (*principalruntime.Runtime
 		CAFile:      strings.TrimSpace(os.Getenv("GATEWAY_PRINCIPAL_JWKS_CA_FILE")),
 		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
 	}
-	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" && config.RedisURL == "" {
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
 		return nil, nil
 	}
 	return principalruntime.NewForIssuer(ctx, config, "gateway")
+}
+
+func loadBotPrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("BOT_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_BOT_PRINCIPAL_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_BOT_PRINCIPAL_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("BOT_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return principalruntime.NewForIssuer(ctx, config, "bot")
+}
+
+func loadGameIntegrationPrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_JWKS_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_JWKS_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return principalruntime.NewForIssuer(ctx, config, "gameintegration")
+}
+
+func loadChatLifecyclePrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("CHAT_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return principalruntime.NewForIssuer(ctx, config, "chat")
+}
+
+func loadSpaceLifecyclePrincipalRuntime(ctx context.Context) (*principalruntime.Runtime, error) {
+	config := principalruntime.Config{
+		JWKSURL:     strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_URL")),
+		TLSCertFile: strings.TrimSpace(os.Getenv("MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE")),
+		TLSKeyFile:  strings.TrimSpace(os.Getenv("MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE")),
+		CAFile:      strings.TrimSpace(os.Getenv("SPACE_PRINCIPAL_JWKS_CA_FILE")),
+		RedisURL:    strings.TrimSpace(os.Getenv("MESSAGING_PRINCIPAL_REPLAY_REDIS_URL")),
+	}
+	if config.JWKSURL == "" && config.TLSCertFile == "" && config.TLSKeyFile == "" && config.CAFile == "" {
+		return nil, nil
+	}
+	return principalruntime.NewForIssuer(ctx, config, "space")
 }
 
 func loadGameAuthKeys() (*s2s.GameAuthKeys, error) {
@@ -182,6 +240,11 @@ func main() {
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	var grpcSrv *grpc.Server
+	var gameIntegrationGRPCSrv *grpc.Server
+	var chatLifecycleGRPCSrv *grpc.Server
+	var gameIntegrationPrincipal *principalruntime.Runtime
+	var chatLifecyclePrincipal *principalruntime.Runtime
+	var spaceLifecyclePrincipal *principalruntime.Runtime
 	if dbURL != "" {
 		tombstoneKeys, err := loadGameTombstoneKeys()
 		if err != nil {
@@ -209,6 +272,36 @@ func main() {
 			defer func() { _ = gatewayPrincipal.Close() }()
 		} else {
 			logger.Warn("ApplyGameMessage ingress is fail-closed because Gateway principal verification is not configured")
+		}
+		botPrincipal, err := loadBotPrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("Bot principal runtime: %v", err)
+		}
+		if botPrincipal != nil {
+			defer func() { _ = botPrincipal.Close() }()
+		} else {
+			logger.Warn("SendGameEventMessage ingress is fail-closed because Bot principal verification is not configured")
+		}
+		gameIntegrationPrincipal, err = loadGameIntegrationPrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("game integration principal runtime: %v", err)
+		}
+		if gameIntegrationPrincipal != nil {
+			defer func() { _ = gameIntegrationPrincipal.Close() }()
+		}
+		chatLifecyclePrincipal, err = loadChatLifecyclePrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("Chat lifecycle principal runtime: %v", err)
+		}
+		if chatLifecyclePrincipal != nil {
+			defer func() { _ = chatLifecyclePrincipal.Close() }()
+		}
+		spaceLifecyclePrincipal, err = loadSpaceLifecyclePrincipalRuntime(context.Background())
+		if err != nil {
+			log.Fatalf("Space lifecycle principal runtime: %v", err)
+		}
+		if spaceLifecyclePrincipal != nil {
+			defer func() { _ = spaceLifecyclePrincipal.Close() }()
 		}
 		gameAuthKeys, err := loadGameAuthKeys()
 		if err != nil {
@@ -238,6 +331,13 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		managedChatPurge, err := newManagedChatPurgeRuntime(context.Background(), pool)
+		if err != nil {
+			log.Fatalf("managed chat purge runtime: %v", err)
+		}
+		if managedChatPurge != nil {
+			defer managedChatPurge.Close()
+		}
 		var tombstoneProcessor grpcsvc.GameTombstoneProcessor
 		if tombstoneKeys != nil && moderationPrincipal != nil {
 			tombstoneProcessor = &grpcsvc.VerifiedGameTombstoneProcessor{Store: &store.MessagesStore{Pool: pool}, Keys: tombstoneKeys}
@@ -458,9 +558,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(append(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), grpc.ChainUnaryInterceptor(
+		messagingGRPCOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		grpcSrv = grpc.NewServer(append(messagingGRPCOptions, grpc.ChainUnaryInterceptor(
 			principalgrpc.TombstoneUnaryInterceptor(moderationPrincipal),
 			principalgrpc.ApplyGameMessageUnaryInterceptor(gatewayPrincipal),
+			principalgrpc.SendGameEventMessageUnaryInterceptor(botPrincipal),
+			principalgrpc.ChatLifecycleOrdinaryUnaryInterceptor(),
+			principalgrpc.SpaceLifecycleOrdinaryUnaryInterceptor(),
+			principalgrpc.GameIntegrationOrdinaryUnaryInterceptor(),
 		))...)
 		var chatThreadPolicy *store.SQLChatThreadPolicy
 		if chatMetaPool != nil {
@@ -480,25 +585,29 @@ func main() {
 		} else {
 			logger.Warn("ApplyGameMessage is fail-closed because Auth status keys, T16 execution-permit authority, or Chat membership authority is unavailable; exact receipts remain readable when storage is available")
 		}
-		messagingv1.RegisterMessagingServiceServer(grpcSrv, &grpcsvc.MessagingGRPC{
-			Messages:          &store.MessagesStore{Pool: pool},
-			GameMessages:      gameMessages,
-			GameTombstones:    tombstoneProcessor,
-			Reactions:         &store.ReactionsStore{Pool: pool},
-			Pins:              &store.PinsStore{Pool: pool},
-			SharedMedia:       &store.SharedMediaStore{Pool: pool},
-			ChatGuard:         chatGuard,
-			ChatTypeResolver:  chatTypeResolver,
-			Blocks:            blocks,
-			AccountBlocks:     accountBlocks,
-			ProfilePairBlocks: profilePairBlocks,
-			UserProfiles:      profiles,
-			DeletedAccounts:   deletedAccounts,
-			Privacy:           privacy,
-			Friends:           friends,
-			SpaceCoMembership: spaceCoMembership,
-			Files:             files,
-			MessageEvents:     msgEvents,
+		messagingService := &grpcsvc.MessagingGRPC{
+			Messages:              &store.MessagesStore{Pool: pool},
+			SpacePurgeReceipts:    &store.MessagesStore{Pool: pool},
+			SpaceManifestImporter: &store.MessagesStore{Pool: pool},
+			SpaceLifecycleFences:  &store.MessagesStore{Pool: pool},
+			SpaceLifecyclePurger:  &store.MessagesStore{Pool: pool},
+			GameMessages:          gameMessages,
+			GameTombstones:        tombstoneProcessor,
+			Reactions:             &store.ReactionsStore{Pool: pool},
+			Pins:                  &store.PinsStore{Pool: pool},
+			SharedMedia:           &store.SharedMediaStore{Pool: pool},
+			ChatGuard:             chatGuard,
+			ChatTypeResolver:      chatTypeResolver,
+			Blocks:                blocks,
+			AccountBlocks:         accountBlocks,
+			ProfilePairBlocks:     profilePairBlocks,
+			UserProfiles:          profiles,
+			DeletedAccounts:       deletedAccounts,
+			Privacy:               privacy,
+			Friends:               friends,
+			SpaceCoMembership:     spaceCoMembership,
+			Files:                 files,
+			MessageEvents:         msgEvents,
 			Moderation: &store.SQLModerationGuard{
 				Pool:      pool,
 				ChatPool:  chatMetaPool,
@@ -519,7 +628,162 @@ func main() {
 			UserPresence:        userPresence,
 			PlatformMod:         platformMod,
 			Logger:              logger,
-		})
+			ManagedChatPurger: func() grpcsvc.ManagedChatPurgeProcessor {
+				if managedChatPurge == nil {
+					return nil
+				}
+				return managedChatPurge.Coordinator
+			}(),
+		}
+		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
+		if managedChatPurge != nil {
+			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
+			retentionCtx, retentionCancel := context.WithCancel(context.Background())
+			retentionDone := make(chan struct{})
+			defer func() { retentionCancel(); <-retentionDone }()
+			go func() {
+				defer close(retentionDone)
+				ticker := time.NewTicker(time.Minute)
+				defer ticker.Stop()
+				for {
+					if err := (&store.MessagesStore{Pool: pool}).CleanupSpaceLifecycleEvidence(retentionCtx); err != nil && retentionCtx.Err() == nil {
+						logger.Error("Messaging Space lifecycle retention pass failed")
+					}
+					select {
+					case <-retentionCtx.Done():
+						return
+					case <-ticker.C:
+					}
+				}
+			}()
+		}
+		if gameIntegrationPrincipal != nil {
+			serverCertPath := strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_SERVER_TLS_CERT_FILE"))
+			serverKeyPath := strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_SERVER_TLS_KEY_FILE"))
+			clientCAPath := strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_CLIENT_CA_FILE"))
+			if serverCertPath == "" || serverKeyPath == "" || clientCAPath == "" {
+				log.Fatal("GIS principal verifier requires the dedicated Messaging mTLS listener certificate and client CA")
+			}
+			certificate, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
+			if err != nil {
+				log.Fatalf("Messaging GIS listener certificate: %v", err)
+			}
+			clientCAPEM, err := os.ReadFile(clientCAPath)
+			if err != nil {
+				log.Fatalf("Messaging GIS listener client CA: %v", err)
+			}
+			clientCAs := x509.NewCertPool()
+			if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+				log.Fatal("Messaging GIS listener client CA is invalid")
+			}
+			protectedListen := strings.TrimSpace(os.Getenv("MESSAGING_GAME_INTEGRATION_GRPC_LISTEN"))
+			if protectedListen == "" {
+				protectedListen = ":9091"
+			}
+			protectedListener, err := net.Listen("tcp", protectedListen)
+			if err != nil {
+				log.Fatalf("Messaging GIS listener: %v", err)
+			}
+			// Reuse the shared middleware options so both listeners record into the
+			// same collectors without registering duplicate Prometheus metrics.
+			protectedOptions := append([]grpc.ServerOption(nil), messagingGRPCOptions...)
+			protectedOptions = append(protectedOptions,
+				grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})),
+				grpc.ChainUnaryInterceptor(principalgrpc.GameIntegrationStrictUnaryInterceptor(gameIntegrationPrincipal)),
+			)
+			gameIntegrationGRPCSrv = grpc.NewServer(protectedOptions...)
+			messagingv1.RegisterMessagingServiceServer(gameIntegrationGRPCSrv, messagingService)
+			go func() {
+				logger.Info("Messaging GIS mTLS gRPC listening", slog.String("addr", protectedListen))
+				if err := gameIntegrationGRPCSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("Messaging GIS gRPC serve: %v", err)
+				}
+			}()
+		}
+		spaceLifecycleListen := strings.TrimSpace(os.Getenv("MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN"))
+		spaceLifecycleServerCert := strings.TrimSpace(os.Getenv("MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_CERT_FILE"))
+		spaceLifecycleServerKey := strings.TrimSpace(os.Getenv("MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_KEY_FILE"))
+		spaceLifecycleClientCA := strings.TrimSpace(os.Getenv("MESSAGING_SPACE_LIFECYCLE_CLIENT_CA_FILE"))
+		if spaceLifecyclePrincipal != nil || spaceLifecycleListen != "" || spaceLifecycleServerCert != "" || spaceLifecycleServerKey != "" || spaceLifecycleClientCA != "" {
+			if spaceLifecyclePrincipal == nil || spaceLifecycleServerCert == "" || spaceLifecycleServerKey == "" || spaceLifecycleClientCA == "" {
+				log.Fatal("Space lifecycle listener requires Space principal verification and complete mTLS configuration")
+			}
+			certificate, err := tls.LoadX509KeyPair(spaceLifecycleServerCert, spaceLifecycleServerKey)
+			if err != nil {
+				log.Fatalf("Messaging Space lifecycle listener certificate: %v", err)
+			}
+			clientCAPEM, err := os.ReadFile(spaceLifecycleClientCA)
+			if err != nil {
+				log.Fatalf("Messaging Space lifecycle listener client CA: %v", err)
+			}
+			clientCAs := x509.NewCertPool()
+			if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+				log.Fatal("Messaging Space lifecycle listener client CA is invalid")
+			}
+			if spaceLifecycleListen == "" {
+				spaceLifecycleListen = ":9093"
+			}
+			protectedListener, err := net.Listen("tcp", spaceLifecycleListen)
+			if err != nil {
+				log.Fatalf("Messaging Space lifecycle listener: %v", err)
+			}
+			protectedOptions := append([]grpc.ServerOption(nil), messagingGRPCOptions...)
+			protectedOptions = append(protectedOptions,
+				grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})),
+				grpc.ChainUnaryInterceptor(principalgrpc.SpaceLifecycleStrictUnaryInterceptor(spaceLifecyclePrincipal)),
+			)
+			spaceLifecycleGRPCSrv := grpc.NewServer(protectedOptions...)
+			messagingv1.RegisterMessagingServiceServer(spaceLifecycleGRPCSrv, messagingService)
+			defer spaceLifecycleGRPCSrv.Stop()
+			go func() {
+				logger.Info("Messaging Space lifecycle mTLS gRPC listening", slog.String("addr", spaceLifecycleListen))
+				if err := spaceLifecycleGRPCSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("Messaging Space lifecycle gRPC serve: %v", err)
+				}
+			}()
+		}
+		chatLifecycleListen := strings.TrimSpace(os.Getenv("MESSAGING_CHAT_LIFECYCLE_GRPC_LISTEN"))
+		chatLifecycleServerCert := strings.TrimSpace(os.Getenv("MESSAGING_CHAT_LIFECYCLE_SERVER_TLS_CERT_FILE"))
+		chatLifecycleServerKey := strings.TrimSpace(os.Getenv("MESSAGING_CHAT_LIFECYCLE_SERVER_TLS_KEY_FILE"))
+		chatLifecycleClientCA := strings.TrimSpace(os.Getenv("MESSAGING_CHAT_LIFECYCLE_CLIENT_CA_FILE"))
+		if chatLifecyclePrincipal != nil || chatLifecycleListen != "" || chatLifecycleServerCert != "" || chatLifecycleServerKey != "" || chatLifecycleClientCA != "" {
+			if chatLifecyclePrincipal == nil || chatLifecycleServerCert == "" || chatLifecycleServerKey == "" || chatLifecycleClientCA == "" {
+				log.Fatal("Chat lifecycle listener requires Chat principal verification and complete mTLS configuration")
+			}
+			certificate, err := tls.LoadX509KeyPair(chatLifecycleServerCert, chatLifecycleServerKey)
+			if err != nil {
+				log.Fatalf("Messaging Chat lifecycle listener certificate: %v", err)
+			}
+			clientCAPEM, err := os.ReadFile(chatLifecycleClientCA)
+			if err != nil {
+				log.Fatalf("Messaging Chat lifecycle listener client CA: %v", err)
+			}
+			clientCAs := x509.NewCertPool()
+			if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+				log.Fatal("Messaging Chat lifecycle listener client CA is invalid")
+			}
+			if chatLifecycleListen == "" {
+				chatLifecycleListen = ":9092"
+			}
+			protectedListener, err := net.Listen("tcp", chatLifecycleListen)
+			if err != nil {
+				log.Fatalf("Messaging Chat lifecycle listener: %v", err)
+			}
+			protectedOptions := append([]grpc.ServerOption(nil), messagingGRPCOptions...)
+			protectedOptions = append(protectedOptions,
+				grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})),
+				grpc.ChainUnaryInterceptor(principalgrpc.ChatLifecycleStrictUnaryInterceptor(chatLifecyclePrincipal)),
+			)
+			chatLifecycleGRPCSrv = grpc.NewServer(protectedOptions...)
+			messagingv1.RegisterMessagingServiceServer(chatLifecycleGRPCSrv, messagingService)
+			defer chatLifecycleGRPCSrv.Stop()
+			go func() {
+				logger.Info("Messaging Chat lifecycle mTLS gRPC listening", slog.String("addr", chatLifecycleListen))
+				if err := chatLifecycleGRPCSrv.Serve(protectedListener); err != nil {
+					log.Fatalf("Messaging Chat lifecycle gRPC serve: %v", err)
+				}
+			}()
+		}
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
 			if err := grpcSrv.Serve(lis); err != nil {
@@ -553,6 +817,9 @@ func main() {
 		defer cancel()
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
+		}
+		if gameIntegrationGRPCSrv != nil {
+			gameIntegrationGRPCSrv.GracefulStop()
 		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)

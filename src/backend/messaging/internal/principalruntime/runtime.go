@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -40,10 +41,10 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 }
 
 func NewForIssuer(ctx context.Context, config Config, expectedIssuer string) (*Runtime, error) {
-	if expectedIssuer != "moderation" && expectedIssuer != "gateway" {
+	if expectedIssuer != "moderation" && expectedIssuer != "gateway" && expectedIssuer != "bot" && expectedIssuer != "gameintegration" && expectedIssuer != "chat" && expectedIssuer != "space" {
 		return nil, errors.New("unsupported service principal issuer")
 	}
-	if !strings.HasPrefix(config.JWKSURL, "https://") || !strings.HasSuffix(config.JWKSURL, "/.well-known/principal-jwks.json") || config.TLSCertFile == "" || config.TLSKeyFile == "" || config.CAFile == "" || config.RedisURL == "" {
+	if !validPrincipalJWKSURL(config.JWKSURL, expectedIssuer) || config.TLSCertFile == "" || config.TLSKeyFile == "" || config.CAFile == "" || config.RedisURL == "" {
 		return nil, fmt.Errorf("%s principal JWKS mTLS and replay configuration are required", expectedIssuer)
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
@@ -104,6 +105,20 @@ func NewForIssuer(ctx context.Context, config Config, expectedIssuer string) (*R
 		return nil, errors.New("service principal replay Redis unavailable")
 	}
 	return &Runtime{issuer: expectedIssuer, resolver: resolver, redis: redisClient, http: client}, nil
+}
+
+func validPrincipalJWKSURL(raw, issuer string) bool {
+	u, err := url.ParseRequestURI(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	wantPath := "/.well-known/principal-jwks.json"
+	if issuer == "gameintegration" {
+		wantPath = "/internal/v1/principal/jwks.json"
+	} else if issuer == "space" {
+		wantPath = "/.well-known/jwks.json"
+	}
+	return u.Path == wantPath && u.RawPath == ""
 }
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {

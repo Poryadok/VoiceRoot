@@ -14,6 +14,7 @@ import (
 
 const tombstoneMethod = messagingv1.MessagingService_TombstoneGameMessage_FullMethodName
 const applyGameMessageMethod = messagingv1.MessagingService_ApplyGameMessage_FullMethodName
+const sendGameEventMethod = messagingv1.MessagingService_SendGameEventMessage_FullMethodName
 
 type Verifier interface {
 	Verify(context.Context, string, string, string, string) (principal.Principal, error)
@@ -27,6 +28,11 @@ func TombstoneUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 // ApplyGameMessageUnaryInterceptor authenticates the internal Gateway ingress.
 func ApplyGameMessageUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 	return exactServiceUnaryInterceptor(applyGameMessageMethod, "gateway", verifier)
+}
+
+// SendGameEventMessageUnaryInterceptor authenticates the Bot-owned event sender.
+func SendGameEventMessageUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
+	return exactServiceUnaryInterceptor(sendGameEventMethod, "bot", verifier)
 }
 
 func exactServiceUnaryInterceptor(method, issuer string, verifier Verifier) grpc.UnaryServerInterceptor {
