@@ -108,6 +108,15 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		if principalEnabled {
+			check, stop := context.WithTimeout(rootCtx, 5*time.Second)
+			var ready bool
+			err := pool.QueryRow(check, `SELECT count(*)=3 FROM information_schema.columns WHERE table_schema='public' AND table_name='search_space_chat_manifests' AND column_name IN ('root_manifest_id','root_manifest_sha256','root_manifest_item_count')`).Scan(&ready)
+			stop()
+			if err != nil || !ready {
+				log.Fatal("Search lifecycle requires migration 000010 source/root manifest binding")
+			}
+		}
 		go func() {
 			ticker := time.NewTicker(time.Hour)
 			defer ticker.Stop()

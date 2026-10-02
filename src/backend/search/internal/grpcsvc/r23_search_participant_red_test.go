@@ -604,10 +604,7 @@ func newR23ManifestClientForIDs(t *testing.T, ids []uuid.UUID) *r23ManifestClien
 		raw[i] = id.String()
 	}
 	page := &chatv1.SpacePurgeManifestPage{ProtocolVersion: 1, Manifest: binding, PageIndex: 0, ItemIds: raw}
-	clone := proto.Clone(page).(*chatv1.SpacePurgeManifestPage)
-	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(clone)
-	require.NoError(t, err)
-	page.PageSha256 = domainSeparatedSHA(string(page.ProtoReflect().Descriptor().FullName()), wire)
+	page.PageSha256 = chatManifestPageSHA(binding.ManifestSha256, 0, ids)
 	return &r23ManifestClient{page: page}
 }
 
@@ -644,6 +641,7 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 	pool := integrationtest.StartPostgres(t, ctx, "search_r23_lifecycle", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000002_verification_type.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000010_chat_manifest_root_binding.up.sql"))
 
 	messages := store.NewMessageSearchStore(pool)
 	projections := store.NewProfileSpaceSearchStore(pool)

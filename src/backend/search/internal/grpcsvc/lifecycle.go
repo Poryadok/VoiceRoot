@@ -326,10 +326,10 @@ func loadCurrentFenceReceipt(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID, 
 }
 
 func persistImportedManifest(ctx context.Context, tx pgx.Tx, spaceID, opID uuid.UUID, generation uint64, m *importedChatManifest, at time.Time) error {
-	if m == nil || m.Binding == nil || len(m.ChatIDs) == 0 {
+	if m == nil || validateManifest(m.Binding) != nil || validateManifest(m.Root) != nil || len(m.Pages) == 0 || uint64(len(m.ChatIDs)) != m.Binding.GetItemCount() {
 		return errors.New("chat manifest is empty or incomplete")
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO search_space_chat_manifests(space_id,deletion_operation_id,generation,manifest_id,manifest_sha256,item_count,page_count,sealed,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,true,$8)`, spaceID, opID, generation, m.Binding.GetManifestId(), m.Binding.GetManifestSha256(), m.Binding.GetItemCount(), len(m.Pages), at); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO search_space_chat_manifests(space_id,deletion_operation_id,generation,manifest_id,manifest_sha256,item_count,page_count,sealed,created_at,root_manifest_id,root_manifest_sha256,root_manifest_item_count) VALUES($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10,$11)`, spaceID, opID, generation, m.Binding.GetManifestId(), m.Binding.GetManifestSha256(), m.Binding.GetItemCount(), len(m.Pages), at, m.Root.GetManifestId(), m.Root.GetManifestSha256(), m.Root.GetItemCount()); err != nil {
 		return err
 	}
 	for _, page := range m.Pages {

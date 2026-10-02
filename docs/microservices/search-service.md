@@ -100,6 +100,19 @@ message document from every active index and persists a permanent compact
 uncertain fence state fails closed. Full request/receipt bytes retain 30 days
 from this participant's completion.
 
+Chat's source manifest is distinct from the aggregate Space root. Search
+requests pages with the Space root ID; Chat authenticates that ID against its
+current lifecycle fence and returns its saved source binding. Search persists
+both bindings and checks the exact Space root again before purge. An empty
+source is valid only as one final empty page. Nonempty pages contain 1000 IDs
+except the final page; IDs remain unique and ordered by raw UUID bytes.
+Root and page hashes use Chat's canonical binary domains
+`voice.chat.v1.SpaceDeletionManifest` and
+`voice.chat.v1.SpaceDeletionManifestPage`, including item counts and big-endian
+generation/page integers. Page tokens bind the next index to the source hash.
+Migration `000010_chat_manifest_root_binding` is required before enabling the
+protected listener; rollback refuses while any imported evidence remains.
+
 ## User-authoritative profile projection
 
 Search signs the protected User bootstrap calls with its rotating principal

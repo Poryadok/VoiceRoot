@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,6 +16,32 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	searchv1 "voice.app/voice/search/v1"
 )
+
+func TestImportChatManifestAcceptsCanonicalSourceUnderDistinctSpaceRoot(t *testing.T) {
+	spaceID := uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	opID := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	root := &commonv1.ManifestBinding{ManifestId: "00000000-0000-4000-8000-000000000003", ManifestSha256: make([]byte, 32), ItemCount: 9}
+	for _, fixture := range []struct {
+		name, manifestHash, pageHash string
+		ids                          []string
+	}{
+		{"empty", "2ba65445d67a8aeef96f4ee918e2b46c38bc1928a7d96953f0d706c6a67fcb0f", "83f1e2c6a7dfa6a7bd651f56fc26cd50942e9b7a3baaafd1c9f64544e3695654", nil},
+		{"one chat", "619f3fb355b406e95d67070613667a54e1dae8df95e32bbb347d6389e51db400", "6b11f19bf96c185b2b0960c4ff98b1e0ce69c6aaaa385026c4771ca49df96d98", []string{"00000000-0000-4000-8000-000000000005"}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			manifestHash, err := hex.DecodeString(fixture.manifestHash)
+			require.NoError(t, err)
+			pageHash, err := hex.DecodeString(fixture.pageHash)
+			require.NoError(t, err)
+			page := &chatv1.SpacePurgeManifestPage{ProtocolVersion: 1, Manifest: &commonv1.ManifestBinding{ManifestId: "00000000-0000-4000-8000-000000000004", ManifestSha256: manifestHash, ItemCount: uint64(len(fixture.ids))}, ItemIds: fixture.ids, PageSha256: pageHash}
+			svc := &SearchGRPC{ChatManifest: &r23ManifestClient{page: page}}
+			imported, err := svc.importChatManifest(context.Background(), spaceID, opID, 1, root)
+			require.NoError(t, err, "authenticated Chat source is independent of the aggregate Space root")
+			require.True(t, proto.Equal(page.Manifest, imported.Binding))
+			require.Len(t, imported.ChatIDs, len(fixture.ids))
+		})
+	}
+}
 
 func TestImportChatManifestRejectsEmptyIncompleteTamperedAndUnsortedPages(t *testing.T) {
 	spaceID, opID := uuid.New(), uuid.New()
@@ -30,12 +57,11 @@ func TestImportChatManifestRejectsEmptyIncompleteTamperedAndUnsortedPages(t *tes
 		}
 		binding := &commonv1.ManifestBinding{ManifestId: "root", ItemCount: itemCount, ManifestSha256: chatManifestSHA(spaceID, opID, 1, ids)}
 		page := &chatv1.SpacePurgeManifestPage{ProtocolVersion: 1, Manifest: binding, ItemIds: raw}
-		wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(page)
-		require.NoError(t, err)
-		page.PageSha256 = domainSeparatedSHA(string(page.ProtoReflect().Descriptor().FullName()), wire)
+		page.PageSha256 = chatManifestPageSHA(binding.ManifestSha256, 0, ids)
 		return page
 	}
 	cases := map[string]*chatv1.SpacePurgeManifestPage{"empty": valid(nil, 0), "incomplete": valid([]uuid.UUID{a}, 2), "unsorted": valid([]uuid.UUID{b, a}, 2), "tampered-hash": valid([]uuid.UUID{a}, 1)}
+	cases["empty"].NextPageToken = "unexpected-next-page"
 	cases["tampered-hash"].PageSha256[0] ^= 1
 	for name, page := range cases {
 		t.Run(name, func(t *testing.T) {
