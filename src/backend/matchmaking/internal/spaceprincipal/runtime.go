@@ -107,7 +107,7 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 
 func (c Config) validate() error {
 	if c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" || c.JWKSURL == "" {
-		return errors.New("Matchmaking Space principal listener, trust, TLS identity, and replay Redis are required")
+		return errors.New("matchmaking Space principal listener, trust, TLS identity, and replay Redis are required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid Matchmaking Space principal listener")
@@ -117,7 +117,7 @@ func (c Config) validate() error {
 	}
 	endpoint, err := http.NewRequest(http.MethodGet, c.JWKSURL, nil)
 	if err != nil || endpoint.URL.Scheme != "https" || endpoint.URL.Hostname() == "" || endpoint.URL.User != nil || endpoint.URL.Fragment != "" {
-		return errors.New("Space principal JWKS URL must use HTTPS")
+		return errors.New("space principal JWKS URL must use HTTPS")
 	}
 	return nil
 }
@@ -140,15 +140,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	serverCert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Matchmaking Space principal TLS identity: %w", err)
+		return nil, fmt.Errorf("matchmaking Space principal TLS identity: %w", err)
 	}
 	clientCAPEM, err := os.ReadFile(cfg.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Matchmaking Space principal client CA: %w", err)
+		return nil, fmt.Errorf("matchmaking Space principal client CA: %w", err)
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Matchmaking Space principal client CA is empty")
+		return nil, errors.New("matchmaking Space principal client CA is empty")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
@@ -157,10 +157,10 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.JWKSCAFile != "" {
 		pem, err := os.ReadFile(cfg.JWKSCAFile)
 		if err != nil {
-			return nil, fmt.Errorf("Space principal JWKS CA: %w", err)
+			return nil, fmt.Errorf("space principal JWKS CA: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(pem) {
-			return nil, errors.New("Space principal JWKS CA is empty")
+			return nil, errors.New("space principal JWKS CA is empty")
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -180,9 +180,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, errors.New("Space principal JWKS unavailable")
+			return nil, errors.New("space principal JWKS unavailable")
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 		if err != nil || len(body) > 65536 {
@@ -190,7 +190,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("Space principal JWKS requires current and next keys")
+			return nil, errors.New("space principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for kid, key := range keys {
@@ -213,7 +213,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
 		_ = runtime.Close()
-		return nil, errors.New("Matchmaking principal replay Redis unavailable")
+		return nil, errors.New("matchmaking principal replay Redis unavailable")
 	}
 	if err := resolver.Refresh(startup, "space"); err != nil {
 		_ = runtime.Close()
@@ -227,7 +227,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.replay == nil || !isLifecycleMethod(method) {
-		return principal.Principal{}, errors.New("Space principal runtime unavailable")
+		return principal.Principal{}, errors.New("space principal runtime unavailable")
 	}
 	verified, err := principal.VerifyService(ctx, token, principal.VerifyConfig{
 		ExpectedIssuer: "space", ExpectedAudience: "matchmaking", ExpectedRPC: method,
@@ -238,7 +238,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestH
 		return principal.Principal{}, err
 	}
 	if verified.Subject != "service:space" || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
-		return principal.Principal{}, errors.New("Space principal contains user authority")
+		return principal.Principal{}, errors.New("space principal contains user authority")
 	}
 	return verified, nil
 }
@@ -255,7 +255,7 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 		return errors.New("principal replay detected")
 	}
 	if err != nil {
-		return errors.New("Matchmaking principal replay Redis unavailable")
+		return errors.New("matchmaking principal replay Redis unavailable")
 	}
 	if result != "OK" {
 		return errors.New("principal replay was not recorded")

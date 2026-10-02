@@ -29,7 +29,7 @@ func (s *RoleStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	defer authoritysource.RollbackRead(ctx, tx)
 	var revision uint64
 	if err := tx.QueryRow(ctx, `SELECT revision FROM public.role_sdk_authority_revision WHERE singleton`).Scan(&revision); err != nil || revision == 0 {
-		return errors.New("SDK source revision unavailable")
+		return errors.New("sDK source revision unavailable")
 	}
 	return tx.Commit(ctx)
 }
@@ -44,7 +44,7 @@ func roleSourceRevisions(ctx context.Context, tx pgx.Tx, space string) (uint64, 
 	var conflict bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.role_voice_policy_outbox WHERE space_id=$1 AND policy_epoch>$2)`, space, role).Scan(&conflict)
 	if err != nil || conflict {
-		return 0, 0, errors.New("Role revision conflicts with durable history")
+		return 0, 0, errors.New("role revision conflicts with durable history")
 	}
 	return role, sdk, nil
 }
@@ -159,7 +159,7 @@ func (s *RoleStore) ReadAuthoritySnapshot(ctx context.Context, scope *authorityv
 			return err
 		}
 		if space != scope.SpaceId || !knownRoles[item.RoleID] {
-			return errors.New("Role assignment crosses owner scope")
+			return errors.New("role assignment crosses owner scope")
 		}
 		state.Assignments = append(state.Assignments, item)
 		return nil
@@ -204,7 +204,7 @@ func (s *RoleStore) ReadAuthoritySnapshot(ctx context.Context, scope *authorityv
 				return err
 			}
 			if room == nil || *room != item.VoiceRoomID || revision == 0 || revision != item.RosterRevision || status != "active" || permission != "VOICE_JOIN" {
-				return errors.New("SDK grant conflicts with owning session")
+				return errors.New("sDK grant conflicts with owning session")
 			}
 			state.SDKSessionGrants = append(state.SDKSessionGrants, item)
 			return nil

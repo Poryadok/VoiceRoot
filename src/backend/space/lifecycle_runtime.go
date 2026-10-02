@@ -74,7 +74,7 @@ func (w lifecycleRecoveryWorker) RunOnce(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if attempt.Stalled && w.logger != nil {
-			w.logger.Error("Space lifecycle stalled", slog.String("space_id", attempt.SpaceID.String()), slog.String("phase", attempt.Phase), slog.Uint64("generation", attempt.Generation))
+			w.logger.Error("space lifecycle stalled", slog.String("space_id", attempt.SpaceID.String()), slog.String("phase", attempt.Phase), slog.Uint64("generation", attempt.Generation))
 		}
 		// Each owner RPC has its own deadline. A large immutable manifest can take
 		// many pages; a fixed outer deadline would repeatedly starve its last page.
@@ -96,12 +96,12 @@ func (w lifecycleRecoveryWorker) RunOnce(ctx context.Context) error {
 
 func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, spaceStore *store.SpaceStore, service *grpcsvc.SpaceGRPC, publisher *spaceevents.JetStreamPublisher, logger *slog.Logger) (*lifecycleRuntime, error) {
 	if parent == nil || spaceStore == nil || spaceStore.Pool == nil || service == nil || service.PrincipalIssuer == nil || service.OwnershipAuth == nil || publisher == nil || len(c.Owners) != 10 {
-		return nil, errors.New("Space lifecycle requires database, Auth, issuer, JetStream and all ten owners")
+		return nil, errors.New("space lifecycle requires database, Auth, issuer, JetStream and all ten owners")
 	}
 	// Validate the deployed migration before exposing a destructive public route.
 	var ready bool
 	if err := spaceStore.Pool.QueryRow(parent, `SELECT to_regprocedure('space_terminal_purge_ready(uuid)') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='space_lifecycle_aggregates' AND column_name='next_attempt_at') AND to_regclass('space_lifecycle_completions') IS NOT NULL`).Scan(&ready); err != nil || !ready {
-		return nil, errors.New("Space lifecycle migrations 000022 and 000023 are required")
+		return nil, errors.New("space lifecycle migrations 000022 and 000023 are required")
 	}
 	hasher, err := tombstone.LoadDevelopmentKey(c.DevTombstoneKeyFile)
 	if err != nil {
@@ -109,11 +109,11 @@ func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, space
 	}
 	rootsPEM, err := os.ReadFile(c.CAFile)
 	if err != nil {
-		return nil, errors.New("Space lifecycle CA unavailable")
+		return nil, errors.New("space lifecycle CA unavailable")
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(rootsPEM) {
-		return nil, errors.New("Space lifecycle CA contains no certificates")
+		return nil, errors.New("space lifecycle CA contains no certificates")
 	}
 	runtime := &lifecycleRuntime{}
 	failed := func(err error) (*lifecycleRuntime, error) { runtime.Stop(); return nil, err }
@@ -127,17 +127,17 @@ func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, space
 		}
 		certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			return failed(fmt.Errorf("Space lifecycle %s client certificate unavailable", owner.Audience))
+			return failed(fmt.Errorf("space lifecycle %s client certificate unavailable", owner.Audience))
 		}
 		connection, err := grpc.NewClient(grpcclient.DialTarget(owner.Address), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: owner.ServerName, Certificates: []tls.Certificate{certificate}})))
 		if err != nil {
-			return failed(fmt.Errorf("Space lifecycle %s transport: %w", owner.Audience, err))
+			return failed(fmt.Errorf("space lifecycle %s transport: %w", owner.Audience, err))
 		}
 		runtime.connections = append(runtime.connections, connection)
 		clients[owner.ID] = connection
 		participant, err := lifecyclecoord.NewGRPCParticipant(owner.ID, service.PrincipalIssuer, connection)
 		if err != nil {
-			return failed(fmt.Errorf("Space lifecycle %s contract: %w", owner.Audience, err))
+			return failed(fmt.Errorf("space lifecycle %s contract: %w", owner.Audience, err))
 		}
 		fences[owner.ID] = participant
 		if owner.ID != commonv1.ParticipantId_PARTICIPANT_ID_ROLE {
@@ -157,14 +157,14 @@ func newLifecycleRuntime(parent context.Context, c lifecycleRuntimeConfig, space
 		defer ticker.Stop()
 		for {
 			if err := spaceStore.CleanupLifecycleEvidence(ctx); err != nil && ctx.Err() == nil && logger != nil {
-				logger.Error("Space lifecycle retention pass failed")
+				logger.Error("space lifecycle retention pass failed")
 			}
 			if err := worker.RunOnce(ctx); err != nil && ctx.Err() == nil && logger != nil {
-				logger.Error("Space lifecycle recovery pass failed")
+				logger.Error("space lifecycle recovery pass failed")
 			}
 			if ctx.Err() == nil {
 				if err := dispatchLifecycleEvents(ctx, spaceStore, publisher); err != nil && logger != nil {
-					logger.Error("Space lifecycle outbox pass failed")
+					logger.Error("space lifecycle outbox pass failed")
 				}
 			}
 			select {

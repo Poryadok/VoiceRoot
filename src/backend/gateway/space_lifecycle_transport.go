@@ -35,7 +35,7 @@ func spaceLifecycleClientConfigFromEnv() (lifecycleClientConfig, bool, error) {
 	}
 	for _, s := range []string{c.address, c.ca, c.serverName, c.cert, c.key} {
 		if s == "" || s != strings.TrimSpace(s) {
-			return c, true, errors.New("Gateway Space lifecycle TLS configuration is incomplete")
+			return c, true, errors.New("gateway Space lifecycle TLS configuration is incomplete")
 		}
 	}
 	if _, err := c.tlsConfig(); err != nil {
@@ -50,7 +50,7 @@ func (c lifecycleClientConfig) tlsConfig() (*tls.Config, error) {
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(data) {
-		return nil, errors.New("Space lifecycle CA has no certificates")
+		return nil, errors.New("space lifecycle CA has no certificates")
 	}
 	cert, err := tls.LoadX509KeyPair(c.cert, c.key)
 	if err != nil {

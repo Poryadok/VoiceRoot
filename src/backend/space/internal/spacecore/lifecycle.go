@@ -447,7 +447,7 @@ func (a *LifecycleAggregate) RoleRetirementRequest() (*rolev1.RetireSpaceRequest
 		if a != nil {
 			phase = a.phase
 		}
-		return nil, fmt.Errorf("Role retirement request is not available in phase %s", phase)
+		return nil, fmt.Errorf("role retirement request is not available in phase %s", phase)
 	}
 	return &rolev1.RetireSpaceRequest{
 		ProtocolVersion:     1,

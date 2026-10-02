@@ -48,7 +48,7 @@ func (c spacePurgeOwnerConfig) validate() error {
 		"CHAT_SPACE_PURGE_CLIENT_KEY_FILE":           c.ClientKey,
 	} {
 		if value == "" {
-			return fmt.Errorf("Chat Space purge runtime requires %s", name)
+			return fmt.Errorf("chat Space purge runtime requires %s", name)
 		}
 	}
 	return nil

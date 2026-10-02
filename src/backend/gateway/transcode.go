@@ -210,7 +210,7 @@ func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 		if c.spaceLifecycleConn != nil {
 			c.spaceLifecycleConn.Connect()
 			if err := grpcclient.WaitForReady(ctx, c.spaceLifecycleConn); err != nil {
-				return fmt.Errorf("Space lifecycle readiness: %w", err)
+				return fmt.Errorf("space lifecycle readiness: %w", err)
 			}
 		}
 	}

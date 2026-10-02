@@ -18,7 +18,7 @@ import (
 )
 
 var ErrDeletionFenceInvalid = errors.New("invalid Role deletion fence")
-var ErrDeletionFenceConflict = errors.New("Role deletion fence conflict")
+var ErrDeletionFenceConflict = errors.New("role deletion fence conflict")
 
 func deletionFenceState(state commonv1.LifecycleFenceState) string {
 	switch state {
@@ -156,7 +156,7 @@ func checkRoleDeletionFence(ctx context.Context, db scopeExecutor, spaces []uuid
 	return nil
 }
 
-// Compact only full bytes after permanent retirement's database retention window.
+// CleanupSpaceDeletionFenceEvidence compacts only full bytes after permanent retirement's database retention window.
 // Semantic tuple, stable receipt and current head remain permanent.
 func (s *RoleStore) CleanupSpaceDeletionFenceEvidence(ctx context.Context) error {
 	if s == nil || s.Pool == nil {

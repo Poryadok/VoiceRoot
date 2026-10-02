@@ -404,8 +404,17 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(self.source_at(service, env[prefix + suffix]), f"tls/{service}.{ext}")
 
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
+        fixture_overrides = {
+            ("space", "SPACE_PRINCIPAL_SIGNING_KEYS_DIR"): "space",
+            ("space", "SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"): "tls/space-lifecycle.crt",
+            ("space", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"): "tls/space-lifecycle.key",
+        }
         for service, base in self.base.items():
             for name, value in base.get("environment", {}).items():
+                if (service, name) in fixture_overrides:
+                    self.assertEqual(self.source_at(service, self.merged[service]["environment"][name]),
+                                     fixture_overrides[service, name])
+                    continue
                 if service == "gameintegration" and name == "GAME_INTEGRATION_CREDENTIAL_KEY_B64":
                     self.assertEqual(len(base64.b64decode(self.merged[service]["environment"][name])), 32)
                     continue
@@ -423,6 +432,20 @@ class ComposeTests(unittest.TestCase):
                     "chat": {"tls/chat-gis-grpc.crt", "tls/chat-gis-grpc.key", "ca/ca.crt", "ca/gameintegration-client-ca.crt"},
                    "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
                    PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}}
+        allowed["space"].update({"tls/space-lifecycle.crt", "tls/space-lifecycle.key",
+                                 "tls/space-lifecycle-client.crt", "tls/space-lifecycle-client.key"})
+        allowed["gameintegration"].update({"tls/gameintegration-messaging-client.crt",
+                                           "tls/gameintegration-messaging-client.key"})
+        allowed["voice"].add("ca/space-lifecycle-client-ca.crt")
+        allowed["bot"] = {"bot", "tls/bot-game-event.crt", "tls/bot-game-event.key",
+                          "tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                          "ca/ca.crt", "ca/gameintegration-client-ca.crt", "ca/space-lifecycle-client-ca.crt"}
+        allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
+                                   "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"}
+        allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                                "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key",
+                                "tls/gameintegration-client.crt", "tls/gameintegration-client.key",
+                                "ca/ca.crt", "ca/gameintegration-client-ca.crt"}
         for service in self.merged:
             for source, mount in self.fixture_mounts(service):
                 self.assertIn(source, allowed.get(service, set()), f"fixture exposed to {service}")

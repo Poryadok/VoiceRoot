@@ -45,12 +45,12 @@ func FromEnv() (Config, bool, error) {
 func (c Config) validate() error {
 	for _, v := range []string{c.Listen, c.CertFile, c.KeyFile, c.ClientCAFile, c.JWKSURL, c.JWKSCAFile, c.RedisAddr} {
 		if strings.TrimSpace(v) == "" || v != strings.TrimSpace(v) {
-			return errors.New("Space Gateway lifecycle configuration is incomplete")
+			return errors.New("space Gateway lifecycle configuration is incomplete")
 		}
 	}
 	u, err := url.Parse(c.JWKSURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" {
-		return errors.New("Gateway JWKS must be an exact HTTPS endpoint")
+		return errors.New("gateway JWKS must be an exact HTTPS endpoint")
 	}
 	return nil
 }
@@ -82,19 +82,19 @@ func New(ctx context.Context, c Config) (*Runtime, error) {
 	}
 	cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space lifecycle server identity: %w", err)
+		return nil, fmt.Errorf("space lifecycle server identity: %w", err)
 	}
 	clients, err := rootsFromFile(c.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space lifecycle client CA: %w", err)
+		return nil, fmt.Errorf("space lifecycle client CA: %w", err)
 	}
 	roots, err := rootsFromFile(c.JWKSCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Gateway JWKS CA: %w", err)
+		return nil, fmt.Errorf("gateway JWKS CA: %w", err)
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	httpClient := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("Gateway JWKS redirects forbidden") }}
+	httpClient := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("gateway JWKS redirects forbidden") }}
 	resolver, err := principal.NewJWKSResolverWithConfig(principal.JWKSResolverConfig{Fetch: func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != "gateway" {
 			return nil, errors.New("untrusted lifecycle issuer")

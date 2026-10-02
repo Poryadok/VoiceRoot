@@ -65,13 +65,13 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			return nil, fmt.Errorf("space principal JWKS CA: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(ca) {
-			return nil, errors.New("Space principal JWKS CA has no certificates")
+			return nil, errors.New("space principal JWKS CA has no certificates")
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("Space principal JWKS redirects are forbidden")
+		return errors.New("space principal JWKS redirects are forbidden")
 	}}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
 		if issuer != "space" {
@@ -87,7 +87,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, status.Error(codes.Unavailable, "Space principal JWKS unavailable")
+			return nil, status.Error(codes.Unavailable, "space principal JWKS unavailable")
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 		if err != nil {
@@ -98,7 +98,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("Space principal JWKS requires current and next keys")
+			return nil, errors.New("space principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for _, key := range keys {
@@ -120,7 +120,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
 		_ = r.Close()
-		return nil, status.Error(codes.Unavailable, "Space principal replay Redis unavailable")
+		return nil, status.Error(codes.Unavailable, "space principal replay Redis unavailable")
 	}
 	if err := resolver.Refresh(startup, "space"); err != nil {
 		_ = r.Close()
@@ -135,12 +135,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 
 func unavailableJWKS(err error) error {
 	_ = err
-	return status.Error(codes.Unavailable, "Space principal JWKS unavailable")
+	return status.Error(codes.Unavailable, "space principal JWKS unavailable")
 }
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.replay == nil {
-		return principal.Principal{}, status.Error(codes.Unavailable, "Space principal verifier unavailable")
+		return principal.Principal{}, status.Error(codes.Unavailable, "space principal verifier unavailable")
 	}
 	if !principalgrpc.IsLifecycleMethod(method) {
 		return principal.Principal{}, status.Error(codes.PermissionDenied, "method is not allowed")
@@ -150,7 +150,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 		return principal.Principal{}, err
 	}
 	if verified.Subject != "service:space" || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
-		return principal.Principal{}, errors.New("Space principal contains user authority")
+		return principal.Principal{}, errors.New("space principal contains user authority")
 	}
 	return verified, nil
 }
@@ -167,7 +167,7 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 		return errors.New("principal replay detected")
 	}
 	if err != nil {
-		return status.Error(codes.Unavailable, "Space principal replay Redis unavailable")
+		return status.Error(codes.Unavailable, "space principal replay Redis unavailable")
 	}
 	if result != "OK" {
 		return errors.New("principal replay was not recorded")

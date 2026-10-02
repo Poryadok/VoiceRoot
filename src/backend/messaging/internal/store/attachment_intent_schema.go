@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrAttachmentIntentSchema = errors.New("Messaging lifecycle requires clean migration 000026 attachment send intents")
+var ErrAttachmentIntentSchema = errors.New("messaging lifecycle requires clean migration 000026 attachment send intents")
 
 // RequireAttachmentIntentSchema runs before the enabled lifecycle runtime can
 // import manifests, acquire references, recover intents or issue receipts.

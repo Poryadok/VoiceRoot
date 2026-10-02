@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrAccountProfileMappingConflict = errors.New("Voice profile account mapping conflicts with User")
+var ErrAccountProfileMappingConflict = errors.New("voice profile account mapping conflicts with User")
 var ErrActiveAccountVoiceSession = errors.New("account already has an active Voice session")
 var ErrAccountVoiceFenceUnavailable = errors.New("account Voice fence unavailable")
 

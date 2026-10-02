@@ -115,7 +115,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.GISTLSCert, cfg.GISTLSKey)
 	if err != nil {
-		return nil, fmt.Errorf("GIS principal JWKS client certificate: %w", err)
+		return nil, fmt.Errorf("gIS principal JWKS client certificate: %w", err)
 	}
 	caPEM, err := os.ReadFile(cfg.GISCAFile)
 	if err != nil {
@@ -126,7 +126,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		roots = x509.NewCertPool()
 	}
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("GIS principal JWKS CA contains no certificates")
+		return nil, errors.New("gIS principal JWKS CA contains no certificates")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{cert}}
@@ -147,11 +147,11 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("GIS principal JWKS returned status %d", resp.StatusCode)
+			return nil, fmt.Errorf("gIS principal JWKS returned status %d", resp.StatusCode)
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024+1))
 		if err != nil || len(body) > 128*1024 {
-			return nil, errors.New("GIS principal JWKS response is invalid")
+			return nil, errors.New("gIS principal JWKS response is invalid")
 		}
 		return body, nil
 	}
@@ -277,7 +277,7 @@ func (r *Runtime) GameEventServerTLSConfig() (*tls.Config, error) {
 	}
 	clients := x509.NewCertPool()
 	if !clients.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Bot game event client CA contains no certificates")
+		return nil, errors.New("bot game event client CA contains no certificates")
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clients}, nil
 }
@@ -299,7 +299,7 @@ func (r *Runtime) SpaceLifecycleServerTLSConfig() (*tls.Config, error) {
 	}
 	clients := x509.NewCertPool()
 	if !clients.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Space lifecycle client CA contains no certificates")
+		return nil, errors.New("space lifecycle client CA contains no certificates")
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{r.spaceCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clients}, nil
 }
@@ -309,7 +309,7 @@ func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, has
 		return principal.Principal{}, errors.New("bot Space lifecycle runtime unavailable")
 	}
 	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" {
-		return principal.Principal{}, errors.New("Space principal method is not allowed")
+		return principal.Principal{}, errors.New("space principal method is not allowed")
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {

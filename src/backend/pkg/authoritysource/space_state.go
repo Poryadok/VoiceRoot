@@ -110,7 +110,7 @@ func DecodeSpaceState(raw []byte) (SpaceState, error) {
 			return SpaceState{}, errors.New("invalid Space tree")
 		}
 		if item.Kind != "text_chat" && item.Kind != "voice_room" || item.Kind == "voice_room" && !rooms[item.ResourceID] {
-			return SpaceState{}, errors.New("Space tree scope mismatch")
+			return SpaceState{}, errors.New("space tree scope mismatch")
 		}
 		resources[item.Kind+item.ResourceID] = true
 	}

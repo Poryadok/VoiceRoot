@@ -119,20 +119,20 @@ func validateManifestPage(page *chatv1.SpacePurgeManifestPage, manifestID string
 	} else {
 		last := (b.GetItemCount() - 1) / 1000
 		if index > last {
-			return errors.New("Chat manifest page index exceeds count")
+			return errors.New("chat manifest page index exceeds count")
 		}
 		count := uint64(1000)
 		if index == last {
 			count = b.GetItemCount() - index*1000
 		}
 		if uint64(len(ids)) != count || (index < last) != (page.GetNextPageToken() != "") {
-			return errors.New("Chat manifest page is incomplete")
+			return errors.New("chat manifest page is incomplete")
 		}
 	}
 	if page.GetNextPageToken() != "" {
 		token, err := base64.RawURLEncoding.DecodeString(page.GetNextPageToken())
 		if err != nil || len(token) != 40 || binary.BigEndian.Uint64(token[:8]) != index+1 || !bytes.Equal(token[8:], b.GetManifestSha256()) {
-			return errors.New("Chat manifest page token binding mismatch")
+			return errors.New("chat manifest page token binding mismatch")
 		}
 	}
 	return nil

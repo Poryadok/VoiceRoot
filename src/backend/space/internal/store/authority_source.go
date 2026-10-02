@@ -44,7 +44,7 @@ func spaceSourceRevision(ctx context.Context, tx pgx.Tx, space string) (uint64, 
 	}
 	var conflict bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.space_voice_access_outbox WHERE space_id=$1 AND access_epoch>$2)`, space, revision).Scan(&conflict); err != nil || conflict {
-		return 0, errors.New("Space revision conflicts with durable history")
+		return 0, errors.New("space revision conflicts with durable history")
 	}
 	return revision, nil
 }

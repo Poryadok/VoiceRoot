@@ -20,8 +20,8 @@ import (
 
 var (
 	ErrInvalidRequest = errors.New("invalid Matchmaking Space lifecycle request")
-	ErrConflict       = errors.New("Matchmaking Space lifecycle request conflicts with durable state")
-	ErrUnavailable    = errors.New("Matchmaking Space lifecycle store unavailable")
+	ErrConflict       = errors.New("matchmaking Space lifecycle request conflicts with durable state")
+	ErrUnavailable    = errors.New("matchmaking Space lifecycle store unavailable")
 )
 
 type Store struct{ pool *pgxpool.Pool }
@@ -314,10 +314,10 @@ func validateTransition(generation int64, state string, operation uuid.UUID, man
 		if req.GetManifest().GetManifestId() != manifestID || !bytes.Equal(req.GetManifest().GetManifestSha256(), manifestHash) || int64(req.GetManifest().GetItemCount()) != itemCount {
 			return ErrConflict
 		}
-		if !((state == "FROZEN" && (newState == "LIVE" || newState == "PURGE_DECIDED")) || (state == "LIVE" && newState == "FROZEN")) {
-			return ErrConflict
+		if (state == "FROZEN" && (newState == "LIVE" || newState == "PURGE_DECIDED")) || (state == "LIVE" && newState == "FROZEN") {
+			return nil
 		}
-		return nil
+		return ErrConflict
 	}
 	if newState != "FROZEN" || state != "LIVE" {
 		return ErrConflict

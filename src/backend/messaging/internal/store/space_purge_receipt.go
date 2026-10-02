@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	ErrSpacePurgeReceiptNotFound = errors.New("Messaging purge receipt not found")
-	ErrSpacePurgeReceiptBinding  = errors.New("Messaging purge receipt binding mismatch")
+	ErrSpacePurgeReceiptNotFound = errors.New("messaging purge receipt not found")
+	ErrSpacePurgeReceiptBinding  = errors.New("messaging purge receipt binding mismatch")
 )
 
 type SpacePurgeReceiptKey struct {

@@ -147,7 +147,7 @@ func (c *ManagedChatPurgeCoordinator) releaseAndVerifyFile(ctx context.Context, 
 		return nil, err
 	}
 	if released == nil || released.GetReceipt() == nil || released.GetReceipt().GetProtocolVersion() != 1 || released.GetReceipt().GetOperationId() != operationID.String() || released.GetReceipt().GetProducerId() != release.GetProducerId() || released.GetReceipt().GetReleasedCount() != uint64(len(refs)) || !bytes.Equal(released.GetReceipt().GetRequestSha256(), releaseHash) {
-		return nil, errors.New("File returned an invalid reference release receipt")
+		return nil, errors.New("file returned an invalid reference release receipt")
 	}
 	statusRequest := &filev1.GetFileReferenceGCStatusRequest{ProtocolVersion: 1, OperationId: operationID.String(), ProducerId: release.GetProducerId(), References: refs, ReleaseRequestSha256: releaseHash}
 	statusRPC := filev1.FileService_GetFileReferenceGCStatus_FullMethodName
@@ -164,21 +164,21 @@ func (c *ManagedChatPurgeCoordinator) releaseAndVerifyFile(ctx context.Context, 
 		return nil, errors.New("could not hash File GC status request")
 	}
 	if statusResponse == nil || statusResponse.GetOperationId() != operationID.String() || statusResponse.GetProducerId() != release.GetProducerId() || !bytes.Equal(statusResponse.GetReleaseRequestSha256(), releaseHash) || !bytes.Equal(statusResponse.GetRequestSha256(), expectedStatusHash) || len(statusResponse.GetReferences()) != len(refs) {
-		return nil, errors.New("File returned mismatched GC status evidence")
+		return nil, errors.New("file returned mismatched GC status evidence")
 	}
 	for index, item := range statusResponse.GetReferences() {
 		if item == nil || item.GetReference() == nil || !proto.Equal(item.GetReference(), refs[index]) {
-			return nil, errors.New("File returned a different frozen reference set")
+			return nil, errors.New("file returned a different frozen reference set")
 		}
 		if item.GetState() == filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_PENDING {
 			return nil, status.Error(codes.Unavailable, "File garbage collection is pending")
 		}
 		if item.GetState() != filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_GC_COMPLETE && item.GetState() != filev1.FileReferenceGCState_FILE_REFERENCE_GC_STATE_RETAINED_SHARED {
-			return nil, errors.New("File returned an unknown GC state")
+			return nil, errors.New("file returned an unknown GC state")
 		}
 	}
 	if statusResponse.GetReceiptId() == "" || statusResponse.GetCompletedAt() == nil || !statusResponse.GetCompletedAt().IsValid() || len(statusResponse.GetRequestSha256()) != sha256.Size {
-		return nil, errors.New("File terminal GC receipt is incomplete")
+		return nil, errors.New("file terminal GC receipt is incomplete")
 	}
 	return responseHash(statusResponse)
 }
@@ -188,7 +188,7 @@ func (c *ManagedChatPurgeCoordinator) purgeAndVerifySearch(ctx context.Context, 
 		return receiptHash("voice.messaging.managed_chat_purge.no_search_docs.v1", []byte(requestHash)), 0, nil
 	}
 	if c.Search == nil {
-		return nil, 0, errors.New("Search purge owner is unavailable")
+		return nil, 0, errors.New("search purge owner is unavailable")
 	}
 	ordered := append([]uuid.UUID(nil), ids...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].String() < ordered[j].String() })
@@ -216,7 +216,7 @@ func (c *ManagedChatPurgeCoordinator) purgeAndVerifySearch(ctx context.Context, 
 		return nil, 0, err
 	}
 	if response == nil || response.GetReceiptId() == "" || response.GetOperationId() != operationID.String() || response.GetChatId() != chatID.String() || response.GetDeletedCount() != uint64(len(ordered)) || !bytes.Equal(response.GetMessageIdsSha256(), messageIDHash.Sum(nil)) || !bytes.Equal(response.GetRequestSha256(), requestHashBytes) || response.GetCompletedAt() == nil || !response.GetCompletedAt().IsValid() {
-		return nil, 0, errors.New("Search returned an incomplete or mismatched purge receipt")
+		return nil, 0, errors.New("search returned an incomplete or mismatched purge receipt")
 	}
 	_ = requestHashString
 	responseDigest, err := responseHash(response)

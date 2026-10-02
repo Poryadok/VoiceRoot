@@ -33,7 +33,7 @@ type signedChatManifestClient struct {
 
 func (c *signedChatManifestClient) GetSpacePurgeManifestPage(ctx context.Context, req *chatv1.GetSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*chatv1.GetSpacePurgeManifestPageResponse, error) {
 	if req == nil {
-		return nil, errors.New("Chat manifest request is required")
+		return nil, errors.New("chat manifest request is required")
 	}
 	operation, err := uuid.Parse(req.DeletionOperationId)
 	if err != nil || operation == uuid.Nil || operation.String() != req.DeletionOperationId {
@@ -77,10 +77,10 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 		}
 	}
 	if _, set := os.LookupEnv("S2S_SIGNING_KEY_PEM"); set {
-		return nil, nil, nil, errors.New("S2S_SIGNING_KEY_PEM is forbidden")
+		return nil, nil, nil, errors.New("s2S_SIGNING_KEY_PEM is forbidden")
 	}
 	if _, set := os.LookupEnv("S2S_SIGNING_KID"); set {
-		return nil, nil, nil, errors.New("S2S_SIGNING_KID is forbidden")
+		return nil, nil, nil, errors.New("s2S_SIGNING_KID is forbidden")
 	}
 	if !enabled {
 		return nil, nil, nil, nil
@@ -92,7 +92,7 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 	caFile, serverName := strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_CA_FILE")), strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME"))
 	certFile, keyFile := strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE")), strings.TrimSpace(os.Getenv("SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE"))
 	if caFile == "" || serverName == "" || certFile == "" || keyFile == "" {
-		return nil, nil, nil, errors.New("Chat manifest TLS CA, server name, client certificate and key are required")
+		return nil, nil, nil, errors.New("chat manifest TLS CA, server name, client certificate and key are required")
 	}
 	keys, err := loadSearchSigningKeys(dir)
 	if err != nil {
@@ -113,7 +113,7 @@ func loadSignedChatManifestClientFromEnv() (chatv1.ChatServiceClient, *grpc.Clie
 	}
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Chat manifest TLS client identity: %w", err)
+		return nil, nil, nil, fmt.Errorf("chat manifest TLS client identity: %w", err)
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: serverName, Certificates: []tls.Certificate{certificate}}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))

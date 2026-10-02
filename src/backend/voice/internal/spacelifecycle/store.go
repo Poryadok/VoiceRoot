@@ -12,9 +12,9 @@ import (
 
 var (
 	ErrInvalidRequest = errors.New("invalid Space lifecycle request")
-	ErrConflict       = errors.New("Space lifecycle request conflicts with durable state")
-	ErrUnavailable    = errors.New("Space lifecycle store unavailable")
-	ErrSpaceFrozen    = errors.New("Space voice admission is fenced")
+	ErrConflict       = errors.New("space lifecycle request conflicts with durable state")
+	ErrUnavailable    = errors.New("space lifecycle store unavailable")
+	ErrSpaceFrozen    = errors.New("space voice admission is fenced")
 )
 
 func validateFenceRequest(req *commonv1.SpaceLifecycleFenceRequest) error {

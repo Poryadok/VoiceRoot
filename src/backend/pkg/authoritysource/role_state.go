@@ -62,7 +62,7 @@ func DecodeRoleState(raw []byte) (RoleState, error) {
 		return RoleState{}, errors.New("noncanonical Role source state")
 	}
 	if state.RoleRevision > math.MaxInt64 || state.SDKRevision > math.MaxInt64 || len(state.Roles) > MaxSubjects || len(state.Assignments) > MaxSubjects || len(state.ChatOverrides) > MaxSubjects || len(state.VoiceOverrides) > MaxSubjects || len(state.SDKSessionGrants) > MaxSubjects {
-		return RoleState{}, errors.New("Role source bound exceeded")
+		return RoleState{}, errors.New("role source bound exceeded")
 	}
 	if (state.DeletionState == "" && state.DeletionGeneration != 0) || (state.DeletionState != "" && (state.DeletionGeneration == 0 || (state.DeletionState != "LIVE" && state.DeletionState != "FROZEN" && state.DeletionState != "PURGE_DECIDED"))) {
 		return RoleState{}, errors.New("invalid Role deletion state")

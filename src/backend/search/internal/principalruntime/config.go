@@ -88,7 +88,7 @@ func (c Config) validate() error {
 		return errors.New("trusted Space JWKS endpoint and at most one Messaging endpoint required")
 	}
 	if (c.JWKSClientCertFile == "") != (c.JWKSClientKeyFile == "") || (c.JWKSURLs["messaging"] != "" && c.JWKSClientCertFile == "") {
-		return errors.New("Messaging JWKS client certificate and key are required")
+		return errors.New("messaging JWKS client certificate and key are required")
 	}
 	for issuer, endpoint := range c.JWKSURLs {
 		u, err := url.Parse(endpoint)

@@ -56,7 +56,7 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	config.principalJWKS = jwks
 	if config.transcoder != nil && config.transcoder.clients.spaceLifecycle != nil {
 		if issuer == nil || !strict {
-			return gatewayConfig{}, errors.New("Space lifecycle transport requires Gateway signing keys and strict session epochs")
+			return gatewayConfig{}, errors.New("space lifecycle transport requires Gateway signing keys and strict session epochs")
 		}
 		config.transcoder.lifecycleIssuer = issuer
 	}

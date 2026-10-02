@@ -44,15 +44,15 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	}
 	serverCert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space principal listener TLS: %w", err)
+		return nil, fmt.Errorf("space principal listener TLS: %w", err)
 	}
 	clientCAPEM, err := os.ReadFile(config.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Space principal client CA: %w", err)
+		return nil, fmt.Errorf("space principal client CA: %w", err)
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Space principal client CA contains no certificates")
+		return nil, errors.New("space principal client CA contains no certificates")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
@@ -61,17 +61,17 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	if config.JWKSCAFile != "" {
 		ca, readErr := os.ReadFile(config.JWKSCAFile)
 		if readErr != nil {
-			return nil, fmt.Errorf("Space principal JWKS CA: %w", readErr)
+			return nil, fmt.Errorf("space principal JWKS CA: %w", readErr)
 		}
 		if !roots.AppendCertsFromPEM(ca) {
-			return nil, errors.New("Space principal JWKS CA contains no certificates")
+			return nil, errors.New("space principal JWKS CA contains no certificates")
 		}
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("Space principal JWKS redirects are forbidden")
+		return errors.New("space principal JWKS redirects are forbidden")
 	}}
 	endpoint := config.JWKSURLs["space"]
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
@@ -88,7 +88,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
-			return nil, principalgrpc.Unavailable(errors.New("Space principal JWKS unavailable"))
+			return nil, principalgrpc.Unavailable(errors.New("space principal JWKS unavailable"))
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 65537))
 		if err != nil || len(body) > 65536 {
@@ -96,7 +96,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("Space principal JWKS requires current and next keys")
+			return nil, errors.New("space principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for kid, key := range keys {
@@ -121,7 +121,7 @@ func New(ctx context.Context, config Config) (*Runtime, error) {
 	defer cancelStartup()
 	if err := replay.Ping(startup).Err(); err != nil {
 		_ = runtime.Close()
-		return nil, principalgrpc.Unavailable(errors.New("Space principal replay Redis unavailable"))
+		return nil, principalgrpc.Unavailable(errors.New("space principal replay Redis unavailable"))
 	}
 	if err := resolver.Refresh(startup, "space"); err != nil {
 		_ = runtime.Close()
@@ -141,14 +141,14 @@ func principalJWKSUnavailable(err error) error {
 		return err
 	}
 	if errors.As(err, &networkError) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return principalgrpc.Unavailable(errors.New("Space principal JWKS unavailable"))
+		return principalgrpc.Unavailable(errors.New("space principal JWKS unavailable"))
 	}
 	return err
 }
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.replay == nil {
-		return principal.Principal{}, principalgrpc.Unavailable(errors.New("Space principal runtime unavailable"))
+		return principal.Principal{}, principalgrpc.Unavailable(errors.New("space principal runtime unavailable"))
 	}
 	if !isLifecycleMethod(method) {
 		return principal.Principal{}, status.Error(codes.PermissionDenied, "Space principal method is not allowed")
@@ -183,7 +183,7 @@ func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expire
 		return errors.New("principal replay detected")
 	}
 	if err != nil {
-		return principalgrpc.Unavailable(errors.New("Space principal replay Redis unavailable"))
+		return principalgrpc.Unavailable(errors.New("space principal replay Redis unavailable"))
 	}
 	if result != "OK" {
 		return errors.New("principal replay was not recorded")

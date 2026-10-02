@@ -39,7 +39,7 @@ func validateSpacePurgeManifestPageRequest(req *messagingv1.ImportSpacePurgeMani
 		pageCount = 1
 	}
 	if page.GetPageIndex() >= pageCount {
-		return errors.New("Chat manifest page index is outside the manifest")
+		return errors.New("chat manifest page index is outside the manifest")
 	}
 	wantItemCount := spacePurgeManifestPageSize
 	if page.GetPageIndex()+1 == pageCount {
@@ -48,7 +48,7 @@ func validateSpacePurgeManifestPageRequest(req *messagingv1.ImportSpacePurgeMani
 	finalPage := page.GetPageIndex()+1 == pageCount
 	if len(page.GetItemIds()) != wantItemCount || req.GetSealsManifest() != finalPage ||
 		finalPage && page.GetNextPageToken() != "" || !finalPage && page.GetNextPageToken() == "" {
-		return errors.New("Chat manifest page chain or seal marker is inconsistent")
+		return errors.New("chat manifest page chain or seal marker is inconsistent")
 	}
 	hash := sha256.New()
 	hash.Write([]byte("voice.chat.v1.SpaceDeletionManifestPage\x00"))
@@ -62,7 +62,7 @@ func validateSpacePurgeManifestPageRequest(req *messagingv1.ImportSpacePurgeMani
 	for i, raw := range page.GetItemIds() {
 		id, err := canonicalSpaceLifecycleUUID(raw)
 		if err != nil || i > 0 && bytes.Compare(previous[:], id[:]) >= 0 {
-			return errors.New("Chat manifest page IDs must be canonical and raw-UUID sorted")
+			return errors.New("chat manifest page IDs must be canonical and raw-UUID sorted")
 		}
 		previous = id
 		hash.Write(id[:])
@@ -71,7 +71,7 @@ func validateSpacePurgeManifestPageRequest(req *messagingv1.ImportSpacePurgeMani
 		return errors.New("invalid Chat manifest page hash")
 	}
 	if !bytes.Equal(hash.Sum(nil), page.GetPageSha256()) {
-		return errors.New("Chat manifest page hash mismatch")
+		return errors.New("chat manifest page hash mismatch")
 	}
 	return nil
 }

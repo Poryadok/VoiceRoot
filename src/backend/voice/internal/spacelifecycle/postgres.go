@@ -35,7 +35,7 @@ AND to_regclass('voice_space_lifecycle_purge_receipts') IS NOT NULL`).Scan(&read
 		return fmt.Errorf("check Voice Space lifecycle schema: %w", err)
 	}
 	if !ready {
-		return errors.New("Voice Space lifecycle schema is missing")
+		return errors.New("voice Space lifecycle schema is missing")
 	}
 	return nil
 }

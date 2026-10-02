@@ -641,7 +641,7 @@ func persistLifecycleSnapshot(ctx context.Context, db spaceStoreDB, snapshot spa
 		return err
 	} else {
 		if operationID != existingOperationID {
-			if existingPhase != "LIVE" || existingGeneration >= math.MaxInt64 || snapshot.Generation != uint64(existingGeneration)+1 || snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING {
+			if existingPhase != "LIVE" || existingGeneration == math.MaxInt64 || snapshot.Generation != uint64(existingGeneration)+1 || snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING {
 				return ErrLifecycleStateTransition
 			}
 			// Generic persistence cannot invent a replacement intent. Reservation

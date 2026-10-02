@@ -68,7 +68,7 @@ func lockSpaceLifecycleMutation(ctx context.Context, tx pgx.Tx, spaceID uuid.UUI
 // exact sorted chat set in the same PostgreSQL transaction.
 func (s *SpaceLifecycleStore) PrepareSpaceDeletionManifest(ctx context.Context, req *chatv1.PrepareSpaceDeletionManifestRequest) (*chatv1.PrepareSpaceDeletionManifestResponse, error) {
 	if s == nil || s.Pool == nil {
-		return nil, errors.New("Chat lifecycle database unavailable")
+		return nil, errors.New("chat lifecycle database unavailable")
 	}
 	spaceID, operationID, requestBytes, requestHash, err := prepareRequestBinding(req)
 	if err != nil {

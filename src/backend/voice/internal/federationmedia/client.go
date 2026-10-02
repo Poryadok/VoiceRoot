@@ -40,7 +40,7 @@ func safeClient(source *http.Client, master bool) (*http.Client, error) {
 		return nil, ErrUnavailable
 	}
 	t, ok := source.Transport.(*http.Transport)
-	if !ok || t.TLSClientConfig == nil || t.TLSClientConfig.RootCAs == nil || t.TLSClientConfig.InsecureSkipVerify || t.DialTLS != nil || t.DialTLSContext != nil || t.TLSClientConfig.GetClientCertificate != nil || (master && len(t.TLSClientConfig.Certificates) == 0) || (!master && len(t.TLSClientConfig.Certificates) != 0) {
+	if !ok || t.TLSClientConfig == nil || t.TLSClientConfig.RootCAs == nil || t.TLSClientConfig.InsecureSkipVerify || t.DialTLS != nil || t.DialTLSContext != nil || t.TLSClientConfig.GetClientCertificate != nil || (master && len(t.TLSClientConfig.Certificates) == 0) || (!master && len(t.TLSClientConfig.Certificates) != 0) { //nolint:staticcheck // Deny deprecated custom TLS dialers as well as context-aware ones.
 		return nil, ErrUnavailable
 	}
 	transport := t.Clone()
@@ -89,7 +89,7 @@ func post(ctx context.Context, client *http.Client, address string, input, outpu
 	if err != nil {
 		return ErrUnavailable
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == 403 || response.StatusCode == 401 {
 		return ErrDenied
 	}

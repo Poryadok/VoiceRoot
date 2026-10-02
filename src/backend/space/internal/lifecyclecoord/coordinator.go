@@ -207,10 +207,10 @@ func (c *Coordinator) ApplyPurgeBarrier(ctx context.Context, spaceID uuid.UUID) 
 		receipt, callErr := c.dependencies.RoleRetirement.RetireSpace(callCtx, request)
 		cancel()
 		if callErr != nil {
-			return nil, fmt.Errorf("Role space retirement: %w", callErr)
+			return nil, fmt.Errorf("role space retirement: %w", callErr)
 		}
 		if receipt == nil {
-			return nil, errors.New("Role returned an empty retirement receipt")
+			return nil, errors.New("role returned an empty retirement receipt")
 		}
 		aggregate, err = c.dependencies.Store.RecordLifecycleRoleRetirementReceipt(ctx, receipt)
 		if err != nil {
@@ -222,7 +222,7 @@ func (c *Coordinator) ApplyPurgeBarrier(ctx context.Context, spaceID uuid.UUID) 
 	producerErr := c.dependencies.FileProducer.ReleaseSpaceFileProducer(producerCtx, snapshot)
 	producerCancel()
 	if producerErr != nil {
-		return nil, fmt.Errorf("Space File producer release: %w", producerErr)
+		return nil, fmt.Errorf("space File producer release: %w", producerErr)
 	}
 	for _, participantID := range purgeOrder {
 		if snapshot.PurgeReceipts[participantID] != nil {

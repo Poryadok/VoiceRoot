@@ -19,11 +19,11 @@ import (
 )
 
 var (
-	ErrSpaceManifestBinding   = errors.New("Messaging Space manifest binding mismatch")
-	ErrSpaceManifestOrder     = errors.New("Messaging Space manifest pages are out of order")
-	ErrSpaceManifestNotSealed = errors.New("Messaging Space manifest is not sealed")
-	ErrSpaceLifecycleConflict = errors.New("Messaging Space lifecycle request conflicts with saved evidence")
-	ErrSpaceLifecycleOrder    = errors.New("Messaging Space lifecycle transition is out of order")
+	ErrSpaceManifestBinding   = errors.New("messaging Space manifest binding mismatch")
+	ErrSpaceManifestOrder     = errors.New("messaging Space manifest pages are out of order")
+	ErrSpaceManifestNotSealed = errors.New("messaging Space manifest is not sealed")
+	ErrSpaceLifecycleConflict = errors.New("messaging Space lifecycle request conflicts with saved evidence")
+	ErrSpaceLifecycleOrder    = errors.New("messaging Space lifecycle transition is out of order")
 )
 
 type SpacePurgeManifestPageInput struct {

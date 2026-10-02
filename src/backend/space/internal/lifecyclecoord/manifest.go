@@ -54,7 +54,7 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		return nil, err
 	}
 	if !proofSaved {
-		return nil, errors.New("Auth deletion proof receipt is not durable")
+		return nil, errors.New("auth deletion proof receipt is not durable")
 	}
 	aggregate, err := c.dependencies.Store.LoadLifecycle(ctx, spaceID)
 	if err != nil {
@@ -89,10 +89,10 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		chatReceipt.GetAppliedState() != commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN ||
 		!manifestReceiptMatches(prepareRequest, chatReceipt.GetRequestSha256()) || chatReceipt.GetAppliedAt() == nil || chatReceipt.GetAppliedAt().CheckValid() != nil ||
 		!validManifestBinding(manifest) {
-		return nil, errors.New("Chat returned an invalid deletion manifest receipt")
+		return nil, errors.New("chat returned an invalid deletion manifest receipt")
 	}
 	if snapshot.Manifest != nil && !proto.Equal(snapshot.Manifest, manifest) {
-		return nil, errors.New("Chat deletion manifest changed during lifecycle replay")
+		return nil, errors.New("chat deletion manifest changed during lifecycle replay")
 	}
 
 	var imported uint64
@@ -112,26 +112,26 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		page := pageResponse.GetPage()
 		if page == nil || page.GetProtocolVersion() != 1 || page.GetPageIndex() != pageIndex ||
 			!proto.Equal(page.GetManifest(), manifest) || len(page.GetPageSha256()) != 32 {
-			return nil, fmt.Errorf("Chat returned an invalid manifest page %d", pageIndex)
+			return nil, fmt.Errorf("chat returned an invalid manifest page %d", pageIndex)
 		}
 		for _, itemID := range page.GetItemIds() {
 			if itemID == "" || (lastItemID != "" && itemID <= lastItemID) {
-				return nil, fmt.Errorf("Chat manifest page %d is not globally sorted and unique", pageIndex)
+				return nil, fmt.Errorf("chat manifest page %d is not globally sorted and unique", pageIndex)
 			}
 			lastItemID = itemID
 		}
 		if len(page.GetItemIds()) == 0 && manifest.GetItemCount() != 0 {
-			return nil, fmt.Errorf("Chat manifest page %d is empty before the root is complete", pageIndex)
+			return nil, fmt.Errorf("chat manifest page %d is empty before the root is complete", pageIndex)
 		}
 		if uint64(len(page.GetItemIds())) > manifest.GetItemCount()-imported {
-			return nil, errors.New("Chat manifest pages exceed the declared item count")
+			return nil, errors.New("chat manifest pages exceed the declared item count")
 		}
 		seals := page.GetNextPageToken() == ""
 		if manifest.GetItemCount() == 0 && (!seals || len(page.GetItemIds()) != 0) {
 			return nil, errors.New("empty Chat manifest must be represented by one final empty page")
 		}
 		if !seals && pageIndex+1 >= manifest.GetItemCount() {
-			return nil, errors.New("Chat manifest page count exceeds the declared item count")
+			return nil, errors.New("chat manifest page count exceeds the declared item count")
 		}
 		importCtx, importCancel := callCtx()
 		messagingRequest := &messagingv1.ImportSpacePurgeManifestPageRequest{
@@ -150,7 +150,7 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 			importReceipt.GetPageIndex() != pageIndex || importReceipt.GetAcceptedCount() != uint64(len(page.GetItemIds())) ||
 			!bytes.Equal(importReceipt.GetPageSha256(), page.GetPageSha256()) || importReceipt.GetManifestSealed() != seals ||
 			!manifestReceiptMatches(messagingRequest, importReceipt.GetRequestSha256()) || importReceipt.GetCompletedAt() == nil || importReceipt.GetCompletedAt().CheckValid() != nil {
-			return nil, fmt.Errorf("Messaging returned an invalid receipt for manifest page %d", pageIndex)
+			return nil, fmt.Errorf("messaging returned an invalid receipt for manifest page %d", pageIndex)
 		}
 		notificationRequest := &notificationv1.ImportSpacePurgeManifestPageRequest{ProtocolVersion: 1, SpaceId: snapshot.SpaceID, DeletionOperationId: snapshot.DeletionOperationID, ScheduleGeneration: snapshot.Generation, Page: page, SealsManifest: seals}
 		notificationCtx, notificationCancel := callCtx()
@@ -163,7 +163,7 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		requestWire, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(notificationRequest)
 		requestDigest := sha256.Sum256(append(append([]byte(notificationRequest.ProtoReflect().Descriptor().FullName()), 0), requestWire...))
 		if marshalErr != nil || notificationReceipt == nil || notificationReceipt.GetProtocolVersion() != 1 || notificationReceipt.GetReceiptId() == "" || notificationReceipt.GetSpaceId() != snapshot.SpaceID || notificationReceipt.GetDeletionOperationId() != snapshot.DeletionOperationID || notificationReceipt.GetGeneration() != snapshot.Generation || !proto.Equal(notificationReceipt.GetManifest(), manifest) || notificationReceipt.GetPageIndex() != pageIndex || notificationReceipt.GetAcceptedCount() != uint64(len(page.GetItemIds())) || !bytes.Equal(notificationReceipt.GetPageSha256(), page.GetPageSha256()) || notificationReceipt.GetManifestSealed() != seals || !bytes.Equal(notificationReceipt.GetRequestSha256(), requestDigest[:]) || notificationReceipt.GetCompletedAt() == nil || notificationReceipt.GetCompletedAt().CheckValid() != nil {
-			return nil, fmt.Errorf("Notification returned an invalid receipt for manifest page %d", pageIndex)
+			return nil, fmt.Errorf("notification returned an invalid receipt for manifest page %d", pageIndex)
 		}
 		imported += uint64(len(page.GetItemIds()))
 		if seals {
@@ -171,13 +171,13 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		}
 		nextToken := page.GetNextPageToken()
 		if _, exists := seenTokens[nextToken]; exists {
-			return nil, errors.New("Chat manifest page token repeated")
+			return nil, errors.New("chat manifest page token repeated")
 		}
 		seenTokens[nextToken] = struct{}{}
 		pageToken = nextToken
 	}
 	if imported != manifest.GetItemCount() {
-		return nil, fmt.Errorf("Messaging imported %d manifest items; Chat declared %d", imported, manifest.GetItemCount())
+		return nil, fmt.Errorf("messaging imported %d manifest items; Chat declared %d", imported, manifest.GetItemCount())
 	}
 
 	fileCtx, fileCancel := callCtx()
@@ -196,7 +196,7 @@ func (c *Coordinator) PrepareFreeze(ctx context.Context, spaceID uuid.UUID) (*sp
 		fileReceipt.GetScheduleGeneration() != snapshot.Generation ||
 		fileReceipt.GetAppliedState() != commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN ||
 		!manifestReceiptMatches(fileRequest, fileReceipt.GetRequestSha256()) || fileReceipt.GetAppliedAt() == nil || fileReceipt.GetAppliedAt().CheckValid() != nil {
-		return nil, errors.New("File returned an invalid reference manifest receipt")
+		return nil, errors.New("file returned an invalid reference manifest receipt")
 	}
 	sealCtx, sealCancel := callCtx()
 	err = c.dependencies.Manifests.SealSpaceFileProducer(sealCtx, snapshot)

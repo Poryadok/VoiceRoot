@@ -17,7 +17,7 @@ func startRoleDeletionRetention(st *store.RoleStore, logger *slog.Logger) (func(
 		return nil, err
 	}
 	if !ready {
-		return nil, errors.New("Role Space lifecycle schema is missing")
+		return nil, errors.New("role Space lifecycle schema is missing")
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})

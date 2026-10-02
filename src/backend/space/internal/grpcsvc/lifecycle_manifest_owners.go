@@ -95,7 +95,7 @@ func (o *LifecycleManifestOwners) signed(ctx context.Context, audience, method s
 		return nil, status.Error(codes.Unavailable, "Space lifecycle principal signing unavailable")
 	}
 	if ctx == nil {
-		return nil, errors.New("Space lifecycle owner context is nil")
+		return nil, errors.New("space lifecycle owner context is nil")
 	}
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		"authorization", "Bearer "+token,

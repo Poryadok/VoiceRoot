@@ -188,12 +188,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	if (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
-		return nil, errors.New("Chat principal JWKS client certificate and key are required together")
+		return nil, errors.New("chat principal JWKS client certificate and key are required together")
 	}
 	if cfg.JWKSClientCertFile != "" {
 		certificate, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("Chat principal JWKS client identity: %w", err)
+			return nil, fmt.Errorf("chat principal JWKS client identity: %w", err)
 		}
 		transport.TLSClientConfig.Certificates = []tls.Certificate{certificate}
 	}
@@ -300,7 +300,7 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		methods[method] = struct{}{}
 	}
 	if len(methods) == 0 {
-		return nil, errors.New("Chat principal method allowlist is empty")
+		return nil, errors.New("chat principal method allowlist is empty")
 	}
 	return methods, nil
 }

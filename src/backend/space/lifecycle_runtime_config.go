@@ -38,17 +38,17 @@ func loadLifecycleRuntimeConfig(getenv func(string) string) (lifecycleRuntimeCon
 	c.Mode = strings.TrimSpace(getenv("SPACE_LIFECYCLE_MODE"))
 	c.DevTombstoneKeyFile = strings.TrimSpace(getenv("SPACE_LIFECYCLE_DEV_TOMBSTONE_KEY_FILE"))
 	if c.CAFile == "" || c.CertFile == "" || c.KeyFile == "" || c.RoleCertFile == "" || c.RoleKeyFile == "" {
-		return c, false, fmt.Errorf("Space lifecycle requires dedicated CA and both client certificate/key pairs")
+		return c, false, fmt.Errorf("space lifecycle requires dedicated CA and both client certificate/key pairs")
 	}
 	if c.Mode != "development" || c.DevTombstoneKeyFile == "" {
-		return c, false, fmt.Errorf("Space lifecycle requires a purpose-specific HMAC provider; local key files are permitted only in explicit development mode")
+		return c, false, fmt.Errorf("space lifecycle requires a purpose-specific HMAC provider; local key files are permitted only in explicit development mode")
 	}
 	names := []string{"role", "chat", "messaging", "file", "voice", "matchmaking", "search", "subscription", "bot", "notification"}
 	for index, name := range names {
 		prefix := "SPACE_LIFECYCLE_" + strings.ToUpper(name)
 		address := strings.TrimSpace(getenv(prefix + "_GRPC_ADDR"))
 		if address == "" || strings.Contains(address, "://") && !strings.HasPrefix(address, "dns:///") {
-			return c, false, fmt.Errorf("Space lifecycle requires %s_GRPC_ADDR for its protected mTLS endpoint", prefix)
+			return c, false, fmt.Errorf("space lifecycle requires %s_GRPC_ADDR for its protected mTLS endpoint", prefix)
 		}
 		serverName := strings.TrimSpace(getenv(prefix + "_TLS_SERVER_NAME"))
 		if serverName == "" {

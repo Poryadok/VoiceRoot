@@ -66,37 +66,37 @@ func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*manag
 	}
 	serverCert, err := tls.LoadX509KeyPair(config.JWKSCertFile, config.JWKSKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging purge JWKS certificate: %w", err)
+		return nil, fmt.Errorf("messaging purge JWKS certificate: %w", err)
 	}
 	clientCAPEM, err := os.ReadFile(config.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging purge JWKS client CA: %w", err)
+		return nil, fmt.Errorf("messaging purge JWKS client CA: %w", err)
 	}
 	clientCAs := x509.NewCertPool()
 	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
-		return nil, errors.New("Messaging purge JWKS client CA contains no certificates")
+		return nil, errors.New("messaging purge JWKS client CA contains no certificates")
 	}
 	listener, err := net.Listen("tcp", config.JWKSListen)
 	if err != nil {
-		return nil, fmt.Errorf("Messaging purge JWKS listen: %w", err)
+		return nil, fmt.Errorf("messaging purge JWKS listen: %w", err)
 	}
 	runtime := &managedChatPurgeRuntime{JWKS: &http.Server{Handler: handler, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}}}
 	go func() {
 		if serveErr := runtime.JWKS.ServeTLS(listener, "", ""); serveErr != nil && serveErr != http.ErrServerClosed {
 			// Serve failures are observable through health checks and client retries.
-			fmt.Fprintf(os.Stderr, "Messaging purge JWKS server exited: %v\n", serveErr)
+			fmt.Fprintf(os.Stderr, "messaging purge JWKS server exited: %v\n", serveErr)
 		}
 	}()
 	fileConn, err := dialManagedChatPurgeOwner(config.FileAddr, config.FileCA, config.FileServerName, config.ClientCertFile, config.ClientKeyFile)
 	if err != nil {
 		runtime.Close()
-		return nil, fmt.Errorf("File managed chat purge client: %w", err)
+		return nil, fmt.Errorf("file managed chat purge client: %w", err)
 	}
 	runtime.Connections = append(runtime.Connections, fileConn)
 	searchConn, err := dialManagedChatPurgeOwner(config.SearchAddr, config.SearchCA, config.SearchServerName, config.ClientCertFile, config.ClientKeyFile)
 	if err != nil {
 		runtime.Close()
-		return nil, fmt.Errorf("Search managed chat purge client: %w", err)
+		return nil, fmt.Errorf("search managed chat purge client: %w", err)
 	}
 	runtime.Connections = append(runtime.Connections, searchConn)
 	runtime.Coordinator = &grpcsvc.ManagedChatPurgeCoordinator{
