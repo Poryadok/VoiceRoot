@@ -304,6 +304,17 @@ class ChatServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// Internal-only: messaging/search/file must recheck managed-chat since-join
+  /// history entitlement using the immutable message creation timestamp.
+  $grpc.ResponseFuture<$0.CheckMessageReadEntitlementResponse>
+      checkMessageReadEntitlement(
+    $0.CheckMessageReadEntitlementRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$checkMessageReadEntitlement, request,
+        options: options);
+  }
+
   /// @voice.security=protected;callers=service:space
   $grpc.ResponseFuture<$0.ApplySpaceLifecycleFenceResponse>
       applySpaceLifecycleFence(
@@ -530,6 +541,12 @@ class ChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets',
       ($0.ListDMReceiptVisibilityTargetsRequest value) => value.writeToBuffer(),
       $0.ListDMReceiptVisibilityTargetsResponse.fromBuffer);
+  static final _$checkMessageReadEntitlement = $grpc.ClientMethod<
+          $0.CheckMessageReadEntitlementRequest,
+          $0.CheckMessageReadEntitlementResponse>(
+      '/voice.chat.v1.ChatService/CheckMessageReadEntitlement',
+      ($0.CheckMessageReadEntitlementRequest value) => value.writeToBuffer(),
+      $0.CheckMessageReadEntitlementResponse.fromBuffer);
   static final _$applySpaceLifecycleFence = $grpc.ClientMethod<
           $0.ApplySpaceLifecycleFenceRequest,
           $0.ApplySpaceLifecycleFenceResponse>(
@@ -873,6 +890,16 @@ abstract class ChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ListDMReceiptVisibilityTargetsRequest.fromBuffer(value),
         ($0.ListDMReceiptVisibilityTargetsResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CheckMessageReadEntitlementRequest,
+            $0.CheckMessageReadEntitlementResponse>(
+        'CheckMessageReadEntitlement',
+        checkMessageReadEntitlement_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CheckMessageReadEntitlementRequest.fromBuffer(value),
+        ($0.CheckMessageReadEntitlementResponse value) =>
             value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ApplySpaceLifecycleFenceRequest,
             $0.ApplySpaceLifecycleFenceResponse>(
@@ -1234,6 +1261,16 @@ abstract class ChatServiceBase extends $grpc.Service {
       listDMReceiptVisibilityTargets($grpc.ServiceCall call,
           $0.ListDMReceiptVisibilityTargetsRequest request);
 
+  $async.Future<$0.CheckMessageReadEntitlementResponse>
+      checkMessageReadEntitlement_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.CheckMessageReadEntitlementRequest> $request) async {
+    return checkMessageReadEntitlement($call, await $request);
+  }
+
+  $async.Future<$0.CheckMessageReadEntitlementResponse>
+      checkMessageReadEntitlement($grpc.ServiceCall call,
+          $0.CheckMessageReadEntitlementRequest request);
+
   $async.Future<$0.ApplySpaceLifecycleFenceResponse>
       applySpaceLifecycleFence_Pre($grpc.ServiceCall $call,
           $async.Future<$0.ApplySpaceLifecycleFenceRequest> $request) async {
@@ -1304,6 +1341,15 @@ class GameIntegrationChatServiceClient extends $grpc.Client {
         options: options);
   }
 
+  $grpc.ResponseFuture<$0.SetManagedChatRetentionResponse>
+      setManagedChatRetention(
+    $0.SetManagedChatRetentionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$setManagedChatRetention, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$provisionManagedChat = $grpc.ClientMethod<
@@ -1316,6 +1362,12 @@ class GameIntegrationChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers',
       ($0.SyncManagedChatMembersRequest value) => value.writeToBuffer(),
       $0.SyncManagedChatMembersResponse.fromBuffer);
+  static final _$setManagedChatRetention = $grpc.ClientMethod<
+          $0.SetManagedChatRetentionRequest,
+          $0.SetManagedChatRetentionResponse>(
+      '/voice.chat.v1.GameIntegrationChatService/SetManagedChatRetention',
+      ($0.SetManagedChatRetentionRequest value) => value.writeToBuffer(),
+      $0.SetManagedChatRetentionResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.GameIntegrationChatService')
@@ -1341,6 +1393,15 @@ abstract class GameIntegrationChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.SyncManagedChatMembersRequest.fromBuffer(value),
         ($0.SyncManagedChatMembersResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SetManagedChatRetentionRequest,
+            $0.SetManagedChatRetentionResponse>(
+        'SetManagedChatRetention',
+        setManagedChatRetention_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SetManagedChatRetentionRequest.fromBuffer(value),
+        ($0.SetManagedChatRetentionResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.ProvisionManagedChatResponse> provisionManagedChat_Pre(
@@ -1360,4 +1421,13 @@ abstract class GameIntegrationChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.SyncManagedChatMembersResponse> syncManagedChatMembers(
       $grpc.ServiceCall call, $0.SyncManagedChatMembersRequest request);
+
+  $async.Future<$0.SetManagedChatRetentionResponse> setManagedChatRetention_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SetManagedChatRetentionRequest> $request) async {
+    return setManagedChatRetention($call, await $request);
+  }
+
+  $async.Future<$0.SetManagedChatRetentionResponse> setManagedChatRetention(
+      $grpc.ServiceCall call, $0.SetManagedChatRetentionRequest request);
 }

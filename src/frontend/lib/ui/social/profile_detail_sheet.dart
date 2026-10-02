@@ -72,7 +72,9 @@ class ProfileDetailSheet extends ConsumerWidget {
 
     final outgoing = requestsAsync.valueOrNull?.outgoing ?? const [];
     final incoming = requestsAsync.valueOrNull?.incoming ?? const [];
-    final pendingOutgoing = outgoing.contains(profileId);
+    final pendingOutgoing = outgoing.any(
+      (request) => request.profileId == profileId && !request.isDeclined,
+    );
     final pendingIncoming = incoming.contains(profileId);
     final isFriend = ref.watch(isFriendProvider(profileId));
     final activeAuthors = ref.watch(activeStoryAuthorIdsProvider);

@@ -62,7 +62,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.JWKSCAFile != "" {
 		ca, err := os.ReadFile(cfg.JWKSCAFile)
 		if err != nil {
-			return nil, fmt.Errorf("Space principal JWKS CA: %w", err)
+			return nil, fmt.Errorf("space principal JWKS CA: %w", err)
 		}
 		if !roots.AppendCertsFromPEM(ca) {
 			return nil, errors.New("Space principal JWKS CA has no certificates")

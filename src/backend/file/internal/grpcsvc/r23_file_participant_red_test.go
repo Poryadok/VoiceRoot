@@ -326,8 +326,9 @@ func TestR23FileDeletionManifest_ExactProducersBoundedChunksAndSeal(t *testing.T
 		ProtocolVersion: 1, SpaceId: spaceID.String(), DeletionOperationId: deletionID.String(), Generation: 7,
 		DesiredState: commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, Manifest: manifest,
 	}}
-	_, err = client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, callerEcho), callerEcho)
-	require.Equal(t, codes.FailedPrecondition, status.Code(err), "File computes the root and item_count from its stored manifest set; it never echoes Chat's caller binding")
+	preliminary, err := client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, callerEcho), callerEcho)
+	require.NoError(t, err, "the preliminary FROZEN receipt retains the Chat binding before final root installation")
+	require.Equal(t, manifest.GetManifestSha256(), preliminary.GetReceipt().GetManifestSha256())
 	require.Equal(t, manifest.GetItemCount()+2, localRoot.GetItemCount(), "the root count is computed from Chat plus all exact producer declarations")
 
 	finalFenceRequest := &filev1.ApplySpaceLifecycleFenceRequest{Fence: &commonv1.SpaceLifecycleFenceRequest{
@@ -339,7 +340,14 @@ func TestR23FileDeletionManifest_ExactProducersBoundedChunksAndSeal(t *testing.T
 		Manifest:            localRoot,
 	}}
 	frozen, err := client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, finalFenceRequest), finalFenceRequest)
+	require.Equal(t, codes.AlreadyExists, status.Code(err), "an aggregate root cannot replace the immutable Chat-bound request for the same generation")
+	require.Nil(t, frozen)
+	frozen, err = client.ApplySpaceLifecycleFence(r23ServiceContext(t, ctx, "space", filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, callerEcho), proto.Clone(callerEcho).(*filev1.ApplySpaceLifecycleFenceRequest))
 	require.NoError(t, err)
+	require.True(t, proto.Equal(preliminary, frozen), "exact retry preserves the first frozen receipt")
+	var storedRoot []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT final_manifest_hash FROM file_space_lifecycle_fences WHERE space_id=$1`, spaceID).Scan(&storedRoot))
+	require.Equal(t, localRoot.GetManifestSha256(), storedRoot, "File retains its independently computed aggregate root")
 	require.Equal(t, commonv1.ParticipantId_PARTICIPANT_ID_FILE, frozen.GetReceipt().GetParticipantId())
 	require.Equal(t, commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, frozen.GetReceipt().GetAppliedState())
 }
@@ -905,7 +913,7 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	ctx := r23TestContext(t)
 	pool := startR23FilePostgres(t, ctx)
 	wantTables := []string{
-		"file_access_capabilities", "file_blobs", "file_reference_operations", "file_references",
+		"file_access_capabilities", "file_blobs", "file_reference_gc_receipts", "file_reference_operations", "file_references",
 		"file_space_deletion_manifest_chunks", "file_space_deletion_manifests", "file_space_deletion_producer_releases",
 		"file_space_lifecycle_fences", "file_space_purge_receipts",
 	}
@@ -944,6 +952,10 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	downPath := filepath.Join(fileGateRepoRoot(t), "src", "backend", "migrations", "file_db", "000004_file_reference_lifecycle.down.sql")
 	downSQL, err := os.ReadFile(downPath)
 	require.NoError(t, err)
+	gcDown, err := os.ReadFile(filepath.Join(fileGateRepoRoot(t), "src", "backend", "migrations", "file_db", "000005_reference_gc_receipts.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(gcDown))
+	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(downSQL))
 	require.NoError(t, err, "guarded DOWN succeeds only when all durable lifecycle tables are empty")
 	for _, table := range wantTables {
@@ -962,7 +974,9 @@ func startR23FilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 }
 
 func r23FileServer(pool *pgxpool.Pool) *FileGRPC {
-	return New(Deps{Files: store.NewFilesStore(pool), Presigner: gatePresigner{}, ReferenceAuthorityActive: true})
+	return New(Deps{Files: store.NewFilesStore(pool), Presigner: gatePresigner{}, ReferenceAuthorityActive: true,
+		ChatGuard: &fixedMessageReferenceGuard{allowed: true}, Reader: gateObjectReader{},
+		RevocableDownloadKey: []byte("0123456789abcdef0123456789abcdef")})
 }
 
 func r23TestContext(t *testing.T) context.Context {

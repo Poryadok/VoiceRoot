@@ -24,16 +24,19 @@ class MessageKind extends $pb.ProtobufEnum {
       MessageKind._(2, _omitEnumNames ? '' : 'MESSAGE_KIND_SYSTEM');
   static const MessageKind MESSAGE_KIND_FORWARD =
       MessageKind._(3, _omitEnumNames ? '' : 'MESSAGE_KIND_FORWARD');
+  static const MessageKind MESSAGE_KIND_GAME_CARD =
+      MessageKind._(4, _omitEnumNames ? '' : 'MESSAGE_KIND_GAME_CARD');
 
   static const $core.List<MessageKind> values = <MessageKind>[
     MESSAGE_KIND_UNSPECIFIED,
     MESSAGE_KIND_REGULAR,
     MESSAGE_KIND_SYSTEM,
     MESSAGE_KIND_FORWARD,
+    MESSAGE_KIND_GAME_CARD,
   ];
 
   static final $core.List<MessageKind?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 3);
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
   static MessageKind? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 

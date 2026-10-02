@@ -74,7 +74,7 @@ func (c Config) validate() error {
 		return errors.New("invalid principal cache policy")
 	}
 	if c.ReplayAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" {
-		return errors.New("Space lifecycle replay Redis and mutual TLS files are required")
+		return errors.New("space lifecycle replay Redis and mutual TLS files are required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid Space lifecycle listener address")

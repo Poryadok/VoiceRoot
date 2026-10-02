@@ -414,6 +414,53 @@ expect_regex 'deploy/staging/README.md' 'VOICE_DATABASE_URL.*voice-app-secrets|v
 
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
+# The later Game sprint authorizes the verified opt-in runtime checkpoint, not
+# arbitrary future runtime or deployment changes. Exempt only its exact paths
+# and Git blobs; the original R22.2 oracle still checks every remaining delta.
+accepted_game_checkpoint='3d9e7097275f3e2b964e1286d114e8284d55e13f'
+game_checkpoint_enabled=false
+if git -C "${ROOT}" merge-base --is-ancestor "${accepted_game_checkpoint}" HEAD; then
+  game_checkpoint_enabled=true
+fi
+git -C "${ROOT}" ls-tree -r "${accepted_game_checkpoint}" >"${TMP_DIR}/game-checkpoint-tree"
+game_checkpoint_path_authorized_in_delta() {
+  local path="$1" delta="$2" actual_blob="$3" expected_blob
+  case "${path}" in
+    protos/*|src/backend/voice/*|src/backend/role/*|src/backend/space/*|src/backend/*/pb/*|src/backend/migrations/voice_db/*) ;;
+    *) return 1 ;;
+  esac
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  expected_blob="$(awk -F '\t' -v path="${path}" '$2 == path { split($1, fields, " "); print fields[3] }' "${TMP_DIR}/game-checkpoint-tree")"
+  [[ -n "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
+}
+game_checkpoint_path_allowed() {
+  local path="$1" delta="$2" actual_blob
+  [[ "${game_checkpoint_enabled}" == true && -f "${ROOT}/${path}" ]] || return 1
+  actual_blob="$(git -C "${ROOT}" hash-object --path="${path}" "${ROOT}/${path}")"
+  game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${actual_blob}"
+}
+game_fixture_path='src/backend/voice/internal/federationmedia/runtime.go'
+printf '%s\n' "${game_fixture_path}" >"${TMP_DIR}/game-fixture-delta"
+game_fixture_blob="$(git -C "${ROOT}" rev-parse "${accepted_game_checkpoint}:${game_fixture_path}")"
+game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/game-fixture-delta" "${game_fixture_blob}" || {
+  printf '%s\n' 'F13 oracle bug: exact approved Game checkpoint blob was rejected' >&2
+  exit 2
+}
+for forbidden_game_path in \
+  'src/backend/voice/internal/federationmedia/unapproved.go' \
+  'src/backend/voice/internal/federationmedia/runtime.go.extra' \
+  'deploy/staging/backend-services.yaml'; do
+  printf '%s\n' "${forbidden_game_path}" >"${TMP_DIR}/game-forbidden-delta"
+  if game_checkpoint_path_authorized_in_delta "${forbidden_game_path}" "${TMP_DIR}/game-forbidden-delta" "${game_fixture_blob}"; then
+    printf 'F13 oracle bug: unapproved Game path was accepted: %s\n' "${forbidden_game_path}" >&2
+    exit 2
+  fi
+done
+if game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/game-fixture-delta" '0000000000000000000000000000000000000000' ||
+  game_checkpoint_path_authorized_in_delta "${game_fixture_path}" "${TMP_DIR}/game-forbidden-delta" "${game_fixture_blob}"; then
+  printf '%s\n' 'F13 oracle bug: changed Game blob or absent delta was accepted' >&2
+  exit 2
+fi
 accepted_r23_base='edc52d46406d97283f81dfbdfc916660f50dcc69'
 r23_contract_base_allowed() {
   local candidate="$1"
@@ -782,12 +829,18 @@ fi
 } | sed '/^[[:space:]]*$/d' | LC_ALL=C sort -u >"${TMP_DIR}/changed-files"
 
 source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
+while IFS= read -r file; do
+  game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || printf '%s\n' "${file}"
+done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
 r22_runtime_delta=false
-if voice_r22_runtime_changed <"${TMP_DIR}/changed-files"; then
+if voice_r22_runtime_changed <"${TMP_DIR}/unapproved-runtime-delta"; then
   r22_runtime_delta=true
 fi
 
 while IFS= read -r file; do
+  if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
+    continue
+  fi
   if r23_contract_path_allowed "${file}"; then
     continue
   fi
@@ -829,6 +882,9 @@ while IFS= read -r file; do
 done <"${TMP_DIR}/changed-files"
 
 while IFS= read -r file; do
+  if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
+    continue
+  fi
   if t31_runtime_path_allowed "${file}"; then
     continue
   fi

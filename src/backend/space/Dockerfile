@@ -26,6 +26,7 @@ COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh space
+COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY chat/pb/voice/chat ./chat/pb/voice/chat

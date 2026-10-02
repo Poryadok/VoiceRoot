@@ -144,7 +144,7 @@ func (s *SettingsStore) ImportSpacePurgeManifestPage(ctx context.Context, reques
 			return nil, writeErr
 		}
 		if tag.RowsAffected() != 1 {
-			return nil, errors.New("Chat manifest scope changed")
+			return nil, errors.New("chat manifest scope changed")
 		}
 	}
 	var completed time.Time

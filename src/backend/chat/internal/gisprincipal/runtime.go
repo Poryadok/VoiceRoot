@@ -349,12 +349,6 @@ func (r *Runtime) allowlist(ctx context.Context, req any, info *grpc.UnaryServer
 	return handler(ctx, req)
 }
 
-func allowlistInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if !AllowsMethod(info.FullMethod) {
-		return nil, status.Error(codes.PermissionDenied, "method unavailable on GIS listener")
-	}
-	return handler(ctx, req)
-}
 func AllowsMethod(method string) bool {
 	return method == ProvisionMethod || method == SyncMembersMethod
 }

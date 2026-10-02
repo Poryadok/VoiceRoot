@@ -73,10 +73,10 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		return Config{}, false, nil
 	}
 	if count != len(values) {
-		return Config{}, true, errors.New("Bot and GIS service-principal TLS, replay, signer, and JWKS settings must be configured together")
+		return Config{}, true, errors.New("bot and GIS service-principal TLS, replay, signer, and JWKS settings must be configured together")
 	}
 	if !strings.HasPrefix(cfg.GISJWKSURL, "https://") || !strings.HasSuffix(cfg.GISJWKSURL, "/internal/v1/principal/jwks.json") {
-		return Config{}, true, errors.New("Game Integration principal JWKS URL must use the internal HTTPS endpoint")
+		return Config{}, true, errors.New("game integration principal JWKS URL must use the internal HTTPS endpoint")
 	}
 	spaceValues := []string{cfg.BotSpaceLifecycleListen, cfg.BotSpaceLifecycleCert, cfg.BotSpaceLifecycleKey, cfg.BotSpaceLifecycleClientCA, cfg.SpaceJWKSURL, cfg.SpaceJWKSCAFile}
 	spaceCount := 0
@@ -86,12 +86,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		}
 	}
 	if spaceCount != 0 && spaceCount != len(spaceValues) {
-		return Config{}, true, errors.New("Bot Space lifecycle mTLS and Space principal JWKS settings must be configured together")
+		return Config{}, true, errors.New("bot Space lifecycle mTLS and Space principal JWKS settings must be configured together")
 	}
 	if spaceCount > 0 {
 		parsed, err := url.Parse(cfg.SpaceJWKSURL)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/space/jwks.json" {
-			return Config{}, true, errors.New("Space principal JWKS URL must use the HTTPS Space JWKS endpoint")
+			return Config{}, true, errors.New("space principal JWKS URL must use the HTTPS Space JWKS endpoint")
 		}
 	}
 	return cfg, true, nil
@@ -103,7 +103,7 @@ func (c Config) SpaceLifecycleEnabled() bool {
 
 func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if strings.TrimSpace(cfg.BotPrivateKeyFile) == "" || strings.TrimSpace(cfg.BotKeyID) == "" {
-		return nil, errors.New("Bot principal signer is incomplete")
+		return nil, errors.New("bot principal signer is incomplete")
 	}
 	key, err := principal.LoadRSAPrivateKeyFile(cfg.BotPrivateKeyFile)
 	if err != nil {
@@ -145,7 +145,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("GIS principal JWKS returned status %d", resp.StatusCode)
 		}
@@ -161,19 +161,19 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	redisOptions, err := redis.ParseURL(cfg.ReplayRedisURL)
 	if err != nil {
-		return nil, errors.New("Bot principal replay Redis URL is invalid")
+		return nil, errors.New("bot principal replay Redis URL is invalid")
 	}
 	redisClient := redis.NewClient(redisOptions)
 	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := redisClient.Ping(pingCtx).Err(); err != nil {
 		_ = redisClient.Close()
-		return nil, errors.New("Bot principal replay Redis unavailable")
+		return nil, errors.New("bot principal replay Redis unavailable")
 	}
 	botCertificate, err := tls.LoadX509KeyPair(cfg.BotTLSCert, cfg.BotTLSKey)
 	if err != nil {
 		_ = redisClient.Close()
-		return nil, fmt.Errorf("Bot principal JWKS TLS certificate: %w", err)
+		return nil, fmt.Errorf("bot principal JWKS TLS certificate: %w", err)
 	}
 	runtime := &Runtime{issuer: issuer, resolver: resolver, redis: redisClient, http: client, config: cfg, privateKey: key, jwksCertificate: botCertificate}
 	runtime.replayGuard = runtime.recordReplay
@@ -181,12 +181,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		spaceCAPEM, err := os.ReadFile(cfg.SpaceJWKSCAFile)
 		if err != nil {
 			_ = redisClient.Close()
-			return nil, fmt.Errorf("Space principal JWKS CA: %w", err)
+			return nil, fmt.Errorf("space principal JWKS CA: %w", err)
 		}
 		spaceRoots := x509.NewCertPool()
 		if !spaceRoots.AppendCertsFromPEM(spaceCAPEM) {
 			_ = redisClient.Close()
-			return nil, errors.New("Space principal JWKS CA contains no certificates")
+			return nil, errors.New("space principal JWKS CA contains no certificates")
 		}
 		spaceTransport := http.DefaultTransport.(*http.Transport).Clone()
 		spaceTransport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: spaceRoots}
@@ -205,13 +205,13 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			if err != nil {
 				return nil, err
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
-				return nil, fmt.Errorf("Space principal JWKS returned status %d", resp.StatusCode)
+				return nil, fmt.Errorf("space principal JWKS returned status %d", resp.StatusCode)
 			}
 			body, err := io.ReadAll(io.LimitReader(resp.Body, 128*1024+1))
 			if err != nil || len(body) > 128*1024 {
-				return nil, errors.New("Space principal JWKS response is invalid")
+				return nil, errors.New("space principal JWKS response is invalid")
 			}
 			return body, nil
 		}, RefreshAfter: 20 * time.Second, HardExpiry: 60 * time.Second, UnknownKIDCooldown: 5 * time.Second})
@@ -232,7 +232,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		if err != nil {
 			_ = redisClient.Close()
 			spaceTransport.CloseIdleConnections()
-			return nil, fmt.Errorf("Bot Space lifecycle TLS certificate: %w", err)
+			return nil, fmt.Errorf("bot Space lifecycle TLS certificate: %w", err)
 		}
 		runtime.spaceResolver, runtime.spaceCertificate, runtime.spaceHTTP = spaceResolver, spaceCert, spaceClient
 	}
@@ -248,7 +248,7 @@ func (r *Runtime) Issuer() *principal.Issuer {
 
 func (r *Runtime) JWKSHTTPServer() (*http.Server, error) {
 	if r == nil {
-		return nil, errors.New("Bot principal runtime unavailable")
+		return nil, errors.New("bot principal runtime unavailable")
 	}
 	caPEM, err := os.ReadFile(r.config.BotJWKSClientCA)
 	if err != nil {
@@ -256,7 +256,7 @@ func (r *Runtime) JWKSHTTPServer() (*http.Server, error) {
 	}
 	clients := x509.NewCertPool()
 	if !clients.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Bot principal client CA contains no certificates")
+		return nil, errors.New("bot principal client CA contains no certificates")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/.well-known/principal-jwks.json", principal.JWKSHandler(r.config.BotKeyID, &r.privateKey.PublicKey))
@@ -265,7 +265,7 @@ func (r *Runtime) JWKSHTTPServer() (*http.Server, error) {
 
 func (r *Runtime) GameEventServerTLSConfig() (*tls.Config, error) {
 	if r == nil {
-		return nil, errors.New("Bot principal runtime unavailable")
+		return nil, errors.New("bot principal runtime unavailable")
 	}
 	certificate, err := tls.LoadX509KeyPair(r.config.BotGameEventCert, r.config.BotGameEventKey)
 	if err != nil {
@@ -291,7 +291,7 @@ func (r *Runtime) SpaceLifecycleListenAddr() string {
 
 func (r *Runtime) SpaceLifecycleServerTLSConfig() (*tls.Config, error) {
 	if r == nil || r.spaceResolver == nil {
-		return nil, errors.New("Bot Space lifecycle runtime unavailable")
+		return nil, errors.New("bot Space lifecycle runtime unavailable")
 	}
 	caPEM, err := os.ReadFile(r.config.BotSpaceLifecycleClientCA)
 	if err != nil {
@@ -306,7 +306,7 @@ func (r *Runtime) SpaceLifecycleServerTLSConfig() (*tls.Config, error) {
 
 func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
 	if r == nil || r.spaceResolver == nil || r.replayGuard == nil {
-		return principal.Principal{}, errors.New("Bot Space lifecycle runtime unavailable")
+		return principal.Principal{}, errors.New("bot Space lifecycle runtime unavailable")
 	}
 	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" {
 		return principal.Principal{}, errors.New("Space principal method is not allowed")
@@ -337,7 +337,7 @@ func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, has
 
 func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.redis == nil {
-		return principal.Principal{}, errors.New("Bot principal runtime unavailable")
+		return principal.Principal{}, errors.New("bot principal runtime unavailable")
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {

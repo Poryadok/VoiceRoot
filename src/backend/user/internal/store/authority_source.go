@@ -15,7 +15,7 @@ var _ authoritysource.SchemaReader = (*ProfileStore)(nil)
 
 func (s *ProfileStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	if s == nil {
-		return errors.New("User source pool unavailable")
+		return errors.New("user source pool unavailable")
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -31,7 +31,7 @@ func (s *ProfileStore) beginAuthorityRead(ctx context.Context, scope *authorityv
 		return nil, err
 	}
 	if s == nil {
-		return nil, errors.New("User source pool unavailable")
+		return nil, errors.New("user source pool unavailable")
 	}
 	return authoritysource.BeginRead(ctx, s.pool, userAuthorityCatalog)
 }

@@ -68,7 +68,7 @@ func (h *BootHeartbeat) Pulse(now time.Time) error {
 	if err != nil {
 		return ErrDenied
 	}
-	defer os.Remove(file.Name())
+	defer func() { _ = os.Remove(file.Name()) }()
 	_, err = file.Write(raw)
 	closeErr := file.Close()
 	if err != nil || closeErr != nil {

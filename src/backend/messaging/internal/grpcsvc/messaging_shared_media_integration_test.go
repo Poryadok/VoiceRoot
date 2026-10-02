@@ -166,7 +166,7 @@ type recordingFileMetadataLookup struct {
 }
 
 func (m *recordingFileMetadataLookup) GetBulkMetadata(ctx context.Context, req *filev1.GetBulkMetadataRequest, opts ...grpc.CallOption) (*filev1.GetBulkMetadataResponse, error) {
-	m.requested = append(m.requested, req.GetFileIds()...)
+	m.requested = append(m.requested, req.GetFileIds()...) //nolint:staticcheck // This fixture records the supported legacy file-id request path.
 	return m.metadata.GetBulkMetadata(ctx, req, opts...)
 }
 

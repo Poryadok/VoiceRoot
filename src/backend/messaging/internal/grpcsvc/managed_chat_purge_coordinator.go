@@ -73,7 +73,7 @@ func (c *ManagedChatPurgeCoordinator) PurgeManagedChatContent(ctx context.Contex
 		return nil, err
 	}
 	if work == nil || work.OperationID != operationID || work.ChatID != chatID || !work.PurgeAfter.Equal(request.GetPurgeAfter().AsTime()) || !bytes.Equal(work.RequestSHA256, requestHashBytes) {
-		return nil, errors.New("Messaging returned a mismatched frozen purge work set")
+		return nil, errors.New("messaging returned a mismatched frozen purge work set")
 	}
 	if work.State == "COMPLETED" {
 		if len(work.FileReceiptSHA256) != sha256.Size || len(work.SearchReceiptSHA256) != sha256.Size || work.CompletedAt == nil {
@@ -107,7 +107,7 @@ func (c *ManagedChatPurgeCoordinator) PurgeManagedChatContent(ctx context.Contex
 		return nil, err
 	}
 	if completed == nil || completed.State != "COMPLETED" || completed.CompletedAt == nil || !bytes.Equal(completed.FileReceiptSHA256, fileReceiptHash) || !bytes.Equal(completed.SearchReceiptSHA256, searchReceiptHash) {
-		return nil, errors.New("Messaging failed to persist both owner receipts")
+		return nil, errors.New("messaging failed to persist both owner receipts")
 	}
 	return managedChatPurgeResponse(completed, requestHashBytes, request.GetPurgeAfter().AsTime(), searchCount), nil
 }
@@ -130,7 +130,7 @@ func (c *ManagedChatPurgeCoordinator) releaseAndVerifyFile(ctx context.Context, 
 		return receiptHash("voice.messaging.managed_chat_purge.no_file_refs.v1", parentRequestHashBytes), nil
 	}
 	if c.Files == nil {
-		return nil, errors.New("File purge owner is unavailable")
+		return nil, errors.New("file purge owner is unavailable")
 	}
 	release := &filev1.ReleaseFileReferencesRequest{ProtocolVersion: 1, OperationId: operationID.String(), ProducerId: filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, References: refs}
 	releaseHash := lifecycleHash(release)

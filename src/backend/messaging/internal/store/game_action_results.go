@@ -66,7 +66,7 @@ func (s *MessagesStore) ProjectGameActionResult(ctx context.Context, request Pro
 		FROM message_game_action_results WHERE message_id=$1 AND action_id=$2 FOR UPDATE`, request.MessageID, request.Result.ActionID).
 		Scan(&saved.OperationID, &saved.ActionID, &saved.ResultID, &saved.StateVersion, &saved.Status, &saved.SafeSummary, &saved.RecordedAt)
 	if err == nil {
-		if saved != request.Result && !(saved.OperationID == request.Result.OperationID && saved.ActionID == request.Result.ActionID && saved.ResultID == request.Result.ResultID && saved.StateVersion == request.Result.StateVersion && saved.Status == request.Result.Status && saved.SafeSummary == request.Result.SafeSummary) {
+		if saved.OperationID != request.Result.OperationID || saved.ActionID != request.Result.ActionID || saved.ResultID != request.Result.ResultID || saved.StateVersion != request.Result.StateVersion || saved.Status != request.Result.Status || saved.SafeSummary != request.Result.SafeSummary {
 			return ProjectGameActionResultResponse{}, ErrGameActionResultConflict
 		}
 		if err := tx.Commit(ctx); err != nil {

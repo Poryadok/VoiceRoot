@@ -37,6 +37,10 @@ func startBotStore(t *testing.T) *store.BotStore {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
+	migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000005_space_lifecycle.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
+	require.NoError(t, err)
 	return &store.BotStore{Pool: pool}
 }
 

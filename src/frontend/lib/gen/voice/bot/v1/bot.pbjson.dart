@@ -32,6 +32,60 @@ final $typed_data.Uint8List botLifecycleStatusDescriptor = $convert.base64Decode
     'QQABIeChpCT1RfTElGRUNZQ0xFX1NUQVRVU19EUkFGVBABEh0KGUJPVF9MSUZFQ1lDTEVfU1RB'
     'VFVTX0xJVkUQAhIhCh1CT1RfTElGRUNZQ0xFX1NUQVRVU19ESVNBQkxFRBAD');
 
+@$core.Deprecated('Use publishGameEventRequestDescriptor instead')
+const PublishGameEventRequest$json = {
+  '1': 'PublishGameEventRequest',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.gameintegration.v1.VerifiedGameEventIntent',
+      '10': 'intent'
+    },
+  ],
+};
+
+/// Descriptor for `PublishGameEventRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List publishGameEventRequestDescriptor =
+    $convert.base64Decode(
+        'ChdQdWJsaXNoR2FtZUV2ZW50UmVxdWVzdBJJCgZpbnRlbnQYASABKAsyMS52b2ljZS5nYW1laW'
+        '50ZWdyYXRpb24udjEuVmVyaWZpZWRHYW1lRXZlbnRJbnRlbnRSBmludGVudA==');
+
+@$core.Deprecated('Use publishGameEventResponseDescriptor instead')
+const PublishGameEventResponse$json = {
+  '1': 'PublishGameEventResponse',
+  '2': [
+    {
+      '1': 'status',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.gameintegration.v1.GameEventPublicationStatus',
+      '10': 'status'
+    },
+    {
+      '1': 'message_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'messageId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_message_id'},
+  ],
+};
+
+/// Descriptor for `PublishGameEventResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List publishGameEventResponseDescriptor = $convert.base64Decode(
+    'ChhQdWJsaXNoR2FtZUV2ZW50UmVzcG9uc2USTAoGc3RhdHVzGAEgASgOMjQudm9pY2UuZ2FtZW'
+    'ludGVncmF0aW9uLnYxLkdhbWVFdmVudFB1YmxpY2F0aW9uU3RhdHVzUgZzdGF0dXMSIgoKbWVz'
+    'c2FnZV9pZBgCIAEoCUgAUgltZXNzYWdlSWSIAQFCDQoLX21lc3NhZ2VfaWQ=');
+
 @$core.Deprecated('Use botDescriptor instead')
 const Bot$json = {
   '1': 'Bot',

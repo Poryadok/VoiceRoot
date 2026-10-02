@@ -27,7 +27,7 @@ func startNotificationPostgresForTest(t *testing.T, ctx context.Context) *pgxpoo
 
 func applyNotificationMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_notification_settings_nullable_scope.up.sql", "000003_space_lifecycle.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_notification_settings_nullable_scope.up.sql", "000003_space_lifecycle.up.sql", "000004_space_chat_manifest.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "notification_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

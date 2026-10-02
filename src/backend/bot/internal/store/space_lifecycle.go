@@ -48,7 +48,7 @@ func (s *BotStore) ApplySpaceLifecycleFence(ctx context.Context, req *commonv1.S
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 71431))`, spaceID.String()); err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (s *BotStore) PurgeSpace(ctx context.Context, req *commonv1.SpacePurgeReque
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return nil, err
 	}

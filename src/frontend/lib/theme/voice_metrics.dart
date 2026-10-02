@@ -16,6 +16,7 @@ class VoiceMetrics extends ThemeExtension<VoiceMetrics> {
   final Map<String, double> radius;
   final Map<String, double> layout;
   final Map<String, double> stroke;
+  @override
   final Map<String, VoiceTypeToken> type;
 
   double spacing(String key, {double fallback = 8}) =>

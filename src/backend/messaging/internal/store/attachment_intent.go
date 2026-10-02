@@ -139,7 +139,14 @@ func (s *MessagesStore) InsertMessageWithReferences(ctx context.Context, row Mes
 		if state == "RELEASED" {
 			return nil, ErrAttachmentIntentExpired
 		}
-		if saved, loadErr := s.GetMessageByID(ctx, savedID); loadErr == nil {
+		// Keep the lookup on the lock owner's connection. Advisory-lock waiters
+		// can occupy every other pool slot, so borrowing again can deadlock.
+		if saved, loadErr := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+` FROM messages WHERE id=$1`, savedID)); loadErr == nil {
+			single := []MessageRow{*saved}
+			if err = hydrateGameCards(ctx, tx, single); err != nil {
+				return nil, err
+			}
+			*saved = single[0]
 			if _, err = tx.Exec(ctx, `UPDATE messaging_attachment_send_intents SET state='COMMITTED',completed_at=COALESCE(completed_at,clock_timestamp()) WHERE operation_id=$1`, op); err != nil {
 				return nil, err
 			}

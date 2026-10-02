@@ -71,7 +71,7 @@ func New(config Config) (*Controller, error) {
 		return nil, ErrConfig
 	}
 	transport, ok := config.Client.Transport.(*http.Transport)
-	if !ok || transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil || transport.TLSClientConfig.InsecureSkipVerify || transport.TLSClientConfig.MinVersion < tls.VersionTLS12 || len(transport.TLSClientConfig.Certificates) == 0 || transport.DialTLSContext != nil || transport.DialTLS != nil {
+	if !ok || transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil || transport.TLSClientConfig.InsecureSkipVerify || transport.TLSClientConfig.MinVersion < tls.VersionTLS12 || len(transport.TLSClientConfig.Certificates) == 0 || transport.DialTLSContext != nil || transport.DialTLS != nil { //nolint:staticcheck // Reject deprecated custom TLS dialers as well as context-aware ones.
 		return nil, ErrConfig
 	}
 	verifier := mediaauthority.Verifier{Issuer: config.Issuer, Environment: config.Environment, NodeID: config.NodeID, Keys: config.Keys}
@@ -215,7 +215,7 @@ func (c *Controller) fetch(ctx context.Context, space, suffix string, ack *proto
 	if err != nil {
 		return protocol.Envelope{}, ErrUnavailable
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-store" || *remaining <= 0 {
 		return protocol.Envelope{}, ErrUnavailable
 	}

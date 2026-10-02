@@ -98,7 +98,7 @@ func (c *Client) getSigned(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 4097))
 	if err != nil || len(body) > 4096 || response.StatusCode != http.StatusOK ||
 		response.Header.Get("X-Voice-Response-Timestamp") != timestamp || response.Header.Get("X-Voice-Response-Nonce") != nonce ||

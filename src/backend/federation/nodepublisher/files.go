@@ -55,7 +55,7 @@ func (s *FileSink) Publish(ctx context.Context, space string, bundle mediaauthor
 	if err != nil {
 		return ErrUnavailable
 	}
-	defer directory.Close()
+	defer func() { _ = directory.Close() }()
 	if directory.Sync() != nil {
 		return ErrUnavailable
 	}

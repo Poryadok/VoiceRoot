@@ -12,7 +12,10 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
+import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
+    as $4;
 
 import '../../chat/v1/chat.pb.dart' as $1;
 import '../../common/v1/common.pb.dart' as $2;
@@ -1233,6 +1236,226 @@ class PurgeSpaceResponse extends $pb.GeneratedMessage {
   void clearReceipt() => $_clearField(1);
   @$pb.TagNumber(1)
   $3.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class PurgeManagedChatMessagesRequest extends $pb.GeneratedMessage {
+  factory PurgeManagedChatMessagesRequest({
+    $core.String? operationId,
+    $core.String? chatId,
+    $core.Iterable<$core.String>? messageIds,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (messageIds != null) result.messageIds.addAll(messageIds);
+    return result;
+  }
+
+  PurgeManagedChatMessagesRequest._();
+
+  factory PurgeManagedChatMessagesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PurgeManagedChatMessagesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PurgeManagedChatMessagesRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.search.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'chatId')
+    ..pPS(3, _omitFieldNames ? '' : 'messageIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeManagedChatMessagesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeManagedChatMessagesRequest copyWith(
+          void Function(PurgeManagedChatMessagesRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as PurgeManagedChatMessagesRequest))
+          as PurgeManagedChatMessagesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PurgeManagedChatMessagesRequest create() =>
+      PurgeManagedChatMessagesRequest._();
+  @$core.override
+  PurgeManagedChatMessagesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PurgeManagedChatMessagesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PurgeManagedChatMessagesRequest>(
+          create);
+  static PurgeManagedChatMessagesRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get chatId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set chatId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasChatId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearChatId() => $_clearField(2);
+
+  /// Canonical, sorted, unique immutable message IDs frozen by Messaging.
+  @$pb.TagNumber(3)
+  $pb.PbList<$core.String> get messageIds => $_getList(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class PurgeManagedChatMessagesResponse extends $pb.GeneratedMessage {
+  factory PurgeManagedChatMessagesResponse({
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.String? chatId,
+    $fixnum.Int64? deletedCount,
+    $core.List<$core.int>? messageIdsSha256,
+    $core.List<$core.int>? requestSha256,
+    $4.Timestamp? completedAt,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (deletedCount != null) result.deletedCount = deletedCount;
+    if (messageIdsSha256 != null) result.messageIdsSha256 = messageIdsSha256;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (completedAt != null) result.completedAt = completedAt;
+    return result;
+  }
+
+  PurgeManagedChatMessagesResponse._();
+
+  factory PurgeManagedChatMessagesResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PurgeManagedChatMessagesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PurgeManagedChatMessagesResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.search.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'chatId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'deletedCount', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'messageIdsSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        6, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOM<$4.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $4.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeManagedChatMessagesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PurgeManagedChatMessagesResponse copyWith(
+          void Function(PurgeManagedChatMessagesResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as PurgeManagedChatMessagesResponse))
+          as PurgeManagedChatMessagesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PurgeManagedChatMessagesResponse create() =>
+      PurgeManagedChatMessagesResponse._();
+  @$core.override
+  PurgeManagedChatMessagesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PurgeManagedChatMessagesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PurgeManagedChatMessagesResponse>(
+          create);
+  static PurgeManagedChatMessagesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get chatId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set chatId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasChatId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearChatId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get deletedCount => $_getI64(3);
+  @$pb.TagNumber(4)
+  set deletedCount($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDeletedCount() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDeletedCount() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get messageIdsSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set messageIdsSha256($core.List<$core.int> value) => $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasMessageIdsSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearMessageIdsSha256() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get requestSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasRequestSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearRequestSha256() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $4.Timestamp get completedAt => $_getN(6);
+  @$pb.TagNumber(7)
+  set completedAt($4.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCompletedAt() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCompletedAt() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $4.Timestamp ensureCompletedAt() => $_ensure(6);
 }
 
 const $core.bool _omitFieldNames =

@@ -14,7 +14,6 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/text v0.24.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
@@ -29,6 +28,8 @@ require (
 	voice/backend/pkg v0.0.0
 	voice/backend/social v0.0.0
 )
+
+require golang.org/x/text v0.24.0 // indirect
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

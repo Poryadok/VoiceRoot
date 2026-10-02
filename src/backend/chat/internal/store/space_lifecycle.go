@@ -246,7 +246,7 @@ func (s *SpaceLifecycleStore) ApplySpaceLifecycleFence(ctx context.Context, req 
 	if err != nil {
 		return nil, err
 	}
-	if currentOp != operationID || sourceManifest == uuid.Nil || len(sourceManifestHash) != sha256.Size || sourceItemCount < 0 || manifestID != sourceManifest || !bytes.Equal(fence.GetManifest().GetManifestSha256(), sourceManifestHash) || fence.GetManifest().GetItemCount() != uint64(sourceItemCount) || scheduleGeneration > math.MaxInt64 {
+	if currentOp != operationID || sourceManifest == uuid.Nil || len(sourceManifestHash) != sha256.Size || sourceItemCount < 0 || manifestID != sourceManifest || !bytes.Equal(fence.GetManifest().GetManifestSha256(), sourceManifestHash) || fence.GetManifest().GetItemCount() != uint64(sourceItemCount) {
 		return nil, ErrSpaceLifecycleConflict
 	}
 	wantState := ""

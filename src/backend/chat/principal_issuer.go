@@ -47,7 +47,7 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 		return nil, chatPrincipalJWKS{}, fmt.Errorf("%s and %s must both be configured", chatPrincipalKeysDirEnv, chatPrincipalActiveKIDEnv)
 	}
 	if !validChatPrincipalKID(kid) {
-		return nil, chatPrincipalJWKS{}, errors.New("Chat active principal key ID is invalid")
+		return nil, chatPrincipalJWKS{}, errors.New("chat active principal key ID is invalid")
 	}
 	canonicalDir, err := filepath.EvalSymlinks(directory)
 	if err != nil {
@@ -55,7 +55,7 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 	}
 	info, err := os.Stat(canonicalDir)
 	if err != nil || !info.IsDir() {
-		return nil, chatPrincipalJWKS{}, errors.New("Chat principal signing key path is not a directory")
+		return nil, chatPrincipalJWKS{}, errors.New("chat principal signing key path is not a directory")
 	}
 	entries, err := os.ReadDir(canonicalDir)
 	if err != nil {
@@ -67,11 +67,11 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 			continue
 		}
 		if !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
-			return nil, chatPrincipalJWKS{}, fmt.Errorf("Chat principal key %q must be PEM", entry.Name())
+			return nil, chatPrincipalJWKS{}, fmt.Errorf("chat principal key %q must be PEM", entry.Name())
 		}
 		keyID := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		if !validChatPrincipalKID(keyID) {
-			return nil, chatPrincipalJWKS{}, fmt.Errorf("Chat principal key %q has invalid ID", entry.Name())
+			return nil, chatPrincipalJWKS{}, fmt.Errorf("chat principal key %q has invalid ID", entry.Name())
 		}
 		path, err := filepath.EvalSymlinks(filepath.Join(canonicalDir, entry.Name()))
 		if err != nil {
@@ -79,11 +79,11 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 		}
 		relative, err := filepath.Rel(canonicalDir, path)
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
-			return nil, chatPrincipalJWKS{}, errors.New("Chat principal key resolves outside configured directory")
+			return nil, chatPrincipalJWKS{}, errors.New("chat principal key resolves outside configured directory")
 		}
 		fileInfo, err := os.Stat(path)
 		if err != nil || !fileInfo.Mode().IsRegular() {
-			return nil, chatPrincipalJWKS{}, errors.New("Chat principal key is not a regular file")
+			return nil, chatPrincipalJWKS{}, errors.New("chat principal key is not a regular file")
 		}
 		encoded, err := os.ReadFile(path)
 		if err != nil {
@@ -91,7 +91,7 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 		}
 		block, rest := pem.Decode(encoded)
 		if block == nil || block.Type != "PRIVATE KEY" || strings.TrimSpace(string(rest)) != "" {
-			return nil, chatPrincipalJWKS{}, errors.New("Chat principal key must contain one PKCS#8 PEM block")
+			return nil, chatPrincipalJWKS{}, errors.New("chat principal key must contain one PKCS#8 PEM block")
 		}
 		private, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
@@ -99,20 +99,20 @@ func loadChatPrincipalIssuerFromEnv() (*principal.Issuer, chatPrincipalJWKS, err
 		}
 		key, ok := private.(*rsa.PrivateKey)
 		if !ok || key.Validate() != nil || key.N.BitLen() < 2048 {
-			return nil, chatPrincipalJWKS{}, errors.New("Chat principal key must be valid RSA of at least 2048 bits")
+			return nil, chatPrincipalJWKS{}, errors.New("chat principal key must be valid RSA of at least 2048 bits")
 		}
 		keys[keyID] = key
 	}
 	if len(keys) != 2 {
-		return nil, chatPrincipalJWKS{}, errors.New("Chat principal key directory must contain exactly two rotation keys")
+		return nil, chatPrincipalJWKS{}, errors.New("chat principal key directory must contain exactly two rotation keys")
 	}
 	active := keys[kid]
 	if active == nil {
-		return nil, chatPrincipalJWKS{}, errors.New("Chat active principal key is missing")
+		return nil, chatPrincipalJWKS{}, errors.New("chat active principal key is missing")
 	}
 	for id, key := range keys {
 		if id != kid && active.N.Cmp(key.N) == 0 {
-			return nil, chatPrincipalJWKS{}, errors.New("Chat principal rotation keys must have distinct public keys")
+			return nil, chatPrincipalJWKS{}, errors.New("chat principal rotation keys must have distinct public keys")
 		}
 	}
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "chat", KeyID: kid, PrivateKey: active})
@@ -137,9 +137,10 @@ func validChatPrincipalKID(value string) bool {
 		return false
 	}
 	for i, r := range value {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || i > 0 && (r == '.' || r == '_' || r == '-')) {
-			return false
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || i > 0 && (r == '.' || r == '_' || r == '-') {
+			continue
 		}
+		return false
 	}
 	return true
 }

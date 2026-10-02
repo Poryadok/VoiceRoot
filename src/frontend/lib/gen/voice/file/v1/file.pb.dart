@@ -4606,6 +4606,319 @@ class ReleaseFileReferencesResponse extends $pb.GeneratedMessage {
 
 /// @voice.unknown_fields=reject
 /// @voice.hash=domain_separated_sha256
+class GetFileReferenceGCStatusRequest extends $pb.GeneratedMessage {
+  factory GetFileReferenceGCStatusRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    FileReferenceProducerId? producerId,
+    $core.Iterable<FileReferenceKey>? references,
+    $core.List<$core.int>? releaseRequestSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (producerId != null) result.producerId = producerId;
+    if (references != null) result.references.addAll(references);
+    if (releaseRequestSha256 != null)
+      result.releaseRequestSha256 = releaseRequestSha256;
+    return result;
+  }
+
+  GetFileReferenceGCStatusRequest._();
+
+  factory GetFileReferenceGCStatusRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetFileReferenceGCStatusRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetFileReferenceGCStatusRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aE<FileReferenceProducerId>(3, _omitFieldNames ? '' : 'producerId',
+        enumValues: FileReferenceProducerId.values)
+    ..pPM<FileReferenceKey>(4, _omitFieldNames ? '' : 'references',
+        subBuilder: FileReferenceKey.create)
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'releaseRequestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetFileReferenceGCStatusRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetFileReferenceGCStatusRequest copyWith(
+          void Function(GetFileReferenceGCStatusRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetFileReferenceGCStatusRequest))
+          as GetFileReferenceGCStatusRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetFileReferenceGCStatusRequest create() =>
+      GetFileReferenceGCStatusRequest._();
+  @$core.override
+  GetFileReferenceGCStatusRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetFileReferenceGCStatusRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetFileReferenceGCStatusRequest>(
+          create);
+  static GetFileReferenceGCStatusRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  FileReferenceProducerId get producerId => $_getN(2);
+  @$pb.TagNumber(3)
+  set producerId(FileReferenceProducerId value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProducerId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProducerId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<FileReferenceKey> get references => $_getList(3);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get releaseRequestSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set releaseRequestSha256($core.List<$core.int> value) => $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasReleaseRequestSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearReleaseRequestSha256() => $_clearField(5);
+}
+
+class FileReferenceGCStatus extends $pb.GeneratedMessage {
+  factory FileReferenceGCStatus({
+    FileReferenceKey? reference,
+    FileReferenceGCState? state,
+  }) {
+    final result = create();
+    if (reference != null) result.reference = reference;
+    if (state != null) result.state = state;
+    return result;
+  }
+
+  FileReferenceGCStatus._();
+
+  factory FileReferenceGCStatus.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileReferenceGCStatus.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileReferenceGCStatus',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOM<FileReferenceKey>(1, _omitFieldNames ? '' : 'reference',
+        subBuilder: FileReferenceKey.create)
+    ..aE<FileReferenceGCState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: FileReferenceGCState.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileReferenceGCStatus clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileReferenceGCStatus copyWith(
+          void Function(FileReferenceGCStatus) updates) =>
+      super.copyWith((message) => updates(message as FileReferenceGCStatus))
+          as FileReferenceGCStatus;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileReferenceGCStatus create() => FileReferenceGCStatus._();
+  @$core.override
+  FileReferenceGCStatus createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileReferenceGCStatus getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileReferenceGCStatus>(create);
+  static FileReferenceGCStatus? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  FileReferenceKey get reference => $_getN(0);
+  @$pb.TagNumber(1)
+  set reference(FileReferenceKey value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReference() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReference() => $_clearField(1);
+  @$pb.TagNumber(1)
+  FileReferenceKey ensureReference() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  FileReferenceGCState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(FileReferenceGCState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class GetFileReferenceGCStatusResponse extends $pb.GeneratedMessage {
+  factory GetFileReferenceGCStatusResponse({
+    $core.String? receiptId,
+    $core.String? operationId,
+    FileReferenceProducerId? producerId,
+    $core.List<$core.int>? releaseRequestSha256,
+    $core.List<$core.int>? requestSha256,
+    $core.Iterable<FileReferenceGCStatus>? references,
+    $3.Timestamp? completedAt,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (producerId != null) result.producerId = producerId;
+    if (releaseRequestSha256 != null)
+      result.releaseRequestSha256 = releaseRequestSha256;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (references != null) result.references.addAll(references);
+    if (completedAt != null) result.completedAt = completedAt;
+    return result;
+  }
+
+  GetFileReferenceGCStatusResponse._();
+
+  factory GetFileReferenceGCStatusResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetFileReferenceGCStatusResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetFileReferenceGCStatusResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aE<FileReferenceProducerId>(3, _omitFieldNames ? '' : 'producerId',
+        enumValues: FileReferenceProducerId.values)
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'releaseRequestSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..pPM<FileReferenceGCStatus>(6, _omitFieldNames ? '' : 'references',
+        subBuilder: FileReferenceGCStatus.create)
+    ..aOM<$3.Timestamp>(7, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $3.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetFileReferenceGCStatusResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetFileReferenceGCStatusResponse copyWith(
+          void Function(GetFileReferenceGCStatusResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetFileReferenceGCStatusResponse))
+          as GetFileReferenceGCStatusResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetFileReferenceGCStatusResponse create() =>
+      GetFileReferenceGCStatusResponse._();
+  @$core.override
+  GetFileReferenceGCStatusResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetFileReferenceGCStatusResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetFileReferenceGCStatusResponse>(
+          create);
+  static GetFileReferenceGCStatusResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  FileReferenceProducerId get producerId => $_getN(2);
+  @$pb.TagNumber(3)
+  set producerId(FileReferenceProducerId value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProducerId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProducerId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get releaseRequestSha256 => $_getN(3);
+  @$pb.TagNumber(4)
+  set releaseRequestSha256($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasReleaseRequestSha256() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearReleaseRequestSha256() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get requestSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRequestSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRequestSha256() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $pb.PbList<FileReferenceGCStatus> get references => $_getList(5);
+
+  @$pb.TagNumber(7)
+  $3.Timestamp get completedAt => $_getN(6);
+  @$pb.TagNumber(7)
+  set completedAt($3.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCompletedAt() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCompletedAt() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $3.Timestamp ensureCompletedAt() => $_ensure(6);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
 class GetSpacePurgeReceiptRequest extends $pb.GeneratedMessage {
   factory GetSpacePurgeReceiptRequest({
     $core.int? protocolVersion,

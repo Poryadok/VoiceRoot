@@ -2932,3 +2932,33 @@ test assertion, not just prose.
 - T40 Bot lifecycle RPC continuation (2026-10-02): Added Bot's proto-defined `ApplySpaceLifecycleFence` and `PurgeSpace` service methods as a typed boundary to the existing durable Bot lifecycle store. Calls require the exact verified Space service principal, audience, full method and deterministic request hash; unknown fields are rejected; absent storage or mismatched durable state fails closed. Red/green handler tests pass (3), Bot lifecycle store tests pass (2), and scoped `go vet ./internal/grpcsvc ./internal/store` passes. The combined full Bot gRPC/store package run stayed live for over five minutes without visible test progress and was interrupted; no full-package pass is claimed. Bot's Space-principal mTLS listener/runtime and other missing lifecycle participants remain open. Graphify completed AST extraction (132 files) but stalled in final graph construction through the bounded attempt and was stopped; graph freshness is unverified. T40 remains open and the parent count remains 43/60.
 - T40 Bot lifecycle transport continuation (2026-10-02): Added optional Bot Space-principal runtime settings, HTTPS JWKS bootstrap through the Phase0 Space JWKS proxy, bounded JWKS caching, issuer/audience/method/request/hash verification, Redis replay protection, and a dedicated mTLS gRPC listener. The listener requires the lifecycle client CA and serves only `ApplySpaceLifecycleFence` and `PurgeSpace`; protected methods fail closed on the ordinary listener. Phase0 exposes port 9444, mounts only the lifecycle CA for Bot, and wires the HTTPS Space JWKS endpoint. Focused Bot principalruntime/principalgrpc tests, the complete Bot `go test -short ./...` run (84 tests), Bot `go vet ./...`, and Phase0 fixture/compose checks (16, one POSIX-only skip) pass. Updating the old T04 test revealed that its expected `UNIMPLEMENTED` status was stale after T51 registration; the production ordinary listener now explicitly denies `PublishGameEvent`, and the regression verifies `UNAVAILABLE` before Gateway metadata processing. Space coordinator activation and other participant gaps remain; T40 and the parent checklist remain open at 43/60. Graphify re-extracted 137 uncached files but stalled during final graph construction after the bounded 60-second attempt; graph refresh is unverified.
 - T40 Notification participant continuation (2026-10-02): Notification now implements the typed fence and purge handlers, validates the verified Space principal/request binding, persists deterministic exact owner receipts and transitions in notification_db, blocks Space-scoped settings reads/writes outside LIVE, and atomically removes only matching Space-scoped settings at purge. The new PostgreSQL lifecycle integration test covers freeze, restore, a later deletion, purge, exact retries, and changed-request conflict. Focused integration plus lifecycle handler tests pass (3); the complete short Notification module passes 290 tests across 18 packages and go vet passes. T40 remains open: Notification still needs its dedicated mTLS listener/runtime, receipt-retention cleanup, and Space coordinator production wiring; other participant/restore-to-purge recovery and end-to-end acceptance remain open. Parent remains 43/60. Graphify re-extracted 140 uncached files and reported the existing Linux runner header parse warning, then stalled during graph construction; refresh is unverified.
+
+## Master integration CI repair checkpoint — 2026-10-03
+
+PR #603 integrates committed sprint checkpoints after explicit owner merge
+authorization. The first hosted run exposed generated Dart/manifest drift,
+incomplete Docker module closure, historical test schemas missing newer owning
+tables, and the old R22 provisioning oracle rejecting the accepted checkpoint.
+Repairs regenerate canonical stubs, close local module packaging, and update
+fixtures without changing production authorization. The provisioning oracle
+accepts only exact path/blob matches from ancestor checkpoint
+`3d9e7097275f3e2b964e1286d114e8284d55e13f`; altered/unapproved/staging paths remain
+denied by explicit negative fixtures. No gate or deployment flag is bypassed.
+
+Messaging concurrent attachment retry had a real pool-starvation deadlock:
+lock waiters held pool connections while the lock owner borrowed again for the
+saved-message lookup. The lookup and game-card hydration now use its existing
+transaction. The existing six-caller regression was strengthened to one pool
+slot and a 10-second deadline: red before the fix, green afterwards. The seven
+attachment-intent tests and four Chat/Messaging regressions pass on local
+PostgreSQL with zero skips; independent read-only concurrency review accepted
+the change. Missing-message, conflict, expiry and commit semantics remain.
+
+Other local evidence: protobuf contract suite 141 passed; Auth historical
+schema selections 12 passed; File 25 passed followed by both remaining repaired
+cases passed; Bot two, Notification one, Search two, Space resolver four and
+store four repaired regression roots passed, all without skips. Flutter analyze
+reports no issues. Required hosted CI for the final repair head remains the
+merge gate. These results do not close full-feature acceptance or authorize
+staging/provider/device activation. Original worktree WIP and its 26 staged
+Dart blobs remain preserved separately.

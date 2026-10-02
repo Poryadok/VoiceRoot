@@ -23,6 +23,7 @@ const MessageKind$json = {
     {'1': 'MESSAGE_KIND_REGULAR', '2': 1},
     {'1': 'MESSAGE_KIND_SYSTEM', '2': 2},
     {'1': 'MESSAGE_KIND_FORWARD', '2': 3},
+    {'1': 'MESSAGE_KIND_GAME_CARD', '2': 4},
   ],
 };
 
@@ -30,7 +31,7 @@ const MessageKind$json = {
 final $typed_data.Uint8List messageKindDescriptor = $convert.base64Decode(
     'CgtNZXNzYWdlS2luZBIcChhNRVNTQUdFX0tJTkRfVU5TUEVDSUZJRUQQABIYChRNRVNTQUdFX0'
     'tJTkRfUkVHVUxBUhABEhcKE01FU1NBR0VfS0lORF9TWVNURU0QAhIYChRNRVNTQUdFX0tJTkRf'
-    'Rk9SV0FSRBAD');
+    'Rk9SV0FSRBADEhoKFk1FU1NBR0VfS0lORF9HQU1FX0NBUkQQBA==');
 
 @$core.Deprecated('Use deleteScopeDescriptor instead')
 const DeleteScope$json = {
@@ -150,6 +151,63 @@ const DmPeerState$json = {
 final $typed_data.Uint8List dmPeerStateDescriptor = $convert.base64Decode(
     'CgtEbVBlZXJTdGF0ZRIdChlETV9QRUVSX1NUQVRFX1VOU1BFQ0lGSUVEEAASGAoURE1fUEVFUl'
     '9TVEFURV9BQ1RJVkUQARIZChVETV9QRUVSX1NUQVRFX0RFTEVURUQQAg==');
+
+@$core.Deprecated('Use sendGameEventMessageRequestDescriptor instead')
+const SendGameEventMessageRequest$json = {
+  '1': 'SendGameEventMessageRequest',
+  '2': [
+    {
+      '1': 'intent',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.gameintegration.v1.VerifiedGameEventIntent',
+      '10': 'intent'
+    },
+    {'1': 'sender_profile_id', '3': 2, '4': 1, '5': 9, '10': 'senderProfileId'},
+  ],
+};
+
+/// Descriptor for `SendGameEventMessageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendGameEventMessageRequestDescriptor =
+    $convert.base64Decode(
+        'ChtTZW5kR2FtZUV2ZW50TWVzc2FnZVJlcXVlc3QSSQoGaW50ZW50GAEgASgLMjEudm9pY2UuZ2'
+        'FtZWludGVncmF0aW9uLnYxLlZlcmlmaWVkR2FtZUV2ZW50SW50ZW50UgZpbnRlbnQSKgoRc2Vu'
+        'ZGVyX3Byb2ZpbGVfaWQYAiABKAlSD3NlbmRlclByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use sendGameEventMessageResponseDescriptor instead')
+const SendGameEventMessageResponse$json = {
+  '1': 'SendGameEventMessageResponse',
+  '2': [
+    {
+      '1': 'status',
+      '3': 1,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.gameintegration.v1.GameEventPublicationStatus',
+      '10': 'status'
+    },
+    {
+      '1': 'message_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'messageId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_message_id'},
+  ],
+};
+
+/// Descriptor for `SendGameEventMessageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sendGameEventMessageResponseDescriptor =
+    $convert.base64Decode(
+        'ChxTZW5kR2FtZUV2ZW50TWVzc2FnZVJlc3BvbnNlEkwKBnN0YXR1cxgBIAEoDjI0LnZvaWNlLm'
+        'dhbWVpbnRlZ3JhdGlvbi52MS5HYW1lRXZlbnRQdWJsaWNhdGlvblN0YXR1c1IGc3RhdHVzEiIK'
+        'Cm1lc3NhZ2VfaWQYAiABKAlIAFIJbWVzc2FnZUlkiAEBQg0KC19tZXNzYWdlX2lk');
 
 @$core.Deprecated('Use sendMessageRequestDescriptor instead')
 const SendMessageRequest$json = {
@@ -636,6 +694,184 @@ const GetMessageRequest$json = {
 final $typed_data.Uint8List getMessageRequestDescriptor = $convert.base64Decode(
     'ChFHZXRNZXNzYWdlUmVxdWVzdBIdCgptZXNzYWdlX2lkGAEgASgJUgltZXNzYWdlSWQ=');
 
+@$core.Deprecated('Use resolveGameActionRequestDescriptor instead')
+const ResolveGameActionRequest$json = {
+  '1': 'ResolveGameActionRequest',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `ResolveGameActionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveGameActionRequestDescriptor =
+    $convert.base64Decode(
+        'ChhSZXNvbHZlR2FtZUFjdGlvblJlcXVlc3QSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZU'
+        'lkEh0KCnByb2ZpbGVfaWQYAiABKAlSCXByb2ZpbGVJZA==');
+
+@$core.Deprecated('Use resolveGameActionResponseDescriptor instead')
+const ResolveGameActionResponse$json = {
+  '1': 'ResolveGameActionResponse',
+  '2': [
+    {
+      '1': 'message',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.Message',
+      '10': 'message'
+    },
+  ],
+};
+
+/// Descriptor for `ResolveGameActionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List resolveGameActionResponseDescriptor =
+    $convert.base64Decode(
+        'ChlSZXNvbHZlR2FtZUFjdGlvblJlc3BvbnNlEjUKB21lc3NhZ2UYASABKAsyGy52b2ljZS5tZX'
+        'NzYWdpbmcudjEuTWVzc2FnZVIHbWVzc2FnZQ==');
+
+@$core.Deprecated('Use projectGameActionResultRequestDescriptor instead')
+const ProjectGameActionResultRequest$json = {
+  '1': 'ProjectGameActionResultRequest',
+  '2': [
+    {'1': 'message_id', '3': 1, '4': 1, '5': 9, '10': 'messageId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'action_id', '3': 5, '4': 1, '5': 9, '10': 'actionId'},
+    {'1': 'result_id', '3': 6, '4': 1, '5': 9, '10': 'resultId'},
+    {'1': 'state_version', '3': 7, '4': 1, '5': 9, '10': 'stateVersion'},
+    {'1': 'status', '3': 8, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'safe_summary', '3': 9, '4': 1, '5': 9, '10': 'safeSummary'},
+  ],
+};
+
+/// Descriptor for `ProjectGameActionResultRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List projectGameActionResultRequestDescriptor = $convert.base64Decode(
+    'Ch5Qcm9qZWN0R2FtZUFjdGlvblJlc3VsdFJlcXVlc3QSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbW'
+    'Vzc2FnZUlkEiUKDmFwcGxpY2F0aW9uX2lkGAIgASgJUg1hcHBsaWNhdGlvbklkEiUKDmVudmly'
+    'b25tZW50X2lkGAMgASgJUg1lbnZpcm9ubWVudElkEiEKDG9wZXJhdGlvbl9pZBgEIAEoCVILb3'
+    'BlcmF0aW9uSWQSGwoJYWN0aW9uX2lkGAUgASgJUghhY3Rpb25JZBIbCglyZXN1bHRfaWQYBiAB'
+    'KAlSCHJlc3VsdElkEiMKDXN0YXRlX3ZlcnNpb24YByABKAlSDHN0YXRlVmVyc2lvbhIWCgZzdG'
+    'F0dXMYCCABKAlSBnN0YXR1cxIhCgxzYWZlX3N1bW1hcnkYCSABKAlSC3NhZmVTdW1tYXJ5');
+
+@$core.Deprecated('Use projectGameActionResultResponseDescriptor instead')
+const ProjectGameActionResultResponse$json = {
+  '1': 'ProjectGameActionResultResponse',
+  '2': [
+    {'1': 'replayed', '3': 1, '4': 1, '5': 8, '10': 'replayed'},
+    {
+      '1': 'result',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.messaging.v1.GameActionResult',
+      '10': 'result'
+    },
+  ],
+};
+
+/// Descriptor for `ProjectGameActionResultResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List projectGameActionResultResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9Qcm9qZWN0R2FtZUFjdGlvblJlc3VsdFJlc3BvbnNlEhoKCHJlcGxheWVkGAEgASgIUghyZX'
+        'BsYXllZBI8CgZyZXN1bHQYAiABKAsyJC52b2ljZS5tZXNzYWdpbmcudjEuR2FtZUFjdGlvblJl'
+        'c3VsdFIGcmVzdWx0');
+
+@$core.Deprecated('Use purgeManagedChatContentRequestDescriptor instead')
+const PurgeManagedChatContentRequest$json = {
+  '1': 'PurgeManagedChatContentRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'purge_after',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAfter'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeManagedChatContentRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeManagedChatContentRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5QdXJnZU1hbmFnZWRDaGF0Q29udGVudFJlcXVlc3QSIQoMb3BlcmF0aW9uX2lkGAEgASgJUg'
+        'tvcGVyYXRpb25JZBIXCgdjaGF0X2lkGAIgASgJUgZjaGF0SWQSOwoLcHVyZ2VfYWZ0ZXIYAyAB'
+        'KAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUgpwdXJnZUFmdGVy');
+
+@$core.Deprecated('Use purgeManagedChatContentResponseDescriptor instead')
+const PurgeManagedChatContentResponse$json = {
+  '1': 'PurgeManagedChatContentResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 3, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'purge_after',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAfter'
+    },
+    {'1': 'message_count', '3': 5, '4': 1, '5': 4, '10': 'messageCount'},
+    {
+      '1': 'file_reference_count',
+      '3': 6,
+      '4': 1,
+      '5': 4,
+      '10': 'fileReferenceCount'
+    },
+    {
+      '1': 'search_document_count',
+      '3': 7,
+      '4': 1,
+      '5': 4,
+      '10': 'searchDocumentCount'
+    },
+    {
+      '1': 'file_receipt_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'fileReceiptSha256'
+    },
+    {
+      '1': 'search_receipt_sha256',
+      '3': 9,
+      '4': 1,
+      '5': 12,
+      '10': 'searchReceiptSha256'
+    },
+    {'1': 'request_sha256', '3': 10, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+    {'1': 'replayed', '3': 12, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `PurgeManagedChatContentResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeManagedChatContentResponseDescriptor = $convert.base64Decode(
+    'Ch9QdXJnZU1hbmFnZWRDaGF0Q29udGVudFJlc3BvbnNlEh0KCnJlY2VpcHRfaWQYASABKAlSCX'
+    'JlY2VpcHRJZBIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEhcKB2NoYXRfaWQY'
+    'AyABKAlSBmNoYXRJZBI7CgtwdXJnZV9hZnRlchgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW'
+    '1lc3RhbXBSCnB1cmdlQWZ0ZXISIwoNbWVzc2FnZV9jb3VudBgFIAEoBFIMbWVzc2FnZUNvdW50'
+    'EjAKFGZpbGVfcmVmZXJlbmNlX2NvdW50GAYgASgEUhJmaWxlUmVmZXJlbmNlQ291bnQSMgoVc2'
+    'VhcmNoX2RvY3VtZW50X2NvdW50GAcgASgEUhNzZWFyY2hEb2N1bWVudENvdW50Ei4KE2ZpbGVf'
+    'cmVjZWlwdF9zaGEyNTYYCCABKAxSEWZpbGVSZWNlaXB0U2hhMjU2EjIKFXNlYXJjaF9yZWNlaX'
+    'B0X3NoYTI1NhgJIAEoDFITc2VhcmNoUmVjZWlwdFNoYTI1NhIlCg5yZXF1ZXN0X3NoYTI1NhgK'
+    'IAEoDFINcmVxdWVzdFNoYTI1NhI9Cgxjb21wbGV0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG'
+    '9idWYuVGltZXN0YW1wUgtjb21wbGV0ZWRBdBIaCghyZXBsYXllZBgMIAEoCFIIcmVwbGF5ZWQ=');
+
 @$core.Deprecated('Use messageListDescriptor instead')
 const MessageList$json = {
   '1': 'MessageList',
@@ -787,6 +1023,54 @@ const Message$json = {
       '10': 'contentType',
       '17': true
     },
+    {
+      '1': 'game_card',
+      '3': 22,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.gameintegration.v1.GameCard',
+      '10': 'gameCard'
+    },
+    {'1': 'game_app_id', '3': 23, '4': 1, '5': 9, '10': 'gameAppId'},
+    {
+      '1': 'game_environment_id',
+      '3': 24,
+      '4': 1,
+      '5': 9,
+      '10': 'gameEnvironmentId'
+    },
+    {
+      '1': 'game_installation_id',
+      '3': 25,
+      '4': 1,
+      '5': 9,
+      '10': 'gameInstallationId'
+    },
+    {'1': 'game_bot_id', '3': 26, '4': 1, '5': 9, '10': 'gameBotId'},
+    {
+      '1': 'game_character_binding_id',
+      '3': 27,
+      '4': 1,
+      '5': 9,
+      '9': 9,
+      '10': 'gameCharacterBindingId',
+      '17': true
+    },
+    {
+      '1': 'game_card_actions_enabled',
+      '3': 28,
+      '4': 1,
+      '5': 8,
+      '10': 'gameCardActionsEnabled'
+    },
+    {
+      '1': 'game_action_results',
+      '3': 29,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.messaging.v1.GameActionResult',
+      '10': 'gameActionResults'
+    },
   ],
   '8': [
     {'1': '_display_chat_id'},
@@ -798,6 +1082,7 @@ const Message$json = {
     {'1': '_message_kind'},
     {'1': '_is_pinned'},
     {'1': '_content_type'},
+    {'1': '_game_character_binding_id'},
   ],
   '9': [
     {'1': 3, '2': 4},
@@ -823,10 +1108,47 @@ final $typed_data.Uint8List messageDescriptor = $convert.base64Decode(
     'SIAQESJQoOcmVhY3Rpb25zX2pzb24YEiABKAlSDXJlYWN0aW9uc0pzb24SIAoJaXNfcGlubmVk'
     'GBMgASgISAdSCGlzUGlubmVkiAEBEhUKBmlzX2UyZRgUIAEoCFIFaXNFMmUSTgoMY29udGVudF'
     '90eXBlGBUgASgOMiYudm9pY2UubWVzc2FnaW5nLnYxLk1lc3NhZ2VDb250ZW50VHlwZUgIUgtj'
-    'b250ZW50VHlwZYgBAUISChBfZGlzcGxheV9jaGF0X2lkQhMKEV90aHJlYWRfcGFyZW50X2lkQh'
-    'IKEF9mb3J3YXJkX2Zyb21faWRCFgoUX2ZvcndhcmRfZnJvbV9zZW5kZXJCDAoKX2VkaXRlZF9h'
-    'dEINCgtfZGVsZXRlZF9hdEIPCg1fbWVzc2FnZV9raW5kQgwKCl9pc19waW5uZWRCDwoNX2Nvbn'
-    'RlbnRfdHlwZUoECAMQBFIJY2hhdF90eXBl');
+    'b250ZW50VHlwZYgBARI/CglnYW1lX2NhcmQYFiABKAsyIi52b2ljZS5nYW1laW50ZWdyYXRpb2'
+    '4udjEuR2FtZUNhcmRSCGdhbWVDYXJkEh4KC2dhbWVfYXBwX2lkGBcgASgJUglnYW1lQXBwSWQS'
+    'LgoTZ2FtZV9lbnZpcm9ubWVudF9pZBgYIAEoCVIRZ2FtZUVudmlyb25tZW50SWQSMAoUZ2FtZV'
+    '9pbnN0YWxsYXRpb25faWQYGSABKAlSEmdhbWVJbnN0YWxsYXRpb25JZBIeCgtnYW1lX2JvdF9p'
+    'ZBgaIAEoCVIJZ2FtZUJvdElkEj4KGWdhbWVfY2hhcmFjdGVyX2JpbmRpbmdfaWQYGyABKAlICV'
+    'IWZ2FtZUNoYXJhY3RlckJpbmRpbmdJZIgBARI5ChlnYW1lX2NhcmRfYWN0aW9uc19lbmFibGVk'
+    'GBwgASgIUhZnYW1lQ2FyZEFjdGlvbnNFbmFibGVkElQKE2dhbWVfYWN0aW9uX3Jlc3VsdHMYHS'
+    'ADKAsyJC52b2ljZS5tZXNzYWdpbmcudjEuR2FtZUFjdGlvblJlc3VsdFIRZ2FtZUFjdGlvblJl'
+    'c3VsdHNCEgoQX2Rpc3BsYXlfY2hhdF9pZEITChFfdGhyZWFkX3BhcmVudF9pZEISChBfZm9yd2'
+    'FyZF9mcm9tX2lkQhYKFF9mb3J3YXJkX2Zyb21fc2VuZGVyQgwKCl9lZGl0ZWRfYXRCDQoLX2Rl'
+    'bGV0ZWRfYXRCDwoNX21lc3NhZ2Vfa2luZEIMCgpfaXNfcGlubmVkQg8KDV9jb250ZW50X3R5cG'
+    'VCHAoaX2dhbWVfY2hhcmFjdGVyX2JpbmRpbmdfaWRKBAgDEARSCWNoYXRfdHlwZQ==');
+
+@$core.Deprecated('Use gameActionResultDescriptor instead')
+const GameActionResult$json = {
+  '1': 'GameActionResult',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'action_id', '3': 2, '4': 1, '5': 9, '10': 'actionId'},
+    {'1': 'result_id', '3': 3, '4': 1, '5': 9, '10': 'resultId'},
+    {'1': 'state_version', '3': 4, '4': 1, '5': 9, '10': 'stateVersion'},
+    {'1': 'status', '3': 5, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'safe_summary', '3': 6, '4': 1, '5': 9, '10': 'safeSummary'},
+    {
+      '1': 'recorded_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'recordedAt'
+    },
+  ],
+};
+
+/// Descriptor for `GameActionResult`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List gameActionResultDescriptor = $convert.base64Decode(
+    'ChBHYW1lQWN0aW9uUmVzdWx0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3BlcmF0aW9uSWQSGw'
+    'oJYWN0aW9uX2lkGAIgASgJUghhY3Rpb25JZBIbCglyZXN1bHRfaWQYAyABKAlSCHJlc3VsdElk'
+    'EiMKDXN0YXRlX3ZlcnNpb24YBCABKAlSDHN0YXRlVmVyc2lvbhIWCgZzdGF0dXMYBSABKAlSBn'
+    'N0YXR1cxIhCgxzYWZlX3N1bW1hcnkYBiABKAlSC3NhZmVTdW1tYXJ5EjsKC3JlY29yZGVkX2F0'
+    'GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIKcmVjb3JkZWRBdA==');
 
 @$core.Deprecated('Use getThreadMessagesRequestDescriptor instead')
 const GetThreadMessagesRequest$json = {
@@ -2306,3 +2628,62 @@ final $typed_data.Uint8List importSpacePurgeManifestPageResponseDescriptor =
         'CiRJbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVzcG9uc2USUQoHcmVjZWlwdBgBIAEoCz'
         'I3LnZvaWNlLm1lc3NhZ2luZy52MS5JbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVjZWlw'
         'dFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use getSpacePurgeReceiptRequestDescriptor instead')
+const GetSpacePurgeReceiptRequest$json = {
+  '1': 'GetSpacePurgeReceiptRequest',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'purge_generation', '3': 3, '4': 1, '5': 4, '10': 'purgeGeneration'},
+    {
+      '1': 'source_schedule_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'sourceScheduleGeneration'
+    },
+    {
+      '1': 'messaging_request_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'messagingRequestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeReceiptRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeReceiptRequestDescriptor = $convert.base64Decode(
+    'ChtHZXRTcGFjZVB1cmdlUmVjZWlwdFJlcXVlc3QSGQoIc3BhY2VfaWQYASABKAlSB3NwYWNlSW'
+    'QSMgoVZGVsZXRpb25fb3BlcmF0aW9uX2lkGAIgASgJUhNkZWxldGlvbk9wZXJhdGlvbklkEikK'
+    'EHB1cmdlX2dlbmVyYXRpb24YAyABKARSD3B1cmdlR2VuZXJhdGlvbhI8Chpzb3VyY2Vfc2NoZW'
+    'R1bGVfZ2VuZXJhdGlvbhgEIAEoBFIYc291cmNlU2NoZWR1bGVHZW5lcmF0aW9uEjgKGG1lc3Nh'
+    'Z2luZ19yZXF1ZXN0X3NoYTI1NhgFIAEoDFIWbWVzc2FnaW5nUmVxdWVzdFNoYTI1Ng==');
+
+@$core.Deprecated('Use getSpacePurgeReceiptResponseDescriptor instead')
+const GetSpacePurgeReceiptResponse$json = {
+  '1': 'GetSpacePurgeReceiptResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.SpacePurgeReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `GetSpacePurgeReceiptResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSpacePurgeReceiptResponseDescriptor =
+    $convert.base64Decode(
+        'ChxHZXRTcGFjZVB1cmdlUmVjZWlwdFJlc3BvbnNlEjwKB3JlY2VpcHQYASABKAsyIi52b2ljZS'
+        '5jb21tb24udjEuU3BhY2VQdXJnZVJlY2VpcHRSB3JlY2VpcHQ=');

@@ -42,7 +42,7 @@ type Permission struct {
 	InstallationID    string   `json:"installation_id,omitempty"`
 }
 
-// Application scope is absent for ordinary Voice or complete for a game-bound
+// ValidApplicationScope reports whether application scope is absent for ordinary Voice or complete for a game-bound
 // actor. Installation is optional only within that complete application scope.
 func ValidApplicationScope(application, environment, binding, installation string) bool {
 	if application == "" && environment == "" && binding == "" && installation == "" {
@@ -148,7 +148,7 @@ type AppliedRevisionAck struct {
 	ReceiverBootNonces []string `json:"receiver_boot_nonces,omitempty"`
 }
 
-// Boot UUIDs are an exact bounded set in signed canonical order. Empty preserves
+// ValidReceiverBootNonces reports whether boot UUIDs are an exact bounded set in signed canonical order. Empty preserves
 // legacy transport; production receivers require their own newly generated UUID.
 func ValidReceiverBootNonces(nonces []string) bool {
 	if len(nonces) > MaxReceiverBootNonces {

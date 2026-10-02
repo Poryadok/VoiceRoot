@@ -152,6 +152,24 @@ final $typed_data.Uint8List fileReferenceProducerIdDescriptor = $convert.base64D
     'RklMRV9SRUZFUkVOQ0VfUFJPRFVDRVJfSURfQ0hBVBACEigKJEZJTEVfUkVGRVJFTkNFX1BST0'
     'RVQ0VSX0lEX01FU1NBR0lORxAD');
 
+@$core.Deprecated('Use fileReferenceGCStateDescriptor instead')
+const FileReferenceGCState$json = {
+  '1': 'FileReferenceGCState',
+  '2': [
+    {'1': 'FILE_REFERENCE_GC_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'FILE_REFERENCE_GC_STATE_PENDING', '2': 1},
+    {'1': 'FILE_REFERENCE_GC_STATE_GC_COMPLETE', '2': 2},
+    {'1': 'FILE_REFERENCE_GC_STATE_RETAINED_SHARED', '2': 3},
+  ],
+};
+
+/// Descriptor for `FileReferenceGCState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List fileReferenceGCStateDescriptor = $convert.base64Decode(
+    'ChRGaWxlUmVmZXJlbmNlR0NTdGF0ZRInCiNGSUxFX1JFRkVSRU5DRV9HQ19TVEFURV9VTlNQRU'
+    'NJRklFRBAAEiMKH0ZJTEVfUkVGRVJFTkNFX0dDX1NUQVRFX1BFTkRJTkcQARInCiNGSUxFX1JF'
+    'RkVSRU5DRV9HQ19TVEFURV9HQ19DT01QTEVURRACEisKJ0ZJTEVfUkVGRVJFTkNFX0dDX1NUQV'
+    'RFX1JFVEFJTkVEX1NIQVJFRBAD');
+
 @$core.Deprecated('Use validateStoryMediaRequestDescriptor instead')
 const ValidateStoryMediaRequest$json = {
   '1': 'ValidateStoryMediaRequest',
@@ -1772,6 +1790,128 @@ final $typed_data.Uint8List releaseFileReferencesResponseDescriptor =
     $convert.base64Decode(
         'Ch1SZWxlYXNlRmlsZVJlZmVyZW5jZXNSZXNwb25zZRJFCgdyZWNlaXB0GAEgASgLMisudm9pY2'
         'UuZmlsZS52MS5SZWxlYXNlRmlsZVJlZmVyZW5jZXNSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use getFileReferenceGCStatusRequestDescriptor instead')
+const GetFileReferenceGCStatusRequest$json = {
+  '1': 'GetFileReferenceGCStatusRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'references',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'references'
+    },
+    {
+      '1': 'release_request_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'releaseRequestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `GetFileReferenceGCStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getFileReferenceGCStatusRequestDescriptor = $convert.base64Decode(
+    'Ch9HZXRGaWxlUmVmZXJlbmNlR0NTdGF0dXNSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YAS'
+    'ABKA1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklk'
+    'EkcKC3Byb2R1Y2VyX2lkGAMgASgOMiYudm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlUHJvZH'
+    'VjZXJJZFIKcHJvZHVjZXJJZBI/CgpyZWZlcmVuY2VzGAQgAygLMh8udm9pY2UuZmlsZS52MS5G'
+    'aWxlUmVmZXJlbmNlS2V5UgpyZWZlcmVuY2VzEjQKFnJlbGVhc2VfcmVxdWVzdF9zaGEyNTYYBS'
+    'ABKAxSFHJlbGVhc2VSZXF1ZXN0U2hhMjU2');
+
+@$core.Deprecated('Use fileReferenceGCStatusDescriptor instead')
+const FileReferenceGCStatus$json = {
+  '1': 'FileReferenceGCStatus',
+  '2': [
+    {
+      '1': 'reference',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceKey',
+      '10': 'reference'
+    },
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceGCState',
+      '10': 'state'
+    },
+  ],
+};
+
+/// Descriptor for `FileReferenceGCStatus`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileReferenceGCStatusDescriptor = $convert.base64Decode(
+    'ChVGaWxlUmVmZXJlbmNlR0NTdGF0dXMSPQoJcmVmZXJlbmNlGAEgASgLMh8udm9pY2UuZmlsZS'
+    '52MS5GaWxlUmVmZXJlbmNlS2V5UglyZWZlcmVuY2USOQoFc3RhdGUYAiABKA4yIy52b2ljZS5m'
+    'aWxlLnYxLkZpbGVSZWZlcmVuY2VHQ1N0YXRlUgVzdGF0ZQ==');
+
+@$core.Deprecated('Use getFileReferenceGCStatusResponseDescriptor instead')
+const GetFileReferenceGCStatusResponse$json = {
+  '1': 'GetFileReferenceGCStatusResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'producer_id',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.file.v1.FileReferenceProducerId',
+      '10': 'producerId'
+    },
+    {
+      '1': 'release_request_sha256',
+      '3': 4,
+      '4': 1,
+      '5': 12,
+      '10': 'releaseRequestSha256'
+    },
+    {'1': 'request_sha256', '3': 5, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'references',
+      '3': 6,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.file.v1.FileReferenceGCStatus',
+      '10': 'references'
+    },
+    {
+      '1': 'completed_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `GetFileReferenceGCStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getFileReferenceGCStatusResponseDescriptor = $convert.base64Decode(
+    'CiBHZXRGaWxlUmVmZXJlbmNlR0NTdGF0dXNSZXNwb25zZRIdCgpyZWNlaXB0X2lkGAEgASgJUg'
+    'lyZWNlaXB0SWQSIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBJHCgtwcm9kdWNl'
+    'cl9pZBgDIAEoDjImLnZvaWNlLmZpbGUudjEuRmlsZVJlZmVyZW5jZVByb2R1Y2VySWRSCnByb2'
+    'R1Y2VySWQSNAoWcmVsZWFzZV9yZXF1ZXN0X3NoYTI1NhgEIAEoDFIUcmVsZWFzZVJlcXVlc3RT'
+    'aGEyNTYSJQoOcmVxdWVzdF9zaGEyNTYYBSABKAxSDXJlcXVlc3RTaGEyNTYSRAoKcmVmZXJlbm'
+    'NlcxgGIAMoCzIkLnZvaWNlLmZpbGUudjEuRmlsZVJlZmVyZW5jZUdDU3RhdHVzUgpyZWZlcmVu'
+    'Y2VzEj0KDGNvbXBsZXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSC2'
+    'NvbXBsZXRlZEF0');
 
 @$core.Deprecated('Use getSpacePurgeReceiptRequestDescriptor instead')
 const GetSpacePurgeReceiptRequest$json = {

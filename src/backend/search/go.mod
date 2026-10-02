@@ -16,7 +16,6 @@ require (
 	voice.app/voice/chat v0.0.0
 	voice.app/voice/common v0.0.0
 	voice.app/voice/events v0.0.0
-	voice.app/voice/gameintegration v0.0.0
 	voice.app/voice/messaging v0.0.0
 	voice.app/voice/search v0.0.0
 	voice.app/voice/social v0.0.0
@@ -95,6 +94,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/analytics v0.0.0 // indirect
 	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/gameintegration v0.0.0 // indirect
 	voice.app/voice/story v0.0.0 // indirect
 )
 

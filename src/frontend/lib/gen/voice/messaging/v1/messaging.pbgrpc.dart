@@ -37,6 +37,14 @@ class MessagingServiceClient extends $grpc.Client {
 
   MessagingServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.SendGameEventMessageResponse> sendGameEventMessage(
+    $0.SendGameEventMessageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$sendGameEventMessage, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.SendMessageResponse> sendMessage(
     $0.SendMessageRequest request, {
     $grpc.CallOptions? options,
@@ -89,6 +97,37 @@ class MessagingServiceClient extends $grpc.Client {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getMessage, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  /// Re-resolves immutable game card authority under Messaging chat ACL.
+  $grpc.ResponseFuture<$0.ResolveGameActionResponse> resolveGameAction(
+    $0.ResolveGameActionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$resolveGameAction, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  /// Projects a committed immutable result onto the separately stored card status.
+  $grpc.ResponseFuture<$0.ProjectGameActionResultResponse>
+      projectGameActionResult(
+    $0.ProjectGameActionResultRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$projectGameActionResult, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  /// Starts or resumes the exact durable managed-chat retention purge operation.
+  $grpc.ResponseFuture<$0.PurgeManagedChatContentResponse>
+      purgeManagedChatContent(
+    $0.PurgeManagedChatContentRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeManagedChatContent, request,
+        options: options);
   }
 
   $grpc.ResponseFuture<$0.GetThreadMessagesResponse> getThreadMessages(
@@ -261,6 +300,16 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$purgeSpace, request, options: options);
   }
 
+  /// Chat may only read Messaging's already committed participant receipt. This
+  /// lookup never starts or advances Messaging purge.
+  /// @voice.security=protected;callers=service:chat
+  $grpc.ResponseFuture<$0.GetSpacePurgeReceiptResponse> getSpacePurgeReceipt(
+    $0.GetSpacePurgeReceiptRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpacePurgeReceipt, request, options: options);
+  }
+
   /// @voice.security=protected;callers=service:space
   $grpc.ResponseFuture<$0.ImportSpacePurgeManifestPageResponse>
       importSpacePurgeManifestPage(
@@ -273,6 +322,11 @@ class MessagingServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$sendGameEventMessage = $grpc.ClientMethod<
+          $0.SendGameEventMessageRequest, $0.SendGameEventMessageResponse>(
+      '/voice.messaging.v1.MessagingService/SendGameEventMessage',
+      ($0.SendGameEventMessageRequest value) => value.writeToBuffer(),
+      $0.SendGameEventMessageResponse.fromBuffer);
   static final _$sendMessage =
       $grpc.ClientMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
           '/voice.messaging.v1.MessagingService/SendMessage',
@@ -308,6 +362,23 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/GetMessage',
           ($0.GetMessageRequest value) => value.writeToBuffer(),
           $0.GetMessageResponse.fromBuffer);
+  static final _$resolveGameAction = $grpc.ClientMethod<
+          $0.ResolveGameActionRequest, $0.ResolveGameActionResponse>(
+      '/voice.messaging.v1.MessagingService/ResolveGameAction',
+      ($0.ResolveGameActionRequest value) => value.writeToBuffer(),
+      $0.ResolveGameActionResponse.fromBuffer);
+  static final _$projectGameActionResult = $grpc.ClientMethod<
+          $0.ProjectGameActionResultRequest,
+          $0.ProjectGameActionResultResponse>(
+      '/voice.messaging.v1.MessagingService/ProjectGameActionResult',
+      ($0.ProjectGameActionResultRequest value) => value.writeToBuffer(),
+      $0.ProjectGameActionResultResponse.fromBuffer);
+  static final _$purgeManagedChatContent = $grpc.ClientMethod<
+          $0.PurgeManagedChatContentRequest,
+          $0.PurgeManagedChatContentResponse>(
+      '/voice.messaging.v1.MessagingService/PurgeManagedChatContent',
+      ($0.PurgeManagedChatContentRequest value) => value.writeToBuffer(),
+      $0.PurgeManagedChatContentResponse.fromBuffer);
   static final _$getThreadMessages = $grpc.ClientMethod<
           $0.GetThreadMessagesRequest, $0.GetThreadMessagesResponse>(
       '/voice.messaging.v1.MessagingService/GetThreadMessages',
@@ -421,6 +492,11 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/PurgeSpace',
           ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
           $0.PurgeSpaceResponse.fromBuffer);
+  static final _$getSpacePurgeReceipt = $grpc.ClientMethod<
+          $0.GetSpacePurgeReceiptRequest, $0.GetSpacePurgeReceiptResponse>(
+      '/voice.messaging.v1.MessagingService/GetSpacePurgeReceipt',
+      ($0.GetSpacePurgeReceiptRequest value) => value.writeToBuffer(),
+      $0.GetSpacePurgeReceiptResponse.fromBuffer);
   static final _$importSpacePurgeManifestPage = $grpc.ClientMethod<
           $0.ImportSpacePurgeManifestPageRequest,
           $0.ImportSpacePurgeManifestPageResponse>(
@@ -434,6 +510,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.messaging.v1.MessagingService';
 
   MessagingServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.SendGameEventMessageRequest,
+            $0.SendGameEventMessageResponse>(
+        'SendGameEventMessage',
+        sendGameEventMessage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.SendGameEventMessageRequest.fromBuffer(value),
+        ($0.SendGameEventMessageResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.SendMessageRequest, $0.SendMessageResponse>(
             'SendMessage',
@@ -495,6 +580,33 @@ abstract class MessagingServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.GetMessageRequest.fromBuffer(value),
         ($0.GetMessageResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ResolveGameActionRequest,
+            $0.ResolveGameActionResponse>(
+        'ResolveGameAction',
+        resolveGameAction_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ResolveGameActionRequest.fromBuffer(value),
+        ($0.ResolveGameActionResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ProjectGameActionResultRequest,
+            $0.ProjectGameActionResultResponse>(
+        'ProjectGameActionResult',
+        projectGameActionResult_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ProjectGameActionResultRequest.fromBuffer(value),
+        ($0.ProjectGameActionResultResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeManagedChatContentRequest,
+            $0.PurgeManagedChatContentResponse>(
+        'PurgeManagedChatContent',
+        purgeManagedChatContent_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PurgeManagedChatContentRequest.fromBuffer(value),
+        ($0.PurgeManagedChatContentResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetThreadMessagesRequest,
             $0.GetThreadMessagesResponse>(
         'GetThreadMessages',
@@ -688,6 +800,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
         ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetSpacePurgeReceiptRequest,
+            $0.GetSpacePurgeReceiptResponse>(
+        'GetSpacePurgeReceipt',
+        getSpacePurgeReceipt_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetSpacePurgeReceiptRequest.fromBuffer(value),
+        ($0.GetSpacePurgeReceiptResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ImportSpacePurgeManifestPageRequest,
             $0.ImportSpacePurgeManifestPageResponse>(
         'ImportSpacePurgeManifestPage',
@@ -699,6 +820,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
         ($0.ImportSpacePurgeManifestPageResponse value) =>
             value.writeToBuffer()));
   }
+
+  $async.Future<$0.SendGameEventMessageResponse> sendGameEventMessage_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.SendGameEventMessageRequest> $request) async {
+    return sendGameEventMessage($call, await $request);
+  }
+
+  $async.Future<$0.SendGameEventMessageResponse> sendGameEventMessage(
+      $grpc.ServiceCall call, $0.SendGameEventMessageRequest request);
 
   $async.Future<$0.SendMessageResponse> sendMessage_Pre($grpc.ServiceCall $call,
       $async.Future<$0.SendMessageRequest> $request) async {
@@ -758,6 +888,33 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetMessageResponse> getMessage(
       $grpc.ServiceCall call, $0.GetMessageRequest request);
+
+  $async.Future<$0.ResolveGameActionResponse> resolveGameAction_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ResolveGameActionRequest> $request) async {
+    return resolveGameAction($call, await $request);
+  }
+
+  $async.Future<$0.ResolveGameActionResponse> resolveGameAction(
+      $grpc.ServiceCall call, $0.ResolveGameActionRequest request);
+
+  $async.Future<$0.ProjectGameActionResultResponse> projectGameActionResult_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ProjectGameActionResultRequest> $request) async {
+    return projectGameActionResult($call, await $request);
+  }
+
+  $async.Future<$0.ProjectGameActionResultResponse> projectGameActionResult(
+      $grpc.ServiceCall call, $0.ProjectGameActionResultRequest request);
+
+  $async.Future<$0.PurgeManagedChatContentResponse> purgeManagedChatContent_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.PurgeManagedChatContentRequest> $request) async {
+    return purgeManagedChatContent($call, await $request);
+  }
+
+  $async.Future<$0.PurgeManagedChatContentResponse> purgeManagedChatContent(
+      $grpc.ServiceCall call, $0.PurgeManagedChatContentRequest request);
 
   $async.Future<$0.GetThreadMessagesResponse> getThreadMessages_Pre(
       $grpc.ServiceCall $call,
@@ -954,6 +1111,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.PurgeSpaceResponse> purgeSpace(
       $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
+
+  $async.Future<$0.GetSpacePurgeReceiptResponse> getSpacePurgeReceipt_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetSpacePurgeReceiptRequest> $request) async {
+    return getSpacePurgeReceipt($call, await $request);
+  }
+
+  $async.Future<$0.GetSpacePurgeReceiptResponse> getSpacePurgeReceipt(
+      $grpc.ServiceCall call, $0.GetSpacePurgeReceiptRequest request);
 
   $async.Future<$0.ImportSpacePurgeManifestPageResponse>
       importSpacePurgeManifestPage_Pre(

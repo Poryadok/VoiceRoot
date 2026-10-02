@@ -185,6 +185,7 @@ const SyncManagedChatMembersRequest$json = {
     {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
     {'1': 'chat_id', '3': 4, '4': 1, '5': 9, '10': 'chatId'},
     {'1': 'profile_ids', '3': 5, '4': 3, '5': 9, '10': 'profileIds'},
+    {'1': 'add_only', '3': 6, '4': 1, '5': 8, '10': 'addOnly'},
   ],
 };
 
@@ -193,7 +194,8 @@ final $typed_data.Uint8List syncManagedChatMembersRequestDescriptor = $convert.b
     'Ch1TeW5jTWFuYWdlZENoYXRNZW1iZXJzUmVxdWVzdBIlCg5hcHBsaWNhdGlvbl9pZBgBIAEoCV'
     'INYXBwbGljYXRpb25JZBIlCg5lbnZpcm9ubWVudF9pZBgCIAEoCVINZW52aXJvbm1lbnRJZBIh'
     'CgxvcGVyYXRpb25faWQYAyABKAlSC29wZXJhdGlvbklkEhcKB2NoYXRfaWQYBCABKAlSBmNoYX'
-    'RJZBIfCgtwcm9maWxlX2lkcxgFIAMoCVIKcHJvZmlsZUlkcw==');
+    'RJZBIfCgtwcm9maWxlX2lkcxgFIAMoCVIKcHJvZmlsZUlkcxIZCghhZGRfb25seRgGIAEoCFIH'
+    'YWRkT25seQ==');
 
 @$core.Deprecated('Use syncManagedChatMembersResponseDescriptor instead')
 const SyncManagedChatMembersResponse$json = {
@@ -212,6 +214,68 @@ final $typed_data.Uint8List syncManagedChatMembersResponseDescriptor =
         'Ch5TeW5jTWFuYWdlZENoYXRNZW1iZXJzUmVzcG9uc2USHwoLcHJvZmlsZV9pZHMYASADKAlSCn'
         'Byb2ZpbGVJZHMSGgoIcmVwbGF5ZWQYAiABKAhSCHJlcGxheWVkEh0KCnJlY2VpcHRfaWQYAyAB'
         'KAlSCXJlY2VpcHRJZBIhCgxyZXF1ZXN0X2hhc2gYBCABKAlSC3JlcXVlc3RIYXNo');
+
+@$core.Deprecated('Use setManagedChatRetentionRequestDescriptor instead')
+const SetManagedChatRetentionRequest$json = {
+  '1': 'SetManagedChatRetentionRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'external_chat_key', '3': 4, '4': 1, '5': 9, '10': 'externalChatKey'},
+    {
+      '1': 'purge_after',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAfter'
+    },
+  ],
+};
+
+/// Descriptor for `SetManagedChatRetentionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setManagedChatRetentionRequestDescriptor = $convert.base64Decode(
+    'Ch5TZXRNYW5hZ2VkQ2hhdFJldGVudGlvblJlcXVlc3QSJQoOYXBwbGljYXRpb25faWQYASABKA'
+    'lSDWFwcGxpY2F0aW9uSWQSJQoOZW52aXJvbm1lbnRfaWQYAiABKAlSDWVudmlyb25tZW50SWQS'
+    'IQoMb3BlcmF0aW9uX2lkGAMgASgJUgtvcGVyYXRpb25JZBIqChFleHRlcm5hbF9jaGF0X2tleR'
+    'gEIAEoCVIPZXh0ZXJuYWxDaGF0S2V5EjsKC3B1cmdlX2FmdGVyGAUgASgLMhouZ29vZ2xlLnBy'
+    'b3RvYnVmLlRpbWVzdGFtcFIKcHVyZ2VBZnRlcg==');
+
+@$core.Deprecated('Use setManagedChatRetentionResponseDescriptor instead')
+const SetManagedChatRetentionResponse$json = {
+  '1': 'SetManagedChatRetentionResponse',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 3, '4': 1, '5': 9, '10': 'requestHash'},
+    {
+      '1': 'purge_after',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'purgeAfter'
+    },
+    {
+      '1': 'completed_at',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+    {'1': 'replayed', '3': 6, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `SetManagedChatRetentionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List setManagedChatRetentionResponseDescriptor = $convert.base64Decode(
+    'Ch9TZXRNYW5hZ2VkQ2hhdFJldGVudGlvblJlc3BvbnNlEhcKB2NoYXRfaWQYASABKAlSBmNoYX'
+    'RJZBIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSIQoMcmVxdWVzdF9oYXNoGAMgASgJ'
+    'UgtyZXF1ZXN0SGFzaBI7CgtwdXJnZV9hZnRlchgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW'
+    '1lc3RhbXBSCnB1cmdlQWZ0ZXISPQoMY29tcGxldGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3Rv'
+    'YnVmLlRpbWVzdGFtcFILY29tcGxldGVkQXQSGgoIcmVwbGF5ZWQYBiABKAhSCHJlcGxheWVk');
 
 @$core.Deprecated('Use createDMRequestDescriptor instead')
 const CreateDMRequest$json = {
@@ -1371,6 +1435,45 @@ final $typed_data.Uint8List listDMReceiptVisibilityTargetsResponseDescriptor =
         'CiZMaXN0RE1SZWNlaXB0VmlzaWJpbGl0eVRhcmdldHNSZXNwb25zZRJCCgd0YXJnZXRzGAEgAy'
         'gLMigudm9pY2UuY2hhdC52MS5ETVJlY2VpcHRWaXNpYmlsaXR5VGFyZ2V0Ugd0YXJnZXRzEh8K'
         'C25leHRfY3Vyc29yGAIgASgJUgpuZXh0Q3Vyc29y');
+
+@$core.Deprecated('Use checkMessageReadEntitlementRequestDescriptor instead')
+const CheckMessageReadEntitlementRequest$json = {
+  '1': 'CheckMessageReadEntitlementRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'profile_id', '3': 2, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'message_created_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'messageCreatedAt'
+    },
+  ],
+};
+
+/// Descriptor for `CheckMessageReadEntitlementRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkMessageReadEntitlementRequestDescriptor =
+    $convert.base64Decode(
+        'CiJDaGVja01lc3NhZ2VSZWFkRW50aXRsZW1lbnRSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlSBm'
+        'NoYXRJZBIdCgpwcm9maWxlX2lkGAIgASgJUglwcm9maWxlSWQSSAoSbWVzc2FnZV9jcmVhdGVk'
+        'X2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIQbWVzc2FnZUNyZWF0ZWRBdA'
+        '==');
+
+@$core.Deprecated('Use checkMessageReadEntitlementResponseDescriptor instead')
+const CheckMessageReadEntitlementResponse$json = {
+  '1': 'CheckMessageReadEntitlementResponse',
+  '2': [
+    {'1': 'entitled', '3': 1, '4': 1, '5': 8, '10': 'entitled'},
+  ],
+};
+
+/// Descriptor for `CheckMessageReadEntitlementResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkMessageReadEntitlementResponseDescriptor =
+    $convert.base64Decode(
+        'CiNDaGVja01lc3NhZ2VSZWFkRW50aXRsZW1lbnRSZXNwb25zZRIaCghlbnRpdGxlZBgBIAEoCF'
+        'IIZW50aXRsZWQ=');
 
 @$core.Deprecated('Use chatRefDescriptor instead')
 const ChatRef$json = {

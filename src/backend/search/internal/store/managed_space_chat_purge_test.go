@@ -102,7 +102,7 @@ func TestMessageSearchStore_ConcurrentManagedPurgeReturnsFirstReceipt_postgres(t
 	defer cancel()
 	root := searchModuleRepoRoot(t)
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
-	for _, name := range []string{"000003_space_lifecycle.up.sql", "000009_managed_chat_message_purge.up.sql"} {
+	for _, name := range []string{"000003_space_lifecycle.up.sql", "000009_managed_chat_message_purge.up.sql", "000010_chat_manifest_root_binding.up.sql"} {
 		integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", name))
 	}
 	st := NewMessageSearchStore(pool)

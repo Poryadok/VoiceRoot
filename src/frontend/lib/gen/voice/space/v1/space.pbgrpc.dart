@@ -302,6 +302,35 @@ class SpaceServiceClient extends $grpc.Client {
     return $createUnaryCall(_$createFromTemplate, request, options: options);
   }
 
+  /// GIS-only versioned complete roster projection. Membership remains source-scoped and expires fail-closed.
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.ApplyCommunityRosterResponse> applyCommunityRoster(
+    $0.ApplyCommunityRosterRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyCommunityRoster, request, options: options);
+  }
+
+  /// GIS-only idempotent community bootstrap. Owner identity is asserted by the authenticated GIS workload.
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.CreateCommunityBootstrapResponse>
+      createCommunityBootstrap(
+    $0.CreateCommunityBootstrapRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createCommunityBootstrap, request,
+        options: options);
+  }
+
+  /// GIS-only durable Owner succession after a distinct operator approval.
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.RecoverCommunityOwnerResponse> recoverCommunityOwner(
+    $0.RecoverCommunityOwnerRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$recoverCommunityOwner, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetAuditLogResponse> getAuditLog(
     $0.GetAuditLogRequest request, {
     $grpc.CallOptions? options,
@@ -558,6 +587,22 @@ class SpaceServiceClient extends $grpc.Client {
       '/voice.space.v1.SpaceService/CreateFromTemplate',
       ($0.CreateFromTemplateRequest value) => value.writeToBuffer(),
       $0.CreateFromTemplateResponse.fromBuffer);
+  static final _$applyCommunityRoster = $grpc.ClientMethod<
+          $0.ApplyCommunityRosterRequest, $0.ApplyCommunityRosterResponse>(
+      '/voice.space.v1.SpaceService/ApplyCommunityRoster',
+      ($0.ApplyCommunityRosterRequest value) => value.writeToBuffer(),
+      $0.ApplyCommunityRosterResponse.fromBuffer);
+  static final _$createCommunityBootstrap = $grpc.ClientMethod<
+          $0.CreateCommunityBootstrapRequest,
+          $0.CreateCommunityBootstrapResponse>(
+      '/voice.space.v1.SpaceService/CreateCommunityBootstrap',
+      ($0.CreateCommunityBootstrapRequest value) => value.writeToBuffer(),
+      $0.CreateCommunityBootstrapResponse.fromBuffer);
+  static final _$recoverCommunityOwner = $grpc.ClientMethod<
+          $0.RecoverCommunityOwnerRequest, $0.RecoverCommunityOwnerResponse>(
+      '/voice.space.v1.SpaceService/RecoverCommunityOwner',
+      ($0.RecoverCommunityOwnerRequest value) => value.writeToBuffer(),
+      $0.RecoverCommunityOwnerResponse.fromBuffer);
   static final _$getAuditLog =
       $grpc.ClientMethod<$0.GetAuditLogRequest, $0.GetAuditLogResponse>(
           '/voice.space.v1.SpaceService/GetAuditLog',
@@ -931,6 +976,33 @@ abstract class SpaceServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.CreateFromTemplateRequest.fromBuffer(value),
         ($0.CreateFromTemplateResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyCommunityRosterRequest,
+            $0.ApplyCommunityRosterResponse>(
+        'ApplyCommunityRoster',
+        applyCommunityRoster_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyCommunityRosterRequest.fromBuffer(value),
+        ($0.ApplyCommunityRosterResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CreateCommunityBootstrapRequest,
+            $0.CreateCommunityBootstrapResponse>(
+        'CreateCommunityBootstrap',
+        createCommunityBootstrap_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CreateCommunityBootstrapRequest.fromBuffer(value),
+        ($0.CreateCommunityBootstrapResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RecoverCommunityOwnerRequest,
+            $0.RecoverCommunityOwnerResponse>(
+        'RecoverCommunityOwner',
+        recoverCommunityOwner_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RecoverCommunityOwnerRequest.fromBuffer(value),
+        ($0.RecoverCommunityOwnerResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.GetAuditLogRequest, $0.GetAuditLogResponse>(
             'GetAuditLog',
@@ -1324,6 +1396,33 @@ abstract class SpaceServiceBase extends $grpc.Service {
 
   $async.Future<$0.CreateFromTemplateResponse> createFromTemplate(
       $grpc.ServiceCall call, $0.CreateFromTemplateRequest request);
+
+  $async.Future<$0.ApplyCommunityRosterResponse> applyCommunityRoster_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyCommunityRosterRequest> $request) async {
+    return applyCommunityRoster($call, await $request);
+  }
+
+  $async.Future<$0.ApplyCommunityRosterResponse> applyCommunityRoster(
+      $grpc.ServiceCall call, $0.ApplyCommunityRosterRequest request);
+
+  $async.Future<$0.CreateCommunityBootstrapResponse>
+      createCommunityBootstrap_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.CreateCommunityBootstrapRequest> $request) async {
+    return createCommunityBootstrap($call, await $request);
+  }
+
+  $async.Future<$0.CreateCommunityBootstrapResponse> createCommunityBootstrap(
+      $grpc.ServiceCall call, $0.CreateCommunityBootstrapRequest request);
+
+  $async.Future<$0.RecoverCommunityOwnerResponse> recoverCommunityOwner_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RecoverCommunityOwnerRequest> $request) async {
+    return recoverCommunityOwner($call, await $request);
+  }
+
+  $async.Future<$0.RecoverCommunityOwnerResponse> recoverCommunityOwner(
+      $grpc.ServiceCall call, $0.RecoverCommunityOwnerRequest request);
 
   $async.Future<$0.GetAuditLogResponse> getAuditLog_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetAuditLogRequest> $request) async {

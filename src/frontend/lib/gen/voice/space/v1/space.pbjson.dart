@@ -1358,6 +1358,153 @@ final $typed_data.Uint8List createFromTemplateRequestDescriptor =
         'ChlDcmVhdGVGcm9tVGVtcGxhdGVSZXF1ZXN0Eh8KC3RlbXBsYXRlX2lkGAEgASgJUgp0ZW1wbG'
         'F0ZUlkEhIKBG5hbWUYAiABKAlSBG5hbWU=');
 
+@$core.Deprecated('Use applyCommunityRosterRequestDescriptor instead')
+const ApplyCommunityRosterRequest$json = {
+  '1': 'ApplyCommunityRosterRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'corporation_key', '3': 4, '4': 1, '5': 9, '10': 'corporationKey'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'owner_generation', '3': 6, '4': 1, '5': 3, '10': 'ownerGeneration'},
+    {'1': 'source_revision', '3': 7, '4': 1, '5': 3, '10': 'sourceRevision'},
+    {'1': 'snapshot_sha256', '3': 8, '4': 1, '5': 12, '10': 'snapshotSha256'},
+    {'1': 'profile_ids', '3': 9, '4': 3, '5': 9, '10': 'profileIds'},
+    {
+      '1': 'lease_expires_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'leaseExpiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyCommunityRosterRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyCommunityRosterRequestDescriptor = $convert.base64Decode(
+    'ChtBcHBseUNvbW11bml0eVJvc3RlclJlcXVlc3QSIQoMb3BlcmF0aW9uX2lkGAEgASgJUgtvcG'
+    'VyYXRpb25JZBIlCg5hcHBsaWNhdGlvbl9pZBgCIAEoCVINYXBwbGljYXRpb25JZBIlCg5lbnZp'
+    'cm9ubWVudF9pZBgDIAEoCVINZW52aXJvbm1lbnRJZBInCg9jb3Jwb3JhdGlvbl9rZXkYBCABKA'
+    'lSDmNvcnBvcmF0aW9uS2V5EhkKCHNwYWNlX2lkGAUgASgJUgdzcGFjZUlkEikKEG93bmVyX2dl'
+    'bmVyYXRpb24YBiABKANSD293bmVyR2VuZXJhdGlvbhInCg9zb3VyY2VfcmV2aXNpb24YByABKA'
+    'NSDnNvdXJjZVJldmlzaW9uEicKD3NuYXBzaG90X3NoYTI1NhgIIAEoDFIOc25hcHNob3RTaGEy'
+    'NTYSHwoLcHJvZmlsZV9pZHMYCSADKAlSCnByb2ZpbGVJZHMSRAoQbGVhc2VfZXhwaXJlc19hdB'
+    'gKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSDmxlYXNlRXhwaXJlc0F0');
+
+@$core.Deprecated('Use applyCommunityRosterResponseDescriptor instead')
+const ApplyCommunityRosterResponse$json = {
+  '1': 'ApplyCommunityRosterResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'owner_generation', '3': 3, '4': 1, '5': 3, '10': 'ownerGeneration'},
+    {'1': 'source_revision', '3': 4, '4': 1, '5': 3, '10': 'sourceRevision'},
+    {'1': 'snapshot_sha256', '3': 5, '4': 1, '5': 12, '10': 'snapshotSha256'},
+    {'1': 'receipt_id', '3': 6, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'member_count', '3': 7, '4': 1, '5': 5, '10': 'memberCount'},
+    {'1': 'replayed', '3': 8, '4': 1, '5': 8, '10': 'replayed'},
+    {'1': 'request_sha256', '3': 9, '4': 1, '5': 12, '10': 'requestSha256'},
+  ],
+};
+
+/// Descriptor for `ApplyCommunityRosterResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyCommunityRosterResponseDescriptor = $convert.base64Decode(
+    'ChxBcHBseUNvbW11bml0eVJvc3RlclJlc3BvbnNlEiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3'
+    'BlcmF0aW9uSWQSGQoIc3BhY2VfaWQYAiABKAlSB3NwYWNlSWQSKQoQb3duZXJfZ2VuZXJhdGlv'
+    'bhgDIAEoA1IPb3duZXJHZW5lcmF0aW9uEicKD3NvdXJjZV9yZXZpc2lvbhgEIAEoA1IOc291cm'
+    'NlUmV2aXNpb24SJwoPc25hcHNob3Rfc2hhMjU2GAUgASgMUg5zbmFwc2hvdFNoYTI1NhIdCgpy'
+    'ZWNlaXB0X2lkGAYgASgJUglyZWNlaXB0SWQSIQoMbWVtYmVyX2NvdW50GAcgASgFUgttZW1iZX'
+    'JDb3VudBIaCghyZXBsYXllZBgIIAEoCFIIcmVwbGF5ZWQSJQoOcmVxdWVzdF9zaGEyNTYYCSAB'
+    'KAxSDXJlcXVlc3RTaGEyNTY=');
+
+@$core.Deprecated('Use createCommunityBootstrapRequestDescriptor instead')
+const CreateCommunityBootstrapRequest$json = {
+  '1': 'CreateCommunityBootstrapRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'owner_profile_id', '3': 4, '4': 1, '5': 9, '10': 'ownerProfileId'},
+    {'1': 'corporation_key', '3': 5, '4': 1, '5': 9, '10': 'corporationKey'},
+    {'1': 'template_id', '3': 6, '4': 1, '5': 9, '10': 'templateId'},
+    {'1': 'owner_account_id', '3': 7, '4': 1, '5': 9, '10': 'ownerAccountId'},
+  ],
+};
+
+/// Descriptor for `CreateCommunityBootstrapRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createCommunityBootstrapRequestDescriptor = $convert.base64Decode(
+    'Ch9DcmVhdGVDb21tdW5pdHlCb290c3RyYXBSZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCV'
+    'ILb3BlcmF0aW9uSWQSJQoOYXBwbGljYXRpb25faWQYAiABKAlSDWFwcGxpY2F0aW9uSWQSJQoO'
+    'ZW52aXJvbm1lbnRfaWQYAyABKAlSDWVudmlyb25tZW50SWQSKAoQb3duZXJfcHJvZmlsZV9pZB'
+    'gEIAEoCVIOb3duZXJQcm9maWxlSWQSJwoPY29ycG9yYXRpb25fa2V5GAUgASgJUg5jb3Jwb3Jh'
+    'dGlvbktleRIfCgt0ZW1wbGF0ZV9pZBgGIAEoCVIKdGVtcGxhdGVJZBIoChBvd25lcl9hY2NvdW'
+    '50X2lkGAcgASgJUg5vd25lckFjY291bnRJZA==');
+
+@$core.Deprecated('Use recoverCommunityOwnerRequestDescriptor instead')
+const RecoverCommunityOwnerRequest$json = {
+  '1': 'RecoverCommunityOwnerRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'corporation_key', '3': 4, '4': 1, '5': 9, '10': 'corporationKey'},
+    {'1': 'space_id', '3': 5, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'previous_owner_account_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'previousOwnerAccountId'
+    },
+    {
+      '1': 'previous_owner_profile_id',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '10': 'previousOwnerProfileId'
+    },
+    {
+      '1': 'replacement_account_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '10': 'replacementAccountId'
+    },
+    {
+      '1': 'replacement_profile_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '10': 'replacementProfileId'
+    },
+    {
+      '1': 'expected_generation',
+      '3': 10,
+      '4': 1,
+      '5': 3,
+      '10': 'expectedGeneration'
+    },
+    {'1': 'reason_code', '3': 11, '4': 1, '5': 9, '10': 'reasonCode'},
+    {'1': 'evidence_sha256', '3': 12, '4': 1, '5': 12, '10': 'evidenceSha256'},
+  ],
+};
+
+/// Descriptor for `RecoverCommunityOwnerRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recoverCommunityOwnerRequestDescriptor = $convert.base64Decode(
+    'ChxSZWNvdmVyQ29tbXVuaXR5T3duZXJSZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3'
+    'BlcmF0aW9uSWQSJQoOYXBwbGljYXRpb25faWQYAiABKAlSDWFwcGxpY2F0aW9uSWQSJQoOZW52'
+    'aXJvbm1lbnRfaWQYAyABKAlSDWVudmlyb25tZW50SWQSJwoPY29ycG9yYXRpb25fa2V5GAQgAS'
+    'gJUg5jb3Jwb3JhdGlvbktleRIZCghzcGFjZV9pZBgFIAEoCVIHc3BhY2VJZBI5ChlwcmV2aW91'
+    'c19vd25lcl9hY2NvdW50X2lkGAYgASgJUhZwcmV2aW91c093bmVyQWNjb3VudElkEjkKGXByZX'
+    'Zpb3VzX293bmVyX3Byb2ZpbGVfaWQYByABKAlSFnByZXZpb3VzT3duZXJQcm9maWxlSWQSNAoW'
+    'cmVwbGFjZW1lbnRfYWNjb3VudF9pZBgIIAEoCVIUcmVwbGFjZW1lbnRBY2NvdW50SWQSNAoWcm'
+    'VwbGFjZW1lbnRfcHJvZmlsZV9pZBgJIAEoCVIUcmVwbGFjZW1lbnRQcm9maWxlSWQSLwoTZXhw'
+    'ZWN0ZWRfZ2VuZXJhdGlvbhgKIAEoA1ISZXhwZWN0ZWRHZW5lcmF0aW9uEh8KC3JlYXNvbl9jb2'
+    'RlGAsgASgJUgpyZWFzb25Db2RlEicKD2V2aWRlbmNlX3NoYTI1NhgMIAEoDFIOZXZpZGVuY2VT'
+    'aGEyNTY=');
+
 @$core.Deprecated('Use getAuditLogRequestDescriptor instead')
 const GetAuditLogRequest$json = {
   '1': 'GetAuditLogRequest',
@@ -2116,6 +2263,45 @@ final $typed_data.Uint8List createFromTemplateResponseDescriptor =
     $convert.base64Decode(
         'ChpDcmVhdGVGcm9tVGVtcGxhdGVSZXNwb25zZRIrCgVzcGFjZRgBIAEoCzIVLnZvaWNlLnNwYW'
         'NlLnYxLlNwYWNlUgVzcGFjZQ==');
+
+@$core.Deprecated('Use createCommunityBootstrapResponseDescriptor instead')
+const CreateCommunityBootstrapResponse$json = {
+  '1': 'CreateCommunityBootstrapResponse',
+  '2': [
+    {
+      '1': 'space',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.space.v1.Space',
+      '10': 'space'
+    },
+    {'1': 'replayed', '3': 2, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `CreateCommunityBootstrapResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createCommunityBootstrapResponseDescriptor =
+    $convert.base64Decode(
+        'CiBDcmVhdGVDb21tdW5pdHlCb290c3RyYXBSZXNwb25zZRIrCgVzcGFjZRgBIAEoCzIVLnZvaW'
+        'NlLnNwYWNlLnYxLlNwYWNlUgVzcGFjZRIaCghyZXBsYXllZBgCIAEoCFIIcmVwbGF5ZWQ=');
+
+@$core.Deprecated('Use recoverCommunityOwnerResponseDescriptor instead')
+const RecoverCommunityOwnerResponse$json = {
+  '1': 'RecoverCommunityOwnerResponse',
+  '2': [
+    {'1': 'space_id', '3': 1, '4': 1, '5': 9, '10': 'spaceId'},
+    {'1': 'owner_generation', '3': 2, '4': 1, '5': 3, '10': 'ownerGeneration'},
+    {'1': 'replayed', '3': 3, '4': 1, '5': 8, '10': 'replayed'},
+  ],
+};
+
+/// Descriptor for `RecoverCommunityOwnerResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recoverCommunityOwnerResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1SZWNvdmVyQ29tbXVuaXR5T3duZXJSZXNwb25zZRIZCghzcGFjZV9pZBgBIAEoCVIHc3BhY2'
+        'VJZBIpChBvd25lcl9nZW5lcmF0aW9uGAIgASgDUg9vd25lckdlbmVyYXRpb24SGgoIcmVwbGF5'
+        'ZWQYAyABKAhSCHJlcGxheWVk');
 
 @$core.Deprecated('Use getAuditLogResponseDescriptor instead')
 const GetAuditLogResponse$json = {

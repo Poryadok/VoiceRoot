@@ -110,7 +110,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "node media configuration invalid")
 		os.Exit(1)
 	}
-	defer heartbeat.Close()
+	defer func() { _ = heartbeat.Close() }()
 	if heartbeat.Pulse(time.Now()) != nil {
 		fmt.Fprintln(os.Stderr, "node media boot request unavailable")
 		os.Exit(1)

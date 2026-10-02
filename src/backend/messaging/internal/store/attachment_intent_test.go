@@ -7,8 +7,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	chatv1 "voice.app/voice/chat/v1"
@@ -96,6 +98,17 @@ func TestAttachmentIntentRetryIsStableAndChangedBodyConflicts(t *testing.T) {
 
 func TestAttachmentIntentConcurrentRetryAcquiresOneMessage(t *testing.T) {
 	s, row, request := attachmentIntentFixture(t)
+	// Retries must complete without borrowing a second connection while holding
+	// the operation lock, even when the pool has no spare capacity.
+	config := s.Pool.Config()
+	config.MaxConns = 1
+	config.MinConns = 0
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	s.Pool = pool
 	var calls atomic.Int32
 	var wg sync.WaitGroup
 	results := make(chan error, 6)
@@ -103,7 +116,7 @@ func TestAttachmentIntentConcurrentRetryAcquiresOneMessage(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.InsertMessageWithReferences(context.Background(), row, nil, request, func(context.Context, *filev1.AcquireFileReferencesRequest) error { calls.Add(1); return nil })
+			_, err := s.InsertMessageWithReferences(ctx, row, nil, request, func(context.Context, *filev1.AcquireFileReferencesRequest) error { calls.Add(1); return nil })
 			results <- err
 		}()
 	}

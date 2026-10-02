@@ -666,7 +666,7 @@ void main() {
       final refreshStarted = Completer<void>();
       final finishRefresh = Completer<void>();
       final readResult = Completer<MessagesApiResult<void>>();
-      final unreadChat = (int unreadCount) => ChatListItem(
+      ChatListItem unreadChat(int unreadCount) => ChatListItem(
         chat: const VoiceChat(
           id: 'chat-1',
           type: 'CHAT_TYPE_DM',

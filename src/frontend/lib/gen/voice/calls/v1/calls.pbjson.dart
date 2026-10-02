@@ -352,6 +352,266 @@ final $typed_data.Uint8List closeGameSessionRoomResponseDescriptor = $convert.ba
     'Zi5UaW1lc3RhbXBSDW1lZGlhRmVuY2VkQXQSNwoJY2xvc2VkX2F0GA4gASgLMhouZ29vZ2xlLn'
     'Byb3RvYnVmLlRpbWVzdGFtcFIIY2xvc2VkQXQ=');
 
+@$core.Deprecated('Use applyGameSessionRosterRequestDescriptor instead')
+const ApplyGameSessionRosterRequest$json = {
+  '1': 'ApplyGameSessionRosterRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 4, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'voice_room_id', '3': 5, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'roster_revision', '3': 6, '4': 1, '5': 4, '10': 'rosterRevision'},
+    {'1': 'profile_ids', '3': 7, '4': 3, '5': 9, '10': 'profileIds'},
+    {
+      '1': 'lease_expires_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'leaseExpiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyGameSessionRosterRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameSessionRosterRequestDescriptor = $convert.base64Decode(
+    'Ch1BcHBseUdhbWVTZXNzaW9uUm9zdGVyUmVxdWVzdBIhCgxvcGVyYXRpb25faWQYASABKAlSC2'
+    '9wZXJhdGlvbklkEiUKDmFwcGxpY2F0aW9uX2lkGAIgASgJUg1hcHBsaWNhdGlvbklkEiUKDmVu'
+    'dmlyb25tZW50X2lkGAMgASgJUg1lbnZpcm9ubWVudElkEh0KCnNlc3Npb25faWQYBCABKAlSCX'
+    'Nlc3Npb25JZBIiCg12b2ljZV9yb29tX2lkGAUgASgJUgt2b2ljZVJvb21JZBInCg9yb3N0ZXJf'
+    'cmV2aXNpb24YBiABKARSDnJvc3RlclJldmlzaW9uEh8KC3Byb2ZpbGVfaWRzGAcgAygJUgpwcm'
+    '9maWxlSWRzEkQKEGxlYXNlX2V4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
+    'ZXN0YW1wUg5sZWFzZUV4cGlyZXNBdA==');
+
+@$core.Deprecated('Use applyGameSessionRosterResponseDescriptor instead')
+const ApplyGameSessionRosterResponse$json = {
+  '1': 'ApplyGameSessionRosterResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 2, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 3, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 4, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'voice_room_id', '3': 5, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'receipt_id', '3': 6, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 7, '4': 1, '5': 12, '10': 'requestHash'},
+    {
+      '1': 'accepted_revision',
+      '3': 8,
+      '4': 1,
+      '5': 4,
+      '10': 'acceptedRevision'
+    },
+    {
+      '1': 'lease_expires_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'leaseExpiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyGameSessionRosterResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameSessionRosterResponseDescriptor = $convert.base64Decode(
+    'Ch5BcHBseUdhbWVTZXNzaW9uUm9zdGVyUmVzcG9uc2USIQoMb3BlcmF0aW9uX2lkGAEgASgJUg'
+    'tvcGVyYXRpb25JZBIlCg5hcHBsaWNhdGlvbl9pZBgCIAEoCVINYXBwbGljYXRpb25JZBIlCg5l'
+    'bnZpcm9ubWVudF9pZBgDIAEoCVINZW52aXJvbm1lbnRJZBIdCgpzZXNzaW9uX2lkGAQgASgJUg'
+    'lzZXNzaW9uSWQSIgoNdm9pY2Vfcm9vbV9pZBgFIAEoCVILdm9pY2VSb29tSWQSHQoKcmVjZWlw'
+    'dF9pZBgGIAEoCVIJcmVjZWlwdElkEiEKDHJlcXVlc3RfaGFzaBgHIAEoDFILcmVxdWVzdEhhc2'
+    'gSKwoRYWNjZXB0ZWRfcmV2aXNpb24YCCABKARSEGFjY2VwdGVkUmV2aXNpb24SRAoQbGVhc2Vf'
+    'ZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSDmxlYXNlRXhwaX'
+    'Jlc0F0');
+
+@$core.Deprecated('Use fenceSdkConversionRequestDescriptor instead')
+const FenceSdkConversionRequest$json = {
+  '1': 'FenceSdkConversionRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_id', '3': 2, '4': 1, '5': 9, '10': 'bindingId'},
+    {'1': 'source_account_id', '3': 3, '4': 1, '5': 9, '10': 'sourceAccountId'},
+    {'1': 'source_actor_id', '3': 4, '4': 1, '5': 9, '10': 'sourceActorId'},
+    {'1': 'source_profile_id', '3': 5, '4': 1, '5': 9, '10': 'sourceProfileId'},
+    {'1': 'target_account_id', '3': 6, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'target_profile_id', '3': 7, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 8,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {'1': 'freeze_receipt_id', '3': 9, '4': 1, '5': 9, '10': 'freezeReceiptId'},
+  ],
+};
+
+/// Descriptor for `FenceSdkConversionRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fenceSdkConversionRequestDescriptor = $convert.base64Decode(
+    'ChlGZW5jZVNka0NvbnZlcnNpb25SZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3Blcm'
+    'F0aW9uSWQSHQoKYmluZGluZ19pZBgCIAEoCVIJYmluZGluZ0lkEioKEXNvdXJjZV9hY2NvdW50'
+    'X2lkGAMgASgJUg9zb3VyY2VBY2NvdW50SWQSJgoPc291cmNlX2FjdG9yX2lkGAQgASgJUg1zb3'
+    'VyY2VBY3RvcklkEioKEXNvdXJjZV9wcm9maWxlX2lkGAUgASgJUg9zb3VyY2VQcm9maWxlSWQS'
+    'KgoRdGFyZ2V0X2FjY291bnRfaWQYBiABKAlSD3RhcmdldEFjY291bnRJZBIqChF0YXJnZXRfcH'
+    'JvZmlsZV9pZBgHIAEoCVIPdGFyZ2V0UHJvZmlsZUlkEjQKFmZyb3plbl9hdXRob3JpdHlfZXBv'
+    'Y2gYCCABKARSFGZyb3plbkF1dGhvcml0eUVwb2NoEioKEWZyZWV6ZV9yZWNlaXB0X2lkGAkgAS'
+    'gJUg9mcmVlemVSZWNlaXB0SWQ=');
+
+@$core.Deprecated('Use fenceSdkConversionResponseDescriptor instead')
+const FenceSdkConversionResponse$json = {
+  '1': 'FenceSdkConversionResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_id', '3': 2, '4': 1, '5': 9, '10': 'bindingId'},
+    {'1': 'source_account_id', '3': 3, '4': 1, '5': 9, '10': 'sourceAccountId'},
+    {'1': 'source_actor_id', '3': 4, '4': 1, '5': 9, '10': 'sourceActorId'},
+    {'1': 'target_account_id', '3': 5, '4': 1, '5': 9, '10': 'targetAccountId'},
+    {'1': 'target_profile_id', '3': 6, '4': 1, '5': 9, '10': 'targetProfileId'},
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 7,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {'1': 'freeze_receipt_id', '3': 8, '4': 1, '5': 9, '10': 'freezeReceiptId'},
+    {'1': 'receipt_id', '3': 9, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 10, '4': 1, '5': 12, '10': 'requestHash'},
+    {
+      '1': 'target_session_conflict',
+      '3': 11,
+      '4': 1,
+      '5': 8,
+      '10': 'targetSessionConflict'
+    },
+    {'1': 'source_room_id', '3': 12, '4': 1, '5': 9, '10': 'sourceRoomId'},
+    {'1': 'media_generation', '3': 13, '4': 1, '5': 4, '10': 'mediaGeneration'},
+    {
+      '1': 'observed_ejection_at',
+      '3': 14,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'observedEjectionAt'
+    },
+    {
+      '1': 'committed_at',
+      '3': 15,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'committedAt'
+    },
+    {
+      '1': 'source_profile_id',
+      '3': 16,
+      '4': 1,
+      '5': 9,
+      '10': 'sourceProfileId'
+    },
+  ],
+};
+
+/// Descriptor for `FenceSdkConversionResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fenceSdkConversionResponseDescriptor = $convert.base64Decode(
+    'ChpGZW5jZVNka0NvbnZlcnNpb25SZXNwb25zZRIhCgxvcGVyYXRpb25faWQYASABKAlSC29wZX'
+    'JhdGlvbklkEh0KCmJpbmRpbmdfaWQYAiABKAlSCWJpbmRpbmdJZBIqChFzb3VyY2VfYWNjb3Vu'
+    'dF9pZBgDIAEoCVIPc291cmNlQWNjb3VudElkEiYKD3NvdXJjZV9hY3Rvcl9pZBgEIAEoCVINc2'
+    '91cmNlQWN0b3JJZBIqChF0YXJnZXRfYWNjb3VudF9pZBgFIAEoCVIPdGFyZ2V0QWNjb3VudElk'
+    'EioKEXRhcmdldF9wcm9maWxlX2lkGAYgASgJUg90YXJnZXRQcm9maWxlSWQSNAoWZnJvemVuX2'
+    'F1dGhvcml0eV9lcG9jaBgHIAEoBFIUZnJvemVuQXV0aG9yaXR5RXBvY2gSKgoRZnJlZXplX3Jl'
+    'Y2VpcHRfaWQYCCABKAlSD2ZyZWV6ZVJlY2VpcHRJZBIdCgpyZWNlaXB0X2lkGAkgASgJUglyZW'
+    'NlaXB0SWQSIQoMcmVxdWVzdF9oYXNoGAogASgMUgtyZXF1ZXN0SGFzaBI2Chd0YXJnZXRfc2Vz'
+    'c2lvbl9jb25mbGljdBgLIAEoCFIVdGFyZ2V0U2Vzc2lvbkNvbmZsaWN0EiQKDnNvdXJjZV9yb2'
+    '9tX2lkGAwgASgJUgxzb3VyY2VSb29tSWQSKQoQbWVkaWFfZ2VuZXJhdGlvbhgNIAEoBFIPbWVk'
+    'aWFHZW5lcmF0aW9uEkwKFG9ic2VydmVkX2VqZWN0aW9uX2F0GA4gASgLMhouZ29vZ2xlLnByb3'
+    'RvYnVmLlRpbWVzdGFtcFISb2JzZXJ2ZWRFamVjdGlvbkF0Ej0KDGNvbW1pdHRlZF9hdBgPIAEo'
+    'CzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSC2NvbW1pdHRlZEF0EioKEXNvdXJjZV9wcm'
+    '9maWxlX2lkGBAgASgJUg9zb3VyY2VQcm9maWxlSWQ=');
+
+@$core
+    .Deprecated('Use completeSdkConversionActivationRequestDescriptor instead')
+const CompleteSdkConversionActivationRequest$json = {
+  '1': 'CompleteSdkConversionActivationRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_id', '3': 2, '4': 1, '5': 9, '10': 'bindingId'},
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 3,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {'1': 'freeze_receipt_id', '3': 4, '4': 1, '5': 9, '10': 'freezeReceiptId'},
+    {'1': 'voice_receipt_id', '3': 5, '4': 1, '5': 9, '10': 'voiceReceiptId'},
+    {
+      '1': 'activation_receipt_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'activationReceiptId'
+    },
+  ],
+};
+
+/// Descriptor for `CompleteSdkConversionActivationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List completeSdkConversionActivationRequestDescriptor =
+    $convert.base64Decode(
+        'CiZDb21wbGV0ZVNka0NvbnZlcnNpb25BY3RpdmF0aW9uUmVxdWVzdBIhCgxvcGVyYXRpb25faW'
+        'QYASABKAlSC29wZXJhdGlvbklkEh0KCmJpbmRpbmdfaWQYAiABKAlSCWJpbmRpbmdJZBI0ChZm'
+        'cm96ZW5fYXV0aG9yaXR5X2Vwb2NoGAMgASgEUhRmcm96ZW5BdXRob3JpdHlFcG9jaBIqChFmcm'
+        'VlemVfcmVjZWlwdF9pZBgEIAEoCVIPZnJlZXplUmVjZWlwdElkEigKEHZvaWNlX3JlY2VpcHRf'
+        'aWQYBSABKAlSDnZvaWNlUmVjZWlwdElkEjIKFWFjdGl2YXRpb25fcmVjZWlwdF9pZBgGIAEoCV'
+        'ITYWN0aXZhdGlvblJlY2VpcHRJZA==');
+
+@$core
+    .Deprecated('Use completeSdkConversionActivationResponseDescriptor instead')
+const CompleteSdkConversionActivationResponse$json = {
+  '1': 'CompleteSdkConversionActivationResponse',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'binding_id', '3': 2, '4': 1, '5': 9, '10': 'bindingId'},
+    {
+      '1': 'frozen_authority_epoch',
+      '3': 3,
+      '4': 1,
+      '5': 4,
+      '10': 'frozenAuthorityEpoch'
+    },
+    {'1': 'voice_receipt_id', '3': 4, '4': 1, '5': 9, '10': 'voiceReceiptId'},
+    {
+      '1': 'activation_receipt_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'activationReceiptId'
+    },
+    {'1': 'receipt_id', '3': 6, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'request_hash', '3': 7, '4': 1, '5': 12, '10': 'requestHash'},
+    {'1': 'state', '3': 8, '4': 1, '5': 9, '10': 'state'},
+    {
+      '1': 'committed_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'committedAt'
+    },
+  ],
+};
+
+/// Descriptor for `CompleteSdkConversionActivationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List completeSdkConversionActivationResponseDescriptor = $convert.base64Decode(
+    'CidDb21wbGV0ZVNka0NvbnZlcnNpb25BY3RpdmF0aW9uUmVzcG9uc2USIQoMb3BlcmF0aW9uX2'
+    'lkGAEgASgJUgtvcGVyYXRpb25JZBIdCgpiaW5kaW5nX2lkGAIgASgJUgliaW5kaW5nSWQSNAoW'
+    'ZnJvemVuX2F1dGhvcml0eV9lcG9jaBgDIAEoBFIUZnJvemVuQXV0aG9yaXR5RXBvY2gSKAoQdm'
+    '9pY2VfcmVjZWlwdF9pZBgEIAEoCVIOdm9pY2VSZWNlaXB0SWQSMgoVYWN0aXZhdGlvbl9yZWNl'
+    'aXB0X2lkGAUgASgJUhNhY3RpdmF0aW9uUmVjZWlwdElkEh0KCnJlY2VpcHRfaWQYBiABKAlSCX'
+    'JlY2VpcHRJZBIhCgxyZXF1ZXN0X2hhc2gYByABKAxSC3JlcXVlc3RIYXNoEhQKBXN0YXRlGAgg'
+    'ASgJUgVzdGF0ZRI9Cgxjb21taXR0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZX'
+    'N0YW1wUgtjb21taXR0ZWRBdA==');
+
 @$core.Deprecated('Use startCallRequestDescriptor instead')
 const StartCallRequest$json = {
   '1': 'StartCallRequest',

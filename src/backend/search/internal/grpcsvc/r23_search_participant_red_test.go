@@ -354,11 +354,16 @@ func TestR23SearchParticipant_RejectsChatPagesOutsideExactSpaceRoot(t *testing.T
 	ids := []uuid.UUID{fixture.targetChat, fixture.controlChat}
 	sort.Slice(ids, func(i, j int) bool { return strings.Compare(string(ids[i][:]), string(ids[j][:])) < 0 })
 	fixture.first.ChatManifest = newR23ManifestClientForIDs(t, ids)
+	// Source and aggregate roots may differ, but Chat's source hash must still
+	// authenticate its complete IDs. Corrupt that binding without corrupting the
+	// page hash so this specifically exercises the complete-source check.
+	fixture.first.ChatManifest.(*r23ManifestClient).page.Manifest.ManifestSha256 = r23SearchManifest().GetManifestSha256()
+	fixture.first.ChatManifest.(*r23ManifestClient).page.PageSha256 = chatManifestPageSHA(r23SearchManifest().GetManifestSha256(), 0, ids)
 
 	before := r23SearchMutationSnapshot(t, fixture)
 	frozen := r23SearchFenceRequest(t, 1, commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN)
 	_, err := fixture.first.ApplySpaceLifecycleFence(r23SearchTrustedSpaceContext(t, frozen, searchv1.SearchService_ApplySpaceLifecycleFence_FullMethodName), frozen)
-	require.Equal(t, codes.Unavailable, status.Code(err), "same manifest_id with different hash, count, and page items cannot bind Search to a wider deletion scope")
+	require.Equal(t, codes.Unavailable, status.Code(err), "Chat's source hash must authenticate every imported ID independently of the aggregate Space root")
 	require.Equal(t, before, r23SearchMutationSnapshot(t, fixture), "rejected Chat pages create no fence or receipt")
 	r23AssertSearchFixtureVisible(t, fixture)
 

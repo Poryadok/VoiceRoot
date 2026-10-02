@@ -113,9 +113,10 @@ func validPrincipalJWKSURL(raw, issuer string) bool {
 		return false
 	}
 	wantPath := "/.well-known/principal-jwks.json"
-	if issuer == "gameintegration" {
+	switch issuer {
+	case "gameintegration":
 		wantPath = "/internal/v1/principal/jwks.json"
-	} else if issuer == "space" {
+	case "space":
 		wantPath = "/.well-known/jwks.json"
 	}
 	return u.Path == wantPath && u.RawPath == ""

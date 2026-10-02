@@ -114,6 +114,8 @@ class GuestConversionDurabilityJdbcIntegrationTest {
         .schemas(schema)
         .defaultSchema(schema)
         .createSchemas(true)
+        // This schema-isolated DOWN contract owns V8/Go9, before the public source clock.
+        .target("8")
         .locations(
             "filesystem:"
                 + GuestConversionDurabilityMigrationContractTest.authProjectRoot()
@@ -129,6 +131,7 @@ class GuestConversionDurabilityJdbcIntegrationTest {
       List<Path> upMigrations =
           migrations
               .filter(path -> path.getFileName().toString().endsWith(".up.sql"))
+              .filter(path -> path.getFileName().toString().compareTo("000010") < 0)
               .sorted(Comparator.comparing(path -> path.getFileName().toString()))
               .toList();
       for (Path migration : upMigrations) {
