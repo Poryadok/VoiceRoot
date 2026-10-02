@@ -69,6 +69,27 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- T73 production node controller now consumes the existing
+  Federation node mTLS/bearer manifest/pages/lease API, verifies the complete
+  signed per-Space policy before ACK, and atomically publishes the exact Bundle
+  read by the SFU. Independent Space workers preserve the last complete file
+  on fetch/verification failure and cannot extend its signed expiry. A directory
+  sync failure after atomic rename means complete replacement with uncertain
+  durability. Tests reject partial,
+  foreign and stale envelopes, incomplete-policy ACKs, unsafe HTTP/redirects,
+  bad receipts and publication failures; rollback floors apply before ACK.
+  Four host roots pass; the Linux image passes all five roots including atomic
+  file publication. A real Federation mTLS API/PostgreSQL test passes against
+  current root WIP (separate from this dependency-closed controller artifact).
+  The actual Linux production child runs UID/GID 10001 and consumes signed
+  policy for two Spaces before four peers exchange RTP. Revocation closes one
+  pair in 259/259ms; killing and reaping the controller closes the other in
+  1,073/1,074ms, 0 skips, 7.53s. The signer continues advancing, file bytes and
+  ACK counts stop changing, the SFU remains healthy, and stale/fresh unexpired
+  bearer reconnects are denied. Independent bounded risk review finds no blocker.
+  Actual master projection/media-grant issuance, fresh-online boot fencing,
+  node bundle deployment/credential reload and capacity qualification remain
+  separate open gates. Parent accounting remains 43/60.
 - T40 real public attachment fixture first failed at zero durable File refs
   after a successful upload/send. The repair persists an exact pending send
   intent before the protected File acquire RPC, serializes client retries and

@@ -38,9 +38,14 @@ hosted LiveKit service intact. Use it with the existing owned Compose project:
 The initializer keeps ephemeral test credentials in the owned volume. Both
 signalling and bidirectional Opus RTP run between containers with no published
 ports. `udp_port: 7882` uses a shared UDP listener for multiple participants.
-The test covers two Spaces, revocation, active admission-credential expiry,
-independent lease expiry, and stale bearer rejection. It uses a controlled
-signer; production master issuance, node controller, online restore/permanent
-fences and qualified capacity/2× load remain open. See
+The default test covers two Spaces, revocation, active admission-credential
+expiry, independent lease expiry, and stale bearer rejection. The additional
+`TestSFUEnforcesControllerProcessDeathForRealMedia_live` runs the production
+[node controller](../authority/README.md) as a separate UID/GID 10001 process
+over verified mTLS, then kills and reaps it while the controlled signer advances
+and the SFU stays healthy. Files and ACK counts stop changing; real media expires
+within five seconds and a fresh bearer cannot reconnect. These use a controlled
+signer; production master issuance, online restore/permanent fences and qualified
+capacity/2× load remain open. See
 [ExecPlan](../../../docs/testing/game-integrations-exec-plan.md) and
 [federation contract](../../../docs/architecture/game-federation.md).

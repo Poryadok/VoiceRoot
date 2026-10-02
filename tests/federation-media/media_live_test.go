@@ -8,8 +8,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -39,6 +41,7 @@ type projectionPublisher struct {
 	grants    [2][]mediaauthority.Grant
 	allow     [2]bool
 	revision  [2]int64
+	sink      func(string, mediaauthority.Bundle) error
 }
 
 func (p *projectionPublisher) publish() error {
@@ -68,7 +71,14 @@ func (p *projectionPublisher) publish() error {
 		if err != nil {
 			return err
 		}
-		wire, err := json.Marshal(mediaauthority.Bundle{Scope: grant.Scope(), Manifest: manifest, Pages: pages, Lease: lease})
+		bundle := mediaauthority.Bundle{Scope: grant.Scope(), Manifest: manifest, Pages: pages, Lease: lease}
+		if p.sink != nil {
+			if err := p.sink(grant.SpaceID, bundle); err != nil {
+				return err
+			}
+			continue
+		}
+		wire, err := json.Marshal(bundle)
 		if err != nil {
 			return err
 		}
@@ -158,6 +168,14 @@ func fixtureJWT(t *testing.T, parameters fixtureParameters, private ed25519.Priv
 // This controlled signer fixture verifies the SFU mechanism on real RTP. It is
 // deliberately separate from full Federation/master/Gateway acceptance.
 func TestSFUEnforcesSignedAuthorityForRealMedia_live(t *testing.T) {
+	runMediaAuthorityFixture(t, false)
+}
+
+func TestSFUEnforcesControllerProcessDeathForRealMedia_live(t *testing.T) {
+	runMediaAuthorityFixture(t, true)
+}
+
+func runMediaAuthorityFixture(t *testing.T, controllerProcess bool) {
 	directory := os.Getenv("VOICE_SFU_FIXTURE_DIR")
 	url := os.Getenv("VOICE_SFU_URL")
 	if directory == "" || url == "" {
@@ -177,7 +195,12 @@ func TestSFUEnforcesSignedAuthorityForRealMedia_live(t *testing.T) {
 				SpaceID: spaceID, Generation: 1, AuthorityEpoch: 1, AccountID: uuid.NewString(), ProfileID: uuid.NewString(), ResourceID: resourceID, SessionEpoch: 1, RoomName: room})
 		}
 	}
-	require.NoError(t, publisher.publish())
+	var stopController func() time.Time
+	if controllerProcess {
+		stopController = startControllerProcess(t, directory, parameters, publisher)
+	} else {
+		require.NoError(t, publisher.publish())
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	refreshCtx, stopRefresh := context.WithCancel(ctx)
@@ -255,12 +278,22 @@ func TestSFUEnforcesSignedAuthorityForRealMedia_live(t *testing.T) {
 	require.Eventually(t, func() bool { return peers[1][0].packets.Load() > before+10 }, 2*time.Second, 20*time.Millisecond, "other Space must continue after revocation")
 	freshBearer := fixtureJWT(t, parameters, private, publisher.grants[1][0], 30*time.Second)
 	partitioned := time.Now()
-	stopRefresh()
-	<-refreshDone
+	var signerRevision [2]int64
+	if controllerProcess {
+		partitioned = stopController()
+		publisher.mu.Lock()
+		signerRevision = publisher.revision
+		publisher.mu.Unlock()
+		// The signed projection source stays live. Only the independent
+		// production controller process has died; the SFU must expire itself.
+	} else {
+		stopRefresh()
+		<-refreshDone
+	}
 	for _, peer := range peers[1] {
 		select {
 		case closed := <-peer.disconnected:
-			t.Logf("authority partition media eject_ms=%d", closed.Sub(partitioned).Milliseconds())
+			t.Logf("authority unavailable controller_process=%t media eject_ms=%d", controllerProcess, closed.Sub(partitioned).Milliseconds())
 			require.Less(t, closed.Sub(partitioned), 5*time.Second)
 		case <-time.After(5 * time.Second):
 			t.Fatal("media survived authority lease expiry")
@@ -268,6 +301,19 @@ func TestSFUEnforcesSignedAuthorityForRealMedia_live(t *testing.T) {
 	}
 	_, err = connectPeer(ctx, url, freshBearer)
 	require.True(t, err != nil, "fresh unexpired bearer cannot reconnect while authority is expired")
+	if controllerProcess {
+		publisher.mu.Lock()
+		current := publisher.revision
+		publisher.mu.Unlock()
+		for space := range current {
+			require.Greater(t, current[space], signerRevision[space], "signed authority source must continue after controller death")
+		}
+	}
+	client := &http.Client{Timeout: time.Second}
+	response, err := client.Get(strings.Replace(url, "ws://", "http://", 1))
+	require.True(t, err == nil, "SFU must remain reachable after expired-authority ejection")
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
 	select {
 	case <-refreshErrors:
 		t.Fatal("controlled projection publisher failed")
