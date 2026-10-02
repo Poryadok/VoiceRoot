@@ -57,14 +57,29 @@ func TestPostgresNodePublisherConsumesActualMTLSAuthorityAPIAndRejectsSuspension
 	t.Cleanup(server.Close)
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: ca, Certificates: []tls.Certificate{nodeCert}, MinVersion: tls.VersionTLS13}}}
 	sink := &publisherAcceptanceSink{bundles: map[string]mediaauthority.Bundle{}}
-	controller, err := nodepublisher.New(nodepublisher.Config{MasterURL: server.URL, Issuer: store.Issuer, Environment: store.Environment, NodeID: node, Credential: credential.Secret, Keys: map[string]ed25519.PublicKey{"publisher": public}, Spaces: []string{spaceA, spaceB}, Client: client, Sink: sink, Interval: 100 * time.Millisecond})
+	verifier := mediaauthority.Verifier{Issuer: store.Issuer, Environment: store.Environment, NodeID: node, Keys: map[string]ed25519.PublicKey{"publisher": public}}
+	registry, err := mediaauthority.NewBootRegistry(verifier, 250*time.Millisecond)
 	require.NoError(t, err)
-	registry, err := mediaauthority.NewRegistry(mediaauthority.Verifier{Issuer: store.Issuer, Environment: store.Environment, NodeID: node, Keys: map[string]ed25519.PublicKey{"publisher": public}}, 250*time.Millisecond)
+	directory := t.TempDir()
+	heartbeat, err := mediaauthority.NewBootHeartbeat(registry, directory)
+	require.NoError(t, err)
+	defer heartbeat.Close()
+	require.NoError(t, heartbeat.Pulse(time.Now()))
+	controller, err := nodepublisher.New(nodepublisher.Config{MasterURL: server.URL, Issuer: store.Issuer, Environment: store.Environment, NodeID: node, Credential: credential.Secret, Keys: map[string]ed25519.PublicKey{"publisher": public}, Spaces: []string{spaceA, spaceB}, Client: client, Sink: sink, Interval: 100 * time.Millisecond, BootRequestDirectory: directory})
 	require.NoError(t, err)
 	for _, space := range []string{spaceA, spaceB} {
 		require.NoError(t, controller.Refresh(ctx, space))
 		require.NoError(t, registry.Apply(sink.bundles[space], time.Now()))
 	}
+	restarted, err := mediaauthority.NewBootRegistry(verifier, 250*time.Millisecond)
+	require.NoError(t, err)
+	require.ErrorIs(t, restarted.Apply(sink.bundles[spaceA], time.Now()), mediaauthority.ErrDenied, "saved unexpired bundle cannot activate a new boot")
+	restartedHeartbeat, err := mediaauthority.NewBootHeartbeat(restarted, directory)
+	require.NoError(t, err)
+	defer restartedHeartbeat.Close()
+	require.NoError(t, restartedHeartbeat.Pulse(time.Now()))
+	require.NoError(t, controller.Refresh(ctx, spaceA), "new receiver needs actual mTLS master ACK")
+	require.NoError(t, restarted.Apply(sink.bundles[spaceA], time.Now()))
 	before := sink.bundles[spaceA]
 	_, err = store.changeNode(ctx, node, "suspend", "", "operator")
 	require.NoError(t, err)
@@ -72,5 +87,5 @@ func TestPostgresNodePublisherConsumesActualMTLSAuthorityAPIAndRejectsSuspension
 	require.Equal(t, before, sink.bundles[spaceA], "suspension cannot replace authority with unsigned/error output")
 	var leases int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM federation_lease_nonces WHERE node_id=$1`, node).Scan(&leases))
-	require.Equal(t, 2, leases, "one acknowledged complete revision per Space")
+	require.Equal(t, 3, leases, "two Space ACKs and a fresh boot-bound master round trip")
 }

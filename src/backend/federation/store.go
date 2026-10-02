@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -288,11 +289,7 @@ func (s *authorityStore) publish(ctx context.Context, node, space string, snap S
 	})
 }
 
-type leaseRequest struct {
-	Revision int64  `json:"revision"`
-	Hash     string `json:"hash"`
-	Nonce    string `json:"nonce"`
-}
+type leaseRequest = protocol.AppliedRevisionAck
 
 func (s *authorityStore) issue(ctx context.Context, node, space, pin, secret string, ack *leaseRequest) (Envelope, error) {
 	return s.issueSnapshot(ctx, node, space, pin, secret, ack, nil)
@@ -351,7 +348,7 @@ func (s *authorityStore) issueSnapshot(ctx context.Context, node, space, pin, se
 			envelope = pages[*pageIndex]
 			return nil
 		} else {
-			if ack.Revision != revision || ack.Hash != *hash || !canonicalID(ack.Nonce) {
+			if ack.Revision != revision || ack.Hash != *hash || !canonicalID(ack.Nonce) || !protocol.ValidReceiverBootNonces(ack.ReceiverBootNonces) {
 				return errConflict
 			}
 			// Nonces survive credential lifetime, so replay cannot renew after a lease expires.
@@ -369,7 +366,7 @@ func (s *authorityStore) issueSnapshot(ctx context.Context, node, space, pin, se
 		if err = refreshAuthorityClock(ctx, tx, &now, n.Expiry, *until); err != nil {
 			return err
 		}
-		c := Claims{Version: 1, Kind: "lease", Issuer: s.Issuer, Audience: "voice-node", Environment: s.Environment, NodeID: node, SpaceID: space, Generation: generation, Epoch: n.Epoch, Revision: revision, IssuedAt: now.UnixMilli(), ExpiresAt: min(until.UnixMilli(), now.Add(2*time.Second).UnixMilli(), n.Expiry.UnixMilli()), Hash: *hash}
+		c := Claims{Version: 1, Kind: "lease", Issuer: s.Issuer, Audience: "voice-node", Environment: s.Environment, NodeID: node, SpaceID: space, Generation: generation, Epoch: n.Epoch, Revision: revision, IssuedAt: now.UnixMilli(), ExpiresAt: min(until.UnixMilli(), now.Add(2*time.Second).UnixMilli(), n.Expiry.UnixMilli()), Hash: *hash, ReceiverBootNonces: slices.Clone(ack.ReceiverBootNonces)}
 		envelope, err = signEnvelope(s.Key, s.KeyID, c)
 		return err
 	})

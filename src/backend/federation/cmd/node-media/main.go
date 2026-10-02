@@ -25,13 +25,14 @@ import (
 )
 
 type configuration struct {
-	ListenAddress      string `json:"listen_address"`
-	TrustFile          string `json:"trust_file"`
-	AuthorityDirectory string `json:"authority_directory"`
-	CredentialsFile    string `json:"credentials_file"`
-	TLSCertFile        string `json:"tls_cert_file"`
-	TLSKeyFile         string `json:"tls_key_file"`
-	MediaURL           string `json:"media_url"`
+	ListenAddress        string `json:"listen_address"`
+	TrustFile            string `json:"trust_file"`
+	AuthorityDirectory   string `json:"authority_directory"`
+	BootRequestDirectory string `json:"boot_request_directory"`
+	CredentialsFile      string `json:"credentials_file"`
+	TLSCertFile          string `json:"tls_cert_file"`
+	TLSKeyFile           string `json:"tls_key_file"`
+	MediaURL             string `json:"media_url"`
 }
 type trustConfiguration struct {
 	Issuer      string            `json:"issuer"`
@@ -60,49 +61,58 @@ func readJSON(path string, value any) error {
 	}
 	return nil
 }
-func load(path string) (*http.Server, *mediaauthority.Registry, string, error) {
+func load(path string) (*http.Server, *mediaauthority.Registry, string, *mediaauthority.BootHeartbeat, error) {
 	var config configuration
 	var trust trustConfiguration
 	var creds credentials
 	if readJSON(path, &config) != nil || readJSON(config.TrustFile, &trust) != nil || readJSON(config.CredentialsFile, &creds) != nil {
-		return nil, nil, "", mediaauthority.ErrDenied
+		return nil, nil, "", nil, mediaauthority.ErrDenied
 	}
 	_, port, err := net.SplitHostPort(config.ListenAddress)
 	if err != nil || port == "" {
-		return nil, nil, "", mediaauthority.ErrDenied
+		return nil, nil, "", nil, mediaauthority.ErrDenied
 	}
 	info, err := os.Stat(config.AuthorityDirectory)
 	if err != nil || !info.IsDir() {
-		return nil, nil, "", mediaauthority.ErrDenied
+		return nil, nil, "", nil, mediaauthority.ErrDenied
 	}
 	keys := map[string]ed25519.PublicKey{}
 	for id, value := range trust.Keys {
 		key, err := base64.RawURLEncoding.DecodeString(value)
 		if err != nil || len(key) != ed25519.PublicKeySize {
-			return nil, nil, "", mediaauthority.ErrDenied
+			return nil, nil, "", nil, mediaauthority.ErrDenied
 		}
 		keys[id] = key
 	}
-	registry, err := mediaauthority.NewRegistry(mediaauthority.Verifier{Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Keys: keys}, 250*time.Millisecond)
+	registry, err := mediaauthority.NewBootRegistry(mediaauthority.Verifier{Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Keys: keys}, 250*time.Millisecond)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", nil, err
+	}
+	heartbeat, err := mediaauthority.NewBootHeartbeat(registry, config.BootRequestDirectory)
+	if err != nil {
+		return nil, nil, "", nil, err
 	}
 	exchange, err := mediaauthority.NewExchange(registry, creds.APIKey, creds.APISecret, config.MediaURL)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", nil, err
 	}
 	certificate, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
 	if err != nil {
-		return nil, nil, "", mediaauthority.ErrDenied
+		return nil, nil, "", nil, mediaauthority.ErrDenied
 	}
-	return &http.Server{Addr: config.ListenAddress, Handler: exchange, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}, registry, config.AuthorityDirectory, nil
+	return &http.Server{Addr: config.ListenAddress, Handler: exchange, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}, registry, config.AuthorityDirectory, heartbeat, nil
 }
 func main() {
 	path := flag.String("config", "", "node media configuration file")
 	flag.Parse()
-	server, registry, directory, err := load(strings.TrimSpace(*path))
+	server, registry, directory, heartbeat, err := load(strings.TrimSpace(*path))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "node media configuration invalid")
+		os.Exit(1)
+	}
+	defer heartbeat.Close()
+	if heartbeat.Pulse(time.Now()) != nil {
+		fmt.Fprintln(os.Stderr, "node media boot request unavailable")
 		os.Exit(1)
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -116,7 +126,10 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				mediaauthority.RefreshDirectory(registry, directory, time.Now())
+				now := time.Now()
+				if heartbeat.Pulse(now) == nil {
+					mediaauthority.RefreshDirectory(registry, directory, now)
+				}
 			}
 		}
 	}()

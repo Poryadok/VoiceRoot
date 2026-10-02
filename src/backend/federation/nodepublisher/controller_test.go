@@ -46,6 +46,7 @@ type authorityFixture struct {
 	badPage, foreign, redirect string
 	acks                       map[string]int
 	badLease                   bool
+	badBoot                    bool
 }
 
 func (f *authorityFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,6 +119,22 @@ func (f *authorityFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.acks[space]++
 		envelope = f.bundles[space].Lease
+		if len(ack.ReceiverBootNonces) > 0 {
+			lease, err := protocol.VerifyEnvelope(f.key.Public().(ed25519.PublicKey), envelope, time.Now())
+			if err != nil {
+				w.WriteHeader(409)
+				return
+			}
+			lease.ReceiverBootNonces = ack.ReceiverBootNonces
+			if f.badBoot {
+				lease.ReceiverBootNonces = []string{uuid.NewString()}
+			}
+			envelope, err = protocol.SignEnvelope(f.key, "master", lease)
+			if err != nil {
+				w.WriteHeader(500)
+				return
+			}
+		}
 		if f.badLease {
 			envelope.Signature = base64.RawURLEncoding.EncodeToString(make([]byte, 64))
 		}
@@ -221,4 +238,33 @@ func TestControllerRejectsFreshlySignedRevisionRollbackBeforeFileReplacement(t *
 	require.Equal(t, before, s.bundles[space])
 	require.Equal(t, 2, s.writes[space], "a fresh signature cannot lower applied revision")
 	require.Equal(t, 2, f.acks[space], "rolled-back policy cannot be acknowledged as applied")
+}
+
+func TestControllerRequiresLiveBootRequestAndExactSignedAcknowledgement(t *testing.T) {
+	c, f, s := publisherFixture(t)
+	c.config.BootRequestDirectory = t.TempDir()
+	space := c.config.Spaces[0]
+	require.ErrorIs(t, c.Refresh(context.Background(), space), ErrUnavailable)
+	require.Zero(t, f.acks[space], "no live receiver means no master lease request")
+	require.Zero(t, s.writes[space])
+	registry, err := mediaauthority.NewBootRegistry(mediaauthority.Verifier{Issuer: c.config.Issuer, Environment: c.config.Environment, NodeID: c.config.NodeID, Keys: c.config.Keys}, 250*time.Millisecond)
+	require.NoError(t, err)
+	heartbeat, err := mediaauthority.NewBootHeartbeat(registry, c.config.BootRequestDirectory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, heartbeat.Close()) })
+	require.NoError(t, heartbeat.Pulse(time.Now()))
+	f.badBoot = true
+	require.ErrorIs(t, c.Refresh(context.Background(), space), ErrUnavailable)
+	require.Equal(t, 1, f.acks[space])
+	require.Zero(t, s.writes[space], "valid signed lease for another boot cannot replace authority")
+	f.badBoot = false
+	require.NoError(t, c.Refresh(context.Background(), space))
+	require.Equal(t, 1, s.writes[space])
+	lease, err := protocol.VerifyEnvelope(c.config.Keys[s.bundles[space].Lease.KeyID], s.bundles[space].Lease, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, []string{registry.BootNonce()}, lease.ReceiverBootNonces)
+	require.NoError(t, heartbeat.Close())
+	require.ErrorIs(t, c.Refresh(context.Background(), space), ErrUnavailable)
+	require.Equal(t, 2, f.acks[space], "closed receiver must not receive fresh authority")
+	require.Equal(t, 1, s.writes[space])
 }

@@ -22,6 +22,7 @@ import (
 const (
 	SnapshotPagePermissionLimit = 256
 	SnapshotMaxPageCount        = 4096
+	MaxReceiverBootNonces       = 16
 )
 
 var ErrInvalid = errors.New("invalid authority protocol value")
@@ -104,24 +105,25 @@ type RevisionStream struct {
 }
 
 type Claims struct {
-	Version        int               `json:"version"`
-	Kind           string            `json:"kind"`
-	Issuer         string            `json:"issuer"`
-	Audience       string            `json:"audience"`
-	Environment    string            `json:"environment"`
-	NodeID         string            `json:"node_id"`
-	SpaceID        string            `json:"space_id"`
-	Generation     int64             `json:"generation"`
-	Epoch          int64             `json:"epoch"`
-	Revision       int64             `json:"revision"`
-	IssuedAt       int64             `json:"issued_at"`
-	ExpiresAt      int64             `json:"expires_at"`
-	Hash           string            `json:"hash"`
-	Snapshot       *Snapshot         `json:"snapshot,omitempty"`
-	Manifest       *SnapshotManifest `json:"manifest,omitempty"`
-	Page           *SnapshotPage     `json:"page,omitempty"`
-	RevisionEvent  *RevisionEvent    `json:"revision_event,omitempty"`
-	RevisionStream *RevisionStream   `json:"revision_stream,omitempty"`
+	Version            int               `json:"version"`
+	Kind               string            `json:"kind"`
+	Issuer             string            `json:"issuer"`
+	Audience           string            `json:"audience"`
+	Environment        string            `json:"environment"`
+	NodeID             string            `json:"node_id"`
+	SpaceID            string            `json:"space_id"`
+	Generation         int64             `json:"generation"`
+	Epoch              int64             `json:"epoch"`
+	Revision           int64             `json:"revision"`
+	IssuedAt           int64             `json:"issued_at"`
+	ExpiresAt          int64             `json:"expires_at"`
+	Hash               string            `json:"hash"`
+	Snapshot           *Snapshot         `json:"snapshot,omitempty"`
+	Manifest           *SnapshotManifest `json:"manifest,omitempty"`
+	Page               *SnapshotPage     `json:"page,omitempty"`
+	RevisionEvent      *RevisionEvent    `json:"revision_event,omitempty"`
+	RevisionStream     *RevisionStream   `json:"revision_stream,omitempty"`
+	ReceiverBootNonces []string          `json:"receiver_boot_nonces,omitempty"`
 }
 
 type Envelope struct {
@@ -140,9 +142,24 @@ type Scope struct {
 }
 
 type AppliedRevisionAck struct {
-	Revision int64  `json:"revision"`
-	Hash     string `json:"hash"`
-	Nonce    string `json:"nonce"`
+	Revision           int64    `json:"revision"`
+	Hash               string   `json:"hash"`
+	Nonce              string   `json:"nonce"`
+	ReceiverBootNonces []string `json:"receiver_boot_nonces,omitempty"`
+}
+
+// Boot UUIDs are an exact bounded set in signed canonical order. Empty preserves
+// legacy transport; production receivers require their own newly generated UUID.
+func ValidReceiverBootNonces(nonces []string) bool {
+	if len(nonces) > MaxReceiverBootNonces {
+		return false
+	}
+	for i, nonce := range nonces {
+		if !canonicalID(nonce) || (i > 0 && nonces[i-1] >= nonce) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s Snapshot) Validate(now time.Time) error {
@@ -265,6 +282,9 @@ func SignRevisionStream(private ed25519.PrivateKey, keyID string, scope Scope, s
 }
 
 func validateClaims(c Claims, now time.Time) error {
+	if !ValidReceiverBootNonces(c.ReceiverBootNonces) || (c.Kind != "lease" && len(c.ReceiverBootNonces) > 0) {
+		return ErrInvalid
+	}
 	if c.Version != 1 || c.Issuer == "" || c.Audience != "voice-node" || c.Environment == "" || !canonicalID(c.NodeID) || !canonicalID(c.SpaceID) || c.Generation < 1 || c.Epoch < 1 || c.Revision < 1 || c.IssuedAt > now.UnixMilli() || c.ExpiresAt <= now.UnixMilli() || c.ExpiresAt <= c.IssuedAt || !validDigest(c.Hash) {
 		return ErrInvalid
 	}

@@ -28,6 +28,19 @@ func prepare() error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
+	bootDirectory := os.Getenv("VOICE_SFU_BOOT_REQUEST_DIR")
+	if !filepath.IsAbs(bootDirectory) {
+		return fmt.Errorf("absolute boot request directory required")
+	}
+	if err := os.MkdirAll(bootDirectory, 0750); err != nil {
+		return err
+	}
+	if err := os.Chown(bootDirectory, 10001, 10001); err != nil {
+		return err
+	}
+	if err := os.Chmod(bootDirectory, 0750); err != nil {
+		return err
+	}
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return err

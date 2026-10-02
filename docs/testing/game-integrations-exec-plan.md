@@ -69,6 +69,45 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Checkpoint `b4bf53caf` delivers seven Messaging preflight paths; exact delivered
+  bytes, pushed remote and original 26 staged blobs are verified. Next T75/T77
+  slice uses the actual independent SFU and node-media receivers: each process
+  creates a fresh cryptographic boot UUID in memory and publishes a bounded
+  one-second heartbeat request in a separate local IPC directory. The controller
+  reads current requests after complete page verification and includes up to 16
+  sorted unique UUIDs in its fresh applied-revision ACK; master signs that exact
+  list in the short lease after current placement/policy/fence validation. A boot
+  receiver accepts only a verified lease naming its own UUID, so restored Bundle
+  files and rolled-back wall time cannot establish first authority. UUIDs are not
+  configured/restored identities and request files contain no node credentials.
+  Legacy transport fixtures remain decodable; production SFU/exchange/controller
+  require the boot request directory. Tests cover replay/new receiver/fresh lease,
+  malformed/expired/cross-node requests, real mTLS master ACK, both production
+  receivers and controller death/restart. Source: game-federation §9 and T75/T77.
+  The broader owning-source projection, remote purge participant and complete
+  bundle/fault/load acceptance remain open; no parent accounting advances.
+- Fresh boot guard now reaches both production receivers and controller. Current
+  Federation root PostgreSQL/mTLS 22/0 and nodepublisher 5/1 (the intentionally
+  opt-in Linux fixture) pass. Controlled Linux production edge restart 1/0
+  proves the unchanged saved lease is still cryptographically valid at denial,
+  a new process UUID exists, and a newly signed boot lease restores admission.
+  The new SFU/controller/media images pass real four-peer/two-Space RTP 1/0:
+  revoke eject 155ms; controller kill/reap eject 1174ms while signer/SFU remain
+  alive. Same bounded reviewer clears protocol, scope, replay, documented
+  deployment and evidence. Shared IPC UID10001/mode0750/0600 files and backup
+  exclusion are documented; malformed requests fail closed. Isolated full root
+  22/0 and module short 36/12 plus vet pass; the 12 skips are deliberately
+  excluded integration paths covered by full PostgreSQL and Linux media runs.
+  Final current-input Linux media 3/0 passes: direct signed authority,
+  production controller death and production HTTPS edge restart. Worst measured
+  eject is 1271ms; revoke 123–230ms; restart 0.23s. Images: SFU `680718ce69f7`
+  (input `56f386196a48`), controller `73f36df5e095` (input `fd6e233493e8`),
+  media fixture `e1d6e417ffdf` (input `db2a607c4757`). Exact build-input checks
+  and prompt push preserve the original 26 staged blobs. Graphify's fresh
+  changed-input attempt again timed out at 45.4s; only its owned process tree
+  was stopped, so graph freshness remains unverified. Parent 43/60 unchanged;
+  this mechanism does not complete owning-source projection, remote Space purge,
+  whole bundle restore/upgrade or qualified capacity/fault acceptance.
 - Checkpoint `693c26057` delivers the seven retirement/clock paths; current and
   isolated full Federation root 22/0, module short/vet, same reviewer and normal
   push pass, with all 26 staged Dart blobs preserved. Next bounded T77 repair:

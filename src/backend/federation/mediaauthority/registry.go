@@ -2,9 +2,12 @@ package mediaauthority
 
 import (
 	"crypto/ed25519"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 
 	"voice/backend/federation/nodecache"
 	"voice/backend/federation/protocol"
@@ -30,6 +33,29 @@ type Registry struct {
 	skew          time.Duration
 	spaces        map[string]spacePolicy
 	wallHighWater atomic.Int64
+	bootNonce     string
+}
+
+// NewBootRegistry generates a process identity which is never restored from
+// configuration or Bundle files. Activation needs a fresh master ACK lease.
+func NewBootRegistry(verifier Verifier, uncertainty time.Duration) (*Registry, error) {
+	r, err := NewRegistry(verifier, uncertainty)
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := uuid.NewRandom()
+	if err != nil {
+		return nil, ErrDenied
+	}
+	r.bootNonce = nonce.String()
+	return r, nil
+}
+
+func (r *Registry) BootNonce() string {
+	if r == nil {
+		return ""
+	}
+	return r.bootNonce
 }
 
 // Admission cannot be constructed by a caller. The SFU saves the verified
@@ -70,6 +96,12 @@ func (r *Registry) Apply(bundle Bundle, now time.Time) error {
 		return ErrDenied
 	}
 	now = checkedNow
+	if r.bootNonce != "" {
+		lease, err := protocol.VerifyEnvelope(r.verifier.Keys[bundle.Lease.KeyID], bundle.Lease, now)
+		if err != nil || lease.Kind != "lease" || protocol.VerifyScope(lease, bundle.Scope) != nil || !slices.Contains(lease.ReceiverBootNonces, r.bootNonce) {
+			return ErrDenied
+		}
+	}
 	candidate := nodecache.New(bundle.Scope, r.verifier.Keys)
 	if candidate.StageManifest(bundle.Manifest, now) != nil {
 		return ErrDenied

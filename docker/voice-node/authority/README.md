@@ -21,6 +21,7 @@ an optional `interval_milliseconds` (default 100, allowed 50–500):
   "client_cert_file": "/run/secrets/node-cert.pem",
   "client_key_file": "/run/secrets/node-key.pem",
   "authority_directory": "/var/lib/voice-node/authority",
+  "boot_request_directory": "/run/voice-node/boot-requests",
   "spaces": ["11111111-1111-4111-8111-111111111111"],
   "interval_milliseconds": 100
 }
@@ -34,6 +35,26 @@ read-only and needs public trust. Give the controller ownership of the output
 directory and the SFU group read access. Private master signing keys never belong
 on either node process. Configuration and credentials load at startup; rotation
 currently requires restarting the controller with the new credential files.
+
+Create a separate `/run/voice-node/boot-requests` directory owned by UID/GID
+10001 with mode 0750. Mount it read/write for the controller, node-media and SFU;
+set `VOICE_SFU_BOOT_REQUEST_DIR=/run/voice-node/boot-requests` on the SFU. Keep it
+apart from the read-only authority directory and exclude it from backups. A
+node-local temporary filesystem is suitable. All three components require this
+absolute, existing, non-symlink directory before startup. Request files are 0600
+and contain only public scope, a process-generated boot UUID and a one-second
+expiry. Components sharing the directory must use the same UID.
+
+Each SFU/media receiver generates a fresh boot UUID in memory. After complete
+policy verification, the controller includes current receiver UUIDs in its fresh
+ACK; the master returns a signed short lease naming exactly those UUIDs. A
+receiver requires its own UUID before activating any saved policy. Restoring
+files or moving the wall clock backwards cannot activate an old receiver lease
+in a new process. No live receiver request means no lease refresh. Malformed
+requests stop refresh with a fixed diagnostic; expired well-formed requests are
+ignored. Stop the affected receiver before removing a corrupt request; do not
+edit signed authority files. An offline restore remains unavailable until the
+fresh master round trip succeeds.
 
 Each Space refreshes independently over verified mTLS with redirects forbidden.
 The controller verifies the manifest, every page and the complete digest before
@@ -55,8 +76,8 @@ and a still-valid admission credential cannot reconnect. Run
 `TestSFUEnforcesControllerProcessDeathForRealMedia_live` through the opt-in media
 Compose fixture after building its client and SFU images.
 
-Production owning-service policy projection, persisted online boot and
-permanent fences, bundle deployment/rotation automation, and qualified worker
+Production owning-service policy projection, remote permanent-purge participation,
+bundle deployment/rotation automation, and qualified worker
 load remain open. A local controller/media test does not complete T73–T78 or
 capacity acceptance. See the [ExecPlan](../../../docs/testing/game-integrations-exec-plan.md).
 
@@ -71,6 +92,7 @@ strict JSON file (all paths below are node-local; no master private key):
   "listen_address": ":8443",
   "trust_file": "/etc/voice-node/trust.json",
   "authority_directory": "/var/lib/voice-node/authority",
+  "boot_request_directory": "/run/voice-node/boot-requests",
   "credentials_file": "/run/secrets/livekit.json",
   "tls_cert_file": "/run/secrets/media.crt",
   "tls_key_file": "/run/secrets/media.key",

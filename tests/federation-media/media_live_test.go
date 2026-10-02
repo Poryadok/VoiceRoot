@@ -70,8 +70,12 @@ func (p *projectionPublisher) publish() error {
 		if err != nil {
 			return err
 		}
+		bootNonces, err := mediaauthority.ActiveBootNonces(os.Getenv("VOICE_SFU_BOOT_REQUEST_DIR"), grant.Issuer, grant.Environment, grant.NodeID, now)
+		if err != nil {
+			return err
+		}
 		lease, err := protocol.SignEnvelope(p.private, "fixture-1", protocol.Claims{Version: 1, Kind: "lease", Issuer: grant.Issuer, Audience: "voice-node", Environment: grant.Environment,
-			NodeID: grant.NodeID, SpaceID: grant.SpaceID, Generation: grant.Generation, Epoch: grant.AuthorityEpoch, Revision: policy.Revision, IssuedAt: now.UnixMilli(), ExpiresAt: policy.ValidUntil, Hash: protocol.SnapshotDigest(policy)})
+			NodeID: grant.NodeID, SpaceID: grant.SpaceID, Generation: grant.Generation, Epoch: grant.AuthorityEpoch, Revision: policy.Revision, IssuedAt: now.UnixMilli(), ExpiresAt: policy.ValidUntil, Hash: protocol.SnapshotDigest(policy), ReceiverBootNonces: bootNonces})
 		if err != nil {
 			return err
 		}

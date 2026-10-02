@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,17 +119,29 @@ func startControllerProcess(t *testing.T, directory string, parameters fixturePa
 			var ack protocol.AppliedRevisionAck
 			decoder := json.NewDecoder(io.LimitReader(request.Body, 4096))
 			decoder.DisallowUnknownFields()
-			if decoder.Decode(&ack) != nil || decoder.Decode(new(any)) != io.EOF || uuid.Validate(ack.Nonce) != nil {
+			if decoder.Decode(&ack) != nil || decoder.Decode(new(any)) != io.EOF || uuid.Validate(ack.Nonce) != nil || len(ack.ReceiverBootNonces) == 0 || !protocol.ValidReceiverBootNonces(ack.ReceiverBootNonces) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			claims, err := protocol.VerifyEnvelope(publisher.private.Public().(ed25519.PublicKey), bundle.Manifest, time.Now())
+			now := time.Now()
+			claims, err := protocol.VerifyEnvelope(publisher.private.Public().(ed25519.PublicKey), bundle.Manifest, now)
 			if err != nil || ack.Revision != claims.Revision || ack.Hash != claims.Hash {
 				w.WriteHeader(http.StatusConflict)
 				return
 			}
+			lease, err := protocol.VerifyEnvelope(publisher.private.Public().(ed25519.PublicKey), bundle.Lease, now)
+			if err != nil {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			lease.IssuedAt = now.UnixMilli()
+			lease.ReceiverBootNonces = slices.Clone(ack.ReceiverBootNonces)
+			envelope, err = protocol.SignEnvelope(publisher.private, "fixture-1", lease)
+			if err != nil {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
 			acks[parts[0]]++
-			envelope = bundle.Lease
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -147,7 +160,7 @@ func startControllerProcess(t *testing.T, directory string, parameters fixturePa
 		return path
 	}
 	spaces := []string{publisher.grants[0][0].SpaceID, publisher.grants[1][0].SpaceID}
-	config, err := json.Marshal(map[string]any{"master_url": server.URL, "trust_file": filepath.Join(directory, "trust.json"), "credential_file": write("credential", []byte(credential)), "ca_cert_file": write("ca.pem", caPEM), "client_cert_file": write("client.pem", clientPEM), "client_key_file": write("client-key.pem", clientKeyPEM), "authority_directory": publisher.directory, "spaces": spaces, "interval_milliseconds": 100})
+	config, err := json.Marshal(map[string]any{"master_url": server.URL, "trust_file": filepath.Join(directory, "trust.json"), "credential_file": write("credential", []byte(credential)), "ca_cert_file": write("ca.pem", caPEM), "client_cert_file": write("client.pem", clientPEM), "client_key_file": write("client-key.pem", clientKeyPEM), "authority_directory": publisher.directory, "boot_request_directory": os.Getenv("VOICE_SFU_BOOT_REQUEST_DIR"), "spaces": spaces, "interval_milliseconds": 100})
 	require.NoError(t, err)
 	log, err := os.Create(filepath.Join(privateDirectory, "controller.log"))
 	require.NoError(t, err)

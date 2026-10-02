@@ -36,6 +36,7 @@ type voiceAdmissionRecord struct {
 type voiceAuthorityRuntime struct {
 	manager    *RoomManager
 	registry   *mediaauthority.Registry
+	heartbeat  *mediaauthority.BootHeartbeat
 	directory  string
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
@@ -60,7 +61,7 @@ func newVoiceAuthority(manager *RoomManager) (*voiceAuthorityRuntime, error) {
 		}
 		keys[id] = key
 	}
-	registry, err := mediaauthority.NewRegistry(mediaauthority.Verifier{Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Keys: keys}, 250*time.Millisecond)
+	registry, err := mediaauthority.NewBootRegistry(mediaauthority.Verifier{Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Keys: keys}, 250*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +69,12 @@ func newVoiceAuthority(manager *RoomManager) (*voiceAuthorityRuntime, error) {
 	if err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("Voice SFU authority directory unavailable")
 	}
+	heartbeat, err := mediaauthority.NewBootHeartbeat(registry, os.Getenv("VOICE_SFU_BOOT_REQUEST_DIR"))
+	if err != nil || heartbeat.Pulse(time.Now()) != nil {
+		return nil, fmt.Errorf("Voice SFU boot request directory unavailable")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	runtime := &voiceAuthorityRuntime{manager: manager, registry: registry, directory: directory, cancel: cancel, admissions: make(map[livekit.ParticipantID]voiceAdmissionRecord)}
+	runtime := &voiceAuthorityRuntime{manager: manager, registry: registry, heartbeat: heartbeat, directory: directory, cancel: cancel, admissions: make(map[livekit.ParticipantID]voiceAdmissionRecord)}
 	runtime.load()
 	runtime.wg.Add(2)
 	go runtime.loadLoop(ctx)
@@ -80,6 +85,7 @@ func newVoiceAuthority(manager *RoomManager) (*voiceAuthorityRuntime, error) {
 func (v *voiceAuthorityRuntime) stop() {
 	v.cancel()
 	v.wg.Wait()
+	_ = v.heartbeat.Close()
 }
 
 func (v *voiceAuthorityRuntime) remember(id livekit.ParticipantID, admission mediaauthority.Admission) {
@@ -97,7 +103,9 @@ func (v *voiceAuthorityRuntime) loadLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			v.load()
+			if v.heartbeat.Pulse(time.Now()) == nil {
+				v.load()
+			}
 		}
 	}
 }

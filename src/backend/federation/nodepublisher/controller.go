@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ type Config struct {
 	Client                                             *http.Client
 	Sink                                               Sink
 	Interval                                           time.Duration
+	BootRequestDirectory                               string
 }
 type Controller struct {
 	config   Config
@@ -76,6 +78,11 @@ func New(config Config) (*Controller, error) {
 	registry, err := mediaauthority.NewRegistry(verifier, nodecache.MaxClockUncertainty)
 	if err != nil {
 		return nil, ErrConfig
+	}
+	if config.BootRequestDirectory != "" {
+		if _, err := mediaauthority.ActiveBootNonces(config.BootRequestDirectory, config.Issuer, config.Environment, config.NodeID, time.Now()); err != nil {
+			return nil, ErrConfig
+		}
 	}
 	copied := *config.Client
 	isolated := transport.Clone()
@@ -151,8 +158,19 @@ func (c *Controller) Refresh(parent context.Context, space string) error {
 		}
 	}
 	ack := protocol.AppliedRevisionAck{Revision: applied.Revision, Hash: claims.Hash, Nonce: uuid.NewString()}
+	if c.config.BootRequestDirectory != "" {
+		var err error
+		ack.ReceiverBootNonces, err = mediaauthority.ActiveBootNonces(c.config.BootRequestDirectory, c.config.Issuer, c.config.Environment, c.config.NodeID, c.now())
+		if err != nil || len(ack.ReceiverBootNonces) == 0 {
+			return ErrUnavailable
+		}
+	}
 	lease, err := c.fetch(ctx, space, "lease", &ack, &remaining)
 	if err != nil || candidate.AcceptLease(lease, c.now()) != nil {
+		return ErrUnavailable
+	}
+	leaseClaims, err := protocol.VerifyEnvelope(c.config.Keys[lease.KeyID], lease, c.now())
+	if err != nil || !slices.Equal(leaseClaims.ReceiverBootNonces, ack.ReceiverBootNonces) {
 		return ErrUnavailable
 	}
 	bundle.Lease = lease

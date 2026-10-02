@@ -30,6 +30,7 @@ type configuration struct {
 	ClientCertFile       string   `json:"client_cert_file"`
 	ClientKeyFile        string   `json:"client_key_file"`
 	AuthorityDirectory   string   `json:"authority_directory"`
+	BootRequestDirectory string   `json:"boot_request_directory"`
 	Spaces               []string `json:"spaces"`
 	IntervalMilliseconds int      `json:"interval_milliseconds"`
 }
@@ -59,7 +60,7 @@ func readJSON(path string, target any) error {
 func load(path string) (*nodepublisher.Controller, error) {
 	var config configuration
 	var trust trustConfiguration
-	if readJSON(path, &config) != nil || readJSON(config.TrustFile, &trust) != nil {
+	if readJSON(path, &config) != nil || readJSON(config.TrustFile, &trust) != nil || config.BootRequestDirectory == "" {
 		return nil, nodepublisher.ErrConfig
 	}
 	credential, err := os.ReadFile(config.CredentialFile)
@@ -99,7 +100,7 @@ func load(path string) (*nodepublisher.Controller, error) {
 	transport.MaxConnsPerHost = 8
 	transport.MaxIdleConnsPerHost = 8
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
-	return nodepublisher.New(nodepublisher.Config{MasterURL: config.MasterURL, Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Credential: strings.TrimSpace(string(credential)), Keys: keys, Spaces: config.Spaces, Client: client, Sink: sink, Interval: interval})
+	return nodepublisher.New(nodepublisher.Config{MasterURL: config.MasterURL, Issuer: trust.Issuer, Environment: trust.Environment, NodeID: trust.NodeID, Credential: strings.TrimSpace(string(credential)), Keys: keys, Spaces: config.Spaces, Client: client, Sink: sink, Interval: interval, BootRequestDirectory: config.BootRequestDirectory})
 }
 func main() {
 	path := flag.String("config", "", "node authority configuration file")

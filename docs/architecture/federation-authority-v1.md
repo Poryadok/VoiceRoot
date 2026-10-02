@@ -34,7 +34,7 @@ HTTP 400/403/409/503. Requests have a three-second database deadline.
 | GET /v1/nodes/{node}/spaces/{space}/snapshot | Node certificate + Bearer | Signed snapshot Envelope |
 | GET /v1/nodes/{node}/spaces/{space}/snapshot/pages/{index} | Node certificate + Bearer | Signed exact-scope snapshot page |
 | GET /v1/nodes/{node}/spaces/{space}/revisions?after_revision=N | Node certificate + Bearer | Bounded signed revision stream or resnapshot requirement |
-| POST /v1/nodes/{node}/spaces/{space}/lease | Node certificate + Bearer | `{revision,hash,nonce}` returns signed lease Envelope |
+| POST /v1/nodes/{node}/spaces/{space}/lease | Node certificate + Bearer | `{revision,hash,nonce,receiver_boot_nonces?}` returns signed lease Envelope |
 | POST /internal/v1/media-routes | Separate master Voice certificate | Account/profile/Space/resource/explicit RTC room/session epoch/publish request → versioned hosted result and exact current projected grant request |
 | POST /internal/v1/media-grants | Separate master Voice certificate | Exact resolved subject/application/binding/installation/room/route → private signed narrow media credential and registered node endpoint |
 
@@ -88,7 +88,8 @@ and a later active row saved before this guard. Immutable history is retained.
 Freeze can restore through a new generation before purge starts. Issuance
 resamples the database clock after blocking queries and immediately before
 signing; elapsed source or node credentials cannot renew authority. This guard
-does not yet prove fresh-online node boot or old-backup reconciliation.
+alone does not prove fresh-online boot; the receiver boot guard below requires
+a fresh signed round trip before restored files become active.
 
 ## Master Voice media discovery and node exchange
 
@@ -135,8 +136,8 @@ authority and denies a wrapper that broadens publish/data permissions. An
 active publisher loses admission when projected `media_publish` disappears.
 
 See [node media setup](../../docker/voice-node/authority/README.md). This runtime
-does not yet supply the owning-service policy projector, fresh-online boot
-fences, full node bundle or qualified capacity evidence. Those gates remain
+does not yet supply the owning-service policy projector, remote purge
+participation, full node bundle or qualified capacity evidence. Those gates remain
 required before capability activation.
 
 ## HTTP request correlation and Q11 denial audit
@@ -236,6 +237,30 @@ existing `/lease` acknowledgment only after activation, naming the exact
 revision/hash and a fresh single-use nonce UUID. A failed or partial stage
 cannot renew the lease.
 
+Production SFU and HTTPS media receivers generate a fresh cryptographically
+random UUID in memory on every process start. Each writes an ephemeral scoped
+request into a separate shared local directory: version 1, issuer/environment/
+node, receiver UUID, issue time and a one-second expiry. After verifying the
+complete policy, the controller reads current requests and includes a strictly
+sorted, unique list of at most 16 canonical nonzero UUIDs as
+`receiver_boot_nonces` in its fresh ACK. No live request stops refresh. Master
+validates that bounded list and copies it exactly into the signed short lease
+after its current source, placement and permanent-fence checks. The controller
+rejects a signed response whose list differs from its ACK. Receivers require
+their own boot UUID in that verified, scope-matching lease before activation.
+The list cannot appear in other signed message kinds. Omitted/empty lists retain
+legacy protocol decoding; production receivers cannot activate them.
+
+Boot UUIDs are never configured, persisted as identity or restored from backup.
+Their unsigned request conveys no credentials or authority. Restoring an old
+Bundle, including under the old wall-clock value, cannot authorize a new process;
+an offline restart waits for the fresh master lease. The local directory must
+be absolute, existing and non-symlink, separate from read-only signed authority,
+and excluded from backups. Production processes share UID/GID `10001`, directory
+mode `0750` and request mode `0600`; malformed requests stop refresh, expired well-formed
+requests are ignored. This guard proves fresh-online activation, not physical
+remote purge or the full node backup/recovery procedure.
+
 The node enforcement cache accepts a signed lease only for its exact active
 revision/hash and treats authority as valid until the earlier of snapshot and
 lease expiry. Every operation check supplies account, profile, resource,
@@ -251,7 +276,7 @@ in-process 100ms watchdog. Real two-Space RTP acceptance includes actual control
 SIGKILL while the signer advances and SFU stays healthy: files and ACKs stop
 refreshing, active media expires within five seconds, and unexpired stale bearer
 reconnects fail. This mechanism evidence does not replace owner projection,
-production media-grant issuance, fresh-online boot, node bundle or qualified 2×
+the combined production media-grant path, node bundle or qualified 2×
 load gates.
 
 Envelope JSON: `{key_id,payload,signature}`. `payload` is unpadded base64url of
