@@ -1,5 +1,6 @@
 """Pinned original-PV file inventory. No payload output and no preservation PASS."""
 import datetime
+from contextlib import contextmanager
 import grp
 import hashlib
 import json
@@ -134,39 +135,73 @@ def inside(path, source):
 def no_open_handles(source, proc=Path("/proc")):
     # Any open handle is rejected, including read-only ones; maps catch closed-fd mmap.
     device, coordinate, _ = source_mount(source)
-    for process in proc.iterdir():
-        if not process.name.isdigit() or int(process.name) == os.getpid():
-            continue
-        mounts = mount_records(process / "mountinfo")
-        def touches(path):
-            if not path.startswith("/"):
-                return False
-            candidates = [r for r in mounts if inside(path, r[2])]
-            if not candidates:
+    def check(process):
+        if int(process.name) == os.getpid():
+            return
+        with process_mount_view(process) as mounts:
+            check_process_handles(process, mounts, device, coordinate)
+    scan_processes(proc, check)
+
+
+def scan_processes(proc, check):
+    """Restart a whole pass only for a verified vanished real proc PID."""
+    for attempt in range(3):
+        for process in proc.iterdir():
+            if not process.name.isdigit():
+                continue
+            try:
+                check(process)
+            except FileNotFoundError as error:
+                if (proc == Path("/proc") and process.parent == proc
+                        and int(process.name) > 0 and type(error.filename) is str
+                        and inside(error.filename, process)
+                        and getattr(error, "pid", int(process.name)) == int(process.name)):
+                    try:
+                        process.lstat()
+                    except FileNotFoundError:
+                        break  # No skip: all earlier processes are rechecked.
+                raise  # Live/missing inner references and denied evidence fail.
+        else:
+            return
+    error = Unsafe("PROCESS_SCAN_UNSTABLE")
+    error.pid = int(process.name)
+    raise error
+
+
+def check_process_handles(process, mounts, device, coordinate):
+    def touches(path):
+        if not path.startswith("/"):
+            return False
+        candidates = [r for r in mounts if inside(path, r[2])]
+        if not candidates:
+            raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
+        longest = max(len(r[2]) for r in candidates)
+        matches = [r for r in candidates if len(r[2]) == longest]
+        if len(matches) != 1:
+            raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
+        dev, root, target = matches[0]
+        if not root.startswith("/"):
+            if dev == device:
                 raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
-            longest = max(len(r[2]) for r in candidates)
-            matches = [r for r in candidates if len(r[2]) == longest]
-            if len(matches) != 1:
-                raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
-            dev, root, target = matches[0]
-            if not root.startswith("/"):
-                if dev == device:
-                    raise Unsafe("HANDLE_MAPPING_UNCERTAIN")
-                return False  # Recognized nsfs objects have no filesystem subtree.
-            physical = posixpath.normpath(posixpath.join(root, posixpath.relpath(path, target)))
-            return dev == device and inside(physical, coordinate)
-        for fd in (process / "fd").iterdir():
-            if touches(os.readlink(fd).removesuffix(" (deleted)")):
-                raise Unsafe("OPEN_SOURCE_HANDLE")
-        for line in (process / "maps").read_text().splitlines():
-            parts = line.split(maxsplit=5)
-            if len(parts) == 6 and touches(parts[5].removesuffix(" (deleted)")):
-                raise Unsafe("MAPPED_SOURCE")
+            return False  # Recognized nsfs objects have no filesystem subtree.
+        physical = posixpath.normpath(posixpath.join(root, posixpath.relpath(path, target)))
+        return dev == device and inside(physical, coordinate)
+    for fd in (process / "fd").iterdir():
+        if touches(os.readlink(fd).removesuffix(" (deleted)")):
+            raise Unsafe("OPEN_SOURCE_HANDLE")
+    for line in (process / "maps").read_text().splitlines():
+        parts = line.split(maxsplit=5)
+        if len(parts) == 6 and touches(parts[5].removesuffix(" (deleted)")):
+            raise Unsafe("MAPPED_SOURCE")
 
 
 def mount_records(path):
+    return parse_mount_records(path.read_text())
+
+
+def parse_mount_records(text):
     result = []
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         fields = line.split()
         if len(fields) < 10 or "-" not in fields or not re.fullmatch(r"\d+:\d+", fields[2]):
             raise Unsafe("MOUNTINFO_UNCERTAIN")
@@ -187,6 +222,109 @@ def mount_records(path):
     if not result:
         raise Unsafe("MOUNTINFO_UNCERTAIN")
     return result
+
+
+def process_identity(process):
+    directory = proc_step(process, "PROC_DIRECTORY", process.stat)
+    fields = proc_step(process, "PROC_STARTTIME", (process / "stat").read_text).rsplit(")", 1)[-1].split()
+    if len(fields) < 20 or not fields[19].isdigit():
+        raise Unsafe("PROCESS_IDENTITY_UNCERTAIN")
+    namespace = proc_step(process, "PROC_NAMESPACE", (process / "ns/mnt").stat)
+    root = proc_step(process, "PROC_ROOT", (process / "root").stat)
+    return (directory.st_dev, directory.st_ino, int(fields[19]),
+            namespace.st_dev, namespace.st_ino, root.st_dev, root.st_ino)
+
+
+def proc_step(process, operation, read):
+    try:
+        return read()
+    except Exception as error:
+        error.operation = operation
+        if process.name.isdigit() and not hasattr(error, "pid"):
+            error.pid = int(process.name)
+        raise
+
+
+def proc_mount_bytes(process):
+    return proc_step(process, "PROC_MOUNT_TABLE", (process / "mountinfo").read_bytes)
+
+
+@contextmanager
+def pinned_process(process):
+    fds = []
+    try:
+        before = process_identity(process)
+        for path, flags, expected in (
+            (process, os.O_DIRECTORY | os.O_NOFOLLOW, before[:2]),
+            (process / "ns/mnt", 0, before[3:5]),
+            (process / "root", os.O_DIRECTORY, before[5:7]),
+        ):
+            fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | flags)
+            fds.append(fd)
+            s = os.fstat(fd)
+            if (s.st_dev, s.st_ino) != expected:
+                raise Unsafe("PROCESS_IDENTITY_CHANGED")
+        if process_identity(process) != before:
+            raise Unsafe("PROCESS_IDENTITY_CHANGED")
+        try:
+            yield before
+        finally:
+            if sys.exception() is None and process_identity(process) != before:
+                raise Unsafe("PROCESS_IDENTITY_CHANGED")
+    except Exception as error:
+        if process.name.isdigit() and not hasattr(error, "pid"):
+            error.pid = int(process.name)
+        raise
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+
+
+@contextmanager
+def process_mount_view(process):
+    raw = proc_mount_bytes(process)
+    if raw:
+        yield parse_mount_records(raw.decode())
+        return
+    # EMPTY can be chroot filtering, never permission to skip a live process.
+    caller_path, init_path = Path("/proc") / str(os.getpid()), Path("/proc/1")
+    with pinned_process(process) as target, pinned_process(caller_path) as caller, pinned_process(init_path) as init:
+        host_root = Path("/").stat()
+        if target[3:5] != caller[3:5] or init[3:7] != caller[3:7]:
+            raise Unsafe("EMPTY_NAMESPACE_UNPROVEN")
+        if caller[5:7] != (host_root.st_dev, host_root.st_ino):
+            raise Unsafe("HOST_ROOT_UNPROVEN")
+        host_raw = proc_mount_bytes(caller_path)
+        init_raw = proc_mount_bytes(init_path)
+        if init_raw != host_raw:
+            raise Unsafe("EMPTY_NAMESPACE_UNPROVEN")
+        records = parse_mount_records(host_raw.decode())
+        roots = [record for record in records if record[2] == "/"]
+        if (len(roots) != 1 or roots[0][1] != "/" or roots[0][0] !=
+                str(os.major(host_root.st_dev)) + ":" + str(os.minor(host_root.st_dev))):
+            raise Unsafe("HOST_ROOT_UNPROVEN")
+        snapshots = ((process, target, raw), (caller_path, caller, host_raw), (init_path, init, init_raw))
+        def recheck():
+            for path, identity, table in snapshots:
+                # Re-stat live proc references: pinned old FDs alone cannot detect
+                # a surviving process that changes root or mount namespace.
+                if process_identity(path) != identity:
+                    raise Unsafe("PROCESS_IDENTITY_CHANGED")
+                if proc_mount_bytes(path) != table:
+                    raise Unsafe("MOUNT_VIEW_CHANGED")
+            fresh_root = Path("/").stat()
+            if (fresh_root.st_dev, fresh_root.st_ino) != caller[5:7]:
+                raise Unsafe("HOST_ROOT_UNPROVEN")
+        recheck()
+        # FD/maps paths are rendered by the kernel relative to the current reader's
+        # root (d_path), so use caller coordinates unchanged, not target chroot paths.
+        try:
+            yield records
+        finally:
+            # A detected source handle/mount must never become a retry because
+            # an exiting process makes a cleanup recheck fail with ENOENT.
+            if sys.exception() is None:
+                recheck()
 
 
 def source_mount(source):
@@ -213,20 +351,20 @@ def source_mount(source):
 def no_mounts(source):
     # mountinfo roots are relative to their filesystem, not the host's /.
     device, coordinate, backing = source_mount(source)
-    for process in Path("/proc").iterdir():
-        if not process.name.isdigit():
-            continue
-        for record in mount_records(process / "mountinfo"):
-            dev, root, target = record
-            if inside(target, source):
-                raise Unsafe("SOURCE_MOUNTED")
-            if record == backing:
-                continue  # Canonical host backing mount is expected.
-            if dev == device:
-                if not root.startswith("/"):
-                    raise Unsafe("SOURCE_MAPPING_UNCERTAIN")
-                if inside(root, coordinate) or inside(coordinate, root):
+    def check(process):
+        with process_mount_view(process) as records:
+            for record in records:
+                dev, root, target = record
+                if inside(target, source):
                     raise Unsafe("SOURCE_MOUNTED")
+                if record == backing:
+                    continue  # Canonical host backing mount is expected.
+                if dev == device:
+                    if not root.startswith("/"):
+                        raise Unsafe("SOURCE_MAPPING_UNCERTAIN")
+                    if inside(root, coordinate) or inside(coordinate, root):
+                        raise Unsafe("SOURCE_MOUNTED")
+    scan_processes(Path("/proc"), check)
 
 
 def validate_kube(pvc, pv, pods):
@@ -314,10 +452,57 @@ def main():
     print(str(target))
 
 
-if __name__ == "__main__":
+PUBLIC_FAILURE_CODES = frozenset("""
+ROOT_LINUX_REQUIRED PATH_INVALID SYMLINK UNTRUSTED_ROOT_PATH DIRECTORY_CHANGED
+SYMLINK_OR_SPECIAL HARDLINK FILE_CHANGED TREE_CHANGED NO_JETSTREAM_METADATA
+HANDLE_MAPPING_UNCERTAIN OPEN_SOURCE_HANDLE MAPPED_SOURCE MOUNTINFO_UNCERTAIN
+PROCESS_IDENTITY_UNCERTAIN PROCESS_IDENTITY_CHANGED EMPTY_NAMESPACE_UNPROVEN
+HOST_ROOT_UNPROVEN MOUNT_VIEW_CHANGED SOURCE_MAPPING_UNCERTAIN SOURCE_MOUNTED
+SOURCE_DEVICE_CHANGED PV_PROVENANCE NODE_AFFINITY POD_MOUNT KUBERNETES_UNCERTAIN
+WRONG_NODE KUBERNETES_CHANGED SOURCE_CHANGED
+PROCESS_SCAN_UNSTABLE
+""".split())
+PUBLIC_FUNCTIONS = frozenset("""
+require_root fingerprint open_read trusted_path inventory walk selected inside
+no_open_handles check_process_handles touches mount_records parse_mount_records
+process_identity pinned_process process_mount_view recheck source_mount no_mounts
+validate_kube kube_state main
+scan_processes proc_step proc_mount_bytes check
+""".split())
+
+
+def safe_failure(error):
+    """Only pinned public labels and bounded numeric context cross the CLI."""
+    category = "Unsafe" if isinstance(error, Unsafe) else "OSError" if isinstance(error, OSError) else "Exception"
+    result = {"status": "INSPECTION_FAILED_NO_ACCEPTANCE", "class": category, "code": "UNEXPECTED_FAILURE"}
+    if (isinstance(error, Unsafe) and len(error.args) == 1
+            and type(error.args[0]) is str and error.args[0] in PUBLIC_FAILURE_CODES):
+        result["code"] = error.args[0]
+    frame = error.__traceback__
+    while frame is not None:
+        code = frame.tb_frame.f_code
+        if code.co_filename == __file__ and code.co_name in PUBLIC_FUNCTIONS:
+            result["function"] = code.co_name
+        frame = frame.tb_next
+    for key, maximum in (("pid", 2**31 - 1), ("errno", 4095)):
+        value = getattr(error, key, None)
+        if type(value) is int and 0 < value <= maximum:
+            result[key] = value
+    operation = getattr(error, "operation", None)
+    if type(operation) is str and operation in {
+            "PROC_DIRECTORY", "PROC_STARTTIME", "PROC_NAMESPACE", "PROC_ROOT", "PROC_MOUNT_TABLE"}:
+        result["operation"] = operation
+    return result
+
+
+def run_cli():
     try:
         main()
-    except Exception:
-        # Do not expose subprocess stderr, source paths in errors, or credential data.
-        print("INSPECTION_FAILED_NO_ACCEPTANCE; root-only partial output remains", file=sys.stderr)
-        sys.exit(1)
+    except Exception as error:
+        print(json.dumps(safe_failure(error), sort_keys=True), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run_cli())

@@ -21,7 +21,12 @@ the config. Config/binary/source ancestor trust and provenance guards must pass.
 Any Pod referencing this PVC, any process FD/mapping into it, or mount namespace
 bind/nested mount fails. Process races, permission errors, missing/malformed API
 fields, file changes, symlinks, hardlinks for selected files, or special files
-also fail. There is no automatic retry or weakened mode. Failure may leave a
+also fail. A numeric process that vanishes during a scan may cause a complete
+scan restart only after fresh `/proc/<pid>` directory lookup verifies absence;
+at most three complete passes are attempted. Live processes with missing or
+denied inner references fail immediately. A detected source handle, mapping or
+mount veto is preserved even if that process exits during error cleanup. There
+is no weakened mode. Failure may leave a
 root-only partial output directory; it does not publish completion metadata.
 
 Mount/handle checks map the source and each namespace path into coordinates on
@@ -32,6 +37,15 @@ Recognized Linux `nsfs` network namespace object roots (`net:[inode]`, virtual
 device major 0) are retained as object records, not filesystem coordinates.
 Their mount targets still reject mounting at/inside the source. Malformed or
 unknown non-filesystem roots fail; filesystem alias checks remain unchanged.
+
+An exactly empty process mount table may be chroot filtering. It can use the
+inspector's complete runtime table only when the target shares the inspector's
+mount namespace, PID 1 shares its namespace and root, and the inspector root is
+the runtime `/` with a matching `/` mount record. The helper pins process,
+namespace and root descriptors and checks fresh process references, start times
+and all three mount-table byte snapshots before and after the FD/maps scan.
+Missing, denied, different or changing evidence fails closed. Every FD/mapping
+and source mount/alias check still runs, using the kernel's caller-root paths.
 
 The walk opens the source read-only with `O_NOFOLLOW` and `O_NOATIME`; failure to
 use these flags fails inspection. Only JetStream `meta.inf`, `meta.sum`, `o.dat`
@@ -72,6 +86,9 @@ Successful inspection prints one metadata path under
 either. Use the exact printed path with `scp voice-staging:<path> <local-path>`
 as pmd after completion. No payloads or account/operator/user seeds are retrieved.
 If the helper reports failure, provide only that failure status for review.
+Failure JSON contains only pinned public guard/class/function labels and bounded
+numeric PID/errno and pinned process-operation labels when available; exception
+text, paths and tracebacks stay private.
 
 ## Disposable Linux checks
 

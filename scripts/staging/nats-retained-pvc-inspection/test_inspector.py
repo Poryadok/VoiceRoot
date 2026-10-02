@@ -1,4 +1,8 @@
 import hashlib
+from contextlib import contextmanager, redirect_stderr
+import io
+import mmap
+import signal
 import importlib.util
 import os
 from pathlib import Path
@@ -14,6 +18,49 @@ spec.loader.exec_module(m)
 
 
 class InspectorTests(unittest.TestCase):
+    def exited_process(self):
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        os.waitpid(pid, 0)
+        return Path("/proc/" + str(pid))
+
+    @contextmanager
+    def jailed_process(self, close_source_fds=False):
+        jail = self.root / "jail"
+        jail.mkdir(exist_ok=True)
+        ready_r, ready_w = os.pipe()
+        stop_r, stop_w = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(ready_r); os.close(stop_w)
+            if close_source_fds:
+                for fd in Path("/proc/self/fd").iterdir():
+                    try:
+                        if os.readlink(fd) == str(self.file):
+                            os.close(int(fd.name))
+                    except FileNotFoundError:
+                        pass  # The scandir descriptor already closed.
+            os.chroot(jail); os.chdir("/")
+            os.write(ready_w, b"R")
+            os.read(stop_r, 1)
+            os._exit(0)
+        os.close(ready_w); os.close(stop_r)
+        try:
+            self.assertEqual(os.read(ready_r, 1), b"R")
+            self.assertEqual(Path("/proc/" + str(pid) + "/mountinfo").read_text(), "")
+            yield pid
+        finally:
+            try:
+                os.write(stop_w, b"X")
+            except BrokenPipeError:
+                pass  # A disappearance test already ended the fixture child.
+            os.close(stop_w); os.close(ready_r)
+            try:
+                os.waitpid(pid, 0)
+            except ChildProcessError:
+                pass
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir="/root")
         self.addCleanup(self.tmp.cleanup)
@@ -128,7 +175,8 @@ class InspectorTests(unittest.TestCase):
         def records(path):
             return host if str(path) == "/proc/self/mountinfo" else alias
         with patch.object(m.Path, "iterdir", return_value=[Path("/proc/123")]), patch.object(
-                m.Path, "read_text", autospec=True, side_effect=records):
+                m.Path, "read_text", autospec=True, side_effect=records), patch.object(
+                m.Path, "read_bytes", autospec=True, side_effect=lambda p: records(p).encode()):
             with self.assertRaisesRegex(m.Unsafe, "SOURCE_MOUNTED"):
                 m.no_mounts(self.root)
 
@@ -142,7 +190,8 @@ class InspectorTests(unittest.TestCase):
             return host if str(path) == "/proc/self/mountinfo" else alias
         with patch.object(m.Path, "iterdir", return_value=[Path("/proc/123")]), patch.object(
                 m.Path, "read_text", autospec=True, side_effect=records), patch.object(
-                m.Path, "stat", return_value=source_stat):
+                m.Path, "stat", return_value=source_stat), patch.object(
+                m.Path, "read_bytes", autospec=True, side_effect=lambda p: records(p).encode()):
             with self.assertRaisesRegex(m.Unsafe, "SOURCE_MOUNTED"):
                 m.no_mounts(source)
 
@@ -153,7 +202,8 @@ class InspectorTests(unittest.TestCase):
         def records(path):
             return host if str(path) == "/proc/self/mountinfo" else alias
         with patch.object(m.Path, "iterdir", return_value=[Path("/proc/123")]), patch.object(
-                m.Path, "read_text", autospec=True, side_effect=records):
+                m.Path, "read_text", autospec=True, side_effect=records), patch.object(
+                m.Path, "read_bytes", autospec=True, side_effect=lambda p: records(p).encode()):
             with self.assertRaisesRegex(m.Unsafe, "SOURCE_MOUNTED"):
                 m.no_mounts(self.root)
 
@@ -204,7 +254,8 @@ class InspectorTests(unittest.TestCase):
         def records(path):
             return host if str(path) == "/proc/self/mountinfo" else alias
         with patch.object(m.Path, "iterdir", return_value=[Path("/proc/123")]), patch.object(
-                m.Path, "read_text", autospec=True, side_effect=records):
+                m.Path, "read_text", autospec=True, side_effect=records), patch.object(
+                m.Path, "read_bytes", autospec=True, side_effect=lambda p: records(p).encode()):
             with self.assertRaisesRegex(m.Unsafe, "SOURCE_MOUNTED"):
                 m.no_mounts(self.root)
 
@@ -228,6 +279,180 @@ class InspectorTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["sha256"], hashlib.sha256(b"synthetic consumer state").hexdigest())
         self.assertEqual(state.stat(), before)
+
+    def test_live_chroot_empty_mount_view_remains_checked(self):
+        real_iterdir = m.Path.iterdir
+        with self.jailed_process() as pid:
+            with patch.object(m.Path, "iterdir", autospec=True,
+                              side_effect=lambda p: [Path("/proc/" + str(pid))] if str(p) == "/proc" else list(real_iterdir(p))):
+                m.no_mounts(self.js)
+            m.no_open_handles(self.js)
+
+    def test_chroot_inherited_source_fd_is_rejected(self):
+        with self.file.open("rb"):
+            with self.jailed_process():
+                with self.assertRaisesRegex(m.Unsafe, "OPEN_SOURCE_HANDLE"):
+                    m.no_open_handles(self.js)
+
+    def test_chroot_closed_fd_source_mapping_is_rejected(self):
+        with self.file.open("rb") as stream:
+            mapping = mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ)
+        try:
+            with self.jailed_process(close_source_fds=True):
+                with self.assertRaisesRegex(m.Unsafe, "MAPPED_SOURCE"):
+                    m.no_open_handles(self.js)
+        finally:
+            mapping.close()
+
+    def test_failure_category_never_leaks_exception_text(self):
+        for error in (m.Unsafe("PRIVATE_SEED_SENTINEL"), OSError(13, "PRIVATE_SEED_SENTINEL")):
+            self.assertNotIn("PRIVATE_SEED_SENTINEL", str(m.safe_failure(error)))
+
+    def test_empty_view_different_namespace_and_missing_peer_fail(self):
+        real_identity = m.process_identity
+        with self.jailed_process() as pid:
+            process = Path("/proc/" + str(pid))
+            def changed_identity(path):
+                value = real_identity(path)
+                return value[:3] + (value[3], value[4] + 1) + value[5:] if path == process else value
+            with patch.object(m, "process_identity", side_effect=changed_identity):
+                with self.assertRaises(m.Unsafe), m.process_mount_view(process):
+                    self.fail("different namespace accepted")
+            def no_peer(path):
+                if path == Path("/proc/1"):
+                    raise PermissionError(13, "PRIVATE_SEED_SENTINEL")
+                return real_identity(path)
+            with patch.object(m, "process_identity", side_effect=no_peer):
+                with self.assertRaises(PermissionError), m.process_mount_view(process):
+                    self.fail("missing peer accepted")
+
+    def test_empty_view_fresh_identity_change_after_scan_fails(self):
+        real_identity = m.process_identity
+        with self.jailed_process() as pid:
+            process = Path("/proc/" + str(pid))
+            for changed_path in (process, Path("/proc/1"), Path("/proc") / str(os.getpid())):
+                changed = False
+                def identity(path):
+                    value = real_identity(path)
+                    return value[:-1] + (value[-1] + 1,) if changed and path == changed_path else value
+                with self.subTest(process=str(changed_path)), patch.object(m, "process_identity", side_effect=identity):
+                    with self.assertRaisesRegex(m.Unsafe, "PROCESS_IDENTITY_CHANGED"):
+                        with m.process_mount_view(process):
+                            changed = True
+
+    def test_empty_view_peer_mount_bytes_change_after_scan_fails(self):
+        real_read = m.Path.read_bytes
+        with self.jailed_process() as pid:
+            process = Path("/proc/" + str(pid))
+            for changed_path in (process, Path("/proc/1"), Path("/proc") / str(os.getpid())):
+                changed = False
+                def read(path):
+                    value = real_read(path)
+                    return value + b"\n" if changed and path == changed_path / "mountinfo" else value
+                with self.subTest(process=str(changed_path)), patch.object(m.Path, "read_bytes", autospec=True, side_effect=read):
+                    with self.assertRaisesRegex(m.Unsafe, "MOUNT_VIEW_CHANGED"):
+                        with m.process_mount_view(process):
+                            changed = True
+
+    def test_cli_reports_static_category_and_numeric_context(self):
+        error = m.Unsafe("OPEN_SOURCE_HANDLE")
+        error.pid = 123
+        output = io.StringIO()
+        with patch.object(m, "main", side_effect=error), redirect_stderr(output):
+            self.assertEqual(m.run_cli(), 1)
+        self.assertIn('"code": "OPEN_SOURCE_HANDLE"', output.getvalue())
+        self.assertIn('"pid": 123', output.getvalue())
+        error = OSError(13, "PRIVATE_SEED_SENTINEL", "/private/credential.creds")
+        output = io.StringIO()
+        with patch.object(m, "main", side_effect=error), redirect_stderr(output):
+            self.assertEqual(m.run_cli(), 1)
+        self.assertIn('"errno": 13', output.getvalue())
+        self.assertNotIn("PRIVATE_SEED_SENTINEL", output.getvalue())
+        self.assertNotIn("/private", output.getvalue())
+
+    def test_verified_exit_restarts_entire_process_scan(self):
+        gone = self.exited_process()
+        live = Path("/proc") / str(os.getpid())
+        checked = []
+        def check(process):
+            checked.append(process)
+            with m.process_mount_view(process):
+                pass
+        with patch.object(m.Path, "iterdir", side_effect=[[live, gone], [live]]):
+            m.scan_processes(Path("/proc"), check)
+        self.assertEqual(checked, [live, gone, live])
+
+    def test_process_exit_restarts_are_bounded(self):
+        gone = self.exited_process()
+        with patch.object(m.Path, "iterdir", return_value=[gone]) as listing:
+            with self.assertRaisesRegex(m.Unsafe, "PROCESS_SCAN_UNSTABLE"):
+                m.scan_processes(Path("/proc"), lambda p: m.proc_mount_bytes(p))
+        self.assertEqual(listing.call_count, 3)
+
+    def test_live_missing_proc_reference_and_guard_do_not_retry(self):
+        live = Path("/proc") / str(os.getpid())
+        for error in (FileNotFoundError(2, "PRIVATE_SEED_SENTINEL"),
+                      PermissionError(13, "PRIVATE_SEED_SENTINEL"), m.Unsafe("OPEN_SOURCE_HANDLE")):
+            with self.subTest(error=type(error).__name__), patch.object(m.Path, "iterdir", return_value=[live]) as listing:
+                def check(process):
+                    raise error
+                with self.assertRaises(type(error)):
+                    m.scan_processes(Path("/proc"), check)
+                self.assertEqual(listing.call_count, 1)
+
+    def test_initial_mount_read_reports_pid_and_static_operation(self):
+        gone = self.exited_process()
+        with self.assertRaises(FileNotFoundError) as caught:
+            with m.process_mount_view(gone):
+                pass
+        diagnostic = m.safe_failure(caught.exception)
+        self.assertEqual(diagnostic["pid"], int(gone.name))
+        self.assertEqual(diagnostic["operation"], "PROC_MOUNT_TABLE")
+
+    def test_unrelated_enoent_never_restarts_a_gone_pid(self):
+        gone = self.exited_process()
+        for filename in (None, "/private/other-file", "/proc/1/root"):
+            error = FileNotFoundError(2, "PRIVATE_SEED_SENTINEL", filename)
+            with self.subTest(filename=filename), patch.object(m.Path, "iterdir", return_value=[gone]) as listing:
+                def check(process):
+                    raise error
+                with self.assertRaises(FileNotFoundError):
+                    m.scan_processes(Path("/proc"), check)
+                self.assertEqual(listing.call_count, 1)
+
+    def test_live_missing_root_or_namespace_never_restarts(self):
+        real_stat = m.Path.stat
+        with self.jailed_process() as pid:
+            process = Path("/proc/" + str(pid))
+            for reference in ("root", "ns/mnt"):
+                def missing(path, *args, **kwargs):
+                    if path == process / reference:
+                        raise FileNotFoundError(2, "PRIVATE_SEED_SENTINEL")
+                    return real_stat(path, *args, **kwargs)
+                with self.subTest(reference=reference), patch.object(m.Path, "stat", autospec=True, side_effect=missing), patch.object(
+                        m.Path, "iterdir", return_value=[process]) as listing:
+                    def check(path):
+                        with m.process_mount_view(path):
+                            self.fail("live missing reference accepted")
+                    with self.assertRaises(FileNotFoundError):
+                        m.scan_processes(Path("/proc"), check)
+                    self.assertEqual(listing.call_count, 1)
+
+    def test_original_data_veto_survives_real_exit_during_unwind(self):
+        for code in ("OPEN_SOURCE_HANDLE", "MAPPED_SOURCE", "SOURCE_MOUNTED"):
+            with self.subTest(code=code), self.jailed_process() as pid:
+                process = Path("/proc/" + str(pid))
+                original = m.Unsafe(code)
+                def check(path):
+                    with m.process_mount_view(path):
+                        os.kill(pid, signal.SIGKILL)
+                        os.waitpid(pid, 0)
+                        raise original
+                with patch.object(m.Path, "iterdir", return_value=[process]) as listing:
+                    with self.assertRaises(m.Unsafe) as caught:
+                        m.scan_processes(Path("/proc"), check)
+                self.assertIs(caught.exception, original)
+                self.assertEqual(listing.call_count, 1)
 
 
 if __name__ == "__main__":
