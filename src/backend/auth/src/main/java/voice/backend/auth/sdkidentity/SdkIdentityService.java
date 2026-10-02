@@ -25,9 +25,16 @@ import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Auth-owned SDK bootstrap. Every admission reads current durable device/identity state. */
 public class SdkIdentityService {
+  private static final Logger LOG = LoggerFactory.getLogger(SdkIdentityService.class);
+  private enum AuthorityStage { INPUT, PARSE, RECEIPT, SESSION, DEVICE, ADMISSION, KEY, SIGNATURE, BINDING, ISSUE }
+  private static final class AuthorityDiagnostic {
+    private AuthorityStage stage = AuthorityStage.INPUT;
+  }
   private final NamedParameterJdbcTemplate jdbc;
   private final TransactionTemplate transactions;
   private final GoogleOidcProofVerifier verifier;
@@ -71,14 +78,27 @@ public class SdkIdentityService {
 
   /** Issues an immutable, short-lived assertion only from current Auth and T16 binding state. */
   public String deviceAuthority(String sessionToken, String proof, byte[] requestBytes) {
+    var diagnostic = new AuthorityDiagnostic();
+    try {
+      return issueDeviceAuthority(sessionToken, proof, requestBytes, diagnostic);
+    } catch (SdkIdentityDeniedException denied) {
+      LOG.debug("SDK device authority denied stage={}", diagnostic.stage.name());
+      throw denied;
+    }
+  }
+
+  private String issueDeviceAuthority(String sessionToken, String proof, byte[] requestBytes,
+      AuthorityDiagnostic diagnostic) {
     if (statusIssuer == null || bindingAuthority == null || sessionToken == null
         || !sessionToken.matches("[A-Za-z0-9_-]{43}") || proof == null || requestBytes == null
         || requestBytes.length == 0 || requestBytes.length > 4096
         || !Arrays.equals(requestBytes, proof.getBytes(StandardCharsets.US_ASCII))) {
       throw new SdkIdentityDeniedException();
     }
+    diagnostic.stage = AuthorityStage.PARSE;
     AuthorityProof parsed = parseAuthorityProof(proof, requestBytes);
     return transactions.execute(status -> {
+      diagnostic.stage = AuthorityStage.RECEIPT;
       jdbc.getJdbcTemplate().queryForObject("SELECT pg_advisory_xact_lock(?)", Object.class,
           parsed.requestId().getMostSignificantBits() ^ parsed.requestId().getLeastSignificantBits());
       String sessionHash = hash(sessionToken);
@@ -91,9 +111,11 @@ public class SdkIdentityService {
         if (!receipt.sessionTokenHash().equals(sessionHash)) throw new SdkIdentityDeniedException();
         return receipt.assertion();
       }
+      diagnostic.stage = AuthorityStage.SESSION;
       UUID accountId = jdbc.query("SELECT account_id FROM sdk_sessions WHERE token_hash=:hash",
           Map.of("hash", sessionHash), (rs, row) -> rs.getObject("account_id", UUID.class))
           .stream().findFirst().orElseThrow(SdkIdentityDeniedException::new);
+      diagnostic.stage = AuthorityStage.DEVICE;
       lockIdentityAndDevice(accountId, parsed.deviceId());
       Instant now = clock.instant();
       var rows = jdbc.query("""
@@ -125,16 +147,21 @@ public class SdkIdentityService {
           || !parsed.applicationId().equals(device.applicationId())
           || !parsed.environmentId().equals(device.environmentId())
           || !parsed.deviceId().equals(device.deviceId())) throw new SdkIdentityDeniedException();
+      diagnostic.stage = AuthorityStage.ADMISSION;
       admitted(device.applicationId(), device.environmentId());
+      diagnostic.stage = AuthorityStage.KEY;
       ECKey publicKey = publicKey(device.publicJwk());
       if (!device.keyId().equals(parsed.keyId()) || !thumbprint(publicKey).equals(device.thumbprint())) {
         throw new SdkIdentityDeniedException();
       }
+      diagnostic.stage = AuthorityStage.SIGNATURE;
       verifyAuthoritySignature(parsed.jws(), publicKey);
+      diagnostic.stage = AuthorityStage.BINDING;
       var binding = bindingAuthority.currentBinding(device.applicationId(), device.environmentId(), device.accountId(), device.deviceId())
           .orElseThrow(SdkIdentityDeniedException::new);
       if (binding.actorId() == null || binding.bindingId() == null
           || !binding.actorId().equals(device.actorId())) throw new SdkIdentityDeniedException();
+      diagnostic.stage = AuthorityStage.ISSUE;
       long issuedAt = clock.instant().toEpochMilli();
       long keyDeadline = device.notAfter().toEpochMilli();
       long expiresAt = Math.min(issuedAt + 4000, keyDeadline);

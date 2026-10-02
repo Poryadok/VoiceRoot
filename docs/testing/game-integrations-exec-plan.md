@@ -3046,3 +3046,16 @@ the credential fixture suite pass. Existing stream drift remains fail-closed;
 this change does not recreate populated streams or apply any live configuration.
 The issuer suite's Linux-only permission checks remain hosted-CI obligations.
 The R22 exact-blob checkpoint and negative scope fixtures remain unchanged.
+
+Hosted startup now confirms Space/Messaging listeners are up; Voice, Bot and
+Notification exit before the T31 scenario, so the failure branches now collect
+bounded owner logs for the complete enabled Phase0 vertical. T16 has passed the
+Auth/proxy namespace mismatch and now rejects valid device-authority input before
+any GIS nonce is recorded. The suspected Compose application binding defect was
+disproved by the real Spring environment mapper and its tentative change removed.
+Auth now emits only a per-request denial-stage enum at DEBUG, enabled solely by
+the disposable T16 overlay. The same denial exception is rethrown; no proof,
+session, claims, identifiers or throwable are logged. A logging regression is red
+before and green after, with all nine REST controller and forty-seven durable
+identity integration tests passing without skips. The exact Auth denial stage
+and next Phase0 owner startup causes remain pending hosted diagnostics.
