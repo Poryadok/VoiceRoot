@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	searchv1 "voice.app/voice/search/v1"
@@ -102,6 +103,14 @@ func TestMessageSearchStore_ConcurrentManagedPurgeReturnsFirstReceipt_postgres(t
 	defer cancel()
 	root := searchModuleRepoRoot(t)
 	pool := integrationtest.StartPostgres(t, ctx, "searchdb", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	// Match a two-core CI runner so the observer cannot rely on spare slots.
+	config := pool.Config()
+	config.MaxConns = 4
+	config.MinConns = 0
+	boundedPool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(boundedPool.Close)
+	pool = boundedPool
 	for _, name := range []string{"000003_space_lifecycle.up.sql", "000009_managed_chat_message_purge.up.sql", "000010_chat_manifest_root_binding.up.sql"} {
 		integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", name))
 	}
@@ -121,6 +130,9 @@ func TestMessageSearchStore_ConcurrentManagedPurgeReturnsFirstReceipt_postgres(t
 			results := make(chan result, 8)
 			start := make(chan struct{})
 			var release func()
+			observer, err := pool.Acquire(ctx)
+			require.NoError(t, err)
+			defer observer.Release()
 			if nonempty {
 				locker, err := pool.Begin(ctx)
 				require.NoError(t, err)
@@ -138,10 +150,21 @@ func TestMessageSearchStore_ConcurrentManagedPurgeReturnsFirstReceipt_postgres(t
 			close(start)
 			if release != nil {
 				require.Eventually(t, func() bool {
-					var count int
-					err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event='advisory'`).Scan(&count)
-					return err == nil && count >= 2
-				}, 5*time.Second, 20*time.Millisecond, "concurrent attempts must reach the database barrier")
+					// Observe through a reserved connection: contenders can occupy
+					// every other pool slot while queued on the two exact locks.
+					var overlapping bool
+					err := observer.QueryRow(ctx, `WITH keys AS (
+						SELECT hashtextextended($1::text,721805) AS operation,
+						       hashtextextended($2::text,721804) AS message
+					) SELECT
+						EXISTS(SELECT 1 FROM pg_locks,keys WHERE locktype='advisory' AND NOT granted
+						  AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+						  AND classid=((operation>>32)&4294967295)::oid AND objid=(operation&4294967295)::oid AND objsubid=1)
+						AND EXISTS(SELECT 1 FROM pg_locks,keys WHERE locktype='advisory' AND NOT granted
+						  AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+						  AND classid=((message>>32)&4294967295)::oid AND objid=(message&4294967295)::oid AND objsubid=1)`, op.String(), ids[0].String()).Scan(&overlapping)
+					return err == nil && overlapping
+				}, 5*time.Second, 20*time.Millisecond, "one purge must wait on the message while a peer waits on its operation")
 				release()
 			}
 			var first *ManagedChatSearchPurgeReceipt

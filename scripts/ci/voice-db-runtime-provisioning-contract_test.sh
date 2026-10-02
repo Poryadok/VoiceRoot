@@ -417,7 +417,7 @@ base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
 # and Git blobs; the original R22.2 oracle still checks every remaining delta.
-accepted_game_checkpoint='3d9e7097275f3e2b964e1286d114e8284d55e13f'
+accepted_game_checkpoint='5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb'
 game_checkpoint_enabled=false
 if git -C "${ROOT}" merge-base --is-ancestor "${accepted_game_checkpoint}" HEAD; then
   game_checkpoint_enabled=true

@@ -2942,7 +2942,7 @@ tables, and the old R22 provisioning oracle rejecting the accepted checkpoint.
 Repairs regenerate canonical stubs, close local module packaging, and update
 fixtures without changing production authorization. The provisioning oracle
 accepts only exact path/blob matches from ancestor checkpoint
-`3d9e7097275f3e2b964e1286d114e8284d55e13f`; altered/unapproved/staging paths remain
+`5ff441e04422e3ff1a4c0e1e7e81e3d17b8470eb`; altered/unapproved/staging paths remain
 denied by explicit negative fixtures. No gate or deployment flag is bypassed.
 
 Messaging concurrent attachment retry had a real pool-starvation deadlock:
@@ -2962,3 +2962,28 @@ reports no issues. Required hosted CI for the final repair head remains the
 merge gate. These results do not close full-feature acceptance or authorize
 staging/provider/device activation. Original worktree WIP and its 26 staged
 Dart blobs remain preserved separately.
+
+The follow-up repair checkpoint also passes lint for all 22 Go modules (the
+12 repaired modules were checked again with uncapped diagnostics). Phase0's
+five Compose contract checks pass with explicit fixture-only TLS overrides
+and exact per-service readonly mount allowlists. The cold principal initializer
+previously omitted mounted Space/Story/Messaging signers and three service TLS
+identities. A new isolated Compose project reproduced unreadable/missing keys
+before the fix, then proved all six signer pairs and eight TLS identities
+readable by UID 65532, with no mounted CA private key. A second initializer run
+is idempotent; a pre-existing partial ready set fails closed without repair or
+overwrite. This is local/CI bootstrap evidence, not live activation.
+
+The bootstrap security recheck found another real fixture defect: service
+identities were serverAuth-only although Compose also uses them for outgoing
+mTLS. OpenSSL rejected the old File certificate for sslclient (error 26).
+Fresh isolated identities now validate for both sslclient and sslserver across
+all eight services. The readonly/private-volume rules remain unchanged.
+
+Search's concurrent receipt test reproduced its CI barrier timeout with a
+four-connection pool. A reserved observer now checks the exact operation and
+message advisory keys in pg_locks, with signed keys converted into masked
+32-bit OID halves. Five repeated PostgreSQL roots pass without skips, retaining
+the eight-equal-receipts assertion; Search lint also passes. Production purge
+behavior is unchanged. The exact-blob R22 scope oracle passes on this repair
+state, including its changed-path/blob and staging-path negative fixtures.

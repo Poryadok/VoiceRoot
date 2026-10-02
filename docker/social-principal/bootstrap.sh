@@ -32,7 +32,9 @@ done
 openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/ca.key -out /ca/ca.crt -days 30 -subj /CN=Voice-Compose-Principal-CA -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
 for service in $services; do
   openssl req -new -newkey rsa:2048 -nodes -keyout "/$service/tls.key" -out "/tmp/$service.csr" -subj "/CN=$service" 2>/dev/null
-  printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\n' "$service" > "/tmp/$service.ext"
+  # Compose uses each service-scoped identity for its listener and outbound
+  # principal/JWKS mTLS calls, so the leaf must support both TLS purposes.
+  printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:%s\nextendedKeyUsage=serverAuth,clientAuth\n' "$service" > "/tmp/$service.ext"
   openssl x509 -req -in "/tmp/$service.csr" -CA /ca/ca.crt -CAkey /tmp/ca.key -set_serial "0x$(openssl rand -hex 16)" -days 30 -extfile "/tmp/$service.ext" -out "/$service/tls.crt" 2>/dev/null
 done
 # Service images run as UID 65532; private files stay 0600 and service-scoped.
