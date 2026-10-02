@@ -2,6 +2,10 @@ package principalruntime
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,4 +43,24 @@ func TestPrincipalJWKSURLIsPinnedByIssuer(t *testing.T) {
 			require.Equal(t, test.valid, validPrincipalJWKSURL(test.url, test.issuer))
 		})
 	}
+}
+
+func TestComposeSpaceJWKSURLMatchesPinnedIssuerRoute(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../"))
+	compose, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	require.NoError(t, err)
+	service := strings.SplitN(string(compose), "\n  messaging:\n", 2)
+	require.Len(t, service, 2)
+	section := strings.SplitN(service[1], "\n  file:\n", 2)[0]
+	var endpoint string
+	for _, line := range strings.Split(section, "\n") {
+		if value, found := strings.CutPrefix(strings.TrimSpace(line), "SPACE_PRINCIPAL_JWKS_URL: "); found {
+			endpoint = value
+			break
+		}
+	}
+	require.NotEmpty(t, endpoint)
+	require.True(t, validPrincipalJWKSURL(endpoint, "space"), "Compose must use the issuer-pinned public JWKS route")
 }

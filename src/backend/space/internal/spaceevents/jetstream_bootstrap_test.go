@@ -2,6 +2,10 @@ package spaceevents
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,4 +39,34 @@ func TestValidateBootstrappedStream(t *testing.T) {
 func TestPublisherFailsClosedWhenStreamIsUnavailable(t *testing.T) {
 	publisher := &JetStreamPublisher{js: unavailableJetStream{}}
 	require.Error(t, publisher.PublishSpaceCreated(t.Context(), "space", "owner"))
+}
+
+func TestComposeBootstrapStreamSupportsSpacePublisher(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../"))
+	script, err := os.ReadFile(filepath.Join(root, "docker/nats/realtime-bootstrap.sh"))
+	require.NoError(t, err)
+	var subjects []string
+	for _, line := range strings.Split(string(script), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 2 && fields[0] == "stream" && fields[1] == "chat_events" {
+			subjects = fields[2:]
+			break
+		}
+	}
+	require.NotEmpty(t, subjects)
+	server := startJSTestServer(t)
+	connection, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(connection.Close)
+	js, err := connection.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: streamName, Subjects: subjects,
+		Retention: nats.LimitsPolicy, MaxAge: 7 * 24 * time.Hour, Storage: nats.FileStorage})
+	require.NoError(t, err)
+	publisher, err := NewJetStreamPublisher(server.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = publisher.Close() })
+	require.NoError(t, publisher.Validate(), "the central Compose bootstrap must support the actual Space publisher")
 }

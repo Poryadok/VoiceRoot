@@ -524,7 +524,7 @@ services:
       MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
       MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
       MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE: /etc/voice/file-principal/tls/tls.key
-      SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/principal-jwks.json
+      SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/jwks.json
       SPACE_PRINCIPAL_JWKS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
       MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
       MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key

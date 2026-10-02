@@ -3032,3 +3032,17 @@ existing T31/A1 failure branches omitted their container stdout. Those branches
 now capture bounded startup logs for the two owners while retaining the original
 failure status. The exact next startup cause remains open until these diagnostics
 run; no guessed source-policy or startup repair is claimed.
+
+The bounded hosted logs now confirm both startup defects: Space rejected the
+central chat_events stream's twelve subjects while both actual Space/Chat
+publishers require fourteen; Messaging rejected the configured Space JWKS route.
+Compose and both Kubernetes bootstrap definitions, the central stream manifest,
+and the exact Space ACL now include the documented deletion_scheduled/restored
+subjects. Messaging uses Space's pinned /.well-known/jwks.json route. Two
+regressions read the actual Compose/bootstrap inputs: both reproduce the old
+configuration failure and pass after repair, alongside sixteen Space event and
+three Messaging runtime roots without skips. Both NATS bootstrap contracts and
+the credential fixture suite pass. Existing stream drift remains fail-closed;
+this change does not recreate populated streams or apply any live configuration.
+The issuer suite's Linux-only permission checks remain hosted-CI obligations.
+The R22 exact-blob checkpoint and negative scope fixtures remain unchanged.
