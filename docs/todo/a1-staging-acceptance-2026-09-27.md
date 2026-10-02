@@ -394,3 +394,138 @@ NATS proof and state-preserving migration gate are satisfied.
   NATS resource changes occurred. The reported census of 566 consumers and
   evidence for 8 messages still require verification/classification and
   retention/replay/idempotency proof before the separate migration gate passes.
+
+## 2026-10-02 consolidated acceptance and deployment-gate ledger
+
+This section supersedes earlier statements that PR #596 exact-head CI or merge
+is pending. It does not close A1 or authorize deployment.
+
+### Build, CI, and NATS deployment gate
+
+- PR [#596](https://github.com/Poryadok/VoiceRoot/pull/596) merged at
+  `d5a1d518e26d0d42ec9ae06b3e4c9c1d5a40ba2f`. PR-head CI
+  [36952031360](https://github.com/Poryadok/VoiceRoot/actions/runs/36952031360)
+  passed at `bf83817c4e85d39bbdfa0f518dfa44699875b315` (56 jobs and `ci-gate`
+  success). Master run
+  [36953502402](https://github.com/Poryadok/VoiceRoot/actions/runs/36953502402)
+  completed successfully; `staging-stack-lock` succeeded, `deploy-staging`
+  was skipped, and master `ci-gate` was skipped. Do not describe the skipped
+  jobs as passes. These runs are CI evidence, not a staging deployment.
+- The active NATS generation is `r20260930a4`. A real earlier activation proof
+  exists: [run 36730512445](https://github.com/Poryadok/VoiceRoot/actions/runs/36730512445),
+  operation `activate`, source/proof image SHA
+  `47f1f5ca7398a4239b4709720e7b0738f87bbb35`, emitted `NATS_LIVE_ACL_PROOF=PASS`
+  at 2026-09-30T14:39:25Z for generation `r20260930a4` and ACL digest
+  `cfbc383b48e18075686d20267edb76bc5b2c1a36372909535217ac3170bba7f1`. This
+  remains valid historical proof for the intent it checked; the credential
+  used for issuance was short-lived and must not be recreated merely to rerun
+  already-covered old checks.
+- Current exact `deploy/nats/acl-intent.yaml` digest is
+  `eafe118f6aa1fd55a7d675b700497ba28b30784c289846d06e42ef34d8c31a02`, while
+  the staging Environment proof digest is still `cfbc383b48e18075686d20267edb76bc5b2c1a36372909535217ac3170bba7f1`.
+  The intent changed by six functional grants since that proof: five for the
+  Realtime `friend_removed` durable (INFO/ACK/SUB) and bootstrap INFO/CREATE,
+  plus bootstrap `STREAM.UPDATE.social_events` (commits `395eef118741e8965945ed7fc4b2048d90ee1370`
+  and `c6ce0296c4893879f117e8aa8b0160361cd300fc`). The old proof does not cover
+  these additions. The digest mismatch directly blocks a normal deployment;
+  re-hashing or relabeling the old proof would misstate what it proved.
+- The staging Environment lacks `STAGING_NATS_PROOF_CREDS_B64`. That separately
+  blocks the documented live proof workflow; its absence alone is not the
+  ordinary deployment variable-comparison failure. Current repository setting
+  `STAGING_DEPLOY_ENABLED=false`; the latest recorded deploy run
+  [36883938271](https://github.com/Poryadok/VoiceRoot/actions/runs/36883938271)
+  stopped at “Verify NATS ACL proof before staging mutation”. Do not dispatch a
+  deploy or change proof inputs/resources while the mismatch and state gate
+  remain unresolved.
+- Deployment controllers and the ready Web pod were directly observed tagged
+  `b126a62b502da1f7d8687116bdb74b9cdb43e84f` (Web image digest
+  `sha256:435a0eac7e0be7d73b81593f276a3a4752db7d6eb31f998a83665b391ce8f3ec`).
+  This live build predates merged PR #596, so its changes are absent from the
+  observed staging build. A signed-in inbox loaded; the regular-account setup
+  prompt is a corroborating UI observation, not the basis for identifying the
+  deployed SHA. No staging data was changed. APP monitoring reports 15 streams,
+  42 consumers, and 1,284 messages; these are current diagnostic counters,
+  not evidence of the historical source census or preservation.
+- Historical migration acceptance remains a separate open gate: locate or
+  produce authoritative source and target per-stream/consumer census and
+  dispositions, ACK/delivery boundaries, historical message hashes, retention,
+  replay/idempotency outcomes, and exact-current ACL proof. A bounded search of
+  the accepted prior-chat summaries found no locator for the expected
+  `evidence.env`, `source-census.tsv`, `streams.tsv`, `consumer-decisions.tsv`,
+  `message-hashes.tsv`, or seven stream archives; this does not establish that
+  artifacts are absent from unsearched operator storage/history.
+- The current full live ACL proof contract cannot safely be met by merely
+  removing its empty-stream guard: the fixed production durable requires real
+  publish/delivery/ACK, which can alter its ACK state and deliver a business
+  subject to other consumers. An isolated proof identity or synthetic ACK
+  would test different grants or fail to prove persisted ACK. No minimal repair
+  is supported under the current contract/prohibitions. Independent safety
+  review confirms that INFO, malformed-API, and unroutable-ACK authorization
+  probes cannot prove positive delivery or persisted ACK; ordinary production
+  SUB can create interest and change consumer state. The only possible
+  compositional route needs explicit owner acceptance of a versioned contract:
+  retain the old full PASS for unchanged inputs, verify current mounted claims
+  and relevant configuration fail-closed, and label new-grant authorization
+  evidence without claiming positive production delivery/ACK. It must never
+  relabel the old PASS with the new digest. See the accepted
+  `tmp/slave-driver/a1-acceptance-continuation/proof-safety-review.md` for the
+  decision boundary. No implementation is authorized or started. Historical
+  migration evidence remains independent; until both decisions/evidence gates
+  pass, deployment remains closed.
+
+### Accepted A1 contract evidence and P2 boundary
+
+- **Auth application boundary: proven at exact-head and merged-master CI.**
+  The Auth contract suites ran with zero skips/failures/errors in the above
+  runs: `AuthUserDbOwnershipContractTest` (2),
+  `UserGrpcClientConfigurationContractTest` (27),
+  `AuthUserGrpcContractTest` (12),
+  `ProfilesVerificationIntegrationTest` (14), and
+  `ResolvePhoneHashesIntegrationTest` (1). They establish removal of the
+  second User datasource/JDBC adapters, User gRPC use, and fail-closed handling
+  for unavailable/malformed User responses. This proves application ownership
+  and contract behavior, not database privilege denial.
+- **Web/Windows phonebook inactivity: proven at source/widget and selected CI
+  level.** Contacts UI has no sync action; the exact contacts-tab regression
+  asserts no sync POST and ran in Flutter CI. Compose E2E selected
+  `TestComposePhoneSync_live` in the successful exact-head smoke job. Dormant
+  helper/provider methods can still explicitly transmit hashes; do not claim
+  those APIs themselves are disabled. Backend phone-contact integration
+  suites that skip in short Go CI are not credited as PR-CI proof.
+- **P2 shared PostgreSQL role: unresolved isolation hardening.** Static
+  deployment/Compose configuration constructs Auth's `auth_db` URL using the
+  shared `POSTGRES_USER`/`POSTGRES_PASSWORD` role; database initialization
+  creates all service databases under that role, and User URL generation uses
+  the same credentials. Reproduction is in manifests/scripts; no live database
+  role privileges or secret values were inspected. Impact: compromise of shared
+  Auth PostgreSQL credentials may permit access beyond Auth's database.
+  Priority is P2 isolation-hardening: this does not negate the proven A1
+  application migration (no User datasource or dependency on User DB settings),
+  but it blocks any claim of enforced Auth-to-User credential isolation or
+  literal absence of credentials usable for `user_db`. A meaningful follow-up
+  needs isolated auth-only/user-only roles and an explicit denied Auth-role
+  connection/query to `user_db`; do not rotate staging credentials ad hoc.
+
+### Remaining full A1 proof matrix
+
+All items below still require actual-build Web acceptance unless noted. Generic
+CI success is not credited as requirement-specific proof when the exact case
+was not recorded in this ledger's evidence source.
+
+| A1 requirement | Current specific evidence | Still required on staging |
+|---|---|---|
+| Email/guest onboarding, session refresh, verification and reset | Auth contract/integration suites passed; email-provider delivery to non-owner mailbox and complete Web onboarding are not established by those suites. | Two regular accounts complete email registration/verification/login/session refresh/reset; verify guest onboarding separately and record delivered email/response. |
+| Friends, requests, notifications, two-way removal; DM/group/channel/thread | Exact-head CI is green, but requirement-specific live-flow cases are not established by the accepted matrix extraction. | Two-account Web request/accept/remove in both directions, incoming notification without reload, and durable DM/group/channel/thread exchange. |
+| Realtime reconnect and global paginated inbox (`main`/`requests`/`archive`) | Forty-five focused notification/reconciler tests cover `message_request`, `joined`, `inbox_bucket_changed`, failed-cursor retry guards, follow-up after activity during paging, and profile-bound responses; Compose profile-handoff T055/T106/T107/pending-email passed 5/5 locally. | On staging, reconnect and complete all three scopes; demonstrate fresh preview/unread state, retained cache after page failure, and successful explicit retry. |
+| Per-member unread→read and durable channel cursor | Inbox tests establish preview/unread reconciliation, but not the whole two-member durable read-cursor flow. | Verify member-specific state across clients and reconnect/restart. |
+| Selected-chat history cursor after restart | Exact-head CI passed; this extraction has no named proof of restart recovery scoped to one `chat_id`. | Create messages while away, restart/reconnect, and verify complete selected-chat catch-up with no global replay. |
+| Archive, folders, Quick Access | Archive action has local verification; folders/Quick Access requirement-specific staging proof is not established here. | Discover and use archive action, verify persistence, and exercise folders/Quick Access on the current build. |
+| Attachment upload/restart/download/hash | CI attachment proof passed, but current acceptance evidence does not establish the user-visible staging download/checksum/restart chain. | Upload known bytes, restart service, download from Web and compare hash. |
+| Directional block/privacy on REST and Realtime | Regression coverage reports blocked-cache purge before API refresh, including offline/failing refresh. This is not a full live REST/Realtime direction check. | Test both block directions in an open chat, including history, send, Realtime delivery, reconnect, and failed/offline refresh. |
+| Account soft-delete contract | No requirement-specific result for immediate session revocation, bidirectional DM denial, fresh snapshot hiding, and one non-persisted terminal marker was captured. | Verify the full A1 soft-delete flow with a safe staging account; do not claim A4 restore/erasure behavior. |
+| Empty/error/offline states and profile switch/reconnect | Reconciler tests cover retaining a failed scope/cursor and explicit retry; five Compose profile-handoff cases passed locally. Neither establishes full current-build UI behavior. | Exercise offline/API failure with visible retained data/retry; switch profile through reconnect and prove no cross-profile response appears. |
+| Auth/User application contract and Web/Windows phonebook | Contract evidence above is proven at application/source/widget plus named exact CI level. Actual deployed permission/network observation is absent; shared-DB-role P2 is separate. | Confirm no Web/Windows contacts request/hash sync on deployed build if deployment resumes; keep database credential isolation claim open pending P2 follow-up. |
+
+A1 remains open. Do not start A2 or deploy until the full acceptance items and
+state-preserving NATS gate have separately passed with evidence for the exact
+deployed SHA.
