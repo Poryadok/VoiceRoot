@@ -24,7 +24,7 @@ Default admission для внешнего alpha — server-signed однораз
 | Состояние | Milestone | Правило |
 |---|---|---|
 | Active | `A1` | Единственный активный milestone последовательности `A`. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
-| Parallel active | Game integrations | Отдельно согласованный единый спринт в `codex/game-sdk-federation-docs`; собственные worktree, integration queue и rollback point. Его PR интегрируются только в эту feature-ветку: merge в `master`, staging rollout и live provider/device tests не входят в спринт. |
+| Parallel active | Game integrations | Отдельно согласованный единый спринт в `codex/game-sdk-federation-docs`; собственные worktree, integration queue и rollback point. 2026-10-02 владелец разрешил merge уже проверенных implementation checkpoints в `master` через PR с зелёным CI. Полная приёмка спринта, staging rollout и live provider/device tests остаются отдельными открытыми gates. |
 | Next | `A2` | Входит в WIP только после интеграции и полного vertical DoD `A1`. |
 | Queued | `A3–A7` | Не получают code WIP до закрытия предыдущего milestone; разрешены лишь чтение канона и подготовка, непосредственно разблокирующая Active. |
 
@@ -60,8 +60,11 @@ Voice Node bundle входят в работу спринта. G01–G13 и Q01�
 Спринт имеет отдельную integration queue: владелец очереди принимает PR,
 сохраняет последний принятый commit как rollback point и готовит revert в этой
 feature-ветке при неудачной интеграции. Отдельно разрешённая синхронизация
-remote `master` → feature-ветку уже выполнена в PR #549; merge игровых PR в
-`master`, staging rollout и live/real-provider tests в этот спринт не входят.
+remote `master` → feature-ветку уже выполнена в PR #549. 2026-10-02 владелец
+отдельно разрешил merge уже проверенных implementation checkpoints в `master`
+через PR с обязательным зелёным CI и merge commit. Это снимает прежний merge
+hold для этих наработок, сохраняя весь незакоммиченный WIP в исходном worktree.
+Staging rollout и live/real-provider tests этим решением не разрешены.
 Gate `A1` acceptance со staging остаётся отдельным и открытым; этот спринт и
 его PR не меняют его состояние. Live provider/device tests также не
 входят в разрешённую приёмку: используются локальные/fake/sandbox checks и

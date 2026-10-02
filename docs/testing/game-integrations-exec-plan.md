@@ -26,8 +26,10 @@
 - The owner has now authorized this sprint to run alongside A1. The current
   `PLAN` still describes A1 as the only active milestone and federation as
   deferred because this sprint was being prepared. Record the parallel sprint
-  in PLAN without changing A1's status. Do not merge game work to `master` or
-  deploy it to staging until A1 acceptance is complete.
+  in PLAN without changing A1's status. The initial master merge hold was
+  explicitly lifted by the owner on 2026-10-02 for verified implementation
+  checkpoints through a green-CI PR and merge commit. Staging deployment and
+  live provider/device acceptance remain outside that authorization.
 - В `src/backend/` нет Game Integration Service; есть только Federation Go
   scaffold (`main.go`, `health.go`), существующие Bot/Chat/Messaging/Voice и
   Java Auth. `federation_db` в DATA_STORES planned/not provisioned. Game API
@@ -69,6 +71,15 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Master integration: the owner explicitly requested merging the verified work
+  on 2026-10-02. A clean integration branch, `codex/game-integration-master-20261002`,
+  combines the sprint checkpoints with current `origin/master` at `1e7141cc5`
+  and the isolated Auth source delivery `3d9e7097275f3e2b964e1286d114e8284d55e13f`.
+  Required CI must pass before a merge commit. This checkpoint delivery does not
+  close the full feature gate or authorize staging, live providers or devices.
+  All inherited uncommitted WIP and the original 26 staged Dart blobs remain in
+  the original worktree. Future agents must continue from that preserved WIP;
+  a merged checkpoint is not evidence of full T73/T77/T90–T94 acceptance.
 - Auth now serves complete owning account/SDK facts through a separately enabled
   source-only mTLS listener. Flyway26 and Go27 install byte-identical global
   transactional clock coverage over the ten source tables, with retained floor,
