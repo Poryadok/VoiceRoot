@@ -331,6 +331,14 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		if spaceLifecyclePrincipal != nil || chatLifecyclePrincipal != nil {
+			check, stop := context.WithTimeout(context.Background(), 5*time.Second)
+			err := store.RequireAttachmentIntentSchema(check, pool)
+			stop()
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 		managedChatPurge, err := newManagedChatPurgeRuntime(context.Background(), pool)
 		if err != nil {
 			log.Fatalf("managed chat purge runtime: %v", err)

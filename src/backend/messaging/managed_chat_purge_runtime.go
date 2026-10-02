@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -56,6 +57,12 @@ func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*manag
 	}
 	if pool == nil {
 		return nil, errors.New("managed chat purge requires Messaging PostgreSQL")
+	}
+	check, stop := context.WithTimeout(ctx, 5*time.Second)
+	err = store.RequireAttachmentIntentSchema(check, pool)
+	stop()
+	if err != nil {
+		return nil, err
 	}
 	serverCert, err := tls.LoadX509KeyPair(config.JWKSCertFile, config.JWKSKeyFile)
 	if err != nil {

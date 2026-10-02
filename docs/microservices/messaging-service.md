@@ -734,6 +734,15 @@ the Messaging server certificate/client CA, and the Space principal JWKS
 client. The listener defaults to `:9093` when enabled and startup fails on
 partial TLS or principal configuration.
 
+Enabled Chat/Space lifecycle and managed-chat purge also require clean Messaging
+migration `000026_attachment_send_intents` or later and all nine durable-intent
+columns with their expected types/nullability. The preflight runs before purge
+JWKS, lifecycle listeners and recovery workers serve. Missing, dirty, old or
+partial schema refuses startup with a fixed migration diagnostic. Migration
+metadata is trusted; this runtime check does not replace migration execution.
+Disabled lifecycle keeps the baseline startup path. Rollback of 000026 refuses
+while any saved intent exists; drain and export its evidence before rollback.
+
 Messaging stores its generation fence, imported immutable Chat manifest pages,
 and exact request/receipt evidence. `FROZEN` imports and seals the exact Chat
 binding and blocks message/reaction/thread/schedule/read/delivery mutations for

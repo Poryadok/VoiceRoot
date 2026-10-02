@@ -69,6 +69,31 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Checkpoint `693c26057` delivers the seven retirement/clock paths; current and
+  isolated full Federation root 22/0, module short/vet, same reviewer and normal
+  push pass, with all 26 staged Dart blobs preserved. Next bounded T77 repair:
+  before enabled Messaging managed-chat/Chat/Space lifecycle workers or
+  listeners serve, require clean migration >=000026 and all nine durable-intent
+  columns/types/nullability. Missing/dirty/old/partial schema fails with a fixed
+  diagnostic; disabled baseline retains its path. Seven real-PG attachment
+  roots pass without skips, including schema and rollback evidence retention;
+  three runtime config/order roots pass, including the actual enabled gate
+  before TLS loading/listener creation. Current module short/vet pass. The
+  rebuilt owned image `f2f33c34c4ed` refused startup because this fixture's clean
+  marker still said 25 after an earlier direct canonical-26 DDL application.
+  Under table/marker locks, a temporary table from the committed migration was
+  compared with the complete columns/defaults/constraints/index contract;
+  guarded marker 25→26 reconciliation preserved all ten intent rows and their
+  aggregate hash. The same image now starts healthy. Actual public freeze/restore
+  passes (21.81s); nonempty shared/exclusive attachment purge passes (12.08s,
+  ten fences/ten purges, no skips) after fixing this runner's missing owned
+  MinIO host-port setting. Isolated candidate root 21/0, attachment PG 7/0 and
+  module short 213 pass/213 skip plus vet pass. The same reviewer clears the
+  preflight/order repair. A bounded graph refresh times out at 45.4s; only its
+  owned process tree stops. This is a
+  preflight slice, not complete bundle upgrade/backup acceptance. Source: T77
+  and Messaging durable File reference/lifecycle contract; physical remote node
+  recovery and parent accounting remain open.
 - Verified checkpoint `fc2ff6b6d` delivers 42 media issuer/client/exchange paths;
   isolated Federation root (19/0) plus authority/cache/protocol (6+9+1/0), Voice
   short (184/113) and both vets pass. Normal hooks/push preserve all 26 staged
