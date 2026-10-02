@@ -69,6 +69,21 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Checkpoint `9da01a3e2` delivers thirteen Role migration-repair paths; remote,
+  delivered additions/deletions and original 26 staged blobs are verified.
+  Active owning-source prerequisite: additive Space24/Role15 preserve v11 data,
+  invalidate saved scopes at activation, cover authoritative insert/update/delete
+  changes in both old/new scopes, and forbid epoch rewind/removal/truncation.
+  Coarse Space-wide invalidations retain the existing Voice event schema. Baseline
+  regressions reproduce missed bans/lifecycle/owner/chat/fence/scope changes and
+  removed floors. The isolated committed closure passes nine real PostgreSQL
+  roots without skips, including both complete pinned migrator catalogs, refused
+  downgrade and late-activation rollback with original triggers/floors retained.
+  All 286 short roots pass (449 explicit integration skips), both module vets
+  pass, and independent scoped risk review finds no remaining blocker. Coverage is
+  forward-only: downgrade must not silently remove authority protections; recovery
+  uses a verified matching database/runtime bundle. Complete protected owner
+  snapshots, Auth/User/GIS revision closure and the real publisher remain open.
 - Role migration repair retains canonical game-grant v13 bytes and places
   lifecycle fences at unique v14. Real PostgreSQL checks pass all six migration
   roots without skips: unique source loading, exact historical/combined schema
