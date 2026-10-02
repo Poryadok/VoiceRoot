@@ -38,7 +38,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		var version int
-		if err := pool.QueryRow(ctx, "SELECT version FROM federation_schema_versions WHERE version=1").Scan(&version); err != nil {
+		if err := pool.QueryRow(ctx, "SELECT version FROM federation_schema_versions WHERE version=5").Scan(&version); err != nil {
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}

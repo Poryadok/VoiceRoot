@@ -69,6 +69,17 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- T73/T74 next-consumer repair reproduced an active foreign-node resource
+  registration (0 pass/1 fail, no skips) and now locks the exact node/Space
+  placement before append/replay. Voice routes require the canonical owner's
+  explicit RTC room; durable bindings are immutable and unique per node/room
+  across resources/Spaces. Migration 5 preserves schema-4 evidence, rejects new
+  foreign generations, and adds legacy missing rooms only through a new explicit
+  owner generation. Full Federation root tests pass: 17 roots, 0 skips, including
+  schema-4 upgrade, placement/collisions, canonical API statuses, real mTLS node
+  controller, lifecycle and Q11. Vet passes; independent risk review finds no
+  blocker. Actual producer projection/media-grant issuance remains next, and
+  parent accounting remains 43/60.
 - T73 production node controller now consumes the existing
   Federation node mTLS/bearer manifest/pages/lease API, verifies the complete
   signed per-Space policy before ACK, and atomically publishes the exact Bundle

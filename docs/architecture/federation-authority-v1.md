@@ -29,8 +29,11 @@ HTTP 400/403/409/503. Requests have a three-second database deadline.
 | POST /v1/nodes/{node}/suspend | Operator | `{}` closes access and increments epoch |
 | POST /v1/nodes/{node}/defederate | Operator | `{}` permanently closes access and increments epoch |
 | POST /v1/nodes/{node}/spaces/{space} | Operator | `{}` establishes immutable placement generation 1 |
+| POST /v1/nodes/{node}/spaces/{space}/resources/{resource} | Operator | `{resource_type,routing_generation,lifecycle_state,capabilities,room_name?}` appends an immutable canonical-resource route generation; `voice_room` requires explicit `room_name` |
 | POST /v1/nodes/{node}/spaces/{space}/snapshot | Operator publisher | Complete Snapshot below; sequential revision CAS |
 | GET /v1/nodes/{node}/spaces/{space}/snapshot | Node certificate + Bearer | Signed snapshot Envelope |
+| GET /v1/nodes/{node}/spaces/{space}/snapshot/pages/{index} | Node certificate + Bearer | Signed exact-scope snapshot page |
+| GET /v1/nodes/{node}/spaces/{space}/revisions?after_revision=N | Node certificate + Bearer | Bounded signed revision stream or resnapshot requirement |
 | POST /v1/nodes/{node}/spaces/{space}/lease | Node certificate + Bearer | `{revision,hash,nonce}` returns signed lease Envelope |
 
 Successful mutations without a credential/envelope return `{status:"ok"}`.
@@ -39,6 +42,39 @@ SHA-256 hash is stored. Lifetime is 24 hours, secret returned once. Rotation
 revokes previous credential immediately, without overlap in this foundation.
 Suspension has no implicit resume endpoint; defederation is permanent. No
 operator certificate can be used on node routes. No NATS credential is issued.
+
+Hosted resource routes are operator-managed on the mTLS authority listener.
+The initial `routing_generation` is 1; retries with the exact same canonical
+resource ID, type, Space, home node, lifecycle state, capabilities and
+generation are inert. A change requires exactly the next generation. Resource
+ID, type, owning Space and home node remain fixed for v1; there is no online
+cross-node migration. A generation may change lifecycle state or capabilities
+while retaining that identity. The Space must already have a master placement
+on that exact home node, locked with the node for registration,
+and the home node must be active in the same Federation environment when each
+generation is registered. Every generation is append-only in PostgreSQL,
+including terminal lifecycle states. Capabilities are limited to `messaging`,
+`file`, `search` and `voice`; the caller cannot supply NATS subjects,
+credentials, environment IDs or a master-owned Chat identity. This registry
+records routing authority only; node data stores own hosted content, while
+master services keep Space and Chat metadata. Client route discovery and node
+admission grants are the downstream T74 slice.
+
+`voice_room` routes additionally require the canonical owner's explicit RTC
+`room_name` and `voice` capability. The name is valid UTF-8, 1–256 bytes, with
+no surrounding whitespace or control characters. Other resource types cannot
+set it. The durable binding is immutable per canonical resource and unique per
+node/RTC room across Spaces. Higher routing generations cannot substitute its
+room. A separate canonical room UUID and an RTC room string remain distinct;
+neither is inferred from the other or from a client request.
+
+Schema migration 5 adds these bindings and an exact placement foreign key for
+new route generations. Historical room-less or misrouted rows remain intact;
+the foreign key is initially `NOT VALID` to preserve that evidence. An exact
+retry of a foreign historical route is denied. A room-less historical voice
+route requires a new owner-supplied generation with its explicit canonical room
+before media grant issuance. No migration guesses a room, rewrites a saved
+route, or makes historical mismatches authoritative. `/ready` requires version 5.
 
 ## HTTP request correlation and Q11 denial audit
 
@@ -80,34 +116,88 @@ outside this audit contract because no request ID or authority handler exists.
 Malformed routes/bodies and failures outside the enumerated Q11 denial cases do
 not gain a new audit guarantee from this slice.
 
-## Complete snapshot and signature
+## Complete snapshots, pagination and signatures
 
-Snapshot fields (all required): `version:1`, `complete:true`, `page_count:1`,
-`revision` positive integer, `valid_until` Unix milliseconds, `permissions`.
-Permissions is a complete effective allowlist array of objects with
-`account_id`, `profile_id`, `resource_id`, positive `session_epoch`, and `actions`
-containing `read`, `write`, `subscribe` or `media`. Missing entry means deny.
-Empty array denies all; missing/null array is invalid. Publisher must reconcile
-Space lifecycle, membership, Role overrides, bans, binding/profile/session
-state before producing this projection. Federation cannot write owning stores.
-There is no production owning-service publisher yet: operator fixtures exercise
-the contract only. Payload is bounded at 1 MiB, one complete page. Unknown
-schema/fields fail closed. `valid_until` is within the next two seconds, so a
-future publisher must continually refresh with a new revision. Source expiry
-prevents indefinite renewal of stale authority. Same revision/same canonical
-bytes is a no-op; changed bytes, skipped or lower revisions conflict.
+The authority accepts one complete source snapshot, bounded to 1 MiB, then
+exposes a deterministic paged wire representation. Snapshot fields (all
+required): `version:1`, `complete:true`, `page_count`, positive `revision`,
+`valid_until` Unix milliseconds, and `permissions`. `page_count` must equal
+`max(1, ceil(len(permissions)/256))` and may not exceed 4096; pages contain at
+most 256 permission entries. An empty permission list is one empty page and
+denies all. Permissions
+is the complete effective allowlist of objects with `account_id`, `profile_id`,
+`resource_id`, positive `session_epoch`, and `actions` containing `read`,
+`write`, `subscribe` or `media`. Missing entry means deny; missing/null
+permissions is invalid. Publisher reconciles Space lifecycle, membership, Role
+overrides, bans, binding/profile/session state before producing this projection.
+Federation cannot write owning stores. There is no production owning-service
+publisher yet; operator fixtures exercise the contract only. Unknown
+schema/fields fail closed. `valid_until` is within the next two seconds. Source
+expiry prevents indefinite renewal of stale authority. Same revision/same
+canonical bytes is a no-op; changed bytes, skipped or lower revisions conflict.
+
+`GET /v1/nodes/{node}/spaces/{space}/snapshot` returns one signed manifest with
+`version`, `complete`, `page_count`, `revision`, `valid_until`, and `total_hash`.
+`GET .../snapshot/pages/{zero_based_index}` returns one signed page with
+`revision`, `page_index`, `page_count`, `page_hash`, `total_hash`, and its
+permission entries. Pages are slices of the canonical source permission array;
+their order is significant. `page_hash` is SHA-256 of canonical Go
+encoding/json bytes of that page's permission array. `total_hash` is SHA-256 of
+the canonical complete Snapshot bytes. The manifest and every page bind the
+same node, Space, generation, epoch, revision, validity and total hash in their
+signed claims. A page outside the manifest range, duplicate index with changed
+bytes, changed manifest, bad page hash, or final total-hash mismatch fails
+closed.
+
+`GET /v1/nodes/{node}/spaces/{space}/revisions?after_revision=N` returns one
+signed revision-stream envelope. Its events are in strict sequence after N,
+with at most 100 events per response; each event binds the new revision, total
+hash and source validity. The authority retains the latest 101 events per
+placement. A detected gap, conflicting hash for one revision, history older
+than retention, or response overflow sets `resnapshot_required` and omits
+events. A node never infers an empty permission set from a missing event or
+page. The current snapshot endpoint always offers the latest complete revision,
+so reconnect can discard an incomplete stage and resnapshot.
+
+The node stages all pages outside its active policy, verifies every envelope
+and page hash, assembles the complete Snapshot, verifies `total_hash`, and
+atomically activates only when every page is present. The current active
+revision remains visible until that transaction succeeds. A higher revision
+must be exactly current+1 when consuming the ordered stream; a gap triggers
+full resnapshot. Same revision/hash is an inert replay; same revision with a
+different hash conflicts; lower revisions are stale. The node sends the
+existing `/lease` acknowledgment only after activation, naming the exact
+revision/hash and a fresh single-use nonce UUID. A failed or partial stage
+cannot renew the lease.
+
+The node enforcement cache accepts a signed lease only for its exact active
+revision/hash and treats authority as valid until the earlier of snapshot and
+lease expiry. Every operation check supplies account, profile, resource,
+session epoch and action; uncertainty above 250ms denies, and otherwise the
+uncertainty is subtracted from the deadline. The development media watchdog
+rechecks active participants on a bounded 250ms interval and ejects identities
+whose `media` permission or lease is no longer valid. The separate production
+node controller verifies manifest/pages/digest before ACK and atomically
+publishes complete signed bundles. Its independent Space workers and pre-ACK
+process-local floors reject partial/foreign/rollback policy. The maintained
+node LiveKit build checks its private media admission claim and has an independent
+in-process 100ms watchdog. Real two-Space RTP acceptance includes actual controller
+SIGKILL while the signer advances and SFU stays healthy: files and ACKs stop
+refreshing, active media expires within five seconds, and unexpired stale bearer
+reconnects fail. This mechanism evidence does not replace owner projection,
+production media-grant issuance, fresh-online boot, node bundle or qualified 2×
+load gates.
 
 Envelope JSON: `{key_id,payload,signature}`. `payload` is unpadded base64url of
-exact UTF-8 JSON Claims bytes; `signature` is unpadded base64url Ed25519 signature
-of those bytes. Verify the bytes before decoding; never reserialize to verify.
-Claims: `version:1`, `kind:snapshot|lease`, `issuer`, `audience:"voice-node"`,
+exact UTF-8 JSON Claims bytes; `signature` is unpadded base64url Ed25519
+signature of those bytes. Verify the bytes before decoding; never reserialize
+to verify. Claims bind `version:1`, `kind`, `issuer`, `audience:"voice-node"`,
 `environment`, `node_id`, `space_id`, `generation`, `epoch`, `revision`,
-`issued_at`, `expires_at`, `hash`, optional `snapshot` (only snapshot kind).
-Times are Unix milliseconds. Hash is lowercase hex SHA-256 of canonical Go
-encoding/json Snapshot bytes, persisted without reserialization in PostgreSQL.
-Consumers pin key_id to a trusted public key and verify exact issuer, audience,
-environment, node/Space, generation, epoch, revision/hash and expiry before
-atomic activation. key_id is a lookup hint, never an authority source.
+`issued_at`, `expires_at`, and `hash`; manifest/page/event claims carry their
+typed payload. Times are Unix milliseconds. Consumers pin `key_id` to a trusted
+public key and verify exact issuer, audience, environment, node/Space,
+generation, epoch, revision/hash and expiry before atomic activation. `key_id`
+is a lookup hint, never an authority source.
 
 Lease lifetime is min(two seconds, source expiry, credential expiry). ACK must
 name the exact current revision/hash and single-use nonce UUID. Nonce is retained

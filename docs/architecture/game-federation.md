@@ -226,8 +226,15 @@ Expiry admission credential запрещает новый вход; уже пр�
 при старте без trust/authority configuration. Эти значения ещё должны пройти
 G08 capacity/partition qualification. Controlled signer + real-media fixture
 проверяет механизм SFU и не заменяет master/Gateway/node-bundle acceptance,
-live controller-process death, permanent-fence reconciliation при restore
+production owning-service projection/grant issuance, permanent-fence reconciliation при restore
 или измерение 2s p95 / 5s max при квалифицированной и 2× нагрузке.
+
+Отдельный production node controller уже проверяет полный signed policy по
+mTLS до ACK и атомарно публикует Bundle для SFU. Local controlled-signer test
+запускает его отдельным процессом UID/GID 10001, затем выполняет SIGKILL/reap:
+signer продолжает новые revisions, файлы/ACK перестают обновляться, SFU остаётся
+healthy, media закрывается по lease expiry и свежий bearer не открывает reconnect.
+Эта проверка не закрывает production master issuer, online boot, bundle или G08.
 
 При потере authority связь может оставаться открытой для диагностики, но после
 lease deadline node закрывает governed reads/writes/subscriptions/media. Нельзя

@@ -43,7 +43,7 @@ func TestPostgresAuthorityLifecycle(t *testing.T) {
 	require.NoError(t, s.place(ctx, node, space))
 	require.NoError(t, s.place(ctx, node, space))
 	require.ErrorIs(t, s.place(ctx, other, space), errConflict)
-	snap := Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: 1, ValidUntil: time.Now().Add(4 * time.Second).UnixMilli(), Permissions: []Permission{}}
+	snap := Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: 1, ValidUntil: time.Now().Add(1500 * time.Millisecond).UnixMilli(), Permissions: []Permission{}}
 	require.NoError(t, s.publish(ctx, node, space, snap))
 	require.NoError(t, s.publish(ctx, node, space, snap))
 	// Exercise the actual API authorization path with the credential issued by
@@ -109,7 +109,7 @@ func TestPostgresAuthorityLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, errConflict)
 	changed = snap
 	changed.Revision = 2
-	changed.ValidUntil = time.Now().Add(4 * time.Second).UnixMilli()
+	changed.ValidUntil = time.Now().Add(1500 * time.Millisecond).UnixMilli()
 	require.NoError(t, s.publish(ctx, node, space, changed))
 	ack.Nonce = uuid.NewString()
 	_, err = s.issue(ctx, node, space, pin, cred.Secret, &ack)
@@ -138,7 +138,7 @@ func TestPostgresAuthorityLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, errForbidden)
 	// Refresh a valid source snapshot, then race lease issuance with revocation.
 	changed.Revision = 3
-	changed.ValidUntil = time.Now().Add(4 * time.Second).UnixMilli()
+	changed.ValidUntil = time.Now().Add(1500 * time.Millisecond).UnixMilli()
 	require.NoError(t, s.publish(ctx, node, space, changed))
 	raw, err = json.Marshal(changed)
 	require.NoError(t, err)

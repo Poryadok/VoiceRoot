@@ -21,7 +21,7 @@ func TestSignedAuthorityRejectsTamperScopeAndExpiry(t *testing.T) {
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	now := time.Unix(1800000000, 0)
-	claims := Claims{Version: 1, Kind: "lease", Issuer: "master", Audience: "voice-node", Environment: "sandbox", NodeID: "node", SpaceID: "space", Generation: 1, Epoch: 1, Revision: 2, IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(2 * time.Second).UnixMilli(), Hash: "abc"}
+	claims := Claims{Version: 1, Kind: "lease", Issuer: "master", Audience: "voice-node", Environment: "sandbox", NodeID: "00000000-0000-4000-8000-000000000001", SpaceID: "00000000-0000-4000-8000-000000000002", Generation: 1, Epoch: 1, Revision: 2, IssuedAt: now.UnixMilli(), ExpiresAt: now.Add(2 * time.Second).UnixMilli(), Hash: digest([]byte("snapshot"))}
 	envelope, err := signEnvelope(key, "key-1", claims)
 	require.NoError(t, err)
 	_, err = verifyEnvelope(pub, envelope, claims, now)
@@ -31,9 +31,9 @@ func TestSignedAuthorityRejectsTamperScopeAndExpiry(t *testing.T) {
 			expected := claims
 			switch field {
 			case "node":
-				expected.NodeID = "other"
+				expected.NodeID = "00000000-0000-4000-8000-000000000003"
 			case "space":
-				expected.SpaceID = "other"
+				expected.SpaceID = "00000000-0000-4000-8000-000000000004"
 			case "env":
 				expected.Environment = "prod"
 			case "revision":
@@ -113,7 +113,7 @@ func ecdsaKey(t *testing.T) (*ecdsa.PrivateKey, error) {
 func TestSnapshotRequiresCompleteKnownSchema(t *testing.T) {
 	now := time.Now()
 	good := Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: 1, ValidUntil: now.Add(time.Second).UnixMilli(), Permissions: []Permission{}}
-	require.NoError(t, good.validate(now))
+	require.NoError(t, good.Validate(now))
 	for _, field := range []string{"schema", "complete", "pages", "revision", "expiry", "unbounded", "missing"} {
 		t.Run(field, func(t *testing.T) {
 			s := good
@@ -133,7 +133,7 @@ func TestSnapshotRequiresCompleteKnownSchema(t *testing.T) {
 			case "missing":
 				s.Permissions = nil
 			}
-			require.Error(t, s.validate(now))
+			require.Error(t, s.Validate(now))
 		})
 	}
 }

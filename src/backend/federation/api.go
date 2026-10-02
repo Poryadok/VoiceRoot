@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,7 +62,7 @@ func (a *authorityAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		code := http.StatusServiceUnavailable
 		reason := "unavailable"
 		switch {
-		case errors.Is(err, errInvalid):
+		case errors.Is(err, errInvalid), errors.Is(err, errInvalidHostedResource):
 			code = http.StatusBadRequest
 			reason = "invalid_request"
 		case errors.Is(err, errForbidden):
@@ -104,7 +105,9 @@ func (a *authorityAPI) q11AuditForRequest(r *http.Request, fingerprint string, e
 	if operator {
 		record.ActorClass = "operator"
 	}
-	if len(parts) == 6 && parts[3] == "spaces" && canonicalID(parts[4]) && parts[5] == "snapshot" && r.Method == http.MethodGet {
+	if (len(parts) == 6 && (parts[5] == "snapshot" || parts[5] == "revisions") ||
+		len(parts) == 8 && parts[5] == "snapshot" && parts[6] == "pages") &&
+		parts[3] == "spaces" && canonicalID(parts[4]) && r.Method == http.MethodGet {
 		record.SpaceID = parts[4]
 		record.Action = "node.snapshot.read"
 		if operator && errors.Is(err, errForbidden) {
@@ -221,10 +224,27 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 		}
 		return nil, a.Store.place(r.Context(), node, space)
 	}
-	if len(parts) != 6 {
-		return nil, errInvalid
+	if len(parts) == 7 && parts[5] == "resources" && canonicalID(parts[6]) && r.Method == http.MethodPost {
+		if !operator {
+			return nil, errForbidden
+		}
+		var req struct {
+			ResourceType      string   `json:"resource_type"`
+			RoutingGeneration int64    `json:"routing_generation"`
+			LifecycleState    string   `json:"lifecycle_state"`
+			Capabilities      []string `json:"capabilities"`
+			RoomName          string   `json:"room_name"`
+		}
+		if decodeRequest(w, r, &req) != nil {
+			return nil, errInvalid
+		}
+		return a.Store.registerHostedResource(r.Context(), HostedResourceMapping{
+			ResourceID: parts[6], ResourceType: req.ResourceType, SpaceID: space, HomeNodeID: node,
+			RoutingGeneration: req.RoutingGeneration, LifecycleState: req.LifecycleState,
+			Capabilities: req.Capabilities, RoomName: req.RoomName,
+		})
 	}
-	if parts[5] == "snapshot" && r.Method == http.MethodPost {
+	if len(parts) == 6 && parts[5] == "snapshot" && r.Method == http.MethodPost {
 		if !operator {
 			return nil, errForbidden
 		}
@@ -246,10 +266,32 @@ func (a *authorityAPI) handle(w http.ResponseWriter, r *http.Request) (any, erro
 	if err != nil || len(decodedSecret) != nodeCredentialEntropyBytes || base64.RawURLEncoding.EncodeToString(decodedSecret) != secret {
 		return nil, errForbidden
 	}
-	if parts[5] == "snapshot" && r.Method == http.MethodGet {
+	if len(parts) == 6 && parts[5] == "snapshot" && r.Method == http.MethodGet {
 		return a.Store.issue(r.Context(), node, space, pin, secret, nil)
 	}
-	if parts[5] == "lease" && r.Method == http.MethodPost {
+	if len(parts) == 8 && parts[5] == "snapshot" && parts[6] == "pages" && r.Method == http.MethodGet {
+		if len(r.URL.Query()) != 0 {
+			return nil, errInvalid
+		}
+		page, parseErr := strconv.Atoi(parts[7])
+		if parseErr != nil || page < 0 {
+			return nil, errInvalid
+		}
+		return a.Store.issuePage(r.Context(), node, space, pin, secret, page)
+	}
+	if len(parts) == 6 && parts[5] == "revisions" && r.Method == http.MethodGet {
+		query := r.URL.Query()
+		values, exists := query["after_revision"]
+		if !exists || len(values) != 1 || len(query) != 1 {
+			return nil, errInvalid
+		}
+		after, parseErr := strconv.ParseInt(values[0], 10, 64)
+		if parseErr != nil || after < 0 {
+			return nil, errInvalid
+		}
+		return a.Store.issueRevisionStream(r.Context(), node, space, pin, secret, after)
+	}
+	if len(parts) == 6 && parts[5] == "lease" && r.Method == http.MethodPost {
 		var ack leaseRequest
 		if decodeRequest(w, r, &ack) != nil {
 			return nil, errInvalid

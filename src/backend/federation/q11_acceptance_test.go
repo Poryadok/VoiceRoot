@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"voice/backend/federation/nodecache"
+	"voice/backend/federation/protocol"
 	"voice/backend/pkg/integrationtest"
 )
 
@@ -97,8 +100,14 @@ func TestQ11FederationCleanStartAuthorityAPIs(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(responseBody))
 	resp, responseBody = post(operatorClient, "/v1/nodes/"+nodeB+"/spaces/"+newID(), map[string]any{}, newID())
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(responseBody))
+	snapshots := map[string]Snapshot{}
 	for _, pair := range []struct{ node, space string }{{nodeA, spaceA}, {nodeA, spaceB}} {
-		snapshot := Snapshot{Version: 1, Complete: true, PageCount: 1, Revision: 1, ValidUntil: time.Now().Add(4 * time.Second).UnixMilli(), Permissions: []Permission{}}
+		permissions := make([]Permission, protocol.SnapshotPagePermissionLimit+1)
+		for index := range permissions {
+			permissions[index] = Permission{AccountID: newID(), ProfileID: newID(), ResourceID: newID(), SessionEpoch: 1, Actions: []string{"read"}}
+		}
+		snapshot := Snapshot{Version: 1, Complete: true, PageCount: 2, Revision: 1, ValidUntil: time.Now().Add(1500 * time.Millisecond).UnixMilli(), Permissions: permissions}
+		snapshots[pair.space] = snapshot
 		resp, response := post(operatorClient, "/v1/nodes/"+pair.node+"/spaces/"+pair.space+"/snapshot", snapshot, newID())
 		require.Equal(t, http.StatusOK, resp.StatusCode, string(response))
 	}
@@ -120,7 +129,6 @@ func TestQ11FederationCleanStartAuthorityAPIs(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(raw))
 	var signed Envelope
 	require.NoError(t, json.Unmarshal(raw, &signed))
-	var published Snapshot
 	payload, err := base64.RawURLEncoding.DecodeString(signed.Payload)
 	require.NoError(t, err)
 	var claims Claims
@@ -128,10 +136,48 @@ func TestQ11FederationCleanStartAuthorityAPIs(t *testing.T) {
 	signature, err := base64.RawURLEncoding.DecodeString(signed.Signature)
 	require.NoError(t, err)
 	require.True(t, ed25519.Verify(signingKey.Public().(ed25519.PublicKey), payload, signature))
-	if claims.Snapshot != nil {
-		published = *claims.Snapshot
+	require.Equal(t, "snapshot_manifest", claims.Kind)
+	require.NotNil(t, claims.Manifest)
+	cache := nodecache.New(protocol.Scope{Issuer: claims.Issuer, Environment: claims.Environment, NodeID: claims.NodeID, SpaceID: claims.SpaceID, Generation: claims.Generation, Epoch: claims.Epoch}, map[string]ed25519.PublicKey{"q11-test": signingKey.Public().(ed25519.PublicKey)})
+	require.NoError(t, cache.StageManifest(signed, time.Now()))
+	var pageEnvelope Envelope
+	for pageIndex := 0; pageIndex < claims.Manifest.PageCount; pageIndex++ {
+		pageResp, pageRaw := getWithBearer(nodeClient, baseA+"/snapshot/pages/"+strconv.Itoa(pageIndex), newID(), credentialA.Secret)
+		require.Equal(t, http.StatusOK, pageResp.StatusCode, string(pageRaw))
+		require.NoError(t, json.Unmarshal(pageRaw, &pageEnvelope))
+		require.NoError(t, cache.StagePage(pageEnvelope, time.Now()))
 	}
-	leaseBody := leaseRequest{Revision: claims.Revision, Hash: claims.Hash, Nonce: newID()}
+	published := cache.Current()
+	require.Equal(t, snapshots[spaceA], published)
+
+	// The ordered event announces the committed revision; policy remains old
+	// until the complete signed page set is staged and verified.
+	secondSnapshot := snapshots[spaceA]
+	secondSnapshot.Revision = 2
+	secondSnapshot.ValidUntil = time.Now().Add(1500 * time.Millisecond).UnixMilli()
+	resp, raw = post(operatorClient, baseA+"/snapshot", secondSnapshot, newID())
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(raw))
+	revisionResp, revisionRaw := getWithBearer(nodeClient, baseA+"/revisions?after_revision=1", newID(), credentialA.Secret)
+	require.Equal(t, http.StatusOK, revisionResp.StatusCode, string(revisionRaw))
+	var revisionEnvelope Envelope
+	require.NoError(t, json.Unmarshal(revisionRaw, &revisionEnvelope))
+	require.NoError(t, cache.ObserveRevisionStream(revisionEnvelope, time.Now()))
+	resp, raw = getWithBearer(nodeClient, baseA+"/snapshot", newID(), credentialA.Secret)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(raw))
+	require.NoError(t, json.Unmarshal(raw, &signed))
+	require.NoError(t, cache.StageManifest(signed, time.Now()))
+	require.NoError(t, json.Unmarshal(raw, &claims))
+	for pageIndex := 0; pageIndex < claims.Manifest.PageCount; pageIndex++ {
+		pageResp, pageRaw := getWithBearer(nodeClient, baseA+"/snapshot/pages/"+strconv.Itoa(pageIndex), newID(), credentialA.Secret)
+		require.Equal(t, http.StatusOK, pageResp.StatusCode, string(pageRaw))
+		require.NoError(t, json.Unmarshal(pageRaw, &pageEnvelope))
+		require.NoError(t, cache.StagePage(pageEnvelope, time.Now()))
+	}
+	published = cache.Current()
+	require.Equal(t, secondSnapshot, published)
+	ack, err := cache.LeaseAck(newID())
+	require.NoError(t, err)
+	leaseBody := leaseRequest{Revision: ack.Revision, Hash: ack.Hash, Nonce: ack.Nonce}
 	leaseResp, leaseRaw := q11Request(t, ctx, nodeClient, server.URL, http.MethodPost, baseA+"/lease", leaseBody, newID(), credentialA.Secret)
 	require.Equal(t, http.StatusOK, leaseResp.StatusCode, string(leaseRaw))
 	var leaseEnvelope Envelope
