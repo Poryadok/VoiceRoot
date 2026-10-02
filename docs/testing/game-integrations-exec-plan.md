@@ -69,6 +69,48 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Dependency-complete lifecycle checkpoint `0cb996890` is pushed: 450 runtime,
+  migration, protocol/generated-Go, Compose and scoped documentation paths.
+  Its isolated HEAD-plus-selected-source snapshot passes short suites and vet
+  in 13 modules (1,972 root passes, 1,547 intentionally skipped integration
+  roots); corrected runners execute each binary from its package directory.
+  Buf lint, format and breaking against local `master` pass. The original
+  26 staged Dart paths and their indexed blobs are verified unchanged, and
+  all remaining WIP is preserved. Snapshot/index/source hashes and the result
+  remain in `tmp/lifecycle-runtime-checkpoint-20261002`. These short-suite
+  results do not substitute for full PostgreSQL/public/platform acceptance.
+  Parent accounting remains 43/60; T40 attachments/full messenger and the
+  remaining whole-sprint gates are still open.
+- T73 now has a maintained SFU implementation candidate pinned
+  to upstream LiveKit v1.8.4/protocol v1.34.0 archive hashes. Dedicated private
+  `voice_media_grant` claims bind explicit RTC room and the verified authority
+  tuple; `RoomManager.StartSession` checks before new admission/resume and
+  immediately before join/resume. An independent in-process watchdog checks
+  saved admissions against per-Space signed complete policy/lease; one Space
+  cannot replace another's scope. Short-lived credentials do not renew policy,
+  and token refresh preserves the original credential. Missing authority
+  configuration fails startup. Node-cache expiry/replay/clock rollback and
+  registry higher-revision backup/credential regressions pass (9 + 3 roots);
+  the same bounded reviewer clears this scoped security/integrity slice.
+  A pinned image builds with actual upstream source. Actual
+  `TestSFUEnforcesSignedAuthorityForRealMedia_live` passes without skips (7.89s):
+  four peers exchange bidirectional nonempty RTP in two Spaces, a revoked pair
+  closes in 172ms, the other pair continues after its admission credential
+  expires, and stopping signed-authority refresh closes it in 1,273ms while
+  the SFU remains alive. Unexpired stale JWT/grant reconnect is denied after
+  revocation and lease expiry; private grant is absent from participant
+  metadata/attributes. The first fixture had only one allocatable UDP socket;
+  `udp_port: 7882` multiplexing fixes multi-peer ICE. This is controlled-signer,
+  four-peer mechanism evidence, not production/capacity qualification. A clean
+  initializer run repeats the pass (8.84s, revocation 199–200ms, partition
+  1,275–1,276ms). Missing authority/trust startup tests fail closed with exit 1;
+  the maintained patch corrects upstream's print-error-but-exit-zero behavior.
+  Production master issuance/publisher, durable restore reconciliation,
+  controller-process death and qualified 2× load/p95 evidence remain open.
+  No strict federation capability or parent checkbox is activated from these
+  intermediate results. Two bounded Graphify updates timed out; source files
+  remain the verification authority and graph freshness is unverified.
+
 - Handoff continuation preserves pushed HEAD `fb91bf9a1`, all inherited WIP
   and the 26 staged Dart bindings; the initial index/hash inventory is saved
   in `tmp/continuation-20261002`. The nonempty purge repair is now verified:

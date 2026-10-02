@@ -1,0 +1,33 @@
+# Opt-in controlled SFU mechanism fixture. Use the same owned Compose project;
+# this overlay does not replace the existing hosted-baseline livekit service.
+services:
+  federated-sfu:
+    image: voice-sfu:game-sprint
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - export VOICE_NODE_ID="$$(cat /fixture/node-id)"; exec /usr/local/bin/livekit-server --config /fixture/livekit.yaml
+    environment:
+      VOICE_SFU_AUTHORITY_DIR: /fixture/authority
+      VOICE_SFU_TRUST_FILE: /fixture/trust.json
+    volumes:
+      - federated_sfu_fixture:/fixture:ro
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:7880/"]
+      interval: 2s
+      timeout: 1s
+      retries: 20
+    cpus: 2
+    mem_limit: 1g
+  sfu-media-acceptance:
+    image: voice-sfu-media-fixture:game-sprint
+    environment:
+      VOICE_SFU_FIXTURE_DIR: /fixture
+      VOICE_SFU_URL: "ws://federated-sfu:7880"
+    volumes:
+      - federated_sfu_fixture:/fixture
+    command: ["-test.run=^TestSFUEnforcesSignedAuthorityForRealMedia_live$$", "-test.v", "-test.count=1", "-test.timeout=90s"]
+    cpus: 1
+    mem_limit: 512m
+volumes:
+  federated_sfu_fixture:

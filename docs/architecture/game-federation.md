@@ -206,6 +206,29 @@ control plane. Это новая prerequisite, не существующая в�
 Без доказанного механизма нельзя обещать непрерывный fail-closed media доступ
 или включать строгую game federation capability.
 
+Текущий implementation candidate использует поддерживаемую сборку LiveKit
+v1.8.4 с отдельным приватным JWT claim `voice_media_grant`; account/profile,
+resource/session epoch, node/environment, Space generation/authority epoch и
+явное RTC room name подписывает master. Claim не публикуется в participant
+metadata/attributes. Проверка на выбранном SFU узле выполняется до создания
+или resume участника и повторяется непосредственно перед join/resume.
+Независимый watchdog внутри SFU проверяет сохранённый admission по текущему
+полностью проверенному per-Space snapshot и lease; остановка controller не
+останавливает этот watchdog. Обычный refresh LiveKit JWT сохраняет исходный
+claim и не продлевает его срок либо authority lease.
+
+Candidate limits: signed snapshot/lease ≤2s; fixture refresh 100ms с lease
+1.5s; SFU watchdog 100ms; clock uncertainty ≤250ms; admission credential ≤30s.
+Deadline переводится в локальное monotonic time, точный replay не продлевает
+его, наблюдённое истечение и clock rollback не оживляют старую authority.
+Expiry admission credential запрещает новый вход; уже принятый участник
+продолжает только по свежей независимой authority. Dedicated node SFU отказывает
+при старте без trust/authority configuration. Эти значения ещё должны пройти
+G08 capacity/partition qualification. Controlled signer + real-media fixture
+проверяет механизм SFU и не заменяет master/Gateway/node-bundle acceptance,
+live controller-process death, permanent-fence reconciliation при restore
+или измерение 2s p95 / 5s max при квалифицированной и 2× нагрузке.
+
 При потере authority связь может оставаться открытой для диагностики, но после
 lease deadline node закрывает governed reads/writes/subscriptions/media. Нельзя
 продолжать разрешённый ранее voice только потому, что media transport жив.
