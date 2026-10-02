@@ -22,15 +22,29 @@ Apply against the matching database only; do not run one folder against another 
 
 | Path | Who applies | Current ordered layout | Auth startup |
 |------|-------------|------------------------|--------------|
-| **A — Flyway (default)** | Auth on boot | `V1__auth_schema.sql` … `V14__verification_source_sync.sql` | `AUTH_FLYWAY_ENABLED` omitted or `true` |
-| **B — golang-migrate** | Ops / CLI / Docker `migrate` | `000001_init` … `000015_verification_source_sync`, each with `.up.sql` and `.down.sql` | `AUTH_FLYWAY_ENABLED=false` |
+| **A — Flyway (default)** | Auth on boot | `V1__auth_schema.sql` … `V25__sdk_conversion_owner_receipts.sql` | `AUTH_FLYWAY_ENABLED` omitted or `true` |
+| **B — golang-migrate** | Ops / CLI / Docker `migrate` | `000001_init` … `000026_sdk_conversion_owner_receipts`, each with `.up.sql` and `.down.sql` | `AUTH_FLYWAY_ENABLED=false` |
 
 **Equivalence (current schema):** Flyway `V1` contains the initial schema and
 the `refresh_tokens.access_jti` change represented by golang-migrate
 `000001_init` followed by `000002_refresh_tokens_access_jti`. Every later
 Flyway revision maps in order to the next golang-migrate revision (`V2` →
-`000003`, …, `V14` → `000015`). Keep these layouts in lockstep for future
+`000003`, …, `V25` → `000026`). Keep these layouts in lockstep for future
 Auth-owned DDL.
+
+Refresh-token profile binding retains canonical V15 / 000016. The SDK chain now
+starts at V16 / 000017, with identical UP bodies in both catalogs through the
+conversion-owner receipts. SDK DOWN refuses downgrade and preserves authority
+evidence; recovery requires a verified matching database/runtime backup.
+
+The earlier SDK-only V15 / 000016 history collides with master's refresh addition.
+Existing histories require inspection and a matching-release recovery plan;
+renumbering source files must not be applied as a history rewrite. Flyway checksum
+validation and golang-migrate's dirty maintenance refusal remain enabled. Never
+repair/baseline/force a marker to bypass that mismatch. See [Auth's database
+instructions](../auth/README.md#database). Complete catalog tests use the actual
+Flyway loader and pinned `migrate/migrate:v4.18.1` against private PostgreSQL 16,
+including historical refusals and preserved SDK identity/operation/receipt rows.
 
 **Examples below** run migrate only for **Go-owned** databases (`user_db`, `social_db`, `chat_db`, `messaging_db`). For `auth_db`, use Path A (start Auth) or Path B (migrate then Auth with Flyway disabled) — see [Auth README](../auth/README.md).
 

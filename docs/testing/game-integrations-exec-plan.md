@@ -69,6 +69,25 @@ services; a compiling scaffold or disabled flag is an intermediate artifact.
 
 ### Active continuation checkpoint — 2026-10-02
 
+- Auth source catalogs now retain canonical refresh-token profile binding at
+  Flyway V15 / golang-migrate 000016 and shift the complete SDK chain to
+  V16-25 / 000017-26. All ten SDK UP bodies are unchanged and mirrored exactly;
+  SDK DOWN refuses downgrade instead of deleting authority/receipt evidence.
+  Fresh actual Flyway and pinned golang-migrate loads pass on private PostgreSQL
+  16, with matching SDK columns/defaults and repeat no-op. Historical SDK-only
+  Flyway history is refused with unchanged rows/history; the old Go marker18
+  refuses current19 with saved state retained and a dirty maintenance marker.
+  Current26 downgrade refuses at dirty25 and retains SDK owner receipts.
+  The isolated delivered closure passes 127 selected roots without skips:
+  three source contracts, four real loader/history/rollback checks and 120
+  SDK identity/authorization/conversion checks; the author fixes the SDK
+  fixture by naming the new FK-dependent receipt table in its cleanup.
+  Current WIP authorization53/conversion22 also pass; scoped independent
+  review finds no remaining fresh-catalog blocker. Full historical recovery
+  remains unaccepted. No live Auth metadata/image is changed. Existing deployment history requires
+  inspection and a matching verified backup/reconciliation plan; source
+  renumbering never authorizes history repair/baseline/force. Parent T77/T91
+  and the full bundle/owning-producer gates remain open.
 - Checkpoint `9da01a3e2` delivers thirteen Role migration-repair paths; remote,
   delivered additions/deletions and original 26 staged blobs are verified.
   Active owning-source prerequisite: additive Space24/Role15 preserve v11 data,
