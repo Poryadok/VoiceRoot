@@ -113,6 +113,28 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "chat snapshot unavailable")
 	}
+	dmPeerNames := map[uuid.UUID]string{}
+	if s.DMPeerDisplayNames != nil && len(peers) > 0 {
+		peerIDs := make([]uuid.UUID, 0, len(peers))
+		seenPeers := make(map[uuid.UUID]struct{}, len(peers))
+		for _, peerID := range peers {
+			if peerID == uuid.Nil {
+				continue
+			}
+			if _, seen := seenPeers[peerID]; seen {
+				continue
+			}
+			seenPeers[peerID] = struct{}{}
+			peerIDs = append(peerIDs, peerID)
+		}
+		if len(peerIDs) > 0 {
+			if names, lookupErr := s.DMPeerDisplayNames.LookupDMPeerDisplayNames(ctx, peerIDs); lookupErr != nil {
+				log.Printf("chat: ListChats DM title lookup skipped: %v", lookupErr)
+			} else if names != nil {
+				dmPeerNames = names
+			}
+		}
+	}
 
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
@@ -143,6 +165,9 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 		}
 		if peerID, ok := peers[row.ID]; ok {
 			item.DmPeerProfileId = proto.String(peerID.String())
+			if name := strings.TrimSpace(dmPeerNames[peerID]); name != "" {
+				item.DmPeerDisplayName = proto.String(name)
+			}
 		}
 		if x, ok := extras[row.ID]; ok {
 			item.UnreadCount = x.UnreadCount

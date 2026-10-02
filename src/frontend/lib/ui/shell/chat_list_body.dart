@@ -51,6 +51,8 @@ class ChatListBody extends ConsumerStatefulWidget {
       Key('chat_list_quick_access_$chatId');
   static Key quickAccessButtonKey(String chatId) =>
       Key('chat_list_quick_access_button_$chatId');
+  static Key rowActionsButtonKey(String chatId) =>
+      Key('chat_list_actions_$chatId');
   static Key archiveActionKey(String chatId) =>
       Key('chat_list_archive_$chatId');
   static Key addToFolderActionKey(String chatId) =>
@@ -267,6 +269,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   final profile = titleAsync?.valueOrNull;
                   final title =
                       profile?.displayName ??
+                      item.dmPeerDisplayName ??
                       item.chat.name ??
                       l10n.chatListDmFallback(_shortChatId(item.chatId));
                   final showPremium =
@@ -343,6 +346,13 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                           l10n: l10n,
                           inbox: inbox,
                           item: item,
+                          onShowActions: () => _showChatRowActions(
+                            context,
+                            ref,
+                            l10n,
+                            item,
+                            folderId: selectedFolderId,
+                          ),
                           showQuickAccessAction:
                               inbox != 'requests' &&
                               !(ref
@@ -722,6 +732,7 @@ class _ChatListTrailing extends StatelessWidget {
     required this.l10n,
     required this.inbox,
     required this.item,
+    required this.onShowActions,
     required this.showQuickAccessAction,
     required this.onAddToQuickAccess,
     required this.muted,
@@ -734,6 +745,7 @@ class _ChatListTrailing extends StatelessWidget {
   final AppLocalizations l10n;
   final String inbox;
   final ChatListItem item;
+  final VoidCallback onShowActions;
   final bool showQuickAccessAction;
   final VoidCallback onAddToQuickAccess;
   final bool muted;
@@ -763,6 +775,13 @@ class _ChatListTrailing extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        IconButton(
+          key: ChatListBody.rowActionsButtonKey(item.chatId),
+          tooltip: l10n.chatListArchive,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.more_vert),
+          onPressed: onShowActions,
+        ),
         if (showQuickAccessAction)
           IconButton(
             key: ChatListBody.quickAccessButtonKey(item.chatId),

@@ -38,6 +38,7 @@ service UserService {
   // Профили
   rpc EnsurePrimaryProfile(EnsurePrimaryProfileRequest) returns (EnsurePrimaryProfileResponse); // S2S Auth bootstrap; см. primary-profile-bootstrap.md
   rpc ResolveAccountIDForProfile(ResolveAccountIDForProfileRequest) returns (ResolveAccountIDForProfileResponse); // internal Messaging/Chat: profile_id -> account_id for DM lifecycle
+  rpc GetDMPeerDisplayNames(GetDMPeerDisplayNamesRequest) returns (GetDMPeerDisplayNamesResponse); // internal Chat: title-only existing DM peer metadata
   rpc ResolvePrimaryProfileIDs(ResolvePrimaryProfileIDsRequest) returns (ResolvePrimaryProfileIDsResponse); // S2S Auth: batch account_id -> existing primary profile_id
   rpc MarkAccountRegular(MarkAccountRegularRequest) returns (MarkAccountRegularResponse); // S2S Auth: guest -> regular profile marker
   rpc GetProfile(GetProfileRequest) returns (Profile);
@@ -79,6 +80,8 @@ service UserService {
 `EnsurePrimaryProfile`, `ResolvePrimaryProfileIDs` и `MarkAccountRegular` доступны только internal callers; они не являются Gateway REST API. `ResolvePrimaryProfileIDs` — read-only batch lookup: возвращает только существующие non-deleted primary profiles, пропускает unknown/no-primary/deleted записи и не создаёт профиль. Frozen primary остаётся каноническим и возвращается. После successful guest→regular conversion в Auth `MarkAccountRegular` снимает `is_guest_account` у всех профилей account, включая soft-deleted; повторный вызов или неизвестный account успешен без изменений.
 
 `ResolveAccountIDForProfile` — отдельный read-only internal lookup только для exact caller `messaging` или `chat`: возвращает только `account_id` владельца указанного `profile_id`, включая soft-deleted profile. Messaging использует его для lifecycle account check до DM write; Chat — для fresh `ListChats` snapshot, чтобы убрать DM с deleted peer. Он не возвращает `Profile`, не применяет public visibility/block filters и не имеет Gateway REST route. Missing, wrong, padded или multiple internal caller metadata отвергается; invalid UUID — `INVALID_ARGUMENT`, unknown profile — `NOT_FOUND`, ошибка store — `INTERNAL`.
+
+`GetDMPeerDisplayNames` — отдельный title-only internal lookup только для единственного exact caller `chat`. Chat передаёт лишь профили собеседников, уже полученные из `DMPeerProfileIDs` для авторизованных строк `ListChats`; User возвращает только `profile_id` и `display_name` активных профилей. Метод не возвращает account IDs, avatar, bio или verification data, ограничивает запрос 100 ID и не имеет Gateway REST route.
 
 `ApplyVerificationSourceState` — internal-only Auth seam. Он принимает `twitch` или
 `youtube`, положительную монотонную revision и применяет только более новое состояние

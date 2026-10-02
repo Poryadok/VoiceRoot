@@ -155,3 +155,242 @@ Full CI was dispatched at the exact deployed SHA: [run 36338102698](https://gith
 - Added widget regression coverage for HTTPS staging URLs and the HTTP `host.docker.internal` local endpoint. The full attachment test file passed (4 tests), targeted Flutter analysis passed, and `make flutter-ci` passed all checks, including 1,195 passed and 98 skipped Flutter tests; analysis reported nine informational findings accepted by the CI `--no-fatal-infos` setting.
 - Graphify extracted changed sources but remained idle after AST extraction on two attempts, so the graph finalization did not complete. CodeGraph had also reported its index frozen by a held file lock.
 - The fix has not been deployed. Staging attachment download and same-content hash verification remain open behind the existing NATS staging gate.
+
+## 2026-10-01 owner findings — local remediation batch
+
+- The owner reported asymmetric friend removal, reset-password sign-in returning to email verification without a delivered code, a profile-setup modal shown for a regular account, stale unread/read state, difficulty finding archive, blocked-account messages visible in shared chats, and invite links that open onboarding without joining the Space.
+- Local changes now fan out `friend_removed` to both profile peers and invalidate the Flutter Friends list; reconcile inbox snapshots after read/live activity; make the archive action available through each chat row's overflow menu; generate invite links from the current web origin and route successful joins to the returned Space; and skip the legacy save-account modal for regular accounts while keeping a separate reminder for guests. The archive action is already available and locally tested, so it is not a missing capability. Staging discoverability still needs verification. Realtime live delivery and Messaging history now hide a blocked sender from that viewer in group/channel chats while preserving reverse visibility. No staging account or content was modified for these code changes.
+- Local verification passed: 78 Flutter tests across the affected onboarding, inbox, friends, archive, chat, and invite suites; targeted Flutter analysis found no issues; the Messaging short grpcsvc/s2s suites passed 124 tests; the full Realtime Go package passed 395 tests; the blocked-mention regression also passed under `go test -race`; and `scripts/ci/nats-realtime-bootstrap-contract-test.sh` passed after syncing the Compose and Kubernetes bootstrap consumer declarations. `git diff --check` is clean. These are branch results, not deployed acceptance.
+- The current staging browser is still running the older build at `b126a62b502da1f7d8687116bdb74b9cdb43e84f`; a fresh screenshot of the signed-in `@xronos2#6340` session still shows “Set up your profile” for this regular account. The guest-only prompt fix and the other local fixes cannot be credited as staging-passed until deployed.
+- The reset-password report is not yet isolated to mail delivery: Auth leaves the account email-pending after a reset when it was not previously verified, and sign-in requires verification. The user must use the explicit resend flow; capture the resend response and verify delivery before concluding whether the mail provider failed. Registration-code delivery is a separate path and its prior success does not prove reset verification delivery.
+- An integration review found a second Realtime privacy route: `mention.added` had bypassed the new block filter for both its direct mention operation and personal notification. The regression first failed with both operations reaching the viewer who blocked the sender; Realtime now applies the same directional account decision to both fanouts. It also verifies an unblocked live mentioned profile still receives its direct operation without a chat subscription. The Realtime service contract now documents this scope. This remains local and requires staging re-verification after deployment.
+- Tightening the onboarding failure assertion exposed duplicate legacy-step completion attempts for a regular account (two POST attempts in one visit). The overlay now records one attempt per active profile/session key; the focused onboarding suite passes 16 tests, including the pre-existing guest auto-skip one-shot case. This change is local and awaits deployment.
+- The latest staging app-only deployment remains `b126a62b502da1f7d8687116bdb74b9cdb43e84f` (workflow [36837174161](https://github.com/Poryadok/VoiceRoot/actions/runs/36837174161)). Deployment remains blocked by the active NATS generation `r20260930a4`: no `STAGING_NATS_PROOF_CREDS_B64` is available and the active ACL proof hash does not match the changed ACL intent. Do not alter the proof or run a full deployment until the state-preserving migration gate is satisfied. Broader Space hierarchy expansion remains outside this A1 batch.
+- A1 remains open. After the safe deployment gate is resolved, retest friend removal on both online clients; guest/regular onboarding; inbox preview, durable mark-read and unread separators; archive discoverability; invite joining from a second account; directional block visibility over REST and live WebSocket; password-reset verification resend; and attachment download/hash. Continue the remaining account, reconnect/history, offline/error, and soft-delete/recovery checks recorded above.
+
+## 2026-10-01 user findings — local versus staging proof
+
+The pasted acceptance findings are the source for the reported behavior. Preserve
+their distinctions when recording results:
+
+- Earlier local checks for friend-removal fanout, inbox/unread reconciliation,
+  archive access, invite origin/join routing, regular-account onboarding,
+  attachment download, and directional block filtering are recorded in the
+  preceding owner-findings entry. Those checks establish local behavior only.
+- The current integrated worktree adds a Social profile-pair block contract,
+  title-only DM peer projection through User/Chat, unblock cache/history refresh,
+  generated protobufs, and regressions. Focused local checks pass: 126 short
+  Messaging tests plus 58 targeted history/deleted-peer/thread tests; 31 Chat
+  `ListChats` integration tests; Social and User RPC regressions; five Flutter
+  title/visibility widget tests plus the unblock suite's 30 tests; scoped Flutter
+  analysis and protobuf lint/breaking/Dart generation checks. This is local
+  evidence only: the changes remain uncommitted and have no exact-head CI or
+  staging acceptance.
+- Read-only staging inspection still shows the profile-setup modal on the
+  deployed app. No controls were used, and this is not evidence for the local
+  onboarding fix.
+- The pasted findings still require live confirmation for two-client friend
+  removal and request UI/REST state; password-reset resend and code delivery;
+  profile switch with reconnect; per-chat unread refresh and channel read state;
+  archive persistence; invite links that both use the configured web origin and
+  successfully join a Space/group; attachment download and hash after restart;
+  directional block behavior in existing DM/shared-chat history and Realtime;
+  archive discoverability in the deployed UI; and soft-delete/recovery states.
+  The owner could not independently inspect phone-book hash transmission,
+  Auth-to-User contract isolation, durable read cursor boundaries, or
+  cursor-based history after restart; keep these explicit acceptance checks
+  open rather than interpreting “not observed” as proof.
+- Broader Space hierarchy expansion remains outside this A1 batch. The active
+  category and text-chat controls are included to exercise API-backed text
+  channel creation in an existing Space.
+- Staging is still on app-only deploy SHA
+  `b126a62b502da1f7d8687116bdb74b9cdb43e84f` (workflow
+  [36837174161](https://github.com/Poryadok/VoiceRoot/actions/runs/36837174161)).
+  The full deploy remains gated on active-generation NATS ACL proof and
+  state-preserving migration evidence for `r20260930a4`. No proof variable,
+  root, namespace, or staging data may be changed to bypass that gate. The
+  latest live observations recorded above apply only to the deployed build;
+  they cannot validate the current local worktree.
+
+A1 remains open. Close each acceptance item only with the evidence level that
+was actually observed (local check, exact-SHA CI, or deployed staging flow).
+Do not mark A1 accepted or start A2 until the migration gate and full A1 DoD are
+complete.
+
+## 2026-10-02 active remediation slices
+
+The following four slices are active local work. Their state below is the
+current proof boundary; none has staging acceptance yet.
+
+| Slice | Local evidence/status | Staging acceptance |
+|---|---|---|
+| Incoming notification duplicate and selected-chat inbox reconciliation | Focused regression showed the defect (RED) and the fix passing (GREEN). The integrated current head still needs scoped verification. | Open: verify incoming request notification and selected-chat inbox/read/preview state on staging without duplicate or stale entries. |
+| Category controls and Space text-chat creation | API-backed text-channel create flow is being covered; tests are in progress. Canonical tree reorder and category placement are being added. Do not mark verified yet. | Open: create a category and a text chat in an existing Space, then verify reorder and category placement in the resulting tree. |
+| Web invite retention and native share origin | Preserve the original invite URL through unauthenticated login and nickname completion before joining; native share must use the configured application origin. Implementation/test status is not yet recorded. | Open: start from an invite while logged out, complete required account steps, confirm the same invite is joined, and verify the shared URL origin. |
+| Pending-email login after password reset | Owner-requested behavior update: automatically resend verification on password-correct login when the account remains email-pending, using Auth's existing throttle. This was not part of the prior documented contract. Implementation/test status is not yet recorded. | Open: verify resend delivery/response and existing throttle behavior on the deployed build. |
+
+Archive is available from chat-row overflow and has been tested locally. Keep
+the staging discoverability check open: confirm a user can find and use that
+overflow action in the deployed UI. It is not an unimplemented archive feature.
+
+Review follow-up: blocking a peer while their shared chat is already open can
+leave that peer's cached messages visible if the filtered REST history refresh
+fails or the client is offline. A fail-closed cache scrub is being implemented;
+add and pass a regression that seeds cached blocked-peer messages, fails the
+refresh, and proves the messages are removed before display. Keep the behavior
+open for staging until verified on the deployed build.
+
+Category API gap: Space protobuf RPCs and target documentation define category
+update/delete operations, but API Gateway has no PATCH/DELETE routes for them.
+Category rename/delete therefore remain unsupported in the current UI/API path.
+Keep this gap explicit unless the routes are implemented. The active local
+scope adds canonical tree reorder and category placement plus API-backed text
+creation; those items do not imply rename/delete support.
+
+The current staging build and NATS gate remain as recorded above. Exact-SHA CI,
+the active-generation ACL proof, and state-preserving migration evidence must
+precede deployment; do not credit local RED/GREEN or in-progress tests as
+staging proof.
+
+## 2026-10-02 integrated owner-findings batch
+
+The reported defects have local implementations and regression coverage on
+branch `codex/a1-inbox-reconcile-fix`; the first implementation and evidence
+commits (`6d1310ab9`, `4db8b6322`) are pushed to PR #596. The first code CI run
+`36935069635` was superseded when the evidence-only commit arrived. It exposed
+three findings now fixed locally; the follow-up code batch is not yet pushed and
+none of this work has staging acceptance:
+
+- Friend removal updates both participants; incoming requests, notifications,
+  inbox preview, and unread/read state reconcile without a page reload.
+- Invite URLs use the web page origin (or configured native share origin), are
+  retained through auth/profile completion, and proceed to the joined Space.
+- Password-correct login for an email-pending account resends verification via
+  Auth's existing throttle. Live provider delivery and the deployed response
+  remain unverified.
+- Regular accounts no longer receive the guest save-profile prompt. The
+  current staging page still displays that prompt for `@xronos2#6340`, confirming
+  that this fix is not deployed.
+- Space UI supports category creation, text-chat creation, category placement,
+  and contract-limited reorder. Partial/uncertain network outcomes are guarded
+  against duplicate creation. Rename/delete are still not available through
+  Gateway's missing PATCH/DELETE routes.
+- Ordinary attachment cards request a fresh download URL. Staging download,
+  checksum comparison, and service-restart persistence remain unverified.
+- Blocked peers retain their real title in an existing authorized DM; their
+  group/channel history and Realtime deliveries are filtered directionally.
+  Unblock refreshes without a full-page reload. Cross-profile/room cache writes
+  are fenced and blocked messages are purged before API refresh, including
+  offline/failing-refresh cases.
+- CI found that `MarkRead` or resumed activity could silently restart all inbox
+  scopes after one page failed. `reconcileAfterMutation()` now preserves that
+  error and opaque cursor until the user retries; its new regression first
+  failed by adding three unexpected requests and now passes without extra calls.
+  CI also exposed stale unused Messaging fakes and one direct-service fixture
+  without the mandatory Social profile-pair policy; both are corrected.
+
+Integrated local verification on this branch:
+
+- `make go-test-short-chat go-test-short-social go-test-short-user go-test-short-messaging go-test-short-realtime` passed.
+- `make buf-ci buf-breaking` passed.
+- Latest `make flutter-ci` passed: 1,239 passed, 98 skipped; analyzer reported
+  eight informational lints accepted by CI.
+- Latest `make golangci-ci` passed across all 20 Go modules. Focused inbox
+  reconciler (16), notification/chat (40), Messaging short tests and Messaging
+  lint passed after the CI-driven corrections.
+- Focused privacy/history/cache tests passed (37); focused Space client/widget
+  tests and targeted Flutter analysis passed; `git diff --check` is clean.
+- `make ci-script-tests` could not run because `jq` is not installed on this
+  host. This is an environment limitation, not a passing check.
+- Realtime's full package suite previously passed 395 tests. Full Go integration
+  suites remain limited by rootless Docker support on this host.
+- Before cancellation, protobuf, docs links, admin, Flutter device-driver,
+  backend package, most service tests, E2E and attachment proof passed on
+  `36935069635`. Lint, the profile-handoff live test and Messaging integration
+  failed; those findings are corrected locally. The run was canceled when the
+  follow-up docs commit landed. Fresh exact-head CI is required.
+- `make buf-go-pb-check` passed after regenerating the Go protobuf trees. The
+  Graphify source graph update completed; its HTML visualization was skipped
+  because the repository graph exceeds the visualization node limit.
+
+Read-only staging observation on 2026-10-02: the existing signed-in session is
+`@xronos2#6340`, the visible inbox loads, and the regular-account “Set up your
+profile” modal is still shown. No staging data was changed in this observation.
+
+Still open and not credited as passed:
+
+- Commit/push the CI-driven fixes, then complete exact-head CI for PR #596.
+- Safe exact-SHA staging deployment. Active NATS generation remains
+  `r20260930a4`; `STAGING_NATS_PROOF_CREDS_B64` is unavailable and the ACL proof
+  hash does not match current intent. Do not change proof variables, rotate
+  roots, reset namespaces, or wipe staging data to bypass the gate.
+- Live email verification delivery, invite join from another account, two-way
+  friend removal/request UI, channel unread/read and durable cursor semantics,
+  profile switch with reconnect, history catch-up after restart, archive
+  discoverability/persistence, attachment download/hash/restart, directional
+  block checks on live REST/WS, and soft-delete/recovery.
+- Phonebook hashing and Auth-to-User credential boundary require contract/code
+  evidence; the absence of a browser permission prompt is not proof of the
+  absence of phonebook hash transmission.
+
+A1 remains open. Continue after exact-head CI and only deploy once the active
+NATS proof and state-preserving migration gate are satisfied.
+
+## 2026-10-02 CI follow-up — inbox reconciliation
+
+- CI run [36937915331](https://github.com/Poryadok/VoiceRoot/actions/runs/36937915331)
+  found two remaining batch regressions: the profile-handoff check observed 12
+  inbox requests where it expected 6, and a direct Messaging service fixture
+  did not provide the required profile-pair block policy. The fixture now uses
+  an explicit allow-all policy, matching the test's intent.
+- Concurrent full reconciliations now share one in-flight three-scope snapshot.
+  Activity received during pagination schedules one follow-up after current
+  pages finish, preserving fresh preview and unread state without overlapping
+  generations. The retry path follows the same rule; a failed scope is not
+  implicitly retried.
+- Regression tests cover a full snapshot and a scope-local retry with activity
+  arriving during paging. They verify one follow-up refresh and the final
+  server preview/unread rows. The inbox reconciler suite passes 18 tests.
+- Final local checks for this batch: `make flutter-ci` passed (1,241 passed,
+  98 skipped; eight informational lints accepted by CI),
+  `make go-test-short-messaging` and `make golangci-ci` passed, and
+  `git diff --check` passed. The exact-head GitHub CI run is still required.
+- The GitHub staging environment's secret-name inventory confirms that
+  `STAGING_NATS_PROOF_CREDS_B64` is absent. No deployment or staging data
+  changes were made; the active-generation ACL proof and state-preserving
+  migration gate remain unresolved.
+
+## 2026-10-02 continuation — notification snapshot initialization
+
+- PR #596 run [36946946345](https://github.com/Poryadok/VoiceRoot/actions/runs/36946946345)
+  at `c6d81b2` failed two notification tests: `joined` and
+  `inbox_bucket_changed` did not initialize an absent inbox snapshot.
+  `reconcileAfterInboxActivity()` now initializes the active profile snapshot
+  for `message_request` and qualifying `chat_update`; existing snapshots use
+  the unchanged loading/error guard. MarkRead and ordinary activity retain
+  their guarded path.
+- Pre-fix caller wiring reproduced those two failures and the new first-use
+  `message_request` case. Restored wiring passes all 45 focused notification/
+  reconciler tests. Regression coverage also verifies activity initializes
+  profile B with B credentials while late profile A responses cannot publish,
+  and activity cannot implicitly retry any scope's failed cursor.
+- Final `make flutter-ci` passed: 1,243 passed, 98 existing opt-in skips,
+  eight informational lints. Independent read-only session/concurrency review
+  found no blockers. `graphify update .` completed successfully; HTML preview
+  remains over the graph size limit.
+- Required isolated `make compose-a1-flutter-profile-handoff` passed all five
+  live tests (T055, T106, T107, pending-email), with cleanup enabled, against
+  the current checkout and rebuilt local Compose services. Containers/network
+  were removed by the runner; the 14 generated project volumes were removed
+  separately after completion. Exact-head GitHub CI remains required.
+- Non-blocker, P3: `VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP=true` runs
+  `compose down --remove-orphans` and leaves project-scoped named volumes.
+  Reproduce with the isolated runner, then list volumes using its generated
+  Compose project label. Expected: disposable proof data is removed; actual:
+  14 volumes remain until explicit scoped cleanup. Impact: local disk and
+  disposable credential/data accumulation. No runner change in this fix.
+- A1 remains open. This evidence is local/CI, not acceptance of the actual
+  staging build. No staging deployment, proof credential issuance, or staging
+  NATS resource changes occurred. The reported census of 566 consumers and
+  evidence for 8 messages still require verification/classification and
+  retention/replay/idempotency proof before the separate migration gate passes.

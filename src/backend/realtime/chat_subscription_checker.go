@@ -30,6 +30,12 @@ type chatSideEffectChecker interface {
 	AuthorizeSideEffect(ctx context.Context, accountID, chatID string) error
 }
 
+type messageSentBlockPolicy interface {
+	MessageChatIsShared(ctx context.Context, chatID, senderAccountID, senderProfileID string) (bool, error)
+	MessageSenderAccount(ctx context.Context, senderProfileID string) (string, error)
+	MessageRecipientBlocked(ctx context.Context, recipientAccountID, senderAccountID string) (bool, error)
+}
+
 type chatSubscriptionRegistrar interface {
 	AuthorizeAndAddChat(ctx context.Context, accountID, profileID, chatID string, reg *connReg) error
 }
@@ -250,4 +256,108 @@ func (g *grpcChatSubscriptionChecker) AuthorizeSideEffect(ctx context.Context, a
 		}
 	}
 	return nil
+}
+
+// MessageSenderAccount resolves the account that owns a message sender profile.
+// It uses a policy context without viewer identity, like DM block resolution.
+func (g *grpcChatSubscriptionChecker) MessageSenderAccount(ctx context.Context, senderProfileID string) (string, error) {
+	if g == nil || g.user == nil {
+		return "", status.Error(codes.Unavailable, "message block policy is not configured")
+	}
+	senderProfile, err := uuid.Parse(strings.TrimSpace(senderProfileID))
+	if err != nil || senderProfile == uuid.Nil {
+		return "", fmt.Errorf("message block policy received invalid sender profile")
+	}
+	ctx, cancel := context.WithTimeout(ctx, chatSubscriptionCheckTimeout)
+	defer cancel()
+	policyCtx := metadata.NewOutgoingContext(ctx, metadata.MD{})
+	resp, err := g.user.GetProfile(policyCtx, &userv1.GetProfileRequest{
+		By: &userv1.GetProfileRequest_ProfileId{ProfileId: senderProfile.String()},
+	})
+	if err != nil {
+		return "", err
+	}
+	if resp == nil || resp.GetProfile() == nil {
+		return "", fmt.Errorf("message block policy received missing sender profile")
+	}
+	profileID, err := uuid.Parse(strings.TrimSpace(resp.GetProfile().GetId()))
+	if err != nil || profileID != senderProfile {
+		return "", fmt.Errorf("message block policy received unexpected sender profile")
+	}
+	accountID, err := uuid.Parse(strings.TrimSpace(resp.GetProfile().GetAccountId()))
+	if err != nil || accountID == uuid.Nil {
+		return "", fmt.Errorf("message block policy received invalid sender account")
+	}
+	return accountID.String(), nil
+}
+
+// MessageChatIsShared confirms that the event belongs to a non-DM chat using
+// the sender's membership identity. DM fanout remains governed by mutual DM policy.
+func (g *grpcChatSubscriptionChecker) MessageChatIsShared(ctx context.Context, chatID, senderAccountID, senderProfileID string) (bool, error) {
+	if g == nil || g.chat == nil {
+		return false, status.Error(codes.Unavailable, "message chat policy is not configured")
+	}
+	chatUUID, chatErr := uuid.Parse(strings.TrimSpace(chatID))
+	accountUUID, accountErr := uuid.Parse(strings.TrimSpace(senderAccountID))
+	profileUUID, profileErr := uuid.Parse(strings.TrimSpace(senderProfileID))
+	if chatErr != nil || chatUUID == uuid.Nil || accountErr != nil || accountUUID == uuid.Nil || profileErr != nil || profileUUID == uuid.Nil {
+		return false, fmt.Errorf("message chat policy received invalid identity")
+	}
+	ctx, cancel := context.WithTimeout(ctx, chatSubscriptionCheckTimeout)
+	defer cancel()
+	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok {
+		outgoing = outgoing.Copy()
+		outgoing.Delete(grpcMDVoiceInternalCaller)
+		ctx = metadata.NewOutgoingContext(ctx, outgoing)
+	}
+	ctx = metadata.AppendToOutgoingContext(ctx, grpcMDVoiceUserID, accountUUID.String(), grpcMDVoiceProfileID, profileUUID.String())
+	resp, err := g.chat.GetChat(ctx, &chatv1.GetChatRequest{ChatId: chatUUID.String()})
+	if err != nil {
+		return false, err
+	}
+	if resp == nil || resp.GetChat() == nil {
+		return false, fmt.Errorf("message chat policy received missing chat")
+	}
+	returnedID, err := uuid.Parse(strings.TrimSpace(resp.GetChat().GetId()))
+	if err != nil || returnedID != chatUUID {
+		return false, fmt.Errorf("message chat policy received unexpected chat")
+	}
+	switch resp.GetChat().GetType() {
+	case chatv1.ChatType_CHAT_TYPE_GROUP, chatv1.ChatType_CHAT_TYPE_CHANNEL:
+		return true, nil
+	case chatv1.ChatType_CHAT_TYPE_DM:
+		return false, nil
+	default:
+		return false, fmt.Errorf("message chat policy received unknown chat type")
+	}
+}
+
+// MessageRecipientBlocked performs the one-way Social decision for a shared
+// chat message. It deliberately does not reuse DM's mutual account-pair rule.
+func (g *grpcChatSubscriptionChecker) MessageRecipientBlocked(ctx context.Context, recipientAccountID, senderAccountID string) (bool, error) {
+	if g == nil || g.social == nil {
+		return false, status.Error(codes.Unavailable, "message block policy is not configured")
+	}
+	recipient, err := uuid.Parse(strings.TrimSpace(recipientAccountID))
+	if err != nil || recipient == uuid.Nil {
+		return false, fmt.Errorf("message block policy received invalid recipient account")
+	}
+	sender, err := uuid.Parse(strings.TrimSpace(senderAccountID))
+	if err != nil || sender == uuid.Nil || sender == recipient {
+		return false, fmt.Errorf("message block policy received invalid sender account")
+	}
+	ctx, cancel := context.WithTimeout(ctx, chatSubscriptionCheckTimeout)
+	defer cancel()
+	policyCtx := metadata.NewOutgoingContext(ctx, metadata.MD{})
+	resp, err := g.social.IsBlocked(policyCtx, &socialv1.IsBlockedRequest{
+		AccountIdA: recipient.String(),
+		AccountIdB: sender.String(),
+	})
+	if err != nil {
+		return false, err
+	}
+	if resp == nil {
+		return false, fmt.Errorf("message block policy received missing Social response")
+	}
+	return resp.GetBlocked(), nil
 }

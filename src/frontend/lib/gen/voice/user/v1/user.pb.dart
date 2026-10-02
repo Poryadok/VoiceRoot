@@ -434,6 +434,175 @@ class ResolveAccountIDForProfileResponse extends $pb.GeneratedMessage {
   void clearAccountId() => $_clearField(1);
 }
 
+class GetDMPeerDisplayNamesRequest extends $pb.GeneratedMessage {
+  factory GetDMPeerDisplayNamesRequest({
+    $core.Iterable<$core.String>? profileIds,
+  }) {
+    final result = create();
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    return result;
+  }
+
+  GetDMPeerDisplayNamesRequest._();
+
+  factory GetDMPeerDisplayNamesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetDMPeerDisplayNamesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetDMPeerDisplayNamesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'profileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetDMPeerDisplayNamesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetDMPeerDisplayNamesRequest copyWith(
+          void Function(GetDMPeerDisplayNamesRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetDMPeerDisplayNamesRequest))
+          as GetDMPeerDisplayNamesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetDMPeerDisplayNamesRequest create() =>
+      GetDMPeerDisplayNamesRequest._();
+  @$core.override
+  GetDMPeerDisplayNamesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetDMPeerDisplayNamesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetDMPeerDisplayNamesRequest>(create);
+  static GetDMPeerDisplayNamesRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get profileIds => $_getList(0);
+}
+
+class DMPeerDisplayName extends $pb.GeneratedMessage {
+  factory DMPeerDisplayName({
+    $core.String? profileId,
+    $core.String? displayName,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (displayName != null) result.displayName = displayName;
+    return result;
+  }
+
+  DMPeerDisplayName._();
+
+  factory DMPeerDisplayName.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DMPeerDisplayName.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DMPeerDisplayName',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOS(2, _omitFieldNames ? '' : 'displayName')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DMPeerDisplayName clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DMPeerDisplayName copyWith(void Function(DMPeerDisplayName) updates) =>
+      super.copyWith((message) => updates(message as DMPeerDisplayName))
+          as DMPeerDisplayName;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DMPeerDisplayName create() => DMPeerDisplayName._();
+  @$core.override
+  DMPeerDisplayName createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DMPeerDisplayName getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DMPeerDisplayName>(create);
+  static DMPeerDisplayName? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get displayName => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set displayName($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDisplayName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDisplayName() => $_clearField(2);
+}
+
+class GetDMPeerDisplayNamesResponse extends $pb.GeneratedMessage {
+  factory GetDMPeerDisplayNamesResponse({
+    $core.Iterable<DMPeerDisplayName>? displayNames,
+  }) {
+    final result = create();
+    if (displayNames != null) result.displayNames.addAll(displayNames);
+    return result;
+  }
+
+  GetDMPeerDisplayNamesResponse._();
+
+  factory GetDMPeerDisplayNamesResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetDMPeerDisplayNamesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetDMPeerDisplayNamesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPM<DMPeerDisplayName>(1, _omitFieldNames ? '' : 'displayNames',
+        subBuilder: DMPeerDisplayName.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetDMPeerDisplayNamesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetDMPeerDisplayNamesResponse copyWith(
+          void Function(GetDMPeerDisplayNamesResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetDMPeerDisplayNamesResponse))
+          as GetDMPeerDisplayNamesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetDMPeerDisplayNamesResponse create() =>
+      GetDMPeerDisplayNamesResponse._();
+  @$core.override
+  GetDMPeerDisplayNamesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetDMPeerDisplayNamesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetDMPeerDisplayNamesResponse>(create);
+  static GetDMPeerDisplayNamesResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<DMPeerDisplayName> get displayNames => $_getList(0);
+}
+
 enum GetProfileRequest_By { profileId, username, notSet }
 
 class GetProfileRequest extends $pb.GeneratedMessage {

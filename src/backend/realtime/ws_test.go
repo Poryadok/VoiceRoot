@@ -44,6 +44,18 @@ func (allowAllChatSubscriptionChecker) AuthorizeChat(context.Context, string, st
 	return nil
 }
 
+func (allowAllChatSubscriptionChecker) MessageSenderAccount(_ context.Context, senderProfileID string) (string, error) {
+	return senderProfileID, nil
+}
+
+func (allowAllChatSubscriptionChecker) MessageChatIsShared(context.Context, string, string, string) (bool, error) {
+	return false, nil
+}
+
+func (allowAllChatSubscriptionChecker) MessageRecipientBlocked(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 func permitAllTestSubscriptions(hub *wsHub) *wsHub {
 	hub.subscriptionChecker = allowAllChatSubscriptionChecker{}
 	return hub

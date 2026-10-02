@@ -328,9 +328,13 @@ void main() {
       addTearDown(helloSubscription.close);
 
       final initialInboxDone = Completer<void>();
+      final selectedReadRefreshStarted = Completer<void>();
+      final selectedReadRefreshDone = Completer<void>();
       final reconnectInboxBegan = Completer<void>();
       final reconnectMainPageFailed = Completer<void>();
       final reconnectHealthyScopesDone = Completer<void>();
+      var waitingForSelectedReadRefresh = false;
+      var selectedReadRefreshObservedLoading = false;
       var waitingForReconnectSnapshot = false;
       final reconnectStartedScopes = <InboxScope>{};
       final inboxSubscription = container.listen<InboxReconcilerState>(
@@ -343,6 +347,21 @@ void main() {
           );
           if (complete && !initialInboxDone.isCompleted) {
             initialInboxDone.complete();
+          }
+          if (waitingForSelectedReadRefresh) {
+            final loading = InboxScope.values.any(
+              (scope) => snapshot[scope].isLoading,
+            );
+            if (loading) {
+              selectedReadRefreshObservedLoading = true;
+              if (!selectedReadRefreshStarted.isCompleted) {
+                selectedReadRefreshStarted.complete();
+              }
+            } else if (selectedReadRefreshObservedLoading &&
+                complete &&
+                !selectedReadRefreshDone.isCompleted) {
+              selectedReadRefreshDone.complete();
+            }
           }
           if (waitingForReconnectSnapshot && !complete) {
             if (!reconnectInboxBegan.isCompleted) {
@@ -457,6 +476,7 @@ void main() {
         {archivedChatId, archivedAltChatId},
       );
 
+      waitingForSelectedReadRefresh = true;
       container.read(selectedChatIdProvider.notifier).state = selectedChatId;
       final selectedBaselineLoaded = Completer<void>();
       final selectedDeltaLoaded = Completer<void>();
@@ -521,6 +541,19 @@ void main() {
               'timed out completing selected baseline read',
             ),
           );
+      await selectedReadRefreshStarted.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => throw TestFailure(
+          'timed out starting selected read inbox reconciliation',
+        ),
+      );
+      await selectedReadRefreshDone.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => throw TestFailure(
+          'timed out completing selected read inbox reconciliation',
+        ),
+      );
+      waitingForSelectedReadRefresh = false;
 
       final requestCountBeforeTransportLoss = recorder.requests.length;
       final completedReadsBeforeReconnect = recorder.completedReadResponses;
@@ -672,6 +705,21 @@ void main() {
         {archivedChatId, archivedAltChatId},
       );
 
+      await selectedDeltaLoaded.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () =>
+            throw TestFailure('timed out loading selected reconnect delta'),
+      );
+      await recorder
+          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
+          .timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => throw TestFailure(
+              'timed out completing selected reconnect read',
+            ),
+          );
+      await pumpEventQueue();
+
       await Future<void>.microtask(() {});
       final mainCursorsBeforeExplicitRetry = recorder.requests
           .skip(requestCountBeforeTransportLoss)
@@ -723,19 +771,6 @@ void main() {
           reconnectCursors['main'],
         ]),
       );
-      await selectedDeltaLoaded.future.timeout(
-        const Duration(seconds: 12),
-        onTimeout: () =>
-            throw TestFailure('timed out loading selected reconnect delta'),
-      );
-      await recorder
-          .waitForCompletedReadResponses(completedReadsBeforeReconnect + 1)
-          .timeout(
-            const Duration(seconds: 12),
-            onTimeout: () => throw TestFailure(
-              'timed out completing selected reconnect read',
-            ),
-          );
       final reconnectHistory = reconnectRequests
           .where(
             (request) =>
@@ -870,8 +905,8 @@ class _TaggedInboxReconcilerController extends InboxReconcilerController {
   _TaggedInboxReconcilerController(super.ref) : super(pageSize: 1);
 
   @override
-  Future<void> reconcile() {
-    return _runTagged(super.reconcile);
+  Future<void> reconcile({bool force = false}) {
+    return _runTagged(() => super.reconcile(force: force));
   }
 
   @override

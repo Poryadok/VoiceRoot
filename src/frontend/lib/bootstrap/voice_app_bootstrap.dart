@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +6,8 @@ import '../app.dart';
 import '../backend/guest_credentials_storage.dart';
 import '../backend/users_client.dart';
 import '../l10n/app_localizations.dart';
+import '../routing/deep_link_controller.dart';
+import '../routing/deep_link_parser.dart';
 import '../state/auth_providers.dart';
 import '../state/social_providers.dart';
 import '../settings/theme_preference.dart';
@@ -29,7 +32,17 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_restoreSession);
+    Future.microtask(() async {
+      await _captureInitialWebInvite();
+      await _restoreSession();
+    });
+  }
+
+  Future<void> _captureInitialWebInvite() async {
+    if (!kIsWeb) return;
+    final target = parseInitialWebInviteTarget(Uri.base);
+    if (target == null) return;
+    await ref.read(deepLinkControllerProvider.notifier).onIncomingLink(target);
   }
 
   Future<void> _restoreSession() async {
@@ -41,6 +54,11 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
     }
     try {
       await ref.read(authControllerProvider.notifier).restore();
+      if (ref.read(authControllerProvider).isAuthenticated) {
+        await ref
+            .read(deepLinkControllerProvider.notifier)
+            .flushPendingAfterAuth();
+      }
       await _resolveGuestNicknameAfterRestore();
       if (mounted) {
         setState(() => _restoreComplete = true);

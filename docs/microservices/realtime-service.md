@@ -369,11 +369,13 @@ DM дополнительно применяется account-level block policy:
 
 Событие остаётся revoke-оптимизацией, а не correctness path: перед `typing`, `mark_read` и `delivery_ack` для уже открытого DM Realtime синхронно вызывает Social `IsBlocked` в обе стороны по сохранённой pair. Block или ошибка Social дают существующий generic deny до fan-out/Redis/JetStream side effects. Поэтому успешный `BlockAccount` закрывает старый socket даже если `PublishUserBlocked` завершился ошибкой или event не был доставлен; non-DM сохраняет local-subscription semantics без Social round-trip.
 
+Для новых `message.sent` и `mention.added` в group/channel Realtime отдельно фильтрует локальный live fan-out по каждому account получателя: Social `IsBlocked(recipient, sender)` подавляет сообщение и оба личных сигнала упоминания только для viewer, заблокировавшего sender. Обратное направление, отправитель и остальные участники остаются видимыми. То же решение применяется к `new_message`/`message_request` и `archive_activity`, чтобы скрытое сообщение не создавало unread-сигнал. Проверки объединяются по account для нескольких профилей и вкладок; ошибка User/Chat закрывает доставку события для неотправителя, ошибка Social — только соответствующему account. Подписки и membership не меняются, а JetStream source message подтверждается независимо от результата отдельных получателей. Эта проверка относится только к live fan-out; история REST/Messaging здесь не фильтруется.
+
 ## Зависимости
 
 - **Redis** — Pub/Sub, registry подключений `{profile_id → [instance_id, ws_conn_id]}` и minimum-epoch floor для fail-closed проверок аккаунта
 - **NATS** — получение событий от всех сервисов
-- **Chat / User / Social gRPC** — membership/type, DM peer account resolution и двунаправленный account-level block decision
+- **Chat / User / Social gRPC** — membership/type, DM peer account resolution и двунаправленный DM block decision; sender account и однонаправленная block-проверка для новых shared-chat live fanouts
 
 Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
 

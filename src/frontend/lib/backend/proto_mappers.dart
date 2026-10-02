@@ -252,6 +252,9 @@ ChatListItem chatListItemFromProto(chat_pb.ChatListItem item) {
     dmPeerProfileId: item.hasDmPeerProfileId()
         ? emptyToNull(item.dmPeerProfileId)
         : null,
+    dmPeerDisplayName: item.hasDmPeerDisplayName()
+        ? emptyToNull(item.dmPeerDisplayName)
+        : null,
     isPinned: item.hasIsPinned() && item.isPinned,
   );
 }
@@ -929,6 +932,8 @@ SpaceTreeNodeData spaceTreeNodeFromProto(
     voiceRoomId: voiceRoomId,
     sortOrder: node.sortOrder,
     isSystem: node.isSystem,
+    isPinned: node.isPinned,
+    pinOrder: node.hasPinOrder() ? node.pinOrder : null,
     displayName: voiceName ?? protoName ?? linkedChatId ?? node.id,
     chatType: chatType,
   );
@@ -960,6 +965,8 @@ SpaceTreeNodeData spaceTreeNodeFromJson(
     voiceRoomId: voiceRoomId,
     sortOrder: (node['sort_order'] as num?)?.toInt() ?? 0,
     isSystem: node['is_system'] as bool? ?? false,
+    isPinned: node['is_pinned'] as bool? ?? false,
+    pinOrder: (node['pin_order'] as num?)?.toInt(),
     displayName:
         enrichedName ??
         voiceName ??

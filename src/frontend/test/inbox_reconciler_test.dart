@@ -23,38 +23,266 @@ import 'support/inbox_reconciler_fakes.dart';
 
 void main() {
   group('InboxReconcilerController', () {
-    test('starts the three-scope snapshot after accepted realtime hello', () async {
+    test(
+      'starts the three-scope snapshot after accepted realtime hello',
+      () async {
+        final chats = InboxReconcilerChatsFake();
+        for (final inbox in ['main', 'requests', 'archive']) {
+          for (var run = 0; run < 2; run++) {
+            chats.enqueue(
+              InboxChatPageScript(
+                inbox: inbox,
+                cursor: null,
+                result: const ChatsApiOk(ChatListData(items: [])),
+              ),
+            );
+          }
+        }
+        final container = _container(
+          chats: chats,
+          messages: InboxReconcilerMessagesFake(),
+        );
+        addTearDown(container.dispose);
+        container.read(inboxReconcilerProvider);
+        await pumpEventQueue();
+        final callsBeforeReconnect = chats.calls.length;
+
+        _acceptCurrentRealtimeHello(container);
+        await pumpEventQueue();
+
+        expect(chats.calls, hasLength(callsBeforeReconnect + 3));
+        expect(
+          chats.calls
+              .skip(callsBeforeReconnect)
+              .map((call) => call.inbox)
+              .toSet(),
+          {'main', 'requests', 'archive'},
+        );
+      },
+    );
+
+    test('coalesces concurrent full and mutation reconciliations', () async {
       final chats = InboxReconcilerChatsFake();
       for (final inbox in ['main', 'requests', 'archive']) {
-        for (var run = 0; run < 2; run++) {
-          chats.enqueue(
+        chats
+          ..enqueue(
             InboxChatPageScript(
               inbox: inbox,
               cursor: null,
-              result: const ChatsApiOk(ChatListData(items: [])),
+              result: ChatsApiOk(
+                ChatListData(
+                  items: [inboxChatItem('first-$inbox')],
+                  nextCursor: 'cursor-$inbox',
+                ),
+              ),
+            ),
+          )
+          ..enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: 'cursor-$inbox',
+              manual: true,
+              result: ChatsApiOk(
+                ChatListData(items: [inboxChatItem('last-$inbox')]),
+              ),
             ),
           );
-        }
+      }
+      for (final inbox in ['main', 'requests', 'archive']) {
+        chats
+          ..enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: null,
+              result: ChatsApiOk(
+                ChatListData(
+                  items: [
+                    inboxChatItem(
+                      'fresh-$inbox',
+                      preview: 'fresh preview',
+                      unreadCount: 4,
+                    ),
+                  ],
+                  nextCursor: 'fresh-cursor-$inbox',
+                ),
+              ),
+            ),
+          )
+          ..enqueue(
+            InboxChatPageScript(
+              inbox: inbox,
+              cursor: 'fresh-cursor-$inbox',
+              result: ChatsApiOk(
+                ChatListData(
+                  items: [
+                    inboxChatItem(
+                      'fresh-$inbox',
+                      preview: 'final preview',
+                      unreadCount: 7,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
       }
       final container = _container(
         chats: chats,
         messages: InboxReconcilerMessagesFake(),
       );
       addTearDown(container.dispose);
-      container.read(inboxReconcilerProvider);
-      await pumpEventQueue();
-      final callsBeforeReconnect = chats.calls.length;
+      final controller = container.read(inboxReconcilerProvider.notifier);
 
-      _acceptCurrentRealtimeHello(container);
+      final firstSnapshot = controller.reconcile();
+      await pumpEventQueue();
+      expect(chats.calls, hasLength(6));
+
+      controller.reconcileAfterMutation();
+      final concurrentSnapshot = controller.reconcile();
       await pumpEventQueue();
 
-      expect(chats.calls, hasLength(callsBeforeReconnect + 3));
       expect(
-        chats.calls
-            .skip(callsBeforeReconnect)
-            .map((call) => call.inbox)
-            .toSet(),
-        {'main', 'requests', 'archive'},
+        chats.calls,
+        hasLength(6),
+        reason: 'overlapping reconnect/activity triggers share one snapshot',
+      );
+      for (final inbox in ['main', 'requests', 'archive']) {
+        final page = chats.findCall(inbox: inbox, cursor: 'cursor-$inbox');
+        expect(page, isNotNull);
+        await chats.completeCall(
+          page!,
+          result: ChatsApiOk(
+            ChatListData(items: [inboxChatItem('last-$inbox')]),
+          ),
+        );
+      }
+      await Future.wait([firstSnapshot, concurrentSnapshot]);
+      await pumpEventQueue();
+      expect(chats.calls, hasLength(12));
+      expect(chats.unmatchedCalls, isEmpty);
+      final refreshed = container
+          .read(inboxReconcilerProvider)
+          .profileSnapshots['prof-test']!;
+      for (final inbox in InboxScope.values) {
+        final row = refreshed[inbox].items.singleWhere(
+          (item) => item.chatId == 'fresh-${inbox.name}',
+        );
+        expect(row.lastMessagePreview, 'final preview');
+        expect(row.unreadCount, 7);
+      }
+    });
+
+    test('drains one deferred refresh after a scope-local retry', () async {
+      final chats = InboxReconcilerChatsFake()
+        ..enqueue(
+          InboxChatPageScript(
+            inbox: 'main',
+            cursor: null,
+            result: ChatsApiOk(
+              ChatListData(
+                items: [inboxChatItem('main-before-retry')],
+                nextCursor: 'failed-cursor',
+              ),
+            ),
+          ),
+        )
+        ..enqueue(
+          const InboxChatPageScript(
+            inbox: 'main',
+            cursor: 'failed-cursor',
+            result: ChatsApiFailure(
+              message: 'temporary failure',
+              statusCode: 503,
+            ),
+          ),
+        );
+      for (final inbox in ['requests', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            result: const ChatsApiOk(ChatListData(items: [])),
+          ),
+        );
+      }
+      final container = _container(
+        chats: chats,
+        messages: InboxReconcilerMessagesFake(),
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(inboxReconcilerProvider.notifier);
+
+      await controller.reconcile();
+      expect(chats.calls, hasLength(4));
+      expect(
+        container
+            .read(inboxReconcilerProvider)
+            .profileSnapshots['prof-test']![InboxScope.main]
+            .hasError,
+        isTrue,
+      );
+
+      chats
+        ..enqueue(
+          InboxChatPageScript(
+            inbox: 'main',
+            cursor: 'failed-cursor',
+            manual: true,
+            result: ChatsApiOk(
+              ChatListData(items: [inboxChatItem('main-after-retry')]),
+            ),
+          ),
+        )
+        ..enqueue(
+          InboxChatPageScript(
+            inbox: 'main',
+            cursor: null,
+            result: ChatsApiOk(
+              ChatListData(items: [inboxChatItem('main-after-activity')]),
+            ),
+          ),
+        );
+      for (final inbox in ['requests', 'archive']) {
+        chats.enqueue(
+          InboxChatPageScript(
+            inbox: inbox,
+            cursor: null,
+            result: ChatsApiOk(
+              ChatListData(items: [inboxChatItem('$inbox-after-activity')]),
+            ),
+          ),
+        );
+      }
+
+      final retry = controller.retry(InboxScope.main);
+      await pumpEventQueue();
+      expect(chats.calls, hasLength(5));
+      controller.reconcileAfterMutation();
+      await chats.completeCall(
+        chats.findCall(inbox: 'main', cursor: 'failed-cursor')!,
+        result: ChatsApiOk(
+          ChatListData(items: [inboxChatItem('main-after-retry')]),
+        ),
+      );
+      await retry;
+      await pumpEventQueue();
+
+      expect(chats.calls, hasLength(8));
+      expect(chats.unmatchedCalls, isEmpty);
+      final refreshed = container
+          .read(inboxReconcilerProvider)
+          .profileSnapshots['prof-test']!;
+      expect(
+        refreshed[InboxScope.main].items.single.chatId,
+        'main-after-activity',
+      );
+      expect(
+        refreshed[InboxScope.requests].items.single.chatId,
+        'requests-after-activity',
+      );
+      expect(
+        refreshed[InboxScope.archive].items.single.chatId,
+        'archive-after-activity',
       );
     });
 
@@ -221,6 +449,26 @@ void main() {
           expect(scope.isLoading, isFalse);
           expect(scope.isComplete, isFalse);
           final callsBeforeRetry = chats.calls.length;
+
+          controller.reconcileAfterMutation();
+          controller.reconcileAfterInboxActivity();
+          await pumpEventQueue();
+
+          scope = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots['prof-test']!
+              .scopes[failedScope]!;
+          expect(
+            chats.calls,
+            hasLength(callsBeforeRetry),
+            reason: 'a mutation must not silently retry a failed inbox page',
+          );
+          expect(scope.items.map((item) => item.chatId), [
+            'cached-$failedInbox',
+          ]);
+          expect(scope.failedCursor, failedCursor);
+          expect(scope.nextCursor, failedCursor);
+          expect(scope.errorMessage, 'later page unavailable');
 
           await controller.retry(failedScope);
 
@@ -646,7 +894,7 @@ void main() {
             ),
           );
         }
-        await controller.reconcile();
+        await controller.reconcile(force: true);
         var state = container.read(inboxReconcilerProvider);
         for (final scope in InboxScope.values) {
           final current = state.profileSnapshots['prof-test']!.scopes[scope]!;
@@ -701,154 +949,170 @@ void main() {
       },
     );
 
-    test(
-      'keeps snapshots keyed by profile, even when chat IDs overlap',
-      () async {
-        final authController = _AuthHarness();
-        final chats = InboxReconcilerChatsFake(
-          profileByAuthorization: const {
-            'Bearer access-a': 'profile-a',
-            'Bearer access-b': 'profile-b',
-          },
-        );
-        for (final inbox in ['main', 'requests', 'archive']) {
-          chats.enqueue(
-            InboxChatPageScript(
+    for (final initializeFromActivity in [false, true]) {
+      test(
+        'keeps snapshots keyed by profile, even when chat IDs overlap (activity=$initializeFromActivity)',
+        () async {
+          final authController = _AuthHarness();
+          final chats = InboxReconcilerChatsFake(
+            profileByAuthorization: const {
+              'Bearer access-a': 'profile-a',
+              'Bearer access-b': 'profile-b',
+            },
+          );
+          for (final inbox in ['main', 'requests', 'archive']) {
+            chats.enqueue(
+              InboxChatPageScript(
+                inbox: inbox,
+                cursor: null,
+                profileId: 'profile-a',
+                authorization: 'Bearer access-a',
+                manual: true,
+                result: ChatsApiOk(
+                  ChatListData(items: [inboxChatItem('same-chat')]),
+                ),
+              ),
+            );
+          }
+          final container = _container(
+            chats: chats,
+            messages: InboxReconcilerMessagesFake(),
+            authController: authController.controller,
+          );
+          addTearDown(container.dispose);
+          final reconciler = container.read(inboxReconcilerProvider.notifier);
+          final profileAReconnect = reconciler.reconcile();
+          await pumpEventQueue();
+
+          for (final inbox in ['main', 'requests', 'archive']) {
+            chats.enqueue(
+              InboxChatPageScript(
+                inbox: inbox,
+                cursor: null,
+                profileId: 'profile-b',
+                authorization: 'Bearer access-b',
+                result: ChatsApiOk(
+                  ChatListData(
+                    items: [
+                      inboxChatItem(
+                        'same-chat',
+                        preview: 'B',
+                        creatorProfileId: 'peer-b',
+                        unreadCount: 4,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          container.read(selectedChatIdProvider.notifier).state =
+              'profile-b-selection';
+          final callsBeforeProfileB = chats.calls.length;
+          authController.controller.state = const AuthState(
+            session: AuthSession(
+              accessToken: 'access-b',
+              refreshToken: 'refresh-b',
+              accountId: 'account-1',
+              activeProfileId: 'profile-b',
+              expiresInSeconds: 900,
+            ),
+          );
+          await pumpEventQueue();
+          expect(chats.calls, hasLength(callsBeforeProfileB));
+          if (initializeFromActivity) {
+            expect(
+              container.read(inboxReconcilerProvider).snapshotFor('profile-b'),
+              isNull,
+            );
+            reconciler.reconcileAfterInboxActivity();
+          } else {
+            _acceptCurrentRealtimeHello(container);
+          }
+          await pumpEventQueue();
+          final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
+          expect(profileBCalls, hasLength(3));
+          expect(profileBCalls.map((call) => call.inbox).toSet(), {
+            'main',
+            'requests',
+            'archive',
+          });
+
+          for (final inbox in ['main', 'requests', 'archive']) {
+            final staleCall = chats.findCall(
               inbox: inbox,
               cursor: null,
               profileId: 'profile-a',
               authorization: 'Bearer access-a',
-              manual: true,
-              result: ChatsApiOk(
-                ChatListData(items: [inboxChatItem('same-chat')]),
-              ),
-            ),
-          );
-        }
-        final container = _container(
-          chats: chats,
-          messages: InboxReconcilerMessagesFake(),
-          authController: authController.controller,
-        );
-        addTearDown(container.dispose);
-        final reconciler = container.read(inboxReconcilerProvider.notifier);
-        final profileAReconnect = reconciler.reconcile();
-        await pumpEventQueue();
-
-        for (final inbox in ['main', 'requests', 'archive']) {
-          chats.enqueue(
-            InboxChatPageScript(
-              inbox: inbox,
-              cursor: null,
-              profileId: 'profile-b',
-              authorization: 'Bearer access-b',
+            );
+            expect(staleCall, isNotNull);
+            await chats.completeCall(
+              staleCall!,
               result: ChatsApiOk(
                 ChatListData(
                   items: [
                     inboxChatItem(
                       'same-chat',
-                      preview: 'B',
-                      creatorProfileId: 'peer-b',
-                      unreadCount: 4,
+                      preview: 'stale-A',
+                      creatorProfileId: 'peer-a',
+                      unreadCount: 99,
                     ),
                   ],
+                  nextCursor: 'stale-A-cursor',
                 ),
               ),
-            ),
-          );
-        }
-        container.read(selectedChatIdProvider.notifier).state =
-            'profile-b-selection';
-        final callsBeforeProfileB = chats.calls.length;
-        authController.controller.state = const AuthState(
-          session: AuthSession(
-            accessToken: 'access-b',
-            refreshToken: 'refresh-b',
-            accountId: 'account-1',
-            activeProfileId: 'profile-b',
-            expiresInSeconds: 900,
-          ),
-        );
-        await pumpEventQueue();
-        expect(chats.calls, hasLength(callsBeforeProfileB));
-        _acceptCurrentRealtimeHello(container);
-        await pumpEventQueue();
-        final profileBCalls = chats.calls.skip(callsBeforeProfileB).toList();
-        expect(profileBCalls, hasLength(3));
-        expect(profileBCalls.map((call) => call.inbox).toSet(), {
-          'main',
-          'requests',
-          'archive',
-        });
+            );
+          }
+          await profileAReconnect;
 
-        for (final inbox in ['main', 'requests', 'archive']) {
-          final staleCall = chats.findCall(
-            inbox: inbox,
-            cursor: null,
-            profileId: 'profile-a',
-            authorization: 'Bearer access-a',
+          final snapshots = container
+              .read(inboxReconcilerProvider)
+              .profileSnapshots;
+          expect(
+            snapshots.keys,
+            containsAll(<String>['profile-a', 'profile-b']),
           );
-          expect(staleCall, isNotNull);
-          await chats.completeCall(
-            staleCall!,
-            result: ChatsApiOk(
-              ChatListData(
-                items: [
-                  inboxChatItem(
-                    'same-chat',
-                    preview: 'stale-A',
-                    creatorProfileId: 'peer-a',
-                    unreadCount: 99,
-                  ),
-                ],
-                nextCursor: 'stale-A-cursor',
-              ),
+          expect(
+            snapshots['profile-b']!
+                .scopes[InboxScope.main]!
+                .items
+                .single
+                .lastMessagePreview,
+            'B',
+          );
+          expect(
+            snapshots['profile-b']!.scopes.values
+                .expand((scope) => scope.items)
+                .every((item) => item.chat.creatorProfileId == 'peer-b'),
+            isTrue,
+          );
+          expect(
+            chats.calls
+                .where((call) => call.profileId == 'profile-b')
+                .every((call) => call.authorization == 'Bearer access-b'),
+            isTrue,
+          );
+          expect(
+            snapshots['profile-a']!.scopes.values.expand(
+              (scope) => scope.items,
             ),
+            isEmpty,
+            reason:
+                'stale profile A rows must not commit after profile boundary',
           );
-        }
-        await profileAReconnect;
-
-        final snapshots = container
-            .read(inboxReconcilerProvider)
-            .profileSnapshots;
-        expect(snapshots.keys, containsAll(<String>['profile-a', 'profile-b']));
-        expect(
-          snapshots['profile-b']!
-              .scopes[InboxScope.main]!
-              .items
-              .single
-              .lastMessagePreview,
-          'B',
-        );
-        expect(
-          snapshots['profile-b']!.scopes.values
-              .expand((scope) => scope.items)
-              .every((item) => item.chat.creatorProfileId == 'peer-b'),
-          isTrue,
-        );
-        expect(
-          chats.calls
-              .where((call) => call.profileId == 'profile-b')
-              .every((call) => call.authorization == 'Bearer access-b'),
-          isTrue,
-        );
-        expect(
-          snapshots['profile-a']!.scopes.values.expand((scope) => scope.items),
-          isEmpty,
-          reason: 'stale profile A rows must not commit after profile boundary',
-        );
-        final peers = container.read(dmPeerProfileByChatIdProvider);
-        expect(peers['same-chat'], 'peer-b');
-        expect(peers.values, isNot(contains('peer-a')));
-        expect(
-          container.read(selectedChatIdProvider),
-          'profile-b-selection',
-          reason: 'late profile A inbox work must not mutate B selection',
-        );
-        expect(chats.unmatchedCalls, isEmpty);
-        expect(chats.pendingScripts, 0);
-      },
-    );
+          final peers = container.read(dmPeerProfileByChatIdProvider);
+          expect(peers['same-chat'], 'peer-b');
+          expect(peers.values, isNot(contains('peer-a')));
+          expect(
+            container.read(selectedChatIdProvider),
+            'profile-b-selection',
+            reason: 'late profile A inbox work must not mutate B selection',
+          );
+          expect(chats.unmatchedCalls, isEmpty);
+          expect(chats.pendingScripts, 0);
+        },
+      );
+    }
 
     test(
       'invalidates an old A generation across an A to B to A boundary',
@@ -1411,13 +1675,14 @@ void _acceptCurrentRealtimeHello(ProviderContainer container) {
     throw StateError('An accepted realtime hello requires an auth session.');
   }
   final generation = ++_nextAcceptedHelloGeneration;
-  container.read(realtimeHelloBindingProvider.notifier).state =
-      RealtimeHelloBinding(
-        generation: generation,
-        bindingGeneration: generation,
-        profileId: session.activeProfileId,
-        authorization: session.authorizationHeader,
-      );
+  container
+      .read(realtimeHelloBindingProvider.notifier)
+      .state = RealtimeHelloBinding(
+    generation: generation,
+    bindingGeneration: generation,
+    profileId: session.activeProfileId,
+    authorization: session.authorizationHeader,
+  );
 }
 
 class _NoAutoChatListController extends ChatListController {

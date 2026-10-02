@@ -2324,6 +2324,96 @@ abstract class AppLocalizations {
   /// **'Channels'**
   String get spaceTreeUncategorized;
 
+  /// No description provided for @spaceTreeCreateTextChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Create text chat'**
+  String get spaceTreeCreateTextChat;
+
+  /// No description provided for @spaceTreeCreateCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Create category'**
+  String get spaceTreeCreateCategory;
+
+  /// No description provided for @spaceTreeCreateChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel'**
+  String get spaceTreeCreateChannel;
+
+  /// No description provided for @spaceTreeCreateGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Group chat'**
+  String get spaceTreeCreateGroup;
+
+  /// No description provided for @spaceTreeCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get spaceTreeCategoryLabel;
+
+  /// No description provided for @spaceTreeNoCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'No category'**
+  String get spaceTreeNoCategory;
+
+  /// No description provided for @spaceTreeReorderTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold and drag to reorder'**
+  String get spaceTreeReorderTooltip;
+
+  /// No description provided for @spaceTreeCreateNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get spaceTreeCreateNameLabel;
+
+  /// No description provided for @spaceTreeCreateSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get spaceTreeCreateSubmit;
+
+  /// No description provided for @spaceTreeCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create item: {message}'**
+  String spaceTreeCreateError(String message);
+
+  /// No description provided for @spaceTreeCategoryAssignError.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat was created but could not be placed in the selected category: {message}'**
+  String spaceTreeCategoryAssignError(String message);
+
+  /// No description provided for @spaceTreePlacementUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat was created, but its category placement could not be confirmed. Refresh and check its current placement before retrying or reordering: {message}'**
+  String spaceTreePlacementUnknown(String message);
+
+  /// No description provided for @spaceTreeCreateOutcomeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not confirm whether the item was created. Refresh or check the tree before trying again: {message}'**
+  String spaceTreeCreateOutcomeUnknown(String message);
+
+  /// No description provided for @spaceTreeCreateRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The request succeeded, but the tree could not be refreshed. Refresh or check the tree before trying again.'**
+  String get spaceTreeCreateRefreshFailed;
+
+  /// No description provided for @spaceTreeReorderError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reorder channels: {message}'**
+  String spaceTreeReorderError(String message);
+
   /// No description provided for @spaceSelectPrompt.
   ///
   /// In en, this message translates to:

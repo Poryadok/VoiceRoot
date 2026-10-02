@@ -79,7 +79,11 @@ void main() {
       expect(restricted.emailVerificationRequired, isTrue);
       expect(reentry.state.isEmailVerificationPending, isTrue);
       expect(sessionAtRouting, isNull);
-      expect(trackedHttp.sends, 0, reason: 'fresh login must not replay OTP');
+      expect(
+        trackedHttp.sends,
+        1,
+        reason: 'fresh password login requests one authenticated resend',
+      );
       expect(
         trackedHttp.verifies,
         0,
@@ -92,8 +96,8 @@ void main() {
         (status as AuthApiOk<EmailVerificationRecoveryState>).data,
         EmailVerificationRecoveryState.emailPending,
       );
-      // Registration already sent the one initial code. Resend is throttled for
-      // one minute, and fresh login must not silently request another code.
+      // Registration already sent the initial code. The login resend can be
+      // rate limited for one minute; its request must not invalidate that code.
       final code = await waitForLiveVerificationCode(
         httpClient: ctx.httpClient,
         stubBaseUrl: liveAuthMailStubBaseUrl(),
@@ -125,7 +129,11 @@ void main() {
         expect(verifyResult, isNull);
       }
       expect(trackedHttp.verifies, 1, reason: 'OTP must be consumed once');
-      expect(trackedHttp.sends, 0, reason: 'no implicit OTP resend');
+      expect(
+        trackedHttp.sends,
+        1,
+        reason: 'verification must not resend again',
+      );
       final regular = reentry.state.session;
       expect(regular, isNotNull);
       expect(regular!.accountId, original.accountId);

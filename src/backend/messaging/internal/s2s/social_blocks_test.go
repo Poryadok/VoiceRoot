@@ -142,3 +142,32 @@ func TestSocialGRPCBlocks_AccountPairBlocked(t *testing.T) {
 		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 }
+
+func TestSocialGRPCBlocks_AccountBlockedIsDirectional(t *testing.T) {
+	t.Parallel()
+	viewer := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	other := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+	conn, cleanup := startBufconnSocial(t, &stubSocialIsBlocked{blocked: map[string]bool{
+		other.String() + ">" + viewer.String(): true,
+	}})
+	t.Cleanup(cleanup)
+	blocks := NewSocialGRPCBlocks(conn)
+
+	blocked, err := blocks.AccountBlocked(context.Background(), viewer, other)
+	require.NoError(t, err)
+	require.False(t, blocked, "the reverse-direction block must not hide messages from this viewer")
+
+	blocked, err = blocks.AccountBlocked(context.Background(), other, viewer)
+	require.NoError(t, err)
+	require.True(t, blocked)
+}
+
+func TestSocialGRPCBlocks_AccountBlockedFailsClosedWithoutClient(t *testing.T) {
+	t.Parallel()
+	for _, blocks := range []*SocialGRPCBlocks{nil, {}} {
+		blocked, err := blocks.AccountBlocked(context.Background(), uuid.New(), uuid.New())
+		require.Error(t, err)
+		require.False(t, blocked)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	}
+}

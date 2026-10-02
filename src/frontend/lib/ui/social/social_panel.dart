@@ -528,14 +528,13 @@ class _FavoriteToggleButtonState extends ConsumerState<_FavoriteToggleButton> {
       icon: Icon(_isFavorite ? Icons.star : Icons.star_border),
       onPressed: () async {
         final next = !_isFavorite;
+        final messenger = ScaffoldMessenger.of(context);
         setState(() => _overrideFavorite = next);
         final err = await widget.onToggle(next);
         if (!mounted) return;
         if (err != null) {
           setState(() => _overrideFavorite = !next);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(err)));
+          messenger.showSnackBar(SnackBar(content: Text(err)));
         } else {
           ref.invalidate(favoritesListProvider);
           ref.invalidate(contactsListProvider);
@@ -671,6 +670,7 @@ class _BlockedTab extends ConsumerWidget {
                 onPressed: () async {
                   final err = await actions.unblockAccount(
                     entry.blockedAccountId,
+                    blockedProfileId: entry.blockedProfileId,
                   );
                   if (!context.mounted) return;
                   if (err != null) {

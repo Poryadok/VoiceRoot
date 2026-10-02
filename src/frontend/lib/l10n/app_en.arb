@@ -608,6 +608,46 @@
   "spaceTreeTextChat": "Text chat",
   "spaceTreeVoiceRoom": "Voice room",
   "spaceTreeUncategorized": "Channels",
+  "spaceTreeCreateTextChat": "Create text chat",
+  "spaceTreeCreateCategory": "Create category",
+  "spaceTreeCreateChannel": "Channel",
+  "spaceTreeCreateGroup": "Group chat",
+  "spaceTreeCategoryLabel": "Category",
+  "spaceTreeNoCategory": "No category",
+  "spaceTreeReorderTooltip": "Hold and drag to reorder",
+  "spaceTreeCreateNameLabel": "Name",
+  "spaceTreeCreateSubmit": "Create",
+  "spaceTreeCreateError": "Could not create item: {message}",
+  "spaceTreeCategoryAssignError": "Chat was created but could not be placed in the selected category: {message}",
+  "spaceTreePlacementUnknown": "Chat was created, but its category placement could not be confirmed. Refresh and check its current placement before retrying or reordering: {message}",
+  "spaceTreeCreateOutcomeUnknown": "Could not confirm whether the item was created. Refresh or check the tree before trying again: {message}",
+  "spaceTreeCreateRefreshFailed": "The request succeeded, but the tree could not be refreshed. Refresh or check the tree before trying again.",
+  "spaceTreeReorderError": "Could not reorder channels: {message}",
+  "@spaceTreeCreateError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCategoryAssignError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreePlacementUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeCreateOutcomeUnknown": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "@spaceTreeReorderError": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
   "spaceSelectPrompt": "Select a space",
   "spaceListTitle": "My spaces",
   "spaceOpenAction": "Open space",

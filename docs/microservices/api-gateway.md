@@ -397,8 +397,6 @@ applies Chat's own create/limit policy. Child IDs must resolve to the path Space
 |---|---|---|---|
 | `GET S/tree` | `ListSpaceTree` | None | `200 {categories:[Category],nodes:[SpaceTreeNode],voice_rooms:[VoiceRoom]}` |
 | `POST S/categories` | `CreateCategory` | `{name,sort_order?}` | `200 {category: Category}` |
-| `PATCH S/categories/{category_id}` | `UpdateCategory` | `{name?,sort_order?}`; at least one | `200 {category: Category}` |
-| `DELETE S/categories/{category_id}` | `DeleteCategory` | Empty | `204` |
 | `POST S/voice-rooms` | `CreateVoiceRoom` | `{name}` | `200 {voice_room: VoiceRoom}` |
 | `PATCH S/voice-rooms/{voice_room_id}` | `UpdateVoiceRoom` | `{name}` | `200 {voice_room: VoiceRoom}` |
 | `DELETE S/voice-rooms/{voice_room_id}` | `DeleteVoiceRoom` | Empty | `204` |
@@ -409,14 +407,22 @@ applies Chat's own create/limit policy. Child IDs must resolve to the path Space
 | `DELETE S/tree/nodes/{node_id}/pin` | `UnpinTreeNode` | Empty | `200 {space_tree_node: SpaceTreeNode}` |
 | `POST S/chats` | Chat `CreateChat`, then Space `UpsertTreeNode` | Existing `CreateChatRequest` JSON excluding actor and path-bound space_id | `200 {space_tree_node: SpaceTreeNode}` |
 
+**Category update/delete gap:** Space `UpdateCategory` and `DeleteCategory` RPCs
+exist, and their semantics are part of the target service contract, but the
+current Gateway transcoder has no `PATCH` or `DELETE` handlers for
+`S/categories/{category_id}`. Those HTTP routes are not implemented and are
+therefore omitted from the available endpoint table. Category rename/delete
+remain unsupported through the client API until Gateway routes are added.
+
 Names are nonempty after trimming and retain service-defined limits. Sort values
 are int32 >=0. Node kind is `text_chat` with `linked_chat:{id,type?}` or
 `voice_room` with `voice_room_id`, never both. New public nodes cannot request
 `is_system:true`; existing system nodes cannot be removed or converted. Reorder
 contains each current node once without duplicates and preserves the pin-group
 contract; stale/incomplete sets fail `409 failed_precondition`. Tree is an
-unpaged complete snapshot in canonical category/pin/sort order. Category deletion
-moves its nodes to root without deleting chats/rooms. Room deletion removes its
+unpaged complete snapshot in canonical category/pin/sort order. Under the target
+category-delete contract, deletion moves its nodes to root without deleting
+chats/rooms. Room deletion removes its
 tree node and follows the Voice cleanup contract. Chat->node creation must retain
 a durable operation record across both calls so retry cannot create a duplicate
 Chat; a failed node link is retried/compensated before success is exposed.

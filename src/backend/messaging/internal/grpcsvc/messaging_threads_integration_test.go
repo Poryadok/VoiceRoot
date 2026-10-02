@@ -264,6 +264,7 @@ func TestMessagingThreads_channelAllowsPostedAsChatMainFeed(t *testing.T) {
 	seedChannelChat(t, ctx, pool, chatID, profA)
 	setChatThreadSettings(t, ctx, pool, chatID, true, false)
 	svc := startMessagingDirect(t, pool)
+	svc.ProfilePairBlocks = allowProfilePairBlocks{}
 
 	sent, err := svc.SendMessage(incomingProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatChannelRef(chatID),

@@ -25,14 +25,23 @@ func preprovisionRealtimeConsumer(t *testing.T, js nats.JetStreamContext, stream
 	if consumer == "" {
 		t.Fatalf("missing test consumer target for stream %q", stream)
 	}
+	deliveryConsumer := consumer
 	suffix := map[string]string{
 		"message": "_msg", "chat": "_chat", "user": "_user", "social": "_social",
 		"role": "_role", "voice": "_voice", "matchmaking": "_matchmaking",
 	}[consumer]
+	switch filter {
+	case "social.friend_request":
+		suffix = "_friend_request"
+		deliveryConsumer = "friend_request"
+	case "social.friend_removed":
+		suffix = "_friend_removed"
+		deliveryConsumer = "friend_removed"
+	}
 	instanceID := strings.TrimSuffix(strings.TrimPrefix(durable, "rt_"), suffix)
 	_, err := js.AddConsumer(stream, &nats.ConsumerConfig{
 		Durable:        durable,
-		DeliverSubject: realtimeConsumerDeliverSubject(instanceID, consumer),
+		DeliverSubject: realtimeConsumerDeliverSubject(instanceID, deliveryConsumer),
 		FilterSubject:  filter,
 		DeliverPolicy:  nats.DeliverNewPolicy,
 		AckPolicy:      nats.AckExplicitPolicy,
@@ -122,6 +131,39 @@ func TestPreflightFriendRequestConsumerWaitsForDurableReadiness(t *testing.T) {
 	}
 }
 
+func TestPreflightFriendRemovedConsumerInspectsProvisionedDurable(t *testing.T) {
+	s := startRealtimeJSTestServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.AddStream(&nats.StreamConfig{Name: jsStreamSocialEvents, Subjects: []string{"social.>"}}); err != nil {
+		t.Fatal(err)
+	}
+	const instanceID = "realtime-1"
+	durable := friendRemovedConsumerDurableName(instanceID)
+	if err := preflightFriendRemovedConsumerWithWait(s.ClientURL(), instanceID, 100*time.Millisecond); err == nil {
+		t.Fatal("preflight accepted a missing durable")
+	}
+	if _, err := js.ConsumerInfo(jsStreamSocialEvents, durable); err == nil {
+		t.Fatal("preflight created a durable")
+	}
+	if _, err := js.AddConsumer(jsStreamSocialEvents, &nats.ConsumerConfig{
+		Durable: durable, DeliverSubject: realtimeConsumerDeliverSubject(instanceID, "friend_removed"),
+		FilterSubject: "social.friend_removed", DeliverPolicy: nats.DeliverNewPolicy, AckPolicy: nats.AckExplicitPolicy,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := preflightFriendRemovedConsumerWithWait(s.ClientURL(), instanceID, time.Second); err != nil {
+		t.Fatalf("preflight rejected the provisioned durable: %v", err)
+	}
+}
+
 func TestRunUserEventsConsumerRejectsBroadDurableWithoutHistoricalDelivery(t *testing.T) {
 	s := startRealtimeJSTestServer(t)
 	nc, err := nats.Connect(s.ClientURL())
@@ -199,6 +241,7 @@ func TestRealtimeSubscribersBindOnlyExactConsumers(t *testing.T) {
 		{"chat", jsStreamChatEvents, "chat.>", chatConsumerDurableName(instanceID), "chat.>", func() (*nats.Subscription, error) { return subscribeChatEvents(js, hub, instanceID, nil) }},
 		{"user", jsStreamUserEvents, "user.>", userConsumerDurableName(instanceID), "user.presence_changed", func() (*nats.Subscription, error) { return subscribeUserEvents(js, hub, nil, nil, instanceID, nil) }},
 		{"social", jsStreamSocialEvents, "social.>", socialConsumerDurableName(instanceID), "social.user_blocked", func() (*nats.Subscription, error) { return subscribeSocialEvents(js, hub, instanceID, nil) }},
+		{"friend removed", jsStreamSocialEvents, "social.>", friendRemovedConsumerDurableName(instanceID), "social.friend_removed", func() (*nats.Subscription, error) { return subscribeFriendRemovedEvents(js, hub, instanceID, nil) }},
 		{"role", jsStreamRoleEvents, "role.>", roleConsumerDurableName(instanceID), "role.>", func() (*nats.Subscription, error) { return subscribeRoleEvents(js, hub, instanceID, nil) }},
 		{"voice", jsStreamVoiceEvents, "voice.>", voiceConsumerDurableName(instanceID), "voice.>", func() (*nats.Subscription, error) { return subscribeVoiceEvents(js, hub, instanceID, nil) }},
 		{"matchmaking", jsStreamMatchmakingEvents, "mm.>", matchmakingConsumerDurableName(instanceID), "mm.>", func() (*nats.Subscription, error) { return subscribeMatchmakingEvents(js, hub, instanceID, nil) }},
@@ -230,6 +273,7 @@ func TestRealtimeConsumerDurableNamesMatchBootstrapContract(t *testing.T) {
 		{"user", userConsumerDurableName(instanceID), "rt_realtime1_user"},
 		{"social", socialConsumerDurableName(instanceID), "rt_realtime1_social"},
 		{"friend request", friendRequestConsumerDurableName(instanceID), "rt_realtime1_friend_request"},
+		{"friend removed", friendRemovedConsumerDurableName(instanceID), "rt_realtime1_friend_removed"},
 		{"role", roleConsumerDurableName(instanceID), "rt_realtime1_role"},
 		{"voice", voiceConsumerDurableName(instanceID), "rt_realtime1_voice"},
 		{"matchmaking", matchmakingConsumerDurableName(instanceID), "rt_realtime1_matchmaking"},

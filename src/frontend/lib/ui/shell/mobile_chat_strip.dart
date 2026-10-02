@@ -119,7 +119,9 @@ class _MobileChatStripState extends ConsumerState<MobileChatStrip> {
   }
 
   static String _stripTitle(AppLocalizations l10n, ChatListItem item) {
-    return item.chat.name ?? l10n.chatListDmFallback(_shortChatId(item.chatId));
+    return item.dmPeerDisplayName ??
+        item.chat.name ??
+        l10n.chatListDmFallback(_shortChatId(item.chatId));
   }
 
   static String _shortChatId(String chatId) {

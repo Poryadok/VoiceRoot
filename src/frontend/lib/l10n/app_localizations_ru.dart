@@ -1261,6 +1261,63 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceTreeUncategorized => 'Каналы';
 
   @override
+  String get spaceTreeCreateTextChat => 'Создать текстовый чат';
+
+  @override
+  String get spaceTreeCreateCategory => 'Создать категорию';
+
+  @override
+  String get spaceTreeCreateChannel => 'Канал';
+
+  @override
+  String get spaceTreeCreateGroup => 'Групповой чат';
+
+  @override
+  String get spaceTreeCategoryLabel => 'Категория';
+
+  @override
+  String get spaceTreeNoCategory => 'Без категории';
+
+  @override
+  String get spaceTreeReorderTooltip =>
+      'Удерживайте и перетаскивайте, чтобы изменить порядок';
+
+  @override
+  String get spaceTreeCreateNameLabel => 'Название';
+
+  @override
+  String get spaceTreeCreateSubmit => 'Создать';
+
+  @override
+  String spaceTreeCreateError(String message) {
+    return 'Не удалось создать элемент: $message';
+  }
+
+  @override
+  String spaceTreeCategoryAssignError(String message) {
+    return 'Чат создан, но его не удалось поместить в выбранную категорию: $message';
+  }
+
+  @override
+  String spaceTreePlacementUnknown(String message) {
+    return 'Чат создан, но подтвердить его размещение в категории не удалось. Обновите дерево и проверьте размещение, прежде чем повторять попытку или менять порядок: $message';
+  }
+
+  @override
+  String spaceTreeCreateOutcomeUnknown(String message) {
+    return 'Не удалось подтвердить создание элемента. Обновите или проверьте дерево, прежде чем повторять попытку: $message';
+  }
+
+  @override
+  String get spaceTreeCreateRefreshFailed =>
+      'Запрос выполнен, но дерево не удалось обновить. Обновите или проверьте дерево, прежде чем повторять попытку.';
+
+  @override
+  String spaceTreeReorderError(String message) {
+    return 'Не удалось изменить порядок каналов: $message';
+  }
+
+  @override
   String get spaceSelectPrompt => 'Выберите спейс';
 
   @override

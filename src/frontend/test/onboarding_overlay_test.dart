@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/l10n/app_localizations_en.dart';
@@ -14,6 +15,8 @@ import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/guest_save_account_reminder.dart';
+import 'package:voice_frontend/ui/auth/guest_save_account_reminder_banner.dart';
 import 'package:voice_frontend/ui/onboarding/onboarding_anchor_keys.dart';
 import 'package:voice_frontend/ui/onboarding/onboarding_overlay.dart';
 
@@ -72,10 +75,8 @@ class _CoachMarkTourController extends OnboardingController {
   final completedSteps = <String>['save_account'];
 
   @override
-  OnboardingUiState build() => const OnboardingUiState(
-    loaded: true,
-    completedSteps: ['save_account'],
-  );
+  OnboardingUiState build() =>
+      const OnboardingUiState(loaded: true, completedSteps: ['save_account']);
 
   @override
   Future<void> load() async {}
@@ -108,10 +109,8 @@ class _DelayedOnboardingController extends OnboardingController {
   final completion = Completer<void>();
 
   @override
-  OnboardingUiState build() => OnboardingUiState(
-    loaded: true,
-    completedSteps: completedSteps,
-  );
+  OnboardingUiState build() =>
+      OnboardingUiState(loaded: true, completedSteps: completedSteps);
 
   @override
   Future<void> load() async {}
@@ -133,10 +132,8 @@ class _FailedOnboardingController extends OnboardingController {
   var completeCalls = 0;
 
   @override
-  OnboardingUiState build() => OnboardingUiState(
-    loaded: true,
-    completedSteps: completedSteps,
-  );
+  OnboardingUiState build() =>
+      OnboardingUiState(loaded: true, completedSteps: completedSteps);
 
   @override
   Future<void> load() async {}
@@ -308,7 +305,7 @@ void main() {
     expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
   });
 
-  testWidgets('loaded save-account step still shows for a regular account', (
+  testWidgets('regular account never sees the save-account profile modal', (
     tester,
   ) async {
     final l10n = AppLocalizationsEn();
@@ -351,11 +348,194 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
   });
 
   testWidgets(
-    'save-account skip stays open when dismissal fails',
+    'guest sees one guest-only save-account prompt, not profile modal',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      var saveAccountStepCompletions = 0;
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((request) async {
+                if (request.url.path == '/api/v1/users/me/onboarding') {
+                  return http.Response(
+                    jsonEncode({
+                      'onboarding_state': {
+                        'completed': false,
+                        'completed_steps': [],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                if (request.url.path == '/api/v1/users/me/onboarding/steps') {
+                  final body =
+                      jsonDecode(utf8.decode(request.bodyBytes))
+                          as Map<String, dynamic>;
+                  expect(body['step_id'], 'save_account');
+                  saveAccountStepCompletions++;
+                  return http.Response(
+                    jsonEncode({
+                      'onboarding_state': {
+                        'completed': false,
+                        'completed_steps': ['save_account'],
+                      },
+                    }),
+                    200,
+                  );
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+            authControllerProvider.overrideWith(_guestAuthController),
+            guestSaveAccountReminderVisibleProvider.overrideWith(
+              (ref) async => true,
+            ),
+            activeProfileProvider.overrideWith(
+              (ref) async => const VoiceProfile(
+                id: 'guest-profile',
+                accountId: 'guest-account',
+                username: 'guestuser',
+                discriminator: '1234',
+                displayName: 'Guest User',
+                isPrimary: true,
+              ),
+            ),
+          ],
+          child: const Scaffold(
+            body: Column(
+              children: [
+                GuestSaveAccountReminderBanner(),
+                Expanded(child: SizedBox.expand()),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.byKey(GuestSaveAccountReminderBanner.bannerKey),
+        findsOneWidget,
+      );
+      expect(find.byKey(GuestSaveAccountReminderBanner.ctaKey), findsOneWidget);
+      expect(saveAccountStepCompletions, 1);
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+    },
+  );
+
+  testWidgets('onboarding skip stays dismissed after app reload', (
+    tester,
+  ) async {
+    final l10n = AppLocalizationsEn();
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    var persistedCompleted = false;
+    var getCount = 0;
+    var postCount = 0;
+    final client = MockClient((request) async {
+      expect(request.headers['authorization'], 'Bearer access-p1');
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/users/me/onboarding') {
+        getCount++;
+        return http.Response(
+          jsonEncode({
+            'onboarding_state': {
+              'profile_id': 'p1',
+              'completed_steps': persistedCompleted
+                  ? ['save_account', 'dismiss']
+                  : ['save_account'],
+              'completed': persistedCompleted,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/users/me/onboarding/steps') {
+        postCount++;
+        final body =
+            jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, dynamic>;
+        expect(body['step_id'], 'dismiss');
+        persistedCompleted = true;
+        return http.Response(
+          jsonEncode({
+            'onboarding_state': {
+              'profile_id': 'p1',
+              'completed_steps': ['dismiss'],
+              'completed': true,
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    List<Override> overrides() => [
+      ...voiceAppTestOverrides(client: client),
+      authControllerProvider.overrideWith((ref) {
+        final controller = authenticatedAuthController(ref);
+        controller.state = controller.state.copyWith(
+          session: const AuthSession(
+            accessToken: 'access-p1',
+            refreshToken: 'refresh-p1',
+            accountId: 'account-p1',
+            activeProfileId: 'p1',
+            expiresInSeconds: 900,
+          ),
+        );
+        return controller;
+      }),
+      activeProfileProvider.overrideWith(
+        (ref) async => const VoiceProfile(
+          id: 'p1',
+          accountId: 'account-p1',
+          username: 'voiceuser',
+          discriminator: '4242',
+          displayName: 'Voice User',
+          isPrimary: true,
+        ),
+      ),
+    ];
+
+    Widget app() => _onboardingTestApp(
+      overrides: overrides(),
+      child: _onboardingAnchorsScaffold(),
+    );
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(getCount, 1);
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+    expect(find.text(l10n.onboardingChatsNavTitle), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, l10n.onboardingSkip));
+    await tester.pumpAndSettle();
+    expect(postCount, 1);
+    expect(persistedCompleted, isTrue);
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    expect(getCount, 2);
+    expect(postCount, 1);
+    expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+  });
+
+  testWidgets(
+    'failed save-account step completion does not show profile modal',
     (tester) async {
       final l10n = AppLocalizationsEn();
       await tester.binding.setSurfaceSize(const Size(1280, 800));
@@ -386,19 +566,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
-      await tester.tap(find.widgetWithText(TextButton, l10n.onboardingSkip));
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
-
       expect(failed.completeCalls, 1);
-      expect(find.text(l10n.onboardingSaveAccountTitle), findsOneWidget);
-      expect(find.text(l10n.onboardingDismissFailed), findsOneWidget);
+      expect(find.text(l10n.onboardingSaveAccountTitle), findsNothing);
+      expect(find.text(l10n.onboardingDismissFailed), findsNothing);
     },
   );
 
-  testWidgets('spaces step opens search for a known space', (
-    tester,
-  ) async {
+  testWidgets('spaces step opens search for a known space', (tester) async {
     final l10n = AppLocalizationsEn();
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -422,7 +597,9 @@ void main() {
               return http.Response('{}', 404);
             }),
           ),
-          onboardingControllerProvider.overrideWith(_OnboardingAtSpacesStep.new),
+          onboardingControllerProvider.overrideWith(
+            _OnboardingAtSpacesStep.new,
+          ),
         ],
         child: Scaffold(
           body: Center(
@@ -439,7 +616,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, l10n.onboardingSpacesFind));
+    await tester.tap(
+      find.widgetWithText(TextButton, l10n.onboardingSpacesFind),
+    );
     await tester.pump();
 
     final overlayElement = tester.element(find.byType(OnboardingOverlay));
@@ -477,7 +656,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.widgetWithText(TextButton, l10n.onboardingSkip), findsOneWidget);
+    expect(
+      find.widgetWithText(TextButton, l10n.onboardingSkip),
+      findsOneWidget,
+    );
     await tester.tap(find.widgetWithText(TextButton, l10n.onboardingSkip));
     await tester.pumpAndSettle(
       const Duration(milliseconds: 100),
@@ -489,121 +671,120 @@ void main() {
     expect(recording.state.completed, isTrue);
   });
 
-  testWidgets('coach-mark tour defers matchmaking until its navigation trigger', (
-    tester,
-  ) async {
-    final l10n = AppLocalizationsEn();
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  testWidgets(
+    'coach-mark tour defers matchmaking until its navigation trigger',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final recording = _CoachMarkTourController();
+      final recording = _CoachMarkTourController();
 
-    await tester.pumpWidget(
-      _onboardingTestApp(
-        overrides: [
-          ...voiceAppTestOverrides(
-            client: MockClient((_) async => http.Response('{}', 404)),
-          ),
-          onboardingControllerProvider.overrideWith(() => recording),
-        ],
-        child: _onboardingAnchorsScaffold(),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            onboardingControllerProvider.overrideWith(() => recording),
+          ],
+          child: _onboardingAnchorsScaffold(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text(l10n.onboardingChatsNavTitle), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingGotIt));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.onboardingChatsNavTitle), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingGotIt));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingLater));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingLater));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    final overlayElement = tester.element(find.byType(OnboardingOverlay));
-    final container = ProviderScope.containerOf(overlayElement);
-    expect(container.read(navigationSectionProvider), NavigationSection.chats);
-    expect(find.text(l10n.onboardingMatchmakingTitle), findsNothing);
+      final overlayElement = tester.element(find.byType(OnboardingOverlay));
+      final container = ProviderScope.containerOf(overlayElement);
+      expect(
+        container.read(navigationSectionProvider),
+        NavigationSection.chats,
+      );
+      expect(find.text(l10n.onboardingMatchmakingTitle), findsNothing);
 
-    expect(
-      recording.completedSteps,
-      [
-        'save_account',
-        'chats_nav',
-        'spaces',
-      ],
-    );
-    expect(recording.state.completed, isFalse);
-    expect(recording.state.currentStep, OnboardingStep.matchmaking);
-  });
+      expect(recording.completedSteps, ['save_account', 'chats_nav', 'spaces']);
+      expect(recording.state.completed, isFalse);
+      expect(recording.state.currentStep, OnboardingStep.matchmaking);
+    },
+  );
 
-  testWidgets('matchmaking coach-mark appears when social navigation is active', (
-    tester,
-  ) async {
-    final l10n = AppLocalizationsEn();
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _DelayedOnboardingController(
-      completedSteps: ['save_account', 'chats_nav', 'spaces'],
-      delayedStep: 'matchmaking',
-    );
+  testWidgets(
+    'matchmaking coach-mark appears when social navigation is active',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = _DelayedOnboardingController(
+        completedSteps: ['save_account', 'chats_nav', 'spaces'],
+        delayedStep: 'matchmaking',
+      );
 
-    await tester.pumpWidget(
-      _onboardingTestApp(
-        overrides: [
-          ...voiceAppTestOverrides(
-            client: MockClient((_) async => http.Response('{}', 404)),
-          ),
-          navigationSectionProvider.overrideWith(
-            (ref) => NavigationSection.social,
-          ),
-          onboardingControllerProvider.overrideWith(() => controller),
-        ],
-        child: _onboardingAnchorsScaffold(),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            navigationSectionProvider.overrideWith(
+              (ref) => NavigationSection.social,
+            ),
+            onboardingControllerProvider.overrideWith(() => controller),
+          ],
+          child: _onboardingAnchorsScaffold(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text(l10n.onboardingMatchmakingTitle), findsOneWidget);
-  });
+      expect(find.text(l10n.onboardingMatchmakingTitle), findsOneWidget);
+    },
+  );
 
-  testWidgets('coach-mark waits for delayed completion before showing next step', (
-    tester,
-  ) async {
-    final l10n = AppLocalizationsEn();
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final delayed = _DelayedOnboardingController(
-      completedSteps: ['save_account'],
-      delayedStep: 'chats_nav',
-    );
+  testWidgets(
+    'coach-mark waits for delayed completion before showing next step',
+    (tester) async {
+      final l10n = AppLocalizationsEn();
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final delayed = _DelayedOnboardingController(
+        completedSteps: ['save_account'],
+        delayedStep: 'chats_nav',
+      );
 
-    await tester.pumpWidget(
-      _onboardingTestApp(
-        overrides: [
-          ...voiceAppTestOverrides(
-            client: MockClient((_) async => http.Response('{}', 404)),
-          ),
-          onboardingControllerProvider.overrideWith(() => delayed),
-        ],
-        child: _onboardingAnchorsScaffold(),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(
+        _onboardingTestApp(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            onboardingControllerProvider.overrideWith(() => delayed),
+          ],
+          child: _onboardingAnchorsScaffold(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingGotIt));
-    await tester.pump();
-    expect(find.text(l10n.onboardingChatsNavTitle), findsNothing);
+      await tester.tap(find.widgetWithText(FilledButton, l10n.onboardingGotIt));
+      await tester.pump();
+      expect(find.text(l10n.onboardingChatsNavTitle), findsNothing);
 
-    delayed.completion.complete();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
-  });
+      delayed.completion.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
+    },
+  );
 
   testWidgets('coach-mark reappears when completion fails', (tester) async {
     final l10n = AppLocalizationsEn();
@@ -675,7 +856,9 @@ void main() {
     expect(container.read(navigationSectionProvider), NavigationSection.chats);
   });
 
-  testWidgets('guest auto-skip does not retry a failed completion', (tester) async {
+  testWidgets('guest auto-skip does not retry a failed completion', (
+    tester,
+  ) async {
     final failed = _FailedOnboardingController(completedSteps: const []);
 
     await tester.pumpWidget(
@@ -696,7 +879,9 @@ void main() {
     expect(failed.completeCalls, 1);
   });
 
-  testWidgets('onboarding coach marks use Russian l10n strings', (tester) async {
+  testWidgets('onboarding coach marks use Russian l10n strings', (
+    tester,
+  ) async {
     final l10n = AppLocalizationsRu();
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -708,7 +893,9 @@ void main() {
           ...voiceAppTestOverrides(
             client: MockClient((_) async => http.Response('{}', 404)),
           ),
-          onboardingControllerProvider.overrideWith(_OnboardingAtSpacesStep.new),
+          onboardingControllerProvider.overrideWith(
+            _OnboardingAtSpacesStep.new,
+          ),
         ],
         child: Scaffold(
           body: Center(
@@ -726,15 +913,17 @@ void main() {
 
     expect(find.text(l10n.onboardingSpacesTitle), findsOneWidget);
     expect(find.text(l10n.onboardingSpacesBody), findsOneWidget);
-    expect(find.widgetWithText(TextButton, l10n.onboardingSkip), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, l10n.onboardingLater), findsOneWidget);
+    expect(
+      find.widgetWithText(TextButton, l10n.onboardingSkip),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(FilledButton, l10n.onboardingLater),
+      findsOneWidget,
+    );
   });
 
-  test('onboarding copy describes the profile and invite-only space flow', () {
-    expect(
-      AppLocalizationsEn().onboardingSaveAccountBody,
-      'Choose a nickname and add an avatar so people can recognize you.',
-    );
+  test('onboarding copy describes the invite-only space flow', () {
     expect(
       AppLocalizationsEn().onboardingSpacesBody,
       "Spaces are communities with channels and voice rooms. Search for a space you know, join with a friend's invite, or create your own.",

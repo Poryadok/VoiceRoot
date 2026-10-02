@@ -84,6 +84,47 @@ func TestEnsurePrimaryProfile_Idempotent(t *testing.T) {
 	require.Equal(t, first.GetProfile().GetId(), second.GetProfile().GetId())
 }
 
+func TestGetDMPeerDisplayNames_IsChatOnlyAndReturnsTitleProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startUserPostgresForSubscriptionTests(t, ctx)
+	profiles := store.NewProfileStore(pool)
+	privacy := store.NewPrivacyStore(pool)
+	cli := startUserSettingsTestServer(t, profiles, privacy)
+
+	one, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId: uuid.NewString(), DisplayHint: "Actual nickname",
+	})
+	require.NoError(t, err)
+	two, err := cli.EnsurePrimaryProfile(withInternalUserCtx(ctx), &userv1.EnsurePrimaryProfileRequest{
+		AccountId: uuid.NewString(), DisplayHint: "Second nickname",
+	})
+	require.NoError(t, err)
+
+	request := &userv1.GetDMPeerDisplayNamesRequest{ProfileIds: []string{
+		one.GetProfile().GetId(), two.GetProfile().GetId(), uuid.NewString(),
+	}}
+	response, err := cli.GetDMPeerDisplayNames(
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "chat"), request)
+	require.NoError(t, err)
+	require.Len(t, response.GetDisplayNames(), 2, "unknown profiles are omitted")
+	names := make(map[string]string, len(response.GetDisplayNames()))
+	for _, entry := range response.GetDisplayNames() {
+		names[entry.GetProfileId()] = entry.GetDisplayName()
+	}
+	require.Equal(t, one.GetProfile().GetDisplayName(), names[one.GetProfile().GetId()])
+	require.Equal(t, two.GetProfile().GetDisplayName(), names[two.GetProfile().GetId()])
+	require.NotContains(t, names, uuid.NewString())
+
+	_, err = cli.GetDMPeerDisplayNames(ctx, request)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "public callers cannot use the title projection")
+	_, err = cli.GetDMPeerDisplayNames(
+		metadata.AppendToOutgoingContext(ctx, authctx.HeaderInternalCaller, "messaging"), request)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "only Chat can request DM title names")
+}
+
 func TestEnsurePrimaryProfile_PersistsGuestAccountMarker(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

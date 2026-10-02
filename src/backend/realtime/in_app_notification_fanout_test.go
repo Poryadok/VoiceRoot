@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,6 +20,48 @@ import (
 type staticMemberDeliveryLister struct {
 	states map[string]chatMemberDeliveryState
 	err    error
+}
+
+type messageDeliveryBlockPolicyStub struct {
+	mu             sync.Mutex
+	senderAccounts map[string]string
+	sharedErr      error
+	blocked        map[[2]string]bool
+	blockErrors    map[[2]string]error
+	checked        [][2]string
+}
+
+func (p *messageDeliveryBlockPolicyStub) AuthorizeChat(context.Context, string, string, string) error {
+	return nil
+}
+
+func (p *messageDeliveryBlockPolicyStub) MessageChatIsShared(context.Context, string, string, string) (bool, error) {
+	return true, p.sharedErr
+}
+
+func (p *messageDeliveryBlockPolicyStub) MessageSenderAccount(_ context.Context, profileID string) (string, error) {
+	accountID := p.senderAccounts[profileID]
+	if accountID == "" {
+		return "", errors.New("sender account unavailable")
+	}
+	return accountID, nil
+}
+
+func (p *messageDeliveryBlockPolicyStub) MessageRecipientBlocked(_ context.Context, recipientAccountID, senderAccountID string) (bool, error) {
+	pair := [2]string{recipientAccountID, senderAccountID}
+	p.mu.Lock()
+	p.checked = append(p.checked, pair)
+	p.mu.Unlock()
+	if err := p.blockErrors[pair]; err != nil {
+		return false, err
+	}
+	return p.blocked[pair], nil
+}
+
+func (p *messageDeliveryBlockPolicyStub) checkedPairs() [][2]string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([][2]string(nil), p.checked...)
 }
 
 func (l staticMemberDeliveryLister) RecipientDeliveryStates(_ context.Context, _ string) (map[string]chatMemberDeliveryState, error) {
@@ -223,6 +267,127 @@ func TestDispatchMessageStreamEvent_LookupFailureKeepsChatBroadcastQuiet(t *test
 	require.NoError(t, err)
 	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
 	require.Equal(t, []string{"message_create"}, drainFanoutOps(t, recipient, 50*time.Millisecond))
+}
+
+func TestDispatchMessageStreamEvent_MessageSentFiltersOneWayRecipientsAndAllUnreadSignals(t *testing.T) {
+	chatID := uuid.NewString()
+	senderAccount, blockedAccount, unrelatedAccount := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	senderProfile, blockedProfile, blockedSecondProfile := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	unrelatedProfile, archivedBlockedProfile, archivedUnblockedProfile := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	policy := &messageDeliveryBlockPolicyStub{
+		senderAccounts: map[string]string{senderProfile: senderAccount, blockedProfile: blockedAccount},
+		blocked:        map[[2]string]bool{{blockedAccount, senderAccount}: true},
+	}
+	hub := newWSHub()
+	hub.subscriptionChecker = policy
+	hub.memberInboxLister = staticMemberDeliveryLister{states: map[string]chatMemberDeliveryState{
+		senderProfile:            {InboxBucket: "main"},
+		blockedProfile:           {InboxBucket: "main"},
+		blockedSecondProfile:     {InboxBucket: "main"},
+		unrelatedProfile:         {InboxBucket: "main"},
+		archivedBlockedProfile:   {IsArchived: true},
+		archivedUnblockedProfile: {IsArchived: true},
+	}}
+	sender := hub.attachAccountConn("inst", "sender", senderAccount, senderProfile, 16)
+	blocked := hub.attachAccountConn("inst", "blocked", blockedAccount, blockedProfile, 16)
+	blockedTab := hub.attachAccountConn("inst", "blocked-tab", blockedAccount, blockedSecondProfile, 16)
+	unrelated := hub.attachAccountConn("inst", "unrelated", unrelatedAccount, unrelatedProfile, 16)
+	archived := hub.attachAccountConn("inst", "archived", blockedAccount, archivedBlockedProfile, 16)
+	archivedUnblocked := hub.attachAccountConn("inst", "archived-unblocked", unrelatedAccount, archivedUnblockedProfile, 16)
+	for _, reg := range []*connReg{sender, blocked, blockedTab, unrelated} {
+		require.True(t, hub.addChat(reg, chatID))
+	}
+
+	messageID := uuid.NewString()
+	dispatch := func(senderID string) {
+		t.Helper()
+		payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			ChatId: chatID, MessageId: messageID, SenderProfileId: senderID,
+		}}})
+		require.NoError(t, err)
+		dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+	}
+	dispatch(senderProfile)
+
+	require.Equal(t, []string{"message_create"}, drainFanoutOps(t, sender, 50*time.Millisecond), "sender must not be block-checked or notified")
+	require.Empty(t, drainFanoutOps(t, blocked, 50*time.Millisecond))
+	require.Empty(t, drainFanoutOps(t, blockedTab, 50*time.Millisecond), "all tabs for a blocked account must be filtered")
+	unrelatedOps := drainFanoutOps(t, unrelated, 50*time.Millisecond)
+	require.Contains(t, unrelatedOps, "message_create")
+	require.Contains(t, unrelatedOps, "notification")
+	require.Empty(t, drainFanoutOps(t, archived, 50*time.Millisecond), "archived profile must not receive blocked archive_activity")
+	require.Equal(t, []string{"archive_activity"}, drainFanoutOps(t, archivedUnblocked, 50*time.Millisecond), "unblocked archived profile must retain archive_activity")
+	require.Len(t, policy.checkedPairs(), 2, "one Social check per unique recipient account despite tabs and archived profiles")
+	for _, reg := range []*connReg{sender, blocked, blockedTab, unrelated} {
+		require.True(t, hub.hasChat(reg, chatID), "message filtering must preserve existing chat subscriptions")
+	}
+	require.False(t, hub.hasChat(archived, chatID), "archive signal filtering must not create a chat subscription")
+	// The block is directional: the blocker (senderAccount) sees the blocked account's message.
+	dispatch(blockedProfile)
+	require.Contains(t, drainFanoutOps(t, sender, 50*time.Millisecond), "message_create")
+	require.Contains(t, drainFanoutOps(t, blocked, 50*time.Millisecond), "message_create", "the blocked sender remains visible to the blocker in the reverse direction")
+	require.NotContains(t, policy.checkedPairs(), [2]string{senderAccount, senderAccount}, "sender self-delivery must skip Social lookup")
+}
+
+func TestConsumeMessageEventMessage_ChatTypeLookupFailureFailsClosedAndStillAcks(t *testing.T) {
+	chatID, senderProfile := uuid.NewString(), uuid.NewString()
+	senderAccount, recipientAccount := uuid.NewString(), uuid.NewString()
+	recipientProfile := uuid.NewString()
+	policy := &messageDeliveryBlockPolicyStub{
+		senderAccounts: map[string]string{senderProfile: senderAccount},
+		sharedErr:      errors.New("chat unavailable"),
+	}
+	hub := newWSHub()
+	hub.subscriptionChecker = policy
+	sender := hub.attachAccountConn("inst", "sender", senderAccount, senderProfile, 8)
+	recipient := hub.attachAccountConn("inst", "recipient", recipientAccount, recipientProfile, 8)
+	for _, reg := range []*connReg{sender, recipient} {
+		require.True(t, hub.addChat(reg, chatID))
+	}
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: uuid.NewString(), SenderProfileId: senderProfile,
+	}}})
+	require.NoError(t, err)
+	acked := false
+	consumeMessageEventMessage(&nats.Msg{Data: payload}, hub, nil, func(*nats.Msg) error { acked = true; return nil })
+	require.True(t, acked, "chat-type uncertainty must not stall the durable source consumer")
+	require.Contains(t, drainFanoutOps(t, sender, 50*time.Millisecond), "message_create", "sender self-delivery skips recipient checks")
+	require.Empty(t, drainFanoutOps(t, recipient, 50*time.Millisecond), "unknown chat type must fail closed for recipients")
+}
+
+func TestConsumeMessageEventMessage_BlockLookupFailureIsRecipientScopedAndStillAcks(t *testing.T) {
+	chatID, senderProfile := uuid.NewString(), uuid.NewString()
+	senderAccount, failedAccount, healthyAccount := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	failedProfile, healthyProfile := uuid.NewString(), uuid.NewString()
+	policy := &messageDeliveryBlockPolicyStub{
+		senderAccounts: map[string]string{senderProfile: senderAccount},
+		blockErrors:    map[[2]string]error{{failedAccount, senderAccount}: errors.New("social unavailable")},
+	}
+	hub := newWSHub()
+	hub.subscriptionChecker = policy
+	hub.memberInboxLister = staticMemberDeliveryLister{states: map[string]chatMemberDeliveryState{
+		senderProfile:  {},
+		failedProfile:  {},
+		healthyProfile: {},
+	}}
+	sender := hub.attachAccountConn("inst", "sender", senderAccount, senderProfile, 8)
+	failed := hub.attachAccountConn("inst", "failed", failedAccount, failedProfile, 8)
+	healthy := hub.attachAccountConn("inst", "healthy", healthyAccount, healthyProfile, 8)
+	for _, reg := range []*connReg{sender, failed, healthy} {
+		require.True(t, hub.addChat(reg, chatID))
+	}
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		ChatId: chatID, MessageId: uuid.NewString(), SenderProfileId: senderProfile,
+	}}})
+	require.NoError(t, err)
+	acked := false
+	consumeMessageEventMessage(&nats.Msg{Data: payload}, hub, nil, func(*nats.Msg) error {
+		acked = true
+		return nil
+	})
+	require.True(t, acked, "filtered delivery must not stall the durable source consumer")
+	require.Empty(t, drainFanoutOps(t, failed, 50*time.Millisecond), "uncertain recipient must fail closed")
+	require.Contains(t, drainFanoutOps(t, healthy, 50*time.Millisecond), "message_create", "one recipient's policy failure must not block other recipients")
 }
 
 func TestDispatchMessageStreamEvent_ArchivedReactionAndMentionDoNotEmitArchiveActivity(t *testing.T) {
@@ -532,6 +697,49 @@ func TestDispatchMessageStreamEvent_MentionFansOutPersonalOp(t *testing.T) {
 	}
 }
 
+func TestDispatchMessageStreamEvent_MentionFiltersBlockedRecipient(t *testing.T) {
+	chatID := uuid.NewString()
+	messageID := uuid.NewString()
+	senderAccount, blockedAccount, unblockedAccount := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	senderProfile, blockedProfile, unblockedProfile, unsubscriberProfile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	policy := &messageDeliveryBlockPolicyStub{
+		senderAccounts: map[string]string{senderProfile: senderAccount},
+		blocked:        map[[2]string]bool{{blockedAccount, senderAccount}: true},
+	}
+	hub := newWSHub()
+	hub.subscriptionChecker = policy
+	hub.memberInboxLister = staticMemberDeliveryLister{states: map[string]chatMemberDeliveryState{
+		senderProfile:    {InboxBucket: "main"},
+		blockedProfile:   {InboxBucket: "main"},
+		unblockedProfile: {InboxBucket: "main"},
+	}}
+	sender := hub.attachAccountConn("inst", "sender", senderAccount, senderProfile, 8)
+	blocked := hub.attachAccountConn("inst", "blocked", blockedAccount, blockedProfile, 8)
+	unblocked := hub.attachAccountConn("inst", "unblocked", unblockedAccount, unblockedProfile, 8)
+	unsubscribedMention := hub.attachAccountConn("inst", "unsubscribed-mention", uuid.NewString(), unsubscriberProfile, 8)
+	for _, reg := range []*connReg{sender, blocked, unblocked} {
+		require.True(t, hub.addChat(reg, chatID))
+	}
+
+	payload, err := proto.Marshal(&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
+		ChatId: chatID, MessageId: messageID, SenderProfileId: senderProfile,
+		MentionedProfileIds: []string{blockedProfile, unblockedProfile, unsubscriberProfile},
+	}}})
+	require.NoError(t, err)
+	dispatchMessageStreamEvent(hub, payload, nil, nil, "")
+
+	blockedOps := drainFanoutOps(t, blocked, 50*time.Millisecond)
+	if len(blockedOps) != 0 {
+		t.Errorf("a viewer who blocked the sender must receive neither the direct mention nor personal notification op; got %v", blockedOps)
+	}
+	unblockedOps := drainFanoutOps(t, unblocked, 50*time.Millisecond)
+	require.Contains(t, unblockedOps, "mention", "unblocked mentioned participant must receive the direct mention op")
+	require.Contains(t, unblockedOps, "notification", "unblocked mentioned participant must receive the personal notification op")
+	require.False(t, hub.hasChat(unsubscribedMention, chatID), "the additional mentioned profile must not be subscribed to the chat")
+	unsubscribedOps := drainFanoutOps(t, unsubscribedMention, 50*time.Millisecond)
+	require.Contains(t, unsubscribedOps, "mention", "an unblocked online mentioned profile must receive the direct mention op without a chat subscription")
+}
+
 func TestDispatchMentionAdded_WiresProfileIdNotUserId(t *testing.T) {
 	chatID := uuid.NewString()
 	msgID := uuid.NewString()
@@ -548,7 +756,7 @@ func TestDispatchMentionAdded_WiresProfileIdNotUserId(t *testing.T) {
 		SenderProfileId:     senderID,
 		MentionedProfileIds: []string{targetID},
 	}
-	dispatchMentionAdded(hub, ma, nil, nil, "")
+	dispatchMentionAdded(hub, ma, nil, nil, nil, "")
 
 	var mentionPayload map[string]string
 	deadline := time.After(2 * time.Second)

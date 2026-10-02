@@ -38,6 +38,14 @@ func friendRequestConsumerDurableName(instanceID string) string {
 	return "rt_" + strings.ReplaceAll(id, "-", "") + "_friend_request"
 }
 
+func friendRemovedConsumerDurableName(instanceID string) string {
+	id := strings.TrimSpace(instanceID)
+	if id == "" {
+		id = "unknown"
+	}
+	return "rt_" + strings.ReplaceAll(id, "-", "") + "_friend_removed"
+}
+
 func friendRequestEventToFanout(data []byte) (string, fanoutEnvelope, bool) {
 	var event eventsv1.SocialStreamEvent
 	if err := proto.Unmarshal(data, &event); err != nil {
@@ -58,6 +66,40 @@ func friendRequestEventToFanout(data []byte) (string, fanoutEnvelope, bool) {
 		return "", fanoutEnvelope{}, false
 	}
 	return request.GetTargetProfileId(), fanoutEnvelope{Op: "notification", D: payload}, true
+}
+
+func friendRemovedEventToFanout(data []byte) ([]profileFanout, bool) {
+	var event eventsv1.SocialStreamEvent
+	if err := proto.Unmarshal(data, &event); err != nil {
+		return nil, false
+	}
+	removed := event.GetFriendRemoved()
+	if removed == nil {
+		return nil, false
+	}
+	profileA := strings.TrimSpace(removed.GetProfileIdA())
+	profileB := strings.TrimSpace(removed.GetProfileIdB())
+	if profileA == "" || profileB == "" || profileA == profileB {
+		return nil, false
+	}
+	forProfile := func(peerID string) (fanoutEnvelope, bool) {
+		payload, err := json.Marshal(map[string]string{
+			"type": "friend_removed", "friend_profile_id": peerID,
+		})
+		if err != nil {
+			return fanoutEnvelope{}, false
+		}
+		return fanoutEnvelope{Op: "notification", D: payload}, true
+	}
+	envA, okA := forProfile(profileB)
+	envB, okB := forProfile(profileA)
+	if !okA || !okB {
+		return nil, false
+	}
+	return []profileFanout{
+		{ProfileID: profileA, Envelope: envA},
+		{ProfileID: profileB, Envelope: envB},
+	}, true
 }
 
 func socialBlockEventAccounts(data []byte) (string, string, bool) {
@@ -127,6 +169,32 @@ func subscribeFriendRequestEvents(js nats.JetStreamContext, hub *wsHub, instance
 	return sub, nil
 }
 
+func subscribeFriendRemovedEvents(js nats.JetStreamContext, hub *wsHub, instanceID string, logger *slog.Logger) (*nats.Subscription, error) {
+	if hub == nil {
+		return nil, fmt.Errorf("friend removed subscriber requires hub")
+	}
+	durable := friendRemovedConsumerDurableName(instanceID)
+	if err := validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_removed", realtimeConsumerDeliverSubject(instanceID, "friend_removed")); err != nil {
+		return nil, err
+	}
+	handler := func(msg *nats.Msg) {
+		fanouts, ok := friendRemovedEventToFanout(msg.Data)
+		if !ok {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "invalid friend removed event payload")
+			return
+		}
+		for _, target := range fanouts {
+			hub.broadcastToProfile(target.ProfileID, target.Envelope, logger, "")
+		}
+		natslog.LogConsume(logger, msg, slog.LevelInfo, "friend removal delivered")
+	}
+	sub, err := js.Subscribe("social.friend_removed", handler, nats.Bind(jsStreamSocialEvents, durable))
+	if err != nil {
+		return nil, fmt.Errorf("bind pre-provisioned social.events consumer %q: %w", durable, err)
+	}
+	return sub, nil
+}
+
 // preflightFriendRequestConsumer verifies the fixed durable through the deployed
 // credential without binding to the live push consumer. Its subscribe grant
 // remains an external ACL activation gate for the subsequent Realtime rollout.
@@ -166,6 +234,42 @@ func preflightFriendRequestConsumerWithWait(natsURL, instanceID string, startupW
 	}
 }
 
+func preflightFriendRemovedConsumer(natsURL, instanceID string) error {
+	return preflightFriendRemovedConsumerWithWait(natsURL, instanceID, realtimeConsumerPreflightStartupWait)
+}
+
+func preflightFriendRemovedConsumerWithWait(natsURL, instanceID string, startupWait time.Duration) error {
+	if strings.TrimSpace(natsURL) == "" || strings.TrimSpace(instanceID) == "" {
+		return fmt.Errorf("missing Realtime NATS preflight configuration")
+	}
+	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-friend-removed-preflight")...)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+	js, err := nc.JetStream()
+	if err != nil {
+		return err
+	}
+	durable := friendRemovedConsumerDurableName(instanceID)
+	deadline := time.NewTimer(startupWait)
+	defer deadline.Stop()
+	ticker := time.NewTicker(realtimeConsumerPreflightRetryDelay)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		lastErr = validateRealtimeConsumerConfig(js, jsStreamSocialEvents, durable, "social.friend_removed", realtimeConsumerDeliverSubject(instanceID, "friend_removed"))
+		if lastErr == nil {
+			return nil
+		}
+		select {
+		case <-deadline.C:
+			return fmt.Errorf("realtime NATS friend removed consumer did not become ready within %s: %w", startupWait, lastErr)
+		case <-ticker.C:
+		}
+	}
+}
+
 func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("social events consumer: missing hub or NATS URL")
@@ -199,6 +303,17 @@ func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceI
 	defer func() {
 		if err := requestSub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("friend request events unsubscribe failed", slog.String("error", err.Error()))
+		}
+	}()
+	removedSub, err := subscribeJetStreamWithRetry(ctx, "realtime social.friend_removed", func() (*nats.Subscription, error) {
+		return subscribeFriendRemovedEvents(js, hub, instanceID, logger)
+	})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := removedSub.Unsubscribe(); err != nil && logger != nil {
+			logger.Warn("friend removed events unsubscribe failed", slog.String("error", err.Error()))
 		}
 	}()
 	markRealtimeConsumerBound(ctx)
