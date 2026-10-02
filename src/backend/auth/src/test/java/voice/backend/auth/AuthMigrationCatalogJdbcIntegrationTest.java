@@ -73,8 +73,8 @@ class AuthMigrationCatalogJdbcIntegrationTest {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
       var loader = flyway(postgres, "classpath:db/migration");
-      assertThat(loader.migrate().migrationsExecuted).isEqualTo(25);
-      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("25");
+      assertThat(loader.migrate().migrationsExecuted).isEqualTo(26);
+      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("26");
       flywayCatalog = authorizationCatalog(jdbc(postgres));
       assertThat(loader.migrate().migrationsExecuted).isZero();
     }
@@ -82,9 +82,16 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       postgres.start();
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       var database = jdbc(postgres);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(26);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(27);
       assertThat(authorizationCatalog(database)).isEqualTo(flywayCatalog);
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
+      try(var reader=new voice.backend.auth.authoritysource.AuthAuthorityReader(
+          new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()))) {
+        reader.checkSchema();
+        assertThat(reader.snapshot(java.util.List.of()).revision()).isEqualTo(1);
+        database.execute("UPDATE schema_migrations SET dirty=true");
+        assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
+      }
     }
   }
 
@@ -94,6 +101,7 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       for (var source : sources.toList()) {
         String name = source.getFileName().toString();
         int version = Integer.parseInt(name.substring(1, name.indexOf("__")));
+        if (version > 25) continue; // Preserve the actual old SDK-only history.
         if (version == 15) continue; // Historical SDK-only V15 omitted master's refresh addition.
         String target = version < 15 ? name : "V" + (version - 1) + name.substring(name.indexOf("__"));
         Files.copy(source, legacy.resolve(target));
@@ -188,7 +196,7 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       var before = seedEvidence(database);
       assertThatThrownBy(() -> migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "down", "1"))
           .isInstanceOf(org.testcontainers.containers.ContainerLaunchException.class);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE dirty", Long.class)).isEqualTo(25);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE dirty", Long.class)).isEqualTo(26);
       assertThat(evidence(database).equals(before)).as("refused downgrade must retain all authority and protected receipt bytes").isTrue();
     }
   }

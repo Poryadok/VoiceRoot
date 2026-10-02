@@ -42,8 +42,8 @@ class AuthMigrationCatalogContractTest {
   @Test
   void flywayHasOneSourcePerVersionAndKeepsCanonicalRefreshAt15() throws Exception {
     var sources = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
-    assertThat(sources).hasSize(25);
-    for (int version = 1; version <= 25; version++) assertThat(sources).containsKey(version);
+    assertThat(sources).hasSize(26);
+    for (int version = 1; version <= 26; version++) assertThat(sources).containsKey(version);
     assertThat(sources.get(15).getFileName().toString()).isEqualTo("V15__refresh_tokens_profile_id.sql");
   }
 
@@ -51,9 +51,9 @@ class AuthMigrationCatalogContractTest {
   void golangHasOneUpAndDownPerVersionAndKeepsCanonicalRefreshAt16() throws Exception {
     var up = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
     var down = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.down\\.sql"));
-    assertThat(up).hasSize(26);
-    assertThat(down).hasSize(26);
-    for (int version = 1; version <= 26; version++) {
+    assertThat(up).hasSize(27);
+    assertThat(down).hasSize(27);
+    for (int version = 1; version <= 27; version++) {
       assertThat(up).containsKey(version);
       assertThat(down).containsKey(version);
       assertThat(up.get(version).getFileName().toString().replace(".up.sql", ""))
@@ -66,7 +66,7 @@ class AuthMigrationCatalogContractTest {
   void bothSupportedCatalogsContainTheSameEntireOrderedSdkDdl() throws Exception {
     var flyway = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
     var golang = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
-    for (int version = 16; version <= 25; version++) {
+    for (int version = 16; version <= 26; version++) {
       assertThat(flyway).containsKey(version);
       assertThat(golang).containsKey(version + 1);
       assertThat(Files.readString(golang.get(version + 1), StandardCharsets.UTF_8).replace("\r\n", "\n"))
