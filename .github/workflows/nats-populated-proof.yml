@@ -1,0 +1,58 @@
+name: NATS populated proof
+
+on:
+  pull_request:
+    paths:
+      - scripts/staging/nats-populated-proof/**
+      - .github/workflows/nats-populated-proof.yml
+      - deploy/nats/acl-intent.yaml
+      - deploy/staging/infra.yaml
+      - deploy/staging/services.yaml
+      - deploy/nats/leaf-sidecar.template.yaml
+      - src/backend/pkg/cmd/nats-hub-config-renderer/**
+      - deploy/templates/nats-realtime-bootstrap.yaml
+  push:
+    branches: [master]
+    paths:
+      - scripts/staging/nats-populated-proof/**
+      - .github/workflows/nats-populated-proof.yml
+      - deploy/nats/acl-intent.yaml
+      - deploy/staging/infra.yaml
+      - deploy/staging/services.yaml
+      - deploy/nats/leaf-sidecar.template.yaml
+      - src/backend/pkg/cmd/nats-hub-config-renderer/**
+      - deploy/templates/nats-realtime-bootstrap.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nats-populated-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-populated-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: scripts/staging/nats-populated-proof
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: scripts/staging/nats-populated-proof/go.sum
+      - name: Opaque inputs, exact grants, populated delivery and denial checks
+        run: go test -count=1 -timeout=90s ./...
+      - name: Pinned Docker boundary, retained source and failure cleanup proof
+        run: |
+          # This fixture-only root custody is restricted to an ephemeral hosted VM.
+          # Root-owned 0600 copies remain readable by the capability-free UID0 clone.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          fixture_home=$(sudo mktemp -d "$RUNNER_TEMP/nats-populated-fixture.XXXXXX")
+          case "$fixture_home" in "$RUNNER_TEMP"/nats-populated-fixture.*) ;; *) exit 1 ;; esac
+          trap 'sudo rm -r -- "$fixture_home"' EXIT
+          sudo env -i PATH="$PATH" HOME="$fixture_home" TMPDIR="$fixture_home" \
+            GOCACHE="$fixture_home/cache" GOPATH="$fixture_home/go" GOTOOLCHAIN=local \
+            go test -tags=dockerproof -run TestDockerPopulatedProof -count=1 -timeout=4m ./...
