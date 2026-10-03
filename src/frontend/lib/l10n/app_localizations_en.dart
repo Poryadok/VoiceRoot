@@ -1553,6 +1553,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'You need permission to join this voice room';
 
   @override
+  String get spacePermissionChecking => 'Checking permissions…';
+
+  @override
+  String get spacePermissionDeniedManageMessages =>
+      'You need permission to delete other messages in this chat.';
+
+  @override
   String get spacePermissionDeniedSendMessages =>
       'You need permission to post in this channel';
 

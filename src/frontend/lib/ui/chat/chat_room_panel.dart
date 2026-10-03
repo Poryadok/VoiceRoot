@@ -13,6 +13,7 @@ import '../../e2e/e2e_file_crypto.dart';
 import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
+import '../../backend/space_permissions.dart';
 import '../../backend/voice_client.dart';
 import '../../state/bot_providers.dart';
 import '../../state/auth_providers.dart';
@@ -29,6 +30,7 @@ import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
 import '../api_error_messages.dart';
+import '../core/voice_disabled_action.dart';
 import '../core/chat_author_label.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_compact_banner.dart';
@@ -1189,9 +1191,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   Future<void> _showMessageActions(VoiceMessage message, bool isMine) async {
     String? spaceId;
+    var canUseSpaceMessageModeration = false;
     for (final item in ref.read(chatListControllerProvider).items) {
       if (item.chatId == widget.chatId) {
         spaceId = item.chat.spaceId;
+        canUseSpaceMessageModeration =
+            spaceId != null && (item.chat.isGroup || item.chat.isChannel);
         break;
       }
     }
@@ -1272,6 +1277,47 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   leading: const Icon(Icons.delete_forever_outlined),
                   title: Text(sheetL10n.chatMessageDeleteForEveryone),
                   onTap: () => Navigator.of(context).pop('delete_everyone'),
+                ),
+              if (!isMine &&
+                  canUseSpaceMessageModeration &&
+                  message.deletedAt == null &&
+                  message.messageKind != VoiceMessageKind.system)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final permission = ref.watch(
+                      spacePermissionProvider((
+                        spaceId: spaceId!,
+                        permission: SpacePermissions.textChatManageMessages,
+                        chatId: widget.chatId,
+                        voiceRoomId: null,
+                      )),
+                    );
+                    final disabledReason = permission.when(
+                      data: (allowed) => allowed
+                          ? null
+                          : spacePermissionDeniedReason(
+                              sheetL10n,
+                              SpacePermissions.textChatManageMessages,
+                            ),
+                      loading: () => sheetL10n.spacePermissionChecking,
+                      error: (_, _) => spacePermissionDeniedReason(
+                        sheetL10n,
+                        SpacePermissions.textChatManageMessages,
+                      ),
+                    );
+                    final allowed = permission.valueOrNull == true;
+                    return VoiceDisabledAction(
+                      disabledReason: disabledReason,
+                      child: ListTile(
+                        leading: const Icon(Icons.delete_forever_outlined),
+                        title: Text(sheetL10n.chatMessageDeleteForEveryone),
+                        enabled: allowed,
+                        onTap: allowed
+                            ? () => Navigator.of(context).pop('delete_everyone')
+                            : null,
+                      ),
+                    );
+                  },
                 ),
             ],
           ),

@@ -11,6 +11,8 @@ String spacePermissionDeniedReason(AppLocalizations l10n, String permission) {
   return switch (permission) {
     SpacePermissions.spaceManageRoles => l10n.spacePermissionDeniedManageRoles,
     SpacePermissions.textChatSetSlowMode => l10n.spacePermissionDeniedSetSlowMode,
+    SpacePermissions.textChatManageMessages =>
+        l10n.spacePermissionDeniedManageMessages,
     SpacePermissions.voiceJoin => l10n.spacePermissionDeniedVoiceJoin,
     SpacePermissions.textChatSendMessages => l10n.spacePermissionDeniedSendMessages,
     _ => l10n.spacePermissionDeniedGeneric(_permissionLabel(permission)),

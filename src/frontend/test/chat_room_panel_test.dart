@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -11,10 +12,12 @@ import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/backend/space_permissions.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
@@ -29,6 +32,86 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets(
+    'space message moderation stays disabled while permission is unresolved and explains denial',
+    (tester) async {
+      final moderationPermission = Completer<bool>();
+      final query = (
+        spaceId: 'space-1',
+        permission: SpacePermissions.textChatManageMessages,
+        chatId: 'chat-abc',
+        voiceRoomId: null,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          chatListControllerProvider.overrideWith(_SpaceChatListController.new),
+          chatRoomControllerProvider('chat-abc').overrideWith(
+            (ref) => _SingleMessageRoomController(ref, 'chat-abc'),
+          ),
+          spacePermissionProvider(query).overrideWith(
+            (ref) => moderationPermission.future,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(ChatMessageBubbleTile));
+      await tester.pumpAndSettle();
+
+      final deleteForEveryone = find.ancestor(
+        of: find.text('Delete for everyone'),
+        matching: find.byType(ListTile),
+      );
+      expect(deleteForEveryone, findsOneWidget);
+      expect(
+        tester.widget<ListTile>(deleteForEveryone).onTap,
+        isNull,
+        reason: 'an unresolved permission check must never expose an action',
+      );
+      expect(find.byTooltip('Checking permissions…'), findsOneWidget);
+
+      moderationPermission.complete(false);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<ListTile>(deleteForEveryone).onTap, isNull);
+      expect(
+        find.byTooltip(
+          'You need permission to delete other messages in this chat.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets(
     'switching to a chat with no unread messages hides the previous unread separator',
     (tester) async {
@@ -415,6 +498,27 @@ class _BlockedDmChatListController extends ChatListController {
             creatorProfileId: 'prof-test',
           ),
           dmPeerProfileId: 'peer-1',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _SpaceChatListController extends ChatListController {
+  _SpaceChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-abc',
+            type: 'CHAT_TYPE_GROUP',
+            creatorProfileId: 'owner',
+            spaceId: 'space-1',
+          ),
         ),
       ],
     );

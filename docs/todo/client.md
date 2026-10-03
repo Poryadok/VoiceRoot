@@ -114,7 +114,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [ ] **api_error_messages — extend residual coverage** — chat-room history now maps unknown upstream text and `permission_denied` to localized safe states; PR #128 helpers still cover chat/search/settings/subscription/space bots|members|invites/player profile. Audit the remaining action and loader surfaces individually before claiming that raw API strings are absent globally.
 
-- [ ] **VoiceDisabledAction — расширить покрытие** — wave H: space tree / roles / slow mode; остальные permission-gated действия (chat moderation, voice room create, MM guest restrictions) без reason tooltip.
+- [ ] **VoiceDisabledAction — остаточные permission-gated действия (CL-010)** — в Space text chat причина запрета `TEXT_CHAT_MANAGE_MESSAGES` показана у удаления чужого сообщения; проверка не должна включать модерацию standalone-групп, пока не закрыт контракт BE-089. Остаток требует продуктового канона: у Flutter нет UI создания voice room и Role не называет право создания ([screen-controls](../design/screen-controls.md) §10.3 указывает только «Has right»); `matchmaking.md` не определяет запрет действий для guest-аккаунта. См. также [roles.md](../features/roles.md), [matchmaking.md](../features/matchmaking.md), [auth-and-contacts.md](../features/auth-and-contacts.md).
 
 - [x] **MobileChatStrip — scope на full-screen фичах** — strip скрывается при `mobileShellOverlayDepthProvider > 0` (PageRoute поверх shell: MM catalog/search, settings sub-routes); `shouldShowMobileChatStrip` + `MobileShellOverlayObserver` (**Batch 29a**).
 

@@ -724,6 +724,8 @@
   "spacePermissionDeniedManageRoles": "Нет права управлять ролями",
   "spacePermissionDeniedSetSlowMode": "Нет права менять медленный режим",
   "spacePermissionDeniedVoiceJoin": "Нет права входить в эту голосовую комнату",
+  "spacePermissionChecking": "Проверяем права…",
+  "spacePermissionDeniedManageMessages": "Нужно право удалять чужие сообщения в этом чате.",
   "spacePermissionDeniedSendMessages": "Нет права писать в этот канал",
   "spacePermissionDeniedGeneric": "Нет права: {permission}",
   "@spacePermissionDeniedGeneric": {

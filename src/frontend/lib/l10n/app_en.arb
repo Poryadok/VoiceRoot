@@ -775,6 +775,8 @@
   "spacePermissionDeniedManageRoles": "You need permission to manage roles",
   "spacePermissionDeniedSetSlowMode": "You need permission to change slow mode",
   "spacePermissionDeniedVoiceJoin": "You need permission to join this voice room",
+  "spacePermissionChecking": "Checking permissions…",
+  "spacePermissionDeniedManageMessages": "You need permission to delete other messages in this chat.",
   "spacePermissionDeniedSendMessages": "You need permission to post in this channel",
   "spacePermissionDeniedGeneric": "Missing permission: {permission}",
   "@spacePermissionDeniedGeneric": {
