@@ -19,10 +19,10 @@ echo "Tier 0: infra"
 kubectl wait --for=condition=ready pod/voice-postgres-0 -n "$NS" --timeout=120s
 
 echo "Tier 1: leaf gRPC services"
-for d in voice-social voice-role voice-search voice-notification voice-bot voice-voice voice-realtime voice-subscription voice-analytics voice-federation; do
+for d in voice-social voice-role voice-search voice-notification voice-bot voice-voice voice-realtime voice-subscription voice-analytics; do
   kubectl rollout restart "deployment/${d}" -n "$NS" || true
 done
-for d in voice-social voice-role voice-search voice-notification voice-bot voice-voice voice-realtime voice-subscription voice-analytics voice-federation; do
+for d in voice-social voice-role voice-search voice-notification voice-bot voice-voice voice-realtime voice-subscription voice-analytics; do
   wait_deploy "$d"
 done
 

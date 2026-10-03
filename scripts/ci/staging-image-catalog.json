@@ -26,14 +26,6 @@
       "dockerfile": "./src/backend/chat/Dockerfile"
     },
     {
-      "name": "federation",
-      "deployment": "voice-federation",
-      "k8s_manifest": "deploy/staging/services.yaml",
-      "language": "go",
-      "build_context": "./src/backend",
-      "dockerfile": "./src/backend/federation/Dockerfile"
-    },
-    {
       "name": "file",
       "deployment": "voice-file",
       "k8s_manifest": "deploy/staging/services.yaml",

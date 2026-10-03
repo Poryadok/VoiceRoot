@@ -8,6 +8,20 @@ CATALOG="${ROOT}/scripts/ci/staging-image-catalog.json"
 
 failures=0
 
+# Federation release activation is deferred by docs/PLAN.md (G0-G4).
+if jq -e '.images[] | select(.name == "federation" or .deployment == "voice-federation")' "${CATALOG}" >/dev/null; then
+  echo "ERROR: deferred Federation must not be in the default image catalog" >&2
+  failures=$((failures + 1))
+fi
+
+for manifest_rel in deploy/staging/services.yaml deploy/prod/services.yaml; do
+  manifest="${ROOT}/${manifest_rel}"
+  if grep -Eq '^[[:space:]]*name: voice-federation$' "${manifest}"; then
+    echo "ERROR: deferred Federation resource found in ${manifest_rel}" >&2
+    failures=$((failures + 1))
+  fi
+done
+
 check_manifest_contains_deployment() {
   local manifest_rel="$1"
   local deployment="$2"
