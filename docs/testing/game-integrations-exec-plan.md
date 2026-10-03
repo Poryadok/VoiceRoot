@@ -3113,3 +3113,16 @@ unchanged. A real disposable Linux proof confirms UID65532 cannot read mode0600
 and root can; its --rm container is removed. Both configuration regressions are
 red before and green after; nineteen Phase0 roots and the original-status/order
 shell suite pass, with only POSIX host permission verification deferred to CI.
+
+Base Compose now starts and its hosted live suite passes twenty-two cases, but
+matchmaking accept fails because squad clients select the first proposal profile
+while preserving the final accepter account. Voice correctly denies this mixed
+identity. Matchmaking now creates Chat/Voice resources using the authenticated
+accepter, requires that caller belong to the durable match roster, preserves its
+account/profile/session metadata, and adds all other participants to Chat.
+Missing, duplicate or outsider identities are rejected before downstream RPCs.
+A real bufconn Chat/Voice regression reproduces the exact ownership denial before
+and passes after; four Squad roots and the Matchmaking linter pass. Independent
+security review accepts this caller correction. Voice production/security code
+and its approved R22 source pin are unchanged. Hosted T16 passes again at a772069;
+T31 has passed the repaired Matchmaking startup and is executing later phases.

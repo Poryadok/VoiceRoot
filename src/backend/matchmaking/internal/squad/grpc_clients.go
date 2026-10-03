@@ -24,17 +24,31 @@ type GRPCVoiceClient struct {
 	Client callsv1.VoiceServiceClient
 }
 
-func withCreatorProfile(ctx context.Context, profileID uuid.UUID) context.Context {
-	md := metadata.MD{}
-	if incoming, ok := metadata.FromIncomingContext(ctx); ok {
-		md = incoming.Copy()
+// The final accepter creates squad resources under their own authenticated
+// identity. Participant order must never substitute a different profile while
+// retaining this caller's account/session metadata.
+func withMatchParticipant(ctx context.Context, profileIDs []uuid.UUID) (context.Context, uuid.UUID, error) {
+	incoming, ok := metadata.FromIncomingContext(ctx)
+	profileID, profileOK := authctx.ProfileID(ctx)
+	accountID, accountOK := authctx.AccountID(ctx)
+	if !ok || !profileOK || !accountOK || profileID == uuid.Nil || accountID == uuid.Nil || len(incoming.Get(authctx.HeaderProfileID)) != 1 || len(incoming.Get(authctx.HeaderAccountID)) != 1 {
+		return nil, uuid.Nil, fmt.Errorf("authenticated match participant required")
 	}
+	participant := false
+	for _, id := range profileIDs {
+		participant = participant || id == profileID
+	}
+	if !participant {
+		return nil, uuid.Nil, fmt.Errorf("authenticated caller is not a match participant")
+	}
+	md := incoming.Copy()
 	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok {
 		md = metadata.Join(md, outgoing.Copy())
 	}
 	md.Set(authctx.HeaderProfileID, profileID.String())
+	md.Set(authctx.HeaderAccountID, accountID.String())
 	md.Set("x-voice-internal-caller", "matchmaking")
-	return metadata.NewOutgoingContext(ctx, md)
+	return metadata.NewOutgoingContext(ctx, md), profileID, nil
 }
 
 // CreateMatchChat creates a group chat and adds all participants.
@@ -45,8 +59,10 @@ func (c *GRPCChatClient) CreateMatchChat(ctx context.Context, matchID uuid.UUID,
 	if len(profileIDs) == 0 {
 		return "", fmt.Errorf("no participants")
 	}
-	creator := profileIDs[0]
-	ctx = withCreatorProfile(ctx, creator)
+	ctx, creator, err := withMatchParticipant(ctx, profileIDs)
+	if err != nil {
+		return "", err
+	}
 	name := fmt.Sprintf("Match %s", matchID.String()[:8])
 	resp, err := c.Client.CreateChat(ctx, &chatv1.CreateChatRequest{
 		Type: chatv1.ChatType_CHAT_TYPE_GROUP,
@@ -61,8 +77,10 @@ func (c *GRPCChatClient) CreateMatchChat(ctx context.Context, matchID uuid.UUID,
 	}
 	if len(profileIDs) > 1 {
 		others := make([]string, 0, len(profileIDs)-1)
-		for _, id := range profileIDs[1:] {
-			others = append(others, id.String())
+		for _, id := range profileIDs {
+			if id != creator {
+				others = append(others, id.String())
+			}
 		}
 		_, err = c.Client.AddMembers(ctx, &chatv1.AddMembersRequest{
 			ChatId:     chatID,
@@ -87,8 +105,10 @@ func (c *GRPCVoiceClient) CreateMatchRoom(ctx context.Context, matchID uuid.UUID
 	if chatID == "" {
 		return "", fmt.Errorf("chat id required")
 	}
-	creator := profileIDs[0]
-	ctx = withCreatorProfile(ctx, creator)
+	ctx, _, err := withMatchParticipant(ctx, profileIDs)
+	if err != nil {
+		return "", err
+	}
 	groupType := chatv1.ChatType_CHAT_TYPE_GROUP
 	resp, err := c.Client.StartCall(ctx, &callsv1.StartCallRequest{
 		RoomType:     "group_voice",
