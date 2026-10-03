@@ -147,7 +147,7 @@ func scanRoleRow(row pgx.Row) (RoleRow, error) {
 	var perms int64
 	var isSystem bool
 	var createdBy *uuid.UUID
-	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &isSystem, &r.Position, &perms, &createdBy, &r.CreatedAt)
+	err := row.Scan(&r.ID, &r.SpaceID, &r.Name, &r.Color, &isSystem, &r.Position, &perms, &r.IsMentionable, &createdBy, &r.CreatedAt)
 	if err != nil {
 		return RoleRow{}, err
 	}
@@ -163,7 +163,7 @@ type roleQueryer interface {
 
 func listRoles(ctx context.Context, queryer roleQueryer, spaceID uuid.UUID) ([]RoleRow, error) {
 	rows, err := queryer.Query(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
+SELECT id, space_id, name, color, is_system, position, permissions, is_mentionable, created_by_profile_id, created_at
 FROM roles
 WHERE space_id = $1
 ORDER BY position DESC, name ASC
@@ -194,7 +194,7 @@ func (s *RoleStore) unscopedListRoles(ctx context.Context, spaceID uuid.UUID) ([
 // GetRoleByID loads a single role.
 func (s *RoleStore) unscopedGetRoleByID(ctx context.Context, roleID uuid.UUID) (*RoleRow, error) {
 	row := s.db().QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
+SELECT id, space_id, name, color, is_system, position, permissions, is_mentionable, created_by_profile_id, created_at
 FROM roles WHERE id = $1
 `, roleID)
 	r, err := scanRoleRow(row)
@@ -248,7 +248,7 @@ func (s *RoleStore) unscopedGetMemberRoles(ctx context.Context, spaceID, profile
 		return nil, errors.New("role store: pool not configured")
 	}
 	rows, err := s.db().Query(ctx, `
-SELECT r.id, r.space_id, r.name, r.is_system, r.position, r.permissions, r.created_by_profile_id, r.created_at
+SELECT r.id, r.space_id, r.name, r.color, r.is_system, r.position, r.permissions, r.is_mentionable, r.created_by_profile_id, r.created_at
 FROM member_roles mr
 JOIN roles r ON r.id = mr.role_id
 WHERE mr.space_id = $1 AND mr.profile_id = $2
@@ -683,7 +683,7 @@ func (s *RoleStore) unscopedGetDefaultJoinRole(ctx context.Context, spaceID uuid
 		return nil, errors.New("role store: pool not configured")
 	}
 	row := s.db().QueryRow(ctx, `
-SELECT id, space_id, name, is_system, position, permissions, created_by_profile_id, created_at
+SELECT id, space_id, name, color, is_system, position, permissions, is_mentionable, created_by_profile_id, created_at
 FROM roles WHERE space_id = $1 AND is_default_join = true
 LIMIT 1
 `, spaceID)

@@ -21,7 +21,9 @@ type RoleRow struct {
 	ID                 uuid.UUID
 	SpaceID            uuid.UUID
 	Name               string
+	Color              *string
 	PermissionsMask    uint64
+	IsMentionable      bool
 	Position           int32
 	Managed            bool
 	CreatedByProfileID *uuid.UUID

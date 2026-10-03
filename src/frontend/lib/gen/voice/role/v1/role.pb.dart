@@ -1252,6 +1252,8 @@ class Role extends $pb.GeneratedMessage {
     $core.bool? managed,
     $1.Timestamp? createdAt,
     $core.String? createdByProfileId,
+    $core.String? color,
+    $core.bool? isMentionable,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1263,6 +1265,8 @@ class Role extends $pb.GeneratedMessage {
     if (createdAt != null) result.createdAt = createdAt;
     if (createdByProfileId != null)
       result.createdByProfileId = createdByProfileId;
+    if (color != null) result.color = color;
+    if (isMentionable != null) result.isMentionable = isMentionable;
     return result;
   }
 
@@ -1290,6 +1294,8 @@ class Role extends $pb.GeneratedMessage {
     ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'createdAt',
         subBuilder: $1.Timestamp.create)
     ..aOS(8, _omitFieldNames ? '' : 'createdByProfileId')
+    ..aOS(9, _omitFieldNames ? '' : 'color')
+    ..aOB(10, _omitFieldNames ? '' : 'isMentionable')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1383,6 +1389,24 @@ class Role extends $pb.GeneratedMessage {
   $core.bool hasCreatedByProfileId() => $_has(7);
   @$pb.TagNumber(8)
   void clearCreatedByProfileId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get color => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set color($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasColor() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearColor() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get isMentionable => $_getBF(9);
+  @$pb.TagNumber(10)
+  set isMentionable($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasIsMentionable() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearIsMentionable() => $_clearField(10);
 }
 
 class CreateRoleRequest extends $pb.GeneratedMessage {

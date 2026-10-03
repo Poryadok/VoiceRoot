@@ -188,6 +188,8 @@ message Role {
   bool managed = 6;
   google.protobuf.Timestamp created_at = 7;
   optional string created_by_profile_id = 8;
+  optional string color = 9;
+  bool is_mentionable = 10;
 }
 
 message CreateRoleRequest {
