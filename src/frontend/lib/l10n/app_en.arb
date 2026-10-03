@@ -513,6 +513,7 @@
   "chatAttachmentUploadFailed": "Could not upload file. Try again.",
   "chatAttachmentTapToDownload": "Tap to download file",
   "chatAttachmentDownloadFailed": "Could not open the file download. Try again.",
+  "chatExpiredFileTooltip": "File deleted. A subscription keeps files forever.",
   "composerEmojiPanelTitle": "Emoji",
   "composerAttachPhotoOrVideo": "Photo or video",
   "composerAttachDocument": "Document",

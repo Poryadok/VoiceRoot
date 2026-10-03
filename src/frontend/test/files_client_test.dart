@@ -155,6 +155,41 @@ void main() {
     );
   });
 
+  test('getFileMetadata returns File lifecycle status', () async {
+    final client = VoiceFilesClient(
+      gateway: gatewayHttpForTest(
+        MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/files/file-expired');
+          expect(req.headers['Authorization'], auth);
+          return http.Response(
+            jsonEncode({
+              'file_metadata': {
+                'id': 'file-expired',
+                'status': 'expired',
+                'file_type': 'document',
+                'original_name': 'retained.pdf',
+              },
+            }),
+            200,
+          );
+        }),
+        config: config,
+      ),
+    );
+
+    final result = await client.getFileMetadata(
+      authorization: auth,
+      fileId: 'file-expired',
+    );
+
+    expect(result, isA<FilesApiOk<FileMetadataData>>());
+    final metadata = (result as FilesApiOk<FileMetadataData>).data;
+    expect(metadata.fileId, 'file-expired');
+    expect(metadata.status, 'expired');
+    expect(metadata.originalName, 'retained.pdf');
+  });
+
   test('getFileUrl requests the thumbnail variant without exposing a key', () async {
     final client = VoiceFilesClient(
       gateway: gatewayHttpForTest(

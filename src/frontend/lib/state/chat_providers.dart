@@ -51,6 +51,21 @@ final voiceFilesClientProvider = Provider<VoiceFilesClient>((ref) {
   return VoiceFilesClient(gateway: ref.watch(gatewayHttpClientProvider));
 });
 
+/// Resolves File-authoritative lifecycle metadata for a message attachment.
+final fileAttachmentMetadataProvider =
+    FutureProvider.family<FileMetadataData?, String>((ref, fileId) async {
+      if (fileId.isEmpty) return null;
+      final auth = ref.watch(authorizationHeaderProvider);
+      if (auth == null) return null;
+      final result = await ref
+          .read(voiceFilesClientProvider)
+          .getFileMetadata(authorization: auth, fileId: fileId);
+      return switch (result) {
+        FilesApiOk(:final data) => data,
+        FilesApiFailure() => null,
+      };
+    });
+
 /// Resolves a presigned GET URL for chat attachment display.
 final fileAttachmentUrlProvider = FutureProvider.family<String?, String>((
   ref,
