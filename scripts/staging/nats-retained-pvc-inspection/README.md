@@ -144,3 +144,48 @@ decryption, mount, source mutation or automatic root run occurs.
 
 Run `/work/test_decoder.py` in the same pinned disposable root/networkless Python
 fixture container. The hosted fixture workflow runs both suites.
+
+## Historical locator discovery (metadata only)
+
+`locator.py` searches three explicit candidate roots on pmdebook:
+`/var/lib/rancher/k3s/storage`, `/var/lib/kubelet/pods`, and
+`/var/lib/rancher/k3s/agent/kubelet/pods`. Kubelet paths are candidate
+conventions, not verified historical storage roots. Only immediate canonical
+`pvc-UUID_voice-staging_*nats*` local-path names and canonical UUID Pod
+directories are considered. Pod checks traverse only the exact
+`volumes/kubernetes.io~empty-dir/jsdata/jetstream` directory shape.
+It does not enumerate JetStream account directories or read any source file.
+
+The report contains validated public locator basenames/Pod UUIDs, exact path
+SHA256, numeric directory stat values and JetStream-directory presence.
+Use the report's candidate-root path and local basename, or Pod UUID plus
+`/volumes/kubernetes.io~empty-dir/jsdata`, to reconstruct follow-up paths.
+The known inspected PV is explicitly identified; its timestamp does not
+authenticate pre-reset data. No other untrusted names or contents are emitted.
+Directory mtime/ctime are not creation timestamps or namespace ownership proof.
+Root absence and empty results never establish historical completeness or loss.
+The report always has `canonical_census=false`, `preservation_pass=false`,
+`historical_attribution_verified=false` and `historical_completeness=UNKNOWN`.
+
+Limits:4096 entries/128 candidates per root, exact child depth5,15-second
+scan deadline/20-second main alarm,1MiB kernel mountinfo. FD-relative directory
+opens use NOFOLLOW/NOATIME/NONBLOCK; symlink/special-file/path replacement,
+root trust ambiguity, nested mounts, bounds and uncertainty fail closed.
+No Kubernetes query, credentials, source chmod/write, mount or broker occurs.
+
+Independently review `locator.py`, `test_locator.py` and
+`locator-launch.template.sh`; replace REVIEWED_LOCATOR_SHA256 with the exact
+accepted code hash. Upload only public code to
+`/home/pmd/voice-nats-preservation/20261003/locator.py`. Paste the reviewed
+bootstrap into the human root shell, or use the established captured-memory
+shell shape with the exact instantiated launcher digest. Do not execute an
+unverified pmd-owned launcher. The bootstrap hashes bounded captured source,
+copies it to fresh root0700 private storage, hashes the private copy and executes
+only that copy under isolated Python with a cleared environment.
+Success prints `/var/lib/voice-nats-preservation/historical-locators-*/locators.json`,
+root:pmd0440 within root:pmd0750. Retrieve only that exact sanitized report as
+pmd. Source code hash and observed time bind the report to the reviewed helper;
+this is not signed historical evidence. Failure prints a literal status only.
+
+Run `/work/test_locator.py` in the same pinned networkless Linux root fixture
+container used by the other two helper suites.
