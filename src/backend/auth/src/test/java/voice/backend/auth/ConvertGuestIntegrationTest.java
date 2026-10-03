@@ -19,10 +19,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import voice.backend.auth.support.CapturingMailSender;
+import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.GuestConversionOperationRepository;
 import voice.backend.auth.repository.GuestConversionState;
+import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.service.GuestConversionPendingUserRecoveryRunner;
+import voice.backend.auth.support.CapturingMailSender;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -31,8 +33,10 @@ class ConvertGuestIntegrationTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
   @Autowired CapturingMailSender mailSender;
+  @Autowired AccountRepository accounts;
   @Autowired GuestConversionOperationRepository operations;
   @Autowired GuestConversionPendingUserRecoveryRunner pendingUserRecovery;
+  @Autowired BCryptPasswordHasher passwordHasher;
   @Autowired Clock clock;
 
   @Test
@@ -216,6 +220,78 @@ class ConvertGuestIntegrationTest {
               assertThat(operation.accountId()).isEqualTo(UUID.fromString(guestAccountId));
               assertThat(operation.state()).isEqualTo(GuestConversionState.PENDING_EVENT);
             });
+  }
+
+  @Test
+  void legacyConvertedAccountCanRecoverWithoutItsBootstrapPassword() throws Exception {
+    String bootstrapPassword = UUID.randomUUID().toString();
+    String recoveredPassword = "Recovered account password 1";
+    String email = "legacy-convert-" + UUID.randomUUID() + "@example.com";
+    JsonNode guest =
+        session(
+            postJson(
+                "/api/v1/auth/register",
+                "{\"password\":\""
+                    + bootstrapPassword
+                    + "\",\"guest\":true,\"device_info_json\":\"{}\"}"));
+    String accountId = guest.get("account_id").asText();
+    String profileId = guest.get("profile_id").asText();
+
+    // Seed the pre-fix persisted shape without creating unrelated conversion-recovery work.
+    var legacyAccount =
+        accounts.convertGuest(
+            UUID.fromString(accountId), email, null, passwordHasher.hash(bootstrapPassword));
+    accounts.markGuestRegular(legacyAccount.id());
+
+    mailSender.clear();
+    mockMvc
+        .perform(
+            post("/api/v1/auth/otp/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"" + email + "\",\"otp_type\":\"password_reset\"}"))
+        .andExpect(status().isNoContent());
+    String resetCode = mailSender.lastCode();
+    assertThat(resetCode).matches("\\d{6}");
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/password/reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"code\":\""
+                        + resetCode
+                        + "\",\"new_password\":\""
+                        + recoveredPassword
+                        + "\"}"))
+        .andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"password\":\""
+                        + bootstrapPassword
+                        + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"password\":\""
+                        + recoveredPassword
+                        + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.account_id", is(accountId)))
+        .andExpect(jsonPath("$.session.profile_id", is(profileId)))
+        .andExpect(jsonPath("$.session.account_type", is("regular")));
   }
 
   private JsonNode postJson(String path, String body) throws Exception {
