@@ -1553,6 +1553,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'You need permission to join this voice room';
 
   @override
+  String get spacePermissionChecking => 'Checking permissions…';
+
+  @override
+  String get spaceModerationUnavailable => 'Message moderation is unavailable.';
+
+  @override
   String get spacePermissionDeniedSendMessages =>
       'You need permission to post in this channel';
 
