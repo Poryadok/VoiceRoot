@@ -1988,6 +1988,12 @@ abstract class AppLocalizations {
   /// **'Could not open the file download. Try again.'**
   String get chatAttachmentDownloadFailed;
 
+  /// No description provided for @chatExpiredFileTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'File deleted. A subscription keeps files forever.'**
+  String get chatExpiredFileTooltip;
+
   /// No description provided for @composerEmojiPanelTitle.
   ///
   /// In en, this message translates to:

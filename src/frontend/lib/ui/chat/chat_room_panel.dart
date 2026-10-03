@@ -1772,6 +1772,31 @@ class _AttachmentPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final voice = VoiceColors.of(context);
+    final metadata = ref.watch(
+      fileAttachmentMetadataProvider(attachment.fileId),
+    );
+    if (metadata.valueOrNull?.status == 'expired') {
+      final l10n = AppLocalizations.of(context)!;
+      return Tooltip(
+        message: l10n.chatExpiredFileTooltip,
+        triggerMode: TooltipTriggerMode.tap,
+        child: Container(
+          key: ValueKey('expired_attachment_placeholder_${attachment.fileId}'),
+          constraints: const BoxConstraints(maxWidth: 260),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: voice.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: voice.borderDefault),
+          ),
+          child: const SizedBox(
+            width: 160,
+            height: 48,
+            child: Center(child: Text('🦴🦴🦴', style: TextStyle(fontSize: 20))),
+          ),
+        ),
+      );
+    }
     if (attachment.isImage) {
       if (attachment.isE2eEncrypted) {
         final decryptRequest = E2eAttachmentDecryptRequest(

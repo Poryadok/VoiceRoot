@@ -28,8 +28,108 @@ import 'support/markdown_test_helpers.dart';
 import 'support/voice_test_theme.dart';
 
 const _dmPeerDeletedMarkerKey = ValueKey<String>('chat_room_dm_peer_deleted');
+const _expiredAttachmentPlaceholderKey =
+    ValueKey<String>('expired_attachment_placeholder_file-expired');
+const _expiredAttachmentTooltip =
+    'Файл удалён. Подписка сохраняет файлы навсегда';
 
 void main() {
+  testWidgets('expired attachment shows the documented placeholder', (
+    tester,
+  ) async {
+    final harness = await _pumpPanel(
+      tester,
+      locale: const Locale('ru'),
+      page: _page(
+        attachments: const [
+          MessageAttachment(
+            fileId: 'file-expired',
+            type: 'document',
+            name: 'retained.pdf',
+          ),
+        ],
+      ),
+      fileMetadataResult: const FilesApiOk(
+        FileMetadataData(
+          fileId: 'file-expired',
+          fileType: 'document',
+          status: 'expired',
+          originalName: 'retained.pdf',
+        ),
+      ),
+    );
+
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsOneWidget);
+    expect(find.text('retained.pdf'), findsNothing);
+    expect(harness.files.metadataRequests, ['file-expired']);
+    expect(
+      harness.container
+          .read(chatRoomControllerProvider('chat-1'))
+          .messages
+          .single
+          .attachments
+          .single
+          .fileId,
+      'file-expired',
+    );
+
+    await tester.tap(find.byKey(_expiredAttachmentPlaceholderKey));
+    await tester.pumpAndSettle();
+    expect(find.text(_expiredAttachmentTooltip), findsOneWidget);
+  });
+
+  testWidgets('ready attachment keeps its regular rendering', (tester) async {
+    final harness = await _pumpPanel(
+      tester,
+      page: _page(
+        attachments: const [
+          MessageAttachment(
+            fileId: 'file-ready',
+            type: 'document',
+            name: 'ready.pdf',
+          ),
+        ],
+      ),
+      fileMetadataResult: const FilesApiOk(
+        FileMetadataData(
+          fileId: 'file-ready',
+          fileType: 'document',
+          status: 'ready',
+          originalName: 'ready.pdf',
+        ),
+      ),
+    );
+
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsNothing);
+    expect(find.text('ready.pdf'), findsOneWidget);
+    expect(harness.files.metadataRequests, ['file-ready']);
+  });
+
+  testWidgets('unavailable metadata does not imply an expired attachment', (
+    tester,
+  ) async {
+    final harness = await _pumpPanel(
+      tester,
+      page: _page(
+        attachments: const [
+          MessageAttachment(
+            fileId: 'file-unavailable',
+            type: 'document',
+            name: 'unavailable.pdf',
+          ),
+        ],
+      ),
+      fileMetadataResult: const FilesApiFailure(
+        message: 'not_found',
+        statusCode: 404,
+      ),
+    );
+
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsNothing);
+    expect(find.text('unavailable.pdf'), findsOneWidget);
+    expect(harness.files.metadataRequests, ['file-unavailable']);
+  });
+
   testWidgets(
     'deleted DM renders one stable marker without changing loaded messages',
     (tester) async {
@@ -304,6 +404,7 @@ Future<_UiHarness> _pumpPanel(
   Locale locale = const Locale('en'),
   ChatAttachmentPicker? attachmentPicker,
   List<bool>? mentionLookups,
+  FilesApiResult<FileMetadataData>? fileMetadataResult,
 }) async {
   final messages = _UiMessagesClient(
     page:
@@ -312,7 +413,7 @@ Future<_UiHarness> _pumpPanel(
   );
   final realtime = _UiRealtimeHub();
   final cache = _UiCacheStore();
-  final files = _UiFilesClient();
+  final files = _UiFilesClient(metadataResult: fileMetadataResult);
   final container = ProviderContainer(
     overrides: [
       ...voiceAppTestOverrides(
@@ -359,7 +460,10 @@ Future<_UiHarness> _pumpPanel(
   );
 }
 
-MessageListData _page({messaging_pb.DmPeerState? peerState}) {
+MessageListData _page({
+  messaging_pb.DmPeerState? peerState,
+  List<MessageAttachment> attachments = const [],
+}) {
   return MessageListData(
     messages: [
       VoiceMessage(
@@ -367,6 +471,7 @@ MessageListData _page({messaging_pb.DmPeerState? peerState}) {
         chatId: 'chat-1',
         senderProfileId: 'peer-1',
         content: 'History survives',
+        attachments: attachments,
         createdAt: DateTime.parse('2024-01-01T00:00:00Z'),
       ),
     ],
@@ -473,14 +578,26 @@ class _UiMessagesClient extends VoiceMessagesClient {
 }
 
 class _UiFilesClient extends VoiceFilesClient {
-  _UiFilesClient()
+  _UiFilesClient({this.metadataResult})
     : super(
         gateway: gatewayHttpForTest(MockClient((_) async => httpResponse404())),
       );
 
+  final FilesApiResult<FileMetadataData>? metadataResult;
+  final metadataRequests = <String>[];
   var requestUploadCalls = 0;
   var putBytesCalls = 0;
   var confirmUploadCalls = 0;
+
+  @override
+  Future<FilesApiResult<FileMetadataData>> getFileMetadata({
+    required String authorization,
+    required String fileId,
+  }) async {
+    metadataRequests.add(fileId);
+    return metadataResult ??
+        FilesApiFailure(message: 'unexpected_metadata', statusCode: 404);
+  }
 
   @override
   Future<FilesApiResult<FileUploadTicket>> requestUpload({
