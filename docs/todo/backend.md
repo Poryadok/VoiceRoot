@@ -459,7 +459,7 @@ and Voice IDs denied while history remains.
 ### Federation
 
 
-- [ ] **[Federation] Hollow pod on every staging/prod deploy** — `voice-federation` is Tier-1 restart in `scripts/staging/rollout-app-tier.sh`; image built/pushed on every `master` push via `.github/workflows/ci.yml` (`staging-images-push`) and `scripts/ci/staging-image-catalog.json`. Burns CI/CD + cluster resources with no product surface.
+- [x] **[Federation] Excluded from default release images, manifests, rollout, and required Secret preflight** — deferred Federation is absent from the image catalog and staging/prod services manifests, app-tier restart/wait loops, and required app Secret keys. Ordinary Go source validation remains enabled. — `scripts/ci/staging-image-catalog.json`; `deploy/{staging,prod}/services.yaml`; `scripts/staging/rollout-app-tier.sh`; `scripts/staging/check-resend-key.py`
 - [x] **[Federation] `federation_db` documented but never provisioned** — `docs/DATA_STORES.md`, `docs/microservices/federation-service.md` now mark `federation_db` as planned/deferred; still absent from `docker/postgres/initdb.d/`, `scripts/dev/compose-migrate-all.sh`, `src/backend/migrations/`, `deploy/templates/` until implementation.
 - [x] **[Federation] Prometheus scrape misconfigured** — federation scaffold now exposes GET `/metrics` via `pkg/promhttp`; k8s annotations unchanged.
 - [ ] **[Federation] Spec ↔ proto drift (implementation trap)** — when work starts, docs and contracts disagree:

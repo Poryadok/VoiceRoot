@@ -1,7 +1,6 @@
 analytics
 bot
 chat
-federation
 file
 gateway
 matchmaking

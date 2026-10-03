@@ -22,6 +22,9 @@ user_restart="$(line_number 'kubectl rollout restart deployment/voice-user -n "$
 [[ -n "${auth_repair}" ]] || fail "full rollout must repair Auth migrations"
 [[ -n "${auth_ready}" ]] || fail "full rollout must wait for recreated Auth"
 [[ -n "${user_restart}" ]] || fail "full rollout must restart User"
+if grep -qF 'voice-federation' "${SCRIPT}"; then
+  fail "deferred Federation must not be restarted or awaited by the default rollout"
+fi
 
 (( auth_repair < auth_ready )) || fail "Auth repair must precede Auth recreation"
 (( auth_ready < user_restart )) || fail "Auth must be ready before the first User restart"
