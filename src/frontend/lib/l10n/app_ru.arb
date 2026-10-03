@@ -476,6 +476,7 @@
   "chatAttachmentUploadFailed": "Не удалось загрузить файл. Попробуйте снова.",
   "chatAttachmentTapToDownload": "Нажмите, чтобы скачать файл",
   "chatAttachmentDownloadFailed": "Не удалось открыть ссылку на файл. Попробуйте снова.",
+  "chatExpiredFileTooltip": "Файл удалён. Подписка сохраняет файлы навсегда",
   "composerEmojiPanelTitle": "Эмодзи",
   "composerAttachPhotoOrVideo": "Фото или видео",
   "composerAttachDocument": "Документ",

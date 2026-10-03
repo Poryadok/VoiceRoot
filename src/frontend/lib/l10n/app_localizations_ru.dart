@@ -1078,6 +1078,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось открыть ссылку на файл. Попробуйте снова.';
 
   @override
+  String get chatExpiredFileTooltip =>
+      'Файл удалён. Подписка сохраняет файлы навсегда';
+
+  @override
   String get composerEmojiPanelTitle => 'Эмодзи';
 
   @override

@@ -1073,6 +1073,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not open the file download. Try again.';
 
   @override
+  String get chatExpiredFileTooltip =>
+      'File deleted. A subscription keeps files forever.';
+
+  @override
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
