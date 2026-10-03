@@ -63,7 +63,8 @@ manifest() {
   if [ "$1" = encoded ] || [ "$1" = invalid_data ]; then fixture_value="$fixture_encoded"; fi
   local fixture_key
   for fixture_key in $fixture_keys; do
-    [ "$1" = missing_required ] && [ "$fixture_key" = FEDERATION_DATABASE_URL ] && continue
+    [ "$fixture_key" = FEDERATION_DATABASE_URL ] && continue
+    [ "$1" = missing_required ] && [ "$fixture_key" = CHAT_DATABASE_URL ] && continue
     printf '  %s: "%s"\n' "$fixture_key" "$fixture_value"
   done
   case "$1" in
@@ -126,7 +127,8 @@ run_existing_case() {
     printf '{"kind":"Secret","metadata":{"name":"voice-app-secrets","namespace":"voice-staging"},"data":{'
     local fixture_key
     for fixture_key in $fixture_keys; do
-      [ "$kind" = missing_required ] && [ "$fixture_key" = FEDERATION_DATABASE_URL ] && continue
+      [ "$fixture_key" = FEDERATION_DATABASE_URL ] && continue
+      [ "$kind" = missing_required ] && [ "$fixture_key" = CHAT_DATABASE_URL ] && continue
       printf '"%s":"%s",' "$fixture_key" "$fixture_encoded"
     done
     case "$kind" in

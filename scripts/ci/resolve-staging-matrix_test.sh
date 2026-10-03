@@ -110,7 +110,7 @@ unset FILTER_JSON GO_SERVICES_JSON
 echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix
 count="$(echo "${build_services}" | jq 'length')"
-[[ "${count}" -eq 23 ]] || fail "expected 23 build services, got ${count}"
+[[ "${count}" -eq 22 ]] || fail "expected 22 release image services, got ${count}"
 
 echo "== staging_infra sets needs_full_rollout =="
 FILTER_JSON='{"code":"true","staging_infra":"true"}' GO_SERVICES_JSON='[]' run_matrix
