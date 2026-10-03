@@ -174,6 +174,16 @@ class FileServiceClient extends $grpc.Client {
     return $createUnaryCall(_$releaseFileReferences, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:messaging
+  $grpc.ResponseFuture<$0.GetFileReferenceGCStatusResponse>
+      getFileReferenceGCStatus(
+    $0.GetFileReferenceGCStatusRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getFileReferenceGCStatus, request,
+        options: options);
+  }
+
   /// @voice.security=protected;callers=service:space
   $grpc.ResponseFuture<$0.GetSpacePurgeReceiptResponse> getSpacePurgeReceipt(
     $0.GetSpacePurgeReceiptRequest request, {
@@ -277,6 +287,12 @@ class FileServiceClient extends $grpc.Client {
       '/voice.file.v1.FileService/ReleaseFileReferences',
       ($0.ReleaseFileReferencesRequest value) => value.writeToBuffer(),
       $0.ReleaseFileReferencesResponse.fromBuffer);
+  static final _$getFileReferenceGCStatus = $grpc.ClientMethod<
+          $0.GetFileReferenceGCStatusRequest,
+          $0.GetFileReferenceGCStatusResponse>(
+      '/voice.file.v1.FileService/GetFileReferenceGCStatus',
+      ($0.GetFileReferenceGCStatusRequest value) => value.writeToBuffer(),
+      $0.GetFileReferenceGCStatusResponse.fromBuffer);
   static final _$getSpacePurgeReceipt = $grpc.ClientMethod<
           $0.GetSpacePurgeReceiptRequest, $0.GetSpacePurgeReceiptResponse>(
       '/voice.file.v1.FileService/GetSpacePurgeReceipt',
@@ -438,6 +454,15 @@ abstract class FileServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ReleaseFileReferencesRequest.fromBuffer(value),
         ($0.ReleaseFileReferencesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetFileReferenceGCStatusRequest,
+            $0.GetFileReferenceGCStatusResponse>(
+        'GetFileReferenceGCStatus',
+        getFileReferenceGCStatus_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetFileReferenceGCStatusRequest.fromBuffer(value),
+        ($0.GetFileReferenceGCStatusResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetSpacePurgeReceiptRequest,
             $0.GetSpacePurgeReceiptResponse>(
         'GetSpacePurgeReceipt',
@@ -605,6 +630,15 @@ abstract class FileServiceBase extends $grpc.Service {
 
   $async.Future<$0.ReleaseFileReferencesResponse> releaseFileReferences(
       $grpc.ServiceCall call, $0.ReleaseFileReferencesRequest request);
+
+  $async.Future<$0.GetFileReferenceGCStatusResponse>
+      getFileReferenceGCStatus_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.GetFileReferenceGCStatusRequest> $request) async {
+    return getFileReferenceGCStatus($call, await $request);
+  }
+
+  $async.Future<$0.GetFileReferenceGCStatusResponse> getFileReferenceGCStatus(
+      $grpc.ServiceCall call, $0.GetFileReferenceGCStatusRequest request);
 
   $async.Future<$0.GetSpacePurgeReceiptResponse> getSpacePurgeReceipt_Pre(
       $grpc.ServiceCall $call,

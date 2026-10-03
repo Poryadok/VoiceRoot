@@ -94,6 +94,7 @@ func ownershipJournalStoreFixture(t *testing.T) *SpaceStore {
 	pool := startSpacePostgresForStoreTest(t, ctx)
 	applySpaceMigrationsThrough12ForStoreTest(t, ctx, pool)
 	applyLifecycleMigration(t, ctx, pool, "up")
+	applyCommunityRosterForStoreTest(t, ctx, &SpaceStore{Pool: pool})
 	return &SpaceStore{Pool: pool}
 }
 func seedOwnershipJournalBinding(t *testing.T, st *SpaceStore) OwnershipBinding {

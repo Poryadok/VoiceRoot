@@ -13,10 +13,14 @@ COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
+COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh file
+COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY pkg ./pkg
 COPY messaging/pb/voice/events ./messaging/pb/voice/events
+COPY messaging/pb/voice/messaging ./messaging/pb/voice/messaging
 COPY file ./file
 COPY chat/pb ./chat/pb
 COPY voice/pb/voice/story ./voice/pb/voice/story

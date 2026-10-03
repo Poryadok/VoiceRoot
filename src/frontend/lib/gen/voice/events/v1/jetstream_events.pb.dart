@@ -2580,6 +2580,8 @@ class MessageSent extends $pb.GeneratedMessage {
     $core.bool? sendSilent,
     $core.bool? wasScheduled,
     $0.Timestamp? scheduledAt,
+    $core.String? gameApplicationId,
+    $core.String? gameEnvironmentId,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2592,6 +2594,8 @@ class MessageSent extends $pb.GeneratedMessage {
     if (sendSilent != null) result.sendSilent = sendSilent;
     if (wasScheduled != null) result.wasScheduled = wasScheduled;
     if (scheduledAt != null) result.scheduledAt = scheduledAt;
+    if (gameApplicationId != null) result.gameApplicationId = gameApplicationId;
+    if (gameEnvironmentId != null) result.gameEnvironmentId = gameEnvironmentId;
     return result;
   }
 
@@ -2620,6 +2624,8 @@ class MessageSent extends $pb.GeneratedMessage {
     ..aOB(9, _omitFieldNames ? '' : 'wasScheduled')
     ..aOM<$0.Timestamp>(10, _omitFieldNames ? '' : 'scheduledAt',
         subBuilder: $0.Timestamp.create)
+    ..aOS(11, _omitFieldNames ? '' : 'gameApplicationId')
+    ..aOS(12, _omitFieldNames ? '' : 'gameEnvironmentId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2736,6 +2742,26 @@ class MessageSent extends $pb.GeneratedMessage {
   void clearScheduledAt() => $_clearField(10);
   @$pb.TagNumber(10)
   $0.Timestamp ensureScheduledAt() => $_ensure(9);
+
+  /// Present only for GIS-verified game-event messages. Notification treats
+  /// these references as routing scope and revalidates consent with GIS.
+  @$pb.TagNumber(11)
+  $core.String get gameApplicationId => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set gameApplicationId($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasGameApplicationId() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearGameApplicationId() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.String get gameEnvironmentId => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set gameEnvironmentId($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasGameEnvironmentId() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearGameEnvironmentId() => $_clearField(12);
 }
 
 class MentionAdded extends $pb.GeneratedMessage {
@@ -2745,6 +2771,8 @@ class MentionAdded extends $pb.GeneratedMessage {
     $core.String? senderProfileId,
     $core.Iterable<$core.String>? mentionedProfileIds,
     $core.bool? sendSilent,
+    $core.String? gameApplicationId,
+    $core.String? gameEnvironmentId,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2753,6 +2781,8 @@ class MentionAdded extends $pb.GeneratedMessage {
     if (mentionedProfileIds != null)
       result.mentionedProfileIds.addAll(mentionedProfileIds);
     if (sendSilent != null) result.sendSilent = sendSilent;
+    if (gameApplicationId != null) result.gameApplicationId = gameApplicationId;
+    if (gameEnvironmentId != null) result.gameEnvironmentId = gameEnvironmentId;
     return result;
   }
 
@@ -2775,6 +2805,8 @@ class MentionAdded extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'senderProfileId')
     ..pPS(4, _omitFieldNames ? '' : 'mentionedProfileIds')
     ..aOB(5, _omitFieldNames ? '' : 'sendSilent')
+    ..aOS(6, _omitFieldNames ? '' : 'gameApplicationId')
+    ..aOS(7, _omitFieldNames ? '' : 'gameEnvironmentId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2836,6 +2868,25 @@ class MentionAdded extends $pb.GeneratedMessage {
   $core.bool hasSendSilent() => $_has(4);
   @$pb.TagNumber(5)
   void clearSendSilent() => $_clearField(5);
+
+  /// Present only when the source message persisted GIS-verified game scope.
+  @$pb.TagNumber(6)
+  $core.String get gameApplicationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set gameApplicationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasGameApplicationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearGameApplicationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get gameEnvironmentId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set gameEnvironmentId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasGameEnvironmentId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearGameEnvironmentId() => $_clearField(7);
 }
 
 class MessageEdited extends $pb.GeneratedMessage {
@@ -2991,6 +3042,8 @@ class ReactionAdded extends $pb.GeneratedMessage {
     $core.String? emoji,
     $core.String? chatId,
     $core.String? messageAuthorProfileId,
+    $core.String? gameApplicationId,
+    $core.String? gameEnvironmentId,
   }) {
     final result = create();
     if (messageId != null) result.messageId = messageId;
@@ -2999,6 +3052,8 @@ class ReactionAdded extends $pb.GeneratedMessage {
     if (chatId != null) result.chatId = chatId;
     if (messageAuthorProfileId != null)
       result.messageAuthorProfileId = messageAuthorProfileId;
+    if (gameApplicationId != null) result.gameApplicationId = gameApplicationId;
+    if (gameEnvironmentId != null) result.gameEnvironmentId = gameEnvironmentId;
     return result;
   }
 
@@ -3021,6 +3076,8 @@ class ReactionAdded extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'emoji')
     ..aOS(4, _omitFieldNames ? '' : 'chatId')
     ..aOS(5, _omitFieldNames ? '' : 'messageAuthorProfileId')
+    ..aOS(6, _omitFieldNames ? '' : 'gameApplicationId')
+    ..aOS(7, _omitFieldNames ? '' : 'gameEnvironmentId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3086,6 +3143,25 @@ class ReactionAdded extends $pb.GeneratedMessage {
   $core.bool hasMessageAuthorProfileId() => $_has(4);
   @$pb.TagNumber(5)
   void clearMessageAuthorProfileId() => $_clearField(5);
+
+  /// Present only when the source message persisted GIS-verified game scope.
+  @$pb.TagNumber(6)
+  $core.String get gameApplicationId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set gameApplicationId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasGameApplicationId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearGameApplicationId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get gameEnvironmentId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set gameEnvironmentId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasGameEnvironmentId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearGameEnvironmentId() => $_clearField(7);
 }
 
 class ReactionRemoved extends $pb.GeneratedMessage {

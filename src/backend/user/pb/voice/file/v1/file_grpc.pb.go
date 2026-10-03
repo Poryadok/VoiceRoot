@@ -36,6 +36,7 @@ const (
 	FileService_PurgeSpace_FullMethodName                             = "/voice.file.v1.FileService/PurgeSpace"
 	FileService_AcquireFileReferences_FullMethodName                  = "/voice.file.v1.FileService/AcquireFileReferences"
 	FileService_ReleaseFileReferences_FullMethodName                  = "/voice.file.v1.FileService/ReleaseFileReferences"
+	FileService_GetFileReferenceGCStatus_FullMethodName               = "/voice.file.v1.FileService/GetFileReferenceGCStatus"
 	FileService_GetSpacePurgeReceipt_FullMethodName                   = "/voice.file.v1.FileService/GetSpacePurgeReceipt"
 )
 
@@ -74,6 +75,8 @@ type FileServiceClient interface {
 	AcquireFileReferences(ctx context.Context, in *AcquireFileReferencesRequest, opts ...grpc.CallOption) (*AcquireFileReferencesResponse, error)
 	// @voice.security=protected;callers=service:space,service:chat,service:messaging
 	ReleaseFileReferences(ctx context.Context, in *ReleaseFileReferencesRequest, opts ...grpc.CallOption) (*ReleaseFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:messaging
+	GetFileReferenceGCStatus(ctx context.Context, in *GetFileReferenceGCStatusRequest, opts ...grpc.CallOption) (*GetFileReferenceGCStatusResponse, error)
 	// @voice.security=protected;callers=service:space
 	GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error)
 }
@@ -256,6 +259,16 @@ func (c *fileServiceClient) ReleaseFileReferences(ctx context.Context, in *Relea
 	return out, nil
 }
 
+func (c *fileServiceClient) GetFileReferenceGCStatus(ctx context.Context, in *GetFileReferenceGCStatusRequest, opts ...grpc.CallOption) (*GetFileReferenceGCStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFileReferenceGCStatusResponse)
+	err := c.cc.Invoke(ctx, FileService_GetFileReferenceGCStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *fileServiceClient) GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSpacePurgeReceiptResponse)
@@ -301,6 +314,8 @@ type FileServiceServer interface {
 	AcquireFileReferences(context.Context, *AcquireFileReferencesRequest) (*AcquireFileReferencesResponse, error)
 	// @voice.security=protected;callers=service:space,service:chat,service:messaging
 	ReleaseFileReferences(context.Context, *ReleaseFileReferencesRequest) (*ReleaseFileReferencesResponse, error)
+	// @voice.security=protected;callers=service:messaging
+	GetFileReferenceGCStatus(context.Context, *GetFileReferenceGCStatusRequest) (*GetFileReferenceGCStatusResponse, error)
 	// @voice.security=protected;callers=service:space
 	GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error)
 	mustEmbedUnimplementedFileServiceServer()
@@ -363,6 +378,9 @@ func (UnimplementedFileServiceServer) AcquireFileReferences(context.Context, *Ac
 }
 func (UnimplementedFileServiceServer) ReleaseFileReferences(context.Context, *ReleaseFileReferencesRequest) (*ReleaseFileReferencesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReleaseFileReferences not implemented")
+}
+func (UnimplementedFileServiceServer) GetFileReferenceGCStatus(context.Context, *GetFileReferenceGCStatusRequest) (*GetFileReferenceGCStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFileReferenceGCStatus not implemented")
 }
 func (UnimplementedFileServiceServer) GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpacePurgeReceipt not implemented")
@@ -694,6 +712,24 @@ func _FileService_ReleaseFileReferences_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileService_GetFileReferenceGCStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFileReferenceGCStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).GetFileReferenceGCStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_GetFileReferenceGCStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).GetFileReferenceGCStatus(ctx, req.(*GetFileReferenceGCStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _FileService_GetSpacePurgeReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSpacePurgeReceiptRequest)
 	if err := dec(in); err != nil {
@@ -786,6 +822,10 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReleaseFileReferences",
 			Handler:    _FileService_ReleaseFileReferences_Handler,
+		},
+		{
+			MethodName: "GetFileReferenceGCStatus",
+			Handler:    _FileService_GetFileReferenceGCStatus_Handler,
 		},
 		{
 			MethodName: "GetSpacePurgeReceipt",

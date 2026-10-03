@@ -267,6 +267,34 @@ class RoleServiceClient extends $grpc.Client {
     return $createUnaryCall(_$retireSpace, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.ApplyGameSessionGrantsResponse>
+      applyGameSessionGrants(
+    $0.ApplyGameSessionGrantsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyGameSessionGrants, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.RevokeGameSessionGrantsResponse>
+      revokeGameSessionGrants(
+    $0.RevokeGameSessionGrantsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$revokeGameSessionGrants, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:voice
+  $grpc.ResponseFuture<$0.CheckGameSessionGrantResponse> checkGameSessionGrant(
+    $0.CheckGameSessionGrantRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$checkGameSessionGrant, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createRole =
@@ -423,6 +451,22 @@ class RoleServiceClient extends $grpc.Client {
           '/voice.role.v1.RoleService/RetireSpace',
           ($0.RetireSpaceRequest value) => value.writeToBuffer(),
           $0.RetireSpaceResponse.fromBuffer);
+  static final _$applyGameSessionGrants = $grpc.ClientMethod<
+          $0.ApplyGameSessionGrantsRequest, $0.ApplyGameSessionGrantsResponse>(
+      '/voice.role.v1.RoleService/ApplyGameSessionGrants',
+      ($0.ApplyGameSessionGrantsRequest value) => value.writeToBuffer(),
+      $0.ApplyGameSessionGrantsResponse.fromBuffer);
+  static final _$revokeGameSessionGrants = $grpc.ClientMethod<
+          $0.RevokeGameSessionGrantsRequest,
+          $0.RevokeGameSessionGrantsResponse>(
+      '/voice.role.v1.RoleService/RevokeGameSessionGrants',
+      ($0.RevokeGameSessionGrantsRequest value) => value.writeToBuffer(),
+      $0.RevokeGameSessionGrantsResponse.fromBuffer);
+  static final _$checkGameSessionGrant = $grpc.ClientMethod<
+          $0.CheckGameSessionGrantRequest, $0.CheckGameSessionGrantResponse>(
+      '/voice.role.v1.RoleService/CheckGameSessionGrant',
+      ($0.CheckGameSessionGrantRequest value) => value.writeToBuffer(),
+      $0.CheckGameSessionGrantResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.role.v1.RoleService')
@@ -682,6 +726,33 @@ abstract class RoleServiceBase extends $grpc.Service {
             ($core.List<$core.int> value) =>
                 $0.RetireSpaceRequest.fromBuffer(value),
             ($0.RetireSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyGameSessionGrantsRequest,
+            $0.ApplyGameSessionGrantsResponse>(
+        'ApplyGameSessionGrants',
+        applyGameSessionGrants_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyGameSessionGrantsRequest.fromBuffer(value),
+        ($0.ApplyGameSessionGrantsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RevokeGameSessionGrantsRequest,
+            $0.RevokeGameSessionGrantsResponse>(
+        'RevokeGameSessionGrants',
+        revokeGameSessionGrants_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RevokeGameSessionGrantsRequest.fromBuffer(value),
+        ($0.RevokeGameSessionGrantsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CheckGameSessionGrantRequest,
+            $0.CheckGameSessionGrantResponse>(
+        'CheckGameSessionGrant',
+        checkGameSessionGrant_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CheckGameSessionGrantRequest.fromBuffer(value),
+        ($0.CheckGameSessionGrantResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateRoleResponse> createRole_Pre($grpc.ServiceCall $call,
@@ -942,4 +1013,31 @@ abstract class RoleServiceBase extends $grpc.Service {
 
   $async.Future<$0.RetireSpaceResponse> retireSpace(
       $grpc.ServiceCall call, $0.RetireSpaceRequest request);
+
+  $async.Future<$0.ApplyGameSessionGrantsResponse> applyGameSessionGrants_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyGameSessionGrantsRequest> $request) async {
+    return applyGameSessionGrants($call, await $request);
+  }
+
+  $async.Future<$0.ApplyGameSessionGrantsResponse> applyGameSessionGrants(
+      $grpc.ServiceCall call, $0.ApplyGameSessionGrantsRequest request);
+
+  $async.Future<$0.RevokeGameSessionGrantsResponse> revokeGameSessionGrants_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RevokeGameSessionGrantsRequest> $request) async {
+    return revokeGameSessionGrants($call, await $request);
+  }
+
+  $async.Future<$0.RevokeGameSessionGrantsResponse> revokeGameSessionGrants(
+      $grpc.ServiceCall call, $0.RevokeGameSessionGrantsRequest request);
+
+  $async.Future<$0.CheckGameSessionGrantResponse> checkGameSessionGrant_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CheckGameSessionGrantRequest> $request) async {
+    return checkGameSessionGrant($call, await $request);
+  }
+
+  $async.Future<$0.CheckGameSessionGrantResponse> checkGameSessionGrant(
+      $grpc.ServiceCall call, $0.CheckGameSessionGrantRequest request);
 }

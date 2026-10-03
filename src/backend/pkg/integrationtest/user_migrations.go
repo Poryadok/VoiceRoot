@@ -29,16 +29,29 @@ var UserDBMigrationFiles = []string{
 	"000015_profile_search_normalization.up.sql",
 	"000016_search_profile_journal.up.sql",
 	"000017_account_lifecycle_search_tombstone.up.sql",
+	"000018_sdk_author_authority.up.sql",
+	"000019_authority_source_revision.up.sql",
 }
 
 // ApplyUserDBMigrations runs all user_db *.up.sql migrations in order.
 func ApplyUserDBMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repoRoot string) {
 	t.Helper()
 	for _, name := range UserDBMigrationFiles {
+		if name == "000019_authority_source_revision.up.sql" {
+			// This raw-DDL fixture owns its private database. Production loader
+			// history is exercised separately with the pinned migration driver.
+			_, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL);
+ INSERT INTO schema_migrations SELECT 18,false WHERE NOT EXISTS(SELECT 1 FROM schema_migrations)`)
+			require.NoError(t, err)
+		}
 		path := filepath.Join(repoRoot, "src", "backend", "migrations", "user_db", name)
 		sqlBytes, err := os.ReadFile(path)
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sqlBytes))
 		require.NoError(t, err)
+		if name == "000019_authority_source_revision.up.sql" {
+			_, err = pool.Exec(ctx, `UPDATE schema_migrations SET version=19 WHERE version=18 AND NOT dirty`)
+			require.NoError(t, err)
+		}
 	}
 }

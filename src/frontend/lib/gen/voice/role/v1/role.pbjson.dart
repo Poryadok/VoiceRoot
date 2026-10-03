@@ -47,6 +47,26 @@ final $typed_data.Uint8List roleRetirementStateDescriptor = $convert.base64Decod
     'ChNSb2xlUmV0aXJlbWVudFN0YXRlEiUKIVJPTEVfUkVUSVJFTUVOVF9TVEFURV9VTlNQRUNJRk'
     'lFRBAAEiEKHVJPTEVfUkVUSVJFTUVOVF9TVEFURV9SRVRJUkVEEAE=');
 
+@$core.Deprecated('Use gameSessionGrantOutcomeDescriptor instead')
+const GameSessionGrantOutcome$json = {
+  '1': 'GameSessionGrantOutcome',
+  '2': [
+    {'1': 'GAME_SESSION_GRANT_OUTCOME_UNSPECIFIED', '2': 0},
+    {'1': 'GAME_SESSION_GRANT_OUTCOME_APPLIED', '2': 1},
+    {'1': 'GAME_SESSION_GRANT_OUTCOME_REPLAYED', '2': 2},
+    {'1': 'GAME_SESSION_GRANT_OUTCOME_STALE', '2': 3},
+    {'1': 'GAME_SESSION_GRANT_OUTCOME_REVOKED', '2': 4},
+  ],
+};
+
+/// Descriptor for `GameSessionGrantOutcome`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List gameSessionGrantOutcomeDescriptor = $convert.base64Decode(
+    'ChdHYW1lU2Vzc2lvbkdyYW50T3V0Y29tZRIqCiZHQU1FX1NFU1NJT05fR1JBTlRfT1VUQ09NRV'
+    '9VTlNQRUNJRklFRBAAEiYKIkdBTUVfU0VTU0lPTl9HUkFOVF9PVVRDT01FX0FQUExJRUQQARIn'
+    'CiNHQU1FX1NFU1NJT05fR1JBTlRfT1VUQ09NRV9SRVBMQVlFRBACEiQKIEdBTUVfU0VTU0lPTl'
+    '9HUkFOVF9PVVRDT01FX1NUQUxFEAMSJgoiR0FNRV9TRVNTSU9OX0dSQU5UX09VVENPTUVfUkVW'
+    'T0tFRBAE');
+
 @$core.Deprecated('Use bootstrapSpaceRolesRequestDescriptor instead')
 const BootstrapSpaceRolesRequest$json = {
   '1': 'BootstrapSpaceRolesRequest',
@@ -1439,3 +1459,160 @@ const RetireSpaceResponse$json = {
 final $typed_data.Uint8List retireSpaceResponseDescriptor = $convert.base64Decode(
     'ChNSZXRpcmVTcGFjZVJlc3BvbnNlEjsKB3JlY2VpcHQYASABKAsyIS52b2ljZS5yb2xlLnYxLl'
     'JldGlyZVNwYWNlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use applyGameSessionGrantsRequestDescriptor instead')
+const ApplyGameSessionGrantsRequest$json = {
+  '1': 'ApplyGameSessionGrantsRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 3, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'voice_room_id', '3': 4, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'operation_id', '3': 5, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'roster_revision', '3': 6, '4': 1, '5': 4, '10': 'rosterRevision'},
+    {'1': 'profile_ids', '3': 7, '4': 3, '5': 9, '10': 'profileIds'},
+  ],
+};
+
+/// Descriptor for `ApplyGameSessionGrantsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameSessionGrantsRequestDescriptor = $convert.base64Decode(
+    'Ch1BcHBseUdhbWVTZXNzaW9uR3JhbnRzUmVxdWVzdBIlCg5hcHBsaWNhdGlvbl9pZBgBIAEoCV'
+    'INYXBwbGljYXRpb25JZBIlCg5lbnZpcm9ubWVudF9pZBgCIAEoCVINZW52aXJvbm1lbnRJZBId'
+    'CgpzZXNzaW9uX2lkGAMgASgJUglzZXNzaW9uSWQSIgoNdm9pY2Vfcm9vbV9pZBgEIAEoCVILdm'
+    '9pY2VSb29tSWQSIQoMb3BlcmF0aW9uX2lkGAUgASgJUgtvcGVyYXRpb25JZBInCg9yb3N0ZXJf'
+    'cmV2aXNpb24YBiABKARSDnJvc3RlclJldmlzaW9uEh8KC3Byb2ZpbGVfaWRzGAcgAygJUgpwcm'
+    '9maWxlSWRz');
+
+@$core.Deprecated('Use revokeGameSessionGrantsRequestDescriptor instead')
+const RevokeGameSessionGrantsRequest$json = {
+  '1': 'RevokeGameSessionGrantsRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 3, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'operation_id', '3': 4, '4': 1, '5': 9, '10': 'operationId'},
+  ],
+};
+
+/// Descriptor for `RevokeGameSessionGrantsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeGameSessionGrantsRequestDescriptor =
+    $convert.base64Decode(
+        'Ch5SZXZva2VHYW1lU2Vzc2lvbkdyYW50c1JlcXVlc3QSJQoOYXBwbGljYXRpb25faWQYASABKA'
+        'lSDWFwcGxpY2F0aW9uSWQSJQoOZW52aXJvbm1lbnRfaWQYAiABKAlSDWVudmlyb25tZW50SWQS'
+        'HQoKc2Vzc2lvbl9pZBgDIAEoCVIJc2Vzc2lvbklkEiEKDG9wZXJhdGlvbl9pZBgEIAEoCVILb3'
+        'BlcmF0aW9uSWQ=');
+
+@$core.Deprecated('Use checkGameSessionGrantRequestDescriptor instead')
+const CheckGameSessionGrantRequest$json = {
+  '1': 'CheckGameSessionGrantRequest',
+  '2': [
+    {'1': 'application_id', '3': 1, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 2, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 3, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'voice_room_id', '3': 4, '4': 1, '5': 9, '10': 'voiceRoomId'},
+    {'1': 'profile_id', '3': 5, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `CheckGameSessionGrantRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkGameSessionGrantRequestDescriptor = $convert.base64Decode(
+    'ChxDaGVja0dhbWVTZXNzaW9uR3JhbnRSZXF1ZXN0EiUKDmFwcGxpY2F0aW9uX2lkGAEgASgJUg'
+    '1hcHBsaWNhdGlvbklkEiUKDmVudmlyb25tZW50X2lkGAIgASgJUg1lbnZpcm9ubWVudElkEh0K'
+    'CnNlc3Npb25faWQYAyABKAlSCXNlc3Npb25JZBIiCg12b2ljZV9yb29tX2lkGAQgASgJUgt2b2'
+    'ljZVJvb21JZBIdCgpwcm9maWxlX2lkGAUgASgJUglwcm9maWxlSWQ=');
+
+@$core.Deprecated('Use gameSessionGrantReceiptDescriptor instead')
+const GameSessionGrantReceipt$json = {
+  '1': 'GameSessionGrantReceipt',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'application_id', '3': 3, '4': 1, '5': 9, '10': 'applicationId'},
+    {'1': 'environment_id', '3': 4, '4': 1, '5': 9, '10': 'environmentId'},
+    {'1': 'session_id', '3': 5, '4': 1, '5': 9, '10': 'sessionId'},
+    {'1': 'request_sha256', '3': 6, '4': 1, '5': 12, '10': 'requestSha256'},
+    {'1': 'roster_revision', '3': 7, '4': 1, '5': 4, '10': 'rosterRevision'},
+    {
+      '1': 'applied_profile_set_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'appliedProfileSetSha256'
+    },
+    {
+      '1': 'outcome',
+      '3': 9,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.role.v1.GameSessionGrantOutcome',
+      '10': 'outcome'
+    },
+  ],
+};
+
+/// Descriptor for `GameSessionGrantReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List gameSessionGrantReceiptDescriptor = $convert.base64Decode(
+    'ChdHYW1lU2Vzc2lvbkdyYW50UmVjZWlwdBIdCgpyZWNlaXB0X2lkGAEgASgJUglyZWNlaXB0SW'
+    'QSIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIlCg5hcHBsaWNhdGlvbl9pZBgD'
+    'IAEoCVINYXBwbGljYXRpb25JZBIlCg5lbnZpcm9ubWVudF9pZBgEIAEoCVINZW52aXJvbm1lbn'
+    'RJZBIdCgpzZXNzaW9uX2lkGAUgASgJUglzZXNzaW9uSWQSJQoOcmVxdWVzdF9zaGEyNTYYBiAB'
+    'KAxSDXJlcXVlc3RTaGEyNTYSJwoPcm9zdGVyX3JldmlzaW9uGAcgASgEUg5yb3N0ZXJSZXZpc2'
+    'lvbhI7ChphcHBsaWVkX3Byb2ZpbGVfc2V0X3NoYTI1NhgIIAEoDFIXYXBwbGllZFByb2ZpbGVT'
+    'ZXRTaGEyNTYSQAoHb3V0Y29tZRgJIAEoDjImLnZvaWNlLnJvbGUudjEuR2FtZVNlc3Npb25Hcm'
+    'FudE91dGNvbWVSB291dGNvbWU=');
+
+@$core.Deprecated('Use applyGameSessionGrantsResponseDescriptor instead')
+const ApplyGameSessionGrantsResponse$json = {
+  '1': 'ApplyGameSessionGrantsResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.GameSessionGrantReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ApplyGameSessionGrantsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List applyGameSessionGrantsResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5BcHBseUdhbWVTZXNzaW9uR3JhbnRzUmVzcG9uc2USQAoHcmVjZWlwdBgBIAEoCzImLnZvaW'
+        'NlLnJvbGUudjEuR2FtZVNlc3Npb25HcmFudFJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use revokeGameSessionGrantsResponseDescriptor instead')
+const RevokeGameSessionGrantsResponse$json = {
+  '1': 'RevokeGameSessionGrantsResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.role.v1.GameSessionGrantReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `RevokeGameSessionGrantsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List revokeGameSessionGrantsResponseDescriptor =
+    $convert.base64Decode(
+        'Ch9SZXZva2VHYW1lU2Vzc2lvbkdyYW50c1Jlc3BvbnNlEkAKB3JlY2VpcHQYASABKAsyJi52b2'
+        'ljZS5yb2xlLnYxLkdhbWVTZXNzaW9uR3JhbnRSZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use checkGameSessionGrantResponseDescriptor instead')
+const CheckGameSessionGrantResponse$json = {
+  '1': 'CheckGameSessionGrantResponse',
+  '2': [
+    {'1': 'allowed', '3': 1, '4': 1, '5': 8, '10': 'allowed'},
+  ],
+};
+
+/// Descriptor for `CheckGameSessionGrantResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List checkGameSessionGrantResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1DaGVja0dhbWVTZXNzaW9uR3JhbnRSZXNwb25zZRIYCgdhbGxvd2VkGAEgASgIUgdhbGxvd2'
+        'Vk');

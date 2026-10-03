@@ -12,11 +12,200 @@ services:
     environment:
       SPACE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/space
       SPACE_PRINCIPAL_ACTIVE_KID: current
+      SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
       ROLE_PRINCIPAL_GRPC_ADDR: role:9091
       ROLE_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
+      SPACE_ROLE_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      SPACE_ROLE_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
+      SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/space-lifecycle-client.crt
+      SPACE_LIFECYCLE_CLIENT_KEY_FILE: /run/phase0/space-lifecycle-client.key
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/space:/run/phase0/space:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle.crt:/run/phase0/space-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle.key:/run/phase0/space-lifecycle.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-client.crt:/run/phase0/space-role-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-client.key:/run/phase0/space-role-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.crt:/run/phase0/space-lifecycle-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.key:/run/phase0/space-lifecycle-client.key:ro
+  matchmaking:
+    user: "0:0"
+    environment:
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  gameintegration:
+    user: "0:0"
+    expose: ["8443"]
+    environment:
+      GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/gameintegration/current.pem
+      GAME_INTEGRATION_PRINCIPAL_KID: current
+      GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE: /run/phase0/gameintegration/next.pem
+      GAME_INTEGRATION_PRINCIPAL_NEXT_KID: next
+      GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/gameintegration-jwks.crt
+      GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/gameintegration-jwks.key
+      GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR: :8443
+      GAME_INTEGRATION_CREDENTIAL_KEY_B64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      GAME_INTEGRATION_ACTION_CHALLENGE_KEY_B64: AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=
+      GIS_BOT_GRPC_ADDR: bot:9443
+      GIS_BOT_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_BOT_CLIENT_CERT_FILE: /run/phase0/gameintegration-client.crt
+      GIS_BOT_CLIENT_KEY_FILE: /run/phase0/gameintegration-client.key
+      NATS_URL: nats://nats:4222
+      GIS_CHAT_GRPC_ADDR: chat:9091
+      GIS_CHAT_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_CHAT_CLIENT_CERT_FILE: /run/phase0/gameintegration-chat-client.crt
+      GIS_CHAT_CLIENT_KEY_FILE: /run/phase0/gameintegration-chat-client.key
+      GIS_MESSAGING_ACTION_GRPC_ADDR: messaging:9091
+      GIS_MESSAGING_ACTION_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_MESSAGING_ACTION_CLIENT_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
+      GIS_MESSAGING_ACTION_CLIENT_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
+      GIS_MESSAGING_PURGE_GRPC_ADDR: messaging:9091
+      GIS_MESSAGING_PURGE_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_MESSAGING_PURGE_CLIENT_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
+      GIS_MESSAGING_PURGE_CLIENT_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
+      GIS_VOICE_GRPC_ADDR: voice:9091
+      GIS_VOICE_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_VOICE_CLIENT_CERT_FILE: /run/phase0/gameintegration-voice-client.crt
+      GIS_VOICE_CLIENT_KEY_FILE: /run/phase0/gameintegration-voice-client.key
+      GIS_ROLE_GRPC_ADDR: role:9091
+      GIS_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      GIS_ROLE_CLIENT_CERT_FILE: /run/phase0/gameintegration-client.crt
+      GIS_ROLE_CLIENT_KEY_FILE: /run/phase0/gameintegration-client.key
+    depends_on:
+      redis:
+        condition: service_healthy
+      role:
+        condition: service_healthy
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gameintegration/current.pem:/run/phase0/gameintegration/current.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gameintegration/next.pem:/run/phase0/gameintegration/next.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-jwks.crt:/run/phase0/gameintegration-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-jwks.key:/run/phase0/gameintegration-jwks.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.crt:/run/phase0/gameintegration-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.key:/run/phase0/gameintegration-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-chat-client.crt:/run/phase0/gameintegration-chat-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-chat-client.key:/run/phase0/gameintegration-chat-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.crt:/run/phase0/gameintegration-messaging-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.key:/run/phase0/gameintegration-messaging-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-voice-client.crt:/run/phase0/gameintegration-voice-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-voice-client.key:/run/phase0/gameintegration-voice-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.crt:/run/phase0/gameintegration-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.key:/run/phase0/gameintegration-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.crt:/run/phase0/gameintegration-messaging-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.key:/run/phase0/gameintegration-messaging-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  bot:
+    user: "0:0"
+    expose: ["9443", "9444", "8444"]
+    environment:
+      BOT_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/bot/current.pem
+      BOT_PRINCIPAL_KEY_ID: current
+      BOT_PRINCIPAL_JWKS_LISTEN: :8444
+      BOT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
+      BOT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/bot-game-event.key
+      BOT_PRINCIPAL_TLS_CLIENT_CA_FILE: /run/phase0/gameintegration-client-ca.crt
+      BOT_PRINCIPAL_REPLAY_REDIS_URL: redis://redis:6379/0
+      BOT_GAME_EVENT_GRPC_LISTEN: :9443
+      BOT_GAME_EVENT_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
+      BOT_GAME_EVENT_TLS_KEY_FILE: /run/phase0/bot-game-event.key
+      BOT_GAME_EVENT_CLIENT_CA_FILE: /run/phase0/ca.crt
+      BOT_SPACE_LIFECYCLE_GRPC_LISTEN: :9444
+      BOT_SPACE_LIFECYCLE_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
+      BOT_SPACE_LIFECYCLE_TLS_KEY_FILE: /run/phase0/bot-game-event.key
+      BOT_SPACE_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      SPACE_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/space/jwks.json
+      SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      GAME_INTEGRATION_PRINCIPAL_JWKS_URL: https://gameintegration:8443/internal/v1/principal/jwks.json
+      GAME_INTEGRATION_PRINCIPAL_TLS_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
+      GAME_INTEGRATION_PRINCIPAL_TLS_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
+      GAME_INTEGRATION_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
+    depends_on:
+      redis:
+        condition: service_healthy
+      gameintegration:
+        condition: service_started
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/bot:/run/phase0/bot:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-game-event.crt:/run/phase0/bot-game-event.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-game-event.key:/run/phase0/bot-game-event.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.crt:/run/phase0/gameintegration-messaging-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.key:/run/phase0/gameintegration-messaging-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/gameintegration-client-ca.crt:/run/phase0/gameintegration-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+  notification:
+    user: "0:0"
+    expose: ["9445"]
+    environment:
+      NOTIFICATION_SPACE_LIFECYCLE_GRPC_LISTEN: :9445
+      NOTIFICATION_SPACE_LIFECYCLE_TLS_CERT_FILE: /run/phase0/notification-lifecycle.crt
+      NOTIFICATION_SPACE_LIFECYCLE_TLS_KEY_FILE: /run/phase0/notification-lifecycle.key
+      NOTIFICATION_SPACE_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      NOTIFICATION_SPACE_LIFECYCLE_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+    depends_on:
+      redis:
+        condition: service_healthy
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/notification-lifecycle.crt:/run/phase0/notification-lifecycle.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/notification-lifecycle.key:/run/phase0/notification-lifecycle.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  voice:
+    user: "0:0"
+    expose: ["8443", "9092"]
+    environment:
+      VOICE_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/voice/current.pem
+      VOICE_PRINCIPAL_KID: current
+      VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE: /run/phase0/voice/next.pem
+      VOICE_PRINCIPAL_NEXT_KID: next
+      VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/voice-jwks.crt
+      VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/voice-jwks.key
+      VOICE_PRINCIPAL_JWKS_LISTEN_ADDR: :8443
+      VOICE_GAME_PRINCIPAL_GRPC_LISTEN: :9091
+      VOICE_GAME_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
+      VOICE_GAME_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
+      VOICE_GAME_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/gameintegration-client-ca.crt
+      VOICE_GAME_PRINCIPAL_JWKS_URL: https://gameintegration:8443/internal/v1/principal/jwks.json
+      VOICE_GAME_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      VOICE_GAME_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_GRPC_LISTEN: :9092
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
+      VOICE_SPACE_LIFECYCLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+      VOICE_ROLE_GRPC_ADDR: role:9091
+      VOICE_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      VOICE_ROLE_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
+      VOICE_ROLE_CLIENT_KEY_FILE: /run/phase0/voice-client.key
+    depends_on:
+      redis:
+        condition: service_healthy
+      role:
+        condition: service_healthy
+      gameintegration:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/voice/current.pem:/run/phase0/voice/current.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/voice/next.pem:/run/phase0/voice/next.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-jwks.crt:/run/phase0/voice-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-jwks.key:/run/phase0/voice-jwks.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.crt:/run/phase0/voice-game-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.key:/run/phase0/voice-game-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.crt:/run/phase0/voice-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.key:/run/phase0/voice-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/gameintegration-client-ca.crt:/run/phase0/gameintegration-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/space-lifecycle-client-ca.crt:/run/phase0/space-lifecycle-client-ca.crt:ro
   role:
     user: "0:0"
     expose: ["9091"]
@@ -24,8 +213,9 @@ services:
       ROLE_PRINCIPAL_GRPC_LISTEN: :9091
       ROLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/role.crt
       ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
+      ROLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json"}'
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
     depends_on:
       redis:
@@ -36,6 +226,58 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.crt:/run/phase0/role.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.key:/run/phase0/role.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  chat:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      CHAT_GIS_GRPC_LISTEN: :9091
+      CHAT_GIS_TLS_CERT_FILE: /run/phase0/chat-gis-grpc.crt
+      CHAT_GIS_TLS_KEY_FILE: /run/phase0/chat-gis-grpc.key
+      CHAT_GIS_CLIENT_CA_FILE: /run/phase0/gameintegration-client-ca.crt
+      GAME_INTEGRATION_PRINCIPAL_JWKS_URL: https://gameintegration:8443/internal/v1/principal/jwks.json
+      GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+    depends_on:
+      gameintegration:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-gis-grpc.crt:/run/phase0/chat-gis-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-gis-grpc.key:/run/phase0/chat-gis-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/gameintegration-client-ca.crt:/run/phase0/gameintegration-client-ca.crt:ro
+  messaging:
+    user: "0:0"
+    expose: ["9091"]
+    environment:
+      BOT_PRINCIPAL_JWKS_URL: https://bot:8444/.well-known/principal-jwks.json
+      MESSAGING_BOT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
+      MESSAGING_BOT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
+      BOT_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_GAME_INTEGRATION_GRPC_LISTEN: :9091
+      MESSAGING_GAME_INTEGRATION_SERVER_TLS_CERT_FILE: /run/phase0/messaging-gameintegration-grpc.crt
+      MESSAGING_GAME_INTEGRATION_SERVER_TLS_KEY_FILE: /run/phase0/messaging-gameintegration-grpc.key
+      MESSAGING_GAME_INTEGRATION_CLIENT_CA_FILE: /run/phase0/gameintegration-client-ca.crt
+      GAME_INTEGRATION_PRINCIPAL_JWKS_URL: https://gameintegration:8443/internal/v1/principal/jwks.json
+      MESSAGING_GAME_INTEGRATION_JWKS_TLS_CERT_FILE: /run/phase0/gameintegration-client.crt
+      MESSAGING_GAME_INTEGRATION_JWKS_TLS_KEY_FILE: /run/phase0/gameintegration-client.key
+      GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_PRINCIPAL_REPLAY_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      gameintegration:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.crt:/run/phase0/gameintegration-messaging-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.key:/run/phase0/gameintegration-messaging-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-gameintegration-grpc.crt:/run/phase0/messaging-gameintegration-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-gameintegration-grpc.key:/run/phase0/messaging-gameintegration-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.crt:/run/phase0/gameintegration-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.key:/run/phase0/gameintegration-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/gameintegration-client-ca.crt:/run/phase0/gameintegration-client-ca.crt:ro
   auth:
     user: "0:0"
     expose: ["9091"]
@@ -61,3 +303,4 @@ services:
       - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro

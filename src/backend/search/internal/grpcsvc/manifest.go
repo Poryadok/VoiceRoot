@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 
@@ -16,6 +17,7 @@ import (
 )
 
 type importedChatManifest struct {
+	Root    *commonv1.ManifestBinding
 	Binding *commonv1.ManifestBinding
 	Pages   []*chatv1.SpacePurgeManifestPage
 	ChatIDs []uuid.UUID
@@ -25,7 +27,7 @@ func (s *SearchGRPC) importChatManifest(ctx context.Context, spaceID, operationI
 	if s.ChatManifest == nil {
 		return nil, errors.New("chat manifest source unavailable")
 	}
-	if validateManifest(root) != nil || root.GetItemCount() == 0 {
+	if validateManifest(root) != nil {
 		return nil, errors.New("root manifest unavailable")
 	}
 	var pages []*chatv1.SpacePurgeManifestPage
@@ -39,11 +41,12 @@ func (s *SearchGRPC) importChatManifest(ctx context.Context, spaceID, operationI
 			return nil, err
 		}
 		page := response.GetPage()
-		if err := validateManifestPage(page, root.GetManifestId(), pageIndex); err != nil {
-			return nil, err
+		sourceID := ""
+		if binding != nil {
+			sourceID = binding.GetManifestId()
 		}
-		if !proto.Equal(root, page.GetManifest()) {
-			return nil, errors.New("chat manifest does not match Space root")
+		if err := validateManifestPage(page, sourceID, pageIndex); err != nil {
+			return nil, err
 		}
 		if binding == nil {
 			binding = proto.Clone(page.GetManifest()).(*commonv1.ManifestBinding)
@@ -74,13 +77,13 @@ func (s *SearchGRPC) importChatManifest(ctx context.Context, spaceID, operationI
 			return nil, errors.New("chat manifest exceeds page limit")
 		}
 	}
-	if binding.GetItemCount() == 0 || uint64(len(ids)) != binding.GetItemCount() {
+	if binding == nil || uint64(len(ids)) != binding.GetItemCount() {
 		return nil, errors.New("chat manifest is empty or incomplete")
 	}
 	if !bytes.Equal(chatManifestSHA(spaceID, operationID, generation, ids), binding.GetManifestSha256()) {
 		return nil, errors.New("chat manifest hash mismatch")
 	}
-	return &importedChatManifest{Binding: proto.Clone(binding).(*commonv1.ManifestBinding), Pages: pages, ChatIDs: ids}, nil
+	return &importedChatManifest{Root: proto.Clone(root).(*commonv1.ManifestBinding), Binding: proto.Clone(binding).(*commonv1.ManifestBinding), Pages: pages, ChatIDs: ids}, nil
 }
 
 func validateManifestPage(page *chatv1.SpacePurgeManifestPage, manifestID string, index uint64) error {
@@ -91,39 +94,81 @@ func validateManifestPage(page *chatv1.SpacePurgeManifestPage, manifestID string
 		return errors.New("chat manifest page contains unknown fields")
 	}
 	b := page.GetManifest()
-	if b.GetManifestId() != manifestID || len(b.GetManifestSha256()) != sha256.Size {
+	if validateManifest(b) != nil || (manifestID != "" && b.GetManifestId() != manifestID) {
 		return errors.New("chat manifest binding mismatch")
 	}
 	if len(page.GetPageSha256()) != sha256.Size {
 		return errors.New("invalid Chat manifest page hash")
 	}
-	clone := proto.Clone(page).(*chatv1.SpacePurgeManifestPage)
-	clone.PageSha256 = nil
-	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(clone)
-	if err != nil {
-		return err
+	ids := make([]uuid.UUID, len(page.GetItemIds()))
+	for i, raw := range page.GetItemIds() {
+		id, err := canonicalUUID(raw)
+		if err != nil {
+			return err
+		}
+		ids[i] = id
 	}
-	want := domainSeparatedSHA(string(page.ProtoReflect().Descriptor().FullName()), wire)
+	want := chatManifestPageSHA(b.GetManifestSha256(), index, ids)
 	if !bytes.Equal(want, page.GetPageSha256()) {
 		return errors.New("chat manifest page hash mismatch")
+	}
+	if b.GetItemCount() == 0 {
+		if index != 0 || len(ids) != 0 || page.GetNextPageToken() != "" {
+			return errors.New("empty Chat manifest must be one final empty page")
+		}
+	} else {
+		last := (b.GetItemCount() - 1) / 1000
+		if index > last {
+			return errors.New("chat manifest page index exceeds count")
+		}
+		count := uint64(1000)
+		if index == last {
+			count = b.GetItemCount() - index*1000
+		}
+		if uint64(len(ids)) != count || (index < last) != (page.GetNextPageToken() != "") {
+			return errors.New("chat manifest page is incomplete")
+		}
+	}
+	if page.GetNextPageToken() != "" {
+		token, err := base64.RawURLEncoding.DecodeString(page.GetNextPageToken())
+		if err != nil || len(token) != 40 || binary.BigEndian.Uint64(token[:8]) != index+1 || !bytes.Equal(token[8:], b.GetManifestSha256()) {
+			return errors.New("chat manifest page token binding mismatch")
+		}
 	}
 	return nil
 }
 
 func chatManifestSHA(spaceID, operationID uuid.UUID, generation uint64, ids []uuid.UUID) []byte {
-	payload := make([]byte, 0, len("voice.chat.v1.SpaceDeletionChatManifest")+1+16+16+8+16*len(ids))
-	payload = append(payload, "voice.chat.v1.SpaceDeletionChatManifest"...)
+	payload := make([]byte, 0, len("voice.chat.v1.SpaceDeletionManifest")+1+16+16+16+16*len(ids))
+	payload = append(payload, "voice.chat.v1.SpaceDeletionManifest"...)
 	payload = append(payload, 0)
-	payload = append(payload, operationID[:]...)
 	payload = append(payload, spaceID[:]...)
+	payload = append(payload, operationID[:]...)
 	var generationBytes [8]byte
 	binary.BigEndian.PutUint64(generationBytes[:], generation)
+	payload = append(payload, generationBytes[:]...)
+	binary.BigEndian.PutUint64(generationBytes[:], uint64(len(ids)))
 	payload = append(payload, generationBytes[:]...)
 	for _, id := range ids {
 		payload = append(payload, id[:]...)
 	}
 	sum := sha256.Sum256(payload)
 	return sum[:]
+}
+
+func chatManifestPageSHA(root []byte, index uint64, ids []uuid.UUID) []byte {
+	h := sha256.New()
+	_, _ = h.Write([]byte("voice.chat.v1.SpaceDeletionManifestPage\x00"))
+	_, _ = h.Write(root)
+	var integer [8]byte
+	binary.BigEndian.PutUint64(integer[:], index)
+	_, _ = h.Write(integer[:])
+	binary.BigEndian.PutUint64(integer[:], uint64(len(ids)))
+	_, _ = h.Write(integer[:])
+	for _, id := range ids {
+		_, _ = h.Write(id[:])
+	}
+	return h.Sum(nil)
 }
 
 // validatePersistedManifestEvidence replays every durable manifest invariant
@@ -136,17 +181,17 @@ func validatePersistedManifestEvidence(ctx context.Context, tx pgx.Tx, spaceID, 
 	var generation, itemCount, pageCount uint64
 	var manifestID string
 	var manifestHash []byte
+	var rootID string
+	var rootHash []byte
+	var rootCount uint64
 	var sealed bool
-	if err := tx.QueryRow(ctx, `SELECT generation,manifest_id,manifest_sha256,item_count,page_count,sealed FROM search_space_chat_manifests WHERE space_id=$1 AND deletion_operation_id=$2`, spaceID, operationID).Scan(&generation, &manifestID, &manifestHash, &itemCount, &pageCount, &sealed); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT generation,manifest_id,manifest_sha256,item_count,page_count,sealed,root_manifest_id,root_manifest_sha256,root_manifest_item_count FROM search_space_chat_manifests WHERE space_id=$1 AND deletion_operation_id=$2`, spaceID, operationID).Scan(&generation, &manifestID, &manifestHash, &itemCount, &pageCount, &sealed, &rootID, &rootHash, &rootCount); err != nil {
 		return errors.New("complete chat manifest missing")
 	}
-	if !sealed || itemCount == 0 || pageCount == 0 || manifestID != expected.GetManifestId() || len(manifestHash) != sha256.Size {
+	if !sealed || pageCount == 0 || rootID != expected.GetManifestId() || !bytes.Equal(rootHash, expected.GetManifestSha256()) || rootCount != expected.GetItemCount() || len(manifestHash) != sha256.Size {
 		return errors.New("persisted chat manifest binding mismatch")
 	}
 	storedBinding := &commonv1.ManifestBinding{ManifestId: manifestID, ManifestSha256: bytes.Clone(manifestHash), ItemCount: itemCount}
-	if !proto.Equal(storedBinding, expected) {
-		return errors.New("persisted chat manifest does not match Space root")
-	}
 
 	rows, err := tx.Query(ctx, `SELECT page_index,page_bytes,page_sha256,item_count,next_page_token FROM search_space_chat_manifest_pages WHERE space_id=$1 AND deletion_operation_id=$2 AND generation=$3 ORDER BY page_index`, spaceID, operationID, generation)
 	if err != nil {

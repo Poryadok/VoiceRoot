@@ -60,11 +60,18 @@ func newCorrectionRuntimeFixture(t *testing.T) correctionRuntimeFixture {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(server.TLS.Certificates[0].PrivateKey)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600))
+	// A separate explicit client trust root keeps JWKS/server trust unchanged.
+	clientTemplate := *server.Certificate()
+	clientTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	clientDER, err := x509.CreateCertificate(rand.Reader, &clientTemplate, &clientTemplate, server.Certificate().PublicKey, server.TLS.Certificates[0].PrivateKey)
+	require.NoError(t, err)
+	clientCA := filepath.Join(dir, "client.pem")
+	require.NoError(t, os.WriteFile(clientCA, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}), 0600))
 	replay := miniredis.RunT(t)
 	return correctionRuntimeFixture{config: Config{
 		JWKSURLs: map[string]string{"space": server.URL}, RefreshAfter: time.Minute, HardExpiry: 2 * time.Minute,
 		UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: certFile,
-		TLSCertFile: certFile, TLSKeyFile: keyFile, ListenAddr: "127.0.0.1:0",
+		ClientCAFile: clientCA, TLSCertFile: certFile, TLSKeyFile: keyFile, ListenAddr: "127.0.0.1:0",
 	}, key: current, next: next, redis: replay}
 }
 
@@ -142,7 +149,9 @@ func TestR23CorrectionProtectedListenerAuthenticatesBeforeHandler(t *testing.T) 
 	require.NoError(t, err)
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(ca))
-	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots})))
+	clientCertificate, err := tls.LoadX509KeyPair(f.config.ClientCAFile, f.config.TLSKeyFile)
+	require.NoError(t, err)
+	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{clientCertificate}})))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := subscriptionv1.NewSubscriptionServiceClient(conn)
@@ -152,6 +161,14 @@ func TestR23CorrectionProtectedListenerAuthenticatesBeforeHandler(t *testing.T) 
 	method := subscriptionv1.SubscriptionService_ApplySpaceLifecycleFence_FullMethodName
 	token := correctionRuntimeToken(t, f.key, "current", "subscription", method, "listener", hash)
 	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "listener"))
+	noCertificate, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots})))
+	require.NoError(t, err)
+	defer noCertificate.Close()
+	unauthenticated, cancel := context.WithTimeout(ctx, time.Second)
+	_, err = subscriptionv1.NewSubscriptionServiceClient(noCertificate).ApplySpaceLifecycleFence(unauthenticated, request)
+	cancel()
+	require.Equal(t, codes.Unavailable, status.Code(err), "valid JWT cannot replace a verified client certificate")
+	require.Empty(t, recorder.principals)
 	_, err = client.ApplySpaceLifecycleFence(ctx, request)
 	require.NoError(t, err)
 	verified := <-recorder.principals

@@ -19,11 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	MessagingService_SendGameEventMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/SendGameEventMessage"
 	MessagingService_SendMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/SendMessage"
+	MessagingService_ApplyGameMessage_FullMethodName             = "/voice.messaging.v1.MessagingService/ApplyGameMessage"
+	MessagingService_TombstoneGameMessage_FullMethodName         = "/voice.messaging.v1.MessagingService/TombstoneGameMessage"
 	MessagingService_EditMessage_FullMethodName                  = "/voice.messaging.v1.MessagingService/EditMessage"
 	MessagingService_DeleteMessage_FullMethodName                = "/voice.messaging.v1.MessagingService/DeleteMessage"
 	MessagingService_GetMessages_FullMethodName                  = "/voice.messaging.v1.MessagingService/GetMessages"
 	MessagingService_GetMessage_FullMethodName                   = "/voice.messaging.v1.MessagingService/GetMessage"
+	MessagingService_ResolveGameAction_FullMethodName            = "/voice.messaging.v1.MessagingService/ResolveGameAction"
+	MessagingService_ProjectGameActionResult_FullMethodName      = "/voice.messaging.v1.MessagingService/ProjectGameActionResult"
+	MessagingService_PurgeManagedChatContent_FullMethodName      = "/voice.messaging.v1.MessagingService/PurgeManagedChatContent"
 	MessagingService_GetThreadMessages_FullMethodName            = "/voice.messaging.v1.MessagingService/GetThreadMessages"
 	MessagingService_ListThreads_FullMethodName                  = "/voice.messaging.v1.MessagingService/ListThreads"
 	MessagingService_AddReaction_FullMethodName                  = "/voice.messaging.v1.MessagingService/AddReaction"
@@ -46,6 +52,7 @@ const (
 	MessagingService_SendScheduledMessageNow_FullMethodName      = "/voice.messaging.v1.MessagingService/SendScheduledMessageNow"
 	MessagingService_ApplySpaceLifecycleFence_FullMethodName     = "/voice.messaging.v1.MessagingService/ApplySpaceLifecycleFence"
 	MessagingService_PurgeSpace_FullMethodName                   = "/voice.messaging.v1.MessagingService/PurgeSpace"
+	MessagingService_GetSpacePurgeReceipt_FullMethodName         = "/voice.messaging.v1.MessagingService/GetSpacePurgeReceipt"
 	MessagingService_ImportSpacePurgeManifestPage_FullMethodName = "/voice.messaging.v1.MessagingService/ImportSpacePurgeManifestPage"
 )
 
@@ -59,11 +66,29 @@ const (
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceClient interface {
+	// @voice.security=protected;callers=service:bot
+	SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// @voice.security=protected;callers=service:gateway
+	// T15 internal ingress: the exact device-signed compact JWS and Auth
+	// assertion are forwarded unchanged; sender/profile/chat authority is
+	// derived by Messaging from Auth binding and chat policy.
+	ApplyGameMessage(ctx context.Context, in *ApplyGameMessageRequest, opts ...grpc.CallOption) (*ApplyGameMessageResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	TombstoneGameMessage(ctx context.Context, in *TombstoneGameMessageRequest, opts ...grpc.CallOption) (*TombstoneGameMessageResponse, error)
 	EditMessage(ctx context.Context, in *EditMessageRequest, opts ...grpc.CallOption) (*EditMessageResponse, error)
 	DeleteMessage(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*DeleteMessageResponse, error)
 	GetMessages(ctx context.Context, in *GetMessagesRequest, opts ...grpc.CallOption) (*GetMessagesResponse, error)
 	GetMessage(ctx context.Context, in *GetMessageRequest, opts ...grpc.CallOption) (*GetMessageResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Re-resolves immutable game card authority under Messaging chat ACL.
+	ResolveGameAction(ctx context.Context, in *ResolveGameActionRequest, opts ...grpc.CallOption) (*ResolveGameActionResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Projects a committed immutable result onto the separately stored card status.
+	ProjectGameActionResult(ctx context.Context, in *ProjectGameActionResultRequest, opts ...grpc.CallOption) (*ProjectGameActionResultResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Starts or resumes the exact durable managed-chat retention purge operation.
+	PurgeManagedChatContent(ctx context.Context, in *PurgeManagedChatContentRequest, opts ...grpc.CallOption) (*PurgeManagedChatContentResponse, error)
 	GetThreadMessages(ctx context.Context, in *GetThreadMessagesRequest, opts ...grpc.CallOption) (*GetThreadMessagesResponse, error)
 	ListThreads(ctx context.Context, in *ListThreadsRequest, opts ...grpc.CallOption) (*ListThreadsResponse, error)
 	AddReaction(ctx context.Context, in *AddReactionRequest, opts ...grpc.CallOption) (*AddReactionResponse, error)
@@ -92,6 +117,10 @@ type MessagingServiceClient interface {
 	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
 	PurgeSpace(ctx context.Context, in *PurgeSpaceRequest, opts ...grpc.CallOption) (*PurgeSpaceResponse, error)
+	// Chat may only read Messaging's already committed participant receipt. This
+	// lookup never starts or advances Messaging purge.
+	// @voice.security=protected;callers=service:chat
+	GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error)
 	// @voice.security=protected;callers=service:space
 	ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error)
 }
@@ -104,10 +133,40 @@ func NewMessagingServiceClient(cc grpc.ClientConnInterface) MessagingServiceClie
 	return &messagingServiceClient{cc}
 }
 
+func (c *messagingServiceClient) SendGameEventMessage(ctx context.Context, in *SendGameEventMessageRequest, opts ...grpc.CallOption) (*SendGameEventMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendGameEventMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_SendGameEventMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendMessageResponse)
 	err := c.cc.Invoke(ctx, MessagingService_SendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) ApplyGameMessage(ctx context.Context, in *ApplyGameMessageRequest, opts ...grpc.CallOption) (*ApplyGameMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyGameMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ApplyGameMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) TombstoneGameMessage(ctx context.Context, in *TombstoneGameMessageRequest, opts ...grpc.CallOption) (*TombstoneGameMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TombstoneGameMessageResponse)
+	err := c.cc.Invoke(ctx, MessagingService_TombstoneGameMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +207,36 @@ func (c *messagingServiceClient) GetMessage(ctx context.Context, in *GetMessageR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetMessageResponse)
 	err := c.cc.Invoke(ctx, MessagingService_GetMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) ResolveGameAction(ctx context.Context, in *ResolveGameActionRequest, opts ...grpc.CallOption) (*ResolveGameActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveGameActionResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ResolveGameAction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) ProjectGameActionResult(ctx context.Context, in *ProjectGameActionResultRequest, opts ...grpc.CallOption) (*ProjectGameActionResultResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProjectGameActionResultResponse)
+	err := c.cc.Invoke(ctx, MessagingService_ProjectGameActionResult_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceClient) PurgeManagedChatContent(ctx context.Context, in *PurgeManagedChatContentRequest, opts ...grpc.CallOption) (*PurgeManagedChatContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PurgeManagedChatContentResponse)
+	err := c.cc.Invoke(ctx, MessagingService_PurgeManagedChatContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -374,6 +463,16 @@ func (c *messagingServiceClient) PurgeSpace(ctx context.Context, in *PurgeSpaceR
 	return out, nil
 }
 
+func (c *messagingServiceClient) GetSpacePurgeReceipt(ctx context.Context, in *GetSpacePurgeReceiptRequest, opts ...grpc.CallOption) (*GetSpacePurgeReceiptResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSpacePurgeReceiptResponse)
+	err := c.cc.Invoke(ctx, MessagingService_GetSpacePurgeReceipt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Context, in *ImportSpacePurgeManifestPageRequest, opts ...grpc.CallOption) (*ImportSpacePurgeManifestPageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ImportSpacePurgeManifestPageResponse)
@@ -394,11 +493,29 @@ func (c *messagingServiceClient) ImportSpacePurgeManifestPage(ctx context.Contex
 // Retry with the same key MUST NOT create a second row; response is gRPC OK with the same Message
 // body as the first successful attempt. Details: docs/microservices/messaging-service.md.
 type MessagingServiceServer interface {
+	// @voice.security=protected;callers=service:bot
+	SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error)
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
+	// @voice.security=protected;callers=service:gateway
+	// T15 internal ingress: the exact device-signed compact JWS and Auth
+	// assertion are forwarded unchanged; sender/profile/chat authority is
+	// derived by Messaging from Auth binding and chat policy.
+	ApplyGameMessage(context.Context, *ApplyGameMessageRequest) (*ApplyGameMessageResponse, error)
+	// @voice.security=protected;callers=service:moderation
+	TombstoneGameMessage(context.Context, *TombstoneGameMessageRequest) (*TombstoneGameMessageResponse, error)
 	EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error)
 	DeleteMessage(context.Context, *DeleteMessageRequest) (*DeleteMessageResponse, error)
 	GetMessages(context.Context, *GetMessagesRequest) (*GetMessagesResponse, error)
 	GetMessage(context.Context, *GetMessageRequest) (*GetMessageResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Re-resolves immutable game card authority under Messaging chat ACL.
+	ResolveGameAction(context.Context, *ResolveGameActionRequest) (*ResolveGameActionResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Projects a committed immutable result onto the separately stored card status.
+	ProjectGameActionResult(context.Context, *ProjectGameActionResultRequest) (*ProjectGameActionResultResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	// Starts or resumes the exact durable managed-chat retention purge operation.
+	PurgeManagedChatContent(context.Context, *PurgeManagedChatContentRequest) (*PurgeManagedChatContentResponse, error)
 	GetThreadMessages(context.Context, *GetThreadMessagesRequest) (*GetThreadMessagesResponse, error)
 	ListThreads(context.Context, *ListThreadsRequest) (*ListThreadsResponse, error)
 	AddReaction(context.Context, *AddReactionRequest) (*AddReactionResponse, error)
@@ -427,6 +544,10 @@ type MessagingServiceServer interface {
 	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
 	PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error)
+	// Chat may only read Messaging's already committed participant receipt. This
+	// lookup never starts or advances Messaging purge.
+	// @voice.security=protected;callers=service:chat
+	GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error)
 	// @voice.security=protected;callers=service:space
 	ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error)
 	mustEmbedUnimplementedMessagingServiceServer()
@@ -439,8 +560,17 @@ type MessagingServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMessagingServiceServer struct{}
 
+func (UnimplementedMessagingServiceServer) SendGameEventMessage(context.Context, *SendGameEventMessageRequest) (*SendGameEventMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendGameEventMessage not implemented")
+}
 func (UnimplementedMessagingServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) ApplyGameMessage(context.Context, *ApplyGameMessageRequest) (*ApplyGameMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyGameMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) TombstoneGameMessage(context.Context, *TombstoneGameMessageRequest) (*TombstoneGameMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TombstoneGameMessage not implemented")
 }
 func (UnimplementedMessagingServiceServer) EditMessage(context.Context, *EditMessageRequest) (*EditMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EditMessage not implemented")
@@ -453,6 +583,15 @@ func (UnimplementedMessagingServiceServer) GetMessages(context.Context, *GetMess
 }
 func (UnimplementedMessagingServiceServer) GetMessage(context.Context, *GetMessageRequest) (*GetMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessage not implemented")
+}
+func (UnimplementedMessagingServiceServer) ResolveGameAction(context.Context, *ResolveGameActionRequest) (*ResolveGameActionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveGameAction not implemented")
+}
+func (UnimplementedMessagingServiceServer) ProjectGameActionResult(context.Context, *ProjectGameActionResultRequest) (*ProjectGameActionResultResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProjectGameActionResult not implemented")
+}
+func (UnimplementedMessagingServiceServer) PurgeManagedChatContent(context.Context, *PurgeManagedChatContentRequest) (*PurgeManagedChatContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeManagedChatContent not implemented")
 }
 func (UnimplementedMessagingServiceServer) GetThreadMessages(context.Context, *GetThreadMessagesRequest) (*GetThreadMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetThreadMessages not implemented")
@@ -520,6 +659,9 @@ func (UnimplementedMessagingServiceServer) ApplySpaceLifecycleFence(context.Cont
 func (UnimplementedMessagingServiceServer) PurgeSpace(context.Context, *PurgeSpaceRequest) (*PurgeSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PurgeSpace not implemented")
 }
+func (UnimplementedMessagingServiceServer) GetSpacePurgeReceipt(context.Context, *GetSpacePurgeReceiptRequest) (*GetSpacePurgeReceiptResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSpacePurgeReceipt not implemented")
+}
 func (UnimplementedMessagingServiceServer) ImportSpacePurgeManifestPage(context.Context, *ImportSpacePurgeManifestPageRequest) (*ImportSpacePurgeManifestPageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ImportSpacePurgeManifestPage not implemented")
 }
@@ -544,6 +686,24 @@ func RegisterMessagingServiceServer(s grpc.ServiceRegistrar, srv MessagingServic
 	s.RegisterService(&MessagingService_ServiceDesc, srv)
 }
 
+func _MessagingService_SendGameEventMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendGameEventMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).SendGameEventMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_SendGameEventMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).SendGameEventMessage(ctx, req.(*SendGameEventMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_SendMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SendMessageRequest)
 	if err := dec(in); err != nil {
@@ -558,6 +718,42 @@ func _MessagingService_SendMessage_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceServer).SendMessage(ctx, req.(*SendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_ApplyGameMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyGameMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ApplyGameMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ApplyGameMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ApplyGameMessage(ctx, req.(*ApplyGameMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_TombstoneGameMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TombstoneGameMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).TombstoneGameMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_TombstoneGameMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).TombstoneGameMessage(ctx, req.(*TombstoneGameMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -630,6 +826,60 @@ func _MessagingService_GetMessage_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceServer).GetMessage(ctx, req.(*GetMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_ResolveGameAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveGameActionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ResolveGameAction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ResolveGameAction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ResolveGameAction(ctx, req.(*ResolveGameActionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_ProjectGameActionResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProjectGameActionResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).ProjectGameActionResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_ProjectGameActionResult_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).ProjectGameActionResult(ctx, req.(*ProjectGameActionResultRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingService_PurgeManagedChatContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeManagedChatContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).PurgeManagedChatContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_PurgeManagedChatContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).PurgeManagedChatContent(ctx, req.(*PurgeManagedChatContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1030,6 +1280,24 @@ func _MessagingService_PurgeSpace_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_GetSpacePurgeReceipt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSpacePurgeReceiptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).GetSpacePurgeReceipt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_GetSpacePurgeReceipt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).GetSpacePurgeReceipt(ctx, req.(*GetSpacePurgeReceiptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_ImportSpacePurgeManifestPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ImportSpacePurgeManifestPageRequest)
 	if err := dec(in); err != nil {
@@ -1056,8 +1324,20 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*MessagingServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "SendGameEventMessage",
+			Handler:    _MessagingService_SendGameEventMessage_Handler,
+		},
+		{
 			MethodName: "SendMessage",
 			Handler:    _MessagingService_SendMessage_Handler,
+		},
+		{
+			MethodName: "ApplyGameMessage",
+			Handler:    _MessagingService_ApplyGameMessage_Handler,
+		},
+		{
+			MethodName: "TombstoneGameMessage",
+			Handler:    _MessagingService_TombstoneGameMessage_Handler,
 		},
 		{
 			MethodName: "EditMessage",
@@ -1074,6 +1354,18 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetMessage",
 			Handler:    _MessagingService_GetMessage_Handler,
+		},
+		{
+			MethodName: "ResolveGameAction",
+			Handler:    _MessagingService_ResolveGameAction_Handler,
+		},
+		{
+			MethodName: "ProjectGameActionResult",
+			Handler:    _MessagingService_ProjectGameActionResult_Handler,
+		},
+		{
+			MethodName: "PurgeManagedChatContent",
+			Handler:    _MessagingService_PurgeManagedChatContent_Handler,
 		},
 		{
 			MethodName: "GetThreadMessages",
@@ -1162,6 +1454,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PurgeSpace",
 			Handler:    _MessagingService_PurgeSpace_Handler,
+		},
+		{
+			MethodName: "GetSpacePurgeReceipt",
+			Handler:    _MessagingService_GetSpacePurgeReceipt_Handler,
 		},
 		{
 			MethodName: "ImportSpacePurgeManifestPage",

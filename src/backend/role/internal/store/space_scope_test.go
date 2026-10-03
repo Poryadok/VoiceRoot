@@ -24,6 +24,7 @@ func TestWithinSpaces(t *testing.T) {
 	_, err := pool.Exec(ctx, `
  CREATE TABLE ownership_transfer_v2 (space_id UUID NOT NULL, state TEXT NOT NULL);
  CREATE TABLE role_space_lifecycle (space_id UUID PRIMARY KEY, retired_at TIMESTAMPTZ);
+ CREATE TABLE role_space_deletion_fences (space_id UUID PRIMARY KEY, state TEXT NOT NULL);
  CREATE TABLE ordinary_scope_probe (id UUID PRIMARY KEY);`)
 	require.NoError(t, err)
 	s := &RoleStore{Pool: pool}
@@ -159,7 +160,7 @@ func TestWithinSpaces(t *testing.T) {
 	})
 
 	t.Run("failed fence lookup never permits callback", func(t *testing.T) {
-		for _, table := range []string{"ownership_transfer_v2", "role_space_lifecycle"} {
+		for _, table := range []string{"ownership_transfer_v2", "role_space_lifecycle", "role_space_deletion_fences"} {
 			t.Run(table, func(t *testing.T) {
 				// Static table names only. Restore the fixture even when an assertion fails.
 				_, err := pool.Exec(ctx, "ALTER TABLE "+table+" RENAME TO missing_fence_fixture")

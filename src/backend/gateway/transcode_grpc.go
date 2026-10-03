@@ -30,6 +30,7 @@ func grpcMetadataFromRequest(r *http.Request) metadata.MD {
 	for _, key := range []string{
 		"x-voice-user-id",
 		"x-voice-profile-id",
+		"x-voice-session-epoch",
 		"x-voice-roles",
 		"x-voice-subscription-tier",
 		"x-voice-account-type",

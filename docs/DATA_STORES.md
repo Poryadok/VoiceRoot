@@ -12,7 +12,7 @@
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db`         | presence cache; Social principal replay | —                         |
+| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | —                         | —                                |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
@@ -27,11 +27,33 @@
 | Moderation Service   | `moderation_db`   | —                         | —                                |
 | Subscription Service | `subscription_db` | —                         | Paddle, CloudPayments            |
 | Bot Service          | `bot_db`          | —                         | —                                |
-| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | —                                |
+| Game Integration Service | `game_integration_db` | — | Current app/env registry, credentials, installations, registry operations; target bindings, sessions, resource mappings, managed grants |
+| Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | Nodes, placements, snapshots, lease nonces, and append-only Q11 denial audit |
 | Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
+
+### Game Integration Service (`game_integration_db`): T05 ownership target
+
+This inventory describes the target owner boundary; it is not a shipment claim.
+The current migrations implement registry/security, credentials, installations,
+and registry operations. Session/resource mappings and managed grants remain
+future GIS-owned records under T30/T31 and later community work.
+
+| GIS record family | GIS-owned data | Logical references; owner keeps the resource |
+|---|---|---|
+| Applications, environments, installations, credentials | Registry state, policy/revision, credential verifier, installation lifecycle | Auth owns accounts and SDK identity/device keys; Bot owns Bot lifecycle. |
+| Player/character bindings | App/environment-scoped binding state and opaque external game keys | Auth owns identity/device proof; User owns profiles/privacy; game owns external character facts. |
+| Sessions/resource mappings | External key, session state, Chat/Voice/Space resource IDs | Chat owns `chat_db.chats`/membership; Voice owns `voice_db` room/lifecycle; Space owns `space_db` Space; Role owns effective permission state. |
+| Desired managed grants | External origin/reason, subject reference, desired bounded permission and projection status | GIS owns desired intent; Role owns applied/effective permission. |
+| Operations/retirement fences | Request hash, durable stage/result references, reconciliation state, retired external-key fence | Each domain service owns its side effect and local receipt. No direct cross-database SQL or cross-service FK. |
+
+GIS schema changes belong in `src/backend/migrations/game_integration_db/`.
+The target contract does not yet fix G04 operation/tombstone retention, G09 roster
+freshness, or G12 app-visible alias/privacy details. Keep these explicit until
+their owning decisions are recorded; do not infer retention durations from other
+services.
 
 ### ClickHouse (Analytics Service)
 
@@ -125,6 +147,16 @@ Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_redis_divergences`. PostgreSQL is the sole durable lifecycle
 source. Divergence incidents are orthogonal evidence: completed receipts do not
 regress, and Redis orphans remain representable without an operation row.
+
+Migration `000004_game_session_rooms` adds ownerless `GAME_SESSION` rooms and
+`voice_game_session_operations`. The latter stores the application/environment
+resource mapping, deterministic request hash, Chat ID and Chat creation operation
+ID, Voice room/receipt IDs and serialized immutable response. A transaction
+creates the room and receipt together. Operation retries return the stored
+response; operation/input divergence and attempts to remap one external resource
+conflict. The Chat operation ID is the identity of Chat's durable create receipt;
+there is no cross-service foreign key. A `GAME_SESSION` room cannot have an
+owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
 
@@ -145,7 +177,11 @@ or profile IDs. This is storage evidence, not an activated party snapshot source
 
 ## Подсчёт логических PostgreSQL БД
 
-**17** planned PostgreSQL databases (see table above). **16** are provisioned by current deployment tooling, including the Voice Service `voice_db`. **`federation_db`** is documented for the deferred Federation Service but is **not** created in `docker/postgres/initdb.d/`, `deploy/templates/`, or migrate jobs until federation implementation starts ([PLAN.md](PLAN.md)).
+**17** current service PostgreSQL databases are listed above; **16** are provisioned in staging.
+The staging manifests still include legacy `gateway_db` and lack `game_integration_db`; the local
+Compose initializer also carries the planned `federation_db` scaffold. The game sprint in
+[PLAN](PLAN.md) includes implementing its new authority store and deployment;
+the old deferred-runtime description is superseded.
 
 ---
 

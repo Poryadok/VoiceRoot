@@ -14,8 +14,11 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	voice.app/voice/gameintegration v0.0.0
 )
 
 replace voice.app/voice/chat => ../../../../chat/pb/voice/chat
 
 replace voice.app/voice/common => ../../../../user/pb/voice/common
+
+replace voice.app/voice/gameintegration => ../../../../user/pb/voice/gameintegration

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package voice.search.v1;
 
+import "google/protobuf/timestamp.proto";
 import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 import "voice/common/v1/space_lifecycle.proto";
@@ -21,6 +22,9 @@ service SearchService {
 
   // @voice.security=protected;callers=service:space
   rpc PurgeSpace(voice.search.v1.PurgeSpaceRequest) returns (voice.search.v1.PurgeSpaceResponse);
+
+  // @voice.security=protected;callers=service:messaging
+  rpc PurgeManagedChatMessages(PurgeManagedChatMessagesRequest) returns (PurgeManagedChatMessagesResponse);
 }
 
 message SearchInChatRequest {
@@ -113,4 +117,24 @@ message PurgeSpaceRequest {
 // @voice.hash=domain_separated_sha256
 message PurgeSpaceResponse {
   voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message PurgeManagedChatMessagesRequest {
+  string operation_id = 1;
+  string chat_id = 2;
+  // Canonical, sorted, unique immutable message IDs frozen by Messaging.
+  repeated string message_ids = 3;
+}
+
+// @voice.unknown_fields=accept_preserve
+message PurgeManagedChatMessagesResponse {
+  string receipt_id = 1;
+  string operation_id = 2;
+  string chat_id = 3;
+  uint64 deleted_count = 4;
+  bytes message_ids_sha256 = 5;
+  bytes request_sha256 = 6;
+  google.protobuf.Timestamp completed_at = 7;
 }

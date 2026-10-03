@@ -23,17 +23,62 @@ Default admission для внешнего alpha — server-signed однораз
 
 | Состояние | Milestone | Правило |
 |---|---|---|
-| Active | `A1` | Единственный активный продуктовый milestone. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
+| Active | `A1` | Единственный активный milestone последовательности `A`. Fleet дробит его на независимые service/client/contract/verification задачи и исполняет их максимально параллельно в отдельных worktree. |
+| Parallel active | Game integrations | Отдельно согласованный единый спринт в `codex/game-sdk-federation-docs`; собственные worktree, integration queue и rollback point. 2026-10-02 владелец разрешил merge уже проверенных implementation checkpoints в `master` через PR с зелёным CI. Полная приёмка спринта, staging rollout и live provider/device tests остаются отдельными открытыми gates. |
 | Next | `A2` | Входит в WIP только после интеграции и полного vertical DoD `A1`. |
 | Queued | `A3–A7` | Не получают code WIP до закрытия предыдущего milestone; разрешены лишь чтение канона и подготовка, непосредственно разблокирующая Active. |
 
-`H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence, но это не открывает второй продуктовый milestone.
+`H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence. По отдельному решению владельца игровой спринт ниже выполняется параллельно `A1` в собственной ветке и integration queue. Это не меняет порядок `A2–A7`.
 
 Scope разделён явно:
 
 - `alpha scope` — `A1–A4` и перечисленный в `G1` функциональный slice `A5`;
 - `post-alpha committed scope` — остаток `A5`, `A6–A7`, затем отдельные milestones для mobile, verification, bots и stories по данным `G1`; эти фичи не deferred, но не получают WIP до entry review после alpha;
-- `deferred` — только federation и её производные, пока владелец отдельно не изменит scope.
+- `deferred` — release activation федерации вне отдельно согласованного игрового спринта; G0–G4 не включают federation deployment.
+
+## Проектирование игровых интеграций
+
+По запросу владельца подготовлен [proposed target игровых интеграций](features/game-integrations.md):
+Game API, Unity/Unreal SDK, MMO communities, [игровые боты](features/game-bot-interactions.md)
+и [game federation](architecture/game-federation.md). Документация изначально
+готовилась без запуска runtime; позднее владелец отдельно запустил параллельный
+спринт, не изменяя A1 и G0–G4. По уточнению владельца
+план разработки — **один спринт целиком**, включая sdk-account с обеими
+конвертациями, внешние API/контракты, мессенджер, ботов, MMO communities и игровую федерацию.
+Assets/SDK для Unity, Unreal и других движков, developer CLI/portal и публикуемые
+инструменты интеграции — отдельная задача вне этого спринта. Приёмка Voice
+использует внутренние test clients и controlled game adapter, а не готовые assets.
+Внутри него — подзадачи с зависимостями и общей приёмкой, а не релизные этапы.
+Федерация входит в implementation scope только как часть этого owner-approved
+игрового спринта; это не разрешает её release activation. `G0–G4` исключают
+federation deployment, её DB/migrations, readiness и alerts. Спецификацию и
+текущую реализацию следует оценивать по этой feature-ветке, а не по старому
+описанию в `master`.
+Все недостающие Game Integration Service, federation runtime, хранилища и
+Voice Node bundle входят в работу спринта. G01–G13 и Q01–Q12 команда закрывает
+конкретными техническими решениями в owning docs до зависимого кода.
+Спринт имеет отдельную integration queue: владелец очереди принимает PR,
+сохраняет последний принятый commit как rollback point и готовит revert в этой
+feature-ветке при неудачной интеграции. Отдельно разрешённая синхронизация
+remote `master` → feature-ветку уже выполнена в PR #549. 2026-10-02 владелец
+отдельно разрешил merge уже проверенных implementation checkpoints в `master`
+через PR с обязательным зелёным CI и merge commit. Это снимает прежний merge
+hold для этих наработок, сохраняя весь незакоммиченный WIP в исходном worktree.
+Staging rollout и live/real-provider tests этим решением не разрешены.
+Gate `A1` acceptance со staging остаётся отдельным и открытым; этот спринт и
+его PR не меняют его состояние. Live provider/device tests также не
+входят в разрешённую приёмку: используются локальные/fake/sandbox checks и
+controlled game adapter. Ни один из этих checks не считается подтверждением
+live gate. Состояние `A1` и его собственные gates/rollout не меняются.
+Подзадачи, открытые решения и acceptance —
+[game-integrations-acceptance.md](testing/game-integrations-acceptance.md).
+Исполняемая декомпозиция —
+[game-integrations-exec-plan.md](testing/game-integrations-exec-plan.md).
+Q11 owner/operator/provider and clean bootstrap contracts are frozen in those
+documents; empty-DB/host and real-Google runtime evidence remains a prerequisite
+before production admission. Q12 capacity/RPO/RTO figures are provisional
+qualification targets only, pending T08/T93 measurement.
+Статус `proposed` в FEATURES не означает обещание релиза или готовность runtime.
 
 ## PLAN и TODO
 
@@ -101,7 +146,7 @@ Scope разделён явно:
 | [Хранение файлов](features/file-storage.md) | partial | Backend upload, R2, retention и SHA verification работают; основной non-E2E download/expired URL UX, dedup, async processing, transcode и previews неполны. |
 | [Наблюдаемость](features/observability.md) | partial | Код и provisioning baseline есть; live staging, полная telemetry chain, P1 routing и restore evidence не приняты. |
 | [Продуктовая аналитика](features/analytics.md) | partial | ClickHouse ingest имеет restart-durable source delivery и dedup в official reads; direct gRPC ingest остаётся memory-only, а consumer health, dashboard/query semantics и coverage неполны, но analytics не gate бесплатного alpha. |
-| [Федерация](features/federation.md) | deferred | Спека и scaffold сохраняются, реализация не планируется без отдельного решения владельца. |
+| [Федерация](features/federation.md) | deferred | Runtime implementation разрешена только внутри отдельного Game Integrations sprint; release activation и deployment остаются deferred, `G0–G4` федерацию не включают. |
 
 ## Технический дизайн сейчас
 
@@ -291,7 +336,7 @@ Milestone — законченный пользовательский резул
 
 ## Как агенты исполняют план
 
-- Одновременно активен ровно один `A` milestone. Это один общий outcome и один integration queue, а не один последовательный агент: captain заранее дробит milestone на независимые `T-*` задачи по контрактам, сервисам, Flutter и verification.
+- В последовательности `A` одновременно активен ровно один milestone. Отдельно согласованный игровой спринт идёт параллельно `A1` в собственной integration queue, без merge в `master` и staging deployment до приёмки `A1`. Каждый outcome дробится на независимые `T-*` задачи по контрактам, сервисам, Flutter и verification.
 - Все готовые независимые задачи активного milestone запускаются максимально параллельно в изолированных treehouse worktree: один crew — один worktree и непересекающиеся write scopes. Профили/контракты, backend-сервисы, Flutter и verify идут параллельно, когда их входы уже определены; зависимые slices ждут contract seam, а не создают второй milestone.
 - Fleet state ведётся локально в `tmp/fleet/`: у каждой `T-*` есть outcome, scope, канон, worktree, owner profile, verification и integration status. Результаты интегрируются через git/PR, worktree возвращается после merge или отмены.
 - Первый приоритет — закрыть пользовательский вертикальный путь и его failure states. Массовая чистка Low/Common не получает fleet раньше milestone DoD.
@@ -308,7 +353,7 @@ Milestone — законченный пользовательский резул
 - После reconnect global inbox state сверяется через Chat REST `ListChats` и durable Messaging metadata; история сообщений догружается через Messaging REST/API с cursor отдельно для выбранного `chat_id`. Глобального WS replay/event-log catch-up нет.
 - Сервис владеет своей БД; межсервисные записи идут через контракт или событие, а не прямой JDBC/SQL в чужую схему. Auth обращается к User-owned profile данным только через User gRPC и не получает credentials к `user_db`.
 - Node.js для frontend/CI — 24.
-- Federation и её производные остаются deferred; scaffold может компилироваться в full-repo CI, но `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.
+- Федерация и её производные реализуются только в owner-approved Game Integrations sprint; live release activation остаётся deferred. `G0–G4` profiles исключают Federation deployment, DB/migrations, readiness и alerts.
 
 ## Верификация
 

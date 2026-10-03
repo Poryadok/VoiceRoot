@@ -17,11 +17,12 @@ func TestOpenLifecycleDatabaseSourceDisabledWithoutVoiceDSN(t *testing.T) {
 	t.Setenv("VOICE_DATABASE_URL", "")
 	t.Setenv("DATABASE_URL", "postgres://must:not-be-used@127.0.0.1:1/wrong_db?sslmode=disable")
 
-	store, closeDatabase, enabled, err := openLifecycleDatabase(context.Background())
+	store, pool, closeDatabase, enabled, err := openLifecycleDatabase(context.Background())
 
 	require.NoError(t, err)
 	require.False(t, enabled, "missing VOICE_DATABASE_URL must keep the R22 lifecycle source disabled")
 	require.Nil(t, store, "source-disabled startup must not fall back to a memory lifecycle store")
+	require.Nil(t, pool)
 	require.NotNil(t, closeDatabase, "disabled startup must still return a safe cleanup function")
 	closeDatabase()
 }
@@ -30,11 +31,12 @@ func TestOpenLifecycleDatabaseRejectsInvalidConfiguredDSN(t *testing.T) {
 	t.Setenv("VOICE_DATABASE_URL", "://not-a-postgres-dsn")
 	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "100ms")
 
-	store, closeDatabase, enabled, err := openLifecycleDatabase(context.Background())
+	store, pool, closeDatabase, enabled, err := openLifecycleDatabase(context.Background())
 
 	require.Error(t, err)
 	require.False(t, enabled)
 	require.Nil(t, store)
+	require.Nil(t, pool)
 	require.NotNil(t, closeDatabase)
 	closeDatabase()
 }
@@ -61,12 +63,13 @@ func TestOpenLifecycleDatabaseUsesBoundedPostgresConnectTimeout(t *testing.T) {
 	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "100ms")
 
 	started := time.Now()
-	store, closeDatabase, enabled, openErr := openLifecycleDatabase(context.Background())
+	store, pool, closeDatabase, enabled, openErr := openLifecycleDatabase(context.Background())
 	elapsed := time.Since(started)
 
 	require.Error(t, openErr, "a configured database that cannot finish handshake must fail startup")
 	require.False(t, enabled)
 	require.Nil(t, store)
+	require.Nil(t, pool)
 	require.NotNil(t, closeDatabase)
 	closeDatabase()
 	require.Less(t, elapsed, 2*time.Second, "startup must honor the repository connect timeout")
@@ -90,10 +93,11 @@ func TestOpenLifecycleDatabaseReturnsCheckedStoreAndClose(t *testing.T) {
 	t.Setenv("VOICE_DATABASE_URL", seedPool.Config().ConnString())
 	t.Setenv("POSTGRES_CONNECT_TIMEOUT", "5s")
 
-	store, closeDatabase, enabled, err := openLifecycleDatabase(ctx)
+	store, pool, closeDatabase, enabled, err := openLifecycleDatabase(ctx)
 	require.NoError(t, err)
 	require.True(t, enabled)
 	require.NotNil(t, store)
+	require.NotNil(t, pool)
 	require.NotNil(t, closeDatabase)
 	require.NoError(t, store.CheckSchema(ctx), "startup must return a store backed by the expected Voice schema")
 

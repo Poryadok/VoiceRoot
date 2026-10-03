@@ -33,6 +33,16 @@ class NotificationServiceClient extends $grpc.Client {
 
   NotificationServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage(
+    $0.ImportSpacePurgeManifestPageRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$importSpacePurgeManifestPage, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterDeviceResponse> registerDevice(
     $0.RegisterDeviceRequest request, {
     $grpc.CallOptions? options,
@@ -120,6 +130,12 @@ class NotificationServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$importSpacePurgeManifestPage = $grpc.ClientMethod<
+          $0.ImportSpacePurgeManifestPageRequest,
+          $0.ImportSpacePurgeManifestPageResponse>(
+      '/voice.notification.v1.NotificationService/ImportSpacePurgeManifestPage',
+      ($0.ImportSpacePurgeManifestPageRequest value) => value.writeToBuffer(),
+      $0.ImportSpacePurgeManifestPageResponse.fromBuffer);
   static final _$registerDevice =
       $grpc.ClientMethod<$0.RegisterDeviceRequest, $0.RegisterDeviceResponse>(
           '/voice.notification.v1.NotificationService/RegisterDevice',
@@ -185,6 +201,16 @@ abstract class NotificationServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.notification.v1.NotificationService';
 
   NotificationServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ImportSpacePurgeManifestPageRequest,
+            $0.ImportSpacePurgeManifestPageResponse>(
+        'ImportSpacePurgeManifestPage',
+        importSpacePurgeManifestPage_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ImportSpacePurgeManifestPageRequest.fromBuffer(value),
+        ($0.ImportSpacePurgeManifestPageResponse value) =>
+            value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.RegisterDeviceRequest,
             $0.RegisterDeviceResponse>(
         'RegisterDevice',
@@ -284,6 +310,18 @@ abstract class NotificationServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
         ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
   }
+
+  $async.Future<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.ImportSpacePurgeManifestPageRequest>
+              $request) async {
+    return importSpacePurgeManifestPage($call, await $request);
+  }
+
+  $async.Future<$0.ImportSpacePurgeManifestPageResponse>
+      importSpacePurgeManifestPage($grpc.ServiceCall call,
+          $0.ImportSpacePurgeManifestPageRequest request);
 
   $async.Future<$0.RegisterDeviceResponse> registerDevice_Pre(
       $grpc.ServiceCall $call,

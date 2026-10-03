@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/spacelifecycle"
 	voicestore "voice/backend/voice/internal/store"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -188,6 +189,28 @@ func TestJoinVoiceRoom_PreservesInputValidationBeforeResolver(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
 	require.Empty(t, resolver.calls)
+}
+
+func TestJoinVoiceRoom_SpaceLifecycleAdmissionFailsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		controller SpaceLifecycleController
+		want       codes.Code
+	}{
+		{name: "missing controller", want: codes.Unavailable},
+		{name: "frozen Space", controller: &fixtureSpaceLifecycle{err: spacelifecycle.ErrSpaceFrozen}, want: codes.FailedPrecondition},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spaceID, roomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+			svc.SpaceLifecycle = tc.controller
+			svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true}}
+			_, err := svc.JoinVoiceRoom(voiceTestCtx(profileID), &callsv1.JoinVoiceRoomRequest{VoiceRoomId: roomID, Space: &spacev1.SpaceRef{Id: spaceID}})
+			require.Equal(t, tc.want, status.Code(err))
+			_, callErr := svc.Calls.GetCallByVoiceRoomID(t.Context(), roomID)
+			require.ErrorIs(t, callErr, voicestore.ErrNotFound)
+		})
+	}
 }
 
 func TestGetJoinToken_ReResolvesCanonicalRoomBeforeRoleAndMint(t *testing.T) {

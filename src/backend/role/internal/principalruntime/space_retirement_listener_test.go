@@ -2,7 +2,6 @@ package principalruntime
 
 import (
 	"context"
-	"crypto/tls"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -41,7 +39,7 @@ func r23RuntimeRetirementRequest() *rolev1.RetireSpaceRequest {
 func TestRuntimeListener_AllowsOnlyBoundSpacePrincipalToRetireSpace(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	req := r23RuntimeRetirementRequest()
 	hash, err := principal.RequestHash(req)
 	require.NoError(t, err)
@@ -64,7 +62,7 @@ func TestRuntimeListener_AllowsOnlyBoundSpacePrincipalToRetireSpace(t *testing.T
 func TestRuntimeListener_RetireSpaceRejectsWrongBindingBeforeHandler(t *testing.T) {
 	f := newRuntimeFixture(t, 2)
 	address, recorder, roots := startRuntimeListener(t, f)
-	client := runtimeListenerClient(t, address, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}))
+	client := runtimeListenerClient(t, address, runtimeTLSCredentials(f, roots))
 	request := r23RuntimeRetirementRequest()
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)

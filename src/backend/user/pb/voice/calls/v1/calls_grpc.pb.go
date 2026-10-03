@@ -19,6 +19,271 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName        = "/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom"
+	GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName            = "/voice.calls.v1.GameSessionProvisioningService/CloseGameSessionRoom"
+	GameSessionProvisioningService_ApplyGameSessionRoster_FullMethodName          = "/voice.calls.v1.GameSessionProvisioningService/ApplyGameSessionRoster"
+	GameSessionProvisioningService_FenceSdkConversion_FullMethodName              = "/voice.calls.v1.GameSessionProvisioningService/FenceSdkConversion"
+	GameSessionProvisioningService_CompleteSdkConversionActivation_FullMethodName = "/voice.calls.v1.GameSessionProvisioningService/CompleteSdkConversionActivation"
+)
+
+// GameSessionProvisioningServiceClient is the client API for GameSessionProvisioningService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// GIS-only room provisioning. Register this service only on the private listener.
+type GameSessionProvisioningServiceClient interface {
+	ProvisionGameSessionRoom(ctx context.Context, in *ProvisionGameSessionRoomRequest, opts ...grpc.CallOption) (*ProvisionGameSessionRoomResponse, error)
+	CloseGameSessionRoom(ctx context.Context, in *CloseGameSessionRoomRequest, opts ...grpc.CallOption) (*CloseGameSessionRoomResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyGameSessionRoster(ctx context.Context, in *ApplyGameSessionRosterRequest, opts ...grpc.CallOption) (*ApplyGameSessionRosterResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	FenceSdkConversion(ctx context.Context, in *FenceSdkConversionRequest, opts ...grpc.CallOption) (*FenceSdkConversionResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	CompleteSdkConversionActivation(ctx context.Context, in *CompleteSdkConversionActivationRequest, opts ...grpc.CallOption) (*CompleteSdkConversionActivationResponse, error)
+}
+
+type gameSessionProvisioningServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewGameSessionProvisioningServiceClient(cc grpc.ClientConnInterface) GameSessionProvisioningServiceClient {
+	return &gameSessionProvisioningServiceClient{cc}
+}
+
+func (c *gameSessionProvisioningServiceClient) ProvisionGameSessionRoom(ctx context.Context, in *ProvisionGameSessionRoomRequest, opts ...grpc.CallOption) (*ProvisionGameSessionRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvisionGameSessionRoomResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameSessionProvisioningServiceClient) CloseGameSessionRoom(ctx context.Context, in *CloseGameSessionRoomRequest, opts ...grpc.CallOption) (*CloseGameSessionRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseGameSessionRoomResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameSessionProvisioningServiceClient) ApplyGameSessionRoster(ctx context.Context, in *ApplyGameSessionRosterRequest, opts ...grpc.CallOption) (*ApplyGameSessionRosterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyGameSessionRosterResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_ApplyGameSessionRoster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameSessionProvisioningServiceClient) FenceSdkConversion(ctx context.Context, in *FenceSdkConversionRequest, opts ...grpc.CallOption) (*FenceSdkConversionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FenceSdkConversionResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_FenceSdkConversion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameSessionProvisioningServiceClient) CompleteSdkConversionActivation(ctx context.Context, in *CompleteSdkConversionActivationRequest, opts ...grpc.CallOption) (*CompleteSdkConversionActivationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteSdkConversionActivationResponse)
+	err := c.cc.Invoke(ctx, GameSessionProvisioningService_CompleteSdkConversionActivation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GameSessionProvisioningServiceServer is the server API for GameSessionProvisioningService service.
+// All implementations must embed UnimplementedGameSessionProvisioningServiceServer
+// for forward compatibility.
+//
+// GIS-only room provisioning. Register this service only on the private listener.
+type GameSessionProvisioningServiceServer interface {
+	ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error)
+	CloseGameSessionRoom(context.Context, *CloseGameSessionRoomRequest) (*CloseGameSessionRoomResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyGameSessionRoster(context.Context, *ApplyGameSessionRosterRequest) (*ApplyGameSessionRosterResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	FenceSdkConversion(context.Context, *FenceSdkConversionRequest) (*FenceSdkConversionResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	CompleteSdkConversionActivation(context.Context, *CompleteSdkConversionActivationRequest) (*CompleteSdkConversionActivationResponse, error)
+	mustEmbedUnimplementedGameSessionProvisioningServiceServer()
+}
+
+// UnimplementedGameSessionProvisioningServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedGameSessionProvisioningServiceServer struct{}
+
+func (UnimplementedGameSessionProvisioningServiceServer) ProvisionGameSessionRoom(context.Context, *ProvisionGameSessionRoomRequest) (*ProvisionGameSessionRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProvisionGameSessionRoom not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) CloseGameSessionRoom(context.Context, *CloseGameSessionRoomRequest) (*CloseGameSessionRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseGameSessionRoom not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) ApplyGameSessionRoster(context.Context, *ApplyGameSessionRosterRequest) (*ApplyGameSessionRosterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyGameSessionRoster not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) FenceSdkConversion(context.Context, *FenceSdkConversionRequest) (*FenceSdkConversionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FenceSdkConversion not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) CompleteSdkConversionActivation(context.Context, *CompleteSdkConversionActivationRequest) (*CompleteSdkConversionActivationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteSdkConversionActivation not implemented")
+}
+func (UnimplementedGameSessionProvisioningServiceServer) mustEmbedUnimplementedGameSessionProvisioningServiceServer() {
+}
+func (UnimplementedGameSessionProvisioningServiceServer) testEmbeddedByValue() {}
+
+// UnsafeGameSessionProvisioningServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GameSessionProvisioningServiceServer will
+// result in compilation errors.
+type UnsafeGameSessionProvisioningServiceServer interface {
+	mustEmbedUnimplementedGameSessionProvisioningServiceServer()
+}
+
+func RegisterGameSessionProvisioningServiceServer(s grpc.ServiceRegistrar, srv GameSessionProvisioningServiceServer) {
+	// If the following call pancis, it indicates UnimplementedGameSessionProvisioningServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&GameSessionProvisioningService_ServiceDesc, srv)
+}
+
+func _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvisionGameSessionRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).ProvisionGameSessionRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_ProvisionGameSessionRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).ProvisionGameSessionRoom(ctx, req.(*ProvisionGameSessionRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameSessionProvisioningService_CloseGameSessionRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseGameSessionRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).CloseGameSessionRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_CloseGameSessionRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).CloseGameSessionRoom(ctx, req.(*CloseGameSessionRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameSessionProvisioningService_ApplyGameSessionRoster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyGameSessionRosterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).ApplyGameSessionRoster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_ApplyGameSessionRoster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).ApplyGameSessionRoster(ctx, req.(*ApplyGameSessionRosterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameSessionProvisioningService_FenceSdkConversion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FenceSdkConversionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).FenceSdkConversion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_FenceSdkConversion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).FenceSdkConversion(ctx, req.(*FenceSdkConversionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameSessionProvisioningService_CompleteSdkConversionActivation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteSdkConversionActivationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameSessionProvisioningServiceServer).CompleteSdkConversionActivation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameSessionProvisioningService_CompleteSdkConversionActivation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameSessionProvisioningServiceServer).CompleteSdkConversionActivation(ctx, req.(*CompleteSdkConversionActivationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// GameSessionProvisioningService_ServiceDesc is the grpc.ServiceDesc for GameSessionProvisioningService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var GameSessionProvisioningService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.calls.v1.GameSessionProvisioningService",
+	HandlerType: (*GameSessionProvisioningServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProvisionGameSessionRoom",
+			Handler:    _GameSessionProvisioningService_ProvisionGameSessionRoom_Handler,
+		},
+		{
+			MethodName: "CloseGameSessionRoom",
+			Handler:    _GameSessionProvisioningService_CloseGameSessionRoom_Handler,
+		},
+		{
+			MethodName: "ApplyGameSessionRoster",
+			Handler:    _GameSessionProvisioningService_ApplyGameSessionRoster_Handler,
+		},
+		{
+			MethodName: "FenceSdkConversion",
+			Handler:    _GameSessionProvisioningService_FenceSdkConversion_Handler,
+		},
+		{
+			MethodName: "CompleteSdkConversionActivation",
+			Handler:    _GameSessionProvisioningService_CompleteSdkConversionActivation_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/calls/v1/calls.proto",
+}
+
+const (
 	VoiceService_StartCall_FullMethodName                = "/voice.calls.v1.VoiceService/StartCall"
 	VoiceService_AcceptCall_FullMethodName               = "/voice.calls.v1.VoiceService/AcceptCall"
 	VoiceService_DeclineCall_FullMethodName              = "/voice.calls.v1.VoiceService/DeclineCall"

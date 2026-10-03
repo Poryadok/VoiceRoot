@@ -57,6 +57,9 @@ const (
 	SpaceService_RemoveBotMember_FullMethodName                   = "/voice.space.v1.SpaceService/RemoveBotMember"
 	SpaceService_ListTemplates_FullMethodName                     = "/voice.space.v1.SpaceService/ListTemplates"
 	SpaceService_CreateFromTemplate_FullMethodName                = "/voice.space.v1.SpaceService/CreateFromTemplate"
+	SpaceService_ApplyCommunityRoster_FullMethodName              = "/voice.space.v1.SpaceService/ApplyCommunityRoster"
+	SpaceService_CreateCommunityBootstrap_FullMethodName          = "/voice.space.v1.SpaceService/CreateCommunityBootstrap"
+	SpaceService_RecoverCommunityOwner_FullMethodName             = "/voice.space.v1.SpaceService/RecoverCommunityOwner"
 	SpaceService_GetAuditLog_FullMethodName                       = "/voice.space.v1.SpaceService/GetAuditLog"
 	SpaceService_AppendAuditEvent_FullMethodName                  = "/voice.space.v1.SpaceService/AppendAuditEvent"
 	SpaceService_AreCoMembers_FullMethodName                      = "/voice.space.v1.SpaceService/AreCoMembers"
@@ -113,6 +116,15 @@ type SpaceServiceClient interface {
 	RemoveBotMember(ctx context.Context, in *RemoveBotMemberRequest, opts ...grpc.CallOption) (*RemoveBotMemberResponse, error)
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	CreateFromTemplate(ctx context.Context, in *CreateFromTemplateRequest, opts ...grpc.CallOption) (*CreateFromTemplateResponse, error)
+	// GIS-only versioned complete roster projection. Membership remains source-scoped and expires fail-closed.
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyCommunityRoster(ctx context.Context, in *ApplyCommunityRosterRequest, opts ...grpc.CallOption) (*ApplyCommunityRosterResponse, error)
+	// GIS-only idempotent community bootstrap. Owner identity is asserted by the authenticated GIS workload.
+	// @voice.security=protected;callers=service:gameintegration
+	CreateCommunityBootstrap(ctx context.Context, in *CreateCommunityBootstrapRequest, opts ...grpc.CallOption) (*CreateCommunityBootstrapResponse, error)
+	// GIS-only durable Owner succession after a distinct operator approval.
+	// @voice.security=protected;callers=service:gameintegration
+	RecoverCommunityOwner(ctx context.Context, in *RecoverCommunityOwnerRequest, opts ...grpc.CallOption) (*RecoverCommunityOwnerResponse, error)
 	GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(ctx context.Context, in *AppendAuditEventRequest, opts ...grpc.CallOption) (*AppendAuditEventResponse, error)
@@ -519,6 +531,36 @@ func (c *spaceServiceClient) CreateFromTemplate(ctx context.Context, in *CreateF
 	return out, nil
 }
 
+func (c *spaceServiceClient) ApplyCommunityRoster(ctx context.Context, in *ApplyCommunityRosterRequest, opts ...grpc.CallOption) (*ApplyCommunityRosterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyCommunityRosterResponse)
+	err := c.cc.Invoke(ctx, SpaceService_ApplyCommunityRoster_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) CreateCommunityBootstrap(ctx context.Context, in *CreateCommunityBootstrapRequest, opts ...grpc.CallOption) (*CreateCommunityBootstrapResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCommunityBootstrapResponse)
+	err := c.cc.Invoke(ctx, SpaceService_CreateCommunityBootstrap_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *spaceServiceClient) RecoverCommunityOwner(ctx context.Context, in *RecoverCommunityOwnerRequest, opts ...grpc.CallOption) (*RecoverCommunityOwnerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecoverCommunityOwnerResponse)
+	err := c.cc.Invoke(ctx, SpaceService_RecoverCommunityOwner_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *spaceServiceClient) GetAuditLog(ctx context.Context, in *GetAuditLogRequest, opts ...grpc.CallOption) (*GetAuditLogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAuditLogResponse)
@@ -636,6 +678,15 @@ type SpaceServiceServer interface {
 	RemoveBotMember(context.Context, *RemoveBotMemberRequest) (*RemoveBotMemberResponse, error)
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	CreateFromTemplate(context.Context, *CreateFromTemplateRequest) (*CreateFromTemplateResponse, error)
+	// GIS-only versioned complete roster projection. Membership remains source-scoped and expires fail-closed.
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyCommunityRoster(context.Context, *ApplyCommunityRosterRequest) (*ApplyCommunityRosterResponse, error)
+	// GIS-only idempotent community bootstrap. Owner identity is asserted by the authenticated GIS workload.
+	// @voice.security=protected;callers=service:gameintegration
+	CreateCommunityBootstrap(context.Context, *CreateCommunityBootstrapRequest) (*CreateCommunityBootstrapResponse, error)
+	// GIS-only durable Owner succession after a distinct operator approval.
+	// @voice.security=protected;callers=service:gameintegration
+	RecoverCommunityOwner(context.Context, *RecoverCommunityOwnerRequest) (*RecoverCommunityOwnerResponse, error)
 	GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error)
 	// @voice.security=protected;callers=service:role,service:chat
 	AppendAuditEvent(context.Context, *AppendAuditEventRequest) (*AppendAuditEventResponse, error)
@@ -775,6 +826,15 @@ func (UnimplementedSpaceServiceServer) ListTemplates(context.Context, *ListTempl
 }
 func (UnimplementedSpaceServiceServer) CreateFromTemplate(context.Context, *CreateFromTemplateRequest) (*CreateFromTemplateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateFromTemplate not implemented")
+}
+func (UnimplementedSpaceServiceServer) ApplyCommunityRoster(context.Context, *ApplyCommunityRosterRequest) (*ApplyCommunityRosterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyCommunityRoster not implemented")
+}
+func (UnimplementedSpaceServiceServer) CreateCommunityBootstrap(context.Context, *CreateCommunityBootstrapRequest) (*CreateCommunityBootstrapResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateCommunityBootstrap not implemented")
+}
+func (UnimplementedSpaceServiceServer) RecoverCommunityOwner(context.Context, *RecoverCommunityOwnerRequest) (*RecoverCommunityOwnerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecoverCommunityOwner not implemented")
 }
 func (UnimplementedSpaceServiceServer) GetAuditLog(context.Context, *GetAuditLogRequest) (*GetAuditLogResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAuditLog not implemented")
@@ -1502,6 +1562,60 @@ func _SpaceService_CreateFromTemplate_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpaceService_ApplyCommunityRoster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyCommunityRosterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).ApplyCommunityRoster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_ApplyCommunityRoster_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).ApplyCommunityRoster(ctx, req.(*ApplyCommunityRosterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_CreateCommunityBootstrap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCommunityBootstrapRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).CreateCommunityBootstrap(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_CreateCommunityBootstrap_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).CreateCommunityBootstrap(ctx, req.(*CreateCommunityBootstrapRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SpaceService_RecoverCommunityOwner_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecoverCommunityOwnerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpaceServiceServer).RecoverCommunityOwner(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpaceService_RecoverCommunityOwner_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpaceServiceServer).RecoverCommunityOwner(ctx, req.(*RecoverCommunityOwnerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SpaceService_GetAuditLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAuditLogRequest)
 	if err := dec(in); err != nil {
@@ -1786,6 +1900,18 @@ var SpaceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateFromTemplate",
 			Handler:    _SpaceService_CreateFromTemplate_Handler,
+		},
+		{
+			MethodName: "ApplyCommunityRoster",
+			Handler:    _SpaceService_ApplyCommunityRoster_Handler,
+		},
+		{
+			MethodName: "CreateCommunityBootstrap",
+			Handler:    _SpaceService_CreateCommunityBootstrap_Handler,
+		},
+		{
+			MethodName: "RecoverCommunityOwner",
+			Handler:    _SpaceService_RecoverCommunityOwner_Handler,
 		},
 		{
 			MethodName: "GetAuditLog",

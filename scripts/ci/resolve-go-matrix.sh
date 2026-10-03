@@ -9,8 +9,9 @@
 set -euo pipefail
 
 GO_SERVICES=(
-  analytics bot chat federation file gateway matchmaking messaging moderation
-  notification realtime role search social space story subscription user voice
+  analytics bot chat controlledgame federation file gameintegration gateway
+  matchmaking messaging moderation notification realtime role search social
+  space story subscription user voice
 )
 
 filter_val() {
@@ -36,13 +37,22 @@ add_unique() {
   services+=("$svc")
 }
 
+add_integration_unique() {
+  local svc="$1"
+  local existing
+  for existing in "${integration_services[@]:-}"; do
+    [[ "${existing}" == "${svc}" ]] && return 0
+  done
+  integration_services+=("${svc}")
+}
+
 expand_s2s_deps() {
   local seed=("$@")
   local svc
-  local had_seed=false
+  local had_deployable_seed=false
   for svc in "${seed[@]}"; do
-    had_seed=true
     add_unique "$svc"
+    [[ "$svc" == "controlledgame" ]] || had_deployable_seed=true
     case "$svc" in
       messaging) add_unique chat; add_unique file; add_unique realtime ;;
       chat) add_unique messaging; add_unique file ;;
@@ -56,15 +66,29 @@ expand_s2s_deps() {
       role) add_unique space ;;
     esac
   done
-  if [[ "${had_seed}" == true ]]; then
+  if [[ "${had_deployable_seed}" == true ]]; then
     add_unique gateway
   fi
 }
 
 services=()
+integration_services=()
 run_pkg=false
 
-if truthy "${FORCE_FULL:-}" || filter_val global || filter_val protos || filter_val pkg; then
+# Testcontainers run only the Go services whose path filters changed. The
+# ordinary backend-go matrix may widen via ci_global/global for broad CI.
+for svc in "${GO_SERVICES[@]}"; do
+  if filter_val "svc_${svc}"; then
+    add_integration_unique "${svc}"
+    # The callback receiver contract is consumed by Game Integration; run
+    # both full integration suites when the receiver changes.
+    if [[ "${svc}" == "controlledgame" ]]; then
+      add_integration_unique gameintegration
+    fi
+  fi
+done
+
+if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg; then
   services=("${GO_SERVICES[@]}")
   run_pkg=true
 else
@@ -93,10 +117,17 @@ else
   run_go=true
 fi
 
+if ((${#integration_services[@]} == 0)); then
+  integration_json='[]'
+else
+  integration_json="$(printf '%s\n' "${integration_services[@]}" | jq -R . | jq -s -c .)"
+fi
+
 {
   echo "go_services=${go_json}"
+  echo "integration_go_services=${integration_json}"
   echo "run_pkg=${run_pkg}"
   echo "run_go=${run_go}"
 } >>"${GITHUB_OUTPUT:-/dev/stdout}"
 
-echo "resolve-go-matrix: services=${go_json} run_pkg=${run_pkg} run_go=${run_go}"
+echo "resolve-go-matrix: services=${go_json} integration=${integration_json} run_pkg=${run_pkg} run_go=${run_go}"

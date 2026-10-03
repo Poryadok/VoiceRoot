@@ -41,6 +41,7 @@ run_matrix() {
   GITHUB_OUTPUT="${out}" FILTER_JSON="${FILTER_JSON:-}" \
     FORCE_FULL="${FORCE_FULL:-}" bash "${SCRIPT}" >/dev/null
   go_services="$(grep '^go_services=' "${out}" | head -1 | cut -d= -f2-)"
+  integration_go_services="$(grep '^integration_go_services=' "${out}" | head -1 | cut -d= -f2-)"
   run_go="$(grep '^run_go=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
 }
@@ -67,10 +68,35 @@ FILTER_JSON='{"code":"true","svc_messaging":"true"}' run_matrix
 assert_contains "${go_services}" messaging
 assert_not_contains "${go_services}" story
 
+echo "== controlledgame change selects its test-only module =="
+FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' run_matrix
+assert_exact_services "${go_services}" '["controlledgame"]'
+[[ "${run_go}" == "true" ]] || fail "expected run_go=true for controlledgame"
+
+echo "== gameintegration change selects the existing GIS module =="
+FILTER_JSON='{"code":"true","svc_gameintegration":"true"}' run_matrix
+assert_exact_services "${go_services}" '["gameintegration","gateway"]'
+[[ "${run_go}" == "true" ]] || fail "expected run_go=true for gameintegration"
+
+echo "== ci_global keeps broad backend tests and limits PR integration to changed services =="
+FILTER_JSON='{"code":"true","ci_global":"true","svc_controlledgame":"true","svc_gameintegration":"true"}' run_matrix
+assert_contains "${go_services}" analytics
+assert_contains "${go_services}" controlledgame
+assert_contains "${go_services}" gameintegration
+assert_exact_services "${integration_go_services}" '["controlledgame","gameintegration"]'
+
+echo "== controlledgame callback changes also validate the Game Integration consumer =="
+FILTER_JSON='{"code":"true","ci_global":"true","svc_controlledgame":"true"}' run_matrix
+assert_exact_services "${integration_go_services}" '["controlledgame","gameintegration"]'
+
 echo "== global (scripts/staging|prod) runs full Go matrix =="
 FILTER_JSON='{"code":"true","global":"true"}' run_matrix
 [[ "${run_go}" == "true" ]] || fail "expected run_go=true for global"
 count="$(echo "${go_services}" | jq 'length')"
-[[ "${count}" -eq 19 ]] || fail "expected 19 go services for global, got ${count}"
+unique="$(echo "${go_services}" | jq 'unique | length')"
+[[ "${count}" -eq "${unique}" ]] || fail "expected no duplicate services in ${go_services}"
+assert_contains "${go_services}" controlledgame
+assert_contains "${go_services}" gameintegration
+assert_exact_services "${integration_go_services}" '[]'
 
 echo "All resolve-go-matrix tests passed."

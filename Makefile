@@ -24,9 +24,9 @@ GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
 GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test $(GO_TEST_SHORT_FLAGS)
 GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
 endif
-GO_SERVICES := analytics bot chat federation file gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
+GO_SERVICES := analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
-GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file role space bot matchmaking moderation notification search story subscription analytics federation
+GO_SERVICES_BACKEND_CONTEXT := gateway realtime chat messaging user social voice file role space bot matchmaking moderation notification search story subscription analytics federation gameintegration controlledgame
 GO_MODULES_LINT := pkg $(GO_SERVICES)
 GO_TEST_TARGETS := $(GO_SERVICES:%=go-test-%)
 GO_TEST_SHORT_TARGETS := $(GO_SERVICES:%=go-test-short-%)
@@ -38,6 +38,26 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
 	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check
+
+ifeq ($(OS),Windows_NT)
+GAME_INTEGRATION_BOOTSTRAP_RUN = set CGO_ENABLED=0&& go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+FEDERATION_Q11_ACCEPTANCE_RUN = set CGO_ENABLED=0&& go test -run "^TestQ11FederationCleanStartAuthorityAPIs$$" -count=1 .
+else
+GAME_INTEGRATION_BOOTSTRAP_RUN = go test -run "^TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs$$" -count=1 ./internal/httpapi
+FEDERATION_Q11_ACCEPTANCE_RUN = go test -run "^TestQ11FederationCleanStartAuthorityAPIs$$" -count=1 .
+endif
+
+.PHONY: game-integration-bootstrap-acceptance
+game-integration-bootstrap-acceptance:
+	cd "$(ROOT)/src/backend/gameintegration" && $(GAME_INTEGRATION_BOOTSTRAP_RUN)
+
+.PHONY: game-integrations-q11-acceptance
+game-integrations-q11-acceptance: game-integration-bootstrap-acceptance
+	cd "$(ROOT)/src/backend/federation" && $(FEDERATION_Q11_ACCEPTANCE_RUN)
+
+.PHONY: sdk-protocol-client-acceptance
+sdk-protocol-client-acceptance:
+	cd "$(ROOT)/tests/sdk-protocol-client" && go test ./...
 
 buf-lint:
 	buf lint

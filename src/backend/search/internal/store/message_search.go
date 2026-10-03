@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,15 @@ func (s *MessageSearchStore) Upsert(ctx context.Context, doc MessageDocument) er
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	if err := lifecycleGateChat(ctx, tx, doc.ChatID); err != nil {
 		return err
+	}
+	if err := lockMessageProjection(ctx, tx, doc.MessageID); err != nil {
+		return err
+	}
+	var purged bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM search_managed_chat_message_purge_fences WHERE message_id=$1)`, doc.MessageID).Scan(&purged); err != nil {
+		return err
+	} else if purged {
+		return tx.Commit(ctx)
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO message_search_documents (message_id, chat_id, sender_profile_id, body, created_at)
@@ -77,6 +87,133 @@ func (s *MessageSearchStore) Delete(ctx context.Context, messageID uuid.UUID) er
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+var ErrManagedChatSearchPurgeConflict = errors.New("managed chat Search purge operation conflicts with saved request")
+
+type ManagedChatSearchPurgeReceipt struct {
+	OperationID    uuid.UUID
+	ChatID         uuid.UUID
+	ReceiptID      uuid.UUID
+	DeletedCount   uint64
+	MessageIDsHash []byte
+	RequestHash    []byte
+	CompletedAt    time.Time
+}
+
+// PurgeManagedChatMessages installs per-message permanent tombstones and
+// removes the current projection atomically. Late JetStream upserts acquire
+// the same message lock and become inert after these tombstones commit.
+func (s *MessageSearchStore) PurgeManagedChatMessages(ctx context.Context, operationID, chatID uuid.UUID, messageIDs []uuid.UUID, requestHash []byte) (*ManagedChatSearchPurgeReceipt, error) {
+	if s == nil || s.Pool == nil || operationID == uuid.Nil || chatID == uuid.Nil || len(requestHash) != 32 {
+		return nil, errors.New("managed chat Search purge identity or request hash is invalid")
+	}
+	ids := append([]uuid.UUID(nil), messageIDs...)
+	for index, id := range ids {
+		if id == uuid.Nil || (index > 0 && ids[index-1].String() >= id.String()) {
+			return nil, errors.New("managed chat Search purge message IDs must be sorted and unique")
+		}
+	}
+	messageIDsHash := ManagedChatMessageIDsHash(ids)
+	tx, err := beginGovernedTx(ctx, s.Pool)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	// Serialize even an absent operation before locking its messages. Exact
+	// concurrent retries then observe the first committed receipt instead of
+	// conflicting with its newly installed message fences.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 721805))`, operationID.String()); err != nil {
+		return nil, err
+	}
+	var savedChat, receiptID uuid.UUID
+	var savedSetHash, savedRequestHash []byte
+	var count int64
+	var completedAt time.Time
+	err = tx.QueryRow(ctx, `SELECT chat_id,receipt_id,message_ids_sha256,request_sha256,deleted_count,completed_at FROM search_managed_chat_purge_operations WHERE operation_id=$1 FOR UPDATE`, operationID).Scan(&savedChat, &receiptID, &savedSetHash, &savedRequestHash, &count, &completedAt)
+	if err == nil {
+		if savedChat != chatID || string(savedSetHash) != string(messageIDsHash) || string(savedRequestHash) != string(requestHash) {
+			return nil, ErrManagedChatSearchPurgeConflict
+		}
+		// Exact committed evidence remains readable after the parent becomes
+		// terminal; a replay performs no projection mutation.
+		if frozen, err := lifecycleFrozenChat(ctx, tx, chatID); err != nil {
+			return nil, err
+		} else if frozen && !boundMessagingPurge(ctx, operationID, requestHash) {
+			return nil, ErrManagedChatSearchPurgeConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return &ManagedChatSearchPurgeReceipt{OperationID: operationID, ChatID: chatID, ReceiptID: receiptID, DeletedCount: uint64(count), MessageIDsHash: savedSetHash, RequestHash: savedRequestHash, CompletedAt: completedAt}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err := authorizeManagedChatPurge(ctx, tx, operationID, chatID, requestHash); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		if err := lockMessageProjection(ctx, tx, id); err != nil {
+			return nil, err
+		}
+	}
+	for _, id := range ids {
+		// A bad owner work set must not create a permanent global tombstone
+		// for an indexed message belonging to another chat.
+		var indexedChat uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT chat_id FROM message_search_documents WHERE message_id=$1`, id).Scan(&indexedChat)
+		if err == nil && indexedChat != chatID {
+			return nil, ErrManagedChatSearchPurgeConflict
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		var fencedChat uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT chat_id FROM search_managed_chat_message_purge_fences WHERE message_id=$1`, id).Scan(&fencedChat)
+		if err == nil {
+			return nil, ErrManagedChatSearchPurgeConflict
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+	}
+	receiptID = uuid.New()
+	completedAt = time.Now().UTC()
+	if _, err := tx.Exec(ctx, `INSERT INTO search_managed_chat_purge_operations(operation_id,chat_id,message_ids_sha256,request_sha256,deleted_count,receipt_id,completed_at) VALUES($1,$2,$3,$4,$5,$6,clock_timestamp())`, operationID, chatID, messageIDsHash, requestHash, len(ids), receiptID); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		if _, err := tx.Exec(ctx, `INSERT INTO search_managed_chat_message_purge_fences(message_id,chat_id,operation_id) VALUES($1,$2,$3)`, id, chatID, operationID); err != nil {
+			return nil, err
+		}
+	}
+	if len(ids) > 0 {
+		if _, err := tx.Exec(ctx, `DELETE FROM message_search_documents WHERE chat_id=$1 AND message_id=ANY($2)`, chatID, ids); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.QueryRow(ctx, `SELECT completed_at FROM search_managed_chat_purge_operations WHERE operation_id=$1`, operationID).Scan(&completedAt); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return &ManagedChatSearchPurgeReceipt{OperationID: operationID, ChatID: chatID, ReceiptID: receiptID, DeletedCount: uint64(len(ids)), MessageIDsHash: messageIDsHash, RequestHash: append([]byte(nil), requestHash...), CompletedAt: completedAt}, nil
+}
+
+func ManagedChatMessageIDsHash(ids []uuid.UUID) []byte {
+	h := sha256.New()
+	_, _ = h.Write([]byte("voice.search.managed_chat_message_ids.v1\x00"))
+	for _, id := range ids {
+		_, _ = h.Write(id[:])
+	}
+	return h.Sum(nil)
+}
+
+func lockMessageProjection(ctx context.Context, tx pgx.Tx, messageID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 721804))`, messageID.String())
+	return err
 }
 
 type messageCursor struct {
@@ -202,6 +339,7 @@ func (s *MessageSearchStore) searchMessages(ctx context.Context, chatID uuid.UUI
 		if err := rows.Scan(&hit.MessageID, &hit.ChatID, &hit.Snippet, &hit.Score, &created); err != nil {
 			return nil, "", err
 		}
+		hit.CreatedAt = created
 		hits = append(hits, hit)
 		createdAt = append(createdAt, created)
 	}

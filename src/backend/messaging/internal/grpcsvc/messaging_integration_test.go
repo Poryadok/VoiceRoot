@@ -63,6 +63,8 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000002_client_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 }
 
 // applyChatDBForBufconnChat applies chat_db schema needed when wiring real Chat gRPC
@@ -71,6 +73,9 @@ func applyChatDBForBufconnChat(t *testing.T, ctx context.Context, pool *pgxpool.
 	t.Helper()
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000011_deleted_for_self.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000013_sticker_packs.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000018_space_lifecycle.up.sql")
 }
 
 func withProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
@@ -132,7 +137,7 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	}
 	guard := w.ChatGuard
 	if guard == nil {
-		guard = &store.SQLChatGuard{Pool: pool}
+		guard = entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}}
 	}
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
@@ -246,7 +251,7 @@ func startMessagingServer(t *testing.T, pool *pgxpool.Pool) (messagingv1.Messagi
 
 func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 	t.Helper()
-	guard := &store.SQLChatGuard{Pool: pool}
+	guard := entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}}
 	return &MessagingGRPC{
 		Messages:          &store.MessagesStore{Pool: pool},
 		Reactions:         &store.ReactionsStore{Pool: pool},
@@ -260,6 +265,16 @@ func startMessagingDirect(t *testing.T, pool *pgxpool.Pool) *MessagingGRPC {
 		ChatThreadPolicy:  &store.SQLChatThreadPolicy{Pool: pool},
 		PreKeyBundles:     &store.E2EPreKeyStore{Pool: pool},
 	}
+}
+
+// entitledSQLChatGuard keeps generic PostgreSQL fixtures focused on the
+// behavior under test while the dedicated entitlement acceptance exercises
+// Chat's real membership-interval decision. A direct SQLChatGuard cannot answer
+// that cross-service policy question, so these fixtures explicitly allow rows.
+type entitledSQLChatGuard struct{ *store.SQLChatGuard }
+
+func (entitledSQLChatGuard) MessageReadEntitled(context.Context, uuid.UUID, uuid.UUID, time.Time) (bool, error) {
+	return true, nil
 }
 
 type profileAcctMap map[uuid.UUID]uuid.UUID
@@ -325,6 +340,7 @@ func TestMessagingSendGetMarkRead(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
@@ -1276,6 +1292,7 @@ func TestMessagingGetMessages_cursorPaginationInvalidAndExclusiveCursors(t *test
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()
@@ -1688,6 +1705,7 @@ func TestMessagingGetMessages_afterPageNextCursor(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForTest(t, ctx)
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000014_managed_chats.up.sql"))
 	applyBaseMessagingMigrations(t, ctx, pool)
 
 	chatID := uuid.New()

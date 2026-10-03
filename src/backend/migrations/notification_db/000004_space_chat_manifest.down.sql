@@ -1,0 +1,3 @@
+DROP TABLE notification_space_chat_manifest_pages;
+DROP TABLE notification_space_chat_manifests;
+DROP TABLE notification_space_chat_fences;

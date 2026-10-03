@@ -305,11 +305,17 @@ services:
       - social_principal_keys:/signing
       - file_principal_keys:/file-signing
       - search_principal_keys:/search-signing
+      - space_principal_keys:/space-signing
+      - story_principal_keys:/story-signing
+      - messaging_principal_keys:/messaging-signing
       - social_principal_tls:/social
       - user_principal_tls:/user
       - space_principal_tls:/space
       - file_principal_tls:/file
       - search_principal_tls:/search
+      - story_principal_tls:/story
+      - messaging_principal_tls:/messaging
+      - matchmaking_principal_tls:/matchmaking
       - social_principal_ca:/ca
 
   social:
@@ -439,6 +445,7 @@ services:
       PGHOST: postgres
       PGUSER: ${POSTGRES_USER:-voice}
       PGPASSWORD: ${POSTGRES_PASSWORD:-voice}
+      GAME_INTEGRATION_DB_PASSWORD: ${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}
       SCHEMA_DIR: /schema
       MIGRATIONS_DIR: /migrations
     volumes:
@@ -509,7 +516,37 @@ services:
       ROLE_GRPC_ADDR: role:9090
       MODERATION_GRPC_ADDR: moderation:9090
       NATS_URL: nats://nats:4222
+      MESSAGING_PURGE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/messaging-principal/keys
+      MESSAGING_PURGE_PRINCIPAL_ACTIVE_KID: current
+      MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN: :8444
+      MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/jwks.json
+      SPACE_PRINCIPAL_JWKS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_PRINCIPAL_REPLAY_REDIS_URL: redis://redis:6379/0
+      MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN: :9093
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_CERT_FILE: /etc/voice/messaging-principal/tls/tls.crt
+      MESSAGING_SPACE_LIFECYCLE_SERVER_TLS_KEY_FILE: /etc/voice/messaging-principal/tls/tls.key
+      MESSAGING_SPACE_LIFECYCLE_CLIENT_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      FILE_MANAGED_CHAT_PURGE_GRPC_ADDR: file:9091
+      FILE_MANAGED_CHAT_PURGE_TLS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      FILE_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: file
+      SEARCH_MANAGED_CHAT_PURGE_GRPC_ADDR: search:9091
+      SEARCH_MANAGED_CHAT_PURGE_TLS_CA_FILE: /etc/voice/messaging-principal/ca/ca.crt
+      SEARCH_MANAGED_CHAT_PURGE_TLS_SERVER_NAME: search
+    volumes:
+      - messaging_principal_keys:/etc/voice/messaging-principal/keys:ro
+      - messaging_principal_tls:/etc/voice/messaging-principal/tls:ro
+      - social_principal_ca:/etc/voice/messaging-principal/ca:ro
+      - file_principal_tls:/etc/voice/file-principal/tls:ro
     depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       nats:
@@ -555,6 +592,15 @@ services:
       FILE_PRINCIPAL_JWKS_LISTEN: :8443
       FILE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
       FILE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      FILE_PRINCIPAL_GRPC_LISTEN: :9091
+      FILE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      FILE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/file-principal/tls/tls.key
+      FILE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/file-principal/ca/ca.crt
+      FILE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"story":"https://story:8443/.well-known/jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /etc/voice/file-principal/tls/tls.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /etc/voice/file-principal/tls/tls.key
       USER_FILE_PRINCIPAL_GRPC_ADDR: user:9092
       USER_FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/file-principal/ca/ca.crt
       USER_FILE_PRINCIPAL_TLS_SERVER_NAME: user
@@ -585,6 +631,8 @@ services:
         condition: service_completed_successfully
       social-principal-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       user:
         condition: service_healthy
       nats-realtime-bootstrap:
@@ -605,6 +653,13 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/matchmaking_db?sslmode=disable
       MATCHMAKING_GRPC_LISTEN: :9090
+      MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN: :9092
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/principal/ca/ca.crt
+      MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
       MATCHMAKING_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090
       VOICE_GRPC_ADDR: voice:9090
@@ -614,6 +669,9 @@ services:
       NATS_URL: nats://nats:4222
       MATCHMAKING_SEARCH_NUDGE_AFTER: ${MATCHMAKING_SEARCH_NUDGE_AFTER:-15m}
       MATCHMAKING_SEARCH_TIMEOUT: ${MATCHMAKING_SEARCH_TIMEOUT:-30m}
+    volumes:
+      - matchmaking_principal_tls:/etc/voice/principal/tls:ro
+      - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -669,6 +727,15 @@ services:
       SEARCH_PRINCIPAL_JWKS_LISTEN: :8443
       SEARCH_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
       SEARCH_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/search-projection/tls/tls.key
+      SEARCH_PRINCIPAL_GRPC_LISTEN: :9091
+      SEARCH_PRINCIPAL_TLS_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
+      SEARCH_PRINCIPAL_TLS_KEY_FILE: /etc/voice/search-projection/tls/tls.key
+      SEARCH_PRINCIPAL_CLIENT_CA_FILE: /etc/voice/search-projection/ca/ca.crt
+      SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"space":"https://space:8443/.well-known/jwks.json","messaging":"https://messaging:8444/.well-known/principal-jwks.json"}'
+      S2S_JWKS_CA_FILE: /etc/voice/search-projection/ca/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /etc/voice/search-projection/tls/tls.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /etc/voice/search-projection/tls/tls.key
       SPACE_GRPC_ADDR: space:9090
     depends_on:
       social-principal-init:
@@ -682,6 +749,8 @@ services:
       nats-search-bootstrap:
         condition: service_completed_successfully
       messaging:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       chat:
         condition: service_healthy
@@ -719,6 +788,10 @@ services:
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
       MESSAGING_GRPC_ADDR: messaging:9090
+      GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
+      GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64:-YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=}
+      GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
+      SOCIAL_GRPC_ADDR: social:9090
     depends_on:
       postgres:
         condition: service_healthy
@@ -735,6 +808,10 @@ services:
       chat:
         condition: service_healthy
       messaging:
+        condition: service_healthy
+      gameintegration:
+        condition: service_healthy
+      social:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -834,12 +911,63 @@ services:
       retries: 10
       start_period: 15s
 
-  # Federation is S2S-only (not in GATEWAY_GRPC_UPSTREAMS_JSON); health/metrics scaffold for CI parity.
-  federation:
+  gameintegration:
     profiles: ["app"]
     build:
       context: ./src/backend
+      dockerfile: gameintegration/Dockerfile
+    environment:
+      LOG_LEVEL: debug
+      DATABASE_URL: postgres://gameintegration_runtime:${GAME_INTEGRATION_DB_PASSWORD:-voice-compose-gameintegration-runtime}@postgres:5432/game_integration_db?sslmode=disable
+      GAME_INTEGRATION_REDIS_ADDR: redis:6379
+      GAME_INTEGRATION_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
+      GAME_INTEGRATION_JWT_ISSUER: voice-auth
+      GAME_INTEGRATION_JWT_AUDIENCE: voice-client
+      GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS: ${GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS:-}
+      GAME_INTEGRATION_CREDENTIAL_KEY_B64: ${GAME_INTEGRATION_CREDENTIAL_KEY_B64:-}
+      GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_AUTH_WORKLOAD_KEY_B64:-}
+      GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64:-YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk=}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Federation is opt-in until a Voice Node verifier is ready. The mounted
+  # local credentials and operator settings are required when this profile is selected.
+  federation:
+    profiles: ["federation"]
+    build:
+      context: ./src/backend
       dockerfile: federation/Dockerfile
+    environment:
+      FEDERATION_DATABASE_URL: ${FEDERATION_DATABASE_URL:-}
+      FEDERATION_TLS_CERT: /run/voice/federation/tls.crt
+      FEDERATION_TLS_KEY: /run/voice/federation/tls.key
+      FEDERATION_CLIENT_CA: /run/voice/federation/client-ca.crt
+      FEDERATION_SIGNING_SEED_FILE: /run/voice/federation/signing-seed
+      FEDERATION_KEY_ID: ${FEDERATION_KEY_ID:-}
+      FEDERATION_ISSUER: ${FEDERATION_ISSUER:-}
+      FEDERATION_ENVIRONMENT: ${FEDERATION_ENVIRONMENT:-}
+      FEDERATION_OPERATOR_CERT_SHA256: ${FEDERATION_OPERATOR_CERT_SHA256:-}
+      FEDERATION_MEDIA_ISSUER_CERT_SHA256: ${FEDERATION_MEDIA_ISSUER_CERT_SHA256:-}
+    volumes:
+      - ${FEDERATION_LOCAL_SECRET_DIR:-./tmp/federation-local}:/run/voice/federation:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compose-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -859,6 +987,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/bot_db?sslmode=disable
       BOT_GRPC_LISTEN: :9090
       BOT_GRPC_GATEWAY_ONLY: "true"
+      BOT_ENABLE_DEV_POLLING: "true"
       BOT_REDIS_ADDR: redis:6379
       MESSAGING_GRPC_ADDR: messaging:9090
       CHAT_GRPC_ADDR: chat:9090
@@ -900,6 +1029,16 @@ services:
       LOG_LEVEL: debug
       DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/story_db?sslmode=disable
       STORY_GRPC_LISTEN: :9090
+      STORY_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/story-principal/keys
+      STORY_PRINCIPAL_ACTIVE_KID: current
+      STORY_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/story-principal/tls/tls.crt
+      STORY_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/story-principal/tls/tls.key
+      STORY_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      FILE_PRINCIPAL_GRPC_ADDR: file:9091
+      FILE_PRINCIPAL_TLS_CA_FILE: /etc/voice/story-principal/ca/ca.crt
+      FILE_PRINCIPAL_TLS_SERVER_NAME: file
+      FILE_PRINCIPAL_CLIENT_CERT_FILE: /etc/voice/story-principal/tls/tls.crt
+      FILE_PRINCIPAL_CLIENT_KEY_FILE: /etc/voice/story-principal/tls/tls.key
       SOCIAL_GRPC_ADDR: social:9090
       USER_GRPC_ADDR: user:9090
       CHAT_GRPC_ADDR: chat:9090
@@ -909,6 +1048,10 @@ services:
       GRPC_DIAL_TIMEOUT: ${GRPC_DIAL_TIMEOUT:-15s}
       NATS_URL: nats://nats:4222
       STORY_TTL_DEV: ${STORY_TTL_DEV:-}
+    volumes:
+      - story_principal_keys:/etc/voice/story-principal/keys:ro
+      - story_principal_tls:/etc/voice/story-principal/tls:ro
+      - social_principal_ca:/etc/voice/story-principal/ca:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -918,6 +1061,10 @@ services:
         condition: service_healthy
       user:
         condition: service_healthy
+      file:
+        condition: service_healthy
+      social-principal-init:
+        condition: service_completed_successfully
       nats:
         condition: service_healthy
       nats-realtime-bootstrap:
@@ -943,6 +1090,8 @@ services:
       REALTIME_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
       REALTIME_JWT_ISSUER: voice-auth
       REALTIME_JWT_AUDIENCE: voice-client
+      GAME_INTEGRATION_CONSENT_URL: http://gameintegration:8080
+      GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64: ${GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64:-cmVhbHRpbWUtd29ya2xvYWQta2V5LTEyMzQ1Njc4OTA=}
       REALTIME_CHAT_GRPC_ADDR: chat:9090
       REALTIME_USER_GRPC_ADDR: user:9090
       REALTIME_SOCIAL_GRPC_ADDR: social:9090
@@ -980,6 +1129,11 @@ services:
       SPACE_PRINCIPAL_GRPC_LISTEN: :9091
       SPACE_PRINCIPAL_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
       SPACE_PRINCIPAL_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      SPACE_PRINCIPAL_SIGNING_KEYS_DIR: /etc/voice/principal/keys
+      SPACE_PRINCIPAL_ACTIVE_KID: current
+      SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /etc/voice/principal/tls/tls.crt
+      SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /etc/voice/principal/tls/tls.key
+      SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
       SPACE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
       S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json"}'
       S2S_JWKS_CA_FILE: /etc/voice/principal/ca/ca.crt
@@ -989,6 +1143,7 @@ services:
       SOCIAL_GRPC_ADDR: social:9090
       NATS_URL: nats://nats:4222
     volumes:
+      - space_principal_keys:/etc/voice/principal/keys:ro
       - space_principal_tls:/etc/voice/principal/tls:ro
       - social_principal_ca:/etc/voice/principal/ca:ro
     depends_on:
@@ -1056,6 +1211,7 @@ services:
       LOG_LEVEL: debug
       VOICE_DATABASE_URL: postgres://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD:-voice}@postgres:5432/voice_db?sslmode=disable
       VOICE_GRPC_LISTEN: :9090
+      VOICE_FEDERATED_MEDIA_CONFIG: ${VOICE_FEDERATED_MEDIA_CONFIG:-}
       VOICE_REDIS_ADDR: redis:6379
       CHAT_GRPC_ADDR: chat:9090
       USER_GRPC_ADDR: user:9090
@@ -1067,6 +1223,8 @@ services:
       LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+    volumes:
+      - ${FEDERATION_MASTER_VOICE_SECRET_DIR:-./tmp/federation-master-voice}:/run/voice/federation-media:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -1109,7 +1267,7 @@ services:
       LISTEN_ADDR: ":8080"
       GATEWAY_REDIS_ADDR: redis:6379
       GATEWAY_SESSION_EPOCH_STRICT: "true"
-      GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080"}'
+      GATEWAY_REST_UPSTREAMS_JSON: '{"auth":"http://auth:8080","game-integrations":"http://gameintegration:8080"}'
       GATEWAY_GRPC_UPSTREAMS_JSON: '{"auth":"auth:9090","users":"user:9090","friends":"social:9090","chats":"chat:9090","messages":"messaging:9090","spaces":"space:9090","roles":"role:9090","voice":"voice:9090","files":"file:9090","notifications":"notification:9090","matchmaking":"matchmaking:9090","search":"search:9090","moderation":"moderation:9090","subscription":"subscription:9090","bots":"bot:9090","stories":"story:9090","analytics":"analytics:9090"}'
       GATEWAY_REALTIME_UPSTREAM_URL: http://realtime:8080
       GATEWAY_JWKS_URL: http://auth:8080/api/v1/auth/.well-known/jwks.json
@@ -1133,6 +1291,8 @@ services:
       nats:
         condition: service_healthy
       auth:
+        condition: service_healthy
+      gameintegration:
         condition: service_healthy
       social:
         condition: service_healthy
@@ -1315,11 +1475,17 @@ volumes:
   social_principal_keys:
   file_principal_keys:
   search_principal_keys:
+  space_principal_keys:
+  story_principal_keys:
+  messaging_principal_keys:
   social_principal_tls:
   user_principal_tls:
   space_principal_tls:
   file_principal_tls:
   search_principal_tls:
+  story_principal_tls:
+  messaging_principal_tls:
+  matchmaking_principal_tls:
   social_principal_ca:
   voice_pgdata:
   voice_redis:

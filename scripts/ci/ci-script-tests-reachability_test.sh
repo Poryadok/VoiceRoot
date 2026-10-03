@@ -21,6 +21,49 @@ global_paths="$(sed -n '/^global:$/,/^[[:alnum:]_]*:$/p' "${PATH_FILTERS}")"
 echo "${global_paths}" | grep -Fxq "  - ${GO_DOWNLOAD_HELPER}" \
   || fail "Docker Go module download helper must be a global CI-policy path"
 
+pr_trigger="$(sed -n '/^  pull_request:$/,/^  push:$/p' "${WORKFLOW}" | sed '$d')"
+echo "${pr_trigger}" | grep -Fq 'branches: [master, codex/game-sdk-federation-docs]' \
+  || fail "CI must run for PRs targeting master and the game SDK feature base"
+push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
+echo "${push_trigger}" | grep -Fq 'branches: [master]' \
+  || fail "CI push trigger must remain limited to master"
+! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
+  || fail "draft PRs must use the same path-filtered CI selection"
+changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+echo "${changes_block}" | grep -Fq "github.event_name == 'pull_request'" \
+  || fail "draft feature-base PRs must enter the normal changes job"
+echo "${changes_block}" | grep -Fq 'uses: dorny/paths-filter@v4' \
+  || fail "feature-base PRs must use the existing path-filtered job selection"
+echo "${changes_block}" | grep -Fq 'filters: .github/ci/path-filters.yml' \
+  || fail "feature-base PRs must use the repository path filter definitions"
+
+integration_pr_block="$(sed -n '/^  backend-go-integration-pr:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+backend_go_block="$(sed -n '/^  backend-go:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+grep -Fq 'integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}' "${WORKFLOW}" \
+  || fail "changes must publish a separate changed-service integration matrix"
+echo "${integration_pr_block}" | grep -Fq 'fromJSON(needs.changes.outputs.integration_go_services)' \
+  || fail "PR integration tests must use the changed-service matrix"
+echo "${backend_go_block}" | grep -Fq 'fromJSON(needs.changes.outputs.go_services)' \
+  || fail "normal backend Go CI must retain its broad Go test matrix"
+grep -Fq "needs.changes.outputs.integration_go_services != '[]'" "${WORKFLOW}" \
+  || fail "PR integration matrix must skip when no Go service path changed"
+grep -Fq 'RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services != '\''[]'\'' }}' "${WORKFLOW}" \
+  || fail "ci-gate must receive whether the PR integration matrix is scheduled"
+grep -Fq 'check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require PR integration only when its matrix is nonempty"
+grep -Fq 'if [[ "${svc}" == "controlledgame" ]]; then' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \
+  && grep -Fq 'add_integration_unique gameintegration' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \
+  || fail "controlledgame changes must include the Game Integration consumer in PR integration tests"
+
+for minio_job in minio-server-image-publish minio-mc-image-publish; do
+  minio_block="$(sed -n "/^  ${minio_job}:$/,/^  [[:alnum:]_-]*:$/p" "${WORKFLOW}")"
+  echo "${minio_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \
+    || fail "${minio_job} must remain limited to deployment-global changes"
+  if echo "${minio_block}" | grep -Fq "needs.changes.outputs.ci_global"; then
+    fail "${minio_job} must not publish images for CI-only changes"
+  fi
+done
+
 echo "${job_block}" | grep -Eq '^    needs: changes$' \
   || fail "ci-script-tests must depend on changes"
 echo "${job_block}" | grep -Fq "needs.changes.outputs.global == 'true'" \

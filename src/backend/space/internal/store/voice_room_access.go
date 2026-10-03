@@ -58,6 +58,11 @@ SELECT vr.space_id,
        EXISTS (
            SELECT 1 FROM space_members sm
            WHERE sm.space_id = vr.space_id AND sm.profile_id = $3
+           UNION ALL
+           SELECT 1 FROM community_roster_members crm JOIN community_owner_authority coa
+             ON coa.space_id=crm.space_id AND coa.owner_generation=crm.owner_generation AND coa.status='active'
+           WHERE crm.space_id=vr.space_id AND crm.profile_id=$3 AND crm.revoked_at IS NULL
+             AND crm.lease_expires_at>clock_timestamp() AND coa.roster_lease_expires_at>clock_timestamp()
        ),
        vae.access_epoch
 FROM voice_rooms vr

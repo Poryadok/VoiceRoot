@@ -164,6 +164,32 @@ func (q *RedisQueue) QueueDepthScoped(ctx context.Context, spaceID *uuid.UUID, g
 	return q.Client.ZCard(ctx, q.scopedQueueKey(spaceID, gameID, mode, region)).Result()
 }
 
+// ClearSpaceQueues removes every scoped matchmaking queue for one Space. It
+// leaves global queues, other Spaces, and per-profile active-search locks
+// untouched; callers release locks from the authoritative session rows.
+func (q *RedisQueue) ClearSpaceQueues(ctx context.Context, spaceID uuid.UUID) error {
+	if q == nil || q.Client == nil || spaceID == uuid.Nil {
+		return ErrQueueUnavailable
+	}
+	pattern := fmt.Sprintf("%s:space:%s:queue:*", q.prefix(), spaceID.String())
+	var cursor uint64
+	for {
+		keys, next, err := q.Client.Scan(ctx, cursor, pattern, 256).Result()
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
+		}
+		if len(keys) > 0 {
+			if err := q.Client.Del(ctx, keys...).Err(); err != nil {
+				return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return nil
+		}
+	}
+}
+
 // Ping checks Redis connectivity.
 func (q *RedisQueue) Ping(ctx context.Context) error {
 	if q == nil || q.Client == nil {

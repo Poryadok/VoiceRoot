@@ -17,7 +17,9 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY social/go.mod ./social/
+COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh user
+COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY pkg ./pkg
 COPY user/pb ./user/pb
 COPY messaging/pb/voice/events ./messaging/pb/voice/events

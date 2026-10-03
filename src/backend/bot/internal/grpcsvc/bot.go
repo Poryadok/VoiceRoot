@@ -18,27 +18,30 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/manifest"
 	"voice/backend/bot/internal/store"
+	"voice/backend/pkg/principal"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	rolev1 "voice.app/voice/role/v1"
-	userv1 "voice.app/voice/user/v1"
 	spacev1 "voice.app/voice/space/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 // BotGRPC implements voice.bot.v1.BotService.
 type BotGRPC struct {
 	botv1.UnimplementedBotServiceServer
-	Store      *store.BotStore
-	Hub        *dispatch.Hub
-	HTTPClient *http.Client
-	Chat       chatv1.ChatServiceClient
-	Messaging  messagingv1.MessagingServiceClient
-	Role       rolev1.RoleServiceClient
-	User       userv1.UserServiceClient
-	Space      spacev1.SpaceServiceClient
-	Events     BotEventPublisher
+	Store           *store.BotStore
+	LifecycleStore  BotLifecycleStore
+	Hub             *dispatch.Hub
+	HTTPClient      *http.Client
+	Chat            chatv1.ChatServiceClient
+	Messaging       messagingv1.MessagingServiceClient
+	Role            rolev1.RoleServiceClient
+	User            userv1.UserServiceClient
+	Space           spacev1.SpaceServiceClient
+	Events          BotEventPublisher
+	PrincipalIssuer *principal.Issuer
 }
 
 // BotEventPublisher publishes bot lifecycle events (optional NATS).
@@ -51,8 +54,9 @@ type BotEventPublisher interface {
 
 func NewBotGRPC(st *store.BotStore, hub *dispatch.Hub) *BotGRPC {
 	return &BotGRPC{
-		Store: st,
-		Hub:   hub,
+		Store:          st,
+		LifecycleStore: st,
+		Hub:            hub,
 		HTTPClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -77,8 +81,8 @@ func (s *BotGRPC) RegisterBot(ctx context.Context, req *botv1.RegisterBotRequest
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	resp := &botv1.RegisterBotResponse{
-		Bot: botToProto(row),
-		TokenResponse: &botv1.TokenResponse{Token: plain},
+		Bot:                   botToProto(row),
+		TokenResponse:         &botv1.TokenResponse{Token: plain},
 		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: row.WebhookSecret},
 	}
 	if s.Events != nil {
@@ -463,8 +467,16 @@ func (s *BotGRPC) DeferResponse(ctx context.Context, req *botv1.DeferResponseReq
 		return nil, err
 	}
 	token := strings.TrimSpace(req.GetInteractionToken())
-	s.Hub.Complete(token, store.InteractionReply{Deferred: true})
-	_ = s.Store.MarkEventDeferred(ctx, botRow.ID, token)
+	authority, err := s.authorizeInteraction(ctx, botRow, token, nil)
+	if err != nil {
+		return nil, err
+	}
+	if authority.state == "pending" {
+		if err := s.Store.MarkEventDeferred(ctx, botRow.ID, token); err != nil {
+			return nil, status.Error(codes.Unavailable, "interaction defer could not be persisted")
+		}
+		s.Hub.Complete(token, store.InteractionReply{Deferred: true})
+	}
 	return &botv1.DeferResponseResponse{}, nil
 }
 
@@ -473,6 +485,12 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 	botRow, err := s.botFromToken(ctx)
 	if err != nil {
 		return err
+	}
+	if !store.DevPollingEnabled() {
+		return status.Error(codes.FailedPrecondition, "development polling is disabled")
+	}
+	if !botRow.IsPollingMode {
+		return status.Error(codes.FailedPrecondition, "bot is not in polling mode")
 	}
 	s.touchPresence(ctx, botRow.ID)
 	ids, types, payloads, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
@@ -496,15 +514,15 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 
 func botToProto(row store.BotRow) *botv1.Bot {
 	b := &botv1.Bot{
-		Id:              row.ID.String(),
-		OwnerAccountId:  row.OwnerAccountID.String(),
-		Name:            row.Name,
-		Description:     row.Description,
-		IsPollingMode:   row.IsPollingMode,
-		ScopesJson:      row.ScopesJSON,
-		Status:          row.Status,
-		CreatedAt:       timestamppb.New(row.CreatedAt),
-		StatusEnum:      botv1.BotLifecycleStatus_BOT_LIFECYCLE_STATUS_LIVE.Enum(),
+		Id:             row.ID.String(),
+		OwnerAccountId: row.OwnerAccountID.String(),
+		Name:           row.Name,
+		Description:    row.Description,
+		IsPollingMode:  row.IsPollingMode,
+		ScopesJson:     row.ScopesJSON,
+		Status:         row.Status,
+		CreatedAt:      timestamppb.New(row.CreatedAt),
+		StatusEnum:     botv1.BotLifecycleStatus_BOT_LIFECYCLE_STATUS_LIVE.Enum(),
 	}
 	if row.AvatarURL != nil {
 		b.AvatarUrl = row.AvatarURL

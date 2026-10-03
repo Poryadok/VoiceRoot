@@ -34,7 +34,18 @@ func (s *SpaceGRPC) AreCoMembers(ctx context.Context, req *spacev1.AreCoMembersR
 		}
 		spaceIDs = append(spaceIDs, id)
 	}
-	ok, err := s.Store.AreCoMembers(ctx, profileA, profileB, spaceIDs)
+	if s.ProfileAccounts == nil {
+		return nil, status.Error(codes.Unavailable, "profile ownership lookup unavailable")
+	}
+	accountA, err := s.ProfileAccounts.AccountIDByProfileID(ctx, profileA)
+	if err != nil || accountA == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "profile ownership lookup unavailable")
+	}
+	accountB, err := s.ProfileAccounts.AccountIDByProfileID(ctx, profileB)
+	if err != nil || accountB == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "profile ownership lookup unavailable")
+	}
+	ok, err := s.Store.AreCoMembersWithAccountBans(ctx, profileA, profileB, []uuid.UUID{accountA, accountB}, spaceIDs)
 	if err != nil {
 		return nil, mapSpaceStoreError(err)
 	}

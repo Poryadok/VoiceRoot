@@ -58,6 +58,11 @@ func main() {
 		defer pool.Close()
 
 		roleStore := &store.RoleStore{Pool: pool}
+		stopRetention, err := startRoleDeletionRetention(roleStore, logger)
+		if err != nil {
+			log.Fatalf("Role lifecycle retention startup: %v", err)
+		}
+		defer stopRetention()
 		var events roleevents.Publisher = roleevents.NoopPublisher{}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			jsPub, err := roleevents.NewJetStreamPublisher(natsURL)
@@ -80,6 +85,11 @@ func main() {
 				log.Fatalf("principal runtime: %v", err)
 			}
 			defer func() { _ = principal.Close() }()
+			if principalConfig.AuthoritySourceEnabled {
+				if err := principal.ActivateAuthoritySource(context.Background(), roleStore); err != nil {
+					log.Fatalf("authority source activation: %v", err)
+				}
+			}
 		}
 		// Construct shared metrics once; both listeners use the same collectors.
 		grpcSrv, principalSrv = newRoleGRPCServers(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg)), &grpcsvc.RoleGRPC{Store: roleStore, Events: events}, principal)

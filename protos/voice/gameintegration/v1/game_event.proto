@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package voice.gameintegration.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/gameintegration/v1;gameintegrationv1";
+
+message BindingEventRecipient {
+  string binding_id = 1;
+  string resolved_chat_id = 2;
+}
+
+message DirectChatEventRecipient {
+  string chat_id = 1;
+}
+
+message VerifiedGameEventIntent {
+  string operation_id = 1;
+  string app_id = 2;
+  string app_owner_account_id = 3;
+  string environment_id = 4;
+  string installation_id = 5;
+  string bot_id = 6;
+  string event_id = 7;
+  string payload_hash = 8;
+  oneof recipient {
+    BindingEventRecipient binding = 9;
+    DirectChatEventRecipient direct_chat = 10;
+  }
+  uint64 authority_revision = 11;
+  uint32 schema_version = 12;
+  google.protobuf.Timestamp occurred_at = 13;
+  google.protobuf.Timestamp expires_at = 14;
+  optional string character_binding_id = 15;
+  optional string state_version = 16;
+  string fallback_text = 17;
+  string client_message_id = 18;
+  string event_type = 19;
+  GameCard card = 20;
+}
+
+// Declarative card payload. Messaging stores this immutable data beside the
+// message; clients do not execute or authorize actions from these fields.
+message GameCard {
+  uint32 schema_version = 1;
+  uint64 revision = 2;
+  string title = 3;
+  string safe_summary = 4;
+  repeated GameCardFact facts = 5;
+  repeated GameCardAction actions = 6;
+  repeated string media_reference_ids = 7;
+}
+
+message GameCardFact {
+  string label = 1;
+  string value = 2;
+}
+
+message GameCardAction {
+  string action_id = 1;
+  string action_type = 2;
+  string label = 3;
+  // Strict canonical JSON object, never a command or executable callback.
+  string arguments_json = 4;
+  // Signed game state precondition; executable T53 admission requires a value.
+  string state_version = 5;
+  // Signed absolute expiry; old or unbounded actions fail closed at invoke.
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+enum GameEventPublicationStatus {
+  GAME_EVENT_PUBLICATION_STATUS_UNSPECIFIED = 0;
+  GAME_EVENT_PUBLICATION_STATUS_PUBLISHED = 1;
+  GAME_EVENT_PUBLICATION_STATUS_EXPIRED = 2;
+}

@@ -98,6 +98,10 @@ func routeMessageNotification(
 		if ev == nil {
 			return nil
 		}
+		gameAppID, gameEnvID, gameCategory, err := gameNotificationScope(ev)
+		if err != nil {
+			return err
+		}
 		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
 		if err != nil {
 			return err
@@ -119,9 +123,13 @@ func routeMessageNotification(
 			}
 			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
+			title, body := pushcopy.TitleForSender(senderLabel, "Reply"), pushcopy.MessageBody(preview)
+			if gameAppID != uuid.Nil {
+				title, body = "Game update", "A game event is waiting in Voice."
+			}
 			payload := push.Payload{
-				Title:  pushcopy.TitleForSender(senderLabel, "Reply"),
-				Body:   pushcopy.MessageBody(preview),
+				Title:  title,
+				Body:   body,
 				Silent: ev.GetSendSilent(),
 				Data: map[string]string{
 					"type":              string(delivery.TypeReply),
@@ -132,9 +140,10 @@ func routeMessageNotification(
 				},
 			}
 			return pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
-				SenderProfileID: senderID,
-				ChatID:          ev.GetChatId(),
-				Type:            delivery.TypeReply,
+				SenderProfileID:   senderID,
+				ChatID:            ev.GetChatId(),
+				Type:              delivery.TypeReply,
+				GameApplicationID: gameAppID, GameEnvironmentID: gameEnvID, GameCategory: gameActivityCategory(gameCategory),
 			}, payload, payload.Body)
 		}
 		if len(memberRows) == 0 {
@@ -157,9 +166,13 @@ func routeMessageNotification(
 			if typ == delivery.TypeMessageRequest {
 				titleFallback = "Message request"
 			}
+			title, body := pushcopy.TitleForSender(senderLabel, titleFallback), pushcopy.MessageBody(preview)
+			if gameAppID != uuid.Nil {
+				title, body = "Game update", "A game event is waiting in Voice."
+			}
 			payload := push.Payload{
-				Title:  pushcopy.TitleForSender(senderLabel, titleFallback),
-				Body:   pushcopy.MessageBody(preview),
+				Title:  title,
+				Body:   body,
 				Silent: ev.GetSendSilent(),
 				Data: map[string]string{
 					"type":              string(typ),
@@ -170,9 +183,10 @@ func routeMessageNotification(
 				},
 			}
 			if err := pusher.SendPush(ctx, decisions, delivery.DeliveryInput{
-				SenderProfileID: senderID,
-				ChatID:          ev.GetChatId(),
-				Type:            typ,
+				SenderProfileID:   senderID,
+				ChatID:            ev.GetChatId(),
+				Type:              typ,
+				GameApplicationID: gameAppID, GameEnvironmentID: gameEnvID, GameCategory: gameActivityCategory(gameCategory),
 			}, payload, payload.Body); err != nil {
 				return err
 			}
@@ -221,10 +235,31 @@ func routeMessageNotification(
 			SenderProfileID: senderID,
 			ChatID:          ev.GetChatId(),
 			Type:            delivery.TypeMention,
+			GameCategory:    "game_social",
 		}, payload, payload.Body)
 	default:
 		return nil
 	}
+}
+
+func gameActivityCategory(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return "game_activity"
+}
+
+func gameNotificationScope(ev *eventsv1.MessageSent) (uuid.UUID, uuid.UUID, string, error) {
+	appRaw, envRaw := ev.GetGameApplicationId(), ev.GetGameEnvironmentId()
+	if appRaw == "" && envRaw == "" {
+		return uuid.Nil, uuid.Nil, "", nil
+	}
+	appID, appErr := uuid.Parse(appRaw)
+	envID, envErr := uuid.Parse(envRaw)
+	if appErr != nil || envErr != nil || appID == uuid.Nil || envID == uuid.Nil || appID.String() != appRaw || envID.String() != envRaw {
+		return uuid.Nil, uuid.Nil, "", fmt.Errorf("message notification: invalid game app scope")
+	}
+	return appID, envID, "game_activity", nil
 }
 
 func listChatMembers(ctx context.Context, members chatmembers.Lister, chatID string) ([]chatmembers.Member, error) {

@@ -17,6 +17,8 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 	ctx := withGRPCMetadata(r.Context(), r)
 
 	switch {
+	case r.Method == http.MethodPost && rest == "space-deletion-proof":
+		return t.serveSpaceDeletionProof(w, r)
 	// linked-accounts* fall through to Auth REST upstream (GATEWAY_REST_UPSTREAMS_JSON auth).
 	case r.Method == http.MethodGet && rest == "linked-accounts":
 		return false

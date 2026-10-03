@@ -66,5 +66,39 @@ class RoleRetirementState extends $pb.ProtobufEnum {
   const RoleRetirementState._(super.value, super.name);
 }
 
+class GameSessionGrantOutcome extends $pb.ProtobufEnum {
+  static const GameSessionGrantOutcome GAME_SESSION_GRANT_OUTCOME_UNSPECIFIED =
+      GameSessionGrantOutcome._(
+          0, _omitEnumNames ? '' : 'GAME_SESSION_GRANT_OUTCOME_UNSPECIFIED');
+  static const GameSessionGrantOutcome GAME_SESSION_GRANT_OUTCOME_APPLIED =
+      GameSessionGrantOutcome._(
+          1, _omitEnumNames ? '' : 'GAME_SESSION_GRANT_OUTCOME_APPLIED');
+  static const GameSessionGrantOutcome GAME_SESSION_GRANT_OUTCOME_REPLAYED =
+      GameSessionGrantOutcome._(
+          2, _omitEnumNames ? '' : 'GAME_SESSION_GRANT_OUTCOME_REPLAYED');
+  static const GameSessionGrantOutcome GAME_SESSION_GRANT_OUTCOME_STALE =
+      GameSessionGrantOutcome._(
+          3, _omitEnumNames ? '' : 'GAME_SESSION_GRANT_OUTCOME_STALE');
+  static const GameSessionGrantOutcome GAME_SESSION_GRANT_OUTCOME_REVOKED =
+      GameSessionGrantOutcome._(
+          4, _omitEnumNames ? '' : 'GAME_SESSION_GRANT_OUTCOME_REVOKED');
+
+  static const $core.List<GameSessionGrantOutcome> values =
+      <GameSessionGrantOutcome>[
+    GAME_SESSION_GRANT_OUTCOME_UNSPECIFIED,
+    GAME_SESSION_GRANT_OUTCOME_APPLIED,
+    GAME_SESSION_GRANT_OUTCOME_REPLAYED,
+    GAME_SESSION_GRANT_OUTCOME_STALE,
+    GAME_SESSION_GRANT_OUTCOME_REVOKED,
+  ];
+
+  static final $core.List<GameSessionGrantOutcome?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static GameSessionGrantOutcome? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const GameSessionGrantOutcome._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

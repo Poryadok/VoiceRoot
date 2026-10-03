@@ -3,12 +3,14 @@ package grpcsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"voice.app/voice/common/v1"
 	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/authctx"
 	"voice/backend/notification/internal/dispatch"
@@ -22,8 +24,12 @@ import (
 // NotificationGRPC implements voice.notification.v1.NotificationService.
 type NotificationGRPC struct {
 	notificationv1.UnimplementedNotificationServiceServer
-	Tokens    *store.DeviceTokenStore
-	Settings  *store.SettingsStore
+	Tokens         *store.DeviceTokenStore
+	Settings       *store.SettingsStore
+	SpaceLifecycle interface {
+		ApplySpaceLifecycleFence(context.Context, *commonv1.SpaceLifecycleFenceRequest) (*commonv1.SpaceLifecycleFenceReceipt, error)
+		PurgeSpace(context.Context, *commonv1.SpacePurgeRequest) (*commonv1.SpacePurgeReceipt, error)
+	}
 	Pusher    *dispatch.PushDispatcher
 	Analytics interface {
 		Publish(ctx context.Context, subject, sourceService, eventType string, props map[string]any) error
@@ -137,6 +143,24 @@ func (s *NotificationGRPC) SendNotification(ctx context.Context, req *notificati
 			"type": req.GetNotificationType(),
 		},
 	}
+	if req.GetPayloadJson() != "" {
+		var scope struct {
+			ChatID  string `json:"chat_id"`
+			SpaceID string `json:"space_id"`
+		}
+		if err := json.Unmarshal([]byte(req.GetPayloadJson()), &scope); err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid notification payload")
+		}
+		for key, value := range map[string]string{"chat_id": scope.ChatID, "space_id": scope.SpaceID} {
+			if value == "" {
+				continue
+			}
+			if id, err := uuid.Parse(value); err != nil || id == uuid.Nil || id.String() != value {
+				return nil, status.Error(codes.InvalidArgument, "invalid notification scope")
+			}
+			payload.Data[key] = value
+		}
+	}
 	tokens, err := s.Tokens.ListByProfile(ctx, profileID)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list tokens: %v", err)
@@ -195,6 +219,9 @@ func (s *NotificationGRPC) GetNotificationSettings(ctx context.Context, req *not
 	}
 	row, err := s.Settings.GetSettings(ctx, profileID, scope, scopeID)
 	if err != nil {
+		if errors.Is(err, store.ErrSpaceLifecycleNotLive) {
+			return nil, status.Error(codes.FailedPrecondition, "Space notification settings are fenced")
+		}
 		return nil, status.Errorf(codes.Internal, "get settings: %v", err)
 	}
 	return &notificationv1.GetNotificationSettingsResponse{
@@ -218,6 +245,9 @@ func (s *NotificationGRPC) UpdateNotificationSettings(ctx context.Context, req *
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err := s.Settings.UpsertSettings(ctx, row); err != nil {
+		if errors.Is(err, store.ErrSpaceLifecycleNotLive) {
+			return nil, status.Error(codes.FailedPrecondition, "Space notification settings are fenced")
+		}
 		return nil, status.Errorf(codes.Internal, "update settings: %v", err)
 	}
 	return &notificationv1.UpdateNotificationSettingsResponse{

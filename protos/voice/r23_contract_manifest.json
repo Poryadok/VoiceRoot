@@ -3840,13 +3840,14 @@
           ]
         }
       ],
-      "contract_projection_sha256": "1d0e75a42e20b681fe7943f255867aee3cbdecac281dbc8d02f2ddba031a53ef",
+      "contract_projection_sha256": "4fc1c8bfa7dbc11b0388eb912bf6d95986eb3f085bf2875aadb48dadb197a99e",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
-        "voice/common/v1/space_lifecycle.proto"
+        "voice/common/v1/space_lifecycle.proto",
+        "voice/gameintegration/v1/game_event.proto"
       ],
       "options": {
         "go_package": "voice.app/voice/messaging/v1;messagingv1"
@@ -4175,9 +4176,10 @@
           ]
         }
       ],
-      "contract_projection_sha256": "7c53b0849b7d44340c917eceac1802a510ad5d4eb61a5c9b244797a03890bb14",
+      "contract_projection_sha256": "da70b078713b89e410335751baa335e9449823030d049e7910a52d91eb3b2753",
       "syntax": "proto3",
       "dependencies": [
+        "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto"
@@ -4398,12 +4400,13 @@
           ]
         }
       ],
-      "contract_projection_sha256": "35bab9d185abc41e4cbc733968f9512807ee063525a5a5a705025e9c70e634f5",
+      "contract_projection_sha256": "81451ccaaffc39873ec7debc85530be9bfe5caed05f7cc08916cb070271d84c7",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/space_lifecycle.proto",
+        "voice/gameintegration/v1/game_event.proto",
         "voice/messaging/v1/messaging.proto",
         "voice/role/v1/role.proto"
       ],
@@ -4511,10 +4514,11 @@
           ]
         }
       ],
-      "contract_projection_sha256": "e79d2648df081af3e394dd5817584b5712821520d78110c0f71379dc2057785c",
+      "contract_projection_sha256": "fd8402bbe324ad301073d057d063d5c9b6418fd702380c6288a23682785c77a7",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
         "voice/common/v1/space_lifecycle.proto"
       ],
       "options": {

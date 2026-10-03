@@ -100,6 +100,38 @@ message document from every active index and persists a permanent compact
 uncertain fence state fails closed. Full request/receipt bytes retain 30 days
 from this participant's completion.
 
+Chat's source manifest is distinct from the aggregate Space root. Search
+requests pages with the Space root ID; Chat authenticates that ID against its
+current lifecycle fence and returns its saved source binding. Search persists
+both bindings and checks the exact Space root again before purge. An empty
+source is valid only as one final empty page. Nonempty pages contain 1000 IDs
+except the final page; IDs remain unique and ordered by raw UUID bytes.
+Root and page hashes use Chat's canonical binary domains
+`voice.chat.v1.SpaceDeletionManifest` and
+`voice.chat.v1.SpaceDeletionManifestPage`, including item counts and big-endian
+generation/page integers. Page tokens bind the next index to the source hash.
+Migration `000010_chat_manifest_root_binding` is required before enabling the
+protected listener; rollback refuses while any imported evidence remains.
+
+The canonical page client requires `SEARCH_CHAT_MANIFEST_GRPC_ADDR`,
+`SEARCH_CHAT_MANIFEST_TLS_CA_FILE`, `SEARCH_CHAT_MANIFEST_TLS_SERVER_NAME`,
+`SEARCH_CHAT_MANIFEST_CLIENT_CERT_FILE`, and
+`SEARCH_CHAT_MANIFEST_CLIENT_KEY_FILE`, together with Search's two rotating
+signing keys and active KID. It targets Chat's dedicated Search page listener.
+Each exact page request signs the deletion operation ID as its request ID and
+the full request hash with a fresh JWT ID; an exact retry preserves the
+operation binding without reusing the replay token. Partial configuration or
+invalid TLS identity fails startup.
+
+Messaging's T33 managed-chat purge may delete through a `PURGE_DECIDED` Search
+fence only with its verified, request-bound service principal and the exact
+deterministic child operation derived from the saved Space/deletion/chat tuple.
+The Chat must belong to the sealed source manifest at the preceding generation.
+Ordinary frozen access stays denied. An indexed message from another Chat
+rejects the complete work set before any permanent message fences are installed.
+Operation locking precedes sorted message locking; concurrent exact retries and
+restart replay return the first saved receipt, including after parent purge.
+
 ## User-authoritative profile projection
 
 Search signs the protected User bootstrap calls with its rotating principal

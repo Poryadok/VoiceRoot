@@ -354,11 +354,16 @@ func TestR23SearchParticipant_RejectsChatPagesOutsideExactSpaceRoot(t *testing.T
 	ids := []uuid.UUID{fixture.targetChat, fixture.controlChat}
 	sort.Slice(ids, func(i, j int) bool { return strings.Compare(string(ids[i][:]), string(ids[j][:])) < 0 })
 	fixture.first.ChatManifest = newR23ManifestClientForIDs(t, ids)
+	// Source and aggregate roots may differ, but Chat's source hash must still
+	// authenticate its complete IDs. Corrupt that binding without corrupting the
+	// page hash so this specifically exercises the complete-source check.
+	fixture.first.ChatManifest.(*r23ManifestClient).page.Manifest.ManifestSha256 = r23SearchManifest().GetManifestSha256()
+	fixture.first.ChatManifest.(*r23ManifestClient).page.PageSha256 = chatManifestPageSHA(r23SearchManifest().GetManifestSha256(), 0, ids)
 
 	before := r23SearchMutationSnapshot(t, fixture)
 	frozen := r23SearchFenceRequest(t, 1, commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN)
 	_, err := fixture.first.ApplySpaceLifecycleFence(r23SearchTrustedSpaceContext(t, frozen, searchv1.SearchService_ApplySpaceLifecycleFence_FullMethodName), frozen)
-	require.Equal(t, codes.Unavailable, status.Code(err), "same manifest_id with different hash, count, and page items cannot bind Search to a wider deletion scope")
+	require.Equal(t, codes.Unavailable, status.Code(err), "Chat's source hash must authenticate every imported ID independently of the aggregate Space root")
 	require.Equal(t, before, r23SearchMutationSnapshot(t, fixture), "rejected Chat pages create no fence or receipt")
 	r23AssertSearchFixtureVisible(t, fixture)
 
@@ -604,10 +609,7 @@ func newR23ManifestClientForIDs(t *testing.T, ids []uuid.UUID) *r23ManifestClien
 		raw[i] = id.String()
 	}
 	page := &chatv1.SpacePurgeManifestPage{ProtocolVersion: 1, Manifest: binding, PageIndex: 0, ItemIds: raw}
-	clone := proto.Clone(page).(*chatv1.SpacePurgeManifestPage)
-	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(clone)
-	require.NoError(t, err)
-	page.PageSha256 = domainSeparatedSHA(string(page.ProtoReflect().Descriptor().FullName()), wire)
+	page.PageSha256 = chatManifestPageSHA(binding.ManifestSha256, 0, ids)
 	return &r23ManifestClient{page: page}
 }
 
@@ -644,6 +646,8 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 	pool := integrationtest.StartPostgres(t, ctx, "search_r23_lifecycle", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000002_verification_type.up.sql"))
 	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000003_space_lifecycle.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000009_managed_chat_message_purge.up.sql"))
+	integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", "000010_chat_manifest_root_binding.up.sql"))
 
 	messages := store.NewMessageSearchStore(pool)
 	projections := store.NewProfileSpaceSearchStore(pool)
@@ -662,9 +666,11 @@ func startR23SearchFixture(t *testing.T) r23SearchFixture {
 		freshMessages := store.NewMessageSearchStore(pool)
 		freshProjections := store.NewProfileSpaceSearchStore(pool)
 		return &SearchGRPC{
-			Messages:     &MessageStoreAdapter{MessageSearchStore: freshMessages},
-			Spaces:       &SpaceStoreAdapter{ProfileSpaceSearchStore: freshProjections},
-			ChatManifest: manifestClient,
+			Messages:          &MessageStoreAdapter{MessageSearchStore: freshMessages},
+			ManagedChatPurger: freshMessages,
+			Spaces:            &SpaceStoreAdapter{ProfileSpaceSearchStore: freshProjections},
+			ChatManifest:      manifestClient,
+			ChatEntitlement:   &entitlementChatClient{allowed: true},
 			Chats: &ProjectionChatAccess{Store: freshProjections, Accessible: func(context.Context, uuid.UUID) ([]uuid.UUID, error) {
 				return []uuid.UUID{targetChat, controlChat}, nil
 			}},

@@ -46,8 +46,64 @@ service RoleService {
   // Проверка прав (internal, вызывается другими сервисами)
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
   rpc GetEffectivePermissions(GetEffectiveRequest) returns (PermissionSet);
+
+  // GIS-owned managed game-session grants (T31 target contract)
+rpc ApplyGameSessionGrants(ApplyGameSessionGrantsRequest) returns (ApplyGameSessionGrantsResponse);
+rpc RevokeGameSessionGrants(RevokeGameSessionGrantsRequest) returns (RevokeGameSessionGrantsResponse);
+  rpc CheckGameSessionGrant(CheckGameSessionGrantRequest) returns (CheckGameSessionGrantResponse);
 }
 ```
+
+### T31 managed game-session grants (target owner contract)
+
+The grant RPCs and ledger in this section are required T31 additions, not
+implemented APIs at base `c31a8e0b771f99d00f00a760a2c6e2f7ec67cbcd`. Role has
+no T31 grant proto/handlers, grant ledger, or migration at that base. T31
+includes the protobuf contract, private server implementation, PostgreSQL
+ledger/migration, and owner-level integration tests. GIS and Voice integration
+must not ship until those owner receipts and admission checks are executable.
+
+Role owns a separate `game_session_grants` ledger; GIS never writes it
+directly. Its private gRPC listener requires mTLS and a signed workload principal.
+Configure the listener with `ROLE_PRINCIPAL_TLS_CERT_FILE`,
+`ROLE_PRINCIPAL_TLS_KEY_FILE`, and `ROLE_PRINCIPAL_CLIENT_CA_FILE`; the last
+file is the trusted client-certificate CA bundle. `ROLE_PRINCIPAL_GRPC_LISTEN`
+defaults to `:9091`. `S2S_JWKS_URLS_JSON` must contain the exact `space`,
+`gameintegration`, and `voice` issuers. The server requires and verifies a
+client certificate before principal verification.
+GIS authenticates as exact issuer `gameintegration`, audience `role`, exact
+RPC full name and deterministic protobuf request hash; `x-request-id` equals
+the request's operation ID for Apply/Revoke. The distinct Voice caller uses
+exact issuer `voice`, audience `role`, exact `CheckGameSessionGrant` RPC and
+request hash; its request ID is a fresh canonical UUID. Role accepts only
+Apply/Revoke from GIS and only Check from Voice. Each JTI authorizes one
+attempt; retries use a fresh JTI and the same request ID/hash. An apply request binds
+`application_id`, `environment_id`, `session_id`, `voice_room_id`,
+`operation_id`, `roster_revision`, and the complete sorted, unique list of
+canonical `profile_id` UUIDs. It grants only `VOICE_JOIN` for that exact
+managed Voice room. Role atomically replaces the session's complete grant set
+and writes a durable receipt containing the request hash, revision, applied
+profile-set hash and receipt ID. The same operation ID and request hash returns
+the same receipt; changed input conflicts. A lower roster revision is a stale
+no-op, equal revision/equal set replays without mutation, equal revision with a
+different set conflicts, and only a complete higher revision replaces the set.
+An empty set is valid only as an explicit complete higher revision.
+
+The apply receipt is readiness evidence only after Role commits every grant in
+its database transaction. Voice checks `CheckGameSessionGrant` for the
+authenticated profile, application/environment, session and room on JoinCall
+and token issuance in addition to current Chat membership; missing, revoked,
+or mismatched grants fail closed. A grant remains valid while its durable
+session ledger row is active. Role has no time-based session expiry; durable
+Revoke immediately removes the session's grants and terminally fences later
+Apply calls. GIS closes Voice first, then revokes Role grants; Voice close
+independently fences admission. `RevokeGameSessionGrants` takes
+app/environment/session, close operation ID and request hash, atomically
+removes only that session's managed grants, and returns a durable receipt. It
+cannot revoke another session's grant or a player's ordinary Role assignment.
+Exact revoke retry returns the original receipt; conflicting reuse rejects.
+GIS reports a roster or close stage ready only after validating this Role
+receipt. These private RPCs do not widen `AssignRole`/`RevokeRole` authority.
 
 ### BE-116 Space audit producer dependency (accepted target; not implemented)
 
@@ -485,11 +541,58 @@ not activate the v2 ownership feature.
 
 ## P3 permanent Space retirement
 
+Role is participant 1 of the common Space lifecycle barrier. Before retirement,
+`ApplySpaceLifecycleFence` accepts only a request-bound authenticated Space
+service principal on the protected listener. The durable head binds canonical
+Space/deletion IDs, monotonic generation and the exact common manifest. FROZEN
+and PURGE_DECIDED block ordinary Role reads, permission decisions, mutations,
+bootstrap and new ownership admission under the same advisory Space lock.
+LIVE at the next generation restores ordinary admission only before irreversible
+purge. A later deletion cycle starts with a new operation at the next generation
+after LIVE; old exact receipt replay cannot reopen current authority. Prepared
+ownership operations prevent a new deletion fence. Exact immutable receipt
+replay preserves the original ID and database application time; changed bindings
+conflict. Permanent retirement takes precedence over every stale LIVE request.
+Migration `000014_space_deletion_fence` persists the head and immutable receipt
+tuple. Receipts bind the full typed participant RPC with a domain-separated
+SHA-256, independently of transport credential hashing. Startup checks the
+schema and runs bounded compaction; full bytes compact only 30 days after
+permanent retirement, while the semantic tuple and stable receipt remain.
+Focused real PostgreSQL, mTLS/JWKS and restart/negative checks verify this
+participant; integrated all-participant acceptance remains tracked in T40.
+
+Version 13 is reserved for `000013_game_session_grants`; its original bytes
+remain unchanged. Version 14 also handles the pre-repair local version-13 fence
+catalog: exact legacy fences/receipts are retained and canonical grant tables
+are added. A canonical grant-only v13 receives the fence schema. A combined
+exact catalog is adopted without row changes. The upgrade requires one recorded
+clean v13 marker, or the dirty v14 marker set by the executing golang-migrate
+driver. Missing/old/dirty v13 state, partial schemas, different columns/defaults/
+checks/keys/indexes/FKs, or an altered immutable function/trigger are refused.
+RLS (including forced RLS), saved policies, rewrite rules, inheritance and
+unlogged tables also prevent adoption, even when columns and keys match.
+This includes schema validation against temporary canonical tables before any
+upgrade can commit; `IF NOT EXISTS` is not used to trust saved objects.
+
+The actual pinned golang-migrate acceptance loads the complete unique source
+catalog, runs to clean v13, then upgrades canonical and legacy fixture states
+to clean v14. Direct-SQL store fixtures record their input marker separately;
+they do not replace that deployment evidence. DOWN locks both fence tables,
+rechecks after concurrent writes complete and refuses while either holds saved
+evidence. The locked catalog check rejects filtering or rewriting behavior;
+`row_security=off` makes hidden-row access fail instead of authorizing an empty
+rollback. A non-superuser forced-RLS regression verifies saved receipts survive.
+Empty DOWN removes only fence objects and retains canonical v13 game
+grants. Never force a dirty version marker to bypass a refused catalog; preserve
+the database and diagnose/recover the exact source state before rollout.
+
 `RetireSpace` is protected-listener only and accepts `protocol_version=1`,
 canonical Space/deletion IDs, positive generation, `purge_decided_at` and exact
 root manifest binding from authenticated Space workload identity. Unknown
 request fields are rejected. Role refuses retirement while any ownership-v2
-operation is `PREPARED`. One transaction writes the permanent retirement fence
+operation is `PREPARED`, or unless the durable `PURGE_DECIDED` head matches
+the exact Space, deletion operation, generation and complete manifest tuple.
+One transaction writes the permanent retirement fence
 and immutable receipt, removes ordinary Role rows and emits final policy
 invalidation. Exact replay returns stored bytes; changed operation, generation,
 manifest or request for the retired Space is `FAILED_PRECONDITION`.

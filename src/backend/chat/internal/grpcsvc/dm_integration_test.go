@@ -44,7 +44,7 @@ func startChatPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 
 func applyChatMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql", "000013_sticker_packs.up.sql", "000014_managed_chats.up.sql", "000015_managed_chat_member_intervals.up.sql", "000016_managed_chat_retention.up.sql", "000017_managed_chat_add_members.up.sql", "000018_space_lifecycle.up.sql", "000019_space_lifecycle_source_manifest.up.sql", "000020_space_purge_owner_receipts.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)

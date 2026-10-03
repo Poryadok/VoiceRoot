@@ -85,6 +85,31 @@ func TestServerOptions_WithRegistry(t *testing.T) {
 	require.NotNil(t, opts[0])
 }
 
+func TestMultipleServersShareMetricsRegistry(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	first := UnaryMetricsForRegistry(reg)
+	// A protected listener shares the service's metrics endpoint with the ordinary listener.
+	ServerOptions(nil, WithRegistry(reg))
+	second := UnaryMetricsForRegistry(reg)
+	handler := func(context.Context, any) (any, error) { return nil, nil }
+	info := &grpc.UnaryServerInfo{FullMethod: "/test.Service/Call"}
+	_, err := first(context.Background(), nil, info, handler)
+	require.NoError(t, err)
+	_, err = second(context.Background(), nil, info, handler)
+	require.NoError(t, err)
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	require.Len(t, families, 2)
+	for _, family := range families {
+		require.Len(t, family.Metric, 1)
+		if family.GetName() == "grpc_server_handled_total" {
+			require.Equal(t, float64(2), family.Metric[0].GetCounter().GetValue())
+		} else {
+			require.Equal(t, uint64(2), family.Metric[0].GetHistogram().GetSampleCount())
+		}
+	}
+}
+
 func TestSplitFullMethod(t *testing.T) {
 	svc, method := splitFullMethod("/voice.chat.v1.ChatService/ListChats")
 	require.Equal(t, "voice.chat.v1.ChatService", svc)

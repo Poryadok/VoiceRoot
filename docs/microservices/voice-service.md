@@ -102,6 +102,151 @@ owner ID, creation operation, manifest hash, creation receipt ID and Chat creati
 receipt ID together with its Chat UUID. No ordinary resource can be relabelled
 as a match resource by updating these fields.
 
+### T31 managed game-session rooms
+
+This is the target contract, not evidence that all listed APIs exist at the T31
+base. `ProvisionGameSessionRoom` is implemented at base
+`c31a8e0b771f99d00f00a760a2c6e2f7ec67cbcd`. Managed-grant admission checking
+and the close path below remain required T31 implementation work; the close
+protobuf/RPC, durable CLOSING/CLOSED receipt and media fencer/store integration
+are absent there. T31 includes the Voice proto, server, Postgres schema/migration,
+and focused service integration tests for these additions.
+
+`000004_game_session_rooms` adds `GAME_SESSION`, a `group_voice` room with a
+NULL `owner_id`. This purpose is separate from `MATCH_SQUAD`, whose owner remains
+required. GIS identity and player profiles never become room owners. Each managed
+room binds the authenticated application/environment, GIS `session_id`, exact
+external resource kind/key, Chat ID and Chat creation operation ID to one Voice
+operation, request hash, Voice creation receipt and immutable response. The Chat creation operation
+ID identifies Chat's durable creation receipt; Voice does not infer or create a
+Chat resource.
+
+The optional private listener is enabled only by a complete
+`VOICE_GAME_PRINCIPAL_*` configuration. Startup fails if TLS server identity,
+dedicated client CA, HTTPS GIS JWKS, replay Redis, Voice DB, or migrations 4 and 5 are
+unavailable. It requires verified mTLS and exposes only
+`GameSessionProvisioningService/ProvisionGameSessionRoom`. The request's
+`operation_id` is the `x-request-id`; its service principal must have exact
+issuer `gameintegration`, audience `voice`, exact RPC and deterministic
+protobuf request hash. A JTI can authorize only one attempt.
+
+Room, resource mapping and immutable Voice receipt are committed in one
+PostgreSQL transaction. The same operation and deterministic input returns the
+stored original response after process restart; changed input or a second
+operation for the same application/environment/resource conflicts. Voice stores
+`session_id` with the immutable operation request and receipt; replaying the
+same resource with another GIS session ID conflicts. Voice passes the stored ID
+to `CheckGameSessionGrant` with application/environment, room ID, and the
+authenticated profile. A Role grant is valid only while its Role ledger row is
+active and becomes invalid immediately after durable revoke; T31 has no grant
+expiry clock. Provisioning
+does not add members, issue media tokens or authorize admission. Players continue
+through the existing user-authorized Voice path, which checks current Chat
+membership/admission before token issuance. Under T31, managed-session
+`JoinCall` and `GetJoinToken` additionally call Role's private
+`CheckGameSessionGrant` for the verified profile, application/environment,
+session ID and Voice room before issuing or refreshing a media token. Missing,
+revoked or mismatched grant denies admission even if Chat
+membership or a warm CallStore entry exists. On a Voice call-store cache miss,
+Voice rebuilds an ownerless managed-room projection from the durable mapping,
+then checks live Chat membership before adding the authenticated profile. This
+lets an active managed room recover after Redis loss without an invented
+initiator. Managed rooms do not occupy the ordinary active-Chat-call index, stay
+active when the last player leaves, and cannot be ended through player `EndCall`;
+the GIS provisioning endpoint does not expose lifecycle mutation methods.
+
+### T31 managed-room close receipt
+
+The close API described in this section is a required new owner implementation;
+it is not present at the cited base.
+
+`VoiceGRPC` receives an injectable `ManagedGameSessionGrantChecker` dependency
+with method `CheckGameSessionGrant(ctx, applicationID, environmentID, sessionID,
+voiceRoomID, profileID string) error`. Missing dependency fails closed for
+managed-room admission. Both cold projection and warm CallStore paths call it
+for JoinCall and GetJoinToken.
+The in-package typed setter
+`setManagedGameSessionGrantChecker(ManagedGameSessionGrantChecker)` exists for
+focused service tests; production startup injects the real Voice-to-Role client
+through the same interface.
+
+Voice enables GIS room provisioning and the Role grant checker as a complete
+configuration pair. GIS admission uses `VOICE_GAME_PRINCIPAL_GRPC_LISTEN`,
+`VOICE_GAME_PRINCIPAL_TLS_CERT_FILE`, `VOICE_GAME_PRINCIPAL_TLS_KEY_FILE`,
+`VOICE_GAME_PRINCIPAL_CLIENT_CA_FILE`, `VOICE_GAME_PRINCIPAL_JWKS_URL`,
+`VOICE_GAME_PRINCIPAL_JWKS_CA_FILE`, and
+`VOICE_GAME_PRINCIPAL_REPLAY_REDIS_ADDR`. The trusted client CA is dedicated to
+the GIS caller. Role lookup uses `VOICE_ROLE_GRPC_ADDR`,
+`VOICE_ROLE_TLS_CA_FILE`, `VOICE_ROLE_CLIENT_CERT_FILE`, and
+`VOICE_ROLE_CLIENT_KEY_FILE`; its client identity is distinct from GIS and is
+signed by Role's configured client CA. Partial configuration prevents Voice
+startup. The Voice service principal signer uses
+`VOICE_PRINCIPAL_PRIVATE_KEY_FILE`, `VOICE_PRINCIPAL_KID`,
+`VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE`, `VOICE_PRINCIPAL_NEXT_KID`,
+`VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE`, and
+`VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE`. The HTTPS
+`/internal/v1/principal/jwks.json` listener publishes both public current and
+next RSA keys; Voice signs only with the current KID. Current and next KIDs and
+keys must be distinct. The Role caller sends only the current-key assertion for
+`CheckGameSessionGrant`.
+
+The Voice-to-Role client uses a separate private mTLS listener and signed
+workload assertion with exact issuer `voice`, audience `role`, exact RPC
+`RoleService/CheckGameSessionGrant`, request UUID in `x-request-id`, and
+deterministic protobuf SHA-256 request hash. This Voice principal cannot call
+Role Apply/Revoke. GIS uses its distinct `gameintegration` principal for those
+mutations; it never impersonates Voice or a user.
+
+The T31 owner API adds private
+`GameSessionProvisioningService/CloseGameSessionRoom`. Its protobuf request
+contains `operation_id`, `application_id`, `environment_id`, `session_id`, `resource`,
+`chat_id`, and `chat_creation_operation_id`; it identifies the same immutable
+owner tuple as provisioning. Its response contains those IDs, `room_id`,
+`status`, `close_receipt_id`, `request_hash`, `closing_at`, `media_fenced_at`,
+and `closed_at`. The GIS mTLS principal is exact issuer `gameintegration`,
+audience `voice`, exact RPC and deterministic protobuf request hash. Voice
+stores the close request hash and immutable receipt in the same PostgreSQL
+transaction that changes the managed room to `CLOSING`; this commit immediately
+fences new admission. The Voice media fencer then stops/ejects existing media
+and atomically changes the room to `CLOSED`, recording `closed_at`,
+`media_fenced_at`, and the immutable close receipt. `CloseGameSessionRoom`
+returns only after that receipt is committed. Exact retries resume a durable
+`CLOSING` operation or return its original receipt; changed bytes under the
+same operation ID conflict. Closing an already closed resource with its
+original close operation returns that receipt; a different close operation
+for that resource conflicts. A restart resumes fencing from the durable
+`CLOSING` row using the same operation ID.
+
+The close commit immediately fences new `JoinCall` and `GetJoinToken` admission,
+including warm CallStore entries; those paths consult durable owner state and
+Role grants before issuing a token. Each media-fence attempt is bounded to five
+seconds. If an attempt fails, `CLOSING` continues to fence admission and an
+exact retry resumes the same operation; the successful attempt records
+`media_fenced_at` after its fence completes. The typed
+`ManagedGameSessionMediaFencer.FenceManagedGameSession(ctx, roomID, operationID)`
+dependency is injected into the provisioning handler. The winning operation ID
+is passed on every retry so the media owner deduplicates the fence effect. The
+active-media recording fixture in the Postgres integration test verifies this
+path. Voice never deletes the managed room or its
+Chat. Provision and close receipts remain queryable for the T32
+terminal receipt window; Voice retains the non-content resource fence after
+receipt expiry.
+
+The store-level integration seam is typed as
+`PostgresStore.CloseGameSessionRoom(ctx, request, mediaFencer)`. It commits
+`CLOSING` plus the exact protobuf request hash before invoking the fencer,
+passes the winning operation ID to the fencer for idempotency, then commits
+`CLOSED` plus one immutable receipt with `closing_at`, `media_fenced_at`, and
+`closed_at`. Exact retry during `CLOSING` resumes fencing; retry after `CLOSED`
+returns the same receipt without a second fencer call. The close Postgres
+integration test provisions a room, seeds active media in a recording fencer,
+closes it, asserts the active media stopped and `media_fenced_at` is within five
+seconds of the successful fencer attempt's start, confirms the closed room is
+no longer joinable, and replays the same receipt. It also fails a first fence,
+waits past five seconds, and verifies that an exact retry can finish the same
+durable `CLOSING` operation. The gRPC handler separately binds the authenticated principal to the
+exact request ID and deterministic protobuf hash before calling this seam.
+
 Memberships record the verified `account_id`, positive `session_epoch` and
 `JOINING|JOINED|RECONNECTING|LEAVING|LEFT|EJECTED` state. `RECONNECTING` alone has
 `reconnect_started_at` and `reconnect_deadline`, with a positive interval no longer
@@ -176,6 +321,18 @@ Client ──LiveKit Client SDK──► LiveKit SFU (media streams)
 - Voice Service создаёт/удаляет комнаты через LiveKit Server SDK
 - Voice Service генерирует JWT-токены для клиентов
 - Клиенты подключаются напрямую к LiveKit для медиа-потоков
+
+For mapped game-node Space rooms, the opt-in `VOICE_FEDERATED_MEDIA_CONFIG`
+client preserves the existing canonical Space/membership/Role and profile fence
+checks, resolves the exact current master route/application binding, obtains a
+private signed credential through a distinct Voice mTLS role, and exchanges
+only that credential at the registered HTTPS node media edge. The node's SFU
+secret stays local. Only an explicit version-1 not-hosted result permits hosted
+token issuance; denial, ambiguity, stale policy, generic HTTP error or unavailable
+authority fails closed. See [authority contract](../architecture/federation-authority-v1.md)
+and [runtime setup](../../docker/voice-node/authority/README.md). Owning-service
+projection, complete bundle and qualified capacity acceptance remain open.
+
 - WebRTC signaling (`offer`/`answer`/`ICE`) идёт внутри LiveKit SDK; собственный signaling через Realtime/Gateway не вводится в Фазе 2
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)

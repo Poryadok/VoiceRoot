@@ -55,6 +55,28 @@ var (
 	}
 )
 
+func TestLifecycleFenceRequestForEachParticipantMatchesBarrierHash(t *testing.T) {
+	aggregate, err := NewLifecycleAggregate(testSpaceID, testOperationID)
+	require.NoError(t, err)
+	require.NoError(t, aggregate.BeginSchedule(1))
+	manifest := &commonv1.ManifestBinding{ManifestId: testManifestID, ManifestSha256: testManifestSHA256, ItemCount: testManifestItemCount}
+	require.NoError(t, aggregate.BeginFreeze(manifest))
+
+	for _, participantID := range testParticipants {
+		request, err := aggregate.FenceRequest(participantID)
+		require.NoError(t, err)
+		require.Equal(t, uint32(1), request.GetProtocolVersion())
+		require.Equal(t, testSpaceID, request.GetSpaceId())
+		require.Equal(t, testOperationID, request.GetDeletionOperationId())
+		require.EqualValues(t, 1, request.GetGeneration())
+		require.Equal(t, commonv1.LifecycleFenceState_LIFECYCLE_FENCE_STATE_FROZEN, request.GetDesiredState())
+		require.Equal(t, manifest, request.GetManifest())
+		wrappedHash, err := computeWrappedRequestSHA256(testParticipantRequestPackages[participantID]+".ApplySpaceLifecycleFenceRequest", request)
+		require.NoError(t, err)
+		require.Equal(t, aggregate.expectedFenceHashes[participantID], wrappedHash)
+	}
+}
+
 func TestLifecycleScheduleRequiresEveryCanonicalParticipant(t *testing.T) {
 	scheduledAt := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
 	for _, omitted := range testParticipants {
@@ -273,6 +295,29 @@ func TestLifecyclePurgeRequiresPurgingAndTypedRoleRetirement(t *testing.T) {
 			require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_PURGING, aggregate.Phase())
 		})
 	}
+}
+
+func TestLifecyclePurgeRequestsReconstructExactBoundRequests(t *testing.T) {
+	aggregate := newPurgingLifecycleAggregate(t)
+	for _, participantID := range testParticipants[1:] {
+		request, err := aggregate.PurgeRequest(participantID)
+		require.NoError(t, err)
+		require.Equal(t, uint32(1), request.GetProtocolVersion())
+		require.Equal(t, testSpaceID, request.GetSpaceId())
+		require.Equal(t, testOperationID, request.GetDeletionOperationId())
+		require.Equal(t, uint64(2), request.GetGeneration())
+		require.Equal(t, participantID, request.GetParticipantId())
+		require.Equal(t, aggregate.Snapshot().PurgeDecidedAt, request.GetPurgeDecidedAt().AsTime())
+		require.True(t, proto.Equal(testManifestBinding(), request.GetManifest()))
+	}
+	roleRequest, err := aggregate.RoleRetirementRequest()
+	require.NoError(t, err)
+	require.Equal(t, testSpaceID, roleRequest.GetSpaceId())
+	require.Equal(t, testOperationID, roleRequest.GetDeletionOperationId())
+	require.Equal(t, uint64(2), roleRequest.GetGeneration())
+	require.Equal(t, aggregate.Snapshot().PurgeDecidedAt, roleRequest.GetPurgeDecidedAt().AsTime())
+	require.True(t, proto.Equal(testManifestBinding(), roleRequest.GetManifest()))
+	require.Error(t, func() error { _, err := aggregate.PurgeRequest(commonv1.ParticipantId_PARTICIPANT_ID_ROLE); return err }())
 }
 
 func TestLifecycleScheduleOutboxIdentityAndTimeAreStableOnReplay(t *testing.T) {

@@ -1,5 +1,12 @@
 # Federation — федерация серверов
 
+**Дополнение для игр (proposed):** [Game federation](../architecture/game-federation.md)
+описывает master authority, node content hosting, snapshot/revision recovery,
+media revocation и lifecycle receipts. Там явно перечислены изменения относительно
+старого дизайна ниже, включая 5–10 минут fallback и владение деревом Space.
+Это спецификация для review, не активация deferred runtime. См. также
+[Game SDK/API](game-integrations.md) и [решения/gates](../testing/game-integrations-acceptance.md).
+
 ## Статус: отложено (deferred)
 
 **Не входит в текущий релизный scope.** Реализация — только при явном запросе рынка на self-hosting / federated nodes. Ниже — целевая архитектура и продуктовые требования на будущее; код `src/backend/federation/` — scaffold (health, CI).
@@ -99,5 +106,4 @@ Kafka / очереди сообщений — не нужны в V1.
 - Открытая регистрация нод (только по заявке)
 - Аккаунты на federated нодах
 - ММ внутри спейсов на нодах (матчмейкинг работает только на master)
-
 

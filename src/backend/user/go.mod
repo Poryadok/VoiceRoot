@@ -14,7 +14,6 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/text v0.24.0
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
 	voice.app/voice/chat v0.0.0
@@ -29,6 +28,8 @@ require (
 	voice/backend/pkg v0.0.0
 	voice/backend/social v0.0.0
 )
+
+require golang.org/x/text v0.24.0 // indirect
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
@@ -109,6 +110,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/file v0.0.0
+	voice.app/voice/gameintegration v0.0.0
 )
 
 replace voice/backend/pkg => ../pkg
@@ -134,3 +136,5 @@ replace voice.app/voice/role => ../role/pb/voice/role
 replace voice.app/voice/story => ../voice/pb/voice/story
 
 replace voice.app/voice/file => ../file/pb/voice/file
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration

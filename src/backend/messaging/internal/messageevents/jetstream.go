@@ -239,6 +239,19 @@ func (p *JetStreamPublisher) PublishMessageSent(ctx context.Context, messageID, 
 	return p.publishProtoWithHeaders(ctx, subjectMessageSent, env, messageSentPublishHeaders(threadParentID))
 }
 
+// PublishGameEventMessageSent publishes the app/environment identity already
+// verified by GIS with a game event. Ordinary messages never set this scope.
+func (p *JetStreamPublisher) PublishGameEventMessageSent(ctx context.Context, messageID, chatID, senderProfileID, applicationID, environmentID string) error {
+	sent := &eventsv1.MessageSent{
+		MessageId: messageID, ChatId: chatID, SenderProfileId: senderProfileID,
+		ContentType:       ptrIfNonEmpty("text"),
+		GameApplicationId: &applicationID, GameEnvironmentId: &environmentID,
+	}
+	env := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(time.Now().UTC()),
+		Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: sent}}
+	return p.publishProtoWithHeaders(ctx, subjectMessageSent, env, nil)
+}
+
 func messageSentPublishHeaders(threadParentID string) nats.Header {
 	if strings.TrimSpace(threadParentID) == "" {
 		return nil
@@ -257,18 +270,22 @@ func ptrIfNonEmpty(s string) *string {
 }
 
 // PublishMentionAdded implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool) error {
+func (p *JetStreamPublisher) PublishMentionAdded(ctx context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool, gameApplicationID, gameEnvironmentID string) error {
+	mention := &eventsv1.MentionAdded{
+		MessageId: messageID, ChatId: chatID, SenderProfileId: senderProfileID,
+		MentionedProfileIds: append([]string(nil), mentionedProfileIDs...), SendSilent: sendSilent,
+	}
+	if value := ptrIfNonEmpty(gameApplicationID); value != nil {
+		mention.GameApplicationId = value
+	}
+	if value := ptrIfNonEmpty(gameEnvironmentID); value != nil {
+		mention.GameEnvironmentId = value
+	}
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_MentionAdded{
-			MentionAdded: &eventsv1.MentionAdded{
-				MessageId:           messageID,
-				ChatId:              chatID,
-				SenderProfileId:     senderProfileID,
-				MentionedProfileIds: append([]string(nil), mentionedProfileIDs...),
-				SendSilent:          sendSilent,
-			},
+			MentionAdded: mention,
 		},
 	}
 	return p.publishProto(ctx, subjectMentionAdded, env)
@@ -328,18 +345,22 @@ func (p *JetStreamPublisher) PublishReadReceiptRevoked(ctx context.Context, mess
 }
 
 // PublishReactionAdded implements MessageEventsPublisher.
-func (p *JetStreamPublisher) PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji string) error {
+func (p *JetStreamPublisher) PublishReactionAdded(ctx context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji, gameApplicationID, gameEnvironmentID string) error {
+	reaction := &eventsv1.ReactionAdded{
+		MessageId: messageID, ChatId: chatID, ProfileId: profileID,
+		Emoji: emoji, MessageAuthorProfileId: messageAuthorProfileID,
+	}
+	if value := ptrIfNonEmpty(gameApplicationID); value != nil {
+		reaction.GameApplicationId = value
+	}
+	if value := ptrIfNonEmpty(gameEnvironmentID); value != nil {
+		reaction.GameEnvironmentId = value
+	}
 	env := &eventsv1.MessageStreamEvent{
 		EventId:    uuid.NewString(),
 		OccurredAt: timestamppb.New(time.Now().UTC()),
 		Payload: &eventsv1.MessageStreamEvent_ReactionAdded{
-			ReactionAdded: &eventsv1.ReactionAdded{
-				MessageId:              messageID,
-				ChatId:                 chatID,
-				ProfileId:              profileID,
-				Emoji:                  emoji,
-				MessageAuthorProfileId: messageAuthorProfileID,
-			},
+			ReactionAdded: reaction,
 		},
 	}
 	return p.publishProto(ctx, subjectReactionAdded, env)

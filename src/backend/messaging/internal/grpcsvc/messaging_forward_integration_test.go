@@ -2,9 +2,12 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"path/filepath"
 	"testing"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -15,6 +18,7 @@ import (
 	commonv1 "voice.app/voice/common/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 
+	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/privacy"
 	"voice/backend/role/permissions"
 )
@@ -60,6 +64,59 @@ func TestMessagingForwardMessage_preservesAttribution(t *testing.T) {
 	require.Equal(t, "original text", msg.GetContent())
 	require.Equal(t, targetChat.String(), msg.GetChat().GetId())
 	require.Equal(t, profA.String(), msg.GetSenderProfileId())
+}
+
+func TestMessagingForwardAndCopyStripGameCardActionsAndMedia(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	sourceChat, targetChat, copyChat := uuid.New(), uuid.New(), uuid.New()
+	profA, profB, profC, profD := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	acctA := uuid.New()
+	seedDMChat(t, ctx, pool, sourceChat, profA, profB)
+	seedDMChat(t, ctx, pool, targetChat, profA, profC)
+	seedDMChat(t, ctx, pool, copyChat, profA, profD)
+	client, _ := startMessagingServerWired(t, pool, messagingWire{
+		ChatGuard: entitledSQLChatGuard{SQLChatGuard: &store.SQLChatGuard{Pool: pool}}, DeletedAccounts: allowDeletedAccounts{},
+	})
+
+	original, err := client.SendMessage(withProfileCtx(ctx, acctA, profB), &messagingv1.SendMessageRequest{
+		Chat: chatDMRef(sourceChat), Content: "Safe fallback text", AttachmentsJson: "[]", MentionsJson: "[]",
+	})
+	require.NoError(t, err)
+	appID, environmentID, installationID, botID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	cardPayload := `{"schema_version":1,"revision":"1","title":"Private card title","safe_summary":"Safe summary","facts":[],"actions":[{"action_id":"00000000-0000-4000-8000-000000000020","action_type":"relic.inspect","label":"Inspect","arguments_json":"{\"secret\":\"do-not-forward\"}"}],"media_reference_ids":["00000000-0000-4000-8000-000000000030"]}`
+	canonicalCard, err := jsoncanonicalizer.Transform([]byte(cardPayload))
+	require.NoError(t, err)
+	cardDigest := sha256.Sum256(canonicalCard)
+	_, err = pool.Exec(ctx, `INSERT INTO message_game_cards
+		(message_id,app_id,environment_id,installation_id,bot_id,card_json,card_sha256,actions_enabled)
+		VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,false)`, uuid.MustParse(original.GetMessage().GetId()), appID, environmentID, installationID, botID,
+		cardPayload, hex.EncodeToString(cardDigest[:]))
+	require.NoError(t, err)
+
+	fwd, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(), TargetChat: chatDMRef(targetChat),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Safe fallback text", fwd.GetMessage().GetContent())
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_FORWARD, fwd.GetMessage().GetMessageKind())
+	require.Nil(t, fwd.GetMessage().GetGameCard())
+	require.Empty(t, fwd.GetMessage().GetGameAppId())
+	require.False(t, fwd.GetMessage().GetGameCardActionsEnabled())
+	require.Equal(t, "[]", fwd.GetMessage().GetAttachmentsJson(), "the card's opaque File references are not copied as attachments")
+
+	withoutAttribution := true
+	copyResult, err := client.ForwardMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.ForwardMessageRequest{
+		SourceMessageId: original.GetMessage().GetId(), TargetChat: chatDMRef(copyChat), WithoutAttribution: &withoutAttribution,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Safe fallback text", copyResult.GetMessage().GetContent())
+	require.Equal(t, messagingv1.MessageKind_MESSAGE_KIND_REGULAR, copyResult.GetMessage().GetMessageKind())
+	require.Nil(t, copyResult.GetMessage().GetGameCard())
+	require.Equal(t, "[]", copyResult.GetMessage().GetAttachmentsJson())
 }
 
 // TestMessagingForwardMessage_chainPointsToOriginal documents forward-messages.md:

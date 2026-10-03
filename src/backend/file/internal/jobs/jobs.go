@@ -73,11 +73,42 @@ func StartExpiryWorker(
 				n, err := RunExpiryPurgeOnce(context.Background(), files, deleter, pub, time.Now().UTC())
 				if err != nil && logger != nil {
 					logger.Error("file expiry worker", slog.String("error", err.Error()))
-					continue
-				}
-				if n > 0 && logger != nil {
+				} else if n > 0 && logger != nil {
 					logger.Info("file expiry worker", slog.Int64("expired", n))
 				}
+			}
+		}
+	}()
+}
+
+// StartReferenceGCWorker retries physical deletion of durable zero-reference
+// blobs immediately and on each interval. A nil deleter deliberately leaves
+// every blob pending so File cannot claim that absent storage is garbage-collected.
+func StartReferenceGCWorker(ctx context.Context, files *store.FilesStore, deleter r2file.ObjectDeleter, interval time.Duration, logger *slog.Logger) {
+	if files == nil || deleter == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		run := func() {
+			collected, err := files.RunReferenceGCOnce(ctx, deleter, expiryBatchSize)
+			if err != nil && logger != nil {
+				logger.Error("file reference GC worker", slog.String("error", err.Error()))
+			} else if collected > 0 && logger != nil {
+				logger.Info("file reference GC worker", slog.Int64("collected", collected))
+			}
+		}
+		run()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
 			}
 		}
 	}()

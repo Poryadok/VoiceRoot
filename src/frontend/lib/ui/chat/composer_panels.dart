@@ -149,7 +149,8 @@ class ComposerAttachMenuBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).dialogBackgroundColor,
+      color: Theme.of(context).dialogTheme.backgroundColor ??
+          Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: Semantics(
         container: true,

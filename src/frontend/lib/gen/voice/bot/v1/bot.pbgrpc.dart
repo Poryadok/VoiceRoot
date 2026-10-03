@@ -33,6 +33,14 @@ class BotServiceClient extends $grpc.Client {
 
   BotServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.PublishGameEventResponse> publishGameEvent(
+    $0.PublishGameEventRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$publishGameEvent, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.RegisterBotResponse> registerBot(
     $0.RegisterBotRequest request, {
     $grpc.CallOptions? options,
@@ -342,6 +350,11 @@ class BotServiceClient extends $grpc.Client {
 
   // method descriptors
 
+  static final _$publishGameEvent = $grpc.ClientMethod<
+          $0.PublishGameEventRequest, $0.PublishGameEventResponse>(
+      '/voice.bot.v1.BotService/PublishGameEvent',
+      ($0.PublishGameEventRequest value) => value.writeToBuffer(),
+      $0.PublishGameEventResponse.fromBuffer);
   static final _$registerBot =
       $grpc.ClientMethod<$0.RegisterBotRequest, $0.RegisterBotResponse>(
           '/voice.bot.v1.BotService/RegisterBot',
@@ -559,6 +572,15 @@ abstract class BotServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.bot.v1.BotService';
 
   BotServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.PublishGameEventRequest,
+            $0.PublishGameEventResponse>(
+        'PublishGameEvent',
+        publishGameEvent_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PublishGameEventRequest.fromBuffer(value),
+        ($0.PublishGameEventResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.RegisterBotRequest, $0.RegisterBotResponse>(
             'RegisterBot',
@@ -917,6 +939,15 @@ abstract class BotServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
         ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
   }
+
+  $async.Future<$0.PublishGameEventResponse> publishGameEvent_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.PublishGameEventRequest> $request) async {
+    return publishGameEvent($call, await $request);
+  }
+
+  $async.Future<$0.PublishGameEventResponse> publishGameEvent(
+      $grpc.ServiceCall call, $0.PublishGameEventRequest request);
 
   $async.Future<$0.RegisterBotResponse> registerBot_Pre($grpc.ServiceCall $call,
       $async.Future<$0.RegisterBotRequest> $request) async {

@@ -91,6 +91,18 @@ func (s *RoleStore) RetireSpace(ctx context.Context, in SpaceRetirementInput, bu
 		if prepared {
 			return ErrSpaceFrozen
 		}
+		// The participant independently enforces the irreversible coordinator
+		// barrier under the same lock as Role cleanup and ordinary admission.
+		var purgeReady bool
+		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM role_space_deletion_fences
+		 WHERE space_id=$1 AND deletion_operation_id=$2 AND generation=$3 AND state='PURGE_DECIDED'
+		 AND manifest_id=$4 AND manifest_sha256=$5 AND manifest_item_count=$6)`,
+			in.SpaceID, in.DeletionOperationID, int64(in.Generation), in.ManifestID, in.ManifestSHA256, in.ManifestItemCount).Scan(&purgeReady); err != nil {
+			return err
+		}
+		if !purgeReady {
+			return ErrSpaceRetirementConflict
+		}
 
 		result = SpaceRetirementReceipt{
 			ProtocolVersion: in.ProtocolVersion, ReceiptID: uuid.New(), SpaceID: in.SpaceID,

@@ -32,6 +32,7 @@ func toMessageHits(in []store.MessageHit) []MessageHit {
 			ChatID:    h.ChatID,
 			Snippet:   h.Snippet,
 			Score:     h.Score,
+			CreatedAt: h.CreatedAt,
 		})
 	}
 	return out

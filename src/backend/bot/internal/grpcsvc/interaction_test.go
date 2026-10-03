@@ -43,15 +43,17 @@ func (f *fakeUserClient) CreateProfile(context.Context, *userv1.CreateProfileReq
 
 type fakeMessagingClient struct {
 	messagingv1.UnimplementedMessagingServiceServer
-	lastContent string
-	lastChat    *chatv1.ChatRef
-	editCalls   int
-	editErr     error
+	lastContent      string
+	lastChat         *chatv1.ChatRef
+	lastThreadParent string
+	editCalls        int
+	editErr          error
 }
 
 func (f *fakeMessagingClient) SendMessage(_ context.Context, req *messagingv1.SendMessageRequest) (*messagingv1.SendMessageResponse, error) {
 	f.lastContent = req.GetContent()
 	f.lastChat = req.GetChat()
+	f.lastThreadParent = req.GetThreadParentId()
 	return &messagingv1.SendMessageResponse{
 		Message: &messagingv1.Message{
 			Id:      uuid.NewString(),
@@ -75,6 +77,7 @@ func (f *fakeMessagingClient) EditMessage(_ context.Context, req *messagingv1.Ed
 
 func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.MessagingServiceServer) (botv1.BotServiceClient, *store.BotStore, func()) {
 	t.Helper()
+	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "botinteraction", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
@@ -83,6 +86,7 @@ func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.Me
 	st := &store.BotStore{Pool: pool}
 	hub := dispatch.NewHub()
 	svc := grpcsvc.NewBotGRPC(st, hub)
+	svc.Chat = allowMembershipClient{}
 	if user != nil {
 		ul := bufconn.Listen(1024)
 		us := grpc.NewServer()

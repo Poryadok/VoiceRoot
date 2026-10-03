@@ -255,10 +255,10 @@ func validateLifecycleRestoreOperation(operation lifecycleOperation) error {
 }
 
 func loadRestoreForSpace(ctx context.Context, db spaceStoreDB, spaceID uuid.UUID) (*lifecycleOperation, error) {
-	// One active deletion cycle per Space exists in the current foundation.
-	// Query by Space first so a forged deletion ID cannot hide an admission.
+	// Consult the current durable cycle, rather than an older restore outcome.
+	// The Space lookup still prevents a forged snapshot ID hiding an admission.
 	var operationID uuid.UUID
-	err := db.QueryRow(ctx, `SELECT operation_id FROM space_lifecycle_operations WHERE space_id=$1 AND method='RESTORE' ORDER BY generation DESC LIMIT 1`, spaceID).Scan(&operationID)
+	err := db.QueryRow(ctx, `SELECT o.operation_id FROM space_lifecycle_operations o JOIN space_lifecycle_aggregates a ON a.space_id=o.space_id AND a.deletion_operation_id=o.deletion_operation_id WHERE o.space_id=$1 AND o.method='RESTORE' ORDER BY o.generation DESC LIMIT 1`, spaceID).Scan(&operationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

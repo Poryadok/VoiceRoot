@@ -80,6 +80,22 @@ quiet_hours
 └── override_mentions (bool — @username пробивает тишину)
 ```
 
+## Space deletion lifecycle
+
+Notification is one of the fixed Space lifecycle participants. Its
+`ImportSpacePurgeManifestPage`, `ApplySpaceLifecycleFence` and `PurgeSpace`
+handlers require the verified Space service principal on the dedicated mTLS
+listener. The ordinary listener rejects these protected methods. The owner ledger stores
+the exact request and receipt bytes so retries replay the original result and
+conflicting requests fail closed. Space scoped settings reads and writes are
+denied while the Space is frozen or terminal. Imported Chat pages also fence
+channel/chat settings and scoped provider delivery before the freeze barrier.
+Admitted provider calls drain before import/fence acknowledgement. Direct RPC
+payloads preserve validated `chat_id`/`space_id` for the same delivery gate.
+Purge removes matching Space settings and settings for the exact imported
+chat IDs; global settings, quiet hours, and device registrations are not
+Space-owned data.
+
 ## Типы уведомлений
 
 Канонические wire-имена — строка `notification_type` в `SendNotificationRequest` и поле `type` в in-app WS `notification`. Feature catalog — [notifications.md](../features/notifications.md).
@@ -291,3 +307,23 @@ preferences scoped to those resources and pending deliveries before they can
 route, then writes a permanent compact `PURGED` fence. Full request/receipt
 bytes retain 30 days from this participant's completion, and delayed
 lower-generation deliveries remain suppressed.
+
+`ImportSpacePurgeManifestPage` is a Space-only protected RPC on the same mTLS
+listener as fence/purge. Space forwards Chat's exact immutable 1000-item pages
+before the participant fence barrier. Its request and immutable receipt use
+the same fields as Messaging's import, with Notification wrapper domain hashes.
+Notification validates page/root hashes, global UUID order, sequential pages
+and final seal. Each imported Chat page drains admitted delivery and then
+suppresses delivery/settings for its saved chat IDs. Explicit Space-scoped
+delivery/settings are denied while import is pending. Notification cannot
+acknowledge the fence until all pages are sealed. It does not infer the Space
+of an unimported chat; that chat must be imported and drained before the barrier.
+Chat IDs are immutable non-content scope
+keys, never membership authority. Import, channel settings mutations and
+external push dispatch serialize on Notification-owned chat/Space locks;
+fence acknowledgment waits for already admitted dispatches. Each device checks
+the fence again at dispatch; delayed queued events cannot bypass it. Purge
+removes `space`, `channel` and `chat` settings for the exact imported work set,
+while keeping global/unrelated settings. Full pages and receipts expire after
+30 days from participant purge completion; only compact non-content chat/Space
+fences remain to suppress delayed deliveries and resurrection after cleanup.

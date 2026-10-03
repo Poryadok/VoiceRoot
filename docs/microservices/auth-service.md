@@ -19,6 +19,244 @@
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
 
+## T14 Auth-to-User selected-profile authority (accepted target; signer/client implemented)
+
+T14 authorization approval and code exchange use User's Auth-only
+`GetSdkProfileEligibility` RPC to verify the exact selected `(account_id,
+profile_id)`. Auth validates that both returned IDs exactly match the request,
+`profile_revision` is positive, and neither `deleted` nor `frozen` is true. A
+missing, mismatched, stale, deleted, frozen, malformed, timed-out or unavailable
+answer denies with the existing coarse `invalid_sdk_identity` response; it must
+not be translated into account/profile enumeration details.
+
+At approval, Auth stores the selected profile ID and returned revision with the
+approval. At exchange, Auth reads eligibility again and requires the same IDs,
+a positive unchanged revision, and an eligible profile. A changed revision,
+deletion or freeze invalidates the approval/code and requires a fresh
+authorization and consent. The profile revision is distinct from the consent
+revision and application-policy revision.
+
+The call is authorized by an Auth-issued service principal on User's dedicated
+TLS listener (`:9094`). Its signed RS256 credential is bound to the exact full
+RPC name, a fresh `x-request-id`, and SHA-256 of deterministic protobuf request
+bytes. It carries `principal_type=service`, `iss=auth`, `sub=service:auth`,
+`aud=user`, `iat`, `nbf`, `exp`, and unique `jti`; it carries no account ID,
+profile ID or session epoch. Credential lifetime is at most 30 seconds, with
+five seconds of permitted future issue/not-before skew and no expiry grace.
+Auth sends exactly one `authorization: Bearer ...` and one `x-request-id` and
+does not send raw identity metadata. User performs shared Redis replay
+admission; Redis failure or a repeated `jti` denies the call.
+
+Auth principal signing keys are a separate keyset from `auth.jwt` client-token
+keys. The signer/client is optional only while SDK authorization is disabled;
+enabling it requires the complete validated keyset and TLS endpoint. Partial or
+invalid keyset configuration is a startup error. The exact environment, JWKS
+and rotation contract is in
+[Deployment: Auth-to-User SDK profile principal](../DEPLOYMENT.md#auth-to-user-sdk-profile-principal).
+The principal JWKS endpoint is published only when the complete keyset is
+loaded. The Auth signer, dedicated JWKS endpoint and TLS User eligibility client
+are implemented with focused Auth tests. This does not claim deployment,
+operational key-rotation proof or provider acceptance.
+
+### T16 GIS binding challenge and handoff (partial implementation)
+
+T14 `start` records a binding intent and stable operation ID. T14 `approve`
+revalidates source device/session, policy, and the selected regular target
+profile, then creates the GIS challenge with private WorkloadProof v1
+`POST /internal/v1/bindings/challenges`. The challenge binds the approved
+identity/profile/revision/scope/consent/policy tuple, redirect hash, PKCE,
+device key, and operation. It is created only after profile selection and
+consent; no provider subject or token is sent to GIS at this point. GIS returns
+the persisted challenge ID, nonce and expiry. Auth pins those values to the
+approval receipt before returning the code response.
+
+For an exact retry after a lost approval response, Auth returns the same
+one-use code and challenge receipt only while the same source session/device
+is current and the code is unexpired and unconsumed. The code is encrypted
+with AES-256-GCM in the approval receipt and is never stored in plaintext.
+`AUTH_GAME_BINDING_APPROVAL_CODE_KEY_B64` must provide the dedicated 32-byte
+key; there is no default and it must not reuse Auth principal, device, or GIS
+workload-proof keys. A changed target/profile conflicts, while an expired or
+consumed receipt cannot authorize a retry.
+
+GIS first reads the persisted challenge through Auth's existing
+`SdkGameIntegrationPolicyClient`: private GET
+`/internal/v1/bindings/challenges/{challenge_id}`, authenticated with the GIS
+WorkloadProof v1 request/response HMAC and replay nonce. Its strict response
+contains exactly `challenge_id`, `nonce`, `application_id`, `environment_id`,
+`provider`, `redirect_uri_sha256`, `pkce_challenge`, `device_key_id`,
+`device_key_thumbprint`, `operation_id`, `expires_at`, and `status`. Auth accepts
+only the canonical requested UUID, a live `pending` challenge, and exact
+app/environment/redirect/PKCE/device matches.
+
+The browser-visible T14 approval code is consumed only at private GIS-authenticated
+`POST /internal/v1/auth/game-bindings/handoffs/exchange`, with exact JSON
+`challenge_id`, `operation_id`, `code`, `code_verifier`, and `device_proof`.
+The device proof is the existing `voice-sdk-code-v1` proof over authorization
+request ID, code hash and verifier hash. Auth locks and revalidates the current
+SDK device/session, T14 approval, policy, target regular account and selected
+profile revision, then atomically consumes the code and stores the linked-session
+consent revision and exact handoff JWS receipt. Response is exactly
+`{"handoff_jws":"<compact JWS>"}`, `application/json`, `no-store`; the JWS is
+delivery-only and never returned through the browser exchange. Public T14
+`/exchange` rejects authorizations carrying a GIS challenge. An identical
+challenge/operation/code/verifier/device-proof retry returns the stored JWS
+without extending its original expiry; changed tuple conflicts.
+
+Auth's dedicated mTLS connector uses
+`voice.auth.game-binding.mtls.port`, `.server-cert-file`, `.server-key-file`,
+`.client-ca-file`, `.truststore-file`, `.truststore-password`, and
+`.allowed-client-uri-san`, with environment bindings
+`AUTH_GAME_BINDING_MTLS_PORT`, `_SERVER_CERT_FILE`, `_SERVER_KEY_FILE`,
+`_CLIENT_CA_FILE`, `_TRUSTSTORE_FILE`, `_TRUSTSTORE_PASSWORD`, and
+`_ALLOWED_CLIENT_URI_SAN`. Port unset/0 disables it; enabling requires all TLS
+files and the exact GIS URI SAN. The PKCS12 JSSE truststore must contain exactly
+the X.509 CA set in `client-ca-file`; the latter also configures Tomcat's
+OpenSSL provider. Configure only the approved GIS and Messaging client CA set,
+and keep the truststore password out of logs. Private route filters require a
+verified peer certificate with the exact route-specific URI SAN; missing or
+untrusted certificates and mismatched URI SANs fail closed. This private
+listener is not Gateway-published and has no plaintext fallback.
+
+Provider subjects are HMAC-SHA-256 digested in Auth with a dedicated 32-byte
+standard-base64 key. Configure both
+`voice.auth.game-binding.subject-digest.kid` /
+`AUTH_GAME_BINDING_SUBJECT_DIGEST_KID` and
+`voice.auth.game-binding.subject-digest.key-base64` /
+`AUTH_GAME_BINDING_SUBJECT_DIGEST_KEY_B64`. Key ID is 1–32 URL-safe characters;
+key bytes must be canonical standard Base64, exactly 32 bytes and nonzero. Do
+not reuse Auth principal, client-token or device keys. The output is
+`hmac-sha256-v1:{kid}:{lowercase hex}` over a version prefix and length-framed
+provider, issuer, application ID, environment ID and verified provider subject.
+Missing digest key keeps this exchange unavailable; raw subjects never enter GIS.
+
+The existing T14 device proof is the handoff proof of possession. At exchange,
+Auth verifies the `voice-sdk-code-v1` signature and atomically stores the
+lowercase SHA-256 of the exact proof bytes against the handoff JTI, operation,
+challenge and registered device. GIS forwards those same proof bytes in its
+private online claim. Auth requires the persisted digest and tuple before
+accepting a new claim, and still rechecks current consent, profile, policy,
+source session and device state. Exact claim retries require identical proof
+bytes; changed bytes conflict. No Auth JWS is exposed to the SDK to obtain a
+second signature.
+
+Auth exposes private `POST /internal/v1/auth/game-bindings/handoffs/claim`,
+`POST /internal/v1/auth/game-bindings/handoffs/completion`, and
+`POST /internal/v1/auth/game-bindings/handoffs/revoke` on a dedicated,
+opt-in mTLS connector; these routes are not Gateway routes. The GIS client
+certificate must chain to the configured client CA and contain the exact
+configured URI SAN. The connector is disabled by default, rejects partial TLS
+configuration, and has no plaintext fallback. Claim JSON is exactly
+`operation_id`, `request_sha256`, `handoff_jws`, and `device_proof`; completion
+JSON is exactly `claim_id`, `operation_id`, `outcome`, and optional
+`binding_id`. Responses use the GIS typed receipt shape and `Cache-Control:
+no-store`.
+
+The claim ledger verifies the dedicated Auth handoff signature, locks the SDK
+identity and consent grant, rechecks current app/environment, device,
+ownership generation, target account epoch, selected profile and policy
+revisions, and verifies device proof over the assertion JTI, operation ID and
+request hash before persisting the claim. Exact operation/JTI/hash replay
+returns the saved receipt; changed tuples conflict. Completion is
+transactional and idempotent for the same terminal outcome and GIS binding ID.
+Revoke names the stable challenge operation ID; it moves the grant to
+`revoking` before checking accepted claims, denies new claims, and returns
+`revoking` until every accepted claim has a durable success/failure receipt. A
+retry with the same operation ID returns `revoked` only after the claim ledger
+drains. This slice has focused controller, issuer and PostgreSQL claim/revoke
+tests. GIS exchange operation/outbox and T14 challenge creation now have
+focused handler and database lifecycle tests. The Auth-to-Messaging permit
+aggregator described below is implemented; hosted cross-service replay and
+revoke-drain acceptance remains a separate evidence gate.
+
+### T16 Auth-to-Messaging execution permits
+
+Auth exposes `POST /api/v1/auth/sdk/game-message/execution-permits` and
+`POST /api/v1/auth/sdk/game-message/execution-permits/{permit_jti}/completion`
+only to the registered Messaging workload over mandatory mTLS. The issue
+request contains only the stable `operation_id` and SHA-256 of exact canonical
+message payload bytes; `X-Voice-Device-Authority` is the original compact Auth
+device assertion. Auth returns strict `{ "permit_jws": "..." }` JSON with
+`no-store`. Completion returns the exact GIS receipt fields. These are
+service-to-service routes, not player/Gateway routes.
+
+For a new permit, Auth resolves exactly one persisted SDK authorization row in
+`sdk_authorizations`, joined to its `sdk_linked_sessions` handoff receipt by
+request ID and matching `game_binding_consent_revision`/`consent_revision`.
+The linked-session expiry bounds only handoff delivery and replay; it is not the
+duration of the send grant. The authorization transaction row's `expires_at`
+is not a grant expiry and must not be used to extend or revoke the grant.
+
+Before issuing `/api/v1/auth/sdk/device-authority`, Auth requires exactly one
+current active grant for the request's application, environment and account;
+it derives the actor from the active Auth SDK identity and the device from the
+authenticated session. The production `SdkBindingAuthority` implementation
+then reads
+`GET /internal/v1/bindings/{binding_id}/authority` from GIS with v1
+WorkloadProof and verifies the exact-byte signed `no-store` response. Auth
+checks the exact application/environment/binding tuple, active GIS status,
+positive binding revision, current consent/revision and local actor/device
+consistency. Missing or ambiguous grants, inactive or mismatched GIS state,
+invalid proof/MAC, malformed response and GIS unavailability all deny
+assertion issuance. `character_context` is checked as part of the strict GIS
+response schema but is not consumed or logged by Auth.
+
+When Auth accepts the handoff claim and the player binding becomes active, it
+creates a separate durable Auth-owned `sdk_game_message_grants` row keyed by
+`(application_id, environment_id, target_account_id, target_profile_id)` and
+bound to that binding ID. It stores the exact consent revision, canonical
+scopes and policy/profile revisions, with lifecycle `active`, `revoking`, or
+`revoked`. This grant has no implicit time-to-live: its lifetime source is the
+persisted grant lifecycle. It is valid until an explicit binding/grant revoke
+or a current account, profile, policy, or binding authority transition makes
+it unusable. Reauthorization after revoke creates a new binding and grant
+revision; it never revives the old grant. Auth serializes revoke and permit
+admission on this grant row. Revoke changes it to `revoking` before waiting for
+admitted operations to complete or expire, then marks it `revoked`; while
+revoking, no new permit is admitted.
+
+Auth derives `profile_id` only from the stored authorization's selected
+`target_profile_id` (and its persisted profile-alias selection where
+applicable), never from a request or device assertion. Send scope authority
+comes from the durable grant's consented `scopes` and consent revision,
+intersected with current application/environment policy and current Auth
+account, device, session and binding state. The source SDK principal is the
+standalone `sdk_identities` row; its account ID is not a regular `accounts`
+row. Auth checks that SDK identity's active status and its current session and
+device/key authority. The selected target account is independently checked
+against `accounts.status` and `session_epoch`. An active `game_binding_status`
+proves only that the player binding is active; it does not prove
+`game.chat.send` consent. Auth requires the canonical `game.chat.send` grant
+in persisted consent and current policy, and requires consent, scope, profile
+and policy revisions to remain current. A current SDK authorization row is
+used only to resolve the handoff receipt/consent tuple and must be consumed;
+its short transaction expiry does not bound or extend the durable grant. Auth
+also checks the target account epoch and current User profile eligibility and
+revision. Missing, stale, revoked, expired, ambiguous or mismatched
+consent/profile/binding/policy authority denies the request. Device
+registration, revocation and proof of possession remain independent request
+authority and do not change the durable grant key.
+
+Auth verifies the device-status assertion with its dedicated principal keyset,
+then calls GIS's exact
+`POST /internal/v1/game-integrations/bindings/{binding_id}/execution-permits`
+using WorkloadProof v2 and the same assertion bytes. GIS serializes issue with
+binding revocation, returns the persisted permit for an exact retry, and denies
+new permits after `revoking`. Auth validates the GIS response proof and tuple,
+re-reads consent, account/device/profile/policy/binding authority under the same
+Auth serialization lock, and signs only if every revision remains current.
+The Messaging consumer checks GIS's exact current
+`(application_id, environment_id, binding_id, chat_id)` mapping before it calls
+this Auth permit route. This order prevents a missing or foreign chat link from
+creating either an Auth or GIS execution permit. The exact Auth JWT
+header/claim set, GIS request/response proof, 3750 ms maximum permit lifetime,
+Messaging's 250 ms clock margin/transaction budget, and 4.25-second revoke
+ceiling are frozen in the
+[game-message API contract](../architecture/game-integration-api.md#messaging-ingress-and-t16-execution-permit).
+An exact retry reuses GIS's permit and returns the same Auth permit; changed
+operation/request digest or divergent completion conflicts. GIS or Auth
+completion uncertainty remains pending.
+
 ### Subscription claims (A7 accepted target; not implemented)
 
 Auth consumes the complete revisioned personal

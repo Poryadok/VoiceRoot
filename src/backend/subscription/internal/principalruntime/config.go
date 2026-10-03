@@ -13,6 +13,7 @@ import (
 )
 
 type Config struct {
+	ClientCAFile                                 string
 	JWKSURLs                                     map[string]string
 	RefreshAfter, HardExpiry, UnknownKIDCooldown time.Duration
 	ReplayAddr, ReplayPassword, JWKSCAFile       string
@@ -22,7 +23,7 @@ type Config struct {
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func LoadFromEnv() (Config, bool, error) {
-	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_ADDR", "SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_PASSWORD", "SUBSCRIPTION_PRINCIPAL_TLS_CERT_FILE", "SUBSCRIPTION_PRINCIPAL_TLS_KEY_FILE", "SUBSCRIPTION_PRINCIPAL_GRPC_LISTEN"}
+	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_ADDR", "SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_PASSWORD", "SUBSCRIPTION_PRINCIPAL_TLS_CERT_FILE", "SUBSCRIPTION_PRINCIPAL_TLS_KEY_FILE", "SUBSCRIPTION_PRINCIPAL_CLIENT_CA_FILE", "SUBSCRIPTION_PRINCIPAL_GRPC_LISTEN"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
@@ -33,6 +34,7 @@ func LoadFromEnv() (Config, bool, error) {
 		return Config{}, false, nil
 	}
 	cfg := Config{
+		ClientCAFile:   strings.TrimSpace(os.Getenv("SUBSCRIPTION_PRINCIPAL_CLIENT_CA_FILE")),
 		ReplayAddr:     strings.TrimSpace(os.Getenv("SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_ADDR")),
 		ReplayPassword: os.Getenv("SUBSCRIPTION_PRINCIPAL_REPLAY_REDIS_PASSWORD"),
 		JWKSCAFile:     strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")),
@@ -78,6 +80,9 @@ func envDuration(name string, fallback time.Duration) (time.Duration, error) {
 }
 
 func (c Config) validate() error {
+	if strings.TrimSpace(c.ClientCAFile) == "" {
+		return errors.New("principal mTLS client CA is required")
+	}
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid principal cache policy")
 	}

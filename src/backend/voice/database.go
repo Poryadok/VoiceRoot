@@ -6,16 +6,17 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	voicepostgres "voice/backend/pkg/postgres"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/voice/internal/roomlifecycle"
 )
 
-func openLifecycleDatabase(parent context.Context) (roomlifecycle.LifecycleStore, func(), bool, error) {
+func openLifecycleDatabase(parent context.Context) (roomlifecycle.LifecycleStore, *pgxpool.Pool, func(), bool, error) {
 	closeDatabase := func() {}
 	dsn := strings.TrimSpace(os.Getenv("VOICE_DATABASE_URL"))
 	if dsn == "" {
-		return nil, closeDatabase, false, nil
+		return nil, nil, closeDatabase, false, nil
 	}
 
 	ctx, cancel := context.WithTimeout(parent, runtimeconfig.PostgresConnectTimeoutFromEnv())
@@ -23,13 +24,13 @@ func openLifecycleDatabase(parent context.Context) (roomlifecycle.LifecycleStore
 
 	pool, err := voicepostgres.NewPool(ctx, dsn)
 	if err != nil {
-		return nil, closeDatabase, false, fmt.Errorf("parse VOICE_DATABASE_URL: %w", err)
+		return nil, nil, closeDatabase, false, fmt.Errorf("parse VOICE_DATABASE_URL: %w", err)
 	}
 	closeDatabase = pool.Close
 	if err := pool.Ping(ctx); err != nil {
 		closeDatabase()
-		return nil, func() {}, false, fmt.Errorf("ping voice lifecycle database: %w", err)
+		return nil, nil, func() {}, false, fmt.Errorf("ping voice lifecycle database: %w", err)
 	}
 
-	return roomlifecycle.NewPostgresLifecycleStore(pool), closeDatabase, true, nil
+	return roomlifecycle.NewPostgresLifecycleStore(pool), pool, closeDatabase, true, nil
 }

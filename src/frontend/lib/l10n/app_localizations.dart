@@ -104,6 +104,120 @@ abstract class AppLocalizations {
   /// **'Voice'**
   String get appTitle;
 
+  /// No description provided for @sdkAuthorizationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a game'**
+  String get sdkAuthorizationTitle;
+
+  /// No description provided for @sdkAuthorizationLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load authorization details.'**
+  String get sdkAuthorizationLoadError;
+
+  /// No description provided for @sdkAuthorizationApplication.
+  ///
+  /// In en, this message translates to:
+  /// **'Application'**
+  String get sdkAuthorizationApplication;
+
+  /// No description provided for @sdkAuthorizationEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment'**
+  String get sdkAuthorizationEnvironment;
+
+  /// No description provided for @sdkAuthorizationGameAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Game account'**
+  String get sdkAuthorizationGameAccount;
+
+  /// No description provided for @sdkAuthorizationPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Requested permissions'**
+  String get sdkAuthorizationPermissions;
+
+  /// No description provided for @sdkAuthorizationSelectProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the Voice profile to connect'**
+  String get sdkAuthorizationSelectProfile;
+
+  /// No description provided for @sdkAuthorizationProfilesError.
+  ///
+  /// In en, this message translates to:
+  /// **'Profiles could not be loaded.'**
+  String get sdkAuthorizationProfilesError;
+
+  /// No description provided for @sdkAuthorizationNoProfiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No eligible Voice profiles are available.'**
+  String get sdkAuthorizationNoProfiles;
+
+  /// No description provided for @sdkAuthorizationApprove.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get sdkAuthorizationApprove;
+
+  /// No description provided for @sdkAuthorizationCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get sdkAuthorizationCancel;
+
+  /// No description provided for @sdkAuthorizationRegularRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'A regular Voice account is required to approve.'**
+  String get sdkAuthorizationRegularRequired;
+
+  /// No description provided for @sdkAuthorizationCallbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Game connection'**
+  String get sdkAuthorizationCallbackTitle;
+
+  /// No description provided for @sdkAuthorizationCallbackInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This authorization link is invalid or expired. Start again from the game.'**
+  String get sdkAuthorizationCallbackInvalid;
+
+  /// No description provided for @sdkAuthorizationResumeTemporaryError.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice is temporarily unavailable. The secure session can be resumed.'**
+  String get sdkAuthorizationResumeTemporaryError;
+
+  /// No description provided for @sdkAuthorizationRetryResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry session resume'**
+  String get sdkAuthorizationRetryResume;
+
+  /// No description provided for @sdkAuthorizationConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {application}'**
+  String sdkAuthorizationConnected(String application);
+
+  /// No description provided for @sdkAuthorizationProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile {profile}'**
+  String sdkAuthorizationProfile(String profile);
+
+  /// No description provided for @sdkAuthorizationGrantedPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions: {permissions}'**
+  String sdkAuthorizationGrantedPermissions(String permissions);
+
   /// No description provided for @gatewayStatusOk.
   ///
   /// In en, this message translates to:

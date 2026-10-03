@@ -12,16 +12,425 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $3;
 
+import '../../chat/v1/chat.pb.dart' as $1;
 import '../../common/v1/space_lifecycle.pb.dart' as $2;
 import 'notification.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
 export 'notification.pbenum.dart';
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ImportSpacePurgeManifestPageRequest extends $pb.GeneratedMessage {
+  factory ImportSpacePurgeManifestPageRequest({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? scheduleGeneration,
+    $1.SpacePurgeManifestPage? page,
+    $core.bool? sealsManifest,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (scheduleGeneration != null)
+      result.scheduleGeneration = scheduleGeneration;
+    if (page != null) result.page = page;
+    if (sealsManifest != null) result.sealsManifest = sealsManifest;
+    return result;
+  }
+
+  ImportSpacePurgeManifestPageRequest._();
+
+  factory ImportSpacePurgeManifestPageRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ImportSpacePurgeManifestPageRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ImportSpacePurgeManifestPageRequest',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$1.SpacePurgeManifestPage>(5, _omitFieldNames ? '' : 'page',
+        subBuilder: $1.SpacePurgeManifestPage.create)
+    ..aOB(6, _omitFieldNames ? '' : 'sealsManifest')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageRequest copyWith(
+          void Function(ImportSpacePurgeManifestPageRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ImportSpacePurgeManifestPageRequest))
+          as ImportSpacePurgeManifestPageRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageRequest create() =>
+      ImportSpacePurgeManifestPageRequest._();
+  @$core.override
+  ImportSpacePurgeManifestPageRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ImportSpacePurgeManifestPageRequest>(create);
+  static ImportSpacePurgeManifestPageRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get deletionOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set deletionOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDeletionOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDeletionOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get scheduleGeneration => $_getI64(3);
+  @$pb.TagNumber(4)
+  set scheduleGeneration($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasScheduleGeneration() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearScheduleGeneration() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $1.SpacePurgeManifestPage get page => $_getN(4);
+  @$pb.TagNumber(5)
+  set page($1.SpacePurgeManifestPage value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPage() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPage() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $1.SpacePurgeManifestPage ensurePage() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  $core.bool get sealsManifest => $_getBF(5);
+  @$pb.TagNumber(6)
+  set sealsManifest($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasSealsManifest() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearSealsManifest() => $_clearField(6);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ImportSpacePurgeManifestPageReceipt extends $pb.GeneratedMessage {
+  factory ImportSpacePurgeManifestPageReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? spaceId,
+    $core.String? deletionOperationId,
+    $fixnum.Int64? generation,
+    $2.ManifestBinding? manifest,
+    $fixnum.Int64? pageIndex,
+    $fixnum.Int64? acceptedCount,
+    $core.List<$core.int>? pageSha256,
+    $core.bool? manifestSealed,
+    $core.List<$core.int>? requestSha256,
+    $3.Timestamp? completedAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (deletionOperationId != null)
+      result.deletionOperationId = deletionOperationId;
+    if (generation != null) result.generation = generation;
+    if (manifest != null) result.manifest = manifest;
+    if (pageIndex != null) result.pageIndex = pageIndex;
+    if (acceptedCount != null) result.acceptedCount = acceptedCount;
+    if (pageSha256 != null) result.pageSha256 = pageSha256;
+    if (manifestSealed != null) result.manifestSealed = manifestSealed;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (completedAt != null) result.completedAt = completedAt;
+    return result;
+  }
+
+  ImportSpacePurgeManifestPageReceipt._();
+
+  factory ImportSpacePurgeManifestPageReceipt.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ImportSpacePurgeManifestPageReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ImportSpacePurgeManifestPageReceipt',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(4, _omitFieldNames ? '' : 'deletionOperationId')
+    ..a<$fixnum.Int64>(
+        5, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$2.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
+        subBuilder: $2.ManifestBinding.create)
+    ..a<$fixnum.Int64>(
+        7, _omitFieldNames ? '' : 'pageIndex', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(
+        8, _omitFieldNames ? '' : 'acceptedCount', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        9, _omitFieldNames ? '' : 'pageSha256', $pb.PbFieldType.OY)
+    ..aOB(10, _omitFieldNames ? '' : 'manifestSealed')
+    ..a<$core.List<$core.int>>(
+        11, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOM<$3.Timestamp>(12, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $3.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageReceipt copyWith(
+          void Function(ImportSpacePurgeManifestPageReceipt) updates) =>
+      super.copyWith((message) =>
+              updates(message as ImportSpacePurgeManifestPageReceipt))
+          as ImportSpacePurgeManifestPageReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageReceipt create() =>
+      ImportSpacePurgeManifestPageReceipt._();
+  @$core.override
+  ImportSpacePurgeManifestPageReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageReceipt getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ImportSpacePurgeManifestPageReceipt>(create);
+  static ImportSpacePurgeManifestPageReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get spaceId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set spaceId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get deletionOperationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set deletionOperationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDeletionOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDeletionOperationId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $fixnum.Int64 get generation => $_getI64(4);
+  @$pb.TagNumber(5)
+  set generation($fixnum.Int64 value) => $_setInt64(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasGeneration() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearGeneration() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $2.ManifestBinding get manifest => $_getN(5);
+  @$pb.TagNumber(6)
+  set manifest($2.ManifestBinding value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasManifest() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearManifest() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $2.ManifestBinding ensureManifest() => $_ensure(5);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get pageIndex => $_getI64(6);
+  @$pb.TagNumber(7)
+  set pageIndex($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasPageIndex() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearPageIndex() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get acceptedCount => $_getI64(7);
+  @$pb.TagNumber(8)
+  set acceptedCount($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAcceptedCount() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAcceptedCount() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.List<$core.int> get pageSha256 => $_getN(8);
+  @$pb.TagNumber(9)
+  set pageSha256($core.List<$core.int> value) => $_setBytes(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasPageSha256() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearPageSha256() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.bool get manifestSealed => $_getBF(9);
+  @$pb.TagNumber(10)
+  set manifestSealed($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasManifestSealed() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearManifestSealed() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.List<$core.int> get requestSha256 => $_getN(10);
+  @$pb.TagNumber(11)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasRequestSha256() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearRequestSha256() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $3.Timestamp get completedAt => $_getN(11);
+  @$pb.TagNumber(12)
+  set completedAt($3.Timestamp value) => $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasCompletedAt() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearCompletedAt() => $_clearField(12);
+  @$pb.TagNumber(12)
+  $3.Timestamp ensureCompletedAt() => $_ensure(11);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ImportSpacePurgeManifestPageResponse extends $pb.GeneratedMessage {
+  factory ImportSpacePurgeManifestPageResponse({
+    ImportSpacePurgeManifestPageReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  ImportSpacePurgeManifestPageResponse._();
+
+  factory ImportSpacePurgeManifestPageResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ImportSpacePurgeManifestPageResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ImportSpacePurgeManifestPageResponse',
+      package: const $pb.PackageName(
+          _omitMessageNames ? '' : 'voice.notification.v1'),
+      createEmptyInstance: create)
+    ..aOM<ImportSpacePurgeManifestPageReceipt>(
+        1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: ImportSpacePurgeManifestPageReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ImportSpacePurgeManifestPageResponse copyWith(
+          void Function(ImportSpacePurgeManifestPageResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ImportSpacePurgeManifestPageResponse))
+          as ImportSpacePurgeManifestPageResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageResponse create() =>
+      ImportSpacePurgeManifestPageResponse._();
+  @$core.override
+  ImportSpacePurgeManifestPageResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ImportSpacePurgeManifestPageResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ImportSpacePurgeManifestPageResponse>(create);
+  static ImportSpacePurgeManifestPageResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  ImportSpacePurgeManifestPageReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(ImportSpacePurgeManifestPageReceipt value) =>
+      $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  ImportSpacePurgeManifestPageReceipt ensureReceipt() => $_ensure(0);
+}
 
 class RegisterDeviceRequest extends $pb.GeneratedMessage {
   factory RegisterDeviceRequest({
@@ -339,7 +748,7 @@ class NotificationSettings extends $pb.GeneratedMessage {
     $core.String? scopeId,
     $core.bool? enabled,
     $core.String? suppressTypesJson,
-    $1.Timestamp? muteUntil,
+    $3.Timestamp? muteUntil,
     NotificationScopeType? scopeTypeEnum,
   }) {
     final result = create();
@@ -372,8 +781,8 @@ class NotificationSettings extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'scopeId')
     ..aOB(4, _omitFieldNames ? '' : 'enabled')
     ..aOS(6, _omitFieldNames ? '' : 'suppressTypesJson')
-    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'muteUntil',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$3.Timestamp>(7, _omitFieldNames ? '' : 'muteUntil',
+        subBuilder: $3.Timestamp.create)
     ..aE<NotificationScopeType>(8, _omitFieldNames ? '' : 'scopeTypeEnum',
         enumValues: NotificationScopeType.values)
     ..hasRequiredFields = false;
@@ -444,15 +853,15 @@ class NotificationSettings extends $pb.GeneratedMessage {
 
   /// UTC instant; public API uses Timestamp per docs/REPOSITORIES.md.
   @$pb.TagNumber(7)
-  $1.Timestamp get muteUntil => $_getN(5);
+  $3.Timestamp get muteUntil => $_getN(5);
   @$pb.TagNumber(7)
-  set muteUntil($1.Timestamp value) => $_setField(7, value);
+  set muteUntil($3.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasMuteUntil() => $_has(5);
   @$pb.TagNumber(7)
   void clearMuteUntil() => $_clearField(7);
   @$pb.TagNumber(7)
-  $1.Timestamp ensureMuteUntil() => $_ensure(5);
+  $3.Timestamp ensureMuteUntil() => $_ensure(5);
 
   @$pb.TagNumber(8)
   NotificationScopeType get scopeTypeEnum => $_getN(6);

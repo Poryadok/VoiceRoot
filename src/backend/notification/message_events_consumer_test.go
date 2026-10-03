@@ -2,10 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/chatmembers"
@@ -52,6 +58,58 @@ type messageTokenRepo struct {
 	byProfile map[uuid.UUID][]store.DeviceToken
 }
 
+type recordingGameConsent struct {
+	profileID, appID, envID uuid.UUID
+	category                string
+	allowed                 bool
+	calls                   int
+}
+
+type recordingGameChatScope struct {
+	profileID, chatID uuid.UUID
+	category         string
+	gameScoped       bool
+	allowed          bool
+	calls            int
+}
+
+func (r *recordingGameChatScope) ResolveGamePushChat(_ context.Context, profileID, chatID uuid.UUID, category string) (bool, bool, error) {
+	r.profileID, r.chatID, r.category = profileID, chatID, category
+	r.calls++
+	return r.gameScoped, r.allowed, nil
+}
+
+type retryThenOptedOutConsent struct {
+	calls         atomic.Int32
+	redeliveryHit chan struct{}
+	release       chan struct{}
+}
+
+func (c *retryThenOptedOutConsent) AllowsGamePush(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error) {
+	switch c.calls.Add(1) {
+	case 1:
+		return false, errors.New("temporary GIS consent lookup failure")
+	case 2:
+		c.redeliveryHit <- struct{}{}
+		<-c.release
+		return false, nil
+	default:
+		return false, nil
+	}
+}
+
+type noGameBlock struct{}
+
+func (noGameBlock) IsGamePushBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (r *recordingGameConsent) AllowsGamePush(_ context.Context, profileID, appID, envID uuid.UUID, category string) (bool, error) {
+	r.profileID, r.appID, r.envID, r.category = profileID, appID, envID, category
+	r.calls++
+	return r.allowed, nil
+}
+
 func (r messageTokenRepo) ListByProfile(_ context.Context, profileID uuid.UUID) ([]store.DeviceToken, error) {
 	return r.byProfile[profileID], nil
 }
@@ -85,6 +143,197 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	}
 	err := routeMessageNotification(context.Background(), handler, stubChatMembers{ids: []string{senderID, recipientID}}, pusher, pushenrich.NoopResolver{}, env)
 	require.NoError(t, err)
+}
+
+func TestRouteMessageNotificationCarriesGameScopeAndUsesPrivatePushCopy(t *testing.T) {
+	senderID, recipientID, appID, envID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	consent := &recordingGameConsent{allowed: true}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), GameConsent: consent, GameBlocks: noGameBlock{},
+	}
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
+		stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{},
+		&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(),
+			GameApplicationId: stringPtr(appID.String()), GameEnvironmentId: stringPtr(envID.String()),
+		}}})
+	require.NoError(t, err)
+	require.Equal(t, 1, consent.calls)
+	require.Equal(t, recipientID, consent.profileID)
+	require.Equal(t, appID, consent.appID)
+	require.Equal(t, envID, consent.envID)
+	require.Equal(t, "game_activity", consent.category)
+	require.Len(t, recorder.sent, 1)
+	require.Equal(t, "Game update", recorder.sent[0].Title)
+	require.Equal(t, "A game event is waiting in Voice.", recorder.sent[0].Body)
+	for _, key := range []string{"action_id", "command", "state_version", "execution_permit"} {
+		require.NotContains(t, recorder.sent[0].Data, key, "game pushes are navigation-only and must not expose executable actions")
+	}
+}
+
+func TestRouteMessageNotificationResolvesChatScopeForPush(t *testing.T) {
+	for _, tc := range []struct {
+		name, category string
+		payload        *eventsv1.MessageStreamEvent
+	}{
+		{
+			name: "message",
+			category: "game_activity",
+			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(),
+			}}},
+		},
+		{
+			name: "mention",
+			category: "game_social",
+			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
+				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(), MentionedProfileIds: []string{uuid.NewString()},
+			}}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			message := tc.payload.GetMessageSent()
+			var chatID, senderID, recipientID string
+			if message != nil {
+				chatID, senderID, recipientID = message.GetChatId(), message.GetSenderProfileId(), uuid.NewString()
+				members := stubChatMembers{ids: []string{senderID, recipientID}}
+				assertChatScopePush(t, tc.category, chatID, senderID, recipientID, members, tc.payload)
+				return
+			}
+			mention := tc.payload.GetMentionAdded()
+			chatID, senderID, recipientID = mention.GetChatId(), mention.GetSenderProfileId(), mention.GetMentionedProfileIds()[0]
+			members := stubChatMembers{ids: []string{senderID, recipientID}}
+			assertChatScopePush(t, tc.category, chatID, senderID, recipientID, members, tc.payload)
+		})
+	}
+}
+
+func assertChatScopePush(t *testing.T, category, chatID, senderID, recipientID string, members chatmembers.Lister, event *eventsv1.MessageStreamEvent) {
+	t.Helper()
+	recipientUUID, chatUUID := uuid.MustParse(recipientID), uuid.MustParse(chatID)
+	recorder := &recordingMessageFCM{}
+	scope := &recordingGameChatScope{gameScoped: true, allowed: false}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientUUID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, GameChatScope: scope, GameBlocks: noGameBlock{}, Grouping: grouping.NewMemoryStore(),
+	}
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err)
+	require.Equal(t, 1, scope.calls)
+	require.Equal(t, recipientUUID, scope.profileID)
+	require.Equal(t, chatUUID, scope.chatID)
+	require.Equal(t, category, scope.category)
+	require.Empty(t, recorder.sent, "game chat opt-out suppresses push")
+}
+
+func TestRouteQueuedGameMessageSuppressesPushAfterOptOutForEveryDevice(t *testing.T) {
+	senderID, recipientID, appID, envID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	consent := &recordingGameConsent{allowed: true}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			recipientID: {
+				{Token: "device-one", PushService: "fcm"},
+				{Token: "device-two", PushService: "fcm"},
+			},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(),
+		GameConsent: consent, GameBlocks: noGameBlock{},
+	}
+	queuedEvent := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+		MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(),
+		GameApplicationId: stringPtr(appID.String()), GameEnvironmentId: stringPtr(envID.String()),
+	}}}
+	// Consent is revoked after the event exists but before the durable consumer
+	// routes it. Delivery must read current consent instead of trusting enqueue time.
+	consent.allowed = false
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
+		stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{}, queuedEvent)
+	require.NoError(t, err)
+	require.Equal(t, 2, consent.calls, "current app consent must be checked separately before each device delivery")
+	require.Empty(t, recorder.sent, "a queued event cannot bypass a later opt-out on any device")
+}
+
+func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesEveryDevice(t *testing.T) {
+	options := &natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1}
+	server, err := natsserver.NewServer(options)
+	require.NoError(t, err)
+	go server.Start()
+	require.True(t, server.ReadyForConnections(10*time.Second))
+	defer server.Shutdown()
+
+	provisioner, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	defer provisioner.Close()
+	js, err := provisioner.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: jsStreamMessageEvents, Subjects: []string{jsSubjectMessageEvents}})
+	require.NoError(t, err)
+	_, err = js.AddConsumer(jsStreamMessageEvents, &nats.ConsumerConfig{
+		Durable: consumer.SharedDurable("message"), FilterSubject: jsSubjectMessageEvents,
+		DeliverSubject: "_INBOX.voice.notification.message", AckPolicy: nats.AckExplicitPolicy,
+		DeliverPolicy: nats.DeliverNewPolicy,
+	})
+	require.NoError(t, err)
+
+	senderID, recipientID, appID, envID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	consent := &retryThenOptedOutConsent{redeliveryHit: make(chan struct{}, 1), release: make(chan struct{})}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {
+			{Token: "device-one", PushService: "fcm"}, {Token: "device-two", PushService: "fcm"},
+		}}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(),
+		GameConsent: consent, GameBlocks: noGameBlock{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	readiness := newNotificationConsumerReadiness("message")
+	done := make(chan error, 1)
+	go func() {
+		done <- runMessageEventsConsumer(withNotificationConsumerReadiness(ctx, readiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
+			stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}, pusher, pushenrich.NoopResolver{}, nil)
+	}()
+	require.Eventually(t, readiness.ready, 5*time.Second, 10*time.Millisecond, "message durable binds before publication")
+
+	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String(),
+			GameApplicationId: stringPtr(appID.String()), GameEnvironmentId: stringPtr(envID.String())},
+	}}
+	encoded, err := proto.Marshal(event)
+	require.NoError(t, err)
+	_, err = js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
+	require.NoError(t, err)
+	select {
+	case <-consent.redeliveryHit:
+		// The first GIS lookup failed and the durable consumer is processing its retry.
+	case <-time.After(5 * time.Second):
+		t.Fatal("queued game message was not redelivered after consent authority failure")
+	}
+	close(consent.release)
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, consumer.SharedDurable("message"))
+		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 && consent.calls.Load() == 3
+	}, 5*time.Second, 20*time.Millisecond, "successful opt-out recheck acknowledges the queued event")
+	require.Empty(t, recorder.sent, "the queued event cannot bypass consent revoked before its retry")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("message consumer did not stop after cancellation")
+	}
+}
+
+func TestRouteMessageNotificationRejectsPartialGameScope(t *testing.T) {
+	appID := uuid.NewString()
+	err := routeMessageNotification(context.Background(), &consumer.MessageEventHandler{Router: delivery.DecideRouting},
+		stubChatMembers{ids: []string{uuid.NewString(), uuid.NewString()}}, &dispatch.MessagePusher{Grouping: grouping.NewMemoryStore()}, pushenrich.NoopResolver{},
+		&eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(), GameApplicationId: &appID,
+		}}})
+	require.Error(t, err, "malformed scoped event must not fall through to ordinary chat push")
 }
 
 func TestRouteMessageNotification_MessageSentEmptyMetadataFailsClosed(t *testing.T) {

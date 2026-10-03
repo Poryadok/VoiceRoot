@@ -86,6 +86,16 @@ class SearchServiceClient extends $grpc.Client {
     return $createUnaryCall(_$purgeSpace, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:messaging
+  $grpc.ResponseFuture<$0.PurgeManagedChatMessagesResponse>
+      purgeManagedChatMessages(
+    $0.PurgeManagedChatMessagesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$purgeManagedChatMessages, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$searchInChat =
@@ -124,6 +134,12 @@ class SearchServiceClient extends $grpc.Client {
           '/voice.search.v1.SearchService/PurgeSpace',
           ($0.PurgeSpaceRequest value) => value.writeToBuffer(),
           $0.PurgeSpaceResponse.fromBuffer);
+  static final _$purgeManagedChatMessages = $grpc.ClientMethod<
+          $0.PurgeManagedChatMessagesRequest,
+          $0.PurgeManagedChatMessagesResponse>(
+      '/voice.search.v1.SearchService/PurgeManagedChatMessages',
+      ($0.PurgeManagedChatMessagesRequest value) => value.writeToBuffer(),
+      $0.PurgeManagedChatMessagesResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.search.v1.SearchService')
@@ -192,6 +208,15 @@ abstract class SearchServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.PurgeSpaceRequest.fromBuffer(value),
         ($0.PurgeSpaceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.PurgeManagedChatMessagesRequest,
+            $0.PurgeManagedChatMessagesResponse>(
+        'PurgeManagedChatMessages',
+        purgeManagedChatMessages_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.PurgeManagedChatMessagesRequest.fromBuffer(value),
+        ($0.PurgeManagedChatMessagesResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.SearchInChatResponse> searchInChat_Pre(
@@ -253,4 +278,13 @@ abstract class SearchServiceBase extends $grpc.Service {
 
   $async.Future<$0.PurgeSpaceResponse> purgeSpace(
       $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
+
+  $async.Future<$0.PurgeManagedChatMessagesResponse>
+      purgeManagedChatMessages_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.PurgeManagedChatMessagesRequest> $request) async {
+    return purgeManagedChatMessages($call, await $request);
+  }
+
+  $async.Future<$0.PurgeManagedChatMessagesResponse> purgeManagedChatMessages(
+      $grpc.ServiceCall call, $0.PurgeManagedChatMessagesRequest request);
 }

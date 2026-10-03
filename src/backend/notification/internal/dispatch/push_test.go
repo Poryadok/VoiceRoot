@@ -17,6 +17,42 @@ type recordingFCMSender struct {
 	sent []store.DeviceToken
 }
 
+type frozenScopedDelivery struct{ scopes []string }
+
+func (g *frozenScopedDelivery) WithChatDelivery(_ context.Context, id string, _ func(context.Context) error) error {
+	g.scopes = append(g.scopes, "chat:"+id)
+	return nil
+}
+func (g *frozenScopedDelivery) WithSpaceDelivery(_ context.Context, id string, _ func(context.Context) error) error {
+	g.scopes = append(g.scopes, "space:"+id)
+	return nil
+}
+
+func TestPushDispatcherSuppressesFrozenScopedPayloadBeforeProvider(t *testing.T) {
+	sender, gate := &recordingFCMSender{}, &frozenScopedDelivery{}
+	d := &PushDispatcher{FCM: sender, LifecycleDelivery: gate}
+	for _, data := range []map[string]string{{"chat_id": "chat", "space_id": "space"}, {"space_id": "space"}, {"type": "system"}} {
+		require.NoError(t, d.Send(context.Background(), uuid.New(), store.DeviceToken{PushService: "fcm"}, push.Payload{Data: data}))
+	}
+	require.Equal(t, []string{"chat:chat", "space:space"}, gate.scopes)
+	require.Len(t, sender.sent, 1, "only global delivery reaches the provider")
+}
+
+type unrelatedChatFrozenSpace struct{ frozenScopedDelivery }
+
+func (g *unrelatedChatFrozenSpace) WithChatDelivery(ctx context.Context, id string, next func(context.Context) error) error {
+	g.scopes = append(g.scopes, "chat:"+id)
+	return next(ctx)
+}
+
+func TestPushDispatcherCannotBypassFrozenSpaceWithUnrelatedChat(t *testing.T) {
+	sender, gate := &recordingFCMSender{}, &unrelatedChatFrozenSpace{}
+	d := &PushDispatcher{FCM: sender, LifecycleDelivery: gate}
+	require.NoError(t, d.Send(context.Background(), uuid.New(), store.DeviceToken{PushService: "fcm"}, push.Payload{Data: map[string]string{"chat_id": "unrelated", "space_id": "frozen"}}))
+	require.Equal(t, []string{"chat:unrelated", "space:frozen"}, gate.scopes)
+	require.Empty(t, sender.sent)
+}
+
 func (r *recordingFCMSender) Send(_ context.Context, _ uuid.UUID, token store.DeviceToken, _ fcm.PushPayload) error {
 	r.sent = append(r.sent, token)
 	return nil

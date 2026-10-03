@@ -442,15 +442,27 @@ the retired-space fence. Current deployment settings do not bypass that hold.
 | Space | `ROLE_PRINCIPAL_GRPC_ADDR` | Dedicated Role TLS endpoint, normally `voice-role:9091` |
 | Space | `ROLE_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; system roots remain available |
 | Space | `ROLE_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Role certificate DNS name override; otherwise use endpoint authority |
+| Space | `SPACE_ROLE_CLIENT_CERT_FILE`, `SPACE_ROLE_CLIENT_KEY_FILE` | Required mutual-TLS client identity for the Role private listener; mount read-only and scope the certificate to Space |
 | Space | `AUTH_PRINCIPAL_GRPC_ADDR` | Dedicated Auth TLS proof endpoint; enabling it requires the Space principal signer |
 | Space | `AUTH_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted Auth CA PEM; system roots remain available |
 | Space | `AUTH_PRINCIPAL_TLS_SERVER_NAME` | Optional expected Auth certificate DNS name override; otherwise use endpoint authority |
 | Space | `SPACE_OWNERSHIP_RECOVERY_INTERVAL` | Positive interval for bounded private journal convergence; defaults to `1s` and starts only when both protected Auth and Role clients are configured |
 | Role | `ROLE_PRINCIPAL_GRPC_LISTEN` | Dedicated listener address; default `:9091` when enabled |
 | Role | `ROLE_PRINCIPAL_TLS_CERT_FILE`, `ROLE_PRINCIPAL_TLS_KEY_FILE` | Server TLS certificate chain and matching private key secret mounts |
-| Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map, including `space` |
-| Role | `S2S_JWKS_CA_FILE` | Optional private CA for the HTTPS issuer endpoint |
+| Role | `ROLE_PRINCIPAL_CLIENT_CA_FILE` | Required PEM CA bundle used to verify mutual-TLS clients on the private listener |
+| Role | `S2S_JWKS_URLS_JSON` | Trusted issuer-to-HTTPS endpoint map; include exact keys `space`, `gameintegration`, and `voice` |
+| Role | `S2S_JWKS_CA_FILE` | CA bundle for HTTPS issuer endpoints using a private or local CA; Phase0 uses the fixture CA |
 | Role | `ROLE_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis for atomic credential replay rejection |
+
+Role's private listener requires a verified client certificate before signed
+principal verification. Space, GIS, and Voice each present a distinct client
+certificate trusted by `ROLE_PRINCIPAL_CLIENT_CA_FILE`. Configure
+`S2S_JWKS_URLS_JSON` with HTTPS URLs for Space's `/.well-known/jwks.json` and
+GIS/Voice's `/internal/v1/principal/jwks.json`; the issuer keys must be exactly
+`space`, `gameintegration`, and `voice`. Keep each signing private key mounted
+only into its issuer. Phase0's GIS and Voice signer settings are
+`GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE` / `GAME_INTEGRATION_PRINCIPAL_KID`
+and `VOICE_PRINCIPAL_PRIVATE_KEY_FILE` / `VOICE_PRINCIPAL_KID`.
 
 Space signs both Role and Auth ownership calls with a fresh `service:space`
 principal bound to the exact full RPC, deterministic protobuf request hash and
@@ -476,6 +488,113 @@ principal runtime absent, ordinary health/service calls can remain available,
 but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
+
+## Auth-to-User SDK profile principal
+
+Auth's T14 RS256 signer and request-bound `GetSdkProfileEligibility` client are
+implemented and merged in [PR #513](https://github.com/Poryadok/VoiceRoot/pull/513).
+That PR reports passing focused Auth contract tests, the Auth Maven suite, and
+User gRPC service tests. This is implementation and test evidence only;
+deployment and runtime acceptance remain unverified, and no staging or
+production deployment is claimed. The game-integration plan still holds
+staging rollout until A1 acceptance completes. This section records the
+deployment contract and readiness gates. The transport is separate from Auth's
+client JWT signer and from Auth's inbound Gateway/Space proof listener on
+`:9091`.
+
+| Holder | Setting or Secret | Contract |
+|---|---|---|
+| Auth | `AUTH_PRINCIPAL_SIGNING_KEYS_DIR` | Read-only secret-mounted directory containing exactly two distinct unencrypted RSA PKCS#8 private keys `<kid>.pem`, each at least 2048 bits. |
+| Auth | `AUTH_PRINCIPAL_ACTIVE_KID` | Must name one of the two loaded keys; only that key signs new credentials. |
+| Auth | `AUTH_USER_PRINCIPAL_GRPC_ADDR` | User's dedicated TLS listener, normally `voice-user:9094`. |
+| Auth | `AUTH_USER_PRINCIPAL_TLS_CA_FILE` | Optional additional trusted CA PEM; JVM system roots remain enabled. |
+| Auth | `AUTH_USER_PRINCIPAL_TLS_SERVER_NAME` | Optional expected User certificate DNS name override; otherwise use endpoint authority. |
+| User | `USER_AUTH_PRINCIPAL_GRPC_LISTEN` | Auth-only TLS listener, default `:9094`; serves only the allowlisted Auth RPCs. |
+| User | `USER_AUTH_PRINCIPAL_TLS_CERT_FILE`, `USER_AUTH_PRINCIPAL_TLS_KEY_FILE` | Matching server certificate chain and private key, mounted read-only. |
+| User | `USER_AUTH_PRINCIPAL_REPLAY_REDIS_ADDR` | Shared Redis used by all User replicas for atomic credential replay rejection. |
+| User | `S2S_JWKS_URLS_JSON` | Must contain `auth` mapped to the HTTPS Auth principal JWKS endpoint. |
+| User | `S2S_JWKS_CA_FILE` | Optional additional CA for the HTTPS JWKS origin. |
+
+The exact signing secret name is `voice-auth-principal-signing`, with keys
+`current.pem`, `next.pem`, and `active-kid`. Mount only the two PEM files into
+`AUTH_PRINCIPAL_SIGNING_KEYS_DIR`; set `AUTH_PRINCIPAL_ACTIVE_KID` from
+`active-kid` (`current` or `next`). Mount keys read-only and never put private
+material in a ConfigMap, source control, logs, or review evidence. The Auth issuer is optional
+when all three required settings (`AUTH_PRINCIPAL_SIGNING_KEYS_DIR`,
+`AUTH_PRINCIPAL_ACTIVE_KID`, `AUTH_USER_PRINCIPAL_GRPC_ADDR`) are absent; in
+that state the T14 profile-authority path is unavailable and fails closed. If
+any required setting is supplied, all three must be valid or Auth fails startup.
+Optional CA/server-name overrides are valid only with the complete required
+set. Enabling `auth.sdk-authorization.enabled` requires all three. Invalid,
+partial, one-key,
+duplicate-key, weak-key, malformed-key, missing-mount, or untrusted-TLS
+configuration never falls back to client JWT signing, raw caller headers, or
+plaintext gRPC.
+
+Auth publishes only the two public principal keys at
+`/api/v1/auth/.well-known/principal-jwks.json`, separate from the client-token
+JWKS at `/api/v1/auth/.well-known/jwks.json`. User's `S2S_JWKS_URLS_JSON`
+`auth` entry points to the HTTPS URL for the principal endpoint. The principal
+JWKS contains the sorted current and next RSA signing keys (`kid`, `use=sig`,
+`alg=RS256`) and public parameters only. The existing User verifier cache
+remains bounded by `S2S_JWKS_REFRESH_AFTER=30s`, `S2S_JWKS_HARD_EXPIRY=2m`,
+and `S2S_UNKNOWN_KID_COOLDOWN=5s`; invalid refresh
+does not replace the last-good complete keyset and hard expiry fails closed.
+
+Provision the Auth signing secret and HTTPS JWKS route, User listener
+certificate, Auth-to-User network route, shared User replay Redis, and User
+issuer map before enabling the Auth caller. Deploy and verify User's issuer
+configuration first. Wait for the verifier's JWKS refresh (at most one 30s
+refresh interval) before the synthetic proof. Route only Auth to User `:9094`
+and User to the Auth HTTPS JWKS endpoint; do not expose the principal gRPC
+listener externally. User owns
+replay admission using shared Redis `SET NX` at
+`user:principal:replay:<hex SHA-256(issuer + NUL + jti)>`, with TTL bounded by
+credential expiry and at most 35 seconds. Redis failure, replay, missing keys,
+expired JWKS, TLS failure, or malformed proof denies the call.
+
+Rotation must preserve the complete current+next RS256 set across Auth replicas:
+
+1. Provision two distinct keys and publish both public keys at the principal
+   JWKS endpoint. Wait for User JWKS refresh and verify a synthetic request
+   signed by the peer key before selecting it for live signing.
+2. Change `active-kid` in the secret manager and restart Auth replicas to load
+   the selected key. Keep both private/public keys during the rollout.
+3. After the last old-signing Auth replica stops, retain its public key for at
+   least **35 seconds**: principal credentials live at most 30 seconds and User
+   permits up to five seconds of future issue/not-before skew.
+4. Replace only the inactive key, redeploy the complete two-key set everywhere,
+   wait for JWKS refresh, and verify another peer-signed synthetic request
+   before a later activation. Never remove an old verification key while a
+   credential it signed can still be accepted.
+
+Before T14 transport readiness is claimed, demonstrate valid Auth proof at User
+and denials for absent, malformed, wrong-issuer/audience/RPC/request/hash,
+replayed and expired proof; verify mismatched profile IDs and zero/stale
+revisions also deny. Do not use key values in the evidence.
+
+## Messaging game-signature runtime
+
+These settings enable the protected T15 ingress. Incomplete key or transport
+configuration fails startup; when an entire provider set is absent, its new
+write route remains fail-closed. Secret files are mounted read-only and never
+logged.
+
+| Holder | Setting | Contract |
+|---|---|---|
+| Messaging | `MESSAGING_TOMBSTONE_KEY_ID`, `MESSAGING_TOMBSTONE_PRIVATE_KEY_FILE`, `MESSAGING_TOMBSTONE_NOT_BEFORE`, `MESSAGING_TOMBSTONE_NOT_AFTER` | Ed25519 PKCS#8 signer and explicit exclusive validity window for moderation tombstones. |
+| Messaging | `MESSAGING_TOMBSTONE_JWKS_LISTEN` | Dedicated HTTPS listener for Messaging's public-only tombstone JWKS. |
+| Messaging | `MESSAGING_TOMBSTONE_JWKS_TLS_CERT_FILE`, `MESSAGING_TOMBSTONE_JWKS_TLS_KEY_FILE`, `MESSAGING_TOMBSTONE_JWKS_CLIENT_CA_FILE` | Server identity and CA for mandatory client-certificate verification on tombstone JWKS reads. |
+| Messaging | `MODERATION_PRINCIPAL_JWKS_URL`, `MODERATION_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS moderation principal keyset URL and trust CA. |
+| Messaging | `GATEWAY_PRINCIPAL_JWKS_URL`, `GATEWAY_PRINCIPAL_JWKS_CA_FILE` | Fixed HTTPS Gateway principal keyset URL and trust CA for `ApplyGameMessage`. |
+| Messaging | `MESSAGING_GATEWAY_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_GATEWAY_PRINCIPAL_TLS_KEY_FILE`, `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Messaging mTLS client identity and shared replay store for exact Gateway service-principal verification. |
+| Messaging | `MESSAGING_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_PRINCIPAL_TLS_KEY_FILE` | Messaging client identity for moderation JWKS mTLS. |
+| Messaging | `MESSAGING_PRINCIPAL_REPLAY_REDIS_URL` | Shared Redis for atomic moderation service-principal replay rejection. |
+| Messaging | `AUTH_PRINCIPAL_JWKS_URL`, `AUTH_PRINCIPAL_JWKS_CA_FILE` | Fixed Auth device-status keyset URL and trust CA. |
+| Messaging | `MESSAGING_AUTH_PRINCIPAL_TLS_CERT_FILE`, `MESSAGING_AUTH_PRINCIPAL_TLS_KEY_FILE` | Messaging client identity for Auth status JWKS mTLS; snapshots older than four seconds are refreshed or denied. |
+| Messaging | `AUTH_GAME_MESSAGE_EXECUTION_PERMIT_URL`, `AUTH_GAME_MESSAGE_EXECUTION_PERMIT_CA_FILE` | Deployment-pinned HTTPS Auth execution-permit endpoint and trust CA. |
+| Messaging | `MESSAGING_AUTH_EXECUTION_PERMIT_TLS_CERT_FILE`, `MESSAGING_AUTH_EXECUTION_PERMIT_TLS_KEY_FILE` | Messaging client identity for Auth execution-permit mTLS. |
+
 ## Social privacy principals
 
 The standard local/CI Compose app generates its own 30-day credentials through

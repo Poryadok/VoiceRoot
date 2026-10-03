@@ -20,8 +20,8 @@ import (
 )
 
 type recordingFCMSender struct {
-	mu    sync.Mutex
-	sent  []fcm.PushPayload
+	mu     sync.Mutex
+	sent   []fcm.PushPayload
 	tokens []store.DeviceToken
 }
 
@@ -126,6 +126,30 @@ func TestSendNotification_MatchFoundRoutesToFCM(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fcmRec.sent, 1, "match_found must route through FCM sender")
 	require.Contains(t, fcmRec.sent[0].Data["type"], "match_found")
+}
+
+type frozenPushScope struct{ calls int }
+
+func (g *frozenPushScope) WithChatDelivery(context.Context, string, func(context.Context) error) error {
+	g.calls++
+	return nil
+}
+func (g *frozenPushScope) WithSpaceDelivery(context.Context, string, func(context.Context) error) error {
+	g.calls++
+	return nil
+}
+
+func TestSendNotificationPreservesScopeForFrozenDeliveryGate(t *testing.T) {
+	sender, gate := &recordingFCMSender{}, &frozenPushScope{}
+	pusher := testPusher(sender, &recordingAPNSSender{})
+	pusher.LifecycleDelivery = gate
+	svc := &NotificationGRPC{Pusher: pusher, Tokens: &store.DeviceTokenStore{}}
+	_, err := svc.SendNotification(context.Background(), &notificationv1.SendNotificationRequest{
+		ProfileId: uuid.NewString(), NotificationType: "new_message", PayloadJson: `{"chat_id":"` + uuid.NewString() + `"}`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, gate.calls)
+	require.Empty(t, sender.sent)
 }
 
 func TestSendNotification_MissingFields_InvalidArgument(t *testing.T) {

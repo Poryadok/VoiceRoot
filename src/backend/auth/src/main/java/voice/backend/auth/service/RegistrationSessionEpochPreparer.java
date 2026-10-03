@@ -1,6 +1,7 @@
 package voice.backend.auth.service;
 
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
@@ -12,16 +13,31 @@ public final class RegistrationSessionEpochPreparer {
   private final TransactionTemplate transactions;
   private final AccountRepository accounts;
   private final SessionEpochIssuanceGate gate;
+  private final RegistrationIntentBinder intentBinder;
 
   public RegistrationSessionEpochPreparer(
       TransactionTemplate transactions, AccountRepository accounts, SessionEpochIssuanceGate gate) {
+    this(transactions, accounts, gate, null);
+  }
+
+  public RegistrationSessionEpochPreparer(TransactionTemplate transactions, AccountRepository accounts,
+      SessionEpochIssuanceGate gate, RegistrationIntentBinder intentBinder) {
     this.transactions = Objects.requireNonNull(transactions, "transactions");
     this.accounts = Objects.requireNonNull(accounts, "accounts");
     this.gate = Objects.requireNonNull(gate, "gate");
+    this.intentBinder = intentBinder;
   }
 
   public PreparedRegistration prepare(
       String email, String phone, String passwordHash, String type, boolean regularEmailVerificationPending) {
+    return prepare(email, phone, passwordHash, type, regularEmailVerificationPending, null);
+  }
+
+  public PreparedRegistration prepare(String email, String phone, String passwordHash, String type,
+      boolean regularEmailVerificationPending, UUID registrationIntentId) {
+    if (registrationIntentId != null && intentBinder == null) {
+      throw new AuthException("auth_unavailable");
+    }
     return Objects.requireNonNull(
         transactions.execute(
             ignored -> {
@@ -29,7 +45,9 @@ public final class RegistrationSessionEpochPreparer {
                   regularEmailVerificationPending
                       ? accounts.createRegularEmailPending(email, passwordHash)
                       : accounts.create(email, phone, passwordHash, type);
-              return new PreparedRegistration(account, gate.prepare(account.id(), account.sessionEpoch()));
+              PreparedSessionEpoch prepared = gate.prepare(account.id(), account.sessionEpoch());
+              if (registrationIntentId != null) intentBinder.bind(registrationIntentId, account.id());
+              return new PreparedRegistration(account, prepared);
             }),
         "registration transaction result");
   }

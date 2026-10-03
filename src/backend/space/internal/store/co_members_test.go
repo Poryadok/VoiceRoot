@@ -2,36 +2,13 @@ package store
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"voice/backend/pkg/integrationtest"
 )
-
-func applySpaceMigrations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	for _, name := range []string{
-		"000001_init.up.sql", "000002_tree.up.sql", "000003_invites.up.sql",
-		"000004_moderation.up.sql", "000005_space_subscriptions.up.sql",
-		"000006_allow_guests.up.sql", "000007_tree_pin.up.sql", "000016_allow_guests_fail_closed.up.sql",
-		"000008_ownership_journal.up.sql", "000009_ownership_journal_decision.up.sql",
-		"000010_ownership_journal_commit.up.sql", "000011_voice_access_epoch.up.sql",
-		"000012_ownership_journal_completion.up.sql",
-		"000013_space_lifecycle.up.sql",
-		"000017_lifecycle_restore_outcome.up.sql", "000018_ownership_consume_started.up.sql",
-	} {
-		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
-		sqlBytes, err := os.ReadFile(migrationPath)
-		require.NoError(t, err)
-		_, err = pool.Exec(ctx, string(sqlBytes))
-		require.NoError(t, err)
-	}
-}
 
 func TestAreCoMembers_SharedSpace(t *testing.T) {
 	if testing.Short() {
@@ -39,7 +16,7 @@ func TestAreCoMembers_SharedSpace(t *testing.T) {
 	}
 	ctx := context.Background()
 	pool := integrationtest.StartPostgres(t, ctx, "spacedb", "")
-	applySpaceMigrations(t, ctx, pool)
+	applySpaceMigrationForStoreTest(t, ctx, pool)
 	store := &SpaceStore{Pool: pool}
 
 	owner := uuid.New()

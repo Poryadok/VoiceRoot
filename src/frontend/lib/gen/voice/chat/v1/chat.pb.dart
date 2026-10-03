@@ -257,6 +257,651 @@ class Chat extends $pb.GeneratedMessage {
   void clearAllowGuests() => $_clearField(15);
 }
 
+/// The operation_id is also the x-request-id principal binding. Request hash
+/// covers the deterministic protobuf encoding of the complete request.
+class ProvisionManagedChatRequest extends $pb.GeneratedMessage {
+  factory ProvisionManagedChatRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? operationId,
+    $core.String? externalChatKey,
+    $core.String? name,
+    $core.String? topic,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (operationId != null) result.operationId = operationId;
+    if (externalChatKey != null) result.externalChatKey = externalChatKey;
+    if (name != null) result.name = name;
+    if (topic != null) result.topic = topic;
+    return result;
+  }
+
+  ProvisionManagedChatRequest._();
+
+  factory ProvisionManagedChatRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProvisionManagedChatRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProvisionManagedChatRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'externalChatKey')
+    ..aOS(5, _omitFieldNames ? '' : 'name')
+    ..aOS(6, _omitFieldNames ? '' : 'topic')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatRequest copyWith(
+          void Function(ProvisionManagedChatRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ProvisionManagedChatRequest))
+          as ProvisionManagedChatRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatRequest create() =>
+      ProvisionManagedChatRequest._();
+  @$core.override
+  ProvisionManagedChatRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProvisionManagedChatRequest>(create);
+  static ProvisionManagedChatRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get externalChatKey => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set externalChatKey($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExternalChatKey() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExternalChatKey() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get name => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set name($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasName() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearName() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get topic => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set topic($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTopic() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTopic() => $_clearField(6);
+}
+
+class ProvisionManagedChatResponse extends $pb.GeneratedMessage {
+  factory ProvisionManagedChatResponse({
+    $core.String? chatId,
+    $core.bool? replayed,
+    $core.String? receiptId,
+    $core.String? requestHash,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (replayed != null) result.replayed = replayed;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    return result;
+  }
+
+  ProvisionManagedChatResponse._();
+
+  factory ProvisionManagedChatResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProvisionManagedChatResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProvisionManagedChatResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..aOS(3, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(4, _omitFieldNames ? '' : 'requestHash')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProvisionManagedChatResponse copyWith(
+          void Function(ProvisionManagedChatResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ProvisionManagedChatResponse))
+          as ProvisionManagedChatResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatResponse create() =>
+      ProvisionManagedChatResponse._();
+  @$core.override
+  ProvisionManagedChatResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProvisionManagedChatResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProvisionManagedChatResponse>(create);
+  static ProvisionManagedChatResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get replayed => $_getBF(1);
+  @$pb.TagNumber(2)
+  set replayed($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReplayed() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReplayed() => $_clearField(2);
+
+  /// Stable managed_chat_operations identity and the exact persisted request hash.
+  @$pb.TagNumber(3)
+  $core.String get receiptId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set receiptId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReceiptId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReceiptId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get requestHash => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set requestHash($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequestHash() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequestHash() => $_clearField(4);
+}
+
+class SyncManagedChatMembersRequest extends $pb.GeneratedMessage {
+  factory SyncManagedChatMembersRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? operationId,
+    $core.String? chatId,
+    $core.Iterable<$core.String>? profileIds,
+    $core.bool? addOnly,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (operationId != null) result.operationId = operationId;
+    if (chatId != null) result.chatId = chatId;
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    if (addOnly != null) result.addOnly = addOnly;
+    return result;
+  }
+
+  SyncManagedChatMembersRequest._();
+
+  factory SyncManagedChatMembersRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncManagedChatMembersRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncManagedChatMembersRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'chatId')
+    ..pPS(5, _omitFieldNames ? '' : 'profileIds')
+    ..aOB(6, _omitFieldNames ? '' : 'addOnly')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersRequest copyWith(
+          void Function(SyncManagedChatMembersRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncManagedChatMembersRequest))
+          as SyncManagedChatMembersRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersRequest create() =>
+      SyncManagedChatMembersRequest._();
+  @$core.override
+  SyncManagedChatMembersRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncManagedChatMembersRequest>(create);
+  static SyncManagedChatMembersRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get chatId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set chatId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasChatId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearChatId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.String> get profileIds => $_getList(4);
+
+  /// When true, add only the listed profiles without removing current members.
+  @$pb.TagNumber(6)
+  $core.bool get addOnly => $_getBF(5);
+  @$pb.TagNumber(6)
+  set addOnly($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasAddOnly() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearAddOnly() => $_clearField(6);
+}
+
+class SyncManagedChatMembersResponse extends $pb.GeneratedMessage {
+  factory SyncManagedChatMembersResponse({
+    $core.Iterable<$core.String>? profileIds,
+    $core.bool? replayed,
+    $core.String? receiptId,
+    $core.String? requestHash,
+  }) {
+    final result = create();
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    if (replayed != null) result.replayed = replayed;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    return result;
+  }
+
+  SyncManagedChatMembersResponse._();
+
+  factory SyncManagedChatMembersResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SyncManagedChatMembersResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SyncManagedChatMembersResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'profileIds')
+    ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..aOS(3, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(4, _omitFieldNames ? '' : 'requestHash')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SyncManagedChatMembersResponse copyWith(
+          void Function(SyncManagedChatMembersResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SyncManagedChatMembersResponse))
+          as SyncManagedChatMembersResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersResponse create() =>
+      SyncManagedChatMembersResponse._();
+  @$core.override
+  SyncManagedChatMembersResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SyncManagedChatMembersResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SyncManagedChatMembersResponse>(create);
+  static SyncManagedChatMembersResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get profileIds => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.bool get replayed => $_getBF(1);
+  @$pb.TagNumber(2)
+  set replayed($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReplayed() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReplayed() => $_clearField(2);
+
+  /// Stable managed_chat_operations identity and the exact persisted request hash.
+  @$pb.TagNumber(3)
+  $core.String get receiptId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set receiptId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReceiptId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReceiptId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get requestHash => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set requestHash($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequestHash() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequestHash() => $_clearField(4);
+}
+
+class SetManagedChatRetentionRequest extends $pb.GeneratedMessage {
+  factory SetManagedChatRetentionRequest({
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? operationId,
+    $core.String? externalChatKey,
+    $1.Timestamp? purgeAfter,
+  }) {
+    final result = create();
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (operationId != null) result.operationId = operationId;
+    if (externalChatKey != null) result.externalChatKey = externalChatKey;
+    if (purgeAfter != null) result.purgeAfter = purgeAfter;
+    return result;
+  }
+
+  SetManagedChatRetentionRequest._();
+
+  factory SetManagedChatRetentionRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetManagedChatRetentionRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetManagedChatRetentionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(2, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'externalChatKey')
+    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetManagedChatRetentionRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetManagedChatRetentionRequest copyWith(
+          void Function(SetManagedChatRetentionRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetManagedChatRetentionRequest))
+          as SetManagedChatRetentionRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetManagedChatRetentionRequest create() =>
+      SetManagedChatRetentionRequest._();
+  @$core.override
+  SetManagedChatRetentionRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetManagedChatRetentionRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetManagedChatRetentionRequest>(create);
+  static SetManagedChatRetentionRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get applicationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set applicationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasApplicationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearApplicationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get environmentId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set environmentId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEnvironmentId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEnvironmentId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get externalChatKey => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set externalChatKey($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExternalChatKey() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExternalChatKey() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $1.Timestamp get purgeAfter => $_getN(4);
+  @$pb.TagNumber(5)
+  set purgeAfter($1.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasPurgeAfter() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearPurgeAfter() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $1.Timestamp ensurePurgeAfter() => $_ensure(4);
+}
+
+class SetManagedChatRetentionResponse extends $pb.GeneratedMessage {
+  factory SetManagedChatRetentionResponse({
+    $core.String? chatId,
+    $core.String? receiptId,
+    $core.String? requestHash,
+    $1.Timestamp? purgeAfter,
+    $1.Timestamp? completedAt,
+    $core.bool? replayed,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (requestHash != null) result.requestHash = requestHash;
+    if (purgeAfter != null) result.purgeAfter = purgeAfter;
+    if (completedAt != null) result.completedAt = completedAt;
+    if (replayed != null) result.replayed = replayed;
+    return result;
+  }
+
+  SetManagedChatRetentionResponse._();
+
+  factory SetManagedChatRetentionResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetManagedChatRetentionResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetManagedChatRetentionResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'requestHash')
+    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOB(6, _omitFieldNames ? '' : 'replayed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetManagedChatRetentionResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetManagedChatRetentionResponse copyWith(
+          void Function(SetManagedChatRetentionResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as SetManagedChatRetentionResponse))
+          as SetManagedChatRetentionResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetManagedChatRetentionResponse create() =>
+      SetManagedChatRetentionResponse._();
+  @$core.override
+  SetManagedChatRetentionResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetManagedChatRetentionResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetManagedChatRetentionResponse>(
+          create);
+  static SetManagedChatRetentionResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get requestHash => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set requestHash($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRequestHash() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRequestHash() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $1.Timestamp get purgeAfter => $_getN(3);
+  @$pb.TagNumber(4)
+  set purgeAfter($1.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPurgeAfter() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPurgeAfter() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $1.Timestamp ensurePurgeAfter() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $1.Timestamp get completedAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set completedAt($1.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCompletedAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCompletedAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $1.Timestamp ensureCompletedAt() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  $core.bool get replayed => $_getBF(5);
+  @$pb.TagNumber(6)
+  set replayed($core.bool value) => $_setBool(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasReplayed() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearReplayed() => $_clearField(6);
+}
+
 class CreateDMRequest extends $pb.GeneratedMessage {
   factory CreateDMRequest({
     $core.String? otherProfileId,
@@ -3951,6 +4596,151 @@ class ListDMReceiptVisibilityTargetsResponse extends $pb.GeneratedMessage {
   $core.bool hasNextCursor() => $_has(1);
   @$pb.TagNumber(2)
   void clearNextCursor() => $_clearField(2);
+}
+
+class CheckMessageReadEntitlementRequest extends $pb.GeneratedMessage {
+  factory CheckMessageReadEntitlementRequest({
+    $core.String? chatId,
+    $core.String? profileId,
+    $1.Timestamp? messageCreatedAt,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (profileId != null) result.profileId = profileId;
+    if (messageCreatedAt != null) result.messageCreatedAt = messageCreatedAt;
+    return result;
+  }
+
+  CheckMessageReadEntitlementRequest._();
+
+  factory CheckMessageReadEntitlementRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckMessageReadEntitlementRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckMessageReadEntitlementRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'messageCreatedAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckMessageReadEntitlementRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckMessageReadEntitlementRequest copyWith(
+          void Function(CheckMessageReadEntitlementRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as CheckMessageReadEntitlementRequest))
+          as CheckMessageReadEntitlementRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckMessageReadEntitlementRequest create() =>
+      CheckMessageReadEntitlementRequest._();
+  @$core.override
+  CheckMessageReadEntitlementRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckMessageReadEntitlementRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CheckMessageReadEntitlementRequest>(
+          create);
+  static CheckMessageReadEntitlementRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get messageCreatedAt => $_getN(2);
+  @$pb.TagNumber(3)
+  set messageCreatedAt($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMessageCreatedAt() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMessageCreatedAt() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureMessageCreatedAt() => $_ensure(2);
+}
+
+class CheckMessageReadEntitlementResponse extends $pb.GeneratedMessage {
+  factory CheckMessageReadEntitlementResponse({
+    $core.bool? entitled,
+  }) {
+    final result = create();
+    if (entitled != null) result.entitled = entitled;
+    return result;
+  }
+
+  CheckMessageReadEntitlementResponse._();
+
+  factory CheckMessageReadEntitlementResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CheckMessageReadEntitlementResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CheckMessageReadEntitlementResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'entitled')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckMessageReadEntitlementResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CheckMessageReadEntitlementResponse copyWith(
+          void Function(CheckMessageReadEntitlementResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as CheckMessageReadEntitlementResponse))
+          as CheckMessageReadEntitlementResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CheckMessageReadEntitlementResponse create() =>
+      CheckMessageReadEntitlementResponse._();
+  @$core.override
+  CheckMessageReadEntitlementResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CheckMessageReadEntitlementResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          CheckMessageReadEntitlementResponse>(create);
+  static CheckMessageReadEntitlementResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get entitled => $_getBF(0);
+  @$pb.TagNumber(1)
+  set entitled($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasEntitled() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearEntitled() => $_clearField(1);
 }
 
 /// Cross-service pointer to chat_db.chats (docs/DATA_MODEL.md). Use in other packages instead of parallel chat_id + chat_type strings.

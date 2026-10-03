@@ -235,6 +235,8 @@ services:
       - space.member_left
       - space.updated
       - space.deleted
+      - space.deletion_scheduled
+      - space.restored
       - voice.room_created
       - voice.room_deleted
       - $JS.API.STREAM.INFO.chat_events

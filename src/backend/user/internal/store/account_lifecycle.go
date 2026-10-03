@@ -35,11 +35,22 @@ func (s *ProfileStore) ApplyAccountDeleted(ctx context.Context, eventID, account
 			return err
 		}
 		defer rows.Close()
+		profiles := []*ProfileRow{}
 		for rows.Next() {
 			profile, err := scanProfile(rows)
 			if err != nil {
 				return err
 			}
+			profiles = append(profiles, profile)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		// pgx cannot execute another command while UPDATE RETURNING owns the
+		// connection. Release its cursor before appending the durable deletes;
+		// all rows and events still commit atomically in this transaction.
+		rows.Close()
+		for _, profile := range profiles {
 			childID := uuid.NewSHA1(eventID, []byte(profile.ID.String()))
 			if err := AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
 				ProtocolVersion: 1, EventId: childID.String(), OccurredAt: timestamppb.New(occurredAt.UTC()), ProfileId: profile.ID.String(), SourceRevision: profile.SearchProjectionRevision,
@@ -48,7 +59,7 @@ func (s *ProfileStore) ApplyAccountDeleted(ctx context.Context, eventID, account
 				return err
 			}
 		}
-		return rows.Err()
+		return nil
 	})
 }
 

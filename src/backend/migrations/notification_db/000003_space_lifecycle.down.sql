@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS notification_space_lifecycle_purge_receipts;
+DROP TABLE IF EXISTS notification_space_lifecycle_fence_receipts;
+DROP TABLE IF EXISTS notification_space_lifecycle_fences;

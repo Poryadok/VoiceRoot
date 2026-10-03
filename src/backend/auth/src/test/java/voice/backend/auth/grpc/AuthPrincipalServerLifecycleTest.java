@@ -69,6 +69,11 @@ class AuthPrincipalServerLifecycleTest {
       verify(verifier).verify("test-credential", AuthPrincipalServerInterceptor.LOOKUP_RPC,
           "lifecycle-request", AuthPrincipalServerInterceptor.requestHash(REQUEST));
       assertStatus(privateChannel, LOGIN, Status.Code.UNIMPLEMENTED);
+      for(var sourceRpc : java.util.List.of("ReadSnapshot","ReadRevision")) {
+        var source = method("/voice.authority.v1.AuthoritySourceService/" + sourceRpc);
+        assertStatus(legacy, source, Status.Code.UNIMPLEMENTED);
+        assertStatus(privateChannel, source, Status.Code.UNIMPLEMENTED);
+      }
       assertEquals(1, loginCalls.get());
       int legacyPort = server.legacyPort();
       int principalPort = server.principalPort();

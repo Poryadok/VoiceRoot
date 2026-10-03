@@ -171,6 +171,22 @@ FROM bots WHERE id = $1`, id)
 	return scanBot(row)
 }
 
+// LookupGameIntegrationBotAuthority returns only the owner and lifecycle state
+// needed by GIS installation binding; Bot credentials and profile data stay
+// inside the Bot service.
+func (s *BotStore) LookupGameIntegrationBotAuthority(ctx context.Context, id uuid.UUID) (uuid.UUID, string, bool, error) {
+	var ownerID uuid.UUID
+	var status string
+	err := s.Pool.QueryRow(ctx, `SELECT owner_account_id, status FROM bots WHERE id=$1`, id).Scan(&ownerID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, "", false, nil
+	}
+	if err != nil {
+		return uuid.Nil, "", false, err
+	}
+	return ownerID, status, true, nil
+}
+
 // GetBotByIDForUpdate reads a bot while holding its row lock until tx commits.
 func (s *BotStore) GetBotByIDForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*BotRow, error) {
 	row := tx.QueryRow(ctx, `
@@ -321,6 +337,17 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, err
 	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+		return uuid.Nil, err
+	}
+	var lifecycleState string
+	err = tx.QueryRow(ctx, `SELECT desired_state FROM bot_space_lifecycle_heads WHERE space_id=$1`, spaceID).Scan(&lifecycleState)
+	if err == nil && lifecycleState != "LIVE" {
+		return uuid.Nil, ErrSpaceLifecycleConflict
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, err
+	}
 	installID := uuid.New()
 	_, err = tx.Exec(ctx, `
 INSERT INTO bot_space_installations (id, bot_id, space_id, installed_by_profile_id)
@@ -442,6 +469,17 @@ func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, i
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+		return err
+	}
+	var lifecycleState string
+	err = tx.QueryRow(ctx, `SELECT desired_state FROM bot_space_lifecycle_heads WHERE space_id=$1`, spaceID).Scan(&lifecycleState)
+	if err == nil && lifecycleState != "LIVE" {
+		return ErrSpaceLifecycleConflict
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	var exists bool
 	err = tx.QueryRow(ctx, `
 SELECT EXISTS(SELECT 1 FROM bot_space_installations WHERE bot_id = $1 AND space_id = $2)`,
@@ -616,8 +654,9 @@ func (s *BotStore) EnqueueEvent(ctx context.Context, botID uuid.UUID, eventType 
 	id := uuid.New()
 	b, _ := json.Marshal(payload)
 	_, err := s.Pool.Exec(ctx, `
-INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token)
-VALUES ($1, $2, $3, $4::jsonb, 'pending', $5)`,
+INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token,space_id)
+VALUES ($1, $2, $3, $4::jsonb, 'pending', $5,
+ (SELECT w.space_id FROM bot_chat_whitelist w WHERE w.bot_id=$2 AND w.chat_id::text=$4::jsonb->>'chat_id' LIMIT 1))`,
 		id, botID, eventType, string(b), token)
 	return id, err
 }

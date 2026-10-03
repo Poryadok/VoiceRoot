@@ -26,14 +26,30 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 
 | Path | Mechanism | Current ordered layout |
 |------|------------|------------------------|
-| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1__auth_schema.sql` … `V14__verification_source_sync.sql` |
-| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` … `000015_verification_source_sync`, each with `.up.sql` and `.down.sql` |
+| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1__auth_schema.sql` … `V25__sdk_conversion_owner_receipts.sql` |
+| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` … `000026_sdk_conversion_owner_receipts`, each with `.up.sql` and `.down.sql` |
 
 `auth_db` belongs to Auth in both layouts. Flyway `V1` contains the initial schema
 and the `refresh_tokens.access_jti` addition represented by golang-migrate
 `000001_init` followed by `000002_refresh_tokens_access_jti`; each later Flyway
 revision maps in order to the next golang-migrate revision (`V2` → `000003`, …,
-`V14` → `000015`, `V15` → `000016`). Keep these layouts aligned when adding Auth-owned DDL.
+`V14` → `000015`, `V15` → `000016`, …, `V25` → `000026`). Keep these layouts aligned when adding Auth-owned DDL.
+
+The canonical refresh-token profile migration stays at Flyway V15 / golang-migrate
+000016. SDK identity begins at V16 / 000017; authorization and preparation follow
+at V17–18 / 000018–19. Every later SDK UP has the same SQL body in both catalogs.
+SDK DOWN migrations are forward-only and refuse downgrade; restore a verified
+matching database/runtime backup instead of deleting identity or receipt history.
+
+An earlier SDK-only catalog used V15 / 000016 for identity, colliding with the
+refresh migration added on master. The current numbering is a fresh-catalog
+repair, not permission to rewrite an existing database's history. Flyway refuses
+that earlier history on validation. The corresponding golang-migrate upgrade
+refuses preexisting SDK objects and retains a dirty maintenance marker. Keep Auth
+stopped, retain a full backup, and compare actual history/checksums and schema
+against the matching release before planning recovery. Do not run Flyway repair,
+baseline, golang-migrate force, or direct history updates to skip this refusal.
+No live database metadata is changed by the source repair.
 
 Do not mix both tools on one database without a deliberate Flyway baseline; Path A
 is the default. To check the repository layout before a change, run the following
@@ -131,6 +147,15 @@ refresh never replaces or extends the last-good set, and hard expiry fails close
 Auth consumes these service keys; its existing client-JWT signing configuration
 does not sign principal credentials. Legacy `S2S_SIGNING_KEY_PEM` and
 `S2S_SIGNING_KID` aliases are rejected.
+
+The statement above describes the current Auth implementation. The accepted
+T14 target adds a separate Auth-issued User principal keyset; it must not reuse
+`AUTH_JWT_PRIVATE_KEY_PEM` or `AUTH_JWT_PRIVATE_KEY_LOCATION`. Its selected
+key source, JWKS route, and rollout contract are recorded in
+[`auth-service.md`](../../../docs/microservices/auth-service.md#t14-auth-to-user-selected-profile-authority-accepted-target-implementation-pending)
+and [Deployment: Auth-to-User SDK profile principal](../../../docs/DEPLOYMENT.md#auth-to-user-sdk-profile-principal).
+Until that signer/client is implemented and configured, T14 profile authority
+remains unavailable and fails closed.
 
 Deployment must route only these proof calls to port 9091, install the Auth
 certificate chain and CA trust for Gateway/Space clients, and verify the

@@ -1,4 +1,4 @@
-# Build context must be `src/backend` (pb, replace on ../chat and user pb).
+# Build context must be `src/backend` (pb, local proto module replacements).
 
 FROM golang:1.26-alpine AS build
 WORKDIR /src
@@ -7,11 +7,13 @@ COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY messaging/go.mod ./messaging/
 COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
+COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/go.mod ./chat/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
+COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY role/go.mod ./role/
@@ -19,6 +21,7 @@ COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/moderation/go.mod ./voice/pb/voice/moderation/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
+COPY voice/pb/voice/search/go.mod ./voice/pb/voice/search/
 COPY voice/pb/voice/auth/go.mod ./voice/pb/voice/auth/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh messaging
 COPY pkg ./pkg
@@ -28,6 +31,7 @@ COPY role/pb ./role/pb
 COPY voice/pb/voice/moderation ./voice/pb/voice/moderation
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/story ./voice/pb/voice/story
+COPY voice/pb/voice/search ./voice/pb/voice/search
 COPY voice/pb/voice/auth ./voice/pb/voice/auth
 COPY role/permissions ./role/permissions
 COPY role ./role

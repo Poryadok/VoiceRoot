@@ -94,6 +94,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/analytics v0.0.0 // indirect
 	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/gameintegration v0.0.0 // indirect
 	voice.app/voice/story v0.0.0 // indirect
 )
 
@@ -106,6 +107,8 @@ replace voice.app/voice/chat => ../chat/pb/voice/chat
 replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
 
 replace voice.app/voice/events => ../messaging/pb/voice/events
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
 
 replace voice.app/voice/role => ../role/pb/voice/role
 

@@ -1,0 +1,4 @@
+DROP TRIGGER IF EXISTS environments_revoke_credentials_on_status_change ON environments;
+DROP FUNCTION IF EXISTS revoke_credentials_on_environment_lifecycle_change();
+DROP TRIGGER IF EXISTS applications_revoke_credentials_on_status_change ON applications;
+DROP FUNCTION IF EXISTS revoke_credentials_on_application_lifecycle_change();

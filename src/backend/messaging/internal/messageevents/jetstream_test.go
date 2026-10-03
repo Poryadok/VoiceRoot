@@ -112,6 +112,29 @@ func TestJetStreamPublisher_MessageSentRoundTrip(t *testing.T) {
 	require.Nil(t, sent.ScheduledAt)
 }
 
+func TestJetStreamPublisher_GameEventMessageSentRetainsVerifiedAppScope(t *testing.T) {
+	ctx := context.Background()
+	s := startJSTestServer(t)
+	nc, err := nats.Connect(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(nc.Close)
+	sub, err := nc.SubscribeSync(subjectMessageSent)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	pub, err := NewJetStreamPublisher(s.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	const mid, cid, sid = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333"
+	const appID, envID = "44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555"
+	require.NoError(t, pub.PublishGameEventMessageSent(ctx, mid, cid, sid, appID, envID))
+	msg, err := sub.NextMsg(3 * time.Second)
+	require.NoError(t, err)
+	var env eventsv1.MessageStreamEvent
+	require.NoError(t, proto.Unmarshal(msg.Data, &env))
+	require.Equal(t, appID, env.GetMessageSent().GetGameApplicationId())
+	require.Equal(t, envID, env.GetMessageSent().GetGameEnvironmentId())
+}
+
 func TestJetStreamPublisher_RequestIDHeader(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(correlation.GRPCMetadataKey, "req-header-test"))
 	s := startJSTestServer(t)
@@ -152,12 +175,15 @@ func TestJetStreamPublisher_MentionAddedPreservesSendSilent(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() })
 
-	require.NoError(t, pub.PublishMentionAdded(ctx, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", []string{"44444444-4444-4444-4444-444444444444"}, true))
+	const appID, envID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	require.NoError(t, pub.PublishMentionAdded(ctx, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", []string{"44444444-4444-4444-4444-444444444444"}, true, appID, envID))
 	msg, err := sub.NextMsg(3 * time.Second)
 	require.NoError(t, err)
 	var env eventsv1.MessageStreamEvent
 	require.NoError(t, proto.Unmarshal(msg.Data, &env))
 	require.True(t, env.GetMentionAdded().GetSendSilent())
+	require.Equal(t, appID, env.GetMentionAdded().GetGameApplicationId())
+	require.Equal(t, envID, env.GetMentionAdded().GetGameEnvironmentId())
 }
 
 func TestJetStreamPublisher_MessageEditedAndDeleted(t *testing.T) {
@@ -233,7 +259,8 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	t.Cleanup(func() { _ = pub.Close() })
 
 	const mid, cid, pid, authorID, emoji = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "cccccccc-cccc-cccc-cccc-cccccccccccc", "dddddddd-dddd-dddd-dddd-dddddddddddd", "👍"
-	require.NoError(t, pub.PublishReactionAdded(ctx, mid, cid, pid, authorID, emoji))
+	const appID, envID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", "ffffffff-ffff-ffff-ffff-ffffffffffff"
+	require.NoError(t, pub.PublishReactionAdded(ctx, mid, cid, pid, authorID, emoji, appID, envID))
 	require.NoError(t, pub.PublishReactionRemoved(ctx, mid, cid, pid, emoji))
 
 	am, err := subAdd.NextMsg(3 * time.Second)
@@ -247,6 +274,8 @@ func TestJetStreamPublisher_ReactionAddedAndRemoved(t *testing.T) {
 	require.Equal(t, pid, ra.GetProfileId())
 	require.Equal(t, authorID, ra.GetMessageAuthorProfileId())
 	require.Equal(t, emoji, ra.GetEmoji())
+	require.Equal(t, appID, ra.GetGameApplicationId())
+	require.Equal(t, envID, ra.GetGameEnvironmentId())
 
 	rm, err := subRem.NextMsg(3 * time.Second)
 	require.NoError(t, err)

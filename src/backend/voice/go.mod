@@ -28,7 +28,8 @@ require (
 	voice.app/voice/story v0.0.0
 	voice.app/voice/subscription v0.0.0
 	voice.app/voice/user v0.0.0
-	voice/backend/pkg v0.0.0-00010101000000-000000000000
+	voice/backend/federation v0.0.0
+	voice/backend/pkg v0.0.0
 )
 
 require (
@@ -147,9 +148,12 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	voice.app/voice/file v0.0.0 // indirect
+	voice.app/voice/gameintegration v0.0.0
 )
 
 replace voice/backend/pkg => ../pkg
+
+replace voice/backend/federation => ../federation
 
 replace voice.app/voice/calls => ./pb/voice/calls
 
@@ -174,3 +178,5 @@ replace voice.app/voice/subscription => ./pb/voice/subscription
 replace voice.app/voice/file => ../file/pb/voice/file
 
 replace voice.app/voice/story => ./pb/voice/story
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration

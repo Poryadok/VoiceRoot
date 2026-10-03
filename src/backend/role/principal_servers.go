@@ -21,6 +21,7 @@ func newRoleGRPCServers(shared []grpc.ServerOption, service rolev1.RoleServiceSe
 	protectedOptions = append(protectedOptions, runtime.ServerOptions()...)
 	protected := grpc.NewServer(protectedOptions...)
 	rolev1.RegisterRoleServiceServer(protected, service)
+	runtime.RegisterAuthoritySource(protected)
 	return legacy, protected
 }
 

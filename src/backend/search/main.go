@@ -108,6 +108,15 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		defer pool.Close()
+		if principalEnabled {
+			check, stop := context.WithTimeout(rootCtx, 5*time.Second)
+			var ready bool
+			err := pool.QueryRow(check, `SELECT count(*)=3 FROM information_schema.columns WHERE table_schema='public' AND table_name='search_space_chat_manifests' AND column_name IN ('root_manifest_id','root_manifest_sha256','root_manifest_item_count')`).Scan(&ready)
+			stop()
+			if err != nil || !ready {
+				log.Fatal("Search lifecycle requires migration 000010 source/root manifest binding")
+			}
+		}
 		go func() {
 			ticker := time.NewTicker(time.Hour)
 			defer ticker.Stop()
@@ -147,10 +156,11 @@ func main() {
 		}
 
 		svc := &grpcsvc.SearchGRPC{
-			Messages:     &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},
-			Profiles:     &grpcsvc.ProfileStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
-			Spaces:       &grpcsvc.SpaceStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
-			ChatManifest: manifestClient,
+			Messages:          &grpcsvc.MessageStoreAdapter{MessageSearchStore: msgStore},
+			ManagedChatPurger: msgStore,
+			Profiles:          &grpcsvc.ProfileStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
+			Spaces:            &grpcsvc.SpaceStoreAdapter{ProfileSpaceSearchStore: profileSpaceStore},
+			ChatManifest:      manifestClient,
 		}
 
 		if conn, err := dialOptional(os.Getenv("MESSAGING_GRPC_ADDR")); err == nil && conn != nil {
@@ -245,6 +255,7 @@ func main() {
 			defer func() { _ = conn.Close() }()
 			chatClient = chatv1.NewChatServiceClient(conn)
 			svc.Roles = &deps.ChatReadAccess{Client: chatClient}
+			svc.ChatEntitlement = chatClient
 		}
 		var socialClient socialv1.SocialServiceClient
 		if conn, err := dialOptional(os.Getenv("SOCIAL_GRPC_ADDR")); err == nil && conn != nil {

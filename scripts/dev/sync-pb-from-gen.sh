@@ -13,7 +13,7 @@ if [[ ! -d "${GEN_ROOT}" ]]; then
 fi
 
 # Services with committed pb/voice subtrees (see docs/REPOSITORIES.md).
-SERVICES=(analytics chat file messaging role user voice)
+SERVICES=(analytics chat file messaging pkg role user voice)
 
 synced=0
 for svc in "${SERVICES[@]}"; do

@@ -57,6 +57,15 @@ service RoleService {
 
   // @voice.security=protected;callers=service:space
   rpc RetireSpace(voice.role.v1.RetireSpaceRequest) returns (voice.role.v1.RetireSpaceResponse);
+
+  // @voice.security=protected;callers=service:gameintegration
+  rpc ApplyGameSessionGrants(ApplyGameSessionGrantsRequest) returns (ApplyGameSessionGrantsResponse);
+
+  // @voice.security=protected;callers=service:gameintegration
+  rpc RevokeGameSessionGrants(RevokeGameSessionGrantsRequest) returns (RevokeGameSessionGrantsResponse);
+
+  // @voice.security=protected;callers=service:voice
+  rpc CheckGameSessionGrant(CheckGameSessionGrantRequest) returns (CheckGameSessionGrantResponse);
 }
 
 message BootstrapSpaceRolesRequest {
@@ -418,4 +427,68 @@ message RetireSpaceReceipt {
 // @voice.hash=domain_separated_sha256
 message RetireSpaceResponse {
   voice.role.v1.RetireSpaceReceipt receipt = 1;
+}
+
+// A complete snapshot. profile_ids is canonical lowercase UUID text, sorted
+// ascending and unique. A successful receipt means the snapshot is durable.
+message ApplyGameSessionGrantsRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string session_id = 3;
+  string voice_room_id = 4;
+  string operation_id = 5;
+  uint64 roster_revision = 6;
+  repeated string profile_ids = 7;
+}
+
+// Revoke is terminal for this app/environment/session tuple. It only removes
+// GIS-managed VOICE_JOIN grants and cannot mutate ordinary Role assignments.
+message RevokeGameSessionGrantsRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string session_id = 3;
+  string operation_id = 4;
+}
+
+// Voice asks about the authenticated profile and exact managed session room.
+message CheckGameSessionGrantRequest {
+  string application_id = 1;
+  string environment_id = 2;
+  string session_id = 3;
+  string voice_room_id = 4;
+  string profile_id = 5;
+}
+
+enum GameSessionGrantOutcome {
+  GAME_SESSION_GRANT_OUTCOME_UNSPECIFIED = 0;
+  GAME_SESSION_GRANT_OUTCOME_APPLIED = 1;
+  GAME_SESSION_GRANT_OUTCOME_REPLAYED = 2;
+  GAME_SESSION_GRANT_OUTCOME_STALE = 3;
+  GAME_SESSION_GRANT_OUTCOME_REVOKED = 4;
+}
+
+// Immutable evidence returned after the Role transaction commits. Hashes are
+// raw 32-byte SHA-256 values. Replayed operations return their original receipt.
+message GameSessionGrantReceipt {
+  string receipt_id = 1;
+  string operation_id = 2;
+  string application_id = 3;
+  string environment_id = 4;
+  string session_id = 5;
+  bytes request_sha256 = 6;
+  uint64 roster_revision = 7;
+  bytes applied_profile_set_sha256 = 8;
+  GameSessionGrantOutcome outcome = 9;
+}
+
+message ApplyGameSessionGrantsResponse {
+  GameSessionGrantReceipt receipt = 1;
+}
+
+message RevokeGameSessionGrantsResponse {
+  GameSessionGrantReceipt receipt = 1;
+}
+
+message CheckGameSessionGrantResponse {
+  bool allowed = 1;
 }

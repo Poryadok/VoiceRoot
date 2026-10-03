@@ -174,6 +174,8 @@ class SessionEpochFloorStartupLifecycleJdbcIntegrationTest {
             "spring.flyway.enabled=" + flywayEnabled,
             "spring.flyway.schemas=" + schema,
             "spring.flyway.default-schema=" + schema,
+            // Schema-isolated startup fixture; the owning source clock is public-only.
+            "spring.flyway.target=25",
             "spring.data.redis.host=" + redisHost,
             "spring.data.redis.port=" + redisPort);
   }
@@ -204,6 +206,7 @@ class SessionEpochFloorStartupLifecycleJdbcIntegrationTest {
         .dataSource(jdbcUrl(schema), POSTGRES.getUsername(), POSTGRES.getPassword())
         .schemas(schema)
         .defaultSchema(schema)
+        .target("25")
         .load()
         .migrate();
   }

@@ -1,5 +1,9 @@
 # Bot Service
 
+Игровые сценарии и source audit baseline: [game-bot-interactions.md](../features/game-bot-interactions.md).
+Новые card/command/opt-in contracts там помечены **proposed**; существующие RPC
+и scopes этого документа не получают новые гарантии доставки автоматически.
+
 ## Обзор
 
 Платформа для ботов: реестр приложений, slash-команды, webhook-доставка, install в спейс, presence.
@@ -18,7 +22,7 @@
 - Bot presence (`bot_presence`, `TouchPresence`); `online` в `ListSlashCommandsForChat` и `ListInstalledBots`
 - Scopes: `TEXT_CHAT_SEND_MESSAGES`, `DM_SEND`, `SPACE_VIEW_MEMBER_LIST`, `MEMBER_ASSIGN_ROLES`, `TEXT_CHAT_CREATE_IN_SPACE`, `SPACE_MANAGE_ROLES` (privileged), `TEXT_CHAT_READ_HISTORY` (privileged); строки совпадают с [role-service.md](role-service.md)
 - Rate limits: 5000 API req/min и 100 role ops/min — Gateway REST (`BotAPI`, `BotRoleOps`, `429` + `Retry-After`); 10 созданий текстовых чатов / день — Bot Service (`bot_daily_chat_creates`, `CreateBotChat`); прямой gRPC обходит Gateway limiter — см. [api-gateway.md](api-gateway.md)
-- **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Prod NetworkPolicy — [`deploy/templates/network-policy-voice-bot.yaml`](../../deploy/templates/network-policy-voice-bot.yaml); mTLS — [`DEPLOYMENT.md`](../DEPLOYMENT.md).
+- **gRPC access (v1):** `BOT_GRPC_GATEWAY_ONLY=true` отклоняет прямой gRPC без `x-voice-internal: true` (Gateway) или bot token / account context. Эти legacy callers остаются ограничены Bot-owned method/scope checks; прямой сетевой доступ к Bot не заменяет проверку actor. Prod NetworkPolicy — [`deploy/templates/network-policy-voice-bot.yaml`](../../deploy/templates/network-policy-voice-bot.yaml); mTLS — [`DEPLOYMENT.md`](../DEPLOYMENT.md).
 - Bot token: перманентный, ручной отзыв (`RegenerateToken`)
 - Bot DM: только в ответ на сообщение пользователя (v1)
 - Ephemeral и deferred responses; hub deferred tokens (`MarkEventDeferred`, `RehydrateDeferred`)
@@ -224,6 +228,50 @@ for diagnosis rather than looping forever. Transient failures remain pending.
 Replay after a completed delivery is inert. Webhook payload
 `options.delivery_id` is stable across retries; receivers should deduplicate
 that ID for an ambiguous HTTP response (remote success before local receipt).
+
+### T51 game-event adapter (planned)
+
+The GIS→Bot `PublishGameEvent` boundary and Bot→Messaging
+`SendGameEventMessage` call are defined in the
+[canonical Game Event v1 contract](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+These are future S2S RPCs, not the public Bot `SendBotMessage` path and not the
+existing `message.sent` JetStream consumer. GIS owns the game-event inbox and
+outbox; Bot verifies its live Bot actor, send scope and chat whitelist, then
+waits for Messaging's idempotent durable message result. The S2S calls use the
+service-principal contract and caller/method allowlist from
+[`ARCHITECTURE_REQUIREMENTS.md`](../ARCHITECTURE_REQUIREMENTS.md). The T51
+RPCs and their tests remain unimplemented.
+
+T11 installation registration uses a separate protected HTTP proof endpoint:
+`POST /internal/v1/game-integrations/bots/{bot_id}/authority`. Only the
+`gameintegration` workload, authenticated with its dedicated 32-byte HMAC key,
+may call this endpoint. Bot binds the exact `bot` audience, method, path,
+timestamp, nonce and body digest; it rejects duplicate or stale proofs and keeps replayed nonces in
+Redis for 61 seconds (covering the inclusive ±30-second timestamp window), and
+returns an exact-body response MAC for the same request timestamp
+and nonce. It reads `bots.owner_account_id` and `bots.status` itself, and
+returns a success proof only when the supplied GIS registry owner matches the
+stored owner and status is `live`. Missing key/Redis, replay storage failure,
+unknown/disabled Bot and foreign owner all fail closed. The key is
+`GAME_INTEGRATION_BOT_WORKLOAD_KEY_B64`, separate from GIS↔Auth workload
+credentials. This registration proof does not replace the future T51
+`PublishGameEvent` service-principal RPC or make that runtime path available.
+It authenticates only installation registration for the exact Bot path/body.
+It does not authorize legacy Bot gRPC or mint a Bot actor token. Bot token or
+account metadata, GIS `vgi1`, and T11 HMAC headers sent to the future T51 RPC
+have no effect: the RPC is not registered and the call returns gRPC
+`UNIMPLEMENTED`. The shared service-principal verifier also rejects both `vgi1`
+credentials and T11 HMAC material as non-JWT credentials. When T51 is
+implemented, its enabled-path verifier must accept only its own verified service
+principal (`gameintegration` caller, `bot` audience, exact RPC allowlist) and
+retain the Bot actor/scope checks in this document.
+
+T11 workload-key rotation has no `kid` and no overlap. Change the GIS and Bot
+secret-manager values as one coordinated operation. Both services fail closed
+while their active keys differ; once Bot loads the replacement, it rejects old
+and in-flight proofs. GIS retries a failed installation proof with the new key
+and the same durable idempotency operation. No success proof or installation
+binding is returned until both sides agree.
 
 ## Публикуемые события (→ NATS)
 

@@ -87,6 +87,9 @@ SELECT EXISTS (SELECT 1 FROM role_space_lifecycle WHERE space_id = ANY($1) AND r
 		if prepared {
 			return ErrSpaceFrozen
 		}
+		if err := checkRoleDeletionFence(ctx, scoped.db(), spaceIDs); err != nil {
+			return err
+		}
 		return fn(scoped)
 	})
 }

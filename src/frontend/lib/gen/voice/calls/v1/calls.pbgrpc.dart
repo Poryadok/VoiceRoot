@@ -20,6 +20,198 @@ import 'calls.pb.dart' as $0;
 
 export 'calls.pb.dart';
 
+/// GIS-only room provisioning. Register this service only on the private listener.
+@$pb.GrpcServiceName('voice.calls.v1.GameSessionProvisioningService')
+class GameSessionProvisioningServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  GameSessionProvisioningServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  $grpc.ResponseFuture<$0.ProvisionGameSessionRoomResponse>
+      provisionGameSessionRoom(
+    $0.ProvisionGameSessionRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$provisionGameSessionRoom, request,
+        options: options);
+  }
+
+  $grpc.ResponseFuture<$0.CloseGameSessionRoomResponse> closeGameSessionRoom(
+    $0.CloseGameSessionRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$closeGameSessionRoom, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.ApplyGameSessionRosterResponse>
+      applyGameSessionRoster(
+    $0.ApplyGameSessionRosterRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyGameSessionRoster, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.FenceSdkConversionResponse> fenceSdkConversion(
+    $0.FenceSdkConversionRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$fenceSdkConversion, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:gameintegration
+  $grpc.ResponseFuture<$0.CompleteSdkConversionActivationResponse>
+      completeSdkConversionActivation(
+    $0.CompleteSdkConversionActivationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$completeSdkConversionActivation, request,
+        options: options);
+  }
+
+  // method descriptors
+
+  static final _$provisionGameSessionRoom = $grpc.ClientMethod<
+          $0.ProvisionGameSessionRoomRequest,
+          $0.ProvisionGameSessionRoomResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/ProvisionGameSessionRoom',
+      ($0.ProvisionGameSessionRoomRequest value) => value.writeToBuffer(),
+      $0.ProvisionGameSessionRoomResponse.fromBuffer);
+  static final _$closeGameSessionRoom = $grpc.ClientMethod<
+          $0.CloseGameSessionRoomRequest, $0.CloseGameSessionRoomResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/CloseGameSessionRoom',
+      ($0.CloseGameSessionRoomRequest value) => value.writeToBuffer(),
+      $0.CloseGameSessionRoomResponse.fromBuffer);
+  static final _$applyGameSessionRoster = $grpc.ClientMethod<
+          $0.ApplyGameSessionRosterRequest, $0.ApplyGameSessionRosterResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/ApplyGameSessionRoster',
+      ($0.ApplyGameSessionRosterRequest value) => value.writeToBuffer(),
+      $0.ApplyGameSessionRosterResponse.fromBuffer);
+  static final _$fenceSdkConversion = $grpc.ClientMethod<
+          $0.FenceSdkConversionRequest, $0.FenceSdkConversionResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/FenceSdkConversion',
+      ($0.FenceSdkConversionRequest value) => value.writeToBuffer(),
+      $0.FenceSdkConversionResponse.fromBuffer);
+  static final _$completeSdkConversionActivation = $grpc.ClientMethod<
+          $0.CompleteSdkConversionActivationRequest,
+          $0.CompleteSdkConversionActivationResponse>(
+      '/voice.calls.v1.GameSessionProvisioningService/CompleteSdkConversionActivation',
+      ($0.CompleteSdkConversionActivationRequest value) =>
+          value.writeToBuffer(),
+      $0.CompleteSdkConversionActivationResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.calls.v1.GameSessionProvisioningService')
+abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.calls.v1.GameSessionProvisioningService';
+
+  GameSessionProvisioningServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.ProvisionGameSessionRoomRequest,
+            $0.ProvisionGameSessionRoomResponse>(
+        'ProvisionGameSessionRoom',
+        provisionGameSessionRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ProvisionGameSessionRoomRequest.fromBuffer(value),
+        ($0.ProvisionGameSessionRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CloseGameSessionRoomRequest,
+            $0.CloseGameSessionRoomResponse>(
+        'CloseGameSessionRoom',
+        closeGameSessionRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CloseGameSessionRoomRequest.fromBuffer(value),
+        ($0.CloseGameSessionRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyGameSessionRosterRequest,
+            $0.ApplyGameSessionRosterResponse>(
+        'ApplyGameSessionRoster',
+        applyGameSessionRoster_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyGameSessionRosterRequest.fromBuffer(value),
+        ($0.ApplyGameSessionRosterResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.FenceSdkConversionRequest,
+            $0.FenceSdkConversionResponse>(
+        'FenceSdkConversion',
+        fenceSdkConversion_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.FenceSdkConversionRequest.fromBuffer(value),
+        ($0.FenceSdkConversionResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompleteSdkConversionActivationRequest,
+            $0.CompleteSdkConversionActivationResponse>(
+        'CompleteSdkConversionActivation',
+        completeSdkConversionActivation_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompleteSdkConversionActivationRequest.fromBuffer(value),
+        ($0.CompleteSdkConversionActivationResponse value) =>
+            value.writeToBuffer()));
+  }
+
+  $async.Future<$0.ProvisionGameSessionRoomResponse>
+      provisionGameSessionRoom_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ProvisionGameSessionRoomRequest> $request) async {
+    return provisionGameSessionRoom($call, await $request);
+  }
+
+  $async.Future<$0.ProvisionGameSessionRoomResponse> provisionGameSessionRoom(
+      $grpc.ServiceCall call, $0.ProvisionGameSessionRoomRequest request);
+
+  $async.Future<$0.CloseGameSessionRoomResponse> closeGameSessionRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CloseGameSessionRoomRequest> $request) async {
+    return closeGameSessionRoom($call, await $request);
+  }
+
+  $async.Future<$0.CloseGameSessionRoomResponse> closeGameSessionRoom(
+      $grpc.ServiceCall call, $0.CloseGameSessionRoomRequest request);
+
+  $async.Future<$0.ApplyGameSessionRosterResponse> applyGameSessionRoster_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ApplyGameSessionRosterRequest> $request) async {
+    return applyGameSessionRoster($call, await $request);
+  }
+
+  $async.Future<$0.ApplyGameSessionRosterResponse> applyGameSessionRoster(
+      $grpc.ServiceCall call, $0.ApplyGameSessionRosterRequest request);
+
+  $async.Future<$0.FenceSdkConversionResponse> fenceSdkConversion_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.FenceSdkConversionRequest> $request) async {
+    return fenceSdkConversion($call, await $request);
+  }
+
+  $async.Future<$0.FenceSdkConversionResponse> fenceSdkConversion(
+      $grpc.ServiceCall call, $0.FenceSdkConversionRequest request);
+
+  $async.Future<$0.CompleteSdkConversionActivationResponse>
+      completeSdkConversionActivation_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.CompleteSdkConversionActivationRequest>
+              $request) async {
+    return completeSdkConversionActivation($call, await $request);
+  }
+
+  $async.Future<$0.CompleteSdkConversionActivationResponse>
+      completeSdkConversionActivation($grpc.ServiceCall call,
+          $0.CompleteSdkConversionActivationRequest request);
+}
+
 /// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 /// Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')

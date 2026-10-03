@@ -12,8 +12,80 @@ import (
 	"google.golang.org/protobuf/proto"
 	commonv1 "voice.app/voice/common/v1"
 	rolev1 "voice.app/voice/role/v1"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/space/internal/spacecore"
 )
+
+// LifecycleDeletionProofRecorded reports whether Auth's exact deletion-proof
+// receipt is durable before Space starts any participant freeze side effect.
+func (s *SpaceStore) LifecycleDeletionProofRecorded(ctx context.Context, spaceID uuid.UUID) (bool, error) {
+	if s == nil || s.Pool == nil || spaceID == uuid.Nil {
+		return false, ErrLifecycleEvidenceInvalid
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer rollbackLifecycleTx(ctx, tx)
+	if err := lockLifecycleSpace(ctx, tx, spaceID); err != nil {
+		return false, err
+	}
+	aggregate, err := loadLifecycle(ctx, tx, spaceID, true)
+	if err != nil {
+		return false, err
+	}
+	operationID, err := canonicalLifecycleUUID(aggregate.Snapshot().DeletionOperationID)
+	if err != nil {
+		return false, err
+	}
+	operation, err := loadLifecycleOperation(ctx, tx, operationID)
+	if err != nil {
+		return false, err
+	}
+	if operation.method != "DELETE" || operation.spaceID != spaceID {
+		return false, ErrLifecycleConflict
+	}
+	if err := operation.validate(); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return len(operation.authReceiptBytes) > 0, nil
+}
+
+// BeginLifecycleFreeze persists Chat's immutable manifest only after the exact
+// Auth proof receipt has been saved. Exact retries retain the same generation
+// and manifest even after participant progress advances.
+func (s *SpaceStore) BeginLifecycleFreeze(ctx context.Context, spaceID uuid.UUID, manifest *commonv1.ManifestBinding) (*spacecore.LifecycleAggregate, error) {
+	if spaceID == uuid.Nil || manifest == nil {
+		return nil, ErrLifecycleEvidenceInvalid
+	}
+	return s.withLockedLifecycle(ctx, spaceID, func(tx pgx.Tx, aggregate *spacecore.LifecycleAggregate) (bool, error) {
+		snapshot := aggregate.Snapshot()
+		if snapshot.Phase != spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING {
+			if proto.Equal(snapshot.Manifest, manifest) {
+				return false, nil
+			}
+			return false, ErrLifecycleConflict
+		}
+		operationID, err := canonicalLifecycleUUID(snapshot.DeletionOperationID)
+		if err != nil {
+			return false, ErrLifecycleEvidenceInvalid
+		}
+		operation, err := loadLifecycleOperation(ctx, tx, operationID)
+		if err != nil {
+			return false, err
+		}
+		if operation.method != "DELETE" || operation.spaceID != spaceID || len(operation.authReceiptBytes) == 0 {
+			return false, ErrLifecycleConflict
+		}
+		if err := aggregate.BeginFreeze(manifest); err != nil {
+			return false, ErrLifecycleEvidenceInvalid
+		}
+		return true, nil
+	})
+}
 
 // RecordLifecycleFenceReceipt commits one authoritative acknowledgement against
 // fresh state. The caller must authenticate the participant before this boundary.

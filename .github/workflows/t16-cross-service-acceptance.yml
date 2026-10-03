@@ -1,0 +1,179 @@
+name: T16 Auth GIS Messaging acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/t16-cross-service-acceptance.yml"
+      - "docker-compose.yml"
+      - "docker-compose.t16-cross-service-acceptance.yml"
+      - "docs/architecture/game-integration-api.md"
+      - "docs/microservices/auth-service.md"
+      - "docs/microservices/game-integration-service.md"
+      - "docs/testing/game-integrations-acceptance.md"
+      - "docs/testing/game-integrations-exec-plan.md"
+      - "src/backend/auth/**"
+      - "src/backend/gameintegration/**"
+      - "src/backend/messaging/**"
+      - "src/backend/migrations/auth_db/**"
+      - "src/backend/migrations/chat_db/**"
+      - "src/backend/migrations/game_integration_db/**"
+      - "src/backend/migrations/messaging_db/**"
+      - "src/backend/migrations/user_db/**"
+      - "scripts/ci/t16-cross-service-acceptance.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: t16-cross-service-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auth-gis-messaging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      T16_COMPOSE_PROJECT: voice-t16-cross-service-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: src/backend/messaging/go.mod
+          cache-dependency-path: src/backend/messaging/go.sum
+
+      - name: Generate disposable T16 credentials
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check cryptography
+          bash scripts/ci/t16-cross-service-acceptance.sh prepare
+
+      - name: Validate isolated service configuration
+        run: |
+          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+            -f docker-compose.yml \
+            -f docker-compose.t16-cross-service-acceptance.yml \
+            -p "$T16_COMPOSE_PROJECT" config --quiet
+
+      - name: Start Auth, User and GIS on disposable databases
+        run: |
+          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+            -f docker-compose.yml \
+            -f docker-compose.t16-cross-service-acceptance.yml \
+            -p "$T16_COMPOSE_PROJECT" up -d --build --wait auth user gameintegration
+
+      - name: Prepare disposable Auth fixture for GIS outage denial
+        env:
+          T16_ACCEPTANCE: "1"
+          T16_FIXTURE_DIR: ${{ github.workspace }}/tmp/t16-cross-service
+          T16_AUTH_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/auth_db?sslmode=disable
+          T16_GIS_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/game_integration_db?sslmode=disable
+          T16_USER_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/user_db?sslmode=disable
+          T16_CHAT_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/chat_db?sslmode=disable
+          T16_REDIS_URL: redis://127.0.0.1:6379/0
+          T16_AUTH_BASE_URL: http://127.0.0.1:18080
+        working-directory: src/backend/messaging
+        run: go test ./internal/grpcsvc -run '^TestT16PrepareAuthGISUnavailableFixture$' -count=1 -v
+
+      - name: Stop GIS for the live Auth fail-closed check
+        id: stop-gis
+        run: |
+          compose=(docker compose --env-file tmp/t16-cross-service/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.t16-cross-service-acceptance.yml
+            -p "$T16_COMPOSE_PROJECT")
+          auth_id="$("${compose[@]}" ps -q auth)"
+          proxy_id="$("${compose[@]}" ps -q auth-principal-jwks)"
+          test -n "$auth_id" && test -n "$proxy_id"
+          echo "auth_container_id=$auth_id" >> "$GITHUB_OUTPUT"
+          echo "proxy_container_id=$proxy_id" >> "$GITHUB_OUTPUT"
+          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+            -f docker-compose.yml \
+            -f docker-compose.t16-cross-service-acceptance.yml \
+            -p "$T16_COMPOSE_PROJECT" stop gameintegration
+
+      - name: Verify Auth denies device authority while GIS is unavailable
+        id: auth-gis-unavailable
+        env:
+          T16_ACCEPTANCE: "1"
+          T16_FIXTURE_DIR: ${{ github.workspace }}/tmp/t16-cross-service
+          T16_AUTH_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/auth_db?sslmode=disable
+          T16_GIS_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/game_integration_db?sslmode=disable
+          T16_USER_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/user_db?sslmode=disable
+          T16_CHAT_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/chat_db?sslmode=disable
+          T16_REDIS_URL: redis://127.0.0.1:6379/0
+          T16_AUTH_BASE_URL: http://127.0.0.1:18080
+        working-directory: src/backend/messaging
+        run: go test ./internal/grpcsvc -run '^TestT16AuthDeviceAuthorityRejectsUnavailableGIS$' -count=1 -v
+
+      - name: Restore GIS after the outage check
+        id: restore-gis
+        if: always() && steps.stop-gis.outcome == 'success'
+        run: |
+          # Reconcile only the stopped service. Replacing Auth would strand its
+          # network_mode: service:auth JWKS sidecar in the old network namespace.
+          docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+            -f docker-compose.yml \
+            -f docker-compose.t16-cross-service-acceptance.yml \
+            -p "$T16_COMPOSE_PROJECT" up -d --no-deps --wait gameintegration
+          compose=(docker compose --env-file tmp/t16-cross-service/compose.env --profile app
+            -f docker-compose.yml -f docker-compose.t16-cross-service-acceptance.yml
+            -p "$T16_COMPOSE_PROJECT")
+          test "$("${compose[@]}" ps -q auth)" = "${{ steps.stop-gis.outputs.auth_container_id }}"
+          test "$("${compose[@]}" ps -q auth-principal-jwks)" = "${{ steps.stop-gis.outputs.proxy_container_id }}"
+
+      - name: Run integrated Messaging gRPC acceptance against live Auth and GIS
+        if: steps.auth-gis-unavailable.outcome == 'success' && steps.restore-gis.outcome == 'success'
+        env:
+          T16_ACCEPTANCE: "1"
+          T16_ACCEPTANCE_DIAGNOSTICS: "1"
+          T16_FIXTURE_DIR: ${{ github.workspace }}/tmp/t16-cross-service
+          T16_AUTH_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/auth_db?sslmode=disable
+          T16_GIS_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/game_integration_db?sslmode=disable
+          T16_USER_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/user_db?sslmode=disable
+          T16_CHAT_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/chat_db?sslmode=disable
+          T16_MESSAGING_DATABASE_URL: postgres://voice:voice@127.0.0.1:5432/messaging_db?sslmode=disable
+          T16_REDIS_URL: redis://127.0.0.1:6379/0
+          T16_AUTH_BASE_URL: http://127.0.0.1:18080
+          T16_AUTH_MTLS_BASE_URL: https://127.0.0.1:19443
+          T16_GIS_MTLS_BASE_URL: https://127.0.0.1:18443
+          T16_AUTH_JWT_PRIVATE_KEY_FILE: ${{ github.workspace }}/src/backend/auth/src/test/resources/jwt-test-private.pem
+          T16_GIS_BASE_URL: http://127.0.0.1:18081
+        working-directory: src/backend/messaging
+        run: |
+          export T16_GIS_RUNTIME_DATABASE_URL="postgres://gameintegration_runtime:${GAME_INTEGRATION_DB_PASSWORD}@127.0.0.1:5432/game_integration_db?sslmode=disable"
+          go test ./internal/grpcsvc -list '^TestT16ComposeCrossServiceAcceptance$' | grep -Fx 'TestT16ComposeCrossServiceAcceptance'
+          go test ./internal/grpcsvc -run '^TestT16ComposeCrossServiceAcceptance$' -count=1 -v
+
+      - name: Capture disposable service logs on failure
+        if: failure()
+        run: |
+          if [[ -f tmp/t16-cross-service/compose.env ]]; then
+            docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+              -f docker-compose.yml \
+              -f docker-compose.t16-cross-service-acceptance.yml \
+              -p "$T16_COMPOSE_PROJECT" logs --no-color --tail=250
+          else
+            echo "T16 fixture was not generated; no service logs to collect."
+          fi
+
+      - name: Tear down disposable T16 services
+        if: always()
+        run: |
+          if [[ -f tmp/t16-cross-service/compose.env ]]; then
+            docker compose --env-file tmp/t16-cross-service/compose.env --profile app \
+              -f docker-compose.yml \
+              -f docker-compose.t16-cross-service-acceptance.yml \
+              -p "$T16_COMPOSE_PROJECT" down --volumes --remove-orphans
+          else
+            echo "T16 fixture was not generated; nothing to tear down."
+          fi

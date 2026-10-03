@@ -48,6 +48,9 @@ const (
 	RoleService_CompensateOwnershipTransfer_FullMethodName      = "/voice.role.v1.RoleService/CompensateOwnershipTransfer"
 	RoleService_ApplySpaceLifecycleFence_FullMethodName         = "/voice.role.v1.RoleService/ApplySpaceLifecycleFence"
 	RoleService_RetireSpace_FullMethodName                      = "/voice.role.v1.RoleService/RetireSpace"
+	RoleService_ApplyGameSessionGrants_FullMethodName           = "/voice.role.v1.RoleService/ApplyGameSessionGrants"
+	RoleService_RevokeGameSessionGrants_FullMethodName          = "/voice.role.v1.RoleService/RevokeGameSessionGrants"
+	RoleService_CheckGameSessionGrant_FullMethodName            = "/voice.role.v1.RoleService/CheckGameSessionGrant"
 )
 
 // RoleServiceClient is the client API for RoleService service.
@@ -94,6 +97,12 @@ type RoleServiceClient interface {
 	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
 	RetireSpace(ctx context.Context, in *RetireSpaceRequest, opts ...grpc.CallOption) (*RetireSpaceResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyGameSessionGrants(ctx context.Context, in *ApplyGameSessionGrantsRequest, opts ...grpc.CallOption) (*ApplyGameSessionGrantsResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	RevokeGameSessionGrants(ctx context.Context, in *RevokeGameSessionGrantsRequest, opts ...grpc.CallOption) (*RevokeGameSessionGrantsResponse, error)
+	// @voice.security=protected;callers=service:voice
+	CheckGameSessionGrant(ctx context.Context, in *CheckGameSessionGrantRequest, opts ...grpc.CallOption) (*CheckGameSessionGrantResponse, error)
 }
 
 type roleServiceClient struct {
@@ -394,6 +403,36 @@ func (c *roleServiceClient) RetireSpace(ctx context.Context, in *RetireSpaceRequ
 	return out, nil
 }
 
+func (c *roleServiceClient) ApplyGameSessionGrants(ctx context.Context, in *ApplyGameSessionGrantsRequest, opts ...grpc.CallOption) (*ApplyGameSessionGrantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyGameSessionGrantsResponse)
+	err := c.cc.Invoke(ctx, RoleService_ApplyGameSessionGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) RevokeGameSessionGrants(ctx context.Context, in *RevokeGameSessionGrantsRequest, opts ...grpc.CallOption) (*RevokeGameSessionGrantsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeGameSessionGrantsResponse)
+	err := c.cc.Invoke(ctx, RoleService_RevokeGameSessionGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *roleServiceClient) CheckGameSessionGrant(ctx context.Context, in *CheckGameSessionGrantRequest, opts ...grpc.CallOption) (*CheckGameSessionGrantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckGameSessionGrantResponse)
+	err := c.cc.Invoke(ctx, RoleService_CheckGameSessionGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoleServiceServer is the server API for RoleService service.
 // All implementations must embed UnimplementedRoleServiceServer
 // for forward compatibility.
@@ -438,6 +477,12 @@ type RoleServiceServer interface {
 	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
 	RetireSpace(context.Context, *RetireSpaceRequest) (*RetireSpaceResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	ApplyGameSessionGrants(context.Context, *ApplyGameSessionGrantsRequest) (*ApplyGameSessionGrantsResponse, error)
+	// @voice.security=protected;callers=service:gameintegration
+	RevokeGameSessionGrants(context.Context, *RevokeGameSessionGrantsRequest) (*RevokeGameSessionGrantsResponse, error)
+	// @voice.security=protected;callers=service:voice
+	CheckGameSessionGrant(context.Context, *CheckGameSessionGrantRequest) (*CheckGameSessionGrantResponse, error)
 	mustEmbedUnimplementedRoleServiceServer()
 }
 
@@ -534,6 +579,15 @@ func (UnimplementedRoleServiceServer) ApplySpaceLifecycleFence(context.Context, 
 }
 func (UnimplementedRoleServiceServer) RetireSpace(context.Context, *RetireSpaceRequest) (*RetireSpaceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetireSpace not implemented")
+}
+func (UnimplementedRoleServiceServer) ApplyGameSessionGrants(context.Context, *ApplyGameSessionGrantsRequest) (*ApplyGameSessionGrantsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyGameSessionGrants not implemented")
+}
+func (UnimplementedRoleServiceServer) RevokeGameSessionGrants(context.Context, *RevokeGameSessionGrantsRequest) (*RevokeGameSessionGrantsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RevokeGameSessionGrants not implemented")
+}
+func (UnimplementedRoleServiceServer) CheckGameSessionGrant(context.Context, *CheckGameSessionGrantRequest) (*CheckGameSessionGrantResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckGameSessionGrant not implemented")
 }
 func (UnimplementedRoleServiceServer) mustEmbedUnimplementedRoleServiceServer() {}
 func (UnimplementedRoleServiceServer) testEmbeddedByValue()                     {}
@@ -1078,6 +1132,60 @@ func _RoleService_RetireSpace_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoleService_ApplyGameSessionGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyGameSessionGrantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).ApplyGameSessionGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_ApplyGameSessionGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).ApplyGameSessionGrants(ctx, req.(*ApplyGameSessionGrantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_RevokeGameSessionGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeGameSessionGrantsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).RevokeGameSessionGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_RevokeGameSessionGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).RevokeGameSessionGrants(ctx, req.(*RevokeGameSessionGrantsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RoleService_CheckGameSessionGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckGameSessionGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoleServiceServer).CheckGameSessionGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoleService_CheckGameSessionGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoleServiceServer).CheckGameSessionGrant(ctx, req.(*CheckGameSessionGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoleService_ServiceDesc is the grpc.ServiceDesc for RoleService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1200,6 +1308,18 @@ var RoleService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RetireSpace",
 			Handler:    _RoleService_RetireSpace_Handler,
+		},
+		{
+			MethodName: "ApplyGameSessionGrants",
+			Handler:    _RoleService_ApplyGameSessionGrants_Handler,
+		},
+		{
+			MethodName: "RevokeGameSessionGrants",
+			Handler:    _RoleService_RevokeGameSessionGrants_Handler,
+		},
+		{
+			MethodName: "CheckGameSessionGrant",
+			Handler:    _RoleService_CheckGameSessionGrant_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

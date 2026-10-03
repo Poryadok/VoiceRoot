@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -319,11 +320,12 @@ func TestSearchGlobal_ReturnsMessageHitsForAccessibleChats(t *testing.T) {
 	chatID := uuid.New()
 	msgID := uuid.New()
 	msgs := &stubMessageSearch{
-		globalHits: []MessageHit{{MessageID: msgID, ChatID: chatID, Snippet: "hit", Score: 1}},
+		globalHits: []MessageHit{{MessageID: msgID, ChatID: chatID, Snippet: "hit", Score: 1, CreatedAt: time.Now().UTC()}},
 	}
 	client := startSearchGRPCTestServer(t, &SearchGRPC{
-		Messages: msgs,
-		Chats:    &stubChatAccess{accessible: []uuid.UUID{chatID}},
+		Messages:        msgs,
+		ChatEntitlement: &entitlementChatClient{allowed: true},
+		Chats:           &stubChatAccess{accessible: []uuid.UUID{chatID}},
 	})
 	resp, err := client.SearchGlobal(ctxWithProfile(uuid.New()), &searchv1.SearchGlobalRequest{
 		Query: "raid",

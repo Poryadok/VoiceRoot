@@ -4072,6 +4072,652 @@ class CreateFromTemplateRequest extends $pb.GeneratedMessage {
   void clearName() => $_clearField(2);
 }
 
+/// @voice.unknown_fields=reject
+/// @voice.unknown_fields=reject
+class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
+  factory ApplyCommunityRosterRequest({
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? corporationKey,
+    $core.String? spaceId,
+    $fixnum.Int64? ownerGeneration,
+    $fixnum.Int64? sourceRevision,
+    $core.List<$core.int>? snapshotSha256,
+    $core.Iterable<$core.String>? profileIds,
+    $1.Timestamp? leaseExpiresAt,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (corporationKey != null) result.corporationKey = corporationKey;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (ownerGeneration != null) result.ownerGeneration = ownerGeneration;
+    if (sourceRevision != null) result.sourceRevision = sourceRevision;
+    if (snapshotSha256 != null) result.snapshotSha256 = snapshotSha256;
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    if (leaseExpiresAt != null) result.leaseExpiresAt = leaseExpiresAt;
+    return result;
+  }
+
+  ApplyCommunityRosterRequest._();
+
+  factory ApplyCommunityRosterRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyCommunityRosterRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyCommunityRosterRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(3, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(4, _omitFieldNames ? '' : 'corporationKey')
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aInt64(6, _omitFieldNames ? '' : 'ownerGeneration')
+    ..aInt64(7, _omitFieldNames ? '' : 'sourceRevision')
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'snapshotSha256', $pb.PbFieldType.OY)
+    ..pPS(9, _omitFieldNames ? '' : 'profileIds')
+    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'leaseExpiresAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyCommunityRosterRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyCommunityRosterRequest copyWith(
+          void Function(ApplyCommunityRosterRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyCommunityRosterRequest))
+          as ApplyCommunityRosterRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyCommunityRosterRequest create() =>
+      ApplyCommunityRosterRequest._();
+  @$core.override
+  ApplyCommunityRosterRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyCommunityRosterRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyCommunityRosterRequest>(create);
+  static ApplyCommunityRosterRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get applicationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set applicationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplicationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplicationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get environmentId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set environmentId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEnvironmentId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEnvironmentId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get corporationKey => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set corporationKey($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasCorporationKey() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearCorporationKey() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get ownerGeneration => $_getI64(5);
+  @$pb.TagNumber(6)
+  set ownerGeneration($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasOwnerGeneration() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearOwnerGeneration() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get sourceRevision => $_getI64(6);
+  @$pb.TagNumber(7)
+  set sourceRevision($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSourceRevision() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSourceRevision() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get snapshotSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set snapshotSha256($core.List<$core.int> value) => $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSnapshotSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSnapshotSha256() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $pb.PbList<$core.String> get profileIds => $_getList(8);
+
+  @$pb.TagNumber(10)
+  $1.Timestamp get leaseExpiresAt => $_getN(9);
+  @$pb.TagNumber(10)
+  set leaseExpiresAt($1.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasLeaseExpiresAt() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearLeaseExpiresAt() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $1.Timestamp ensureLeaseExpiresAt() => $_ensure(9);
+}
+
+class ApplyCommunityRosterResponse extends $pb.GeneratedMessage {
+  factory ApplyCommunityRosterResponse({
+    $core.String? operationId,
+    $core.String? spaceId,
+    $fixnum.Int64? ownerGeneration,
+    $fixnum.Int64? sourceRevision,
+    $core.List<$core.int>? snapshotSha256,
+    $core.String? receiptId,
+    $core.int? memberCount,
+    $core.bool? replayed,
+    $core.List<$core.int>? requestSha256,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (ownerGeneration != null) result.ownerGeneration = ownerGeneration;
+    if (sourceRevision != null) result.sourceRevision = sourceRevision;
+    if (snapshotSha256 != null) result.snapshotSha256 = snapshotSha256;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (memberCount != null) result.memberCount = memberCount;
+    if (replayed != null) result.replayed = replayed;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    return result;
+  }
+
+  ApplyCommunityRosterResponse._();
+
+  factory ApplyCommunityRosterResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApplyCommunityRosterResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApplyCommunityRosterResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aInt64(3, _omitFieldNames ? '' : 'ownerGeneration')
+    ..aInt64(4, _omitFieldNames ? '' : 'sourceRevision')
+    ..a<$core.List<$core.int>>(
+        5, _omitFieldNames ? '' : 'snapshotSha256', $pb.PbFieldType.OY)
+    ..aOS(6, _omitFieldNames ? '' : 'receiptId')
+    ..aI(7, _omitFieldNames ? '' : 'memberCount')
+    ..aOB(8, _omitFieldNames ? '' : 'replayed')
+    ..a<$core.List<$core.int>>(
+        9, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyCommunityRosterResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApplyCommunityRosterResponse copyWith(
+          void Function(ApplyCommunityRosterResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApplyCommunityRosterResponse))
+          as ApplyCommunityRosterResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApplyCommunityRosterResponse create() =>
+      ApplyCommunityRosterResponse._();
+  @$core.override
+  ApplyCommunityRosterResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApplyCommunityRosterResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApplyCommunityRosterResponse>(create);
+  static ApplyCommunityRosterResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get ownerGeneration => $_getI64(2);
+  @$pb.TagNumber(3)
+  set ownerGeneration($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOwnerGeneration() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOwnerGeneration() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get sourceRevision => $_getI64(3);
+  @$pb.TagNumber(4)
+  set sourceRevision($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSourceRevision() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSourceRevision() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get snapshotSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set snapshotSha256($core.List<$core.int> value) => $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSnapshotSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSnapshotSha256() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get receiptId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set receiptId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasReceiptId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearReceiptId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.int get memberCount => $_getIZ(6);
+  @$pb.TagNumber(7)
+  set memberCount($core.int value) => $_setSignedInt32(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasMemberCount() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearMemberCount() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.bool get replayed => $_getBF(7);
+  @$pb.TagNumber(8)
+  set replayed($core.bool value) => $_setBool(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasReplayed() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearReplayed() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.List<$core.int> get requestSha256 => $_getN(8);
+  @$pb.TagNumber(9)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasRequestSha256() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearRequestSha256() => $_clearField(9);
+}
+
+class CreateCommunityBootstrapRequest extends $pb.GeneratedMessage {
+  factory CreateCommunityBootstrapRequest({
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? ownerProfileId,
+    $core.String? corporationKey,
+    $core.String? templateId,
+    $core.String? ownerAccountId,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (ownerProfileId != null) result.ownerProfileId = ownerProfileId;
+    if (corporationKey != null) result.corporationKey = corporationKey;
+    if (templateId != null) result.templateId = templateId;
+    if (ownerAccountId != null) result.ownerAccountId = ownerAccountId;
+    return result;
+  }
+
+  CreateCommunityBootstrapRequest._();
+
+  factory CreateCommunityBootstrapRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateCommunityBootstrapRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateCommunityBootstrapRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(3, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(4, _omitFieldNames ? '' : 'ownerProfileId')
+    ..aOS(5, _omitFieldNames ? '' : 'corporationKey')
+    ..aOS(6, _omitFieldNames ? '' : 'templateId')
+    ..aOS(7, _omitFieldNames ? '' : 'ownerAccountId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateCommunityBootstrapRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateCommunityBootstrapRequest copyWith(
+          void Function(CreateCommunityBootstrapRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CreateCommunityBootstrapRequest))
+          as CreateCommunityBootstrapRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateCommunityBootstrapRequest create() =>
+      CreateCommunityBootstrapRequest._();
+  @$core.override
+  CreateCommunityBootstrapRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateCommunityBootstrapRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateCommunityBootstrapRequest>(
+          create);
+  static CreateCommunityBootstrapRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get applicationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set applicationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplicationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplicationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get environmentId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set environmentId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEnvironmentId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEnvironmentId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get ownerProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set ownerProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOwnerProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOwnerProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get corporationKey => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set corporationKey($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCorporationKey() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCorporationKey() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get templateId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set templateId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasTemplateId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearTemplateId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get ownerAccountId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set ownerAccountId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasOwnerAccountId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearOwnerAccountId() => $_clearField(7);
+}
+
+/// @voice.unknown_fields=reject
+class RecoverCommunityOwnerRequest extends $pb.GeneratedMessage {
+  factory RecoverCommunityOwnerRequest({
+    $core.String? operationId,
+    $core.String? applicationId,
+    $core.String? environmentId,
+    $core.String? corporationKey,
+    $core.String? spaceId,
+    $core.String? previousOwnerAccountId,
+    $core.String? previousOwnerProfileId,
+    $core.String? replacementAccountId,
+    $core.String? replacementProfileId,
+    $fixnum.Int64? expectedGeneration,
+    $core.String? reasonCode,
+    $core.List<$core.int>? evidenceSha256,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (applicationId != null) result.applicationId = applicationId;
+    if (environmentId != null) result.environmentId = environmentId;
+    if (corporationKey != null) result.corporationKey = corporationKey;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (previousOwnerAccountId != null)
+      result.previousOwnerAccountId = previousOwnerAccountId;
+    if (previousOwnerProfileId != null)
+      result.previousOwnerProfileId = previousOwnerProfileId;
+    if (replacementAccountId != null)
+      result.replacementAccountId = replacementAccountId;
+    if (replacementProfileId != null)
+      result.replacementProfileId = replacementProfileId;
+    if (expectedGeneration != null)
+      result.expectedGeneration = expectedGeneration;
+    if (reasonCode != null) result.reasonCode = reasonCode;
+    if (evidenceSha256 != null) result.evidenceSha256 = evidenceSha256;
+    return result;
+  }
+
+  RecoverCommunityOwnerRequest._();
+
+  factory RecoverCommunityOwnerRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecoverCommunityOwnerRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecoverCommunityOwnerRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'applicationId')
+    ..aOS(3, _omitFieldNames ? '' : 'environmentId')
+    ..aOS(4, _omitFieldNames ? '' : 'corporationKey')
+    ..aOS(5, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(6, _omitFieldNames ? '' : 'previousOwnerAccountId')
+    ..aOS(7, _omitFieldNames ? '' : 'previousOwnerProfileId')
+    ..aOS(8, _omitFieldNames ? '' : 'replacementAccountId')
+    ..aOS(9, _omitFieldNames ? '' : 'replacementProfileId')
+    ..aInt64(10, _omitFieldNames ? '' : 'expectedGeneration')
+    ..aOS(11, _omitFieldNames ? '' : 'reasonCode')
+    ..a<$core.List<$core.int>>(
+        12, _omitFieldNames ? '' : 'evidenceSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecoverCommunityOwnerRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecoverCommunityOwnerRequest copyWith(
+          void Function(RecoverCommunityOwnerRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as RecoverCommunityOwnerRequest))
+          as RecoverCommunityOwnerRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecoverCommunityOwnerRequest create() =>
+      RecoverCommunityOwnerRequest._();
+  @$core.override
+  RecoverCommunityOwnerRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecoverCommunityOwnerRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecoverCommunityOwnerRequest>(create);
+  static RecoverCommunityOwnerRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get applicationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set applicationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasApplicationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearApplicationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get environmentId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set environmentId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasEnvironmentId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearEnvironmentId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get corporationKey => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set corporationKey($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasCorporationKey() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearCorporationKey() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get spaceId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set spaceId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSpaceId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSpaceId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get previousOwnerAccountId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set previousOwnerAccountId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPreviousOwnerAccountId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPreviousOwnerAccountId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get previousOwnerProfileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set previousOwnerProfileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasPreviousOwnerProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearPreviousOwnerProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get replacementAccountId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set replacementAccountId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasReplacementAccountId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearReplacementAccountId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get replacementProfileId => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set replacementProfileId($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasReplacementProfileId() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearReplacementProfileId() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $fixnum.Int64 get expectedGeneration => $_getI64(9);
+  @$pb.TagNumber(10)
+  set expectedGeneration($fixnum.Int64 value) => $_setInt64(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasExpectedGeneration() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearExpectedGeneration() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get reasonCode => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set reasonCode($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasReasonCode() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearReasonCode() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.List<$core.int> get evidenceSha256 => $_getN(11);
+  @$pb.TagNumber(12)
+  set evidenceSha256($core.List<$core.int> value) => $_setBytes(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasEvidenceSha256() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearEvidenceSha256() => $_clearField(12);
+}
+
 class GetAuditLogRequest extends $pb.GeneratedMessage {
   factory GetAuditLogRequest({
     $core.String? spaceId,
@@ -6479,6 +7125,160 @@ class CreateFromTemplateResponse extends $pb.GeneratedMessage {
   void clearSpace() => $_clearField(1);
   @$pb.TagNumber(1)
   Space ensureSpace() => $_ensure(0);
+}
+
+class CreateCommunityBootstrapResponse extends $pb.GeneratedMessage {
+  factory CreateCommunityBootstrapResponse({
+    Space? space,
+    $core.bool? replayed,
+  }) {
+    final result = create();
+    if (space != null) result.space = space;
+    if (replayed != null) result.replayed = replayed;
+    return result;
+  }
+
+  CreateCommunityBootstrapResponse._();
+
+  factory CreateCommunityBootstrapResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateCommunityBootstrapResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateCommunityBootstrapResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<Space>(1, _omitFieldNames ? '' : 'space', subBuilder: Space.create)
+    ..aOB(2, _omitFieldNames ? '' : 'replayed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateCommunityBootstrapResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateCommunityBootstrapResponse copyWith(
+          void Function(CreateCommunityBootstrapResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CreateCommunityBootstrapResponse))
+          as CreateCommunityBootstrapResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateCommunityBootstrapResponse create() =>
+      CreateCommunityBootstrapResponse._();
+  @$core.override
+  CreateCommunityBootstrapResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateCommunityBootstrapResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateCommunityBootstrapResponse>(
+          create);
+  static CreateCommunityBootstrapResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Space get space => $_getN(0);
+  @$pb.TagNumber(1)
+  set space(Space value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpace() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpace() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Space ensureSpace() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $core.bool get replayed => $_getBF(1);
+  @$pb.TagNumber(2)
+  set replayed($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReplayed() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReplayed() => $_clearField(2);
+}
+
+class RecoverCommunityOwnerResponse extends $pb.GeneratedMessage {
+  factory RecoverCommunityOwnerResponse({
+    $core.String? spaceId,
+    $fixnum.Int64? ownerGeneration,
+    $core.bool? replayed,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (ownerGeneration != null) result.ownerGeneration = ownerGeneration;
+    if (replayed != null) result.replayed = replayed;
+    return result;
+  }
+
+  RecoverCommunityOwnerResponse._();
+
+  factory RecoverCommunityOwnerResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecoverCommunityOwnerResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecoverCommunityOwnerResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aInt64(2, _omitFieldNames ? '' : 'ownerGeneration')
+    ..aOB(3, _omitFieldNames ? '' : 'replayed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecoverCommunityOwnerResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecoverCommunityOwnerResponse copyWith(
+          void Function(RecoverCommunityOwnerResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as RecoverCommunityOwnerResponse))
+          as RecoverCommunityOwnerResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecoverCommunityOwnerResponse create() =>
+      RecoverCommunityOwnerResponse._();
+  @$core.override
+  RecoverCommunityOwnerResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecoverCommunityOwnerResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecoverCommunityOwnerResponse>(create);
+  static RecoverCommunityOwnerResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get ownerGeneration => $_getI64(1);
+  @$pb.TagNumber(2)
+  set ownerGeneration($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOwnerGeneration() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOwnerGeneration() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.bool get replayed => $_getBF(2);
+  @$pb.TagNumber(3)
+  set replayed($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasReplayed() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearReplayed() => $_clearField(3);
 }
 
 class GetAuditLogResponse extends $pb.GeneratedMessage {

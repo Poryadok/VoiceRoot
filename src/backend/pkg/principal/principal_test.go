@@ -73,6 +73,8 @@ func TestVerifier_FailsClosedForInvalidOrMismatchedCredentials(t *testing.T) {
 		}), false},
 		{"wrong issuer", service, altered(serviceConfig(key, now), func(c *VerifyConfig) { c.ExpectedIssuer = "space" }), false},
 		{"expired", service, serviceConfig(key, now.Add(36*time.Second)), false},
+		{"vgi1 game-service credential is not a service JWT", "vgi1_00000000-0000-4000-8000-000000000001_secret", serviceConfig(key, now), false},
+		{"T11 HMAC workload proof is not a service JWT", "gameintegration.bot.authority.signature", serviceConfig(key, now), false},
 		{"service as delegated", service, delegatedConfig(key, now), true},
 		{"delegated as service", delegated, serviceConfig(key, now), false},
 		{"missing session epoch checker", delegated, altered(delegatedConfig(key, now), func(c *VerifyConfig) { c.SessionEpochChecker = nil }), true},

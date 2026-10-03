@@ -52,6 +52,9 @@ func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 		"000012_ownership_journal_completion.up.sql",
 		"000013_space_lifecycle.up.sql",
 		"000017_lifecycle_restore_outcome.up.sql",
+		"000019_t37_community_bootstrap.up.sql",
+		"000020_t37_owner_recovery.up.sql",
+		"000021_t38_community_roster.up.sql",
 	} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -79,6 +82,14 @@ func applySpaceMigrationsThrough7(t *testing.T, ctx context.Context, pool *pgxpo
 func withAccountProfileCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
 	ctx = metadata.AppendToOutgoingContext(ctx, authctx.HeaderUserID, accountID.String())
 	return metadata.AppendToOutgoingContext(ctx, authctx.HeaderProfileID, profileID.String())
+}
+
+func withAccountProfileSessionCtx(ctx context.Context, accountID, profileID uuid.UUID) context.Context {
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		authctx.HeaderUserID, accountID.String(),
+		authctx.HeaderProfileID, profileID.String(),
+		authctx.HeaderSessionEpoch, "1",
+	))
 }
 
 type mapProfileAccounts map[uuid.UUID]uuid.UUID
@@ -985,7 +996,7 @@ func TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	owner, _, ctx := profileFixture(t)
+	owner, account, ctx := profileFixture(t)
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
 	auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000015_audit_ledger.up.sql"))
@@ -1005,8 +1016,11 @@ func TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3(t *testing.T) {
 	_, err = pool.Exec(context.Background(), `INSERT INTO audit_log(id,space_id,actor_profile_id,action,target_type,target_id,details) VALUES($1,$2,$3,'member_kicked','profile',$4,'{}')`, auditID, parsedID, owner, uuid.New())
 	require.NoError(t, err)
 
-	_, err = client.DeleteSpace(ctx, &spacev1.DeleteSpaceRequest{SpaceId: spaceID})
-	require.Error(t, err)
+	deleteCtx := withAccountProfileSessionCtx(ctx, account, owner)
+	_, err = client.DeleteSpace(deleteCtx, &spacev1.DeleteSpaceRequest{
+		SpaceId: spaceID, OperationId: uuid.NewString(), ConfirmationName: "Doomed", Proof: "unused",
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err), "legacy hard-delete RPC must remain disabled until the scheduled lifecycle coordinator is active: %s", status.Convert(err).Message())
 
 	row, err := (&store.SpaceStore{Pool: pool}).GetSpace(context.Background(), parsedID)
 	require.NoError(t, err)
@@ -1020,14 +1034,15 @@ func TestDeleteSpace_LegacyRPCPreservesAggregateUntilP3(t *testing.T) {
 	require.Empty(t, spy.snapshotDeleted())
 }
 
-// TestDeleteSpace_NonOwner_PermissionDenied documents only owner may DeleteSpace.
-func TestDeleteSpace_NonOwner_PermissionDenied(t *testing.T) {
+// TestDeleteSpace_LegacyRPCDisabledForNonOwner documents that the obsolete
+// hard-delete RPC is unavailable until scheduled lifecycle activation.
+func TestDeleteSpace_LegacyRPCDisabledForNonOwner(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	_, _, ownerCtx := profileFixture(t)
 	otherAccount, otherProfile := uuid.New(), uuid.New()
-	otherCtx := withAccountProfileCtx(context.Background(), otherAccount, otherProfile)
+	otherCtx := withAccountProfileSessionCtx(context.Background(), otherAccount, otherProfile)
 
 	pool := startSpacePostgresForTest(t, context.Background())
 	applySpaceMigration(t, context.Background(), pool)
@@ -1038,13 +1053,10 @@ func TestDeleteSpace_NonOwner_PermissionDenied(t *testing.T) {
 	require.NoError(t, err)
 	spaceID := created.GetSpace().GetId()
 
-	inv, err := client.CreateInvite(ownerCtx, &spacev1.CreateInviteRequest{SpaceId: spaceID})
-	require.NoError(t, err)
-	_, err = client.JoinByInvite(otherCtx, &spacev1.JoinByInviteRequest{Code: inv.GetInvite().GetCode()})
-	require.NoError(t, err)
-
-	_, err = client.DeleteSpace(otherCtx, &spacev1.DeleteSpaceRequest{SpaceId: spaceID})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = client.DeleteSpace(otherCtx, &spacev1.DeleteSpaceRequest{
+		SpaceId: spaceID, OperationId: uuid.NewString(), ConfirmationName: "Keep", Proof: "unused",
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 // TestTransferOwnership_ToMember updates owner and emits space.updated.

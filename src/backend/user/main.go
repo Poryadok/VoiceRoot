@@ -20,9 +20,11 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
 	"voice/backend/pkg/httpserver"
+	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/pkg/socialprincipal"
@@ -50,6 +52,13 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_USER, ":9097")
+	if err != nil {
+		log.Fatalf("user authority source config: %v", err)
+	}
+	if sourceEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("user authority source requires DATABASE_URL")
+	}
 	principalConfig, principalEnabled, err := socialprincipal.LoadFromEnv("user")
 	if err != nil {
 		log.Fatalf("user privacy principal config: %v", err)
@@ -61,6 +70,10 @@ func main() {
 	searchPrincipalConfig, searchPrincipalEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "search", "USER_SEARCH_PRINCIPAL_", ":9093")
 	if err != nil {
 		log.Fatalf("user search projection principal config: %v", err)
+	}
+	authPrincipalConfig, authPrincipalEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "auth", "USER_AUTH_PRINCIPAL_", ":9094")
+	if err != nil {
+		log.Fatalf("user SDK conversion principal config: %v", err)
 	}
 	searchProjectionCursorKey, err := searchprojection.CursorKeyFromEnv(searchPrincipalEnabled, os.Getenv)
 	if err != nil {
@@ -102,6 +115,17 @@ func main() {
 			log.Fatalf("user search projection principal: %v", err)
 		}
 		defer func() { _ = searchProjectionRuntime.Close() }()
+	}
+	var authSdkRuntime *socialprincipal.Runtime
+	if authPrincipalEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user SDK conversion principal requires DATABASE_URL")
+		}
+		authSdkRuntime, err = socialprincipal.New(context.Background(), authPrincipalConfig)
+		if err != nil {
+			log.Fatalf("user SDK conversion principal: %v", err)
+		}
+		defer func() { _ = authSdkRuntime.Close() }()
 	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
@@ -276,6 +300,23 @@ func main() {
 		}
 
 		sharedOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		if sourceEnabled {
+			sourceServer, sourceRuntime, err := newUserAuthorityServer(context.Background(), sharedOptions, sourceConfig, store.NewProfileStore(pool))
+			if err != nil {
+				log.Fatalf("user authority source startup: %v", err)
+			}
+			defer func() { _ = sourceRuntime.Close() }()
+			sourceListener, err := net.Listen("tcp", sourceConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user authority source listen: %v", err)
+			}
+			defer sourceServer.Stop()
+			go func() {
+				if err := sourceServer.Serve(sourceListener); err != nil {
+					log.Fatalf("user authority source serve: %v", err)
+				}
+			}()
+		}
 		ordinaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
 		ordinaryOptions = append(ordinaryOptions, grpc.ChainUnaryInterceptor(socialprincipal.OrdinaryUnaryInterceptor("user")))
 		srv := grpc.NewServer(ordinaryOptions...)
@@ -353,6 +394,22 @@ func main() {
 			go func() {
 				if err := searchProjectionServer.Serve(searchProjectionListener); err != nil {
 					log.Fatalf("user search projection principal serve: %v", err)
+				}
+			}()
+		}
+		if authSdkRuntime != nil {
+			authSDKListener, err := net.Listen("tcp", authPrincipalConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user SDK conversion principal listen: %v", err)
+			}
+			authSDKOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			authSDKOptions = append(authSDKOptions, authSdkRuntime.ServerOptions()...)
+			authSDKServer := grpc.NewServer(authSDKOptions...)
+			grpcsvc.RegisterSdkConversionServer(authSDKServer, userSvc.Profiles)
+			defer authSDKServer.Stop()
+			go func() {
+				if err := authSDKServer.Serve(authSDKListener); err != nil {
+					log.Fatalf("user SDK conversion principal serve: %v", err)
 				}
 			}()
 		}

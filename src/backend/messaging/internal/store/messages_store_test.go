@@ -88,6 +88,97 @@ func TestMessagesStore_CRUD(t *testing.T) {
 	require.NoError(t, err) // soft-deleted row still fetchable by id
 }
 
+func TestInsertGameEventMessageIsIdempotentAndExpirySafe(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	store := &MessagesStore{Pool: pool}
+	clientID := uuid.New()
+	row := MessageRow{ID: uuid.New(), ChatID: uuid.New(), ChatType: "group", SenderProfileID: uuid.New(),
+		Content: "A creature was discovered.", Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]",
+		ClientMessageID: &clientID, ContentType: "text"}
+	expires := time.Now().UTC().Add(time.Minute)
+	first, expired, inserted, err := store.InsertGameEventMessage(ctx, row, &expires)
+	require.NoError(t, err)
+	require.False(t, expired)
+	require.True(t, inserted)
+	require.NotNil(t, first)
+	require.Equal(t, row.ID, first.ID)
+
+	retry := row
+	retry.ID = uuid.New()
+	oldExpiry := time.Now().UTC().Add(-time.Minute)
+	duplicate, expired, inserted, err := store.InsertGameEventMessage(ctx, retry, &oldExpiry)
+	require.NoError(t, err)
+	require.False(t, expired, "a committed message remains replayable after expiry")
+	require.False(t, inserted)
+	require.Equal(t, first.ID, duplicate.ID)
+
+	changed := retry
+	changed.Content = "A different event payload."
+	_, _, _, err = store.InsertGameEventMessage(ctx, changed, nil)
+	require.ErrorIs(t, err, ErrGameEventMessageConflict)
+
+	unseen := row
+	unseen.ID, unseen.ChatID, unseen.ClientMessageID = uuid.New(), uuid.New(), ptrUUID(uuid.New())
+	_, expired, inserted, err = store.InsertGameEventMessage(ctx, unseen, &oldExpiry)
+	require.NoError(t, err)
+	require.True(t, expired)
+	require.False(t, inserted)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE client_message_id=$1`, *unseen.ClientMessageID).Scan(&count))
+	require.Zero(t, count)
+}
+
+func TestGameCardPersistsAtomicallyAndReplaysImmutablePayload(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	store := &MessagesStore{Pool: pool}
+	clientID := uuid.New()
+	card := `{"actions":[{"action_id":"00000000-0000-4000-8000-000000000020","action_type":"relic.inspect","arguments_json":"{\"target\":\"relic\"}","label":"Inspect"}],"facts":[{"label":"Location","value":"North gate"}],"media_reference_ids":["00000000-0000-4000-8000-000000000030"],"revision":"1","safe_summary":"A relic was found","schema_version":1,"title":"Relic found"}`
+	row := MessageRow{ID: uuid.New(), ChatID: uuid.New(), ChatType: "group", SenderProfileID: uuid.New(),
+		Content: "A relic was discovered.", Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]",
+		ClientMessageID: &clientID, ContentType: "text", GameCardJSON: &card,
+		GameAppID: ptrUUID(uuid.New()), GameEnvironmentID: ptrUUID(uuid.New()), GameInstallationID: ptrUUID(uuid.New()), GameBotID: ptrUUID(uuid.New()),
+		GameCharacterBindingID: ptrUUID(uuid.New())}
+	expires := time.Now().UTC().Add(time.Minute)
+	first, expired, inserted, err := store.InsertGameEventMessage(ctx, row, &expires)
+	require.NoError(t, err)
+	require.False(t, expired)
+	require.True(t, inserted)
+	require.True(t, sameStringPointer(&card, first.GameCardJSON))
+	require.Len(t, first.GameCardSHA256, 64)
+	require.False(t, first.GameCardActionsEnabled)
+
+	read, err := store.GetMessageByID(ctx, row.ID)
+	require.NoError(t, err)
+	require.True(t, sameStringPointer(&card, read.GameCardJSON))
+	require.Equal(t, first.GameCardSHA256, read.GameCardSHA256)
+	require.Equal(t, *row.GameAppID, *read.GameAppID)
+	require.Equal(t, *row.GameCharacterBindingID, *read.GameCharacterBindingID)
+	require.False(t, read.GameCardActionsEnabled)
+	_, err = store.UpdateMessageContent(ctx, row.ID, row.SenderProfileID, "replace the card")
+	require.ErrorIs(t, err, pgx.ErrNoRows, "game-card fallback and payload remain immutable under the generic edit path")
+
+	retry := row
+	retry.ID = uuid.New()
+	replayed, expired, inserted, err := store.InsertGameEventMessage(ctx, retry, nil)
+	require.NoError(t, err)
+	require.False(t, expired)
+	require.False(t, inserted)
+	require.Equal(t, row.ID, replayed.ID)
+
+	changed := retry
+	changed.GameCardJSON = ptrStringForTest(`{"revision":"2"}`)
+	_, _, _, err = store.InsertGameEventMessage(ctx, changed, nil)
+	require.ErrorIs(t, err, ErrGameEventMessageConflict)
+}
+
+func ptrStringForTest(value string) *string { return &value }
+
+func ptrUUID(value uuid.UUID) *uuid.UUID { return &value }
+
 func TestMessagesStore_InsertValidationAndErrors(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)

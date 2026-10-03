@@ -1,0 +1,47 @@
+package voice.backend.auth.sdkidentity;
+
+import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.service.AuthService;
+
+@Configuration
+@ConditionalOnProperty(prefix = "auth.sdk-authorization", name = "enabled", havingValue = "true")
+@Import({AuthUserPrincipalConfiguration.class, SdkGameIntegrationPolicyConfiguration.class})
+public class SdkAuthorizationConfiguration {
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
+  SdkAuthorizationService sdkAuthorizationService(NamedParameterJdbcTemplate jdbc,
+      PlatformTransactionManager manager, SdkIdentityService identity, AuthService auth,
+      SdkAuthorizationPolicy policies, SdkProfileEligibility profiles, TokenBlacklist blacklist, Clock clock,
+      SdkBindingChallengeAuthority bindingChallenges, AuthUserPrincipalIssuer issuer, Environment environment) {
+    return new SdkAuthorizationService(jdbc, new TransactionTemplate(manager), identity, auth,
+        policies, profiles, blacklist, clock, bindingChallenges, issuer, AuthGameBindingSubjectDigest.configured(environment),
+        AuthGameBindingApprovalCodeVault.configured(environment));
+  }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
+  AuthGameBindingHandoffService authGameBindingHandoffService(NamedParameterJdbcTemplate jdbc,
+      PlatformTransactionManager manager, AuthUserPrincipalIssuer issuer, SdkAuthorizationPolicy policies,
+      SdkProfileEligibility profiles, SdkIdentityService identity, TokenBlacklist blacklist, Clock clock) {
+    return new AuthGameBindingHandoffService(jdbc, new TransactionTemplate(manager), issuer, policies, profiles,
+        identity, blacklist, clock);
+  }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "auth", name = "persistence", havingValue = "jdbc", matchIfMissing = true)
+  AuthGameMessageExecutionPermitService authGameMessageExecutionPermitService(NamedParameterJdbcTemplate jdbc,
+      PlatformTransactionManager manager, AuthUserPrincipalIssuer issuer, SdkAuthorizationPolicy policies,
+      SdkProfileEligibility profiles, SdkGameIntegrationExecutionPermitAuthority gis, Clock clock) {
+    return new AuthGameMessageExecutionPermitService(jdbc, new TransactionTemplate(manager), issuer, policies,
+        profiles, gis, clock);
+  }
+}

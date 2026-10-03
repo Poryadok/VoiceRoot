@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"voice/backend/notification/internal/apns"
 	"voice/backend/notification/internal/chatmembers"
@@ -23,11 +24,14 @@ import (
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/email"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/gameconsent"
 	"voice/backend/notification/internal/grouping"
 	grpcsvc "voice/backend/notification/internal/grpcsvc"
 	"voice/backend/notification/internal/presence"
+	"voice/backend/notification/internal/principalgrpc"
 	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/s2s"
+	"voice/backend/notification/internal/spaceprincipalruntime"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/analyticsevents"
 	"voice/backend/pkg/grpcmw"
@@ -36,12 +40,36 @@ import (
 	"voice/backend/pkg/runtimeconfig"
 
 	notificationv1 "voice.app/voice/notification/v1"
+	socialv1 "voice.app/voice/social/v1"
+	userv1 "voice.app/voice/user/v1"
 )
 
 const serviceName = "notification"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	gameConsentClient, gameConsentEnabled, err := gameconsent.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("game notification consent configuration: %v", err)
+	}
+	var gameBlockChecker dispatch.GamePushBlockChecker
+	if gameConsentEnabled {
+		userAddr, socialAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")), strings.TrimSpace(os.Getenv("SOCIAL_GRPC_ADDR"))
+		if userAddr == "" || socialAddr == "" {
+			log.Fatal("USER_GRPC_ADDR and SOCIAL_GRPC_ADDR are required for game notification block policy")
+		}
+		userConn, connErr := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if connErr != nil {
+			log.Fatalf("game notification User client: %v", connErr)
+		}
+		defer func() { _ = userConn.Close() }()
+		socialConn, connErr := grpc.NewClient(socialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if connErr != nil {
+			log.Fatalf("game notification Social client: %v", connErr)
+		}
+		defer func() { _ = socialConn.Close() }()
+		gameBlockChecker = &gameconsent.BlockChecker{Profiles: userv1.NewUserServiceClient(userConn), Blocks: socialv1.NewSocialServiceClient(socialConn)}
+	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
@@ -53,10 +81,19 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	spacePrincipalConfig, spacePrincipalEnabled, err := spaceprincipalruntime.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("Notification Space lifecycle principal configuration: %v", err)
+	}
+	if spacePrincipalEnabled && dbURL == "" {
+		log.Fatal("Notification Space lifecycle principal listener requires DATABASE_URL")
+	}
 	consumerCtx, stopConsumers := context.WithCancel(context.Background())
 	defer stopConsumers()
 	var consumerReadiness *notificationConsumerReadiness
 	var grpcSrv *grpc.Server
+	var spaceLifecycleSrv *grpc.Server
+	var spaceLifecycleRuntime *spaceprincipalruntime.Runtime
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -68,6 +105,7 @@ func main() {
 
 		tokenStore := &store.DeviceTokenStore{Pool: pool}
 		settingsStore := &store.SettingsStore{Pool: pool}
+		go runNotificationLifecycleRetention(consumerCtx, settingsStore, logger)
 		policyLoader := delivery.DBPolicyLoader{Reader: store.PolicyAdapter{Store: settingsStore}}
 		fcmSender := fcm.Sender(&fcm.NoopSender{Logger: logger})
 		if cfg, ok := fcm.ConfigFromEnv(); ok {
@@ -101,7 +139,7 @@ func main() {
 				logger.Info("APNs VoIP HTTP sender enabled", slog.Bool("production", cfg.Production))
 			}
 		}
-		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender, VoIP: voipSender}
+		pusher := &dispatch.PushDispatcher{FCM: fcmSender, APNs: apnsSender, VoIP: voipSender, LifecycleDelivery: settingsStore}
 
 		var groupingStore grouping.Store
 		if redisAddr := strings.TrimSpace(os.Getenv("NOTIFICATION_REDIS_ADDR")); redisAddr != "" {
@@ -155,11 +193,18 @@ func main() {
 		}
 
 		msgPusher := &dispatch.MessagePusher{
-			Tokens:   tokenStore,
-			Pusher:   pusher,
-			Grouping: groupingStore,
-			Presence: presenceChecker,
-			Policy:   policyLoader,
+			LifecycleDelivery: settingsStore,
+			Tokens:            tokenStore,
+			Pusher:            pusher,
+			Grouping:          groupingStore,
+			Presence:          presenceChecker,
+			Policy:            policyLoader,
+			GameConsent:       gameConsentClient,
+			GameBlocks:        gameBlockChecker,
+			GameChatScope:     gameConsentClient,
+		}
+		if !gameConsentEnabled {
+			logger.Warn("GIS game notification consent is not configured; game-scoped push is disabled")
 		}
 		storyPusher := &dispatch.StoryPusher{
 			Tokens: tokenStore,
@@ -199,11 +244,15 @@ func main() {
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
 		}
-		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		sharedGRPCOptions := grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))
+		ordinaryOptions := []grpc.ServerOption{grpc.ChainUnaryInterceptor(principalgrpc.OrdinaryUnaryInterceptor())}
+		ordinaryOptions = append(ordinaryOptions, sharedGRPCOptions...)
+		grpcSrv = grpc.NewServer(ordinaryOptions...)
 		notifySvc := &grpcsvc.NotificationGRPC{
-			Tokens:   tokenStore,
-			Settings: settingsStore,
-			Pusher:   pusher,
+			Tokens:         tokenStore,
+			Settings:       settingsStore,
+			SpaceLifecycle: settingsStore,
+			Pusher:         pusher,
 		}
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			if pub, err := analyticsevents.NewJetStreamPublisher(natsURL, "notification"); err == nil {
@@ -220,6 +269,27 @@ func main() {
 				log.Fatalf("grpc serve: %v", err)
 			}
 		}()
+		if spacePrincipalEnabled {
+			spaceLifecycleRuntime, err = spaceprincipalruntime.New(context.Background(), spacePrincipalConfig)
+			if err != nil {
+				log.Fatalf("Notification Space lifecycle principal runtime: %v", err)
+			}
+			defer func() { _ = spaceLifecycleRuntime.Close() }()
+			lifecycleListener, listenErr := net.Listen("tcp", spacePrincipalConfig.ListenAddr)
+			if listenErr != nil {
+				log.Fatalf("Notification Space lifecycle principal listen: %v", listenErr)
+			}
+			lifecycleOptions := append([]grpc.ServerOption{}, sharedGRPCOptions...)
+			lifecycleOptions = append(lifecycleOptions, spaceLifecycleRuntime.ServerOptions()...)
+			spaceLifecycleSrv = grpc.NewServer(lifecycleOptions...)
+			notificationv1.RegisterNotificationServiceServer(spaceLifecycleSrv, notifySvc)
+			go func() {
+				logger.Info("Space lifecycle gRPC listening", slog.String("addr", spacePrincipalConfig.ListenAddr))
+				if err := spaceLifecycleSrv.Serve(lifecycleListener); err != nil {
+					log.Fatalf("Notification Space lifecycle gRPC serve: %v", err)
+				}
+			}()
+		}
 	} else {
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
 	}
@@ -249,8 +319,37 @@ func main() {
 		if grpcSrv != nil {
 			grpcSrv.GracefulStop()
 		}
+		if spaceLifecycleSrv != nil {
+			spaceLifecycleSrv.GracefulStop()
+		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
+		}
+	}
+}
+
+func runNotificationLifecycleRetention(ctx context.Context, settings *store.SettingsStore, logger *slog.Logger) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	run := func() {
+		cleanupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		deleted, err := settings.DeleteExpiredSpaceLifecycleReceipts(cleanupCtx)
+		if err != nil {
+			logger.Error("Space lifecycle receipt retention cleanup failed", slog.Any("error", err))
+			return
+		}
+		if deleted > 0 {
+			logger.Info("expired Space lifecycle receipts removed", slog.Int64("count", deleted))
+		}
+	}
+	run()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
 		}
 	}
 }

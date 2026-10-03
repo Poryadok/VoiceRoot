@@ -36,6 +36,20 @@ func TestOrdinaryListenerRejectsProtectedStoryMediaBeforeHandler(t *testing.T) {
 	require.Equal(t, 1, called)
 }
 
+func TestProtectedReferenceMethodsRequireMessagingAndStoryMethodRequiresStory(t *testing.T) {
+	for method, issuer := range map[string]string{
+		filev1.FileService_ValidateStoryMedia_FullMethodName:       "story",
+		filev1.FileService_AcquireFileReferences_FullMethodName:    "messaging",
+		filev1.FileService_ReleaseFileReferences_FullMethodName:    "messaging",
+		filev1.FileService_GetFileReferenceGCStatus_FullMethodName: "messaging",
+	} {
+		require.True(t, IsProtectedMethod(method))
+		got := expectedIssuerForMethod(method)
+		require.Equal(t, issuer, got)
+	}
+	require.Empty(t, expectedIssuerForMethod(filev1.FileService_GetFileMetadata_FullMethodName))
+}
+
 func TestStrictListenerRejectsMetadataBeforeVerifierOrHandler(t *testing.T) {
 	cases := map[string]metadata.MD{
 		"missing":                 {},

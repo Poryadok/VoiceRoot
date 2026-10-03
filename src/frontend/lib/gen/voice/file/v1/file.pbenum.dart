@@ -249,5 +249,34 @@ class FileReferenceProducerId extends $pb.ProtobufEnum {
   const FileReferenceProducerId._(super.value, super.name);
 }
 
+class FileReferenceGCState extends $pb.ProtobufEnum {
+  static const FileReferenceGCState FILE_REFERENCE_GC_STATE_UNSPECIFIED =
+      FileReferenceGCState._(
+          0, _omitEnumNames ? '' : 'FILE_REFERENCE_GC_STATE_UNSPECIFIED');
+  static const FileReferenceGCState FILE_REFERENCE_GC_STATE_PENDING =
+      FileReferenceGCState._(
+          1, _omitEnumNames ? '' : 'FILE_REFERENCE_GC_STATE_PENDING');
+  static const FileReferenceGCState FILE_REFERENCE_GC_STATE_GC_COMPLETE =
+      FileReferenceGCState._(
+          2, _omitEnumNames ? '' : 'FILE_REFERENCE_GC_STATE_GC_COMPLETE');
+  static const FileReferenceGCState FILE_REFERENCE_GC_STATE_RETAINED_SHARED =
+      FileReferenceGCState._(
+          3, _omitEnumNames ? '' : 'FILE_REFERENCE_GC_STATE_RETAINED_SHARED');
+
+  static const $core.List<FileReferenceGCState> values = <FileReferenceGCState>[
+    FILE_REFERENCE_GC_STATE_UNSPECIFIED,
+    FILE_REFERENCE_GC_STATE_PENDING,
+    FILE_REFERENCE_GC_STATE_GC_COMPLETE,
+    FILE_REFERENCE_GC_STATE_RETAINED_SHARED,
+  ];
+
+  static final $core.List<FileReferenceGCState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static FileReferenceGCState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const FileReferenceGCState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

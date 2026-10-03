@@ -135,6 +135,62 @@ func (s *SpaceGRPC) revokeAllMemberRoles(ctx context.Context, spaceID, profileID
 	}
 }
 
+// ensureCommunityMemberRole projects only the Space's baseline Member role.
+// External rank claims never select or elevate a Role role.
+func (s *SpaceGRPC) ensureCommunityMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {
+	if s == nil || s.Roles == nil {
+		return nil
+	}
+	roles, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{SpaceId: spaceID.String(), ProfileId: profileID.String()})
+	if err != nil {
+		return err
+	}
+	for _, role := range roles.GetRoleList().GetRoles() {
+		if role.GetName() == permissions.RoleMember {
+			return nil
+		}
+	}
+	return s.assignDefaultMemberRole(ctx, spaceID, profileID)
+}
+
+// revokeCommunityMemberRole removes only the baseline Member role and only
+// when the profile has no independent Space membership. Elevated user roles
+// are never selected by game rank or removed here.
+func (s *SpaceGRPC) revokeCommunityMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {
+	if s == nil || s.Roles == nil {
+		return nil
+	}
+	manual, err := s.Store.IsSpaceMember(ctx, spaceID, profileID)
+	if err != nil || manual {
+		return err
+	}
+	roleList, err := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+	if err != nil {
+		return err
+	}
+	var memberRoleID string
+	for _, role := range roleList.GetRoleList().GetRoles() {
+		if role.GetName() == permissions.RoleMember {
+			memberRoleID = role.GetId()
+			break
+		}
+	}
+	if memberRoleID == "" {
+		return nil
+	}
+	memberRoles, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{SpaceId: spaceID.String(), ProfileId: profileID.String()})
+	if err != nil {
+		return err
+	}
+	for _, role := range memberRoles.GetRoleList().GetRoles() {
+		if role.GetId() == memberRoleID {
+			_, err = s.Roles.RevokeRole(ctx, &rolev1.RevokeRoleRequest{SpaceId: spaceID.String(), ProfileId: profileID.String(), RoleId: memberRoleID})
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
 	if s.Roles == nil {
 		return nil

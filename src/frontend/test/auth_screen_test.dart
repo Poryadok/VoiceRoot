@@ -409,8 +409,9 @@ void main() {
                   200,
                 );
               }
-              if (request.url.path == '/health')
+              if (request.url.path == '/health') {
                 return http.Response('ok', 200);
+              }
               return http.Response('not found', 404);
             }),
           ),

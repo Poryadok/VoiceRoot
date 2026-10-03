@@ -117,6 +117,60 @@ message ChatListItem {
 
 ## Модель данных
 
+### GIS application-managed group chats (T31 recipient slice)
+
+Chat owns the `chats`, `chat_members`, and `managed_chat_operations` rows. A
+managed chat is a standalone `group` whose `creator_profile_id` is NULL and
+whose `managed_by_application_id`, `managed_environment_id`, and
+`external_chat_key` are all set. The application/environment is the resource
+owner; no profile receives `owner` or `admin` role. The external key is unique
+within that application and environment.
+
+GIS mutations use the separate `GameIntegrationChatService` with
+`ProvisionManagedChat`, `SyncManagedChatMembers`, and
+`SetManagedChatRetention` allowlisted, on the
+dedicated mTLS listener. Each request carries a UUID `operation_id`. The
+recipient verifies the `gameintegration` service principal for audience
+`chat`, the exact full RPC, `x-request-id == operation_id`, and deterministic
+protobuf SHA-256 request hash; JTI replay protection is Redis-backed. Player
+roster methods reject managed chats. The GIS surface is not registered on the
+ordinary player listener. Runtime configuration is all-or-nothing; its
+environment variables are `CHAT_GIS_GRPC_LISTEN`, `CHAT_GIS_TLS_CERT_FILE`,
+`CHAT_GIS_TLS_KEY_FILE`, `CHAT_GIS_CLIENT_CA_FILE`,
+`GAME_INTEGRATION_PRINCIPAL_JWKS_URL`, optional
+`GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE`, and
+`GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_ADDR` plus optional password.
+Current staging/production deployment manifests do not yet configure the
+dedicated port, secret mounts, or GIS-only network policy, so they leave this
+listener disabled.
+
+`SetManagedChatRetention` records the immutable absolute `purge_after` cutoff
+for a managed chat. The request binds application, environment, external chat
+key, operation ID, and cutoff in the GIS principal's request hash. Exact retry
+returns the original receipt; any attempt to change the cutoff conflicts. Chat
+uses its PostgreSQL clock and denies message-read entitlement at
+`clock_timestamp() >= purge_after`, even for a current member and for messages
+created before the cutoff. GIS schedules this at the session's first terminal
+transition using the frozen `terminalized_at + 30 days` deadline. It never
+schedules Party chats or a child session's shared Party chat. This signal
+controls read access; it does not claim that Messaging/File physical purge has
+completed.
+
+
+`managed_chat_operations` stores the exact app/environment/operation ID,
+method, request hash, chat ID, and immutable JSON receipt. Provision and roster
+responses include the persisted `receipt_id` and `request_hash` alongside the
+immutable resource or roster result and `replayed` flag. `receipt_id` equals the
+operation UUID, a primary key component of `managed_chat_operations`; exact
+retries return the same values. GIS persists the values returned by Chat and
+does not synthesize a receipt. Mutable chat projections are read through Chat's
+ordinary API. A different method or request hash conflicts. Roster
+synchronization atomically diffs membership, gives all members the `member`
+role, and preserves per-member state for retained members. Managed resources
+and receipts currently have no retention or retirement policy; product and T31
+orchestration work must define one before application/environment deletion can
+safely remove them.
+
 ```
 chats
 ├── id (UUID)
@@ -516,47 +570,96 @@ transaction blocks Space-chat/navigation mutation and captures every
 is the first downstream freeze linearization point. Exact pages/count/hash are
 replayed; the same page index with changed bytes conflicts.
 
+Space-bound group and channel chat creation acquire the same PostgreSQL
+transaction-scoped advisory lock before inserting. Space and Chat derive its
+key through the shared `voice/backend/pkg/spacemutationlock` package. With no
+lifecycle fence, or an explicit `LIVE` fence, creation proceeds; a frozen or
+terminal fence rejects the insert with the lifecycle-state error. This
+serializes each create against manifest capture: a create that wins the lock is
+visible in the manifest, and a freeze that wins first prevents the new chat.
+Ordinary resource lookups and navigation queries exclude every Chat whose
+local Space fence is not `LIVE`, including the manifest-capture interval before
+the participant barrier finishes. This applies to direct Chat reads, inbox and
+archive pages, Space projections, custom/system folders and quick-access slots.
+The stored navigation preferences remain intact and reappear after the higher
+`LIVE` restore generation. A frozen shortcut does not make unrelated live or
+standalone shortcuts unavailable. The authenticated lifecycle participant reads
+its saved immutable manifest directly; ordinary lookup is never a purge bypass.
+
+The Chat source manifest root is `SHA-256("voice.chat.v1.SpaceDeletionManifest\\0" ||
+space_uuid_bytes || deletion_operation_uuid_bytes || schedule_generation_u64be ||
+item_count_u64be || ordered_chat_uuid_bytes...)`. Each page digest is
+`SHA-256("voice.chat.v1.SpaceDeletionManifestPage\\0" || root_sha256 ||
+page_index_u64be || item_count_u64be || ordered_chat_uuid_bytes...)`. The
+manifest ID is UUIDv5 using the deletion operation ID as namespace and the
+literal UTF-8 name `voice.chat.v1.SpaceDeletionManifest/<space-id>/<generation>`.
+Page tokens are unpadded base64url of `page_index_u64be || root_sha256`; page
+zero has no input token. Chat validates the token against the saved root and
+returns immutable page bytes only.
+
+Space sends this canonical Chat binding unchanged to all ten lifecycle
+participants. File separately verifies its private producer-reference root;
+Space does not reconstruct that root. Chat's fence, page lookup, restore and
+purge validate the exact saved Chat manifest ID/hash/count. The deletion
+operation ID remains a separate identity and is not a replacement manifest ID.
+
 Messaging, Search, Bot and Notification import/acknowledge those exact pages.
-Chat's final fence receipt binds the complete root manifest. Restore applies the
+Search reads pages on a separate mTLS listener configured by
+`CHAT_SEARCH_MANIFEST_GRPC_LISTEN`, `CHAT_SEARCH_MANIFEST_TLS_CERT_FILE`,
+`CHAT_SEARCH_MANIFEST_TLS_KEY_FILE`, `CHAT_SEARCH_MANIFEST_CLIENT_CA_FILE`,
+`CHAT_SEARCH_PRINCIPAL_JWKS_URL`, `CHAT_SEARCH_PRINCIPAL_JWKS_CA_FILE`, and
+`CHAT_SEARCH_PRINCIPAL_REPLAY_REDIS_ADDR`. Optional JWKS client certificate/key
+settings (`CHAT_SEARCH_PRINCIPAL_JWKS_CLIENT_CERT_FILE` and `_CLIENT_KEY_FILE`)
+must be paired. Startup verifies the HTTPS Search rotation keys and replay
+store before exposing the listener. Only Search's request-bound
+`GetSpacePurgeManifestPage` is allowed there; lifecycle mutations remain
+Space-only. The ordinary and GIS listeners cannot serve these page requests.
+Chat's fence receipt binds the canonical Chat root manifest. Restore applies the
 higher `LIVE` generation without recapture. Purge exposes only the saved pages,
 waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
 
-### P3 terminal purge prerequisite proof seam (decision required)
+### P3 terminal purge prerequisite proof contract (accepted)
 
-The accepted ordering above is not yet representable by the wire. The current
-`voice.chat.v1.PurgeSpaceRequest` contains only the generic `SpacePurgeRequest`;
-it carries neither Messaging's participant-3 completion receipt nor File's
-acceptance receipt for the exact `CHAT` producer release. Messaging exposes no
-purge-receipt lookup, and File's `GetSpacePurgeReceipt` returns File's overall
-participant receipt rather than the required producer-release acceptance; no
-canonical lookup currently binds these two prerequisite receipts to Chat purge.
-Therefore the current request is insufficient authority for destructive Chat
-cleanup: `PurgeSpace` must remain fail-closed, must preserve the saved chats and
-`PURGE_DECIDED` fence, and must not create a completion receipt.
+Space's generic purge request is a durable decision, not evidence that upstream
+participants completed. Chat obtains each owner's evidence directly before
+deleting its rows:
 
-Before implementation, one docs/proto decision must define all of these as one
-contract:
+1. Chat makes a read-only authenticated, request-bound Messaging receipt lookup
+   for the exact Space, deletion operation, purge generation, source schedule
+   generation and Messaging participant request hash. Messaging returns only
+   its already committed participant-3 completion receipt, after its own
+   `MESSAGING` File release completed; this lookup never starts Messaging purge.
+2. Chat submits the deterministic File
+   `ReleaseSpaceDeletionProducerReferences` request for producer `CHAT`, using
+   the producer tuple-set hash sealed for the source schedule generation. The
+   current Chat schema has no File-reference producer rows, so this is the
+   deterministic empty-set hash; File still verifies its durable seal and
+   returns a receipt bound to the exact Space/deletion/purge/source generations,
+   producer, hash and request. An identical retry returns the same receipt
+   after response loss, so Chat owns retry without a separate File lookup.
+3. Only after both owner responses validate does Chat atomically persist their
+   deterministic bytes with its completion receipt and delete the exact saved
+   Chat manifest. Missing, changed, incomplete, wrong-owner, wrong-generation
+   or mismatched-hash evidence leaves rows and `PURGE_DECIDED` untouched.
+   Restart reuses the saved manifest and exact request bytes; it never
+   recaptures the work set.
 
-- **proof transport:** deterministic receipt bytes embedded in and covered by
-  the Chat purge request hash, or authenticated request-bound receipt lookup
-  RPCs; unsigned metadata or a coordinator assertion is not proof;
-- **issuers:** only Messaging may issue its participant-3 purge completion, and
-  only File may issue `ReleaseSpaceDeletionProducerReferencesReceipt` for the
-  exact `FILE_REFERENCE_PRODUCER_ID_CHAT` release;
-- **release caller/retry owner:** either Chat calls File and durably stores the
-  accepted receipt before local deletion, or Space obtains and binds that File
-  receipt before calling Chat; the retry owner and response-loss recovery must
-  be explicit;
-- **binding:** protocol, Space/deletion IDs, purge generation, source schedule
-  generation, root/chat manifest hashes, participant/producer IDs, exact
-  reference aggregate hash and deterministic request/receipt bytes are all
-  cross-checked; hash equality by itself is insufficient;
-- **resume acceptance:** exact proof replay after timeout/restart returns the
-  same outcome, while missing, reordered or changed proof cannot advance local
-  deletion and never causes work-set recapture.
+Both owner calls use service-to-service TLS plus a short-lived request-bound
+`service:chat` principal with exact audience, RPC and deterministic request
+hash. Chat validates each owner response field-by-field against persisted
+evidence. A Space coordinator assertion or unsigned metadata is never accepted
+as proof. Messaging adds a read-only receipt lookup; File's producer release
+call already provides idempotent lost-response recovery. This contract assigns
+the retries to Chat and reserves no protobuf field numbers.
 
-This section records the owner decision still required; it does not choose or
-reserve protobuf field numbers.
+The outbound clients are enabled with the inbound Space lifecycle principal
+listener and require all of `CHAT_SPACE_PURGE_MESSAGING_GRPC_ADDR`,
+`CHAT_SPACE_PURGE_MESSAGING_TLS_CA_FILE`,
+`CHAT_SPACE_PURGE_MESSAGING_TLS_SERVER_NAME`,
+`CHAT_SPACE_PURGE_FILE_GRPC_ADDR`, `CHAT_SPACE_PURGE_FILE_TLS_CA_FILE`,
+`CHAT_SPACE_PURGE_FILE_TLS_SERVER_NAME`, `CHAT_SPACE_PURGE_CLIENT_CERT_FILE`,
+and `CHAT_SPACE_PURGE_CLIENT_KEY_FILE`. The client certificate is presented to
+both owner services; each connection validates its own CA and server name.

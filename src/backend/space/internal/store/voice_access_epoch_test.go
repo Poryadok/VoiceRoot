@@ -58,6 +58,19 @@ func applyR22SpaceEpochMigration(t *testing.T, ctx context.Context, st *SpaceSto
 	if !lifecyclePresent {
 		applyLifecycleMigration(t, ctx, st.Pool, "up")
 	}
+	applyCommunityRosterForStoreTest(t, ctx, st)
+}
+
+func applyCommunityRosterForStoreTest(t *testing.T, ctx context.Context, st *SpaceStore) {
+	t.Helper()
+	var rosterPresent bool
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT to_regclass('community_roster_members') IS NOT NULL`).Scan(&rosterPresent))
+	if !rosterPresent {
+		for _, name := range []string{"000019_t37_community_bootstrap.up.sql", "000020_t37_owner_recovery.up.sql", "000021_t38_community_roster.up.sql"} {
+			_, err := st.Pool.Exec(ctx, r22SpaceMigrationSQL(t, name))
+			require.NoError(t, err)
+		}
+	}
 }
 
 func runR22SpaceEpochDown(t *testing.T, ctx context.Context, st *SpaceStore) error {

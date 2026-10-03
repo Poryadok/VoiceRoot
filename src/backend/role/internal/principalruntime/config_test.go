@@ -9,10 +9,30 @@ import (
 )
 
 var runtimeEnvNames = []string{
+	"ROLE_AUTHORITY_SOURCE_ENABLED",
 	"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY",
 	"S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE",
 	"ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
-	"ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN",
+	"ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN",
+}
+
+func TestLoadFromEnvAuthoritySourceRequiresExplicitFederationTrust(t *testing.T) {
+	validRuntimeEnv(t)
+	t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", "true")
+	_, _, err := LoadFromEnv()
+	require.Error(t, err, "source activation requires Federation trust")
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks","federation":"https://federation.internal/jwks"}`)
+	_, enabled, err := LoadFromEnv()
+	require.NoError(t, err)
+	require.True(t, enabled)
+	t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", "false")
+	_, _, err = LoadFromEnv()
+	require.Error(t, err, "a disabled source cannot add an unrelated trusted issuer")
+	for _, value := range []string{"", "yes", "1", "TRUE", " true "} {
+		t.Setenv("ROLE_AUTHORITY_SOURCE_ENABLED", value)
+		_, _, err = LoadFromEnv()
+		require.Error(t, err, "activation must use an exact boolean")
+	}
 }
 
 func clearRuntimeEnv(t *testing.T) {
@@ -27,10 +47,11 @@ func clearRuntimeEnv(t *testing.T) {
 func validRuntimeEnv(t *testing.T) {
 	t.Helper()
 	clearRuntimeEnv(t)
-	t.Setenv("S2S_JWKS_URLS_JSON", `{"space":"https://space.internal/jwks"}`)
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks"}`)
 	t.Setenv("ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "redis.internal:6379")
 	t.Setenv("ROLE_PRINCIPAL_TLS_CERT_FILE", "role.crt")
 	t.Setenv("ROLE_PRINCIPAL_TLS_KEY_FILE", "role.key")
+	t.Setenv("ROLE_PRINCIPAL_CLIENT_CA_FILE", "role-clients.pem")
 }
 
 func TestLoadFromEnvDisabledOnlyWhenNarrowConfigurationAbsent(t *testing.T) {
@@ -45,13 +66,14 @@ func TestLoadFromEnvUsesPhaseZeroDefaults(t *testing.T) {
 	cfg, enabled, err := LoadFromEnv()
 	require.NoError(t, err)
 	require.True(t, enabled)
-	require.Equal(t, map[string]string{"space": "https://space.internal/jwks"}, cfg.JWKSURLs)
+	require.Equal(t, map[string]string{"space": "https://space.internal/jwks", "gameintegration": "https://gis.internal/jwks", "voice": "https://voice.internal/jwks"}, cfg.JWKSURLs)
 	require.Equal(t, 30*time.Second, cfg.RefreshAfter)
 	require.Equal(t, 2*time.Minute, cfg.HardExpiry)
 	require.Equal(t, 5*time.Second, cfg.UnknownKIDCooldown)
 	require.Equal(t, "redis.internal:6379", cfg.ReplayAddr)
 	require.Equal(t, "role.crt", cfg.TLSCertFile)
 	require.Equal(t, "role.key", cfg.TLSKeyFile)
+	require.Equal(t, "role-clients.pem", cfg.ClientCAFile)
 	require.Equal(t, ":9091", cfg.ListenAddr)
 }
 
@@ -83,7 +105,7 @@ func TestLoadFromEnvPartialConfigurationFailsClosed(t *testing.T) {
 			require.Error(t, err, "present but empty configuration must not disable security")
 		})
 	}
-	for _, name := range []string{"S2S_JWKS_URLS_JSON", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE"} {
+	for _, name := range []string{"S2S_JWKS_URLS_JSON", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE"} {
 		t.Run("missing_"+name, func(t *testing.T) {
 			validRuntimeEnv(t)
 			require.NoError(t, os.Unsetenv(name))
@@ -96,11 +118,13 @@ func TestLoadFromEnvPartialConfigurationFailsClosed(t *testing.T) {
 func TestLoadFromEnvRejectsUntrustedJWKSConfiguration(t *testing.T) {
 	for name, value := range map[string]string{
 		"malformed": "{", "null": "null", "empty": "{}",
-		"missing_space": `{"gateway":"https://gateway.internal/jwks"}`,
-		"plaintext":     `{"space":"http://space.internal/jwks"}`,
-		"missing_host":  `{"space":"https:///jwks"}`,
-		"empty_url":     `{"space":""}`,
-		"empty_issuer":  `{"space":"https://space.internal/jwks","":"https://other.internal/jwks"}`,
+		"missing_space":           `{"gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks"}`,
+		"missing_gameintegration": `{"space":"https://space.internal/jwks","voice":"https://voice.internal/jwks"}`,
+		"missing_voice":           `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks"}`,
+		"plaintext":               `{"space":"http://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks"}`,
+		"missing_host":            `{"space":"https:///jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks"}`,
+		"empty_url":               `{"space":"","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks"}`,
+		"empty_issuer":            `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks","":"https://other.internal/jwks"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			validRuntimeEnv(t)

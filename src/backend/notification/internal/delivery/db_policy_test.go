@@ -12,14 +12,21 @@ import (
 )
 
 type stubSettingsReader struct {
-	global delivery.SettingsRecord
-	chat   delivery.SettingsRecord
-	quiet  delivery.QuietHoursRecord
+	global  delivery.SettingsRecord
+	chat    delivery.SettingsRecord
+	channel *delivery.SettingsRecord
+	quiet   delivery.QuietHoursRecord
 }
 
 func (s stubSettingsReader) GetSettings(_ context.Context, _ uuid.UUID, scopeType string, scopeID *uuid.UUID) (delivery.SettingsRecord, error) {
 	if scopeType == "chat" && scopeID != nil {
 		return s.chat, nil
+	}
+	if scopeType == "channel" && scopeID != nil {
+		if s.channel != nil {
+			return *s.channel, nil
+		}
+		return delivery.SettingsRecord{Enabled: true}, nil
 	}
 	return s.global, nil
 }
@@ -44,4 +51,17 @@ func TestDBPolicyLoader_AppliesChatMuteAndQuietHours(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, settings.ChatMuted)
 	require.True(t, quiet.Enabled)
+}
+
+func TestDBPolicyLoaderAppliesChannelConsentRestrictions(t *testing.T) {
+	channel := delivery.SettingsRecord{Enabled: false, SuppressTypes: []string{"reply"}}
+	loader := delivery.DBPolicyLoader{Reader: stubSettingsReader{global: delivery.SettingsRecord{Enabled: true}, chat: delivery.SettingsRecord{Enabled: true}, channel: &channel}}
+	settings, _, err := loader.LoadPolicy(context.Background(), uuid.New(), uuid.NewString(), delivery.TypeNewMessage, time.Now())
+	require.NoError(t, err)
+	require.True(t, settings.ChatMuted)
+	require.Contains(t, settings.SuppressTypes, delivery.TypeReply)
+	global, _, err := loader.LoadPolicy(context.Background(), uuid.New(), "", delivery.TypeNewMessage, time.Now())
+	require.NoError(t, err)
+	require.False(t, global.ChatMuted)
+	require.Empty(t, global.SuppressTypes)
 }

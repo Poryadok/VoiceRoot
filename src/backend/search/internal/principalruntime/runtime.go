@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	searchv1 "voice.app/voice/search/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/search/internal/principalgrpc"
 )
@@ -40,6 +41,14 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
+	clientCAPEM, err := os.ReadFile(cfg.ClientCAFile)
+	if err != nil {
+		return nil, errors.New("principal client CA unavailable")
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(clientCAPEM) {
+		return nil, errors.New("principal client CA has no certificates")
+	}
 	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("principal listener TLS: %w", err)
@@ -59,12 +68,20 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if cfg.JWKSClientCertFile != "" {
+		clientCert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
+		if err != nil {
+			transport.CloseIdleConnections()
+			return nil, fmt.Errorf("principal JWKS client TLS: %w", err)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{clientCert}
+	}
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
-	endpoint := cfg.JWKSURLs["space"]
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
-		if issuer != "space" {
+		endpoint := cfg.JWKSURLs[issuer]
+		if endpoint == "" || (issuer != "space" && issuer != "messaging") {
 			return nil, errors.New("untrusted principal issuer")
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -111,7 +128,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: cfg.ReplayAddr, Password: cfg.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	r := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	r := &Runtime{resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs})}
 	startup, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
@@ -145,11 +162,15 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, hash str
 	if !principalgrpc.IsLifecycleMethod(method) {
 		return principal.Principal{}, errors.New("principal method is not allowed")
 	}
-	p, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: "space", ExpectedAudience: "search", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
+	expectedIssuer := "space"
+	if method == searchv1.SearchService_PurgeManagedChatMessages_FullMethodName {
+		expectedIssuer = "messaging"
+	}
+	p, err := principal.VerifyService(ctx, token, principal.VerifyConfig{ExpectedIssuer: expectedIssuer, ExpectedAudience: "search", ExpectedRPC: method, ExpectedRequestID: requestID, ExpectedRequestHash: hash, KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay})
 	if err != nil {
 		return principal.Principal{}, err
 	}
-	if p.Subject != "service:space" || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
+	if p.Subject != "service:"+expectedIssuer || p.AccountID != "" || p.ProfileID != "" || p.SessionEpoch != 0 {
 		return principal.Principal{}, errors.New("service principal contains user authority")
 	}
 	return p, nil

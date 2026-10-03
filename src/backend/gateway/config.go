@@ -39,6 +39,9 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	if err := validateGRPCUpstreamsFromEnv(); err != nil {
 		return gatewayConfig{}, err
 	}
+	if _, _, err := spaceLifecycleClientConfigFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
 	if strict {
 		if strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")) == "" {
 			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
@@ -51,6 +54,12 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	}
 	config.principalIssuer = issuer
 	config.principalJWKS = jwks
+	if config.transcoder != nil && config.transcoder.clients.spaceLifecycle != nil {
+		if issuer == nil || !strict {
+			return gatewayConfig{}, errors.New("space lifecycle transport requires Gateway signing keys and strict session epochs")
+		}
+		config.transcoder.lifecycleIssuer = issuer
+	}
 	return config, nil
 }
 

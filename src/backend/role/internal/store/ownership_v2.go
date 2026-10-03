@@ -80,6 +80,9 @@ func (s *RoleStore) transitionOwnershipV2(ctx context.Context, action string, in
 		if retired {
 			return ErrSpaceRetired
 		}
+		if err := checkRoleDeletionFence(ctx, db, []uuid.UUID{in.SpaceID}); err != nil {
+			return err
+		}
 		var legacy bool
 		if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ownership_transfer_role_receipts WHERE operation_id=$1)`, in.OperationID).Scan(&legacy); err != nil {
 			return err

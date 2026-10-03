@@ -54,6 +54,7 @@ or_true() {
 }
 
 RUN_GO="${RUN_GO:-false}"
+RUN_GO_INTEGRATION="${RUN_GO_INTEGRATION:-false}"
 RUN_PKG="${RUN_PKG:-false}"
 RUN_AUTH="${RUN_AUTH:-false}"
 RUN_FLUTTER="${RUN_FLUTTER:-false}"
@@ -85,7 +86,7 @@ check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
 check_if "$(or_true "${RUN_PKG}" "${COMPOSE}" "${GLOBAL}")" nats-hub-config-renderer-image
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go
-check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go-integration-pr
+check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr
 check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
 check_if "$(or_true "${RUN_PORTAL}" "${FILTER_PORTAL}" "${GLOBAL}")" developer-portal
 check_if "$(or_true "${RUN_ADMIN}" "${FILTER_ADMIN}" "${GLOBAL}")" admin

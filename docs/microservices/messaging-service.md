@@ -27,6 +27,53 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 
 `SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
 
+T51 adds a planned Bot-only S2S publication surface,
+`MessagingService.SendGameEventMessage`; it is not in the current proto or
+runtime. Its canonical request and retry contract live in
+[Game Event v1](../architecture/game-integration-api.md#t51-game-event-v1-ingress-and-publication-contract).
+Messaging owns the committed message and deduplicates by the same
+`(chat_id, sender_profile_id, client_message_id)` rule. Only a verified Bot
+service principal may supply the Bot-owned sender identity; public game
+credentials and GIS are not message senders. The RPC must retain normal
+membership, Space permission, moderation, block, content and expiry checks.
+
+## Game SDK message ingress (T15/T16)
+
+`MessagingService.ApplyGameMessage` accepts the signed SDK message and Auth
+device-authority assertion only from the verified Gateway service principal.
+For a new operation, Messaging checks the current GIS app/environment/binding/
+chat mapping before asking Auth for a short-lived execution permit. It then
+checks Chat membership using the permit profile, verifies File attachment
+provenance, and atomically commits the message receipt, message revision and
+permit-completion outbox. Exact retained receipt retries are resolved before
+fresh authority or GIS calls; changed operation content conflicts. Auth permits
+expire after at most 3,750 ms (also capped by the device assertion expiry);
+Messaging reserves a 250 ms clock margin and caps its atomic transaction at
+250 ms. An admitted operation completes within that permit window while revoke
+fences new issuance.
+
+The mapping client calls GIS's private
+`POST /internal/v1/game-integrations/resource-mappings/authorize-chat` route
+over a dedicated HTTPS listener. Its JSON request contains exactly the UUID
+fields `application_id`, `environment_id`, `binding_id` and `chat_id`. The
+Messaging client authenticates with its mTLS URI SAN
+`spiffe://voice/service/messaging` and WorkloadProof v1 request proof; GIS's
+signed response is verified with the same workload key used for that request.
+The client pins the configured GIS CA and endpoint hostname, has a 2-second
+request timeout, and fails closed on transport, TLS, signature, response-shape,
+or mapping-deny errors. `mapping_revision` is required and positive on allow.
+
+Configure the client with all five values:
+`GAME_INTEGRATION_MESSAGING_RESOURCE_MAPPING_URL`,
+`MESSAGING_GAME_INTEGRATION_TLS_CERT_FILE`,
+`MESSAGING_GAME_INTEGRATION_TLS_KEY_FILE`,
+`GAME_INTEGRATION_MESSAGING_CA_FILE`, and
+`GAME_INTEGRATION_MESSAGING_WORKLOAD_KEY_B64`. If every value is absent,
+Messaging starts without the optional client and game message writes remain
+fail-closed before permit issuance. Partial configuration, an invalid client
+certificate/SPIFFE identity, or an invalid key fails service startup; it never
+enables a pass-through mapping decision.
+
 ## API (gRPC)
 
 Источник истины по RPC и сообщениям: [protos/voice/messaging/v1/messaging.proto](../../protos/voice/messaging/v1/messaging.proto). Ниже — краткая схема для навигации по документу (имена типов как в репозитории).
@@ -662,18 +709,58 @@ Key backup хранится в **Auth Service** (`PutE2EKeyBackup` / `GetE2EKeyB
 
 ## P3 Space lifecycle participant (target)
 
+The participant implementation has Space-authenticated manifest-page import,
+lifecycle-fence, and purge RPCs on a dedicated mutual-TLS listener. Manifest pages
+are validated for domain-separated hashes, canonical sorted Chat IDs, page
+size, sequence, and final seal position. PostgreSQL retains deterministic page,
+request, and receipt bytes, and seals only after the ordered root matches.
+Exact retries return the first receipt; changed bytes and gaps fail closed.
+The fence accepts only a sealed matching manifest, records monotonic FROZEN and
+LIVE transitions with immutable operation receipts, and acknowledges stale
+generations with the current saved receipt. Database triggers currently block
+message, reaction, pin, read-position/read-receipt, and scheduled-message
+mutations while the Space is frozen or terminal, under the shared Space
+mutation lock. Additional triggers cover message hides, game-message
+revisions/operation receipts, game cards, and game-action results. Thread edits
+flow through the guarded message row; read and delivery cursors share the
+guarded receipt tables. Purge pages the sealed Chat manifest, derives a stable
+child operation per chat, and invokes the managed-chat purge coordinator. Each
+child must return valid File and Search receipt hashes before Messaging commits
+its exact participant receipt and terminal fence. The Space coordinator and a
+separate File Space-producer release receipt remain outstanding.
+
+The app Compose profile configures `MESSAGING_SPACE_LIFECYCLE_GRPC_LISTEN`,
+the Messaging server certificate/client CA, and the Space principal JWKS
+client. The listener defaults to `:9093` when enabled and startup fails on
+partial TLS or principal configuration.
+
+Enabled Chat/Space lifecycle and managed-chat purge also require clean Messaging
+migration `000026_attachment_send_intents` or later and all nine durable-intent
+columns with their expected types/nullability. The preflight runs before purge
+JWKS, lifecycle listeners and recovery workers serve. Missing, dirty, old or
+partial schema refuses startup with a fixed migration diagnostic. Migration
+metadata is trusted; this runtime check does not replace migration execution.
+Disabled lifecycle keeps the baseline startup path. Rollback of 000026 refuses
+while any saved intent exists; drain and export its evidence before rollback.
+
 Messaging stores its generation fence, imported immutable Chat manifest pages,
-message-reference producer pages and request/receipt evidence. `FROZEN` imports
-and seals the exact Chat binding, blocks message/reaction/thread/schedule/read/
-delivery mutations for that Space work set, and enumerates exact Space-scoped
-`FileReferenceKey` values as the fixed `MESSAGING` producer. A final receipt is
-valid only after the root manifest matches local saved evidence.
+and exact request/receipt evidence. `FROZEN` imports and seals the exact Chat
+binding and blocks message/reaction/thread/schedule/read/delivery mutations for
+that Space work set. Each managed-chat purge snapshots its frozen attachment
+references and submits them to File as the `MESSAGING` producer. A separate
+Space-level producer manifest is still outstanding.
 
 Reads and attachment refresh authorize the message domain first, then request a
 subject-bound File capability for its exact live reference. Attachment visibility
-waits for `AcquireFileReferences`. Purge deletes messages, reactions, read and
-delivery state, pins, hides, threads and scheduled rows in bounded FK order,
-then asks File to release the saved producer manifest. Completion requires
-File's exact release receipt. Restore reuses the saved manifest and releases
-nothing. Full request/receipt bytes retain 30 days from this participant's
-completion and the compact `PURGED` fence is permanent.
+waits for `AcquireFileReferences`. Each managed-chat purge deletes messages,
+reactions, read and delivery state, pins, hides, threads and scheduled rows in
+bounded FK order, then waits for File reference-release and Search purge
+receipts. Space-level Messaging completion follows only after every manifest
+chat returns both owner receipts. Full request/receipt bytes retain 30 days from
+this participant's completion and the compact `PURGED` fence is permanent.
+
+The child uses the existing T33 `PurgeManagedChatContent` protocol:
+`request_sha256` is SHA-256 of its deterministic protobuf request bytes, matching
+its service-principal request binding. The P3 adapter verifies that digest;
+it does not replace the saved child evidence with the parent's message-name
+domain. The Space participant request/receipt remains domain-separated P3.

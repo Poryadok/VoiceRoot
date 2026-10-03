@@ -14,9 +14,13 @@ import (
 
 // PushDispatcher routes push delivery to FCM, APNs, or VoIP APNs based on device token metadata.
 type PushDispatcher struct {
-	FCM  fcm.Sender
-	APNs apns.Sender
-	VoIP apns.VoIPSender
+	FCM               fcm.Sender
+	APNs              apns.Sender
+	VoIP              apns.VoIPSender
+	LifecycleDelivery interface {
+		WithChatDelivery(context.Context, string, func(context.Context) error) error
+		WithSpaceDelivery(context.Context, string, func(context.Context) error) error
+	}
 }
 
 // Send delivers a push to the appropriate sender for the device token.
@@ -24,6 +28,23 @@ func (d *PushDispatcher) Send(ctx context.Context, profileID uuid.UUID, token st
 	if d == nil {
 		return fmt.Errorf("push dispatcher unavailable")
 	}
+	if d.LifecycleDelivery != nil {
+		dispatch := func(guarded context.Context) error { return d.send(guarded, profileID, token, payload) }
+		spaceDispatch := func(guarded context.Context) error {
+			if id := payload.Data["space_id"]; id != "" {
+				return d.LifecycleDelivery.WithSpaceDelivery(guarded, id, dispatch)
+			}
+			return dispatch(guarded)
+		}
+		if id := payload.Data["chat_id"]; id != "" {
+			return d.LifecycleDelivery.WithChatDelivery(ctx, id, spaceDispatch)
+		}
+		return spaceDispatch(ctx)
+	}
+	return d.send(ctx, profileID, token, payload)
+}
+
+func (d *PushDispatcher) send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload push.Payload) error {
 	fcmPayload := fcm.PushPayload(payload)
 	switch token.PushService {
 	case "apns":

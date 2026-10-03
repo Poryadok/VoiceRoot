@@ -62,6 +62,8 @@ func TestUploadPreKeyBundle_GetPreKeyBundle_Roundtrip(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profPeer, acctPeer := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner, profPeer: acctPeer}
@@ -99,6 +101,8 @@ func TestUploadPreKeyBundle_RejectsInvalidBundle(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner}
 
@@ -125,6 +129,8 @@ func TestUploadPreKeyBundle_RejectsOversizedBundle(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner}
 
@@ -152,6 +158,8 @@ func TestUploadPreKeyBundle_AcceptsLibsignalGoldenBundle(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner}
 
@@ -186,6 +194,8 @@ func TestUploadPreKeyBundle_RejectsInvalidSignedPreKeySignature(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner}
 
@@ -236,6 +246,8 @@ func TestGetPreKeyBundle_ConsumesOTPKFromPool(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profPeer, acctPeer := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner, profPeer: acctPeer}
@@ -283,6 +295,8 @@ func TestGetPreKeyBundle_ConsumesOTPK(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profOwner, acctOwner := uuid.New(), uuid.New()
 	profPeer, acctPeer := uuid.New(), uuid.New()
 	profiles := profileAcctMap{profOwner: acctOwner, profPeer: acctPeer}
@@ -327,6 +341,8 @@ func TestSendMessage_E2E_WhenChatEnabled_StoresOpaqueContent(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -369,6 +385,8 @@ func TestSendMessage_E2E_WhenChatNotEnabled_Fails(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -401,6 +419,8 @@ func TestSendMessage_E2E_OnGroup_Fails(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -434,6 +454,8 @@ func TestSendMessage_PlaintextRejected_WhenE2EEnabled(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -467,6 +489,8 @@ func TestSendMessage_E2E_RequiredFlagWhenEnabled(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -499,6 +523,8 @@ func TestEditMessage_AllowsE2ECiphertextUpdate(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()
@@ -545,6 +571,8 @@ func TestEditMessage_Rejected_WhenChatE2EEnabled(t *testing.T) {
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	profA, acctA := uuid.New(), uuid.New()
 	profB := uuid.New()
 	chatID := uuid.New()

@@ -19,6 +19,17 @@ type lifecycleRestoreOutcomeStore interface {
 	ReplayLifecycleRestoreOutcome(context.Context, uuid.UUID, uuid.UUID, int64, *spacev1.RestoreSpaceRequest) (*spacev1.RestoreSpaceResponse, error)
 }
 
+type lifecycleCoordinatorStatusStore interface {
+	GetLifecycleCoordinatorStatus(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) (*spacev1.SpaceDeletionCoordinatorStatus, error)
+}
+
+func requireLifecycleCoordinatorStatusStore(t *testing.T, st *SpaceStore) lifecycleCoordinatorStatusStore {
+	t.Helper()
+	api, ok := any(st).(lifecycleCoordinatorStatusStore)
+	require.True(t, ok, "SpaceStore must expose the owner-scoped lifecycle coordinator receipt projection")
+	return api
+}
+
 func requireLifecycleRestoreOutcome(t *testing.T, st *SpaceStore) lifecycleRestoreOutcomeStore {
 	t.Helper()
 	api, ok := any(st).(lifecycleRestoreOutcomeStore)
@@ -28,6 +39,42 @@ func requireLifecycleRestoreOutcome(t *testing.T, st *SpaceStore) lifecycleResto
 
 func TestLifecycleRestoreOutcome_TypedSurfaceRequired(t *testing.T) {
 	requireLifecycleRestoreOutcome(t, &SpaceStore{})
+}
+
+func TestLifecycleCoordinatorStatus_IsOwnerScopedAndProjectsDurableFenceReceipts(t *testing.T) {
+	f := newLifecycleRestoreFixture(t)
+	f.admit(t, 3)
+	api := requireLifecycleCoordinatorStatusStore(t, f.st)
+
+	status, err := api.GetLifecycleCoordinatorStatus(context.Background(), f.account, f.actor, f.space,
+		uuid.MustParse(f.request.OperationId))
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), status.GetProtocolVersion())
+	require.Equal(t, f.space.String(), status.GetSpaceId())
+	require.Equal(t, f.request.OperationId, status.GetDeletionOperationId())
+	require.Equal(t, uint64(2), status.GetGeneration())
+	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_RESTORE_DECIDED, status.GetPhase())
+	require.True(t, proto.Equal(lifecycleManifestFixture(), status.GetManifest()))
+	require.Len(t, status.GetParticipants(), len(lifecycleTestParticipants))
+	for i, participant := range status.GetParticipants() {
+		require.Equal(t, lifecycleTestParticipants[i], participant.GetParticipantId())
+		if i < 3 {
+			require.Equal(t, spacev1.ParticipantOperationState_PARTICIPANT_OPERATION_STATE_COMPLETE, participant.GetState())
+			require.Len(t, participant.GetRequestSha256(), 32)
+			require.Len(t, participant.GetReceiptSha256(), 32)
+			require.NotNil(t, participant.GetUpdatedAt())
+		} else {
+			require.Equal(t, spacev1.ParticipantOperationState_PARTICIPANT_OPERATION_STATE_NOT_STARTED, participant.GetState())
+			require.Empty(t, participant.GetRequestSha256())
+			require.Empty(t, participant.GetReceiptSha256())
+			require.Nil(t, participant.GetUpdatedAt())
+		}
+	}
+	_, err = api.GetLifecycleCoordinatorStatus(context.Background(), f.account, uuid.New(), f.space,
+		uuid.MustParse(f.request.OperationId))
+	require.Error(t, err, "status is hidden from non-owners")
+	_, err = api.GetLifecycleCoordinatorStatus(context.Background(), f.account, f.actor, f.space, uuid.New())
+	require.Error(t, err, "status must bind the original deletion operation")
 }
 
 type lifecycleRestoreFixture struct {

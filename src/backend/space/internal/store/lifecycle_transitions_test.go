@@ -35,6 +35,32 @@ func TestLifecycleTransitions_TypedSurfaceRequired(t *testing.T) {
 	requireLifecycleTransitions(t, &SpaceStore{})
 }
 
+func TestLifecycleTransitions_BeginFreezeRequiresSavedAuthReceiptAndIsImmutable(t *testing.T) {
+	st := lifecycleStoreFixture(t)
+	store, _, _, actorID, spaceID, request, proofBytes, proofHash := reserveLifecycleOperationFixture(t, st)
+	ctx := context.Background()
+	manifest := lifecycleManifestFixture()
+	_, err := st.BeginLifecycleFreeze(ctx, spaceID, manifest)
+	require.Error(t, err, "Space must not start owner-wide freezes before Auth's proof receipt is durable")
+	before, err := store.LoadLifecycle(ctx, spaceID)
+	require.NoError(t, err)
+	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_SCHEDULE_PENDING, before.Phase())
+
+	_, err = store.RecordLifecycleDeletionProofReceipt(ctx, actorID, uuid.MustParse(request.OperationId), proofBytes, proofHash)
+	require.NoError(t, err)
+	frozen, err := st.BeginLifecycleFreeze(ctx, spaceID, manifest)
+	require.NoError(t, err)
+	require.Equal(t, spacev1.SpaceDeletionPhase_SPACE_DELETION_PHASE_FREEZE_PENDING, frozen.Phase())
+	require.Equal(t, manifest, frozen.Snapshot().Manifest)
+	replay, err := st.BeginLifecycleFreeze(ctx, spaceID, proto.Clone(manifest).(*commonv1.ManifestBinding))
+	require.NoError(t, err)
+	require.Equal(t, frozen.Snapshot(), replay.Snapshot(), "exact persisted manifest retry must resume the same generation")
+	changed := proto.Clone(manifest).(*commonv1.ManifestBinding)
+	changed.ItemCount++
+	_, err = st.BeginLifecycleFreeze(ctx, spaceID, changed)
+	require.Error(t, err, "same lifecycle generation cannot replace its manifest")
+}
+
 func TestLifecycleTransitions_ConcurrentFenceReceiptsSurviveRestartAndAdvancedReplay(t *testing.T) {
 	st := lifecycleStoreFixture(t)
 	transitions := requireLifecycleTransitions(t, st)

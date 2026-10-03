@@ -22,6 +22,7 @@ func TestAuthBoundary(t *testing.T) {
 				ProfileID:        "profile-1",
 				Roles:            []string{"member"},
 				SubscriptionTier: "free",
+				SessionEpoch:     7,
 			},
 			"staff-token": {
 				UserID:           "staff-account",
@@ -87,6 +88,7 @@ func TestAuthBoundary(t *testing.T) {
 	for header, want := range map[string]string{
 		"X-Voice-User-Id":           "account-1",
 		"X-Voice-Profile-Id":        "profile-1",
+		"X-Voice-Session-Epoch":     "7",
 		"X-Voice-Roles":             "member",
 		"X-Voice-Subscription-Tier": "free",
 	} {

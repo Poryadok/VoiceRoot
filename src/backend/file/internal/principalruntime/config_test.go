@@ -9,7 +9,7 @@ import (
 
 func clearPrincipalEnv(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"FILE_PRINCIPAL_GRPC_LISTEN", "FILE_PRINCIPAL_TLS_CERT_FILE", "FILE_PRINCIPAL_TLS_KEY_FILE", "FILE_PRINCIPAL_REPLAY_REDIS_ADDR", "FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE"} {
+	for _, name := range []string{"FILE_PRINCIPAL_GRPC_LISTEN", "FILE_PRINCIPAL_TLS_CERT_FILE", "FILE_PRINCIPAL_TLS_KEY_FILE", "FILE_PRINCIPAL_CLIENT_CA_FILE", "FILE_PRINCIPAL_REPLAY_REDIS_ADDR", "FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE"} {
 		value, set := os.LookupEnv(name)
 		require.NoError(t, os.Unsetenv(name))
 		t.Cleanup(func() {
@@ -25,8 +25,11 @@ func setValidPrincipalEnv(t *testing.T) {
 	t.Setenv("FILE_PRINCIPAL_GRPC_LISTEN", ":9091")
 	t.Setenv("FILE_PRINCIPAL_TLS_CERT_FILE", "cert.pem")
 	t.Setenv("FILE_PRINCIPAL_TLS_KEY_FILE", "key.pem")
+	t.Setenv("FILE_PRINCIPAL_CLIENT_CA_FILE", "client-ca.pem")
 	t.Setenv("FILE_PRINCIPAL_REPLAY_REDIS_ADDR", "redis:6379")
-	t.Setenv("S2S_JWKS_URLS_JSON", `{"story":"https://story.internal/.well-known/jwks.json"}`)
+	t.Setenv("S2S_JWKS_CLIENT_CERT_FILE", "client.pem")
+	t.Setenv("S2S_JWKS_CLIENT_KEY_FILE", "client-key.pem")
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"story":"https://story.internal/.well-known/jwks.json","messaging":"https://messaging.internal/.well-known/jwks.json"}`)
 }
 func TestLoadFromEnvDisabledOnlyWhenEverySettingIsAbsent(t *testing.T) {
 	clearPrincipalEnv(t)
@@ -35,7 +38,7 @@ func TestLoadFromEnvDisabledOnlyWhenEverySettingIsAbsent(t *testing.T) {
 	require.False(t, enabled)
 }
 func TestLoadFromEnvRequiresCompleteTLSReplayAndStoryTrust(t *testing.T) {
-	for _, missing := range []string{"FILE_PRINCIPAL_GRPC_LISTEN", "FILE_PRINCIPAL_TLS_CERT_FILE", "FILE_PRINCIPAL_TLS_KEY_FILE", "FILE_PRINCIPAL_REPLAY_REDIS_ADDR", "S2S_JWKS_URLS_JSON"} {
+	for _, missing := range []string{"FILE_PRINCIPAL_GRPC_LISTEN", "FILE_PRINCIPAL_TLS_CERT_FILE", "FILE_PRINCIPAL_TLS_KEY_FILE", "FILE_PRINCIPAL_CLIENT_CA_FILE", "FILE_PRINCIPAL_REPLAY_REDIS_ADDR", "S2S_JWKS_URLS_JSON"} {
 		t.Run(missing, func(t *testing.T) {
 			clearPrincipalEnv(t)
 			setValidPrincipalEnv(t)
@@ -62,7 +65,7 @@ func TestLoadFromEnvUsesCanonicalCacheDefaultsAndRejectsInvalidValues(t *testing
 	}
 }
 func TestConfigRequiresStoryHTTPSAndValidatesEveryConfiguredIssuer(t *testing.T) {
-	cfg := Config{JWKSURLs: map[string]string{"story": "https://story.internal/.well-known/jwks.json"}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: "redis:6379", TLSCertFile: "cert.pem", TLSKeyFile: "key.pem", ListenAddr: ":9091"}
+	cfg := Config{JWKSURLs: map[string]string{"story": "https://story.internal/.well-known/jwks.json", "messaging": "https://messaging.internal/.well-known/jwks.json"}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: "redis:6379", JWKSClientCertFile: "client.pem", JWKSClientKeyFile: "client-key.pem", ClientCAFile: "client-ca.pem", TLSCertFile: "cert.pem", TLSKeyFile: "key.pem", ListenAddr: ":9091"}
 	require.NoError(t, cfg.validate())
 	cfg.JWKSURLs["gateway"] = "https://gateway.internal/jwks"
 	require.NoError(t, cfg.validate(), "additional trusted caller can be verified then denied by method policy")
@@ -72,4 +75,7 @@ func TestConfigRequiresStoryHTTPSAndValidatesEveryConfiguredIssuer(t *testing.T)
 	}
 	delete(cfg.JWKSURLs, "story")
 	require.Error(t, cfg.validate(), "Story trust is required")
+	cfg.JWKSURLs["story"] = "https://story.internal/.well-known/jwks.json"
+	delete(cfg.JWKSURLs, "messaging")
+	require.Error(t, cfg.validate(), "Messaging trust is required")
 }

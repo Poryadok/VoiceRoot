@@ -20,6 +20,6 @@ RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/service /service
-EXPOSE 8080
+EXPOSE 8080 9443
 ENV LISTEN_ADDR=:8080
 ENTRYPOINT ["/service"]

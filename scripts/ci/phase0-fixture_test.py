@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline Phase0 fixture contracts. Never starts containers or contacts Docker."""
 
+import base64
 import hashlib
 import json
 import os
@@ -72,13 +73,30 @@ class FixtureTests(unittest.TestCase):
                 self.assertIsNotNone(bits)
                 self.assertGreaterEqual(int(bits.group(1)), 2048)
                 public_keys.add(public)
-        self.assertEqual(len(public_keys), 4, "issuers and rotation keys must be independent")
+        for issuer in ("gameintegration", "voice", "bot"):
+            for kid in ("current", "next"):
+                path = self.dest / issuer / f"{kid}.pem"
+                self.assertTrue(path.read_text().startswith("-----BEGIN PRIVATE KEY-----"),
+                                "T31 service signer must contain unencrypted PKCS8")
+                public = self.openssl("pkey", "-in", path, "-pubout")
+                description = self.openssl("rsa", "-pubin", "-text", "-noout", input=public)
+                bits = re.search(r"Public-Key:\s*\((\d+) bit\)", description)
+                self.assertIsNotNone(bits)
+                self.assertGreaterEqual(int(bits.group(1)), 2048)
+                public_keys.add(public)
+        self.assertEqual(len(public_keys), 10, "issuer and service signing keys must be independent")
 
     def test_ca_signed_leaf_keys_hostname_and_short_lifetime(self):
         ca = self.dest / "ca/ca.crt"
-        self.assertEqual({p.name for p in ca.parent.iterdir()}, {"ca.crt"},
+        self.assertEqual({p.name for p in ca.parent.iterdir()},
+                         {"ca.crt", "gameintegration-client-ca.crt", "space-lifecycle-client-ca.crt"},
                          "CA signing key must not survive issuance")
-        for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY)):
+        for leaf, hostname in (("role", "role"), ("auth", "auth"), ("proxy", PROXY),
+                               ("gameintegration-jwks", "gameintegration"),
+                                ("voice-jwks", "voice"), ("chat-gis-grpc", "chat"),
+                                ("voice-game-grpc", "voice"), ("space-lifecycle", "space"),
+                                ("bot-game-event", "bot"), ("notification-lifecycle", "notification"),
+                                ("messaging-gameintegration-grpc", "messaging")):
             with self.subTest(leaf=leaf):
                 cert = self.dest / "tls" / f"{leaf}.crt"
                 key = self.dest / "tls" / f"{leaf}.key"
@@ -97,6 +115,55 @@ class FixtureTests(unittest.TestCase):
                 lifetime = ssl.cert_time_to_seconds(values["notAfter"]) - ssl.cert_time_to_seconds(values["notBefore"])
                 self.assertGreater(lifetime, 0)
                 self.assertLessEqual(lifetime, 2 * 86400 + 60)
+
+    def test_service_client_leaves_are_ca_signed_and_client_auth_only(self):
+        for service in ("space", "gameintegration", "voice"):
+            with self.subTest(service=service):
+                cert = self.dest / f"tls/{service}-client.crt"
+                self.openssl("verify", "-CAfile", self.dest / "ca/ca.crt", "-purpose", "sslclient", cert)
+                eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
+                self.assertIn("TLS Web Client Authentication", eku)
+                self.assertNotIn("TLS Web Server Authentication", eku)
+                subject = self.openssl("x509", "-in", cert, "-noout", "-subject")
+                # OpenSSL 3.4 formats this as ``subject=CN = service`` while
+                # older releases commonly emit ``subject=CN=service``.
+                normalized_subject = re.sub(r"\s+", "", subject).removeprefix("subject=")
+                self.assertRegex(
+                    normalized_subject,
+                    rf"(?:^|[,/])CN={re.escape(service)}(?:$|[,/])",
+                )
+
+    def test_gis_client_leaves_use_dedicated_ca_for_chat_and_voice(self):
+        ca = self.dest / "ca/gameintegration-client-ca.crt"
+        for leaf in ("gameintegration-chat-client", "gameintegration-voice-client", "gameintegration-messaging-client"):
+            with self.subTest(leaf=leaf):
+                cert = self.dest / f"tls/{leaf}.crt"
+                self.openssl("verify", "-CAfile", ca, "-purpose", "sslclient", cert)
+                eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
+                self.assertIn("TLS Web Client Authentication", eku)
+                self.assertNotIn("TLS Web Server Authentication", eku)
+                self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca/ca.crt",
+                                        "-purpose", "sslclient", cert).returncode, 0)
+
+    def test_space_lifecycle_client_uses_only_its_dedicated_ca(self):
+        cert = self.dest / "tls/space-lifecycle-client.crt"
+        self.openssl("verify", "-CAfile", self.dest / "ca/space-lifecycle-client-ca.crt",
+                     "-purpose", "sslclient", cert)
+        for foreign_ca in ("ca.crt", "gameintegration-client-ca.crt"):
+            self.assertNotEqual(run("openssl", "verify", "-CAfile", self.dest / "ca" / foreign_ca,
+                                    "-purpose", "sslclient", cert).returncode, 0)
+        subject = self.openssl("x509", "-in", cert, "-noout", "-subject")
+        self.assertEqual(re.sub(r"\s+", "", subject).removeprefix("subject="), "CN=space")
+        eku = self.openssl("x509", "-in", cert, "-noout", "-ext", "extendedKeyUsage")
+        self.assertIn("TLS Web Client Authentication", eku)
+        self.assertNotIn("TLS Web Server Authentication", eku)
+
+    def test_certificate_serials_are_distinct_within_each_issuer(self):
+        issued = set()
+        for cert in (self.dest / "tls").glob("*.crt"):
+            identity = self.openssl("x509", "-in", cert, "-noout", "-issuer", "-serial")
+            self.assertNotIn(identity, issued, "one CA must not issue duplicate serials")
+            issued.add(identity)
 
     def test_jvm_truststore_contains_fixture_ca_and_no_private_entry(self):
         listing = require_success(run("keytool", "-list", "-rfc", "-keystore",
@@ -230,6 +297,9 @@ class ComposeTests(unittest.TestCase):
         cls.fixture = Path(cls.temp.name) / "fixture"
         cls.empty_env = Path(cls.temp.name) / "empty.env"
         cls.empty_env.write_text("")
+        for binary in ("openssl", "keytool"):
+            require_binary(binary)
+        require_success(run(sys.executable, GENERATOR, cls.fixture))
         # Whitelist execution prerequisites, never inherit developer Compose secrets.
         cls.env = {k: v for k, v in os.environ.items()
                    if k.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE",
@@ -265,10 +335,42 @@ class ComposeTests(unittest.TestCase):
                 return source
         self.fail(f"{service} config path has no fixture mount: {target}")
 
+    def test_matchmaking_trusts_replaced_space_jwks_certificate(self):
+        environment = self.merged["matchmaking"]["environment"]
+        self.assertEqual(json.loads(environment["S2S_JWKS_URLS_JSON"])["space"],
+                         "https://space:8443/.well-known/jwks.json")
+        self.assertEqual(self.source_at("matchmaking", environment["S2S_JWKS_CA_FILE"]),
+                         "ca/ca.crt")
+        self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
+                      "all generated fixture files are root-owned mode 0600 in Linux CI")
+
+    def test_bounded_startup_diagnostics_only_name_declared_services(self):
+        for path in (ROOT / ".github/workflows/t31-session-events-e2e.yml",
+                     ROOT / "scripts/ci/compose-file-attachment-restart-proof.sh"):
+            text = path.read_text()
+            batches = re.findall(r"logs --no-color --timestamps --tail=100 ([^\n]+)", text)
+            self.assertEqual(len(batches), 1)
+            names = shlex.split(re.split(r">&2|\|\|", batches[0])[0])
+            self.assertIn("matchmaking", names)
+            for name in names:
+                self.assertTrue(name in self.merged, f"undeclared diagnostic service {name} in {path.name}")
+
     def test_fixture_directory_is_required(self):
         env = dict(self.env)
         env.pop("PHASE0_FIXTURE_DIR")
         self.assertNotEqual(run(*self.command(True), env=env).returncode, 0)
+
+    def test_every_fixture_bind_source_is_generated(self):
+        for service in self.merged:
+            for source, volume in self.fixture_mounts(service):
+                with self.subTest(service=service, source=source):
+                    path = self.fixture / source
+                    self.assertTrue(path.exists(), "Compose bind source is absent from generated fixture")
+                    if path.is_dir():
+                        self.assertTrue(any(path.iterdir()), "signer directory is empty")
+                    else:
+                        self.assertGreater(path.stat().st_size, 0)
+                    self.assertTrue(volume.get("read_only"), "fixture credentials must be mounted read-only")
 
     def test_frozen_environment_and_mounted_paths(self):
         for issuer in ("gateway", "space"):
@@ -279,11 +381,72 @@ class ComposeTests(unittest.TestCase):
         space = self.merged["space"]["environment"]
         self.assertEqual(space["ROLE_PRINCIPAL_GRPC_ADDR"], "role:9091")
         self.assertEqual(self.source_at("space", space["ROLE_PRINCIPAL_TLS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("space", space["SPACE_ROLE_CLIENT_CERT_FILE"]), "tls/space-client.crt")
+        self.assertEqual(self.source_at("space", space["SPACE_ROLE_CLIENT_KEY_FILE"]), "tls/space-client.key")
+        gis = self.merged["gameintegration"]["environment"]
+        self.assertEqual(gis["GAME_INTEGRATION_PRINCIPAL_KID"], "current")
+        self.assertEqual(self.source_at("gameintegration", gis["GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE"]), "gameintegration/current.pem")
+        self.assertEqual(gis["GAME_INTEGRATION_PRINCIPAL_NEXT_KID"], "next")
+        self.assertEqual(self.source_at("gameintegration", gis["GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE"]), "gameintegration/next.pem")
+        self.assertEqual(self.source_at("gameintegration", gis["GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE"]), "tls/gameintegration-jwks.crt")
+        self.assertEqual(self.source_at("gameintegration", gis["GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE"]), "tls/gameintegration-jwks.key")
+        self.assertEqual(gis["GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR"], ":8443")
+        self.assertEqual(gis["GIS_ROLE_GRPC_ADDR"], "role:9091")
+        self.assertEqual(self.source_at("gameintegration", gis["GIS_ROLE_TLS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("gameintegration", gis["GIS_ROLE_CLIENT_CERT_FILE"]), "tls/gameintegration-client.crt")
+        self.assertEqual(self.source_at("gameintegration", gis["GIS_ROLE_CLIENT_KEY_FILE"]), "tls/gameintegration-client.key")
+        for prefix, destination, cert, key in (
+                ("GIS_CHAT", "chat:9091", "tls/gameintegration-chat-client.crt", "tls/gameintegration-chat-client.key"),
+                ("GIS_VOICE", "voice:9091", "tls/gameintegration-voice-client.crt", "tls/gameintegration-voice-client.key")):
+            self.assertEqual(gis[prefix + "_GRPC_ADDR"], destination)
+            self.assertEqual(self.source_at("gameintegration", gis[prefix + "_TLS_CA_FILE"]), "ca/ca.crt")
+            self.assertEqual(self.source_at("gameintegration", gis[prefix + "_CLIENT_CERT_FILE"]), cert)
+            self.assertEqual(self.source_at("gameintegration", gis[prefix + "_CLIENT_KEY_FILE"]), key)
+        voice = self.merged["voice"]["environment"]
+        self.assertEqual(voice["VOICE_PRINCIPAL_KID"], "current")
+        self.assertEqual(self.source_at("voice", voice["VOICE_PRINCIPAL_PRIVATE_KEY_FILE"]), "voice/current.pem")
+        self.assertEqual(voice["VOICE_PRINCIPAL_NEXT_KID"], "next")
+        self.assertEqual(self.source_at("voice", voice["VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE"]), "voice/next.pem")
+        self.assertEqual(self.source_at("voice", voice["VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE"]), "tls/voice-jwks.crt")
+        self.assertEqual(self.source_at("voice", voice["VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE"]), "tls/voice-jwks.key")
+        self.assertEqual(voice["VOICE_PRINCIPAL_JWKS_LISTEN_ADDR"], ":8443")
+        self.assertEqual(voice["VOICE_GAME_PRINCIPAL_JWKS_URL"], "https://gameintegration:8443/internal/v1/principal/jwks.json")
+        self.assertEqual(self.source_at("voice", voice["VOICE_GAME_PRINCIPAL_JWKS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(voice["VOICE_GAME_PRINCIPAL_GRPC_LISTEN"], ":9091")
+        self.assertEqual(self.source_at("voice", voice["VOICE_GAME_PRINCIPAL_TLS_CERT_FILE"]), "tls/voice-game-grpc.crt")
+        self.assertEqual(self.source_at("voice", voice["VOICE_GAME_PRINCIPAL_TLS_KEY_FILE"]), "tls/voice-game-grpc.key")
+        self.assertEqual(self.source_at("voice", voice["VOICE_GAME_PRINCIPAL_CLIENT_CA_FILE"]), "ca/gameintegration-client-ca.crt")
+        self.assertEqual(voice["VOICE_GAME_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
+        self.assertEqual(voice["VOICE_ROLE_GRPC_ADDR"], "role:9091")
+        self.assertEqual(self.source_at("voice", voice["VOICE_ROLE_TLS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("voice", voice["VOICE_ROLE_CLIENT_CERT_FILE"]), "tls/voice-client.crt")
+        self.assertEqual(self.source_at("voice", voice["VOICE_ROLE_CLIENT_KEY_FILE"]), "tls/voice-client.key")
         role = self.merged["role"]["environment"]
         self.assertEqual(role["ROLE_PRINCIPAL_GRPC_LISTEN"], ":9091")
         self.assertEqual(role["ROLE_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
-        self.assertEqual(json.loads(role["S2S_JWKS_URLS_JSON"]), {"space": URLS["space"]})
+        self.assertEqual(json.loads(role["S2S_JWKS_URLS_JSON"]), {
+            "space": URLS["space"],
+            "gameintegration": "https://gameintegration:8443/internal/v1/principal/jwks.json",
+            "voice": "https://voice:8443/internal/v1/principal/jwks.json",
+        })
         self.assertEqual(self.source_at("role", role["S2S_JWKS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(self.source_at("role", role["ROLE_PRINCIPAL_CLIENT_CA_FILE"]), "ca/ca.crt")
+        chat = self.merged["chat"]["environment"]
+        self.assertEqual(chat["CHAT_GIS_GRPC_LISTEN"], ":9091")
+        self.assertEqual(self.source_at("chat", chat["CHAT_GIS_TLS_CERT_FILE"]), "tls/chat-gis-grpc.crt")
+        self.assertEqual(self.source_at("chat", chat["CHAT_GIS_TLS_KEY_FILE"]), "tls/chat-gis-grpc.key")
+        self.assertEqual(self.source_at("chat", chat["CHAT_GIS_CLIENT_CA_FILE"]), "ca/gameintegration-client-ca.crt")
+        self.assertEqual(chat["GAME_INTEGRATION_PRINCIPAL_JWKS_URL"], "https://gameintegration:8443/internal/v1/principal/jwks.json")
+        self.assertEqual(self.source_at("chat", chat["GAME_INTEGRATION_PRINCIPAL_JWKS_CA_FILE"]), "ca/ca.crt")
+        self.assertEqual(chat["GAME_INTEGRATION_PRINCIPAL_REPLAY_REDIS_ADDR"], "redis:6379")
+        for key, cert, path in (("GIS_CHAT", "chat:9091", "chat-client"),
+                                ("GIS_VOICE", "voice:9091", "voice-client")):
+            self.assertEqual(gis[key + "_GRPC_ADDR"], cert)
+            self.assertEqual(self.source_at("gameintegration", gis[key + "_TLS_CA_FILE"]), "ca/ca.crt")
+            self.assertEqual(self.source_at("gameintegration", gis[key + "_CLIENT_CERT_FILE"]),
+                             f"tls/gameintegration-{path}.crt")
+            self.assertEqual(self.source_at("gameintegration", gis[key + "_CLIENT_KEY_FILE"]),
+                             f"tls/gameintegration-{path}.key")
         auth = self.merged["auth"]["environment"]
         self.assertEqual(auth["AUTH_PRINCIPAL_GRPC_PORT"], "9091")
         self.assertEqual(json.loads(auth["S2S_JWKS_URLS_JSON"]), URLS)
@@ -299,8 +462,21 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(self.source_at(service, env[prefix + suffix]), f"tls/{service}.{ext}")
 
     def test_base_environments_and_legacy_endpoints_are_preserved(self):
+        fixture_overrides = {
+            ("matchmaking", "S2S_JWKS_CA_FILE"): "ca/ca.crt",
+            ("space", "SPACE_PRINCIPAL_SIGNING_KEYS_DIR"): "space",
+            ("space", "SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE"): "tls/space-lifecycle.crt",
+            ("space", "SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE"): "tls/space-lifecycle.key",
+        }
         for service, base in self.base.items():
             for name, value in base.get("environment", {}).items():
+                if (service, name) in fixture_overrides:
+                    self.assertEqual(self.source_at(service, self.merged[service]["environment"][name]),
+                                     fixture_overrides[service, name])
+                    continue
+                if service == "gameintegration" and name == "GAME_INTEGRATION_CREDENTIAL_KEY_B64":
+                    self.assertEqual(len(base64.b64decode(self.merged[service]["environment"][name])), 32)
+                    continue
                 self.assertEqual(self.merged[service]["environment"].get(name), value,
                                  f"base environment changed: {service}/{name}")
             self.assertEqual(self.merged[service].get("ports", []), base.get("ports", []))
@@ -308,10 +484,28 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(self.merged["space"]["environment"]["ROLE_GRPC_ADDR"], "role:9090")
 
     def test_private_mounts_are_readonly_and_service_isolated(self):
-        allowed = {"gateway": {"gateway"}, "space": {"space", "ca/ca.crt"},
+        allowed = {"gateway": {"gateway"}, "space": {"space", "ca/ca.crt", "tls/space-client.crt", "tls/space-client.key"},
                    "role": {"tls/role.crt", "tls/role.key", "ca/ca.crt"},
+                    "gameintegration": {"gameintegration/current.pem", "gameintegration/next.pem", "tls/gameintegration-jwks.crt", "tls/gameintegration-jwks.key", "tls/gameintegration-client.crt", "tls/gameintegration-client.key", "tls/gameintegration-chat-client.crt", "tls/gameintegration-chat-client.key", "tls/gameintegration-voice-client.crt", "tls/gameintegration-voice-client.key", "ca/ca.crt"},
+                    "voice": {"voice/current.pem", "voice/next.pem", "tls/voice-jwks.crt", "tls/voice-jwks.key", "tls/voice-game-grpc.crt", "tls/voice-game-grpc.key", "tls/voice-client.crt", "tls/voice-client.key", "ca/ca.crt", "ca/gameintegration-client-ca.crt"},
+                    "chat": {"tls/chat-gis-grpc.crt", "tls/chat-gis-grpc.key", "ca/ca.crt", "ca/gameintegration-client-ca.crt"},
                    "auth": {"tls/auth.crt", "tls/auth.key", "truststore.p12", "ca/ca.crt"},
                    PROXY: {"tls/proxy.crt", "tls/proxy.key", "ca/ca.crt"}}
+        allowed["space"].update({"tls/space-lifecycle.crt", "tls/space-lifecycle.key",
+                                 "tls/space-lifecycle-client.crt", "tls/space-lifecycle-client.key"})
+        allowed["gameintegration"].update({"tls/gameintegration-messaging-client.crt",
+                                           "tls/gameintegration-messaging-client.key"})
+        allowed["voice"].add("ca/space-lifecycle-client-ca.crt")
+        allowed["bot"] = {"bot", "tls/bot-game-event.crt", "tls/bot-game-event.key",
+                          "tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                          "ca/ca.crt", "ca/gameintegration-client-ca.crt", "ca/space-lifecycle-client-ca.crt"}
+        allowed["notification"] = {"tls/notification-lifecycle.crt", "tls/notification-lifecycle.key",
+                                   "ca/ca.crt", "ca/space-lifecycle-client-ca.crt"}
+        allowed["matchmaking"] = {"ca/ca.crt"}
+        allowed["messaging"] = {"tls/gameintegration-messaging-client.crt", "tls/gameintegration-messaging-client.key",
+                                "tls/messaging-gameintegration-grpc.crt", "tls/messaging-gameintegration-grpc.key",
+                                "tls/gameintegration-client.crt", "tls/gameintegration-client.key",
+                                "ca/ca.crt", "ca/gameintegration-client-ca.crt"}
         for service in self.merged:
             for source, mount in self.fixture_mounts(service):
                 self.assertIn(source, allowed.get(service, set()), f"fixture exposed to {service}")
@@ -366,7 +560,17 @@ class ComposeTests(unittest.TestCase):
             self.assertIn("$", target, "proxy must resolve issuer DNS lazily")
             for variable, value in re.findall(r"set\s+(\$\w+)\s+([^;]+);", config):
                 target = target.replace(variable, value.strip().strip('\"'))
-            self.assertEqual(target, f"http://{issuer}:8080{upstream}")
+            if issuer == "space":
+                self.assertEqual(target, f"https://space:8443{upstream}")
+                for directive, value in (("proxy_ssl_server_name", "on"),
+                                         ("proxy_ssl_name", "space"),
+                                         ("proxy_ssl_verify", "on")):
+                    self.assertEqual(re.findall(rf"\b{directive}\s+([^;\s]+)\s*;", body), [value])
+                trusted_ca = re.search(r"proxy_ssl_trusted_certificate\s+([^;\s]+)\s*;", body)
+                self.assertIsNotNone(trusted_ca)
+                self.assertEqual(self.source_at(PROXY, trusted_ca.group(1)), "ca/ca.crt")
+            else:
+                self.assertEqual(target, f"http://{issuer}:8080{upstream}")
             method_guard = re.search(
                 r"if\s*\(\s*\$request_method\s*!=\s*[\"']?GET[\"']?\s*\)"
                 r"\s*\{\s*return\s+(?:403|405)\s*;\s*\}", body)

@@ -69,15 +69,15 @@ func (l *slidingWindowLimiter) Allow(_ context.Context, key, group string) (bool
 
 func defaultRateLimitRules() map[string]rateLimitRule {
 	return map[string]rateLimitRule{
-		"AuthLogin":     {Limit: 5, Window: 15 * time.Minute},
-		"AuthRegister":  {Limit: 5, Window: 15 * time.Minute},
-		"AuthOAuth":     {Limit: 30, Window: 15 * time.Minute},
-		"OTP":           {Limit: 3, Window: 10 * time.Minute},
-		"MessagesSend":  {Limit: 5, Window: 5 * time.Second},
-		"FileUpload":    {Limit: 10, Window: time.Hour},
-		"SpaceCreation": {Limit: 5, Window: 24 * time.Hour},
-		"BotAPI":        {Limit: 5000, Window: time.Minute},
-		"BotRoleOps":    {Limit: 100, Window: time.Minute},
+		"AuthLogin":       {Limit: 5, Window: 15 * time.Minute},
+		"AuthRegister":    {Limit: 5, Window: 15 * time.Minute},
+		"AuthOAuth":       {Limit: 30, Window: 15 * time.Minute},
+		"OTP":             {Limit: 3, Window: 10 * time.Minute},
+		"MessagesSend":    {Limit: 5, Window: 5 * time.Second},
+		"FileUpload":      {Limit: 10, Window: time.Hour},
+		"SpaceCreation":   {Limit: 5, Window: 24 * time.Hour},
+		"BotAPI":          {Limit: 5000, Window: time.Minute},
+		"BotRoleOps":      {Limit: 100, Window: time.Minute},
 		"E2EKeyBackupPut": {Limit: 5, Window: time.Minute},
 		"E2EKeyBackupGet": {Limit: 30, Window: time.Minute},
 		"PreKeyUpload":    {Limit: 10, Window: time.Minute},
@@ -138,6 +138,9 @@ func rateLimitRuleFromSpec(spec rateLimitRuleSpec) rateLimitRule {
 }
 
 func rateLimitGroup(method, path string) string {
+	if policy, ok := sdkAuthorizationPolicy(method, path); ok {
+		return policy.rateGroup
+	}
 	switch {
 	case method == http.MethodPost && path == "/api/v1/auth/login":
 		return "AuthLogin"

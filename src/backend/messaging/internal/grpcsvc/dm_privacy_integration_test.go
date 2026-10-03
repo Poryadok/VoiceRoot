@@ -75,6 +75,8 @@ func TestSendMessage_FriendsOnlyPrivacy_StrangerDenied(t *testing.T) {
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000002_client_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000011_last_delivered_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000012_messages_content_type.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000005_thread_settings.up.sql")
 
 	profOwner, acctOwner := uuid.New(), uuid.New()
@@ -111,6 +113,8 @@ func TestSendMessage_FriendsOnlyPrivacy_OwnerAllowed(t *testing.T) {
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000002_client_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000011_last_delivered_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000012_messages_content_type.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000005_thread_settings.up.sql")
 
 	profOwner, acctOwner := uuid.New(), uuid.New()
@@ -147,6 +151,8 @@ func TestSendMessage_DMPrivacyClientUnavailableFailsClosed(t *testing.T) {
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000002_client_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000011_last_delivered_message_id.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000012_messages_content_type.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000005_thread_settings.up.sql")
 
 	profileA, accountA := uuid.New(), uuid.New()

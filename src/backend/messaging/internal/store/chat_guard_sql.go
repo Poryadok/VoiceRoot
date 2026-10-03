@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,6 +52,31 @@ LIMIT 1
 		return ErrNotChatMember
 	}
 	return err
+}
+
+// MessageReadEntitled is the DB-backed development/local fallback for the
+// ChatService RPC. Production callers should use s2s.GRPCChatGuard so Chat
+// remains the policy decision boundary.
+func (g *SQLChatGuard) MessageReadEntitled(ctx context.Context, chatID, profileID uuid.UUID, createdAt time.Time) (bool, error) {
+	if g == nil || g.Pool == nil || chatID == uuid.Nil || profileID == uuid.Nil || createdAt.IsZero() {
+		return false, errors.New("chat guard: invalid message entitlement request")
+	}
+	var managedBy *uuid.UUID
+	if err := g.Pool.QueryRow(ctx, `SELECT managed_by_application_id FROM chats WHERE id=$1`, chatID).Scan(&managedBy); err != nil {
+		return false, err
+	}
+	if managedBy == nil {
+		return true, nil
+	}
+	var allowed bool
+	err := g.Pool.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM managed_chat_member_intervals
+  WHERE chat_id=$1 AND profile_id=$2 AND joined_at <= $3
+    AND (revoked_at IS NULL OR $3 < revoked_at)
+)
+`, chatID, profileID, createdAt.UTC()).Scan(&allowed)
+	return allowed, err
 }
 
 func (g *SQLChatGuard) DMOtherProfileID(ctx context.Context, chatID, profileID uuid.UUID) (uuid.UUID, error) {

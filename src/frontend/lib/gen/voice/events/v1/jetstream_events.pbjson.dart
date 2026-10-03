@@ -939,11 +939,31 @@ const MessageSent$json = {
       '10': 'scheduledAt',
       '17': true
     },
+    {
+      '1': 'game_application_id',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'gameApplicationId',
+      '17': true
+    },
+    {
+      '1': 'game_environment_id',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '9': 4,
+      '10': 'gameEnvironmentId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_thread_parent_id'},
     {'1': '_content_type'},
     {'1': '_scheduled_at'},
+    {'1': '_game_application_id'},
+    {'1': '_game_environment_id'},
   ],
 };
 
@@ -956,8 +976,10 @@ final $typed_data.Uint8List messageSentDescriptor = $convert.base64Decode(
     'Y29udGVudF90eXBlGAcgASgJSAFSC2NvbnRlbnRUeXBliAEBEh8KC3NlbmRfc2lsZW50GAggAS'
     'gIUgpzZW5kU2lsZW50EiMKDXdhc19zY2hlZHVsZWQYCSABKAhSDHdhc1NjaGVkdWxlZBJCCgxz'
     'Y2hlZHVsZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAJSC3NjaGVkdW'
-    'xlZEF0iAEBQhMKEV90aHJlYWRfcGFyZW50X2lkQg8KDV9jb250ZW50X3R5cGVCDwoNX3NjaGVk'
-    'dWxlZF9hdA==');
+    'xlZEF0iAEBEjMKE2dhbWVfYXBwbGljYXRpb25faWQYCyABKAlIA1IRZ2FtZUFwcGxpY2F0aW9u'
+    'SWSIAQESMwoTZ2FtZV9lbnZpcm9ubWVudF9pZBgMIAEoCUgEUhFnYW1lRW52aXJvbm1lbnRJZI'
+    'gBAUITChFfdGhyZWFkX3BhcmVudF9pZEIPCg1fY29udGVudF90eXBlQg8KDV9zY2hlZHVsZWRf'
+    'YXRCFgoUX2dhbWVfYXBwbGljYXRpb25faWRCFgoUX2dhbWVfZW52aXJvbm1lbnRfaWQ=');
 
 @$core.Deprecated('Use mentionAddedDescriptor instead')
 const MentionAdded$json = {
@@ -974,6 +996,28 @@ const MentionAdded$json = {
       '10': 'mentionedProfileIds'
     },
     {'1': 'send_silent', '3': 5, '4': 1, '5': 8, '10': 'sendSilent'},
+    {
+      '1': 'game_application_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'gameApplicationId',
+      '17': true
+    },
+    {
+      '1': 'game_environment_id',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'gameEnvironmentId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_game_application_id'},
+    {'1': '_game_environment_id'},
   ],
 };
 
@@ -982,7 +1026,10 @@ final $typed_data.Uint8List mentionAddedDescriptor = $convert.base64Decode(
     'CgxNZW50aW9uQWRkZWQSHQoKbWVzc2FnZV9pZBgBIAEoCVIJbWVzc2FnZUlkEhcKB2NoYXRfaW'
     'QYAiABKAlSBmNoYXRJZBIqChFzZW5kZXJfcHJvZmlsZV9pZBgDIAEoCVIPc2VuZGVyUHJvZmls'
     'ZUlkEjIKFW1lbnRpb25lZF9wcm9maWxlX2lkcxgEIAMoCVITbWVudGlvbmVkUHJvZmlsZUlkcx'
-    'IfCgtzZW5kX3NpbGVudBgFIAEoCFIKc2VuZFNpbGVudA==');
+    'IfCgtzZW5kX3NpbGVudBgFIAEoCFIKc2VuZFNpbGVudBIzChNnYW1lX2FwcGxpY2F0aW9uX2lk'
+    'GAYgASgJSABSEWdhbWVBcHBsaWNhdGlvbklkiAEBEjMKE2dhbWVfZW52aXJvbm1lbnRfaWQYBy'
+    'ABKAlIAVIRZ2FtZUVudmlyb25tZW50SWSIAQFCFgoUX2dhbWVfYXBwbGljYXRpb25faWRCFgoU'
+    'X2dhbWVfZW52aXJvbm1lbnRfaWQ=');
 
 @$core.Deprecated('Use messageEditedDescriptor instead')
 const MessageEdited$json = {
@@ -1028,6 +1075,28 @@ const ReactionAdded$json = {
       '5': 9,
       '10': 'messageAuthorProfileId'
     },
+    {
+      '1': 'game_application_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '9': 0,
+      '10': 'gameApplicationId',
+      '17': true
+    },
+    {
+      '1': 'game_environment_id',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '9': 1,
+      '10': 'gameEnvironmentId',
+      '17': true
+    },
+  ],
+  '8': [
+    {'1': '_game_application_id'},
+    {'1': '_game_environment_id'},
   ],
 };
 
@@ -1036,7 +1105,10 @@ final $typed_data.Uint8List reactionAddedDescriptor = $convert.base64Decode(
     'Cg1SZWFjdGlvbkFkZGVkEh0KCm1lc3NhZ2VfaWQYASABKAlSCW1lc3NhZ2VJZBIdCgpwcm9maW'
     'xlX2lkGAIgASgJUglwcm9maWxlSWQSFAoFZW1vamkYAyABKAlSBWVtb2ppEhcKB2NoYXRfaWQY'
     'BCABKAlSBmNoYXRJZBI5ChltZXNzYWdlX2F1dGhvcl9wcm9maWxlX2lkGAUgASgJUhZtZXNzYW'
-    'dlQXV0aG9yUHJvZmlsZUlk');
+    'dlQXV0aG9yUHJvZmlsZUlkEjMKE2dhbWVfYXBwbGljYXRpb25faWQYBiABKAlIAFIRZ2FtZUFw'
+    'cGxpY2F0aW9uSWSIAQESMwoTZ2FtZV9lbnZpcm9ubWVudF9pZBgHIAEoCUgBUhFnYW1lRW52aX'
+    'Jvbm1lbnRJZIgBAUIWChRfZ2FtZV9hcHBsaWNhdGlvbl9pZEIWChRfZ2FtZV9lbnZpcm9ubWVu'
+    'dF9pZA==');
 
 @$core.Deprecated('Use reactionRemovedDescriptor instead')
 const ReactionRemoved$json = {

@@ -96,7 +96,7 @@ consumer() {
   echo "bootstrap consumer ready $stream_name/$durable" >&2
 }
 stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
-stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted
+stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored
 stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded
 stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
 stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed

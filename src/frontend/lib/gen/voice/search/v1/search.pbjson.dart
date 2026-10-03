@@ -390,3 +390,56 @@ const PurgeSpaceResponse$json = {
 final $typed_data.Uint8List purgeSpaceResponseDescriptor = $convert.base64Decode(
     'ChJQdXJnZVNwYWNlUmVzcG9uc2USPAoHcmVjZWlwdBgBIAEoCzIiLnZvaWNlLmNvbW1vbi52MS'
     '5TcGFjZVB1cmdlUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use purgeManagedChatMessagesRequestDescriptor instead')
+const PurgeManagedChatMessagesRequest$json = {
+  '1': 'PurgeManagedChatMessagesRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 2, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'message_ids', '3': 3, '4': 3, '5': 9, '10': 'messageIds'},
+  ],
+};
+
+/// Descriptor for `PurgeManagedChatMessagesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeManagedChatMessagesRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9QdXJnZU1hbmFnZWRDaGF0TWVzc2FnZXNSZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCV'
+        'ILb3BlcmF0aW9uSWQSFwoHY2hhdF9pZBgCIAEoCVIGY2hhdElkEh8KC21lc3NhZ2VfaWRzGAMg'
+        'AygJUgptZXNzYWdlSWRz');
+
+@$core.Deprecated('Use purgeManagedChatMessagesResponseDescriptor instead')
+const PurgeManagedChatMessagesResponse$json = {
+  '1': 'PurgeManagedChatMessagesResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'chat_id', '3': 3, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'deleted_count', '3': 4, '4': 1, '5': 4, '10': 'deletedCount'},
+    {
+      '1': 'message_ids_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'messageIdsSha256'
+    },
+    {'1': 'request_sha256', '3': 6, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 7,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `PurgeManagedChatMessagesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List purgeManagedChatMessagesResponseDescriptor = $convert.base64Decode(
+    'CiBQdXJnZU1hbmFnZWRDaGF0TWVzc2FnZXNSZXNwb25zZRIdCgpyZWNlaXB0X2lkGAEgASgJUg'
+    'lyZWNlaXB0SWQSIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIXCgdjaGF0X2lk'
+    'GAMgASgJUgZjaGF0SWQSIwoNZGVsZXRlZF9jb3VudBgEIAEoBFIMZGVsZXRlZENvdW50EiwKEm'
+    '1lc3NhZ2VfaWRzX3NoYTI1NhgFIAEoDFIQbWVzc2FnZUlkc1NoYTI1NhIlCg5yZXF1ZXN0X3No'
+    'YTI1NhgGIAEoDFINcmVxdWVzdFNoYTI1NhI9Cgxjb21wbGV0ZWRfYXQYByABKAsyGi5nb29nbG'
+    'UucHJvdG9idWYuVGltZXN0YW1wUgtjb21wbGV0ZWRBdA==');

@@ -17,6 +17,12 @@ enum VoiceSessionKind {
   VOICE_SESSION_KIND_VOICE_ROOM = 3;
 }
 
+enum GameSessionResourceKind {
+  GAME_SESSION_RESOURCE_KIND_UNSPECIFIED = 0;
+  GAME_SESSION_RESOURCE_KIND_PARTY = 1;
+  GAME_SESSION_RESOURCE_KIND_MATCH = 2;
+  GAME_SESSION_RESOURCE_KIND_FLEET_SESSION = 3;
+}
 enum CallMediaKind {
   CALL_MEDIA_KIND_UNSPECIFIED = 0;
   CALL_MEDIA_KIND_AUDIO = 1;
@@ -46,6 +52,18 @@ enum VoiceRoomLifecycleOutcome {
   VOICE_ROOM_LIFECYCLE_OUTCOME_LEFT = 2;
   VOICE_ROOM_LIFECYCLE_OUTCOME_MOVED = 3;
   VOICE_ROOM_LIFECYCLE_OUTCOME_NO_OP = 4;
+}
+
+// GIS-only room provisioning. Register this service only on the private listener.
+service GameSessionProvisioningService {
+  rpc ProvisionGameSessionRoom(ProvisionGameSessionRoomRequest) returns (ProvisionGameSessionRoomResponse);
+  rpc CloseGameSessionRoom(CloseGameSessionRoomRequest) returns (CloseGameSessionRoomResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  rpc ApplyGameSessionRoster(ApplyGameSessionRosterRequest) returns (ApplyGameSessionRosterResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  rpc FenceSdkConversion(FenceSdkConversionRequest) returns (FenceSdkConversionResponse);
+  // @voice.security=protected;callers=service:gameintegration
+  rpc CompleteSdkConversionActivation(CompleteSdkConversionActivationRequest) returns (CompleteSdkConversionActivationResponse);
 }
 
 // Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
@@ -87,6 +105,158 @@ service VoiceService {
   rpc PurgeSpace(voice.calls.v1.PurgeSpaceRequest) returns (voice.calls.v1.PurgeSpaceResponse);
 }
 
+// Opaque GIS resource identity. Voice never interprets external keys as user or owner IDs.
+message GameSessionResourceRef {
+  GameSessionResourceKind kind = 1;
+  string external_resource_key = 2;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message ProvisionGameSessionRoomRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  // Chat create receipt identity is its original operation_id.
+  string chat_creation_operation_id = 6;
+  // GIS session identity used by Role grants and Voice admission checks.
+  string session_id = 7;
+}
+
+message ProvisionGameSessionRoomResponse {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  string chat_creation_operation_id = 6;
+  string room_id = 7;
+  string livekit_room_name = 8;
+  string voice_creation_receipt_id = 9;
+  bytes request_hash = 10;
+  google.protobuf.Timestamp created_at = 11;
+  string session_id = 12;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message CloseGameSessionRoomRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  // Chat create receipt identity is its original operation_id.
+  string chat_creation_operation_id = 6;
+  // Must equal the immutable GIS session identity stored at provisioning.
+  string session_id = 7;
+}
+
+message CloseGameSessionRoomResponse {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  GameSessionResourceRef resource = 4;
+  string chat_id = 5;
+  string chat_creation_operation_id = 6;
+  string session_id = 7;
+  string room_id = 8;
+  string status = 9;
+  string close_receipt_id = 10;
+  bytes request_hash = 11;
+  google.protobuf.Timestamp closing_at = 12;
+  google.protobuf.Timestamp media_fenced_at = 13;
+  google.protobuf.Timestamp closed_at = 14;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message ApplyGameSessionRosterRequest {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string session_id = 4;
+  string voice_room_id = 5;
+  uint64 roster_revision = 6;
+  // Complete, sorted profile UUID set. Empty is a valid complete roster.
+  repeated string profile_ids = 7;
+  // GIS database commit time plus the fixed lease duration.
+  google.protobuf.Timestamp lease_expires_at = 8;
+}
+
+message ApplyGameSessionRosterResponse {
+  string operation_id = 1;
+  string application_id = 2;
+  string environment_id = 3;
+  string session_id = 4;
+  string voice_room_id = 5;
+  string receipt_id = 6;
+  bytes request_hash = 7;
+  uint64 accepted_revision = 8;
+  google.protobuf.Timestamp lease_expires_at = 9;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message FenceSdkConversionRequest {
+  string operation_id = 1;
+  string binding_id = 2;
+  string source_account_id = 3;
+  string source_actor_id = 4;
+  string source_profile_id = 5;
+  string target_account_id = 6;
+  string target_profile_id = 7;
+  uint64 frozen_authority_epoch = 8;
+  string freeze_receipt_id = 9;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message FenceSdkConversionResponse {
+  string operation_id = 1;
+  string binding_id = 2;
+  string source_account_id = 3;
+  string source_actor_id = 4;
+  string target_account_id = 5;
+  string target_profile_id = 6;
+  uint64 frozen_authority_epoch = 7;
+  string freeze_receipt_id = 8;
+  string receipt_id = 9;
+  bytes request_hash = 10;
+  bool target_session_conflict = 11;
+  string source_room_id = 12;
+  uint64 media_generation = 13;
+  google.protobuf.Timestamp observed_ejection_at = 14;
+  google.protobuf.Timestamp committed_at = 15;
+  string source_profile_id = 16;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message CompleteSdkConversionActivationRequest {
+  string operation_id = 1;
+  string binding_id = 2;
+  uint64 frozen_authority_epoch = 3;
+  string freeze_receipt_id = 4;
+  string voice_receipt_id = 5;
+  string activation_receipt_id = 6;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message CompleteSdkConversionActivationResponse {
+  string operation_id = 1;
+  string binding_id = 2;
+  uint64 frozen_authority_epoch = 3;
+  string voice_receipt_id = 4;
+  string activation_receipt_id = 5;
+  string receipt_id = 6;
+  bytes request_hash = 7;
+  string state = 8;
+  google.protobuf.Timestamp committed_at = 9;
+}
 message StartCallRequest {
   string room_type = 1; // call | group_voice | voice_room; prefer room_type_enum when set
   optional voice.chat.v1.ChatRef linked_chat = 2;

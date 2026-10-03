@@ -12,6 +12,74 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appTitle => 'Voice';
 
   @override
+  String get sdkAuthorizationTitle => 'Подключить игру';
+
+  @override
+  String get sdkAuthorizationLoadError =>
+      'Не удалось загрузить сведения об авторизации.';
+
+  @override
+  String get sdkAuthorizationApplication => 'Приложение';
+
+  @override
+  String get sdkAuthorizationEnvironment => 'Среда';
+
+  @override
+  String get sdkAuthorizationGameAccount => 'Игровой аккаунт';
+
+  @override
+  String get sdkAuthorizationPermissions => 'Запрошенные разрешения';
+
+  @override
+  String get sdkAuthorizationSelectProfile =>
+      'Выберите профиль Voice для подключения';
+
+  @override
+  String get sdkAuthorizationProfilesError => 'Не удалось загрузить профили.';
+
+  @override
+  String get sdkAuthorizationNoProfiles => 'Нет доступных профилей Voice.';
+
+  @override
+  String get sdkAuthorizationApprove => 'Разрешить';
+
+  @override
+  String get sdkAuthorizationCancel => 'Отмена';
+
+  @override
+  String get sdkAuthorizationRegularRequired =>
+      'Для подтверждения нужна обычная учётная запись Voice.';
+
+  @override
+  String get sdkAuthorizationCallbackTitle => 'Подключение игры';
+
+  @override
+  String get sdkAuthorizationCallbackInvalid =>
+      'Ссылка авторизации недействительна или истекла. Начните подключение в игре заново.';
+
+  @override
+  String get sdkAuthorizationResumeTemporaryError =>
+      'Voice временно недоступен. Можно повторить восстановление защищённой сессии.';
+
+  @override
+  String get sdkAuthorizationRetryResume => 'Повторить восстановление сессии';
+
+  @override
+  String sdkAuthorizationConnected(String application) {
+    return 'Подключено: $application';
+  }
+
+  @override
+  String sdkAuthorizationProfile(String profile) {
+    return 'Профиль $profile';
+  }
+
+  @override
+  String sdkAuthorizationGrantedPermissions(String permissions) {
+    return 'Разрешения: $permissions';
+  }
+
+  @override
   String get gatewayStatusOk => 'Шлюз: ок';
 
   @override

@@ -94,6 +94,121 @@ final $typed_data.Uint8List clientNotificationCategoryDescriptor = $convert.base
     'NMSUVOVF9OT1RJRklDQVRJT05fQ0FURUdPUllfU1BBQ0UQBhInCiNDTElFTlRfTk9USUZJQ0FU'
     'SU9OX0NBVEVHT1JZX1NZU1RFTRAH');
 
+@$core.Deprecated('Use importSpacePurgeManifestPageRequestDescriptor instead')
+const ImportSpacePurgeManifestPageRequest$json = {
+  '1': 'ImportSpacePurgeManifestPageRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'space_id', '3': 2, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {
+      '1': 'schedule_generation',
+      '3': 4,
+      '4': 1,
+      '5': 4,
+      '10': 'scheduleGeneration'
+    },
+    {
+      '1': 'page',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.SpacePurgeManifestPage',
+      '10': 'page'
+    },
+    {'1': 'seals_manifest', '3': 6, '4': 1, '5': 8, '10': 'sealsManifest'},
+  ],
+};
+
+/// Descriptor for `ImportSpacePurgeManifestPageRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List importSpacePurgeManifestPageRequestDescriptor = $convert.base64Decode(
+    'CiNJbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SGQoIc3BhY2VfaWQYAiABKAlSB3NwYWNlSWQSMgoV'
+    'ZGVsZXRpb25fb3BlcmF0aW9uX2lkGAMgASgJUhNkZWxldGlvbk9wZXJhdGlvbklkEi8KE3NjaG'
+    'VkdWxlX2dlbmVyYXRpb24YBCABKARSEnNjaGVkdWxlR2VuZXJhdGlvbhI5CgRwYWdlGAUgASgL'
+    'MiUudm9pY2UuY2hhdC52MS5TcGFjZVB1cmdlTWFuaWZlc3RQYWdlUgRwYWdlEiUKDnNlYWxzX2'
+    '1hbmlmZXN0GAYgASgIUg1zZWFsc01hbmlmZXN0');
+
+@$core.Deprecated('Use importSpacePurgeManifestPageReceiptDescriptor instead')
+const ImportSpacePurgeManifestPageReceipt$json = {
+  '1': 'ImportSpacePurgeManifestPageReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'space_id', '3': 3, '4': 1, '5': 9, '10': 'spaceId'},
+    {
+      '1': 'deletion_operation_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'deletionOperationId'
+    },
+    {'1': 'generation', '3': 5, '4': 1, '5': 4, '10': 'generation'},
+    {
+      '1': 'manifest',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.common.v1.ManifestBinding',
+      '10': 'manifest'
+    },
+    {'1': 'page_index', '3': 7, '4': 1, '5': 4, '10': 'pageIndex'},
+    {'1': 'accepted_count', '3': 8, '4': 1, '5': 4, '10': 'acceptedCount'},
+    {'1': 'page_sha256', '3': 9, '4': 1, '5': 12, '10': 'pageSha256'},
+    {'1': 'manifest_sealed', '3': 10, '4': 1, '5': 8, '10': 'manifestSealed'},
+    {'1': 'request_sha256', '3': 11, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'completed_at',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `ImportSpacePurgeManifestPageReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List importSpacePurgeManifestPageReceiptDescriptor = $convert.base64Decode(
+    'CiNJbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW'
+    '9uGAEgASgNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElk'
+    'EhkKCHNwYWNlX2lkGAMgASgJUgdzcGFjZUlkEjIKFWRlbGV0aW9uX29wZXJhdGlvbl9pZBgEIA'
+    'EoCVITZGVsZXRpb25PcGVyYXRpb25JZBIeCgpnZW5lcmF0aW9uGAUgASgEUgpnZW5lcmF0aW9u'
+    'EjwKCG1hbmlmZXN0GAYgASgLMiAudm9pY2UuY29tbW9uLnYxLk1hbmlmZXN0QmluZGluZ1IIbW'
+    'FuaWZlc3QSHQoKcGFnZV9pbmRleBgHIAEoBFIJcGFnZUluZGV4EiUKDmFjY2VwdGVkX2NvdW50'
+    'GAggASgEUg1hY2NlcHRlZENvdW50Eh8KC3BhZ2Vfc2hhMjU2GAkgASgMUgpwYWdlU2hhMjU2Ei'
+    'cKD21hbmlmZXN0X3NlYWxlZBgKIAEoCFIObWFuaWZlc3RTZWFsZWQSJQoOcmVxdWVzdF9zaGEy'
+    'NTYYCyABKAxSDXJlcXVlc3RTaGEyNTYSPQoMY29tcGxldGVkX2F0GAwgASgLMhouZ29vZ2xlLn'
+    'Byb3RvYnVmLlRpbWVzdGFtcFILY29tcGxldGVkQXQ=');
+
+@$core.Deprecated('Use importSpacePurgeManifestPageResponseDescriptor instead')
+const ImportSpacePurgeManifestPageResponse$json = {
+  '1': 'ImportSpacePurgeManifestPageResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.notification.v1.ImportSpacePurgeManifestPageReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `ImportSpacePurgeManifestPageResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List importSpacePurgeManifestPageResponseDescriptor =
+    $convert.base64Decode(
+        'CiRJbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVzcG9uc2USVAoHcmVjZWlwdBgBIAEoCz'
+        'I6LnZvaWNlLm5vdGlmaWNhdGlvbi52MS5JbXBvcnRTcGFjZVB1cmdlTWFuaWZlc3RQYWdlUmVj'
+        'ZWlwdFIHcmVjZWlwdA==');
+
 @$core.Deprecated('Use registerDeviceRequestDescriptor instead')
 const RegisterDeviceRequest$json = {
   '1': 'RegisterDeviceRequest',

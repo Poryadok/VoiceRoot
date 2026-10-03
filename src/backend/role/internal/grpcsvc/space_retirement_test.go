@@ -75,6 +75,10 @@ func newR23RetirementFixture(t *testing.T) r23RetirementFixture {
 	require.NoError(t, st.AssignMemberRole(ctx, f.spaceID, uuid.New(), custom.ID, f.ownerID))
 	require.NoError(t, st.SetChatOverride(ctx, uuid.New(), custom.ID, 1, 2))
 	require.NoError(t, st.SetVoiceRoomOverride(ctx, uuid.New(), memberID, 4, 8))
+	// Retirement tests begin after the coordinator's verified purge barrier;
+	// generation transition semantics are exercised by the lifecycle tests.
+	_, err = st.Pool.Exec(ctx, `INSERT INTO role_space_deletion_fences(space_id,deletion_operation_id,generation,state,manifest_id,manifest_sha256,manifest_item_count) VALUES($1,$2,7,'PURGE_DECIDED',$3,$4,23)`, f.spaceID, f.deletionOperationID, f.manifestID, f.manifestSHA)
+	require.NoError(t, err)
 	return f
 }
 

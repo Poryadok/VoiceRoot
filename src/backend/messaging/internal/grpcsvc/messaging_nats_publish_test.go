@@ -24,13 +24,14 @@ import (
 const contractMessageSentSubject = "message.sent"
 
 type spyMessageEvents struct {
-	mu        sync.Mutex
-	sent      [][4]string // message_id, chat_id, sender_profile_id, has_mentions
-	mentions  [][5]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv, send_silent
-	edited    [][2]string
-	deleted   [][2]string
-	read      [][3]string // message_id, chat_id, profile_id
-	forwarded [][4]string // message_id, source_chat_id, target_chat_id, forwarder_profile_id
+	mu         sync.Mutex
+	sent       [][4]string // message_id, chat_id, sender_profile_id, has_mentions
+	mentions   [][5]string // message_id, chat_id, sender_profile_id, mentioned_ids_csv, send_silent
+	edited     [][2]string
+	deleted    [][2]string
+	read       [][3]string // message_id, chat_id, profile_id
+	forwarded  [][4]string // message_id, source_chat_id, target_chat_id, forwarder_profile_id
+	gameScopes [][2]string // app_id, environment_id
 }
 
 func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chatID, senderProfileID string, hasMentions bool, _ string, _ bool, _ string, _ bool) error {
@@ -44,7 +45,15 @@ func (s *spyMessageEvents) PublishMessageSent(_ context.Context, messageID, chat
 	return nil
 }
 
-func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool) error {
+func (s *spyMessageEvents) PublishGameEventMessageSent(_ context.Context, messageID, chatID, senderProfileID, applicationID, environmentID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sent = append(s.sent, [4]string{messageID, chatID, senderProfileID, "false"})
+	s.gameScopes = append(s.gameScopes, [2]string{applicationID, environmentID})
+	return nil
+}
+
+func (s *spyMessageEvents) PublishMentionAdded(_ context.Context, messageID, chatID, senderProfileID string, mentionedProfileIDs []string, sendSilent bool, _, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	flag := "false"
@@ -76,7 +85,7 @@ func (s *spyMessageEvents) PublishMessageRead(_ context.Context, messageID, chat
 	return nil
 }
 
-func (s *spyMessageEvents) PublishReactionAdded(_ context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji string) error {
+func (s *spyMessageEvents) PublishReactionAdded(_ context.Context, messageID, chatID, profileID, messageAuthorProfileID, emoji, _, _ string) error {
 	return nil
 }
 

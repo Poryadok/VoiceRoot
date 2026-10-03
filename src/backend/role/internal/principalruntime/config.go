@@ -12,20 +12,24 @@ import (
 	"time"
 )
 
-// Config configures only the dedicated Space ownership surface.
+// Config configures the dedicated trusted-service listener.
 type Config struct {
-	JWKSURLs                                     map[string]string
-	RefreshAfter, HardExpiry, UnknownKIDCooldown time.Duration
-	ReplayAddr, ReplayPassword, JWKSCAFile       string
-	TLSCertFile, TLSKeyFile, ListenAddr          string
+	JWKSURLs                                          map[string]string
+	RefreshAfter, HardExpiry, UnknownKIDCooldown      time.Duration
+	ReplayAddr, ReplayPassword, JWKSCAFile            string
+	TLSCertFile, TLSKeyFile, ClientCAFile, ListenAddr string
+	AuthoritySourceEnabled                            bool
 }
 
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // LoadFromEnv disables the listener only when all of its configuration is absent.
 func LoadFromEnv() (Config, bool, error) {
-	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN"}
+	names := []string{"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY", "S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE", "ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD", "ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN"}
 	enabled := false
+	if _, present := os.LookupEnv("ROLE_AUTHORITY_SOURCE_ENABLED"); present {
+		enabled = true
+	}
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
 			enabled = true
@@ -34,9 +38,15 @@ func LoadFromEnv() (Config, bool, error) {
 	if !enabled {
 		return Config{}, false, nil
 	}
-	cfg := Config{ReplayAddr: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_KEY_FILE")), ListenAddr: ":9091"}
+	cfg := Config{ReplayAddr: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv("ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_TLS_KEY_FILE")), ClientCAFile: strings.TrimSpace(os.Getenv("ROLE_PRINCIPAL_CLIENT_CA_FILE")), ListenAddr: ":9091"}
 	if value, ok := os.LookupEnv("ROLE_PRINCIPAL_GRPC_LISTEN"); ok {
 		cfg.ListenAddr = strings.TrimSpace(value)
+	}
+	if value, ok := os.LookupEnv("ROLE_AUTHORITY_SOURCE_ENABLED"); ok {
+		if value != "true" && value != "false" {
+			return Config{}, true, errors.New("ROLE_AUTHORITY_SOURCE_ENABLED must be true or false")
+		}
+		cfg.AuthoritySourceEnabled = value == "true"
 	}
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &cfg.JWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
@@ -74,18 +84,22 @@ func (c Config) validate() error {
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid principal cache policy")
 	}
-	if strings.TrimSpace(c.ReplayAddr) == "" || strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" {
-		return errors.New("principal Redis and TLS certificate/key are required")
+	if strings.TrimSpace(c.ReplayAddr) == "" || strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" || strings.TrimSpace(c.ClientCAFile) == "" {
+		return errors.New("principal Redis, server TLS certificate/key, and client CA are required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
 	}
-	if c.JWKSURLs["space"] == "" {
-		return errors.New("trusted Space JWKS endpoint required")
+	allowedIssuers := map[string]struct{}{"space": {}, "gameintegration": {}, "voice": {}}
+	if c.AuthoritySourceEnabled {
+		allowedIssuers["federation"] = struct{}{}
+	}
+	if len(c.JWKSURLs) != len(allowedIssuers) {
+		return errors.New("exact trusted listener JWKS endpoint set required")
 	}
 	for issuer, endpoint := range c.JWKSURLs {
 		parsed, err := url.Parse(endpoint)
-		if !issuerPattern.MatchString(issuer) || err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
+		if _, allowed := allowedIssuers[issuer]; !allowed || !issuerPattern.MatchString(issuer) || err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
 			return errors.New("invalid principal HTTPS JWKS endpoint")
 		}
 	}

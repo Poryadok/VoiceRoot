@@ -58,8 +58,10 @@ type transportFixture struct {
 	redis        *miniredis.Miniredis
 	service      *protectedFileFixture
 	client       filev1.FileServiceClient
+	connection   *grpc.ClientConn
 	active, next *rsa.PrivateKey
 	address      string
+	clientTLS    *tls.Config
 	jwksStatus   atomic.Int32
 }
 
@@ -92,7 +94,7 @@ func newTransportFixture(t *testing.T, cacheShort bool) *transportFixture {
 	require.NoError(t, err)
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	require.NoError(t, err)
-	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "localhost"}, DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "localhost"}, DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &serverKey.PublicKey, serverKey)
 	require.NoError(t, err)
 	certPath, keyPath := filepath.Join(temp, "server.pem"), filepath.Join(temp, "server-key.pem")
@@ -102,7 +104,7 @@ func newTransportFixture(t *testing.T, cacheShort bool) *transportFixture {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encodedKey}), 0o600))
 	f.redis = miniredis.RunT(t)
-	cfg := Config{JWKSURLs: map[string]string{"story": jwks.URL, "gateway": jwks.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: f.redis.Addr(), JWKSCAFile: jwksCA, TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: "127.0.0.1:0"}
+	cfg := Config{JWKSURLs: map[string]string{"story": jwks.URL, "messaging": jwks.URL, "gateway": jwks.URL, "space": jwks.URL, "chat": jwks.URL, "user": jwks.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: f.redis.Addr(), JWKSCAFile: jwksCA, JWKSClientCertFile: certPath, JWKSClientKeyFile: keyPath, ClientCAFile: certPath, TLSCertFile: certPath, TLSKeyFile: keyPath, ListenAddr: "127.0.0.1:0"}
 	if cacheShort {
 		cfg.RefreshAfter = 10 * time.Millisecond
 		cfg.HardExpiry = 40 * time.Millisecond
@@ -120,10 +122,14 @@ func newTransportFixture(t *testing.T, cacheShort bool) *transportFixture {
 	t.Cleanup(server.Stop)
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(certificate))
-	conn, err := grpc.NewClient(f.address, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost"})))
+	clientCertificate, err := tls.LoadX509KeyPair(certPath, keyPath)
+	require.NoError(t, err)
+	f.clientTLS = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "localhost", Certificates: []tls.Certificate{clientCertificate}}
+	conn, err := grpc.NewClient(f.address, grpc.WithTransportCredentials(credentials.NewTLS(f.clientTLS)))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	f.client = filev1.NewFileServiceClient(conn)
+	f.connection = conn
 	return f
 }
 

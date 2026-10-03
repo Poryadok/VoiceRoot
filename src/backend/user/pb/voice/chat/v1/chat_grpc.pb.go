@@ -56,6 +56,7 @@ const (
 	ChatService_EnableChatE2E_FullMethodName                  = "/voice.chat.v1.ChatService/EnableChatE2E"
 	ChatService_DisableChatE2E_FullMethodName                 = "/voice.chat.v1.ChatService/DisableChatE2E"
 	ChatService_ListDMReceiptVisibilityTargets_FullMethodName = "/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets"
+	ChatService_CheckMessageReadEntitlement_FullMethodName    = "/voice.chat.v1.ChatService/CheckMessageReadEntitlement"
 	ChatService_ApplySpaceLifecycleFence_FullMethodName       = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
 	ChatService_PurgeSpace_FullMethodName                     = "/voice.chat.v1.ChatService/PurgeSpace"
 	ChatService_PrepareSpaceDeletionManifest_FullMethodName   = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
@@ -111,6 +112,9 @@ type ChatServiceClient interface {
 	// visibility after a profile disables show_read_receipts. It has no Gateway
 	// route and requires the trusted Messaging service identity.
 	ListDMReceiptVisibilityTargets(ctx context.Context, in *ListDMReceiptVisibilityTargetsRequest, opts ...grpc.CallOption) (*ListDMReceiptVisibilityTargetsResponse, error)
+	// Internal-only: messaging/search/file must recheck managed-chat since-join
+	// history entitlement using the immutable message creation timestamp.
+	CheckMessageReadEntitlement(ctx context.Context, in *CheckMessageReadEntitlementRequest, opts ...grpc.CallOption) (*CheckMessageReadEntitlementResponse, error)
 	// @voice.security=protected;callers=service:space
 	ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
@@ -499,6 +503,16 @@ func (c *chatServiceClient) ListDMReceiptVisibilityTargets(ctx context.Context, 
 	return out, nil
 }
 
+func (c *chatServiceClient) CheckMessageReadEntitlement(ctx context.Context, in *CheckMessageReadEntitlementRequest, opts ...grpc.CallOption) (*CheckMessageReadEntitlementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckMessageReadEntitlementResponse)
+	err := c.cc.Invoke(ctx, ChatService_CheckMessageReadEntitlement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) ApplySpaceLifecycleFence(ctx context.Context, in *ApplySpaceLifecycleFenceRequest, opts ...grpc.CallOption) (*ApplySpaceLifecycleFenceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ApplySpaceLifecycleFenceResponse)
@@ -588,6 +602,9 @@ type ChatServiceServer interface {
 	// visibility after a profile disables show_read_receipts. It has no Gateway
 	// route and requires the trusted Messaging service identity.
 	ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error)
+	// Internal-only: messaging/search/file must recheck managed-chat since-join
+	// history entitlement using the immutable message creation timestamp.
+	CheckMessageReadEntitlement(context.Context, *CheckMessageReadEntitlementRequest) (*CheckMessageReadEntitlementResponse, error)
 	// @voice.security=protected;callers=service:space
 	ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error)
 	// @voice.security=protected;callers=service:space
@@ -716,6 +733,9 @@ func (UnimplementedChatServiceServer) DisableChatE2E(context.Context, *DisableCh
 }
 func (UnimplementedChatServiceServer) ListDMReceiptVisibilityTargets(context.Context, *ListDMReceiptVisibilityTargetsRequest) (*ListDMReceiptVisibilityTargetsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDMReceiptVisibilityTargets not implemented")
+}
+func (UnimplementedChatServiceServer) CheckMessageReadEntitlement(context.Context, *CheckMessageReadEntitlementRequest) (*CheckMessageReadEntitlementResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckMessageReadEntitlement not implemented")
 }
 func (UnimplementedChatServiceServer) ApplySpaceLifecycleFence(context.Context, *ApplySpaceLifecycleFenceRequest) (*ApplySpaceLifecycleFenceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ApplySpaceLifecycleFence not implemented")
@@ -1416,6 +1436,24 @@ func _ChatService_ListDMReceiptVisibilityTargets_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_CheckMessageReadEntitlement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckMessageReadEntitlementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).CheckMessageReadEntitlement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_CheckMessageReadEntitlement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).CheckMessageReadEntitlement(ctx, req.(*CheckMessageReadEntitlementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_ApplySpaceLifecycleFence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ApplySpaceLifecycleFenceRequest)
 	if err := dec(in); err != nil {
@@ -1644,6 +1682,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChatService_ListDMReceiptVisibilityTargets_Handler,
 		},
 		{
+			MethodName: "CheckMessageReadEntitlement",
+			Handler:    _ChatService_CheckMessageReadEntitlement_Handler,
+		},
+		{
 			MethodName: "ApplySpaceLifecycleFence",
 			Handler:    _ChatService_ApplySpaceLifecycleFence_Handler,
 		},
@@ -1658,6 +1700,191 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSpacePurgeManifestPage",
 			Handler:    _ChatService_GetSpacePurgeManifestPage_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/chat/v1/chat.proto",
+}
+
+const (
+	GameIntegrationChatService_ProvisionManagedChat_FullMethodName    = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
+	GameIntegrationChatService_SyncManagedChatMembers_FullMethodName  = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
+	GameIntegrationChatService_SetManagedChatRetention_FullMethodName = "/voice.chat.v1.GameIntegrationChatService/SetManagedChatRetention"
+)
+
+// GameIntegrationChatServiceClient is the client API for GameIntegrationChatService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// GIS-only API. Register on Chat's dedicated TLS/mTLS listener; never expose
+// this service on the player-facing ChatService listener.
+type GameIntegrationChatServiceClient interface {
+	ProvisionManagedChat(ctx context.Context, in *ProvisionManagedChatRequest, opts ...grpc.CallOption) (*ProvisionManagedChatResponse, error)
+	SyncManagedChatMembers(ctx context.Context, in *SyncManagedChatMembersRequest, opts ...grpc.CallOption) (*SyncManagedChatMembersResponse, error)
+	SetManagedChatRetention(ctx context.Context, in *SetManagedChatRetentionRequest, opts ...grpc.CallOption) (*SetManagedChatRetentionResponse, error)
+}
+
+type gameIntegrationChatServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewGameIntegrationChatServiceClient(cc grpc.ClientConnInterface) GameIntegrationChatServiceClient {
+	return &gameIntegrationChatServiceClient{cc}
+}
+
+func (c *gameIntegrationChatServiceClient) ProvisionManagedChat(ctx context.Context, in *ProvisionManagedChatRequest, opts ...grpc.CallOption) (*ProvisionManagedChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvisionManagedChatResponse)
+	err := c.cc.Invoke(ctx, GameIntegrationChatService_ProvisionManagedChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameIntegrationChatServiceClient) SyncManagedChatMembers(ctx context.Context, in *SyncManagedChatMembersRequest, opts ...grpc.CallOption) (*SyncManagedChatMembersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncManagedChatMembersResponse)
+	err := c.cc.Invoke(ctx, GameIntegrationChatService_SyncManagedChatMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gameIntegrationChatServiceClient) SetManagedChatRetention(ctx context.Context, in *SetManagedChatRetentionRequest, opts ...grpc.CallOption) (*SetManagedChatRetentionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetManagedChatRetentionResponse)
+	err := c.cc.Invoke(ctx, GameIntegrationChatService_SetManagedChatRetention_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GameIntegrationChatServiceServer is the server API for GameIntegrationChatService service.
+// All implementations must embed UnimplementedGameIntegrationChatServiceServer
+// for forward compatibility.
+//
+// GIS-only API. Register on Chat's dedicated TLS/mTLS listener; never expose
+// this service on the player-facing ChatService listener.
+type GameIntegrationChatServiceServer interface {
+	ProvisionManagedChat(context.Context, *ProvisionManagedChatRequest) (*ProvisionManagedChatResponse, error)
+	SyncManagedChatMembers(context.Context, *SyncManagedChatMembersRequest) (*SyncManagedChatMembersResponse, error)
+	SetManagedChatRetention(context.Context, *SetManagedChatRetentionRequest) (*SetManagedChatRetentionResponse, error)
+	mustEmbedUnimplementedGameIntegrationChatServiceServer()
+}
+
+// UnimplementedGameIntegrationChatServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedGameIntegrationChatServiceServer struct{}
+
+func (UnimplementedGameIntegrationChatServiceServer) ProvisionManagedChat(context.Context, *ProvisionManagedChatRequest) (*ProvisionManagedChatResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProvisionManagedChat not implemented")
+}
+func (UnimplementedGameIntegrationChatServiceServer) SyncManagedChatMembers(context.Context, *SyncManagedChatMembersRequest) (*SyncManagedChatMembersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncManagedChatMembers not implemented")
+}
+func (UnimplementedGameIntegrationChatServiceServer) SetManagedChatRetention(context.Context, *SetManagedChatRetentionRequest) (*SetManagedChatRetentionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetManagedChatRetention not implemented")
+}
+func (UnimplementedGameIntegrationChatServiceServer) mustEmbedUnimplementedGameIntegrationChatServiceServer() {
+}
+func (UnimplementedGameIntegrationChatServiceServer) testEmbeddedByValue() {}
+
+// UnsafeGameIntegrationChatServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to GameIntegrationChatServiceServer will
+// result in compilation errors.
+type UnsafeGameIntegrationChatServiceServer interface {
+	mustEmbedUnimplementedGameIntegrationChatServiceServer()
+}
+
+func RegisterGameIntegrationChatServiceServer(s grpc.ServiceRegistrar, srv GameIntegrationChatServiceServer) {
+	// If the following call pancis, it indicates UnimplementedGameIntegrationChatServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&GameIntegrationChatService_ServiceDesc, srv)
+}
+
+func _GameIntegrationChatService_ProvisionManagedChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvisionManagedChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameIntegrationChatServiceServer).ProvisionManagedChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameIntegrationChatService_ProvisionManagedChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameIntegrationChatServiceServer).ProvisionManagedChat(ctx, req.(*ProvisionManagedChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameIntegrationChatService_SyncManagedChatMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncManagedChatMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameIntegrationChatServiceServer).SyncManagedChatMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameIntegrationChatService_SyncManagedChatMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameIntegrationChatServiceServer).SyncManagedChatMembers(ctx, req.(*SyncManagedChatMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GameIntegrationChatService_SetManagedChatRetention_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetManagedChatRetentionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GameIntegrationChatServiceServer).SetManagedChatRetention(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GameIntegrationChatService_SetManagedChatRetention_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GameIntegrationChatServiceServer).SetManagedChatRetention(ctx, req.(*SetManagedChatRetentionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// GameIntegrationChatService_ServiceDesc is the grpc.ServiceDesc for GameIntegrationChatService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var GameIntegrationChatService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.chat.v1.GameIntegrationChatService",
+	HandlerType: (*GameIntegrationChatServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProvisionManagedChat",
+			Handler:    _GameIntegrationChatService_ProvisionManagedChat_Handler,
+		},
+		{
+			MethodName: "SyncManagedChatMembers",
+			Handler:    _GameIntegrationChatService_SyncManagedChatMembers_Handler,
+		},
+		{
+			MethodName: "SetManagedChatRetention",
+			Handler:    _GameIntegrationChatService_SetManagedChatRetention_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

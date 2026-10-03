@@ -261,8 +261,9 @@ void main() {
           requested.complete();
           return response.future;
         }
-        if (req.url.path == '/api/v1/auth/logout')
+        if (req.url.path == '/api/v1/auth/logout') {
           return http.Response('', 204);
+        }
         return http.Response('not found', 404);
       });
       final container = buildContainer(mock: mock);
@@ -351,8 +352,9 @@ void main() {
     () async {
       var refreshes = 0;
       final mock = MockClient((req) async {
-        if (req.url.path != '/api/v1/auth/refresh')
+        if (req.url.path != '/api/v1/auth/refresh') {
           return http.Response('not found', 404);
+        }
         refreshes++;
         return http.Response(
           jsonEncode({
@@ -394,7 +396,7 @@ void main() {
     final storage = _DeferredAuthSessionStorage();
     storage.pauseWriteFor('guest-next');
     final mock = MockClient((req) async {
-      if (req.url.path == '/api/v1/auth/refresh')
+      if (req.url.path == '/api/v1/auth/refresh') {
         return http.Response(
           jsonEncode({
             'session': {
@@ -406,6 +408,7 @@ void main() {
           }),
           200,
         );
+      }
       if (req.url.path == '/api/v1/auth/logout') return http.Response('', 204);
       return http.Response('not found', 404);
     });

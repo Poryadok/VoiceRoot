@@ -18,10 +18,14 @@ import (
 func migrationSQL(t *testing.T) string {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
-	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000001_init.up.sql")
-	b, err := os.ReadFile(root)
-	require.NoError(t, err)
-	return string(b)
+	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
+	var sql string
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql"} {
+		b, err := os.ReadFile(filepath.Join(root, name))
+		require.NoError(t, err)
+		sql += string(b) + "\n"
+	}
+	return sql
 }
 
 func startBotStore(t *testing.T) *store.BotStore {
