@@ -10,7 +10,7 @@ the PostgreSQL backup. `VOICE_DATABASE_URL` is the only lifecycle DSN and must t
 `POSTGRES_CONNECT_TIMEOUT` bounds startup connection and ping work (the repository
 default is used when it is absent).
 
-A missing `VOICE_DATABASE_URL` keeps the R22.2 lifecycle path source-disabled:
+A missing `VOICE_DATABASE_URL` keeps the R22.3 lifecycle path source-disabled:
 the process starts without a lifecycle store, and no coordinator, lifecycle
 handler, Redis bridge, publisher, or external-effects worker is registered. A
 configured DSN must parse, connect, and ping successfully or startup fails.
