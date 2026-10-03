@@ -2822,6 +2822,18 @@ abstract class AppLocalizations {
   /// **'You need permission to join this voice room'**
   String get spacePermissionDeniedVoiceJoin;
 
+  /// No description provided for @spacePermissionChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking permissions…'**
+  String get spacePermissionChecking;
+
+  /// No description provided for @spaceModerationUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Message moderation is unavailable.'**
+  String get spaceModerationUnavailable;
+
   /// No description provided for @spacePermissionDeniedSendMessages.
   ///
   /// In en, this message translates to:

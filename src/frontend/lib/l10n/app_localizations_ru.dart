@@ -1561,6 +1561,12 @@ class AppLocalizationsRu extends AppLocalizations {
       'Нет права входить в эту голосовую комнату';
 
   @override
+  String get spacePermissionChecking => 'Проверяем права…';
+
+  @override
+  String get spaceModerationUnavailable => 'Модерация сообщений недоступна.';
+
+  @override
   String get spacePermissionDeniedSendMessages =>
       'Нет права писать в этот канал';
 
