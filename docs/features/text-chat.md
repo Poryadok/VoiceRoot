@@ -293,7 +293,7 @@ Prefer **inline/banner** у composer; toast — secondary ([brand.md](../design/
 | **`send_when_online` on non-DM** | Inline «Только для личных чатов» | Hide option or block submit — §3.6c / §3.6f |
 | **Sticker/GIF send fail** | Inline near picker | Retry; provider search remains open |
 | **Optimistic send fail** | Bubble → failed state (red icon) | Tap → Retry or Delete local failed row |
-| **Rate limit (5/5s)** | Inline «Слишком много сообщений» | Wait + auto-clear |
+| **Rate limit (100/5s)** | Inline «Слишком много сообщений» | Wait + auto-clear |
 | **Char limit 4000** | Counter turns red at limit | Trim before send |
 | **ClamAV / infected file** | Toast or inline «Файл заблокирован» | Pick another file — §3.6f #20 |
 | **Recipient privacy blocks attach** | Toast with privacy reason | — §3.6f #19 |
@@ -313,7 +313,7 @@ Preview labels (`Photo`, `Voice`, `Article`, …), last-seen buckets, message-re
 - **Между инстансами Realtime**: Redis Pub/Sub
 - **Typing indicator**: WebSocket, throttle — событие не чаще раза в 3 сек, гасить через 5 сек без обновления; отображение в header — [screen-controls.md](../design/screen-controls.md) §3.1 #11
 - **Read receipts / просмотры**: механизм **зависит от типа чата** — DM: ✓/✓✓ delivery ticks (list preview + bubble); группы и каналы: **view count** на bubble, не delivery ticks (см. § «Статусы доставки»)
-- **Rate limiting**: 5 сообщений / 5 сек на пользователя (глобально); slow mode для текстовых чатов в спейсе (`group` \| `channel`) — 5 сек – 6 ч, настраивается админом спейса
+- **Rate limiting**: 100 сообщений / 5 сек на пользователя (глобально); slow mode для текстовых чатов в спейсе (`group` \| `channel`) — 5 сек – 6 ч, настраивается админом спейса
 - **Реакции**: стандартные Unicode + кастомные эмодзи спейса
 - **Лимит группы**: 500 участников для обычной группы (не спейса); для больших сообществ — спейс
 
