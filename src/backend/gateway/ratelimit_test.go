@@ -3,11 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+type errorRateLimiter struct{}
+
+func (errorRateLimiter) Allow(context.Context, string, string) (bool, error) {
+	return false, errors.New("rate limit store unavailable")
+}
 
 func TestRateLimitGroups(t *testing.T) {
 	t.Parallel()
@@ -69,8 +76,8 @@ func TestDefaultRateLimitRules_messagesSend(t *testing.T) {
 	if !ok {
 		t.Fatal("missing MessagesSend rule")
 	}
-	if rule.Limit != 5 || rule.Window != 5*time.Second {
-		t.Fatalf("MessagesSend rule = %#v, want limit 5 window 5s", rule)
+	if rule.Limit != 100 || rule.Window != 5*time.Second {
+		t.Fatalf("MessagesSend rule = %#v, want limit 100 window 5s", rule)
 	}
 }
 
@@ -85,23 +92,21 @@ func TestDefaultRateLimitRules_otpProductionLimit(t *testing.T) {
 	}
 }
 
-func TestSlidingWindowLimiter_messagesSend_fivePerFiveSeconds(t *testing.T) {
+func TestSlidingWindowLimiter_messagesSend_100PerFiveSeconds(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700, 0)
-	limiter := newSlidingWindowLimiter(map[string]rateLimitRule{
-		"MessagesSend": {Limit: 5, Window: 5 * time.Second},
-	})
+	limiter := newSlidingWindowLimiter(defaultRateLimitRules())
 	limiter.now = func() time.Time { return now }
 
 	key := "user:account-1"
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 100; i++ {
 		allowed, err := limiter.Allow(context.Background(), key, "MessagesSend")
 		if err != nil || !allowed {
 			t.Fatalf("request %d: allowed=%v err=%v, want allowed", i, allowed, err)
 		}
 	}
 	if allowed, err := limiter.Allow(context.Background(), key, "MessagesSend"); err != nil || allowed {
-		t.Fatalf("sixth request: allowed=%v err=%v, want denied", allowed, err)
+		t.Fatalf("101st request: allowed=%v err=%v, want denied", allowed, err)
 	}
 
 	// Oldest entries fall out of the 5s window.
@@ -188,12 +193,48 @@ func TestGateway_messageSendRateLimit_returns429JSON(t *testing.T) {
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("second status=%d", rec.Code)
 	}
+	if got := rec.Header().Get("Retry-After"); got != "5" {
+		t.Fatalf("Retry-After=%q, want 5 seconds", got)
+	}
 	var body map[string]string
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if body["error"] != "rate_limited" {
 		t.Fatalf("error=%q, want rate_limited", body["error"])
+	}
+}
+
+func TestGateway_messageSendRateLimit_failsClosedOnLimiterError(t *testing.T) {
+	t.Parallel()
+	var upstreamHits int
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"tok": {UserID: "u1", ProfileID: "p1"},
+		},
+		rateLimiter: errorRateLimiter{},
+		restUpstreams: map[string]http.Handler{
+			"messages": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				upstreamHits++
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		},
+	})
+	rec := performRequest(h, http.MethodPost, "/api/v1/messages/send", `{}`, map[string]string{
+		"Authorization": "Bearer tok",
+	})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d, want 503", rec.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error"] != "rate_limit_unavailable" {
+		t.Fatalf("error=%q, want rate_limit_unavailable", body["error"])
+	}
+	if upstreamHits != 0 {
+		t.Fatalf("upstream hits=%d, want 0 while rate limiter is unavailable", upstreamHits)
 	}
 }
 
@@ -257,8 +298,8 @@ func TestRateLimitRulesFromEnv_overrideSingleGroup(t *testing.T) {
 	if rules["AuthRegister"].Limit != 5 || rules["AuthRegister"].Window != 15*time.Minute {
 		t.Fatalf("AuthRegister=%#v, want default 5/15m", rules["AuthRegister"])
 	}
-	if rules["MessagesSend"].Limit != 99 {
-		t.Fatalf("MessagesSend=%#v", rules["MessagesSend"])
+	if rules["MessagesSend"].Limit != 99 || rules["MessagesSend"].Window != time.Second {
+		t.Fatalf("MessagesSend=%#v, want limit 99 window 1s", rules["MessagesSend"])
 	}
 }
 
