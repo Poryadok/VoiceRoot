@@ -843,7 +843,7 @@ and Voice IDs denied while history remains.
 ### Realtime
 
 
-- [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
+- [x] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` returns one generic `error` frame (`unknown_operation`, `unsupported operation`) for unrecognized client ops and keeps the connection open.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
 
 **Промпт-якорь:** Full product audit Batch 14 from docs/todo/backend.md.
