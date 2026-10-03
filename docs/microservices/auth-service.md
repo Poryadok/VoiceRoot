@@ -322,10 +322,32 @@ service AuthService {
   rpc RestoreAccount(RestoreAccountRequest) returns (RestoreAccountResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse); // internal
   rpc GetJWKS(GetJWKSRequest) returns (GetJWKSResponse); // public
+  // See docs/features/multi-profile.md; returns a session with the selected profile claim.
+  rpc SwitchActiveProfile(SwitchActiveProfileRequest) returns (SwitchActiveProfileResponse);
+  // Internal — platform moderation changes account status (reports.md).
+  rpc SetAccountStatus(SetAccountStatusRequest) returns (SetAccountStatusResponse);
+  // Internal — Social SyncPhoneContacts maps phone hashes to primary profile IDs.
+  rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // encryption.md
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
 }
 ```
+
+`SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
+the response contains the replacement `AuthSession`. The active profile claim is
+selected by Auth using the User-owned profile contract described in
+[multi-profile.md](../features/multi-profile.md).
+
+`SetAccountStatus` is the internal platform-moderation RPC. Its request carries
+`account_id`, `status` (`active` or `suspended`), and `reason`; it returns an
+empty response. The moderation contract is described in
+[reports.md](../features/reports.md).
+
+`ResolvePhoneHashes` is an internal Social RPC used by `SyncPhoneContacts`. It
+accepts `phone_hashes` and returns `matches` containing each resolved
+`phone_hash` and primary `profile_id`. This internal mapping RPC does not change
+the post-alpha/G3 phone-book discovery scope in
+[auth-and-contacts.md](../features/auth-and-contacts.md).
 
 ### Ownership-transfer step-up proof
 
@@ -456,6 +478,37 @@ uncommitted/rolled-back consume isolation on separate and ambient transactions.
 and `{ "error": "validation_failed" }` before creating an identity or sending
 an email verification code. Email may be omitted for guest and phone registration.
 
+### OAuth2 authorization code flow
+
+Auth exposes an authorization-code flow for the Developer Portal and the
+separately configured admin client. The REST controller is rooted at
+`/api/v1/auth`:
+
+| Method and path | Contract |
+|-----------------|----------|
+| `GET /oauth2/authorize` | Returns the sign-in form. Requires `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, and `code_challenge_method=S256`; `state` is optional. |
+| `POST /oauth2/authorize` | Accepts form fields for the same authorization request and `email` or `phone`, `password`, and optional `totp_code`; redirects with the authorization `code` and optional `state`. |
+| `POST /oauth2/token` | Accepts `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id`, `code_verifier`, and `client_secret`; returns `access_token`, `token_type`, and `expires_in`. |
+| `GET /.well-known/openid-configuration` | Returns `issuer`, `authorization_endpoint`, `token_endpoint`, and `jwks_uri`. |
+
+Only `response_type=code` and `grant_type=authorization_code` are accepted.
+The configured client must be enabled, the redirect URI must exactly match one
+of that client's configured URIs, and the authorization request and exchange
+use the S256 PKCE challenge. The authorization code is bound to the client,
+redirect URI, challenge, and logged-in account/profile, and expires according
+to that client's `authorization-code-ttl` (default `PT60S`). The token response
+contains an access token; this endpoint does not return a refresh token. A
+configured client secret is checked during exchange; an empty client-secret
+setting skips that check.
+
+Client settings live under `auth.oauth.developer-portal` and `auth.oauth.admin`:
+each has `enabled`, `client-id`, `client-secret`, `redirect-uris`, and
+`authorization-code-ttl`. `auth.oauth.public-api-base-url` supplies the base
+used in the discovery document. The application configuration currently
+defaults the Developer Portal client to enabled and the admin client to
+disabled; both require an enabled client ID and configured redirect URI to
+complete a flow. OAuth errors use an `{ "error": "..." }` response body.
+
 ### ConvertGuest (guest → regular)
 
 REST: `POST /api/v1/auth/convert-guest` (Gateway transcoding). Спека UX: [auth-and-contacts.md](../features/auth-and-contacts.md) § «Регистрация гостевого аккаунта».
@@ -518,6 +571,7 @@ accounts
 ├── totp_secret (encrypted, nullable)
 ├── totp_enabled (bool)
 ├── deleted_at (nullable, soft delete)
+├── last_online_at (nullable; Auth account activity, Flyway V5)
 ├── created_at
 └── updated_at
 
@@ -536,6 +590,13 @@ otp_codes
 ├── code (encrypted)
 ├── type (email_verify | password_reset)
 ├── expires_at
+├── used_at (nullable)
+└── created_at
+
+backup_codes ([privacy.md](../features/privacy.md), Flyway V2)
+├── id (UUID)
+├── account_id (UUID, logical ref → accounts.id)
+├── code_hash (CHAR(64))
 ├── used_at (nullable)
 └── created_at
 
@@ -561,6 +622,7 @@ accounts
 ├── totp_secret BYTEA NULL
 ├── totp_enabled BOOLEAN NOT NULL DEFAULT false
 ├── deleted_at TIMESTAMPTZ NULL
+├── last_online_at TIMESTAMPTZ NULL -- Flyway V5__accounts_last_online_at.sql
 ├── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 └── updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
@@ -582,7 +644,14 @@ otp_codes
 ├── used_at TIMESTAMPTZ NULL
 └── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 
-e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_backups.sql)
+backup_codes ([privacy.md](../features/privacy.md), Flyway V2__backup_codes.sql)
+├── id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+├── account_id UUID NOT NULL -- logical ref → accounts.id
+├── code_hash CHAR(64) NOT NULL
+├── used_at TIMESTAMPTZ NULL
+└── created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+└── e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4 / golang-migrate 000005)
 ├── account_id UUID PRIMARY KEY -- logical ref → accounts.id
 ├── encrypted_blob TEXT NOT NULL
 ├── password_hint TEXT NULL
@@ -595,6 +664,8 @@ e2e_key_backups ([encryption.md](../features/encryption.md), Flyway V4__e2e_key_
 - `INDEX refresh_tokens_account_active_idx (account_id, expires_at DESC) WHERE revoked_at IS NULL`
 - `INDEX refresh_tokens_token_hash_idx (token_hash)`
 - `INDEX otp_codes_account_type_idx (account_id, type, expires_at DESC)`
+- `INDEX backup_codes_account_active_idx (account_id) WHERE used_at IS NULL` (Flyway V2)
+- `INDEX accounts_guest_last_online_idx (last_online_at) WHERE type = 'guest' AND status = 'active'` (Flyway V5)
 
 `email_verified_at` and the verification-gated promotion are shipped for email
 registration and `convert-guest` (PR #180): Auth creates a restricted pending
