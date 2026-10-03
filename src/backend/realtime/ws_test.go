@@ -505,6 +505,72 @@ func TestWSErrorOnInvalidSubscribeChatID(t *testing.T) {
 	}
 }
 
+func TestWSUnknownOperationReturnsGenericErrorAndKeepsConnection(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
+		"tok": {UserID: "account-1", ProfileID: "profile-1"},
+	}, nil))
+	t.Cleanup(srv.Close)
+
+	hdr := wsUpgradeHeaders("tok")
+	hdr.Set("X-Profile-Id", "profile-1")
+	c, _, err := websocket.DefaultDialer.Dial(wsEndpoint(t, srv), hdr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var hello wsEnvelope
+	if _, data, err := c.ReadMessage(); err != nil {
+		t.Fatalf("read hello: %v", err)
+	} else if err := json.Unmarshal(data, &hello); err != nil {
+		t.Fatalf("hello json: %v", err)
+	}
+	if hello.Op != "hello" || hello.S != 1 {
+		t.Fatalf("hello = %+v", hello)
+	}
+
+	const unknownOp = "future_operation_with_sensitive_detail"
+	if err := c.WriteJSON(map[string]any{"op": unknownOp, "d": map[string]any{"token": "must-not-be-echoed"}}); err != nil {
+		t.Fatalf("write unknown operation: %v", err)
+	}
+	var response wsEnvelope
+	if _, data, err := c.ReadMessage(); err != nil {
+		t.Fatalf("read unknown operation response: %v", err)
+	} else if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatalf("unknown operation response json: %v", err)
+	}
+	if response.Op != "error" || response.S != 2 {
+		t.Fatalf("unknown operation response = %+v", response)
+	}
+	var errorBody struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(response.D, &errorBody); err != nil {
+		t.Fatalf("error d: %v", err)
+	}
+	if errorBody.Code != "unknown_operation" || errorBody.Message != "unsupported operation" {
+		t.Fatalf("error body = %+v", errorBody)
+	}
+	if strings.Contains(string(response.D), unknownOp) || strings.Contains(string(response.D), "must-not-be-echoed") {
+		t.Fatalf("error response exposed request details: %s", response.D)
+	}
+
+	if err := c.WriteJSON(map[string]any{"op": "heartbeat"}); err != nil {
+		t.Fatalf("write heartbeat after unknown operation: %v", err)
+	}
+	if _, data, err := c.ReadMessage(); err != nil {
+		t.Fatalf("read heartbeat ack after unknown operation: %v", err)
+	} else if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatalf("heartbeat ack json: %v", err)
+	}
+	if response.Op != "heartbeat_ack" || response.S != 3 {
+		t.Fatalf("heartbeat ack after unknown operation = %+v", response)
+	}
+}
+
 func TestWSUnsubscribeACK(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(testRealtimeHandler(staticTokenValidator{
