@@ -31,14 +31,14 @@
 | Артефакт | Путь | В git | Как обновить локально | Проверка в CI |
 |----------|------|-------|------------------------|---------------|
 | Исходники контрактов | `protos/**/*.proto` | да | правка вручную | job `protobuf`: `buf lint`, `buf format -d`, `buf breaking` (PR vs base) |
-| Go `*.pb.go` / gRPC | `src/backend/*/pb/voice/**` (вложенные `go.mod` у потребителей) | **да** | `make buf-generate` → `gen/go` (gitignored), затем **`make sync-pb-from-gen`** (или `make buf-generate-all`); альтернатива для voice: `buf generate --template buf.gen.local.yaml` | нет drift-check; компиляция `go test` / образов |
-| Go scratch | `gen/go/` | **нет** (`.gitignore`) | `make buf-generate` или `make buf-generate-ci` (Docker) | `buf-generate-ci` — smoke генерации, без diff |
+| Go `*.pb.go` / gRPC | `src/backend/*/pb/voice/**` (вложенные `go.mod` у потребителей) | **да** | `make buf-generate` → `gen/go` (gitignored), затем **`make sync-pb-from-gen`** (или `make buf-generate-all`); альтернатива для voice: `buf generate --template buf.gen.local.yaml` | job `protobuf`: `scripts/ci/buf-go-pb-check.sh` сравнивает отслеживаемые и новые файлы в committed `pb/` trees с генерацией |
+| Go scratch | `gen/go/` | **нет** (`.gitignore`) | `make buf-generate` или `make buf-generate-ci` (Docker) | `buf-generate-ci` — smoke генерации; drift-check выполняет `buf-go-pb-check` |
 | Dart / Flutter | `src/frontend/lib/gen/` | **да** | `make buf-generate-dart` (`buf.gen.dart.yaml`, `protoc-gen-dart`) | job `flutter`: **`make buf-dart-check`** (реген + `git diff --exit-code`) |
 | Java (Auth) | `src/backend/auth/target/generated-sources/` | **нет** | `mvn compile` / `mvn test` из `src/backend/auth` (proto-копия в `src/main/proto/`) | job `build-all` → `auth-test-ci` |
 
 **Сборка Docker-образов Go-сервисов** использует **закоммиченные** `pb/`; `gen/go` в образ не копируется. После изменения `protos/` в PR: обновить затронутые `src/backend/*/pb/` и `src/frontend/lib/gen/`, прогнать `make buf-dart-check` и релевантные `go test`.
 
-Команды Makefile (корень репо): `buf-lint`, `buf-format`, `buf-breaking`, `buf-generate`, `sync-pb-from-gen`, `buf-generate-all`, `buf-generate-dart`, `buf-dart-check`, `buf-ci`, `buf-breaking-ci`, `buf-generate-ci`. Паритет с [`.github/workflows/ci.yml`](../.github/workflows/ci.yml): protobuf job + `buf-dart-check` в `flutter` / `make flutter-ci`.
+Команды Makefile (корень репо): `buf-lint`, `buf-format`, `buf-breaking`, `buf-generate`, `buf-go-pb-check`, `sync-pb-from-gen`, `buf-generate-all`, `buf-generate-dart`, `buf-dart-check`, `buf-ci`, `buf-breaking-ci`, `buf-generate-ci`. Паритет с [`.github/workflows/ci.yml`](../.github/workflows/ci.yml): protobuf job запускает `buf-go-pb-check`; `buf-dart-check` запускается в `flutter` / `make flutter-ci`.
 
 ### Идентификаторы в телах сообщений (`account_id` / `profile_id` / `user_id`)
 
@@ -112,5 +112,4 @@
 - [DEPLOYMENT.md](DEPLOYMENT.md) — выкат, артефакты
 - [MICROSERVICES.md](MICROSERVICES.md) — сервисы и протоколы
 - [TESTING.md](TESTING.md) — CI
-
 
