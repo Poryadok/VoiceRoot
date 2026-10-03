@@ -2828,11 +2828,11 @@ abstract class AppLocalizations {
   /// **'Checking permissions…'**
   String get spacePermissionChecking;
 
-  /// No description provided for @spacePermissionDeniedManageMessages.
+  /// No description provided for @spaceModerationUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'You need permission to delete other messages in this chat.'**
-  String get spacePermissionDeniedManageMessages;
+  /// **'Message moderation is unavailable.'**
+  String get spaceModerationUnavailable;
 
   /// No description provided for @spacePermissionDeniedSendMessages.
   ///

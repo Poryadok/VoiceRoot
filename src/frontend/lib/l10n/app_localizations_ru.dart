@@ -1564,8 +1564,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spacePermissionChecking => 'Проверяем права…';
 
   @override
-  String get spacePermissionDeniedManageMessages =>
-      'Нужно право удалять чужие сообщения в этом чате.';
+  String get spaceModerationUnavailable => 'Модерация сообщений недоступна.';
 
   @override
   String get spacePermissionDeniedSendMessages =>

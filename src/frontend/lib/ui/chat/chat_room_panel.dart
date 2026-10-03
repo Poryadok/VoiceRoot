@@ -1292,29 +1292,24 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         voiceRoomId: null,
                       )),
                     );
-                    final disabledReason = permission.when(
-                      data: (allowed) => allowed
-                          ? null
-                          : spacePermissionDeniedReason(
-                              sheetL10n,
-                              SpacePermissions.textChatManageMessages,
-                            ),
-                      loading: () => sheetL10n.spacePermissionChecking,
-                      error: (_, _) => spacePermissionDeniedReason(
-                        sheetL10n,
-                        SpacePermissions.textChatManageMessages,
-                      ),
-                    );
                     final allowed = permission.valueOrNull == true;
-                    return VoiceDisabledAction(
-                      disabledReason: disabledReason,
-                      child: ListTile(
+                    if (allowed) {
+                      return ListTile(
                         leading: const Icon(Icons.delete_forever_outlined),
                         title: Text(sheetL10n.chatMessageDeleteForEveryone),
-                        enabled: allowed,
-                        onTap: allowed
-                            ? () => Navigator.of(context).pop('delete_everyone')
-                            : null,
+                        onTap: () =>
+                            Navigator.of(context).pop('delete_everyone'),
+                      );
+                    }
+                    final unavailableReason = permission.isLoading
+                        ? sheetL10n.spacePermissionChecking
+                        : sheetL10n.spaceModerationUnavailable;
+                    return VoiceDisabledAction(
+                      disabledReason: unavailableReason,
+                      child: ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: Text(unavailableReason),
+                        enabled: false,
                       ),
                     );
                   },

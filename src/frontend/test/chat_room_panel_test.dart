@@ -34,7 +34,7 @@ import 'support/voice_test_theme.dart';
 
 void main() {
   testWidgets(
-    'space message moderation stays disabled while permission is unresolved and explains denial',
+    'space message moderation has no delete affordance while permission is unresolved or denied',
     (tester) async {
       final moderationPermission = Completer<bool>();
       final query = (
@@ -90,28 +90,107 @@ void main() {
           .state = 'chat-abc-message';
       await tester.pumpAndSettle();
 
-      final deleteForEveryone = find.ancestor(
-        of: find.text('Delete for everyone'),
+      final checkingPermission = find.ancestor(
+        of: find.text('Checking permissions…'),
         matching: find.byType(ListTile),
       );
-      expect(deleteForEveryone, findsOneWidget);
+      expect(checkingPermission, findsOneWidget);
+      expect(find.text('Delete for everyone'), findsNothing);
       expect(
-        tester.widget<ListTile>(deleteForEveryone).onTap,
+        tester.widget<ListTile>(checkingPermission).onTap,
         isNull,
-        reason: 'an unresolved permission check must never expose an action',
+        reason: 'an unresolved permission check must expose no delete action',
       );
       expect(find.byTooltip('Checking permissions…'), findsOneWidget);
 
       moderationPermission.complete(false);
       await tester.pumpAndSettle();
 
-      expect(tester.widget<ListTile>(deleteForEveryone).onTap, isNull);
+      expect(find.text('Delete for everyone'), findsNothing);
+      final unavailableModeration = find.ancestor(
+        of: find.text('Message moderation is unavailable.'),
+        matching: find.byType(ListTile),
+      );
+      expect(unavailableModeration, findsOneWidget);
+      expect(tester.widget<ListTile>(unavailableModeration).onTap, isNull);
       expect(
         find.byTooltip(
-          'You need permission to delete other messages in this chat.',
+          'Message moderation is unavailable.',
         ),
         findsOneWidget,
       );
+    },
+  );
+
+  testWidgets(
+    'Space moderator can delete another member message for everyone',
+    (tester) async {
+      final query = (
+        spaceId: 'space-1',
+        permission: SpacePermissions.textChatManageMessages,
+        chatId: 'chat-abc',
+        voiceRoomId: null,
+      );
+      late _SingleMessageRoomController roomController;
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((_) async => http.Response('{}', 404)),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          chatListControllerProvider.overrideWith(_SpaceChatListController.new),
+          chatRoomControllerProvider('chat-abc').overrideWith((ref) {
+            return roomController = _SingleMessageRoomController(
+              ref,
+              'chat-abc',
+            );
+          }),
+          spacePermissionProvider(query).overrideWith((ref) async => true),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container
+          .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+          .state = 'chat-abc-message';
+      await tester.pumpAndSettle();
+
+      final deleteForEveryone = find.ancestor(
+        of: find.text('Delete for everyone'),
+        matching: find.byType(ListTile),
+      );
+      expect(deleteForEveryone, findsOneWidget);
+      expect(tester.widget<ListTile>(deleteForEveryone).onTap, isNotNull);
+      await tester.ensureVisible(deleteForEveryone);
+      await tester.tap(deleteForEveryone);
+      await tester.pumpAndSettle();
+
+      expect(roomController.deleteMessageCalls, [('chat-abc-message', false)]);
     },
   );
 
@@ -578,6 +657,14 @@ class _SingleMessageRoomController extends ChatRoomController {
       ],
       historyProfileId: 'prof-test',
     );
+  }
+
+  final deleteMessageCalls = <(String, bool)>[];
+
+  @override
+  Future<String?> deleteMessage(String messageId, {required bool forMe}) async {
+    deleteMessageCalls.add((messageId, forMe));
+    return null;
   }
 
   @override

@@ -1556,8 +1556,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spacePermissionChecking => 'Checking permissions…';
 
   @override
-  String get spacePermissionDeniedManageMessages =>
-      'You need permission to delete other messages in this chat.';
+  String get spaceModerationUnavailable => 'Message moderation is unavailable.';
 
   @override
   String get spacePermissionDeniedSendMessages =>
