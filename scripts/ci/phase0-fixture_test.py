@@ -341,6 +341,19 @@ class ComposeTests(unittest.TestCase):
                          "https://space:8443/.well-known/jwks.json")
         self.assertEqual(self.source_at("matchmaking", environment["S2S_JWKS_CA_FILE"]),
                          "ca/ca.crt")
+        self.assertIn(str(self.merged["matchmaking"].get("user")), ("0", "0:0", "root"),
+                      "all generated fixture files are root-owned mode 0600 in Linux CI")
+
+    def test_bounded_startup_diagnostics_only_name_declared_services(self):
+        for path in (ROOT / ".github/workflows/t31-session-events-e2e.yml",
+                     ROOT / "scripts/ci/compose-file-attachment-restart-proof.sh"):
+            text = path.read_text()
+            batches = re.findall(r"logs --no-color --timestamps --tail=100 ([^\n]+)", text)
+            self.assertEqual(len(batches), 1)
+            names = shlex.split(re.split(r">&2|\|\|", batches[0])[0])
+            self.assertIn("matchmaking", names)
+            for name in names:
+                self.assertTrue(name in self.merged, f"undeclared diagnostic service {name} in {path.name}")
 
     def test_fixture_directory_is_required(self):
         env = dict(self.env)
@@ -497,8 +510,7 @@ class ComposeTests(unittest.TestCase):
             for source, mount in self.fixture_mounts(service):
                 self.assertIn(source, allowed.get(service, set()), f"fixture exposed to {service}")
                 self.assertTrue(mount.get("read_only"), f"writable fixture: {service}/{source}")
-            if service in allowed and service != "matchmaking":
-                # Matchmaking receives only a public CA, so needs no root override.
+            if service in allowed:
                 self.assertIn(str(self.merged[service].get("user")), ("0", "0:0", "root"))
         for service in ("role", "auth", PROXY):
             self.assertFalse(self.merged[service].get("ports"), f"private port published: {service}")

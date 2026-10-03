@@ -3099,3 +3099,17 @@ tails, retaining exact original failure status and existing dedicated-log order.
 Graphify AST extraction finishes, but graph build exceeds the 60-second owned
 process bound again; graph freshness remains unverified. Hosted exact-head
 T16/T31 and required ci-gate remain prerequisites to the authorized merge.
+
+Hosted T16 passes at 266e59d, including the actual GIS outage refusal and
+restored-client Messaging acceptance. T31 still exits at Matchmaking. Its new
+diagnostic batch was itself rejected because it named an absent presence service;
+that name is removed and a rendered-service-inventory regression now rejects
+undeclared log owners without dumping Compose configuration. Source inspection
+also establishes that the fixture generator chmods every file, including public
+CA certificates, to 0600. The previous assumption that public-CA-only consumers
+needed no root override was incorrect. Matchmaking now uses the same local/CI
+root override as other fixture readers, with its public CA-only read-only mount
+unchanged. A real disposable Linux proof confirms UID65532 cannot read mode0600
+and root can; its --rm container is removed. Both configuration regressions are
+red before and green after; nineteen Phase0 roots and the original-status/order
+shell suite pass, with only POSIX host permission verification deferred to CI.

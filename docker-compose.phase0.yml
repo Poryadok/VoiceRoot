@@ -30,6 +30,7 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.crt:/run/phase0/space-lifecycle-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.key:/run/phase0/space-lifecycle-client.key:ro
   matchmaking:
+    user: "0:0"
     environment:
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
     volumes:
