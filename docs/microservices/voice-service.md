@@ -270,24 +270,49 @@ exclusive locks and rejects expanded identity or room data; legacy-only rows can
 be rolled back without discarding evidence. Verification and remaining gates:
 [voice-mm-membership-exec-plan.md](../testing/voice-mm-membership-exec-plan.md).
 
-```
-voice:session:{profile_id} → {
-  room_id, room_type (call|voice_room|group_voice),
-  chat_id, voice_room_id, space_id,
-  is_muted, is_deafened, is_video_on,
-  is_screen_sharing, is_commander,
-  hand_raised, has_floor, is_broadcasting, joined_at
-}
+The current `RedisCallStore` layout below is the compatibility store used by
+existing active-call paths. Keys use the configured prefix (default `voice:`).
+The call document is the record read and mutated within this compatibility
+store; the other keys are lookup indexes or move receipts. These keys do not
+represent the `voice_db`-backed lifecycle projection described above. That
+lifecycle path remains source-disabled, and its Redis bridge/projection has not
+been registered.
 
-voice:room:{room_id} → {
-  type, chat_id, voice_room_id, space_id,
-  participant_count, max_participants,
-  created_at, livekit_room_name
-}
+| Key (default prefix) | Redis value | Use |
+|---|---|---|
+| `voice:call:{room_id}` | JSON `Call` document | Stores the call record; its fields are shown below. |
+| `voice:session:{profile_id}` | `room_id` string | Profile-to-call lookup for a ringing or active call. This is a pointer, not a session object. |
+| `voice:active_chat:{chat_id}` | `room_id` string | Active group-voice lookup by Chat ID; managed game-session rooms are excluded. |
+| `voice:active_voice_room:{voice_room_id}` | `room_id` string | Active Space voice-room lookup by voice-room ID. |
+| `voice:voice_move_operation:{actor_profile_id}:{operation_id}` | JSON `{"request": ..., "result": ...}` | Idempotency receipt for a voice-room participant move. |
 
-voice:room:{room_id}:participants → Set[profile_id]
-voice:room:{room_id}:screen_shares → Set[{profile_id, stream_id}]
+The `Call` document shape is:
+
+```text
+{
+  room_id, livekit_room_name, chat_id,
+  managed_game_session?, application_id?, environment_id?, session_id?,
+  voice_room_id?, space_id?, session_kind?,
+  initiator_profile_id, callee_profile_id, media_kind, status,
+  started_at, expires_at, ended_at?,
+  states: {
+    <profile_id>: {
+      profile_id, is_muted, is_deafened, is_video_on, is_screen_sharing,
+      is_commander, hand_raised, has_floor, is_broadcasting
+    }
+  },
+  screen_shares?: [{ profile_id, stream_id }]
+}
 ```
+
+Question-marked fields are omitted when empty or zero. The profile, Chat, and
+voice-room keys above are indexes to this document; they are not copies of its
+participant state.
+
+Written call documents, lookup indexes, and move receipts have a 24-hour TTL.
+The implementation scans `voice:call:*` documents to find expired ringing
+calls; there are no `voice:room:*` objects or participant/screen-share set keys
+in this store.
 
 ### Привязка комнаты в ответах и событиях
 
@@ -306,10 +331,11 @@ Realtime сохраняет прежних получателей `profile_ids`;
 `GetActiveCall` не добавляет обращения к Space; выдача или повторная выдача media grant
 по-прежнему требует свежей проверки через существующий token flow.
 
-Эти Redis-ключи — projection, которую можно перестроить из durable lifecycle
-данных в `voice_db`, если operation не заблокирована open divergence evidence;
-Redis не является источником истины room lifecycle. Process instances остаются
-горизонтально масштабируемыми, потому что durable state вынесен наружу.
+Redis compatibility state above does not replace durable lifecycle authority.
+Where the `voice_db` lifecycle path is enabled, durable room lifecycle and
+divergence evidence govern admission and reconciliation; the compatibility
+keys above are not that authoritative projection. Process instances remain
+horizontally scalable because durable state is externalized.
 
 ## Интеграция с LiveKit
 
