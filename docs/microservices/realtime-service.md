@@ -18,7 +18,7 @@ WebSocket-шлюз для доставки событий в реальном в
 - Нумерация событий **`s`** в рамках WebSocket-сессии, op **`resume`** с `last_s` после reconnect (см. ниже)
 - T056-P1 account session-epoch enforcement: fail-closed upgrade/operation/fan-out checks
 - **Не хранит inbox или историю чатов**; после reconnect клиент делает глобальную REST-сверку inbox через Chat `ListChats`, а сообщения догружает через Messaging API (Gateway → REST/gRPC) только per selected `chat_id`, см. [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (Reconnect)
-- Heartbeat / ping-pong для детекции разрыва
+- Liveness использует application-level JSON `heartbeat` от клиента и ответ `heartbeat_ack`; сервер не отправляет инициированные сервером WebSocket Ping frames. Клиент отправляет `heartbeat` каждые 30 секунд, а Realtime устанавливает 90-секундный deadline перед каждым чтением клиентского JSON-сообщения.
 - На client **`delivery_ack`**: ephemeral `message_delivered` fan-out **и** publish JetStream **`message.delivery_ack`** на `message.events` (Messaging consumer → durable cursor) — см. § `delivery_ack` op
 - Social block closure для DM: bootstrap, lazy `subscribe` и каждая client side effect (`typing`, `mark_read`, `delivery_ack`) проверяют account pair fail-closed; `social.user_blocked` ускоряет отзыв уже открытых DM-подписок
 
@@ -197,7 +197,7 @@ not `s` or `occurred_at`.
 
 | op             | Описание                                              |
 |----------------|-------------------------------------------------------|
-| `heartbeat`    | Keepalive (каждые 30 сек)                             |
+| `heartbeat`    | Клиентский application-level keepalive (каждые 30 сек); Realtime обновляет presence до `online` и отвечает `heartbeat_ack` с пустым `d` |
 | `subscribe`    | Подписка на чат: `d.chat_id` — UUID чата (RFC 4122)                    |
 | `unsubscribe`  | Отписка: `d.chat_id` — UUID чата                                      |
 | `typing_start` | Начал печатать                                        |
@@ -227,10 +227,8 @@ not `s` or `occurred_at`.
 | `reaction_remove`    | Реакция удалена                                                     |
 | `typing`             | Кто-то печатает                                                     |
 | `presence_update`    | Смена статуса пользователя                                          |
-| `chat_update`        | Изменение чата/группы                                               |
+| `chat_update`        | Изменение чата/группы. Для `chat.created`: `d.chat_id`, `d.type`; для `chat.member_changed`: `d.chat_id`, `d.profile_id`, `d.change` (значение передаётся из события Chat) |
 | `role_update`        | Доставка изменения role policy из `role.events`; `role.chat_override_set` и `role.chat_override_removed` доставляются только текущим подписчикам указанного `d.chat_id`. Payload сохраняет `subject`, `space_id`, `chat_id`, `role_id`. Voice-room override events не имеют WS fan-out, пока не определён authoritative индекс voice-room подписок. |
-| `member_add`         | Новый участник                                                      |
-| `member_remove`      | Участник удалён                                                     |
 | `dm_peer_deleted`    | Удалён второй участник уже известного DM; `d.chat_id` + `d.recipient_profile_id`, только для designated surviving profile, без deleted identity; live-ускорение, не durable history/replay |
 | `call_incoming`      | Входящий DM-звонок: `room_id`, `chat_id`, `initiator_profile_id`, `callee_profile_id`, `media_kind`, `expires_at` |
 | `call_accepted`      | Звонок принят: `room_id`, `chat_id`, `accepted_by_profile_id`, `profile_ids`, `media_kind` |
@@ -365,7 +363,7 @@ DM дополнительно применяется account-level block policy:
 | **Chat не сконфигурирован** | Bootstrap не выполняется; lazy `subscribe` **не** служит fallback для ACL и fail-closed с generic `permission_denied`. Для продакшена DM MVP ожидается заданный адрес Chat. |
 | **Ошибка Chat при bootstrap** | Всё равно отправляется `subscription_sync` с `degraded: true` и пустым `chat_ids`; клиенту следует опереться на REST список чатов и при необходимости прислать `subscribe` по известным `chat_id`. |
 
-`chat.member_changed` c `removed` или `left` отзывает все локальные подписки profile/chat; `joined` не создаёт подписку автоматически. Для DM Realtime держит bounded локальный индекс `account pair → local chat IDs` только пока существует подписка или выполняется authorization check; последняя `unsubscribe`/disconnect/revoke удаляет chat и пустую pair. Каждый instance имеет собственный durable consumer `social.user_blocked`: событие по этому индексу удаляет DM из локальных tabs обоих accounts, не сканируя глобальную историю пар. In-flight generation barrier не позволяет гонке `check → event → add` восстановить подписку.
+`chat.member_changed` доставляется как `chat_update` только активным WebSocket-соединениям целевого `profile_id`; Realtime передаёт `change` из события Chat без преобразования и не отправляет отдельные `member_add` / `member_remove` ops. Значения `removed` и `left` отзывают все локальные подписки profile/chat; `joined` не создаёт подписку автоматически. Для DM Realtime держит bounded локальный индекс `account pair → local chat IDs` только пока существует подписка или выполняется authorization check; последняя `unsubscribe`/disconnect/revoke удаляет chat и пустую pair. Каждый instance имеет собственный durable consumer `social.user_blocked`: событие по этому индексу удаляет DM из локальных tabs обоих accounts, не сканируя глобальную историю пар. In-flight generation barrier не позволяет гонке `check → event → add` восстановить подписку.
 
 Событие остаётся revoke-оптимизацией, а не correctness path: перед `typing`, `mark_read` и `delivery_ack` для уже открытого DM Realtime синхронно вызывает Social `IsBlocked` в обе стороны по сохранённой pair. Block или ошибка Social дают существующий generic deny до fan-out/Redis/JetStream side effects. Поэтому успешный `BlockAccount` закрывает старый socket даже если `PublishUserBlocked` завершился ошибкой или event не был доставлен; non-DM сохраняет local-subscription semantics без Social round-trip.
 
