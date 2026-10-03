@@ -26,14 +26,15 @@ Schema for `auth_db` is defined in two places; apply it with **one** tool per da
 
 | Path | Mechanism | Current ordered layout |
 |------|------------|------------------------|
-| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1__auth_schema.sql` … `V25__sdk_conversion_owner_receipts.sql` |
-| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` … `000026_sdk_conversion_owner_receipts`, each with `.up.sql` and `.down.sql` |
+| **A — Flyway (default)** | `src/main/resources/db/migration/V*.sql` on Auth startup | `V1__auth_schema.sql` … `V26__authority_source_revision.sql` |
+| **B — golang-migrate** | [src/backend/migrations/auth_db/](../migrations/auth_db/) | `000001_init` … `000027_authority_source_revision`, each with `.up.sql` and `.down.sql` |
 
 `auth_db` belongs to Auth in both layouts. Flyway `V1` contains the initial schema
 and the `refresh_tokens.access_jti` addition represented by golang-migrate
 `000001_init` followed by `000002_refresh_tokens_access_jti`; each later Flyway
 revision maps in order to the next golang-migrate revision (`V2` → `000003`, …,
-`V14` → `000015`, `V15` → `000016`, …, `V25` → `000026`). Keep these layouts aligned when adding Auth-owned DDL.
+`V14` → `000015`, `V15` → `000016`, …, `V25` → `000026`, `V26` →
+`000027`). Keep these layouts aligned when adding Auth-owned DDL.
 
 The canonical refresh-token profile migration stays at Flyway V15 / golang-migrate
 000016. SDK identity begins at V16 / 000017; authorization and preparation follow
