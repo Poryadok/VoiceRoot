@@ -556,7 +556,7 @@ and Voice IDs denied while history remains.
 - [ ] **[Space] No gateway REST for leave/join-public/delete/transfer/audit/templates** — `src/backend/gateway/transcode_spaces.go`, `transcode_spaces_members.go`
 - [ ] **[Space] Flutter client gaps — `spaces_client.dart` has no leave/join-public/transfer/audit/delete** — `src/frontend/lib/backend/spaces_client.dart`
 - [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; tree update/delete/category update/voice update/delete/RemoveTreeNode thin coverage** — `src/backend/space/internal/grpcsvc/*_integration_test.go`
-- [ ] **[Space] Stale README still says “scaffold / out of scope”** — `src/backend/space/README.md`
+- [x] **[Space] README scope** — describes the implemented Space service responsibilities, database, and canonical service/PLAN references (`src/backend/space/README.md`).
 
 ### Moderation
 
@@ -701,7 +701,7 @@ and Voice IDs denied while history remains.
 
 - [x] **[Voice] `GetVoiceStates` populates commander/floor fields** — `is_commander`, `hand_raised`, `has_floor`, `is_broadcasting` in store + GetVoiceStates + state events (П.11 / VC-07).
 - [ ] **[Voice] E2E coverage gaps vs PLAN “shipped”** — present: DM signaling (`TestComposeVoiceCall1to1_live`), optional bidirectional audio (`compose_voice_call_media_live_test.go`), Flutter `group_voice` / `spaces_voice` / `screen_share` API tests. Missing: compose live test for **space** voice + screen share with Role guard; no staging **RTC/media** smoke; `group_voice` E2E never exercises `LeaveCall` multi-participant behavior.
-- [ ] **[Voice] Stale service README** — still says “scaffold / out of scope” while PLAN marks voice shipped.
+- [x] **[Voice] README scope and lifecycle version** — describes the current service and R22.3 source-disabled lifecycle behavior, matching `docs/microservices/voice-service.md` (`src/backend/voice/README.md`).
 
 ### Auth
 
