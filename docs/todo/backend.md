@@ -378,7 +378,7 @@ and Voice IDs denied while history remains.
 
 
 - [x] **[Messaging] `message.forwarded` NATS event** — `PublishMessageForwarded` on forward path (`messaging_grpc.go`; `messageevents/jetstream.go`).
-- [ ] **[Gateway/Messaging] Raise `MessagesSend` rate limit to 100 messages / 5 sec** — local app stack hits rate limit after ~5 quick messages; desired product behavior: normal chat should allow up to **100 сообщений / 5 сек** while keeping anti-bot protection. Update docs currently saying `5 сообщений / 5 сек` ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md), [text-chat.md](../features/text-chat.md)) together with `defaultRateLimitRules` / `GATEWAY_RATE_LIMIT_RULES_JSON` tests when implementing.
+- [x] **[Gateway/Messaging] Raise `MessagesSend` rate limit to 100 messages / 5 sec** — done: Gateway Redis sliding-window default is 100 per authenticated user / 5 sec; per-user keys, `GATEWAY_RATE_LIMIT_RULES_JSON` overrides, denial behavior, and separate Messaging Space slow mode are preserved. Rate-limit contracts and focused assertions are updated.
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).

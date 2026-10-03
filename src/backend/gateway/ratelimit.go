@@ -73,7 +73,7 @@ func defaultRateLimitRules() map[string]rateLimitRule {
 		"AuthRegister":    {Limit: 5, Window: 15 * time.Minute},
 		"AuthOAuth":       {Limit: 30, Window: 15 * time.Minute},
 		"OTP":             {Limit: 3, Window: 10 * time.Minute},
-		"MessagesSend":    {Limit: 5, Window: 5 * time.Second},
+		"MessagesSend":    {Limit: 100, Window: 5 * time.Second},
 		"FileUpload":      {Limit: 10, Window: time.Hour},
 		"SpaceCreation":   {Limit: 5, Window: 24 * time.Hour},
 		"BotAPI":          {Limit: 5000, Window: time.Minute},
