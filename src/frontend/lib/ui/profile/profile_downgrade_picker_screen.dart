@@ -7,6 +7,8 @@ import '../../state/auth_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 
 /// Pick two profiles to keep when downgrading from premium.
 class ProfileDowngradePickerScreen extends ConsumerStatefulWidget {
@@ -72,8 +74,11 @@ class _ProfileDowngradePickerScreenState
     return KeyedSubtree(
       key: ProfileDowngradePickerScreen.pickerKey,
       child: profilesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => Center(child: Text(l10n.subscriptionProfilesLoadError)),
+        loading: () => const VoiceListSkeleton(rowCount: 3),
+        error: (_, _) => VoiceStatePanel(
+          title: l10n.subscriptionProfilesLoadError,
+          icon: Icons.cloud_off_outlined,
+        ),
         data: (profiles) {
           return Padding(
             padding: const EdgeInsets.all(24),
@@ -96,8 +101,7 @@ class _ProfileDowngradePickerScreenState
                     itemBuilder: (context, index) {
                       final profile = profiles[index];
                       final checked = _selected.contains(profile.id);
-                      final disabled =
-                          !checked && _selected.length >= 2;
+                      final disabled = !checked && _selected.length >= 2;
                       return CheckboxListTile(
                         value: checked,
                         onChanged: disabled && !checked
@@ -113,7 +117,12 @@ class _ProfileDowngradePickerScreenState
                   ),
                 ),
                 if (_error != null) ...[
-                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                 ],
                 VoicePrimaryButton(
