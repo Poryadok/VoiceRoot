@@ -68,6 +68,20 @@
   требует real PostgreSQL 16 с zero skips; Redis 7 понадобится для deferred
   D2/D3 bridge tests, не для D1-only classifier transaction.
 
+### Space tree integration proof
+
+Для узкого exact-SHA доказательства запускается workflow
+[space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет
+три PostgreSQL-backed кейса: update/delete категории, update/delete voice room
+с удалением tree node и удаление text node. Hosted Ubuntu запускает существующую
+testcontainers-Go fixture без `-short`; job сверяет SHA checkout и завершится
+ошибкой, если любой названный тест не выдал `PASS` либо был skipped. Подробный
+verbose log хранится как workflow artifact.
+
+После merge workflow можно вручную запустить с точным `source_sha` через его
+копию в default branch. Этот узкий proof не заменяет обычный CI сервиса и не
+закрывает более широкие критерии A2.
+
 ### API Gateway
 
 - Локально: из [`src/backend/gateway/`](../src/backend/gateway/main.go) запускать `go test ./...`; для race-проверки на хосте с CGO — `CGO_ENABLED=1 go test -race ./...`.

@@ -1,0 +1,98 @@
+name: Space tree integration proof
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/space-tree-proof.yml"
+      - "src/backend/space/**"
+      - "src/backend/pkg/**"
+      - "src/backend/migrations/space_db/**"
+      - "protos/**"
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/space-tree-proof.yml"
+      - "src/backend/space/**"
+      - "src/backend/pkg/**"
+      - "src/backend/migrations/space_db/**"
+      - "protos/**"
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact commit SHA to check out and prove
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: space-tree-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  space-tree-integration:
+    name: Space tree integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || inputs.source_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || inputs.source_sha || github.sha }}
+
+      - name: Verify exact source SHA
+        shell: bash
+        run: |
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Expected a full 40-character commit SHA" >&2
+            exit 1
+          fi
+          actual_sha="$(git rev-parse HEAD)"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Expected $EXPECTED_SHA but checked out $actual_sha" >&2
+            exit 1
+          fi
+          echo "Verified source SHA: $actual_sha"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: src/backend/space/go.sum
+
+      - name: Run the three PostgreSQL-backed cases
+        working-directory: src/backend/space
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          TEST_LOG: ${{ runner.temp }}/space-tree-integration.log
+        run: |
+          set -euo pipefail
+          go test ./internal/grpcsvc \
+            -run '^(TestSpaceTree_OwnerCanUpdateAndDeleteCategory|TestSpaceTree_OwnerCanUpdateAndDeleteVoiceRoomWithTreeNode|TestSpaceTree_OwnerCanRemoveTextNode)$' \
+            -count=1 -v 2>&1 | tee "$TEST_LOG"
+
+          for test_name in \
+            TestSpaceTree_OwnerCanUpdateAndDeleteCategory \
+            TestSpaceTree_OwnerCanUpdateAndDeleteVoiceRoomWithTreeNode \
+            TestSpaceTree_OwnerCanRemoveTextNode; do
+            if ! grep -Eq -- "^--- PASS: ${test_name}([[:space:]]|$)" "$TEST_LOG"; then
+              echo "Required test did not report PASS: ${test_name}" >&2
+              exit 1
+            fi
+            if grep -Eq -- "^--- SKIP: ${test_name}([[:space:]]|$)" "$TEST_LOG"; then
+              echo "Required test was skipped: ${test_name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Retain verbose test output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: space-tree-integration-${{ github.run_id }}
+          path: ${{ runner.temp }}/space-tree-integration.log
+          if-no-files-found: warn
+          retention-days: 14
