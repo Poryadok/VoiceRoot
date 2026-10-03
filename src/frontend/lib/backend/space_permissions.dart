@@ -12,6 +12,7 @@ abstract final class SpacePermissions {
   static const textChatView = 'TEXT_CHAT_VIEW';
   static const textChatSetSlowMode = 'TEXT_CHAT_SET_SLOW_MODE';
   static const textChatManageSettings = 'TEXT_CHAT_MANAGE_SETTINGS';
+  static const textChatManageMessages = 'TEXT_CHAT_MANAGE_MESSAGES';
   static const voiceJoin = 'VOICE_JOIN';
   static const voiceSpeak = 'VOICE_SPEAK';
   static const voiceMuteOthers = 'VOICE_MUTE_OTHERS';
@@ -34,7 +35,7 @@ abstract final class SpacePermissions {
     'TEXT_CHAT_CREATE_IN_SPACE': 1 << 13,
     'TEXT_CHAT_VIEW': 1 << 14,
     textChatSendMessages: 1 << 15,
-    'TEXT_CHAT_MANAGE_MESSAGES': 1 << 16,
+    textChatManageMessages: 1 << 16,
     voiceJoin: 1 << 17,
     voiceSpeak: 1 << 18,
     voiceMuteOthers: 1 << 19,
@@ -86,7 +87,7 @@ abstract final class SpacePermissions {
       'TEXT_CHAT_MANAGE_THREADS',
       textChatManageSettings,
       textChatSetSlowMode,
-      'TEXT_CHAT_MANAGE_MESSAGES',
+      textChatManageMessages,
       'TEXT_CHAT_READ_HISTORY',
     ],
     'Voice': [
