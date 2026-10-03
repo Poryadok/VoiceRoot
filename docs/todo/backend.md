@@ -548,14 +548,13 @@ and Voice IDs denied while history remains.
 ### Space
 
 
-- [ ] **[Space] ChatLookup S2S hardening (Agent batch)** — set `x-voice-internal-caller=space` on Chat GetChat; Warn on lookup failures instead of silent skip; add unit/mock test for enrichment; optional batch GetChat to avoid N+1 (`chat_lookup.go`, `main.go`). Closed High wiring via PR #129.
 - [ ] **[Space] Complete the accepted BE-116 audit ledger runtime** — the bounded Space ledger core, seven Space-local writers, durable Space outbox, 365-day retention worker, signed unfiltered snapshot cursor and full filter store query are shipped. The canonical action/target/details registry, complete cursor contract and protected Role/Chat `AppendAuditEvent` proto are defined in [space-service.md](../microservices/space-service.md#phase-0-space-audit-ledger-accepted-target-runtime-not-implemented). Remaining: the other accepted Space-local writers, idempotent protected ingestion, Role/Chat durable producer outboxes, gRPC filter mapping and complete cursor binding, plus positive/negative integration tests. Sources: `src/backend/space/internal/store/{invite,tree,audit}.go`; `src/backend/space/internal/grpcsvc/`; `src/backend/role/internal/grpcsvc/`; `src/backend/chat/internal/grpcsvc/`.
 - [x] **[Space] `RevokeInvite` / `ListInvites` use `SpaceManageInvites`** — **done:** PR #225 replaced the owner-only gate with `requireSpacePermission(..., SpaceManageInvites)`; `Test(ListInvites|RevokeInvite)_RequiresManageInvitesPermission` verifies delegated access and denial without the permission.
 - [x] **[Space] Invite/public join membership event** — both join paths call `finalizeMembership`, which publishes `space.member_joined` after a new membership is created (`invites.go`, `join.go`, `spaceevents/jetstream.go`).
 - [x] **[Space] Kick/leave membership event** — `KickMember` and `LeaveSpace` publish `space.member_left` after removal (`members.go`, `join.go`, `spaceevents/jetstream.go`). Residual Space event gaps remain in the dedicated NATS item above.
 - [ ] **[Space] No gateway REST for leave/join-public/delete/transfer/audit/templates** — `src/backend/gateway/transcode_spaces.go`, `transcode_spaces_members.go`
 - [ ] **[Space] Flutter client gaps — `spaces_client.dart` has no leave/join-public/transfer/audit/delete** — `src/frontend/lib/backend/spaces_client.dart`
-- [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; tree update/delete/category update/voice update/delete/RemoveTreeNode thin coverage** — `src/backend/space/internal/grpcsvc/*_integration_test.go`
+- [ ] **[Space] Test holes — no integration tests for unimplemented RPCs; general tree update/delete coverage remains** — add focused integration coverage as the remaining Space RPCs and tree operations are implemented. Category update/delete, voice-room update/delete with tree cleanup, and text-node `RemoveTreeNode` have focused PostgreSQL integration coverage. — `src/backend/space/internal/grpcsvc/*_integration_test.go`
 
 ### Moderation
 
@@ -842,7 +841,6 @@ and Voice IDs denied while history remains.
 ### Realtime
 
 
-- [x] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` returns one generic `error` frame (`unknown_operation`, `unsupported operation`) for unrecognized client ops and keeps the connection open.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
 
 **Промпт-якорь:** Full product audit Batch 14 from docs/todo/backend.md.

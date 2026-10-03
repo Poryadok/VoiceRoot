@@ -72,8 +72,9 @@
 
 Для узкого exact-SHA доказательства запускается workflow
 [space-tree-proof.yml](../.github/workflows/space-tree-proof.yml). Он выполняет
-три PostgreSQL-backed кейса: update/delete категории, update/delete voice room
-с удалением tree node и удаление text node. Hosted Ubuntu запускает существующую
+четыре PostgreSQL-backed кейса: update/delete категории, update/delete voice room
+с удалением tree node, удаление text node и обогащение text-chat узлов именем и
+типом из Chat Service. Hosted Ubuntu запускает существующую
 testcontainers-Go fixture без `-short`; job сверяет SHA checkout и завершится
 ошибкой, если любой названный тест не выдал `PASS` либо был skipped. Подробный
 verbose log хранится как workflow artifact.
