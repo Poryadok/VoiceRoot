@@ -214,7 +214,7 @@ not `s` or `occurred_at`.
 | `subscription_sync`  | Снимок всех видимых Chat-подписок после `hello` (см. раздел «Подписки»): `d.scope` = `all`, `d.chat_ids`, `d.source` = `chat`, `d.degraded` при ошибке S2S к Chat |
 | `subscribe_ack`      | Подтверждение `subscribe`: `d.chat_id`                              |
 | `unsubscribe_ack`    | Подтверждение `unsubscribe`: `d.chat_id`                          |
-| `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id` |
+| `error`              | Ошибка клиентской операции: malformed UUID сохраняет `invalid_subscribe` / `invalid_unsubscribe`; valid lazy `subscribe`, который Chat не разрешил или не смог проверить, возвращает generic `d.code=permission_denied`, `d.message=chat subscription denied`, `d.chat_id`; неизвестный верхнеуровневый `op` возвращает `d.code=unknown_operation`, `d.message=unsupported operation` без отражения значения `op` |
 | `message_create`     | Новое сообщение                                                     |
 | `archive_activity`   | Тихий badge update для archived chat: `d.chat_id`; только incoming `message.sent`, без notification-center row, навигации или звука |
 | `message_update`     | Сообщение отредактировано                                           |
