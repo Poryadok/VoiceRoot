@@ -12,6 +12,7 @@ import 'matchmaking_match_controller.dart';
 import 'matchmaking_search_controller.dart';
 import 'push_notification_handler.dart';
 import 'social_providers.dart';
+import 'space_providers.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -174,9 +175,32 @@ class InAppNotificationController {
         _onArchiveActivity(frame.data);
       case 'chat_update':
         _onChatUpdate(frame.data);
+      case 'role_update':
+        _onRoleUpdate(frame.data);
       default:
         break;
     }
+  }
+
+  void _onRoleUpdate(Map<String, dynamic>? data) {
+    if (data == null) return;
+    final subject = data['subject'];
+    if (subject != 'role.chat_override_set' &&
+        subject != 'role.chat_override_removed') {
+      return;
+    }
+    final spaceId = data['space_id'];
+    final chatId = data['chat_id'];
+    final roleId = data['role_id'];
+    if (spaceId is! String ||
+        spaceId.trim().isEmpty ||
+        chatId is! String ||
+        chatId.trim().isEmpty ||
+        roleId is! String ||
+        roleId.trim().isEmpty) {
+      return;
+    }
+    refreshSpaceChatPermissions(_ref, spaceId, chatId);
   }
 
   void _onNotification(
