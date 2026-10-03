@@ -585,6 +585,9 @@ typedef SpacePermissionQuery = ({
 
 final spacePermissionProvider =
     FutureProvider.family<bool, SpacePermissionQuery>((ref, query) async {
+      final queryRegistry = ref.read(spacePermissionQueryRegistryProvider);
+      queryRegistry.register(query);
+      ref.onDispose(() => queryRegistry.unregister(query));
       final auth = ref.watch(authorizationHeaderProvider);
       final profileId = ref.watch(spaceViewerProfileIdProvider);
       if (auth == null || profileId == null) return false;
@@ -603,6 +606,32 @@ final spacePermissionProvider =
         RolesApiFailure() => false,
       };
     });
+
+final spacePermissionQueryRegistryProvider =
+    Provider<SpacePermissionQueryRegistry>(
+      (ref) => SpacePermissionQueryRegistry(),
+    );
+
+class SpacePermissionQueryRegistry {
+  final Set<SpacePermissionQuery> _queries = {};
+
+  void register(SpacePermissionQuery query) => _queries.add(query);
+
+  void unregister(SpacePermissionQuery query) => _queries.remove(query);
+
+  Iterable<SpacePermissionQuery> forChat(String spaceId, String chatId) =>
+      _queries.where(
+        (query) => query.spaceId == spaceId && query.chatId == chatId,
+      );
+}
+
+/// Refreshes only cached permissions for a chat after its Role policy changes.
+void refreshSpaceChatPermissions(Ref ref, String spaceId, String chatId) {
+  final queryRegistry = ref.read(spacePermissionQueryRegistryProvider);
+  for (final query in queryRegistry.forChat(spaceId, chatId).toList()) {
+    ref.invalidate(spacePermissionProvider(query));
+  }
+}
 
 final defaultJoinRoleProvider = FutureProvider.family<SpaceRole?, String>((
   ref,
