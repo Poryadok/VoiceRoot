@@ -1775,7 +1775,9 @@ class _AttachmentPreview extends ConsumerWidget {
     final metadata = ref.watch(
       fileAttachmentMetadataProvider(attachment.fileId),
     );
-    if (metadata.valueOrNull?.status == 'expired') {
+    if (!metadata.isLoading &&
+        !metadata.hasError &&
+        metadata.valueOrNull?.status == 'expired') {
       final l10n = AppLocalizations.of(context)!;
       return Tooltip(
         message: l10n.chatExpiredFileTooltip,

@@ -11,11 +11,13 @@ import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_sto
 import 'package:voice_frontend/backend/message_cache/message_cache_store.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/files_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart'
     as messaging_pb;
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/message_cache_providers.dart';
 import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_composer_text_field.dart';
@@ -128,6 +130,70 @@ void main() {
     expect(find.byKey(_expiredAttachmentPlaceholderKey), findsNothing);
     expect(find.text('unavailable.pdf'), findsOneWidget);
     expect(harness.files.metadataRequests, ['file-unavailable']);
+  });
+
+  testWidgets('session reload does not show a previous expired result', (
+    tester,
+  ) async {
+    final harness = await _pumpPanel(
+      tester,
+      page: _page(
+        attachments: const [
+          MessageAttachment(
+            fileId: 'file-expired',
+            type: 'document',
+            name: 'retained.pdf',
+          ),
+        ],
+      ),
+      fileMetadataResult: const FilesApiOk(
+        FileMetadataData(
+          fileId: 'file-expired',
+          fileType: 'document',
+          status: 'expired',
+          originalName: 'retained.pdf',
+        ),
+      ),
+    );
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsOneWidget);
+
+    final pendingMetadata = Completer<FilesApiResult<FileMetadataData>>();
+    harness.files.pendingMetadataResult = pendingMetadata;
+    final auth = harness.container.read(authControllerProvider.notifier);
+    auth.state = auth.state.copyWith(
+      session: const AuthSession(
+        accessToken: 'other-session',
+        refreshToken: 'other-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'prof-test',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+
+    expect(harness.files.metadataRequests, ['file-expired', 'file-expired']);
+    expect(
+      harness.container
+          .read(fileAttachmentMetadataProvider('file-expired'))
+          .valueOrNull
+          ?.status,
+      'expired',
+    );
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsNothing);
+
+    pendingMetadata.complete(
+      const FilesApiOk(
+        FileMetadataData(
+          fileId: 'file-expired',
+          fileType: 'document',
+          status: 'ready',
+          originalName: 'retained.pdf',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(_expiredAttachmentPlaceholderKey), findsNothing);
+    expect(find.text('retained.pdf'), findsOneWidget);
   });
 
   testWidgets(
@@ -584,6 +650,7 @@ class _UiFilesClient extends VoiceFilesClient {
       );
 
   final FilesApiResult<FileMetadataData>? metadataResult;
+  Completer<FilesApiResult<FileMetadataData>>? pendingMetadataResult;
   final metadataRequests = <String>[];
   var requestUploadCalls = 0;
   var putBytesCalls = 0;
@@ -595,6 +662,11 @@ class _UiFilesClient extends VoiceFilesClient {
     required String fileId,
   }) async {
     metadataRequests.add(fileId);
+    final pending = pendingMetadataResult;
+    if (pending != null) {
+      pendingMetadataResult = null;
+      return pending.future;
+    }
     return metadataResult ??
         FilesApiFailure(message: 'unexpected_metadata', statusCode: 404);
   }
