@@ -136,6 +136,23 @@ class VoiceFilesClient {
     );
   }
 
+  Future<FilesApiResult<FileMetadataData>> getFileMetadata({
+    required String authorization,
+    required String fileId,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/files/$fileId'),
+      authorization: authorization,
+      createEmpty: file_pb.GetFileMetadataResponse.create,
+    );
+    return _map(
+      result,
+      (data) => fileMetadataFromProto(
+        data.hasFileMetadata() ? data.fileMetadata : file_pb.FileMetadata(),
+      ),
+    );
+  }
+
   Future<FilesApiResult<Uint8List>> fetchFileBytes({
     required String authorization,
     required String fileId,
