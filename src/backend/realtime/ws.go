@@ -647,7 +647,14 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					cancel()
 				}
 			default:
-				// ignore unknown ops for now
+				errD, _ := json.Marshal(map[string]any{
+					"code":    "unknown_operation",
+					"message": "unsupported operation",
+				})
+				if err := write("error", errD); err != nil {
+					return
+				}
+				continue
 			}
 		}
 	}
