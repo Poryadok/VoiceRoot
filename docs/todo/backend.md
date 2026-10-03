@@ -378,7 +378,6 @@ and Voice IDs denied while history remains.
 
 
 - [x] **[Messaging] `message.forwarded` NATS event** — `PublishMessageForwarded` on forward path (`messaging_grpc.go`; `messageevents/jetstream.go`).
-- [x] **[Gateway/Messaging] Raise `MessagesSend` rate limit to 100 messages / 5 sec** — done: Gateway Redis sliding-window default is 100 per authenticated user / 5 sec; per-user keys, `GATEWAY_RATE_LIMIT_RULES_JSON` overrides, denial behavior, and separate Messaging Space slow mode are preserved. Rate-limit contracts and focused assertions are updated.
 - [x] **[Messaging] `ForwardMessageRequest.commentary` ignored** — **done:** commentary inserts a separate message via `insertForwardCommentary` (`messaging_grpc.go`; Messaging forward ITs).
 - [x] **[Messaging] “Copy as new message” / forward without attribution** — **done:** `ForwardMessageRequest.without_attribution` → regular message, no Forwarded-from; skips `allow_forward` deny (FW-03).
 - [x] **[Messaging] Forward-author privacy block not enforced** — spec says user can forbid forwarding their messages; Messaging `ForwardMessage` checks User `allow_forward` via S2S (`PermissionDenied`).
@@ -710,14 +709,11 @@ and Voice IDs denied while history remains.
 - [ ] **[Auth] NATS event matrix mostly unimplemented** — `docs/microservices/auth-service.md` lists `user.registered`, `user.logged_in`, `user.logged_out`, `user.2fa_enabled`, `user.account_deleted`, `user.account_restored`; `AuthEventPublisher` only defines `user.guest_converted`. Files: `src/backend/auth/src/main/java/voice/backend/auth/events/AuthEventPublisher.java`, `src/backend/auth/src/main/java/voice/backend/auth/events/NatsAuthEventPublisher.java`.
 - [ ] **[Auth] Disable 2FA not implemented** — No RPC/REST to turn off TOTP or invalidate backup codes after enrollment. Sessions list/revoke **есть** (`GET /api/v1/auth/sessions`, `TestComposeAuthSessions_live`); Flutter UI — [client.md](client.md).
 - [x] **[Auth] gRPC token context via `lastAccessToken` atomic** — Protected Auth gRPC methods now use only `Authorization` metadata from the current RPC and fail closed when it is absent; no process-wide remembered bearer remains. In-process regression coverage proves a preceding `Register` cannot authorize a later headerless 2FA or E2E-backup call. File: `src/backend/auth/src/main/java/voice/backend/auth/grpc/AuthGrpcService.java`.
-- [ ] **[Auth] `auth-service.md` doc drift** — Missing/incorrect vs code: `SwitchActiveProfile`, `SetAccountStatus`, `ResolvePhoneHashes`, OAuth2 (developer-portal + admin), `backup_codes`, `last_online_at`, `linked_identities`; E2E migration cited as `V4` but Flyway uses `V4__e2e_key_backups.sql` + golang `000005`. File: `docs/microservices/auth-service.md`. *(Partial overlap with TODO.md “convert-guest doc auth-service.md” — that item is narrower.)*
-- [ ] **[Auth] `src/backend/auth/README.md` migration section stale** — Still says Flyway “single migration V1”; repo has `V1`–`V5` and golang `000001`–`000006`. File: `src/backend/auth/README.md`.
 
 ### Realtime
 
 
 - [ ] **[Realtime] Doc metrics vs implementation** — `realtime-service.md` lists `realtime.events.delivered`, `realtime.events.fanout_latency`, `realtime.reconnects`; `metrics.go` exposes only connections, connect counters, hello histogram, NATS lag. (`docs/features/observability.md` documents the implemented set — drift between service doc and observability spec.)
-- [ ] **[Realtime] Phantom membership operations in service doc** — documented server ops `member_add` / `member_remove` are not emitted; `chat_events_consumer.go` canonically maps membership changes to `chat_update` with `change`. Remove the phantom ops or introduce them only with a documented client migration; the remaining implemented message/Voice operations are now listed.
 - [ ] **[Client/Role] `role_update` is delivered but Flutter does not consume it — define the authoritative refetch target and implement client invalidation/refetch for `role.chat_override_set` / `role.chat_override_removed`; until then WS delivery does not change a rendered permission state.** — `src/backend/realtime/role_events_consumer.go`, `src/frontend/lib/`, `docs/microservices/realtime-service.md`
 - [ ] **[Realtime] Six separate NATS connections per instance** — `main.go` opens one connection per consumer + lag poller (no shared `*nats.Conn`), increasing reconnect churn and FD usage at scale.
 - [ ] **[Realtime] Matchmaking consumer integration coverage** — `matchmaking_events_consumer.go` still needs subscription/fan-out integration coverage. Role subscription routing is covered by `TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID`; presence adapter gRPC identity/privacy-response handling is covered by `presence_identity_boundary_test.go` (adapter contract fixtures, not live User/Social E2E). Cross-instance `message_delivered` is covered by `TestRedisDeliveryAckFanoutCrossInstance`; friend WS presence is covered by `TestComposePresenceDNDInvisible_live`.
@@ -851,7 +847,6 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
-- [ ] **[Realtime] Server does not emit WebSocket ping frames** — liveness is client `heartbeat` + 90s read deadline (`ws.go`); doc mentions “ping-pong” but implementation is app-level heartbeat only.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
 
 **Промпт-якорь:** Full product audit Batch 14 from docs/todo/backend.md.
