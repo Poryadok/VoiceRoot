@@ -158,7 +158,6 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth-and-contacts.md](../features/auth-and-contacts.md).
 
-- [ ] **Convert-guest: recovery для аккаунтов после бага transport-пароля** — аккаунты, сконвертированные до фикса (2026-07), остались с неизвестным паролем; self-service через password-reset UI (**Batch 30a**) или support-runbook.
 - [x] **Convert-guest: док auth-service.md** — `ConvertGuest` §: `password` = новый пароль regular-аккаунта (JWT гостя достаточен), не transport-пароль.
 - [x] **Convert-guest live в compose-e2e** — `TestComposeConvertGuest_live` in `.github/ci/e2e-features.yml` smoke_gateway (CI tier 2).
 - [x] **Convert-guest: negative Auth integration tests** — duplicate email, password <8, non-guest token, missing email/phone in `ConvertGuestIntegrationTest`.
