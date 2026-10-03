@@ -24,6 +24,7 @@ import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_message_list.dart';
 import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
+import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -84,7 +85,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(ChatMessageBubbleTile));
+      container
+          .read(chatMessageContextMenuRequestProvider('chat-abc').notifier)
+          .state = 'chat-abc-message';
       await tester.pumpAndSettle();
 
       final deleteForEveryone = find.ancestor(

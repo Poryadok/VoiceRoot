@@ -1205,7 +1205,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       builder: (context) {
         final sheetL10n = AppLocalizations.of(context)!;
         return SafeArea(
-          child: Column(
+          child: SingleChildScrollView(child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (message.deletedAt == null &&
@@ -1320,7 +1320,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   },
                 ),
             ],
-          ),
+          )),
         );
       },
     );
