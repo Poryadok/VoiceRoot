@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	rolev1 "voice.app/voice/role/v1"
 )
@@ -17,6 +18,7 @@ import (
 type recordingRoleService struct {
 	rolev1.UnimplementedRoleServiceServer
 	lastList      *rolev1.ListRolesRequest
+	lastMember    *rolev1.GetMemberRolesRequest
 	lastCreate    *rolev1.CreateRoleRequest
 	lastAssign    *rolev1.AssignRoleRequest
 	lastCheck     *rolev1.CheckPermissionRequest
@@ -30,10 +32,22 @@ func (s *recordingRoleService) ListRoles(_ context.Context, req *rolev1.ListRole
 	s.lastList = req
 	return &rolev1.ListRolesResponse{
 		RoleList: &rolev1.RoleList{
-			Roles: []*rolev1.Role{{Id: "role-1", SpaceId: req.GetSpaceId(), Name: "Owner", Position: 4}},
+			Roles: []*rolev1.Role{
+				{Id: "role-1", SpaceId: req.GetSpaceId(), Name: "Owner", Position: 4, Color: roleColorPtr("#123abc"), IsMentionable: true},
+				{Id: "role-2", SpaceId: req.GetSpaceId(), Name: "Member", Position: 1},
+			},
 		},
 	}, nil
 }
+
+func (s *recordingRoleService) GetMemberRoles(_ context.Context, req *rolev1.GetMemberRolesRequest) (*rolev1.GetMemberRolesResponse, error) {
+	s.lastMember = req
+	return &rolev1.GetMemberRolesResponse{RoleList: &rolev1.RoleList{Roles: []*rolev1.Role{
+		{Id: "role-member", SpaceId: req.GetSpaceId(), Name: "Member", Color: roleColorPtr("#123abc"), IsMentionable: true},
+	}}}, nil
+}
+
+func roleColorPtr(value string) *string { return &value }
 
 func (s *recordingRoleService) CreateRole(_ context.Context, req *rolev1.CreateRoleRequest) (*rolev1.CreateRoleResponse, error) {
 	s.lastCreate = req
@@ -119,6 +133,34 @@ func TestTranscodeRolesList(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NotNil(t, rec.lastList)
 	require.Equal(t, "space-1", rec.lastList.GetSpaceId())
+	require.Contains(t, resp.Body.String(), `"color":"#123abc"`)
+	require.Contains(t, resp.Body.String(), `"is_mentionable":true`)
+	require.NotContains(t, resp.Body.String(), `"color":null`)
+}
+
+func TestTranscodeMemberRolesIncludesMetadata(t *testing.T) {
+	t.Parallel()
+	rec := &recordingRoleService{}
+	h := newRolesContractGateway(t, rec)
+
+	resp := performRequest(h, http.MethodGet, "/api/v1/roles/members?space_id=space-1&profile_id=profile-1", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NotNil(t, rec.lastMember)
+	require.Equal(t, "profile-1", rec.lastMember.GetProfileId())
+	require.Contains(t, resp.Body.String(), `"color":"#123abc"`)
+	require.Contains(t, resp.Body.String(), `"is_mentionable":true`)
+}
+
+func TestRoleResponseJSONIncludesColorAndMentionable(t *testing.T) {
+	var resp rolev1.ListRolesResponse
+	err := protojson.Unmarshal([]byte(`{"roleList":{"roles":[{"color":"#123abc","isMentionable":true}]}}`), &resp)
+	require.NoError(t, err)
+	roles := resp.GetRoleList().GetRoles()
+	require.Len(t, roles, 1)
+	require.Equal(t, "#123abc", roles[0].GetColor())
+	require.True(t, roles[0].GetIsMentionable())
 }
 
 // TestTranscodeRolesCreate documents POST /api/v1/roles with name and permissions_mask.

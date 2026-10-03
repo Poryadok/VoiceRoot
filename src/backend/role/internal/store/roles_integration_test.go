@@ -47,6 +47,66 @@ func TestBootstrapSystemRoles_SeedsHierarchy(t *testing.T) {
 	}
 }
 
+func TestRoleMetadataIsPresentOnEveryRoleReadPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartRoleDBForStoreTest(t, ctx)
+	ApplyRoleMigrationsForStoreTest(t, ctx, pool)
+	s := &RoleStore{Pool: pool}
+	spaceID := uuid.New()
+	profileID := uuid.New()
+	require.NoError(t, s.BootstrapSystemRoles(ctx, spaceID))
+
+	defaultRole, err := s.GetDefaultJoinRole(ctx, spaceID)
+	require.NoError(t, err)
+	require.NotNil(t, defaultRole)
+	require.Nil(t, defaultRole.Color)
+	require.False(t, defaultRole.IsMentionable)
+
+	custom, err := s.CreateCustomRole(ctx, spaceID, "Mentionable", 0, 1, &profileID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE roles SET color = '#123abc', is_mentionable = true WHERE id = $1`, custom.ID)
+	require.NoError(t, err)
+	require.NoError(t, s.AssignMemberRole(ctx, spaceID, profileID, custom.ID, profileID))
+	require.NoError(t, s.SetDefaultJoinRole(ctx, spaceID, custom.ID))
+
+	assertMetadata := func(row RoleRow) {
+		t.Helper()
+		require.NotNil(t, row.Color)
+		require.Equal(t, "#123abc", *row.Color)
+		require.True(t, row.IsMentionable)
+	}
+
+	roles, err := s.ListRoles(ctx, spaceID)
+	require.NoError(t, err)
+	var listed *RoleRow
+	for i := range roles {
+		if roles[i].ID == custom.ID {
+			listed = &roles[i]
+			break
+		}
+	}
+	require.NotNil(t, listed)
+	assertMetadata(*listed)
+
+	got, err := s.GetRoleByID(ctx, custom.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assertMetadata(*got)
+
+	memberRoles, err := s.GetMemberRoles(ctx, spaceID, profileID)
+	require.NoError(t, err)
+	require.Len(t, memberRoles, 1)
+	assertMetadata(memberRoles[0])
+
+	defaultRole, err = s.GetDefaultJoinRole(ctx, spaceID)
+	require.NoError(t, err)
+	require.NotNil(t, defaultRole)
+	assertMetadata(*defaultRole)
+}
+
 // TestAssignMemberRole_PersistsMemberRoles documents member_roles UNIQUE(space_id, profile_id, role_id).
 func TestAssignMemberRole_PersistsMemberRoles(t *testing.T) {
 	if testing.Short() {

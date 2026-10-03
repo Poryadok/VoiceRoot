@@ -480,9 +480,12 @@ const Role$json = {
       '10': 'createdByProfileId',
       '17': true
     },
+    {'1': 'color', '3': 9, '4': 1, '5': 9, '9': 1, '10': 'color', '17': true},
+    {'1': 'is_mentionable', '3': 10, '4': 1, '5': 8, '10': 'isMentionable'},
   ],
   '8': [
     {'1': '_created_by_profile_id'},
+    {'1': '_color'},
   ],
 };
 
@@ -493,7 +496,8 @@ final $typed_data.Uint8List roleDescriptor = $convert.base64Decode(
     'axIaCghwb3NpdGlvbhgFIAEoBVIIcG9zaXRpb24SGAoHbWFuYWdlZBgGIAEoCFIHbWFuYWdlZB'
     'I5CgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJY3JlYXRl'
     'ZEF0EjYKFWNyZWF0ZWRfYnlfcHJvZmlsZV9pZBgIIAEoCUgAUhJjcmVhdGVkQnlQcm9maWxlSW'
-    'SIAQFCGAoWX2NyZWF0ZWRfYnlfcHJvZmlsZV9pZA==');
+    'SIAQESGQoFY29sb3IYCSABKAlIAVIFY29sb3KIAQESJQoOaXNfbWVudGlvbmFibGUYCiABKAhS'
+    'DWlzTWVudGlvbmFibGVCGAoWX2NyZWF0ZWRfYnlfcHJvZmlsZV9pZEIICgZfY29sb3I=');
 
 @$core.Deprecated('Use createRoleRequestDescriptor instead')
 const CreateRoleRequest$json = {
