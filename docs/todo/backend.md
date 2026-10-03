@@ -829,7 +829,6 @@ and Voice IDs denied while history remains.
 ### Voice
 
 
-- [ ] **[Voice] Redis key layout differs from `voice-service.md` model** — docs describe `voice:session:{profile_id}` object + room sets; code uses `voice:session:{profile_id}` → `room_id` pointer + JSON blob `voice:call:{room_id}`.
 - [ ] **[A2 Voice] Active-session handoff, RTC reconnect and authoritative cleanup have no contract** — `voice-service.md` defines only the invariant «один активный voice на профиль»; it does not identify a device/session principal, say whether a second device is rejected or replaces the first, define LiveKit disconnect/heartbeat/TTL reconciliation, or prescribe retry/idempotency and event/roster ordering for leave. The current serial store behavior rejects a second active room for the same `profile_id` and frees it after `RemoveParticipant` (characterized by `TestCallStore_oneActiveVoicePerProfileUntilLeave`), while `RedisCallStore.CreateCall`/`AddParticipant` perform a read-then-write active-session check without a documented atomic cross-device protocol. Do not add a reconnect or forced-disconnect implementation/test until the owner freezes the device binding, source of truth, revocation and cleanup semantics. Sources: `docs/microservices/voice-service.md`; `docs/features/voice-chat.md`; `src/backend/voice/internal/store/{call_store.go,redis_store.go}`.
 - [ ] **[Voice] LiveKit DM/group JWT minimal grants** — Space voice-room JWTs now carry explicit `video.canPublish` from `VOICE_SPEAK`; DM/group JWTs still contain only `video.roomJoin` + `room` and no explicit `canPublish` / `canSubscribe` (works in compose media test, but less explicit than LiveKit best practice).
 - [ ] **[Voice] Commander / raise-hand client surface is proto-only** — generated Dart gRPC stubs exist; no `lib/` product usage beyond `lib/gen/`.
@@ -844,7 +843,7 @@ and Voice IDs denied while history remains.
 ### Realtime
 
 
-- [ ] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` `default` branch ignores unrecognized client ops (no `error` frame).
+- [x] **[Realtime] Unknown inbound ops silently dropped** — `ws.go` returns one generic `error` frame (`unknown_operation`, `unsupported operation`) for unrecognized client ops and keeps the connection open.
 - [ ] **[Realtime] `CheckOrigin` always true** — `ws.go` delegates origin policy to Gateway (documented inline); defense-in-depth relies entirely on edge.
 
 **Промпт-якорь:** Full product audit Batch 14 from docs/todo/backend.md.
