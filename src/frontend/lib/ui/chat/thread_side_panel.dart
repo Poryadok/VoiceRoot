@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/api_errors.dart' show isBackendUnavailable;
 import '../../backend/messages_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
@@ -37,7 +38,7 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
   var _loading = true;
   var _sending = false;
   List<VoiceMessage> _replies = const [];
-  String? _error;
+  MessagesApiFailure? _error;
 
   @override
   void initState() {
@@ -59,11 +60,13 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
       _loading = true;
       _error = null;
     });
-    final result = await ref.read(voiceMessagesClientProvider).getThreadMessages(
-      authorization: auth,
-      chatId: widget.chatId,
-      threadParentId: widget.parentMessageId,
-    );
+    final result = await ref
+        .read(voiceMessagesClientProvider)
+        .getThreadMessages(
+          authorization: auth,
+          chatId: widget.chatId,
+          threadParentId: widget.parentMessageId,
+        );
     if (!mounted) return;
     switch (result) {
       case MessagesApiOk(:final data):
@@ -71,12 +74,27 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
           _replies = data.messages;
           _loading = false;
         });
-      case MessagesApiFailure(:final message):
+      case final failure as MessagesApiFailure:
         setState(() {
-          _error = message;
+          _error = failure;
           _loading = false;
         });
     }
+  }
+
+  String? _loadErrorMessage(AppLocalizations l10n) {
+    final failure = _error!;
+    if (failure.errorCode == 'permission_denied') {
+      return chatRoomErrorMessage(
+        l10n,
+        'permission_denied',
+        statusCode: failure.statusCode,
+      );
+    }
+    if (isBackendUnavailable(failure.statusCode)) {
+      return chatThreadErrorMessage(l10n, '', statusCode: failure.statusCode);
+    }
+    return null;
   }
 
   Future<void> _send() async {
@@ -137,7 +155,7 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
                 : _error != null
                 ? VoiceStatePanel(
                     title: l10n.chatThreadLoadError,
-                    message: chatThreadErrorMessage(l10n, _error!),
+                    message: _loadErrorMessage(l10n),
                     icon: Icons.cloud_off_outlined,
                     actionLabel: l10n.commonRetry,
                     onAction: _load,
