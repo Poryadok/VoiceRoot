@@ -108,7 +108,11 @@ void main() {
       _expectSuccessfulSubmission(tester, client, focusNode);
       await expectLater(
         find.byType(Scaffold).first,
-        matchesGoldenFile('goldens/report_success_h.png'),
+        matchesGoldenFile(
+          Platform.isLinux
+              ? 'goldens/linux/report_success_h.png'
+              : 'goldens/report_success_h.png',
+        ),
       );
 
       final close = find.descendant(
@@ -143,7 +147,11 @@ void main() {
     _expectSuccessfulSubmission(tester, client, focusNode);
     await expectLater(
       find.byType(Scaffold).first,
-      matchesGoldenFile('goldens/report_success_v.png'),
+      matchesGoldenFile(
+        Platform.isLinux
+            ? 'goldens/linux/report_success_v.png'
+            : 'goldens/report_success_v.png',
+      ),
     );
   });
 
