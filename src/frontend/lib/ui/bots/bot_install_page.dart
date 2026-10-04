@@ -10,6 +10,8 @@ import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_avatar.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_skeleton.dart';
+import '../api_error_messages.dart';
 
 /// Public bot install page opened from `bots/{slug}` deep links.
 class BotInstallPage extends ConsumerStatefulWidget {
@@ -37,14 +39,12 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
 
     return Scaffold(
       key: BotInstallPage.pageKey,
-      appBar: AppBar(
-        title: Text(l10n.botInstallTitle),
-      ),
+      appBar: AppBar(title: Text(l10n.botInstallTitle)),
       body: botAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const VoiceListSkeleton(),
         error: (e, _) => VoiceStatePanel(
           title: l10n.botInstallTitle,
-          message: l10n.chatRoomError('$e'),
+          message: spaceBotsErrorMessage(l10n, e),
           icon: Icons.smart_toy_outlined,
         ),
         data: (bot) => SingleChildScrollView(
@@ -71,9 +71,12 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
                         if (bot.slug != null && bot.slug!.isNotEmpty)
                           Text(
                             '@${bot.slug}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                           ),
                       ],
                     ),
@@ -95,7 +98,9 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              for (final scope in BotScopeLabels.parseScopesJson(bot.scopesJson))
+              for (final scope in BotScopeLabels.parseScopesJson(
+                bot.scopesJson,
+              ))
                 Text('• ${BotScopeLabels.labelFor(context, scope)}'),
               const SizedBox(height: 16),
               Text(
@@ -142,7 +147,9 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
                 style: FilledButton.styleFrom(
                   backgroundColor: voice.profileAccent,
                 ),
-                onPressed: _busy || !_canInstall(bot) ? null : () => _install(context, bot),
+                onPressed: _busy || !_canInstall(bot)
+                    ? null
+                    : () => _install(context, bot),
                 child: Text(l10n.botInstallConfirm),
               ),
             ],
@@ -176,21 +183,20 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
               _selectedChatIds.contains(n.linkedChatId),
         )
         .map(
-          (n) => (
-            id: n.linkedChatId!,
-            type: n.chatType ?? 'CHAT_TYPE_GROUP',
-          ),
+          (n) => (id: n.linkedChatId!, type: n.chatType ?? 'CHAT_TYPE_GROUP'),
         )
         .toList();
 
     setState(() => _busy = true);
-    final result = await ref.read(voiceBotsClientProvider).installBotInSpace(
-      authorization: auth,
-      botId: bot.id,
-      spaceId: spaceId,
-      allowedChats: allowedChats,
-      acknowledgePrivilegedScopes: _privilegedAcknowledged,
-    );
+    final result = await ref
+        .read(voiceBotsClientProvider)
+        .installBotInSpace(
+          authorization: auth,
+          botId: bot.id,
+          spaceId: spaceId,
+          allowedChats: allowedChats,
+          acknowledgePrivilegedScopes: _privilegedAcknowledged,
+        );
     if (!context.mounted) return;
     setState(() => _busy = false);
 
@@ -198,14 +204,14 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
       case BotsApiOk():
         ref.invalidate(installedBotsProvider(spaceId));
         ref.invalidate(discoverableBotsProvider);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.spaceBotsInstallSuccess)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.spaceBotsInstallSuccess)));
         Navigator.of(context).pop();
       case BotsApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.chatRoomError(message))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.chatRoomError(message))));
     }
   }
 }
@@ -244,8 +250,11 @@ class _SpaceInstallSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         spacesAsync.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) => Text(l10n.chatRoomError('$e')),
+          loading: () => const VoiceListSkeleton(rowCount: 2),
+          error: (e, _) => VoiceStatePanel(
+            title: l10n.botInstallSelectSpace,
+            message: spaceBotsErrorMessage(l10n, e),
+          ),
           data: (spaces) {
             if (spaces.spaces.isEmpty) {
               return Text(l10n.botInstallNoSpaces);
@@ -258,10 +267,7 @@ class _SpaceInstallSection extends ConsumerWidget {
               ),
               items: [
                 for (final space in spaces.spaces)
-                  DropdownMenuItem(
-                    value: space.id,
-                    child: Text(space.name),
-                  ),
+                  DropdownMenuItem(value: space.id, child: Text(space.name)),
               ],
               onChanged: busy ? null : onSpaceChanged,
             );
@@ -284,32 +290,39 @@ class _SpaceInstallSection extends ConsumerWidget {
             l10n.spaceBotsSelectChats,
             style: Theme.of(context).textTheme.titleSmall,
           ),
-          ref.watch(spaceTreeProvider(selectedSpaceId!)).when(
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text(l10n.chatRoomError('$e')),
-            data: (tree) {
-              final textChats = tree.nodes
-                  .where((n) => n.isTextChat && n.linkedChatId != null)
-                  .toList();
-              if (textChats.isEmpty) {
-                return Text(l10n.chatBotsEmpty);
-              }
-              return Column(
-                children: [
-                  for (final node in textChats)
-                    CheckboxListTile(
-                      key: Key('bot_install_chat_${node.linkedChatId}'),
-                      title: Text(node.displayName),
-                      value: selectedChatIds.contains(node.linkedChatId),
-                      onChanged: busy
-                          ? null
-                          : (checked) =>
-                              onChatToggled(node.linkedChatId!, checked == true),
-                    ),
-                ],
-              );
-            },
-          ),
+          ref
+              .watch(spaceTreeProvider(selectedSpaceId!))
+              .when(
+                loading: () => const VoiceListSkeleton(rowCount: 3),
+                error: (e, _) => VoiceStatePanel(
+                  title: l10n.botInstallSelectSpace,
+                  message: spaceTreeErrorMessage(l10n, e),
+                ),
+                data: (tree) {
+                  final textChats = tree.nodes
+                      .where((n) => n.isTextChat && n.linkedChatId != null)
+                      .toList();
+                  if (textChats.isEmpty) {
+                    return Text(l10n.chatBotsEmpty);
+                  }
+                  return Column(
+                    children: [
+                      for (final node in textChats)
+                        CheckboxListTile(
+                          key: Key('bot_install_chat_${node.linkedChatId}'),
+                          title: Text(node.displayName),
+                          value: selectedChatIds.contains(node.linkedChatId),
+                          onChanged: busy
+                              ? null
+                              : (checked) => onChatToggled(
+                                  node.linkedChatId!,
+                                  checked == true,
+                                ),
+                        ),
+                    ],
+                  );
+                },
+              ),
         ],
       ],
     );

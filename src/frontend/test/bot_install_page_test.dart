@@ -28,8 +28,10 @@ void main() {
         '["TEXT_CHAT_SEND_MESSAGES","SPACE_VIEW_MEMBER_LIST","MEMBER_ASSIGN_ROLES"]',
   );
 
-  testWidgets('BotInstallPage shows description, scopes, and commands section',
-      (tester) async {
+  testWidgets('BotInstallPage hides upstream details on bot load failure', (
+    tester,
+  ) async {
+    const raw = 'internal trace id=secret-bot-456';
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -38,10 +40,9 @@ void main() {
             testProfileAccentStorage,
           ),
           authorizationHeaderProvider.overrideWithValue(auth),
-          botBySlugProvider(slug).overrideWith((ref) async => sampleBot),
-          mySpacesProvider.overrideWith(
-            (ref) async => const SpaceListData(spaces: []),
-          ),
+          botBySlugProvider(
+            slug,
+          ).overrideWith((ref) async => throw Exception(raw)),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -54,30 +55,65 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(BotInstallPage.pageKey), findsOneWidget);
-    expect(find.text('StatsBot'), findsOneWidget);
-    expect(find.text('@statsbot'), findsOneWidget);
-
     final l10n = AppLocalizationsEn();
-    expect(find.text(l10n.botInstallDescriptionHeading), findsOneWidget);
-    expect(find.text(sampleBot.description), findsOneWidget);
-
-    expect(find.text(l10n.botInstallScopesHeading), findsOneWidget);
-    expect(
-      find.text('• Send messages in allowed text chats'),
-      findsOneWidget,
-    );
-    expect(find.text('• View space member list'), findsOneWidget);
-    expect(find.text('• Assign roles below the bot'), findsOneWidget);
-
-    expect(find.text(l10n.botInstallCommandsHeading), findsOneWidget);
-    expect(find.text(l10n.botInstallCommandsEmpty), findsOneWidget);
-
-    expect(find.text(l10n.botInstallWhitelistHeading), findsOneWidget);
-    expect(find.byKey(const Key('bot_install_confirm')), findsOneWidget);
+    expect(find.text(l10n.spaceBotsLoadError), findsOneWidget);
+    expect(find.textContaining('secret-bot-456'), findsNothing);
   });
 
-  testWidgets('BotInstallPage shows localized scope labels in Russian', (tester) async {
+  testWidgets(
+    'BotInstallPage shows description, scopes, and commands section',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authorizationHeaderProvider.overrideWithValue(auth),
+            botBySlugProvider(slug).overrideWith((ref) async => sampleBot),
+            mySpacesProvider.overrideWith(
+              (ref) async => const SpaceListData(spaces: []),
+            ),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const BotInstallPage(slug: slug),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(BotInstallPage.pageKey), findsOneWidget);
+      expect(find.text('StatsBot'), findsOneWidget);
+      expect(find.text('@statsbot'), findsOneWidget);
+
+      final l10n = AppLocalizationsEn();
+      expect(find.text(l10n.botInstallDescriptionHeading), findsOneWidget);
+      expect(find.text(sampleBot.description), findsOneWidget);
+
+      expect(find.text(l10n.botInstallScopesHeading), findsOneWidget);
+      expect(
+        find.text('• Send messages in allowed text chats'),
+        findsOneWidget,
+      );
+      expect(find.text('• View space member list'), findsOneWidget);
+      expect(find.text('• Assign roles below the bot'), findsOneWidget);
+
+      expect(find.text(l10n.botInstallCommandsHeading), findsOneWidget);
+      expect(find.text(l10n.botInstallCommandsEmpty), findsOneWidget);
+
+      expect(find.text(l10n.botInstallWhitelistHeading), findsOneWidget);
+      expect(find.byKey(const Key('bot_install_confirm')), findsOneWidget);
+    },
+  );
+
+  testWidgets('BotInstallPage shows localized scope labels in Russian', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -129,9 +165,9 @@ void main() {
               testProfileAccentStorage,
             ),
             authorizationHeaderProvider.overrideWithValue(auth),
-            botBySlugProvider('rolesbot').overrideWith(
-              (ref) async => privilegedBot,
-            ),
+            botBySlugProvider(
+              'rolesbot',
+            ).overrideWith((ref) async => privilegedBot),
             mySpacesProvider.overrideWith(
               (ref) async => const SpaceListData(
                 spaces: [

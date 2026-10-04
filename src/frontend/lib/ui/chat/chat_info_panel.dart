@@ -96,25 +96,25 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
         if (spaceId != null && widget.isGroup)
-          ChatBotsSettingsSection(
-            chatId: widget.chatId,
-            spaceId: spaceId,
-          ),
+          ChatBotsSettingsSection(chatId: widget.chatId, spaceId: spaceId),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         ChatNotificationOverridesSection(chatId: widget.chatId),
       ],
     );
     final tabs = TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabs: [
-            Tab(key: ChatInfoPanel.mediaTabKey, text: l10n.chatSharedMediaTabMedia),
-            Tab(key: ChatInfoPanel.stickersTabKey, text: l10n.chatSharedMediaTabStickers),
-            Tab(key: ChatInfoPanel.filesTabKey, text: l10n.chatSharedMediaTabFiles),
-            Tab(key: ChatInfoPanel.linksTabKey, text: l10n.chatSharedMediaTabLinks),
-            Tab(key: ChatInfoPanel.voiceTabKey, text: l10n.chatSharedMediaTabVoice),
-          ],
-        );
+      controller: _tabs,
+      isScrollable: true,
+      tabs: [
+        Tab(key: ChatInfoPanel.mediaTabKey, text: l10n.chatSharedMediaTabMedia),
+        Tab(
+          key: ChatInfoPanel.stickersTabKey,
+          text: l10n.chatSharedMediaTabStickers,
+        ),
+        Tab(key: ChatInfoPanel.filesTabKey, text: l10n.chatSharedMediaTabFiles),
+        Tab(key: ChatInfoPanel.linksTabKey, text: l10n.chatSharedMediaTabLinks),
+        Tab(key: ChatInfoPanel.voiceTabKey, text: l10n.chatSharedMediaTabVoice),
+      ],
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -135,15 +135,30 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             SizedBox(
               height: mediaHeight,
               child: TabBarView(
-            controller: _tabs,
-            children: [
-              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.media),
-              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.stickers),
-              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.files),
-              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.links),
-              _SharedMediaTab(chatId: widget.chatId, kind: SharedMediaTabKind.voice),
-            ],
-          ),
+                controller: _tabs,
+                children: [
+                  _SharedMediaTab(
+                    chatId: widget.chatId,
+                    kind: SharedMediaTabKind.media,
+                  ),
+                  _SharedMediaTab(
+                    chatId: widget.chatId,
+                    kind: SharedMediaTabKind.stickers,
+                  ),
+                  _SharedMediaTab(
+                    chatId: widget.chatId,
+                    kind: SharedMediaTabKind.files,
+                  ),
+                  _SharedMediaTab(
+                    chatId: widget.chatId,
+                    kind: SharedMediaTabKind.links,
+                  ),
+                  _SharedMediaTab(
+                    chatId: widget.chatId,
+                    kind: SharedMediaTabKind.voice,
+                  ),
+                ],
+              ),
             ),
           ],
         );
@@ -178,7 +193,9 @@ class _StandaloneChatGuestSettingsSectionState
       ref.watch(chatListControllerProvider).items,
       widget.chatId,
     );
-    if (chat == null || chat.isSpaceChannel || !(chat.isGroup || chat.isChannel)) {
+    if (chat == null ||
+        chat.isSpaceChannel ||
+        !(chat.isGroup || chat.isChannel)) {
       return const SizedBox.shrink();
     }
 
@@ -188,7 +205,8 @@ class _StandaloneChatGuestSettingsSectionState
         .where((member) => member.profileId == activeProfileId)
         .map((member) => member.role)
         .firstOrNull;
-    if (role != kChatRoleOwner && role != 'admin') return const SizedBox.shrink();
+    if (role != kChatRoleOwner && role != 'admin')
+      return const SizedBox.shrink();
 
     final l10n = AppLocalizations.of(context)!;
     final value = _allowGuests ?? chat.allowGuests;
@@ -212,11 +230,13 @@ class _StandaloneChatGuestSettingsSectionState
     final authorization = ref.read(authorizationHeaderProvider);
     if (authorization == null) return;
     setState(() => _updating = true);
-    final result = await ref.read(voiceChatsClientProvider).updateGroup(
-      authorization: authorization,
-      chatId: widget.chatId,
-      allowGuests: enabled,
-    );
+    final result = await ref
+        .read(voiceChatsClientProvider)
+        .updateGroup(
+          authorization: authorization,
+          chatId: widget.chatId,
+          allowGuests: enabled,
+        );
     if (!mounted) return;
     switch (result) {
       case ChatsApiOk(:final data):
@@ -239,12 +259,13 @@ class _StandaloneChatGuestSettingsSectionState
         });
       case ChatsApiFailure(:final message):
         setState(() => _updating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }
+
 class _SharedMediaTab extends ConsumerWidget {
   const _SharedMediaTab({required this.chatId, required this.kind});
 
@@ -263,8 +284,7 @@ class _SharedMediaTab extends ConsumerWidget {
         message: sharedMediaErrorMessage(l10n, error),
         icon: Icons.cloud_off_outlined,
         actionLabel: l10n.commonRetry,
-        onAction: () =>
-            ref.invalidate(sharedMediaListProvider((chatId, kind))),
+        onAction: () => ref.invalidate(sharedMediaListProvider((chatId, kind))),
       ),
       data: (data) {
         if (data.items.isEmpty) {
@@ -297,10 +317,8 @@ class _SharedMediaTab extends ConsumerWidget {
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: data.items.length,
-                  itemBuilder: (context, index) => _ListTile(
-                    item: data.items[index],
-                    chatId: chatId,
-                  ),
+                  itemBuilder: (context, index) =>
+                      _ListTile(item: data.items[index], chatId: chatId),
                 ),
         );
       },
@@ -338,8 +356,9 @@ class _MediaTile extends ConsumerWidget {
         senderProfileId: item.senderProfileId,
         chatId: chatId,
       );
-      final bytesAsync =
-          ref.watch(e2eDecryptedAttachmentThumbProvider(decryptRequest));
+      final bytesAsync = ref.watch(
+        e2eDecryptedAttachmentThumbProvider(decryptRequest),
+      );
       return InkWell(
         key: Key('shared_media_item_${item.messageId}_${item.sortOrder}'),
         onTap: () => _openMessage(context, ref, chatId, item.messageId),
@@ -410,7 +429,9 @@ class _ListTile extends ConsumerWidget {
     final title = item.isLink
         ? (item.title?.isNotEmpty == true ? item.title! : item.externalUrl!)
         : (item.originalName ?? item.attachmentType ?? 'file');
-    final subtitle = item.isLink ? item.externalUrl : _formatSize(item.sizeBytes);
+    final subtitle = item.isLink
+        ? item.externalUrl
+        : _formatSize(item.sizeBytes);
     final isLockedE2eFile = e2eChat && !item.isLink && !item.isE2eEncrypted;
 
     return ListTile(
@@ -487,13 +508,14 @@ Future<void> _downloadSharedE2eFile(
     senderProfileId: item.senderProfileId,
     chatId: chatId,
   );
-  final bytes =
-      await ref.read(e2eDecryptedAttachmentBytesProvider(decryptRequest).future);
+  final bytes = await ref.read(
+    e2eDecryptedAttachmentBytesProvider(decryptRequest).future,
+  );
   if (!context.mounted) return;
   if (bytes == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.e2eAttachmentDecryptFailed)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.e2eAttachmentDecryptFailed)));
     return;
   }
   final saved = await saveDecryptedE2eAttachment(
@@ -502,9 +524,9 @@ Future<void> _downloadSharedE2eFile(
   );
   if (!context.mounted) return;
   if (!saved) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l10n.e2eAttachmentDownloadFailed)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.e2eAttachmentDownloadFailed)));
   }
 }
 
@@ -516,8 +538,7 @@ void _openMessage(
 ) {
   ref.read(shellNavigationProvider).closeSidePanel();
   Navigator.of(context).maybePop();
-  ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
-      messageId;
+  ref.read(pendingChatMessageScrollProvider(chatId).notifier).state = messageId;
 }
 
 /// Opens chat info in side panel (desktop) or bottom sheet (narrow).
@@ -582,7 +603,8 @@ class _ChatOverrideBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final canManage = ref
+    final canManage =
+        ref
             .watch(
               spacePermissionProvider((
                 spaceId: spaceId,
@@ -672,7 +694,8 @@ class ChatBotsSettingsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final canManage = ref
+    final canManage =
+        ref
             .watch(
               spacePermissionProvider((
                 spaceId: spaceId,
@@ -704,7 +727,7 @@ class ChatBotsSettingsSection extends ConsumerWidget {
         botsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
+            child: VoiceListSkeleton(rowCount: 2),
           ),
           error: (error, _) => Padding(
             padding: const EdgeInsets.all(16),
@@ -738,7 +761,8 @@ class ChatBotsSettingsSection extends ConsumerWidget {
                     onChanged: (enabled) async {
                       final auth = ref.read(authorizationHeaderProvider);
                       if (auth == null) return;
-                      final chatType = ref.read(chatTypeForChatProvider(chatId)) ??
+                      final chatType =
+                          ref.read(chatTypeForChatProvider(chatId)) ??
                           'CHAT_TYPE_CHANNEL';
                       final result = await ref
                           .read(voiceBotsClientProvider)
@@ -754,12 +778,17 @@ class ChatBotsSettingsSection extends ConsumerWidget {
                       switch (result) {
                         case BotsApiOk():
                           ref.invalidate(
-                            botsInChatProvider((chatId: chatId, spaceId: spaceId)),
+                            botsInChatProvider((
+                              chatId: chatId,
+                              spaceId: spaceId,
+                            )),
                           );
                           ref.invalidate(slashCommandsForChatProvider(chatId));
                         case BotsApiFailure(:final message):
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l10n.chatRoomError(message))),
+                            SnackBar(
+                              content: Text(l10n.chatRoomError(message)),
+                            ),
                           );
                       }
                     },
