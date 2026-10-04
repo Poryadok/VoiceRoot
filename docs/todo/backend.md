@@ -562,7 +562,7 @@ and Voice IDs denied while history remains.
 - [x] **[Moderation] Service README status** — describes the implemented core and keeps residual gaps explicit.
 - [ ] **[Moderation] No report dedup / rate limiting** — unlimited reports per reporter/target; no abuse protection.
 - [ ] **[Moderation] Report targets not validated** — no S2S checks that message/space/story/user exists (deps listed in `moderation-service.md` unused beyond profile→account lookup).
-- [ ] **[Moderation] Admin API gaps** — no HTTP for `ReviewAppeal`, `RevokeSanction`, `GetReport` by ID; admin UI (`src/admin/src/api/moderation.ts`) only list/resolve/sanction/audit stub.
+- [x] **[Moderation] Admin API gaps** — **done:** staff Gateway HTTP routes expose `GetReport` by ID, `RevokeSanction`, and `ReviewAppeal`; bufconn route tests verify IDs/body forwarding, response mapping, gRPC `NotFound`→HTTP 404, and staff-only denial. Admin API/UI consumers exist for sanction revocation and appeal review.
 - [ ] **[Moderation] Compose E2E gap** — `TestComposeModeration_live` covers perm_ban + login block; comment mentions shadow ban but test does not exercise it.
 - [ ] **[Moderation] Global moderator phone requirement not enforced** — staff role checked at Gateway; no verified-phone gate in Moderation.
 - [ ] **[Moderation] Trust E2E scope ≠ moderation depth** — `TestComposeTrust_live` / `trust_e2e_live_test.dart` cover report 202 + privacy + 2FA only, not sanctions/appeals/automod.
