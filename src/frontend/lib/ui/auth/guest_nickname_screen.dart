@@ -34,15 +34,16 @@ class _GuestNicknameScreenState extends ConsumerState<GuestNicknameScreen> {
       _busy = true;
       _error = null;
     });
-    final err = await ref.read(profileActionsProvider).updateBasicProfile(
-      displayName: nickname,
-      bio: '',
-    );
+    final err = await ref
+        .read(profileActionsProvider)
+        .updateBasicProfile(displayName: nickname, bio: '');
     if (!mounted) return;
     if (err != null) {
       setState(() {
         _busy = false;
-        _error = err;
+        _error = err == 'not_authenticated'
+            ? err
+            : AppLocalizations.of(context)!.commonActionFailed;
       });
       return;
     }
@@ -102,10 +103,7 @@ class _GuestNicknameScreenState extends ConsumerState<GuestNicknameScreen> {
                       ),
                       if (_error != null) ...[
                         const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: TextStyle(color: scheme.error),
-                        ),
+                        Text(_error!, style: TextStyle(color: scheme.error)),
                       ],
                       const SizedBox(height: 24),
                       VoicePrimaryButton(
