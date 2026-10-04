@@ -34,6 +34,37 @@ func TestFCMPushCaptureWrapperIsSelectedOnlyByDebugGate(t *testing.T) {
 	require.IsType(t, &fcm.RecordSender{}, maybeRecordFCMSender(inner, true))
 }
 
+func TestLegacyRecordingFlagDoesNotCaptureOrRegisterDebugRouteWithoutDebugGate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	profileID := uuid.New()
+	token := store.DeviceToken{Token: "synthetic-fixture-token", PushService: "fcm"}
+	payload := fcm.PushPayload{Title: "fixture title", Body: "fixture body", Data: map[string]string{"type": "fixture"}}
+	inner := &fcmSendCapture{
+		expectedContext: ctx, expectedProfileID: profileID,
+		expectedToken: token, expectedPayload: payload,
+	}
+	debugEnabled, err := parseDebugHTTPEnabled(func(string) (string, bool) { return "", false }, true)
+	require.NoError(t, err)
+	require.False(t, debugEnabled)
+
+	wrapped := maybeRecordFCMSender(inner, debugEnabled)
+	err = wrapped.Send(ctx, profileID, token, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, inner.calls)
+	require.True(t, inner.contextPreserved)
+	require.True(t, inner.profilePreserved)
+	require.True(t, inner.tokenPreserved)
+	require.True(t, inner.payloadPreserved)
+	_, recorded := fcm.GlobalPushRecorder.LastForProfile(profileID)
+	require.False(t, recorded)
+
+	handler := notificationHTTPHandlerWithReadinessAndDebug(serviceName, nil, debugEnabled)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/recorded-pushes?profile_id="+profileID.String(), nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
+}
+
 type fcmSendCapture struct {
 	calls             int
 	expectedContext   context.Context
