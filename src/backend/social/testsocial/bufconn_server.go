@@ -28,19 +28,35 @@ type AccountProfilesResolver interface {
 	ProfileIDsForAccount(context.Context, uuid.UUID) ([]uuid.UUID, error)
 }
 
+// Dependencies configures the service-owned resolvers needed by a Social test
+// server. Optional production dependencies remain nil unless a test supplies
+// them; no permissive behavior is substituted.
+type Dependencies struct {
+	AccountProfiles    AccountProfilesResolver
+	Privacy            socgrpc.FriendRequestPrivacyChecker
+	PhoneSearchPrivacy socgrpc.PhoneSearchPrivacyChecker
+	PhoneHashes        socgrpc.PhoneHashLookup
+	SpaceCoMembership  socgrpc.SpaceCoMembershipChecker
+}
+
 // NewBufconnClient returns a gRPC client connection to an in-process SocialService backed by pool.
 // Caller must run migrations on pool before use and provide the deterministic
-// User-owned account-to-profile resolver. cleanup closes the client and stops
-// the server.
-func NewBufconnClient(t *testing.T, pool *pgxpool.Pool, accountProfiles AccountProfilesResolver) (grpc.ClientConnInterface, func()) {
+// User-owned account-to-profile resolver. Production-backed privacy and phone
+// dependencies can be supplied explicitly when the tested RPC requires them.
+// cleanup closes the client and stops the server.
+func NewBufconnClient(t *testing.T, pool *pgxpool.Pool, deps Dependencies) (grpc.ClientConnInterface, func()) {
 	t.Helper()
-	require.NotNil(t, accountProfiles, "account profile resolver is required")
+	require.NotNil(t, deps.AccountProfiles, "account profile resolver is required")
 	lis := bufconn.Listen(defaultBufSize)
 	srv := grpc.NewServer()
 	socialv1.RegisterSocialServiceServer(srv, &socgrpc.SocialGRPC{
-		Friends:         &socialstore.FriendshipStore{Pool: pool},
-		Blocks:          &socialstore.BlockStore{Pool: pool},
-		AccountProfiles: accountProfiles,
+		Friends:            &socialstore.FriendshipStore{Pool: pool},
+		Blocks:             &socialstore.BlockStore{Pool: pool},
+		Privacy:            deps.Privacy,
+		PhoneSearchPrivacy: deps.PhoneSearchPrivacy,
+		PhoneHashes:        deps.PhoneHashes,
+		SpaceCoMembership:  deps.SpaceCoMembership,
+		AccountProfiles:    deps.AccountProfiles,
 	})
 	go func() {
 		if err := srv.Serve(lis); err != nil {
