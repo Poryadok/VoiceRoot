@@ -93,6 +93,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SpaceInvitesSheet)),
+      )!;
       if (revoke) {
         await tester.tap(find.byKey(const Key('revoke_invite_inv-1')));
       } else {
@@ -101,8 +104,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(mutation, 1);
       expect(find.textContaining('private_backend_detail'), findsNothing);
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
     });
   }
+
+  testWidgets('unauthenticated create retains its local action copy', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authorizationHeaderProvider.overrideWithValue(null),
+          spaceInvitesProvider(
+            'space-1',
+          ).overrideWith((ref) async => sampleInvites),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(SpaceInvitesSheet)),
+    )!;
+    await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(l10n.spaceInviteCreateError('not_authenticated')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('invalid max uses stays local and sends no request', (
     tester,

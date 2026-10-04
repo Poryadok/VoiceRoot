@@ -123,12 +123,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SpaceMembersSheet)),
+      )!;
       await tester.tap(find.byKey(action.key));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(FilledButton).last);
       await tester.pumpAndSettle();
       expect(mutationPaths, ['/api/v1/spaces/space-1${action.suffix}']);
       expect(find.textContaining('private_backend_detail'), findsNothing);
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
     });
   }
 }
