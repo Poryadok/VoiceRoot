@@ -15,9 +15,9 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $2;
 
-import '../../chat/v1/chat.pb.dart' as $2;
+import '../../chat/v1/chat.pb.dart' as $1;
 import '../../common/v1/space_lifecycle.pb.dart' as $4;
 import '../../space/v1/space.pb.dart' as $3;
 import 'calls.pbenum.dart';
@@ -234,6 +234,760 @@ class ProvisionGameSessionRoomRequest extends $pb.GeneratedMessage {
   void clearSessionId() => $_clearField(7);
 }
 
+/// Matchmaking owns the participant manifest. UUIDs are canonical lower-case,
+/// unique, and ordered by UUID bytes; its digest covers concatenated fixed-width
+/// 16-byte UUID values. Digest fields contain raw SHA-256 bytes.
+/// operation_id is also the protected principal request-id binding. Hashes
+/// cover deterministic serialization of the complete typed request.
+/// @voice.unknown_fields=reject
+/// @voice.hash=deterministic_protobuf_sha256
+class CreateMatchSquadRoomRequest extends $pb.GeneratedMessage {
+  factory CreateMatchSquadRoomRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? matchId,
+    $core.Iterable<$1.MatchSquadParticipant>? participants,
+    $core.List<$core.int>? participantManifestSha256,
+    $1.MatchSquadChatReceipt? chatCreationReceipt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (matchId != null) result.matchId = matchId;
+    if (participants != null) result.participants.addAll(participants);
+    if (participantManifestSha256 != null)
+      result.participantManifestSha256 = participantManifestSha256;
+    if (chatCreationReceipt != null)
+      result.chatCreationReceipt = chatCreationReceipt;
+    return result;
+  }
+
+  CreateMatchSquadRoomRequest._();
+
+  factory CreateMatchSquadRoomRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateMatchSquadRoomRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateMatchSquadRoomRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'matchId')
+    ..pPM<$1.MatchSquadParticipant>(4, _omitFieldNames ? '' : 'participants',
+        subBuilder: $1.MatchSquadParticipant.create)
+    ..a<$core.List<$core.int>>(5,
+        _omitFieldNames ? '' : 'participantManifestSha256', $pb.PbFieldType.OY)
+    ..aOM<$1.MatchSquadChatReceipt>(
+        6, _omitFieldNames ? '' : 'chatCreationReceipt',
+        subBuilder: $1.MatchSquadChatReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateMatchSquadRoomRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateMatchSquadRoomRequest copyWith(
+          void Function(CreateMatchSquadRoomRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CreateMatchSquadRoomRequest))
+          as CreateMatchSquadRoomRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateMatchSquadRoomRequest create() =>
+      CreateMatchSquadRoomRequest._();
+  @$core.override
+  CreateMatchSquadRoomRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateMatchSquadRoomRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateMatchSquadRoomRequest>(create);
+  static CreateMatchSquadRoomRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get matchId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set matchId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMatchId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMatchId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<$1.MatchSquadParticipant> get participants => $_getList(3);
+
+  @$pb.TagNumber(5)
+  $core.List<$core.int> get participantManifestSha256 => $_getN(4);
+  @$pb.TagNumber(5)
+  set participantManifestSha256($core.List<$core.int> value) =>
+      $_setBytes(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasParticipantManifestSha256() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearParticipantManifestSha256() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $1.MatchSquadChatReceipt get chatCreationReceipt => $_getN(5);
+  @$pb.TagNumber(6)
+  set chatCreationReceipt($1.MatchSquadChatReceipt value) =>
+      $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatCreationReceipt() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatCreationReceipt() => $_clearField(6);
+  @$pb.TagNumber(6)
+  $1.MatchSquadChatReceipt ensureChatCreationReceipt() => $_ensure(5);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class MatchSquadRoomReceipt extends $pb.GeneratedMessage {
+  factory MatchSquadRoomReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.String? matchId,
+    $core.String? roomId,
+    $core.String? chatId,
+    $core.String? chatCreationReceiptId,
+    $core.List<$core.int>? chatCreationReceiptSha256,
+    $core.List<$core.int>? participantManifestSha256,
+    $core.List<$core.int>? requestSha256,
+    $2.Timestamp? createdAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (matchId != null) result.matchId = matchId;
+    if (roomId != null) result.roomId = roomId;
+    if (chatId != null) result.chatId = chatId;
+    if (chatCreationReceiptId != null)
+      result.chatCreationReceiptId = chatCreationReceiptId;
+    if (chatCreationReceiptSha256 != null)
+      result.chatCreationReceiptSha256 = chatCreationReceiptSha256;
+    if (participantManifestSha256 != null)
+      result.participantManifestSha256 = participantManifestSha256;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (createdAt != null) result.createdAt = createdAt;
+    return result;
+  }
+
+  MatchSquadRoomReceipt._();
+
+  factory MatchSquadRoomReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MatchSquadRoomReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MatchSquadRoomReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'matchId')
+    ..aOS(5, _omitFieldNames ? '' : 'roomId')
+    ..aOS(6, _omitFieldNames ? '' : 'chatId')
+    ..aOS(7, _omitFieldNames ? '' : 'chatCreationReceiptId')
+    ..a<$core.List<$core.int>>(8,
+        _omitFieldNames ? '' : 'chatCreationReceiptSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(9,
+        _omitFieldNames ? '' : 'participantManifestSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        10, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOM<$2.Timestamp>(11, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadRoomReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadRoomReceipt copyWith(
+          void Function(MatchSquadRoomReceipt) updates) =>
+      super.copyWith((message) => updates(message as MatchSquadRoomReceipt))
+          as MatchSquadRoomReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadRoomReceipt create() => MatchSquadRoomReceipt._();
+  @$core.override
+  MatchSquadRoomReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadRoomReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MatchSquadRoomReceipt>(create);
+  static MatchSquadRoomReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get matchId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set matchId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMatchId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMatchId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get roomId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set roomId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRoomId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRoomId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get chatId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set chatId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get chatCreationReceiptId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set chatCreationReceiptId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasChatCreationReceiptId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearChatCreationReceiptId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get chatCreationReceiptSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set chatCreationReceiptSha256($core.List<$core.int> value) =>
+      $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasChatCreationReceiptSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearChatCreationReceiptSha256() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.List<$core.int> get participantManifestSha256 => $_getN(8);
+  @$pb.TagNumber(9)
+  set participantManifestSha256($core.List<$core.int> value) =>
+      $_setBytes(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasParticipantManifestSha256() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearParticipantManifestSha256() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.List<$core.int> get requestSha256 => $_getN(9);
+  @$pb.TagNumber(10)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasRequestSha256() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearRequestSha256() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $2.Timestamp get createdAt => $_getN(10);
+  @$pb.TagNumber(11)
+  set createdAt($2.Timestamp value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasCreatedAt() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearCreatedAt() => $_clearField(11);
+  @$pb.TagNumber(11)
+  $2.Timestamp ensureCreatedAt() => $_ensure(10);
+}
+
+class CreateMatchSquadRoomResponse extends $pb.GeneratedMessage {
+  factory CreateMatchSquadRoomResponse({
+    MatchSquadRoomReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  CreateMatchSquadRoomResponse._();
+
+  factory CreateMatchSquadRoomResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CreateMatchSquadRoomResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CreateMatchSquadRoomResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOM<MatchSquadRoomReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: MatchSquadRoomReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateMatchSquadRoomResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CreateMatchSquadRoomResponse copyWith(
+          void Function(CreateMatchSquadRoomResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CreateMatchSquadRoomResponse))
+          as CreateMatchSquadRoomResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CreateMatchSquadRoomResponse create() =>
+      CreateMatchSquadRoomResponse._();
+  @$core.override
+  CreateMatchSquadRoomResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CreateMatchSquadRoomResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CreateMatchSquadRoomResponse>(create);
+  static CreateMatchSquadRoomResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  MatchSquadRoomReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(MatchSquadRoomReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  MatchSquadRoomReceipt ensureReceipt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=deterministic_protobuf_sha256
+class TeardownMatchSquadRoomRequest extends $pb.GeneratedMessage {
+  factory TeardownMatchSquadRoomRequest({
+    $core.int? protocolVersion,
+    $core.String? teardownOperationId,
+    $core.String? matchId,
+    $core.String? roomId,
+    $core.String? creationReceiptId,
+    $core.List<$core.int>? participantManifestSha256,
+    $core.List<$core.int>? creationRequestSha256,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (teardownOperationId != null)
+      result.teardownOperationId = teardownOperationId;
+    if (matchId != null) result.matchId = matchId;
+    if (roomId != null) result.roomId = roomId;
+    if (creationReceiptId != null) result.creationReceiptId = creationReceiptId;
+    if (participantManifestSha256 != null)
+      result.participantManifestSha256 = participantManifestSha256;
+    if (creationRequestSha256 != null)
+      result.creationRequestSha256 = creationRequestSha256;
+    return result;
+  }
+
+  TeardownMatchSquadRoomRequest._();
+
+  factory TeardownMatchSquadRoomRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory TeardownMatchSquadRoomRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'TeardownMatchSquadRoomRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'teardownOperationId')
+    ..aOS(3, _omitFieldNames ? '' : 'matchId')
+    ..aOS(4, _omitFieldNames ? '' : 'roomId')
+    ..aOS(5, _omitFieldNames ? '' : 'creationReceiptId')
+    ..a<$core.List<$core.int>>(6,
+        _omitFieldNames ? '' : 'participantManifestSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'creationRequestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TeardownMatchSquadRoomRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TeardownMatchSquadRoomRequest copyWith(
+          void Function(TeardownMatchSquadRoomRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as TeardownMatchSquadRoomRequest))
+          as TeardownMatchSquadRoomRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static TeardownMatchSquadRoomRequest create() =>
+      TeardownMatchSquadRoomRequest._();
+  @$core.override
+  TeardownMatchSquadRoomRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static TeardownMatchSquadRoomRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<TeardownMatchSquadRoomRequest>(create);
+  static TeardownMatchSquadRoomRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get teardownOperationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set teardownOperationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasTeardownOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearTeardownOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get matchId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set matchId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMatchId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMatchId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get roomId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set roomId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRoomId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRoomId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get creationReceiptId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set creationReceiptId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCreationReceiptId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCreationReceiptId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.List<$core.int> get participantManifestSha256 => $_getN(5);
+  @$pb.TagNumber(6)
+  set participantManifestSha256($core.List<$core.int> value) =>
+      $_setBytes(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasParticipantManifestSha256() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearParticipantManifestSha256() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get creationRequestSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set creationRequestSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCreationRequestSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCreationRequestSha256() => $_clearField(7);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class MatchSquadRoomTeardownReceipt extends $pb.GeneratedMessage {
+  factory MatchSquadRoomTeardownReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? teardownOperationId,
+    $core.String? matchId,
+    $core.String? roomId,
+    $core.String? creationReceiptId,
+    $core.List<$core.int>? participantManifestSha256,
+    $core.List<$core.int>? requestSha256,
+    MatchSquadTeardownStatus? status,
+    $2.Timestamp? completedAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (teardownOperationId != null)
+      result.teardownOperationId = teardownOperationId;
+    if (matchId != null) result.matchId = matchId;
+    if (roomId != null) result.roomId = roomId;
+    if (creationReceiptId != null) result.creationReceiptId = creationReceiptId;
+    if (participantManifestSha256 != null)
+      result.participantManifestSha256 = participantManifestSha256;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (status != null) result.status = status;
+    if (completedAt != null) result.completedAt = completedAt;
+    return result;
+  }
+
+  MatchSquadRoomTeardownReceipt._();
+
+  factory MatchSquadRoomTeardownReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MatchSquadRoomTeardownReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MatchSquadRoomTeardownReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'teardownOperationId')
+    ..aOS(4, _omitFieldNames ? '' : 'matchId')
+    ..aOS(5, _omitFieldNames ? '' : 'roomId')
+    ..aOS(6, _omitFieldNames ? '' : 'creationReceiptId')
+    ..a<$core.List<$core.int>>(7,
+        _omitFieldNames ? '' : 'participantManifestSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(
+        8, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aE<MatchSquadTeardownStatus>(9, _omitFieldNames ? '' : 'status',
+        enumValues: MatchSquadTeardownStatus.values)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'completedAt',
+        subBuilder: $2.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadRoomTeardownReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadRoomTeardownReceipt copyWith(
+          void Function(MatchSquadRoomTeardownReceipt) updates) =>
+      super.copyWith(
+              (message) => updates(message as MatchSquadRoomTeardownReceipt))
+          as MatchSquadRoomTeardownReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadRoomTeardownReceipt create() =>
+      MatchSquadRoomTeardownReceipt._();
+  @$core.override
+  MatchSquadRoomTeardownReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadRoomTeardownReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MatchSquadRoomTeardownReceipt>(create);
+  static MatchSquadRoomTeardownReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get teardownOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set teardownOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasTeardownOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearTeardownOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get matchId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set matchId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMatchId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMatchId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get roomId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set roomId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRoomId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRoomId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get creationReceiptId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set creationReceiptId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCreationReceiptId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCreationReceiptId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get participantManifestSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set participantManifestSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasParticipantManifestSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearParticipantManifestSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.List<$core.int> get requestSha256 => $_getN(7);
+  @$pb.TagNumber(8)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasRequestSha256() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearRequestSha256() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  MatchSquadTeardownStatus get status => $_getN(8);
+  @$pb.TagNumber(9)
+  set status(MatchSquadTeardownStatus value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasStatus() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearStatus() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $2.Timestamp get completedAt => $_getN(9);
+  @$pb.TagNumber(10)
+  set completedAt($2.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasCompletedAt() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearCompletedAt() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $2.Timestamp ensureCompletedAt() => $_ensure(9);
+}
+
+class TeardownMatchSquadRoomResponse extends $pb.GeneratedMessage {
+  factory TeardownMatchSquadRoomResponse({
+    MatchSquadRoomTeardownReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  TeardownMatchSquadRoomResponse._();
+
+  factory TeardownMatchSquadRoomResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory TeardownMatchSquadRoomResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'TeardownMatchSquadRoomResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
+      createEmptyInstance: create)
+    ..aOM<MatchSquadRoomTeardownReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: MatchSquadRoomTeardownReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TeardownMatchSquadRoomResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  TeardownMatchSquadRoomResponse copyWith(
+          void Function(TeardownMatchSquadRoomResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as TeardownMatchSquadRoomResponse))
+          as TeardownMatchSquadRoomResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static TeardownMatchSquadRoomResponse create() =>
+      TeardownMatchSquadRoomResponse._();
+  @$core.override
+  TeardownMatchSquadRoomResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static TeardownMatchSquadRoomResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<TeardownMatchSquadRoomResponse>(create);
+  static TeardownMatchSquadRoomResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  MatchSquadRoomTeardownReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(MatchSquadRoomTeardownReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  MatchSquadRoomTeardownReceipt ensureReceipt() => $_ensure(0);
+}
+
 class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
   factory ProvisionGameSessionRoomResponse({
     $core.String? operationId,
@@ -246,7 +1000,7 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
     $core.String? livekitRoomName,
     $core.String? voiceCreationReceiptId,
     $core.List<$core.int>? requestHash,
-    $1.Timestamp? createdAt,
+    $2.Timestamp? createdAt,
     $core.String? sessionId,
   }) {
     final result = create();
@@ -293,8 +1047,8 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
     ..aOS(9, _omitFieldNames ? '' : 'voiceCreationReceiptId')
     ..a<$core.List<$core.int>>(
         10, _omitFieldNames ? '' : 'requestHash', $pb.PbFieldType.OY)
-    ..aOM<$1.Timestamp>(11, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(11, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(12, _omitFieldNames ? '' : 'sessionId')
     ..hasRequiredFields = false;
 
@@ -414,15 +1168,15 @@ class ProvisionGameSessionRoomResponse extends $pb.GeneratedMessage {
   void clearRequestHash() => $_clearField(10);
 
   @$pb.TagNumber(11)
-  $1.Timestamp get createdAt => $_getN(10);
+  $2.Timestamp get createdAt => $_getN(10);
   @$pb.TagNumber(11)
-  set createdAt($1.Timestamp value) => $_setField(11, value);
+  set createdAt($2.Timestamp value) => $_setField(11, value);
   @$pb.TagNumber(11)
   $core.bool hasCreatedAt() => $_has(10);
   @$pb.TagNumber(11)
   void clearCreatedAt() => $_clearField(11);
   @$pb.TagNumber(11)
-  $1.Timestamp ensureCreatedAt() => $_ensure(10);
+  $2.Timestamp ensureCreatedAt() => $_ensure(10);
 
   @$pb.TagNumber(12)
   $core.String get sessionId => $_getSZ(11);
@@ -584,9 +1338,9 @@ class CloseGameSessionRoomResponse extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? closeReceiptId,
     $core.List<$core.int>? requestHash,
-    $1.Timestamp? closingAt,
-    $1.Timestamp? mediaFencedAt,
-    $1.Timestamp? closedAt,
+    $2.Timestamp? closingAt,
+    $2.Timestamp? mediaFencedAt,
+    $2.Timestamp? closedAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -633,12 +1387,12 @@ class CloseGameSessionRoomResponse extends $pb.GeneratedMessage {
     ..aOS(10, _omitFieldNames ? '' : 'closeReceiptId')
     ..a<$core.List<$core.int>>(
         11, _omitFieldNames ? '' : 'requestHash', $pb.PbFieldType.OY)
-    ..aOM<$1.Timestamp>(12, _omitFieldNames ? '' : 'closingAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(13, _omitFieldNames ? '' : 'mediaFencedAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'closedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(12, _omitFieldNames ? '' : 'closingAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(13, _omitFieldNames ? '' : 'mediaFencedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'closedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -765,37 +1519,37 @@ class CloseGameSessionRoomResponse extends $pb.GeneratedMessage {
   void clearRequestHash() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $1.Timestamp get closingAt => $_getN(11);
+  $2.Timestamp get closingAt => $_getN(11);
   @$pb.TagNumber(12)
-  set closingAt($1.Timestamp value) => $_setField(12, value);
+  set closingAt($2.Timestamp value) => $_setField(12, value);
   @$pb.TagNumber(12)
   $core.bool hasClosingAt() => $_has(11);
   @$pb.TagNumber(12)
   void clearClosingAt() => $_clearField(12);
   @$pb.TagNumber(12)
-  $1.Timestamp ensureClosingAt() => $_ensure(11);
+  $2.Timestamp ensureClosingAt() => $_ensure(11);
 
   @$pb.TagNumber(13)
-  $1.Timestamp get mediaFencedAt => $_getN(12);
+  $2.Timestamp get mediaFencedAt => $_getN(12);
   @$pb.TagNumber(13)
-  set mediaFencedAt($1.Timestamp value) => $_setField(13, value);
+  set mediaFencedAt($2.Timestamp value) => $_setField(13, value);
   @$pb.TagNumber(13)
   $core.bool hasMediaFencedAt() => $_has(12);
   @$pb.TagNumber(13)
   void clearMediaFencedAt() => $_clearField(13);
   @$pb.TagNumber(13)
-  $1.Timestamp ensureMediaFencedAt() => $_ensure(12);
+  $2.Timestamp ensureMediaFencedAt() => $_ensure(12);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get closedAt => $_getN(13);
+  $2.Timestamp get closedAt => $_getN(13);
   @$pb.TagNumber(14)
-  set closedAt($1.Timestamp value) => $_setField(14, value);
+  set closedAt($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasClosedAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearClosedAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureClosedAt() => $_ensure(13);
+  $2.Timestamp ensureClosedAt() => $_ensure(13);
 }
 
 /// @voice.unknown_fields=reject
@@ -809,7 +1563,7 @@ class ApplyGameSessionRosterRequest extends $pb.GeneratedMessage {
     $core.String? voiceRoomId,
     $fixnum.Int64? rosterRevision,
     $core.Iterable<$core.String>? profileIds,
-    $1.Timestamp? leaseExpiresAt,
+    $2.Timestamp? leaseExpiresAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -845,8 +1599,8 @@ class ApplyGameSessionRosterRequest extends $pb.GeneratedMessage {
         6, _omitFieldNames ? '' : 'rosterRevision', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..pPS(7, _omitFieldNames ? '' : 'profileIds')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'leaseExpiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'leaseExpiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -931,15 +1685,15 @@ class ApplyGameSessionRosterRequest extends $pb.GeneratedMessage {
 
   /// GIS database commit time plus the fixed lease duration.
   @$pb.TagNumber(8)
-  $1.Timestamp get leaseExpiresAt => $_getN(7);
+  $2.Timestamp get leaseExpiresAt => $_getN(7);
   @$pb.TagNumber(8)
-  set leaseExpiresAt($1.Timestamp value) => $_setField(8, value);
+  set leaseExpiresAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasLeaseExpiresAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearLeaseExpiresAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureLeaseExpiresAt() => $_ensure(7);
+  $2.Timestamp ensureLeaseExpiresAt() => $_ensure(7);
 }
 
 class ApplyGameSessionRosterResponse extends $pb.GeneratedMessage {
@@ -952,7 +1706,7 @@ class ApplyGameSessionRosterResponse extends $pb.GeneratedMessage {
     $core.String? receiptId,
     $core.List<$core.int>? requestHash,
     $fixnum.Int64? acceptedRevision,
-    $1.Timestamp? leaseExpiresAt,
+    $2.Timestamp? leaseExpiresAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -991,8 +1745,8 @@ class ApplyGameSessionRosterResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         8, _omitFieldNames ? '' : 'acceptedRevision', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'leaseExpiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'leaseExpiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1090,15 +1844,15 @@ class ApplyGameSessionRosterResponse extends $pb.GeneratedMessage {
   void clearAcceptedRevision() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get leaseExpiresAt => $_getN(8);
+  $2.Timestamp get leaseExpiresAt => $_getN(8);
   @$pb.TagNumber(9)
-  set leaseExpiresAt($1.Timestamp value) => $_setField(9, value);
+  set leaseExpiresAt($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasLeaseExpiresAt() => $_has(8);
   @$pb.TagNumber(9)
   void clearLeaseExpiresAt() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensureLeaseExpiresAt() => $_ensure(8);
+  $2.Timestamp ensureLeaseExpiresAt() => $_ensure(8);
 }
 
 /// @voice.unknown_fields=reject
@@ -1274,8 +2028,8 @@ class FenceSdkConversionResponse extends $pb.GeneratedMessage {
     $core.bool? targetSessionConflict,
     $core.String? sourceRoomId,
     $fixnum.Int64? mediaGeneration,
-    $1.Timestamp? observedEjectionAt,
-    $1.Timestamp? committedAt,
+    $2.Timestamp? observedEjectionAt,
+    $2.Timestamp? committedAt,
     $core.String? sourceProfileId,
   }) {
     final result = create();
@@ -1332,10 +2086,10 @@ class FenceSdkConversionResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         13, _omitFieldNames ? '' : 'mediaGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'observedEjectionAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(15, _omitFieldNames ? '' : 'committedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'observedEjectionAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'committedAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(16, _omitFieldNames ? '' : 'sourceProfileId')
     ..hasRequiredFields = false;
 
@@ -1478,26 +2232,26 @@ class FenceSdkConversionResponse extends $pb.GeneratedMessage {
   void clearMediaGeneration() => $_clearField(13);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get observedEjectionAt => $_getN(13);
+  $2.Timestamp get observedEjectionAt => $_getN(13);
   @$pb.TagNumber(14)
-  set observedEjectionAt($1.Timestamp value) => $_setField(14, value);
+  set observedEjectionAt($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasObservedEjectionAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearObservedEjectionAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureObservedEjectionAt() => $_ensure(13);
+  $2.Timestamp ensureObservedEjectionAt() => $_ensure(13);
 
   @$pb.TagNumber(15)
-  $1.Timestamp get committedAt => $_getN(14);
+  $2.Timestamp get committedAt => $_getN(14);
   @$pb.TagNumber(15)
-  set committedAt($1.Timestamp value) => $_setField(15, value);
+  set committedAt($2.Timestamp value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasCommittedAt() => $_has(14);
   @$pb.TagNumber(15)
   void clearCommittedAt() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.Timestamp ensureCommittedAt() => $_ensure(14);
+  $2.Timestamp ensureCommittedAt() => $_ensure(14);
 
   @$pb.TagNumber(16)
   $core.String get sourceProfileId => $_getSZ(15);
@@ -1646,7 +2400,7 @@ class CompleteSdkConversionActivationResponse extends $pb.GeneratedMessage {
     $core.String? receiptId,
     $core.List<$core.int>? requestHash,
     $core.String? state,
-    $1.Timestamp? committedAt,
+    $2.Timestamp? committedAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -1688,8 +2442,8 @@ class CompleteSdkConversionActivationResponse extends $pb.GeneratedMessage {
     ..a<$core.List<$core.int>>(
         7, _omitFieldNames ? '' : 'requestHash', $pb.PbFieldType.OY)
     ..aOS(8, _omitFieldNames ? '' : 'state')
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'committedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'committedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1788,21 +2542,21 @@ class CompleteSdkConversionActivationResponse extends $pb.GeneratedMessage {
   void clearState() => $_clearField(8);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get committedAt => $_getN(8);
+  $2.Timestamp get committedAt => $_getN(8);
   @$pb.TagNumber(9)
-  set committedAt($1.Timestamp value) => $_setField(9, value);
+  set committedAt($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasCommittedAt() => $_has(8);
   @$pb.TagNumber(9)
   void clearCommittedAt() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensureCommittedAt() => $_ensure(8);
+  $2.Timestamp ensureCommittedAt() => $_ensure(8);
 }
 
 class StartCallRequest extends $pb.GeneratedMessage {
   factory StartCallRequest({
     $core.String? roomType,
-    $2.ChatRef? linkedChat,
+    $1.ChatRef? linkedChat,
     $core.String? voiceRoomId,
     $3.SpaceRef? space,
     VoiceSessionKind? roomTypeEnum,
@@ -1834,8 +2588,8 @@ class StartCallRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'roomType')
-    ..aOM<$2.ChatRef>(2, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $2.ChatRef.create)
+    ..aOM<$1.ChatRef>(2, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $1.ChatRef.create)
     ..aOS(3, _omitFieldNames ? '' : 'voiceRoomId')
     ..aOM<$3.SpaceRef>(4, _omitFieldNames ? '' : 'space',
         subBuilder: $3.SpaceRef.create)
@@ -1875,15 +2629,15 @@ class StartCallRequest extends $pb.GeneratedMessage {
   void clearRoomType() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.ChatRef get linkedChat => $_getN(1);
+  $1.ChatRef get linkedChat => $_getN(1);
   @$pb.TagNumber(2)
-  set linkedChat($2.ChatRef value) => $_setField(2, value);
+  set linkedChat($1.ChatRef value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasLinkedChat() => $_has(1);
   @$pb.TagNumber(2)
   void clearLinkedChat() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.ChatRef ensureLinkedChat() => $_ensure(1);
+  $1.ChatRef ensureLinkedChat() => $_ensure(1);
 
   @$pb.TagNumber(3)
   $core.String get voiceRoomId => $_getSZ(2);
@@ -2208,16 +2962,16 @@ class CallSession extends $pb.GeneratedMessage {
     $core.String? roomId,
     $core.String? livekitRoomName,
     $core.String? roomType,
-    $2.ChatRef? linkedChat,
+    $1.ChatRef? linkedChat,
     $core.String? voiceRoomId,
-    $1.Timestamp? startedAt,
+    $2.Timestamp? startedAt,
     VoiceSessionKind? roomTypeEnum,
     $core.String? initiatorProfileId,
     $core.String? calleeProfileId,
     CallMediaKind? mediaKind,
     CallStatus? status,
-    $1.Timestamp? expiresAt,
-    $1.Timestamp? endedAt,
+    $2.Timestamp? expiresAt,
+    $2.Timestamp? endedAt,
     $core.String? spaceId,
   }) {
     final result = create();
@@ -2255,11 +3009,11 @@ class CallSession extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'roomId')
     ..aOS(2, _omitFieldNames ? '' : 'livekitRoomName')
     ..aOS(3, _omitFieldNames ? '' : 'roomType')
-    ..aOM<$2.ChatRef>(4, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $2.ChatRef.create)
+    ..aOM<$1.ChatRef>(4, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $1.ChatRef.create)
     ..aOS(5, _omitFieldNames ? '' : 'voiceRoomId')
-    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'startedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(6, _omitFieldNames ? '' : 'startedAt',
+        subBuilder: $2.Timestamp.create)
     ..aE<VoiceSessionKind>(7, _omitFieldNames ? '' : 'roomTypeEnum',
         enumValues: VoiceSessionKind.values)
     ..aOS(8, _omitFieldNames ? '' : 'initiatorProfileId')
@@ -2268,10 +3022,10 @@ class CallSession extends $pb.GeneratedMessage {
         enumValues: CallMediaKind.values)
     ..aE<CallStatus>(11, _omitFieldNames ? '' : 'status',
         enumValues: CallStatus.values)
-    ..aOM<$1.Timestamp>(12, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(13, _omitFieldNames ? '' : 'endedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(12, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(13, _omitFieldNames ? '' : 'endedAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(14, _omitFieldNames ? '' : 'spaceId')
     ..hasRequiredFields = false;
 
@@ -2322,15 +3076,15 @@ class CallSession extends $pb.GeneratedMessage {
   void clearRoomType() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $2.ChatRef get linkedChat => $_getN(3);
+  $1.ChatRef get linkedChat => $_getN(3);
   @$pb.TagNumber(4)
-  set linkedChat($2.ChatRef value) => $_setField(4, value);
+  set linkedChat($1.ChatRef value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasLinkedChat() => $_has(3);
   @$pb.TagNumber(4)
   void clearLinkedChat() => $_clearField(4);
   @$pb.TagNumber(4)
-  $2.ChatRef ensureLinkedChat() => $_ensure(3);
+  $1.ChatRef ensureLinkedChat() => $_ensure(3);
 
   @$pb.TagNumber(5)
   $core.String get voiceRoomId => $_getSZ(4);
@@ -2342,15 +3096,15 @@ class CallSession extends $pb.GeneratedMessage {
   void clearVoiceRoomId() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $1.Timestamp get startedAt => $_getN(5);
+  $2.Timestamp get startedAt => $_getN(5);
   @$pb.TagNumber(6)
-  set startedAt($1.Timestamp value) => $_setField(6, value);
+  set startedAt($2.Timestamp value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasStartedAt() => $_has(5);
   @$pb.TagNumber(6)
   void clearStartedAt() => $_clearField(6);
   @$pb.TagNumber(6)
-  $1.Timestamp ensureStartedAt() => $_ensure(5);
+  $2.Timestamp ensureStartedAt() => $_ensure(5);
 
   @$pb.TagNumber(7)
   VoiceSessionKind get roomTypeEnum => $_getN(6);
@@ -2398,26 +3152,26 @@ class CallSession extends $pb.GeneratedMessage {
   void clearStatus() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $1.Timestamp get expiresAt => $_getN(11);
+  $2.Timestamp get expiresAt => $_getN(11);
   @$pb.TagNumber(12)
-  set expiresAt($1.Timestamp value) => $_setField(12, value);
+  set expiresAt($2.Timestamp value) => $_setField(12, value);
   @$pb.TagNumber(12)
   $core.bool hasExpiresAt() => $_has(11);
   @$pb.TagNumber(12)
   void clearExpiresAt() => $_clearField(12);
   @$pb.TagNumber(12)
-  $1.Timestamp ensureExpiresAt() => $_ensure(11);
+  $2.Timestamp ensureExpiresAt() => $_ensure(11);
 
   @$pb.TagNumber(13)
-  $1.Timestamp get endedAt => $_getN(12);
+  $2.Timestamp get endedAt => $_getN(12);
   @$pb.TagNumber(13)
-  set endedAt($1.Timestamp value) => $_setField(13, value);
+  set endedAt($2.Timestamp value) => $_setField(13, value);
   @$pb.TagNumber(13)
   $core.bool hasEndedAt() => $_has(12);
   @$pb.TagNumber(13)
   void clearEndedAt() => $_clearField(13);
   @$pb.TagNumber(13)
-  $1.Timestamp ensureEndedAt() => $_ensure(12);
+  $2.Timestamp ensureEndedAt() => $_ensure(12);
 
   /// Persisted room locator, not a current authorization grant. Absent for legacy/incomplete bindings.
   @$pb.TagNumber(14)
@@ -4658,7 +5412,7 @@ class MoveVoiceRoomParticipantResponse extends $pb.GeneratedMessage {
 class GetJoinTokenResponse extends $pb.GeneratedMessage {
   factory GetJoinTokenResponse({
     $core.String? jwt,
-    $1.Timestamp? expiresAt,
+    $2.Timestamp? expiresAt,
     $core.String? livekitUrl,
     $core.String? mediaEpoch,
     $fixnum.Int64? spaceAccessEpoch,
@@ -4691,8 +5445,8 @@ class GetJoinTokenResponse extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.calls.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'jwt')
-    ..aOM<$1.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(2, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(3, _omitFieldNames ? '' : 'livekitUrl')
     ..aOS(4, _omitFieldNames ? '' : 'mediaEpoch')
     ..a<$fixnum.Int64>(
@@ -4734,15 +5488,15 @@ class GetJoinTokenResponse extends $pb.GeneratedMessage {
   void clearJwt() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $1.Timestamp get expiresAt => $_getN(1);
+  $2.Timestamp get expiresAt => $_getN(1);
   @$pb.TagNumber(2)
-  set expiresAt($1.Timestamp value) => $_setField(2, value);
+  set expiresAt($2.Timestamp value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasExpiresAt() => $_has(1);
   @$pb.TagNumber(2)
   void clearExpiresAt() => $_clearField(2);
   @$pb.TagNumber(2)
-  $1.Timestamp ensureExpiresAt() => $_ensure(1);
+  $2.Timestamp ensureExpiresAt() => $_ensure(1);
 
   /// WebSocket URL for LiveKit SDK connect (public ingress; not the internal service URL).
   @$pb.TagNumber(3)
