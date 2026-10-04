@@ -40,8 +40,7 @@ class StoryHighlightsScreen extends ConsumerWidget {
           message: storyArchiveErrorMessage(l10n, error),
           icon: Icons.cloud_off_outlined,
           actionLabel: l10n.commonRetry,
-          onAction: () =>
-              ref.invalidate(profileHighlightsProvider(profileId)),
+          onAction: () => ref.invalidate(profileHighlightsProvider(profileId)),
         ),
         data: (highlights) {
           if (highlights.isEmpty) {
@@ -56,10 +55,7 @@ class StoryHighlightsScreen extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final highlight = highlights[index];
-              return _HighlightTile(
-                highlight: highlight,
-                profileId: profileId,
-              );
+              return _HighlightTile(highlight: highlight, profileId: profileId);
             },
           );
         },
@@ -69,10 +65,7 @@ class StoryHighlightsScreen extends ConsumerWidget {
 }
 
 class _HighlightTile extends ConsumerWidget {
-  const _HighlightTile({
-    required this.highlight,
-    required this.profileId,
-  });
+  const _HighlightTile({required this.highlight, required this.profileId});
 
   final HighlightData highlight;
   final String profileId;
@@ -87,18 +80,12 @@ class _HighlightTile extends ConsumerWidget {
       child: ListTile(
         key: Key('story_highlight_tile_${highlight.id}'),
         leading: Icon(Icons.bookmark, color: voice.profileAccent),
-        title: Text(
-          highlight.name,
-          style: TextStyle(color: voice.textPrimary),
-        ),
+        title: Text(highlight.name, style: TextStyle(color: voice.textPrimary)),
         subtitle: Text(
           l10n.storyHighlightStoryCount(highlight.storyIds.length),
           style: TextStyle(color: voice.textSecondary),
         ),
-        onTap: () => HighlightEditSheet.showEdit(
-          context,
-          highlight: highlight,
-        ),
+        onTap: () => HighlightEditSheet.showEdit(context, highlight: highlight),
         trailing: IconButton(
           key: Key('story_highlight_delete_${highlight.id}'),
           tooltip: l10n.storyHighlightDelete,
@@ -133,18 +120,21 @@ class _HighlightTile extends ConsumerWidget {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).deleteHighlight(
-          authorization: auth,
-          highlightId: highlight.id,
-        );
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .deleteHighlight(authorization: auth, highlightId: highlight.id);
 
     if (!context.mounted) return;
     switch (result) {
       case StoriesApiOk():
         ref.invalidate(profileHighlightsProvider(profileId));
-      case StoriesApiFailure(:final message):
+      case StoriesApiFailure(:final statusCode):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
         );
     }
   }

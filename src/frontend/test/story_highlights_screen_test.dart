@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/stories_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -11,11 +12,11 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
-  Widget wrap(Widget child) {
+  Widget wrap(Widget child, {http.Client? client}) {
     return ProviderScope(
       overrides: [
         ...voiceAppTestOverrides(
-          client: MockClient((_) async => throw UnimplementedError()),
+          client: client ?? MockClient((_) async => throw UnimplementedError()),
         ),
         profileHighlightsProvider('prof-test').overrideWith(
           (ref) async => const [
@@ -37,8 +38,9 @@ void main() {
     );
   }
 
-  testWidgets('StoryHighlightsScreen lists highlights with create FAB',
-      (tester) async {
+  testWidgets('StoryHighlightsScreen lists highlights with create FAB', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       wrap(const StoryHighlightsScreen(profileId: 'prof-test')),
     );
@@ -47,5 +49,30 @@ void main() {
     expect(find.byKey(const Key('story_highlights_screen')), findsOneWidget);
     expect(find.text('Clips'), findsOneWidget);
     expect(find.byKey(const Key('story_highlight_create_fab')), findsOneWidget);
+  });
+
+  testWidgets('StoryHighlightsScreen hides upstream delete error', (
+    tester,
+  ) async {
+    final mock = MockClient(
+      (_) async => http.Response(
+        '{"error":"internal","message":"private delete diagnostic"}',
+        500,
+        headers: const {'content-type': 'application/json'},
+      ),
+    );
+    await tester.pumpWidget(
+      wrap(const StoryHighlightsScreen(profileId: 'prof-test'), client: mock),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('story_highlight_delete_hl-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('private delete diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('Clips'), findsOneWidget);
   });
 }
