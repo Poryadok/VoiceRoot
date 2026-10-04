@@ -88,9 +88,13 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 		return true
 
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "complete":
-		resp, err := t.clients.matchmaking.CompleteMatch(ctx, &matchmakingv1.CompleteMatchRequest{
-			MatchId: matchID,
-		})
+		req := &matchmakingv1.CompleteMatchRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		req.MatchId = matchID
+		resp, err := t.clients.matchmaking.CompleteMatch(ctx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

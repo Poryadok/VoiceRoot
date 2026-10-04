@@ -674,13 +674,14 @@ const CompleteMatchRequest$json = {
   '1': 'CompleteMatchRequest',
   '2': [
     {'1': 'match_id', '3': 1, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
   ],
 };
 
 /// Descriptor for `CompleteMatchRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List completeMatchRequestDescriptor =
-    $convert.base64Decode(
-        'ChRDb21wbGV0ZU1hdGNoUmVxdWVzdBIZCghtYXRjaF9pZBgBIAEoCVIHbWF0Y2hJZA==');
+final $typed_data.Uint8List completeMatchRequestDescriptor = $convert.base64Decode(
+    'ChRDb21wbGV0ZU1hdGNoUmVxdWVzdBIZCghtYXRjaF9pZBgBIAEoCVIHbWF0Y2hJZBIhCgxvcG'
+    'VyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklk');
 
 @$core.Deprecated('Use completeMatchResponseDescriptor instead')
 const CompleteMatchResponse$json = {

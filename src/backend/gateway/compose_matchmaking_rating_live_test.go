@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,9 +91,12 @@ func extractProfileID(t *testing.T, match map[string]any, fallback string) strin
 
 func completeComposeMatch(t *testing.T, client *http.Client, base, token, matchID string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/matchmaking/matches/"+matchID+"/complete", nil)
+	body, err := json.Marshal(map[string]string{"operationId": uuid.NewString()})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/matchmaking/matches/"+matchID+"/complete", bytes.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

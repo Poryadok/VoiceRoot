@@ -99,6 +99,7 @@ func main() {
 		banStore := &store.BanStore{Pool: pool}
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
+		eventsEnabled := false
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := mmevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
@@ -106,6 +107,7 @@ func main() {
 			} else {
 				pub.Logger = logger
 				events = pub
+				eventsEnabled = true
 				defer func() { _ = pub.Close() }()
 			}
 		}
@@ -248,6 +250,32 @@ func main() {
 			matchmakingv1.RegisterMatchmakingServiceServer(lifecycleSrv, mmSvc)
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
+		if eventsEnabled {
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					pending, err := matchStore.ListPendingMatchSquadCompletionEvents(context.Background(), 100)
+					if err != nil {
+						logger.Warn("MatchSquad completion event scan failed", slog.Any("error", err))
+						continue
+					}
+					for _, event := range pending {
+						if err := events.PublishMatchCompleted(context.Background(), mmevents.MatchCompletedEvent{
+							EventID: event.EventID.String(), OccurredAt: event.OccurredAt,
+							MatchID: event.MatchID.String(), DurationSeconds: event.DurationSeconds,
+							ProfileIDs: event.ProfileIDs,
+						}); err != nil {
+							logger.Warn("MatchSquad completion event publish failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+							continue
+						}
+						if err := matchStore.MarkMatchSquadCompletionEventPublished(context.Background(), event.AggregateID, event.EventID); err != nil {
+							logger.Warn("MatchSquad completion event acknowledgement failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+						}
+					}
+				}
+			}()
+		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			lfpCtx, lfpCancel := context.WithCancel(context.Background())

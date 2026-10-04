@@ -44,6 +44,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 		"000013_mm_duo_live_lfp_party.up.sql",
 		"000014_space_lifecycle_fences.up.sql",
 		"000015_match_deadline_squad_recovery.up.sql",
+		"000016_match_squad_lifecycle.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -59,11 +60,11 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 
 func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000015_match_deadline_squad_recovery.up.sql")
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000016_match_squad_lifecycle.up.sql")
 }
 
 func ApplyMatchmakingMigrationsThrough005ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	// Includes Space lifecycle fences required by Space-scoped session writes.
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000015_match_deadline_squad_recovery.up.sql")
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000016_match_squad_lifecycle.up.sql")
 }

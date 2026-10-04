@@ -266,5 +266,34 @@ void main() {
       );
       expect(result, isA<VoiceApiFailure>());
     });
+
+    test('does not confirm squad leave while provider reports leaving', () async {
+      final mock = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'call_session': {
+              'room_id': 'room-1',
+              'livekit_room_name': 'squad-room-1',
+              'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+              'status': 'CALL_STATUS_ACTIVE',
+            },
+            'media_epoch': 'epoch-1',
+            'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING',
+          }),
+          200,
+        ),
+      );
+      final client = VoiceCallsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+      final result = await client.leaveMatchSquadRoom(
+        authorization: auth,
+        matchId: 'match-1',
+        roomId: 'room-1',
+        mediaEpoch: 'epoch-1',
+        operationId: 'leave-op',
+      );
+      expect(result, isA<VoiceApiFailure>());
+    });
   });
 }

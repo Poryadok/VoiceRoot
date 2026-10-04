@@ -612,11 +612,12 @@ class VoiceMatchmakingClient {
   Future<MatchmakingApiResult<MatchData>> completeMatch({
     required String authorization,
     required String matchId,
+    required String operationId,
   }) async {
     final result = await _gateway.postJson(
       uri: _gateway.resolve('/api/v1/matchmaking/matches/$matchId/complete'),
       authorization: authorization,
-      body: const <String, dynamic>{},
+      body: <String, dynamic>{'operationId': operationId},
     );
     return _map(result, MatchData.fromGatewayJson);
   }

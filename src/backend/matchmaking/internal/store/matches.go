@@ -637,6 +637,7 @@ var (
 	ErrMatchNotFound       = errors.New("match not found")
 	ErrProposalNotFound    = errors.New("match proposal not found")
 	ErrNotMatchParticipant = errors.New("not a match participant")
+	ErrMatchOperationConflict = errors.New("match operation ID is bound to another request")
 )
 
 // MatchParticipant is one row in matches.participants jsonb.
@@ -1097,8 +1098,18 @@ func (s *MatchStore) CompleteMatchLeave(ctx context.Context, matchID, profileID 
 // whether this call performed the active-to-completed transition. Callers use
 // that signal for exactly-once terminal side effects such as event publication.
 func (s *MatchStore) CompleteMatchLeaveWithTransition(ctx context.Context, matchID, profileID uuid.UUID) (Match, bool, error) {
+	return s.CompleteMatchLeaveWithOperation(ctx, matchID, profileID, uuid.New())
+}
+
+// CompleteMatchLeaveWithOperation records an authenticated participant leave
+// exactly once for the actor-scoped operation ID. The operation fence and
+// match transition commit in the same transaction.
+func (s *MatchStore) CompleteMatchLeaveWithOperation(ctx context.Context, matchID, profileID, operationID uuid.UUID) (Match, bool, error) {
 	if s == nil || s.Pool == nil {
 		return Match{}, false, errors.New("match store unavailable")
+	}
+	if matchID == uuid.Nil || profileID == uuid.Nil || operationID == uuid.Nil {
+		return Match{}, false, ErrMatchOperationConflict
 	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -1125,6 +1136,42 @@ func (s *MatchStore) CompleteMatchLeaveWithTransition(ctx context.Context, match
 	if match.Status != MatchStatusActive && match.Status != MatchStatusCompleted {
 		return Match{}, false, errors.New("match not leaveable")
 	}
+	var recordedMatchID uuid.UUID
+	err = tx.QueryRow(ctx, `
+		SELECT match_id FROM matchmaking_match_leave_operations
+		WHERE actor_profile_id=$1 AND operation_id=$2
+	`, profileID, operationID).Scan(&recordedMatchID)
+	if err == nil {
+		if recordedMatchID != matchID || !match.HasLeft(profileID) {
+			return Match{}, false, ErrMatchOperationConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return Match{}, false, err
+		}
+		return match, false, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return Match{}, false, err
+	}
+	inserted, err := tx.Exec(ctx, `
+		INSERT INTO matchmaking_match_leave_operations (actor_profile_id, operation_id, match_id)
+		VALUES ($1,$2,$3) ON CONFLICT (actor_profile_id, operation_id) DO NOTHING
+	`, profileID, operationID, matchID)
+	if err != nil {
+		return Match{}, false, err
+	}
+	if inserted.RowsAffected() != 1 {
+		if err := tx.QueryRow(ctx, `SELECT match_id FROM matchmaking_match_leave_operations WHERE actor_profile_id=$1 AND operation_id=$2 FOR UPDATE`, profileID, operationID).Scan(&recordedMatchID); err != nil {
+			return Match{}, false, err
+		}
+		if recordedMatchID != matchID || !match.HasLeft(profileID) {
+			return Match{}, false, ErrMatchOperationConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return Match{}, false, err
+		}
+		return match, false, nil
+	}
 
 	left := append([]uuid.UUID{}, match.LeftProfileIDs...)
 	if !match.HasLeft(profileID) {
@@ -1135,10 +1182,14 @@ func (s *MatchStore) CompleteMatchLeaveWithTransition(ctx context.Context, match
 		return Match{}, false, err
 	}
 
-	now := time.Now().UTC()
+	var now time.Time
 	status := match.Status
 	var completedAt *time.Time
-	if allParticipantsLeft(Match{Participants: match.Participants, LeftProfileIDs: left}) {
+	completedNow := match.Status != MatchStatusCompleted && allParticipantsLeft(Match{Participants: match.Participants, LeftProfileIDs: left})
+	if completedNow {
+		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return Match{}, false, err
+		}
 		status = MatchStatusCompleted
 		completedAt = &now
 	}
@@ -1168,10 +1219,15 @@ func (s *MatchStore) CompleteMatchLeaveWithTransition(ctx context.Context, match
 	if err := unmarshalLeftProfileIDs(leftRaw, &m.LeftProfileIDs); err != nil {
 		return Match{}, false, err
 	}
+	if completedNow {
+		if err := persistMatchSquadTeardownIntentTx(ctx, tx, m); err != nil {
+			return Match{}, false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Match{}, false, err
 	}
-	return m, match.Status != MatchStatusCompleted && m.Status == MatchStatusCompleted, nil
+	return m, completedNow, nil
 }
 
 func matchHasProfileID(match Match, profileID uuid.UUID) bool {

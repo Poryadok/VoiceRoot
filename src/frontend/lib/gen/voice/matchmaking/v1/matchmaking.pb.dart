@@ -2024,9 +2024,11 @@ class MatchList extends $pb.GeneratedMessage {
 class CompleteMatchRequest extends $pb.GeneratedMessage {
   factory CompleteMatchRequest({
     $core.String? matchId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (matchId != null) result.matchId = matchId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2045,6 +2047,7 @@ class CompleteMatchRequest extends $pb.GeneratedMessage {
           _omitMessageNames ? '' : 'voice.matchmaking.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'matchId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2074,6 +2077,15 @@ class CompleteMatchRequest extends $pb.GeneratedMessage {
   $core.bool hasMatchId() => $_has(0);
   @$pb.TagNumber(1)
   void clearMatchId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class CompleteMatchResponse extends $pb.GeneratedMessage {

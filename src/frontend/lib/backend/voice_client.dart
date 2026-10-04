@@ -413,7 +413,9 @@ class VoiceCallsClient {
             as calls_pb.LeaveMatchSquadRoomResponse;
     if (!response.hasCallSession() ||
         response.callSession.roomId != roomId ||
-        response.mediaEpoch != mediaEpoch) {
+        response.mediaEpoch != mediaEpoch ||
+        response.membershipState !=
+            calls_pb.MatchSquadMembershipState.MATCH_SQUAD_MEMBERSHIP_STATE_LEFT) {
       return const VoiceApiFailure(
         message: 'invalid_match_squad_leave_response',
         errorCode: 'invalid_response',

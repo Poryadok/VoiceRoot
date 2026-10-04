@@ -224,6 +224,44 @@ void main() {
     );
   });
 
+  testWidgets('CompleteMatch retries reuse the same actor operation ID', (
+    tester,
+  ) async {
+    final operationIds = <String>[];
+    var completeAttempts = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/complete')) {
+        final payload = jsonDecode(request.body) as Map<String, dynamic>;
+        operationIds.add(payload['operationId'] as String);
+        completeAttempts++;
+        if (completeAttempts == 1) return http.Response('{}', 503);
+        return http.Response(
+          jsonEncode({
+            'match': {
+              'id': 'match-1',
+              'gameId': 'game-1',
+              'mode': 'ranked',
+              'region': 'eu',
+              'status': 'completed',
+              'profileIds': ['prof-test', 'profile-2'],
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    await _openSquadAndLeave(tester);
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(operationIds, hasLength(2));
+    expect(operationIds.first, isNotEmpty);
+    expect(operationIds[1], operationIds.first);
+  });
+
   testWidgets('leaving a squad enters rating and the Social history consumer', (
     tester,
   ) async {

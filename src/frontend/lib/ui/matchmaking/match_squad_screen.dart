@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../backend/matchmaking_client.dart';
 import '../../backend/voice_client.dart';
@@ -26,6 +27,9 @@ class MatchSquadScreen extends ConsumerStatefulWidget {
 }
 
 class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
+  static const _uuid = Uuid();
+  String? _completeOperationId;
+
   @override
   void initState() {
     super.initState();
@@ -94,6 +98,7 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     final result = await client.completeMatch(
       authorization: 'Bearer $token',
       matchId: widget.match.id,
+      operationId: _completeOperationId ??= _uuid.v4(),
     );
 
     if (!context.mounted) return;
@@ -106,6 +111,7 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     }
 
     final completed = (result as MatchmakingApiOk<MatchData>).data;
+    _completeOperationId = null;
     ref
         .read(matchmakingRatingControllerProvider.notifier)
         .showRatingForMatch(completed);

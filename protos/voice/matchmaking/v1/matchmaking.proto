@@ -214,6 +214,7 @@ message MatchList {
 
 message CompleteMatchRequest {
   string match_id = 1;
+  string operation_id = 2;
 }
 
 message CompleteMatchResponse {

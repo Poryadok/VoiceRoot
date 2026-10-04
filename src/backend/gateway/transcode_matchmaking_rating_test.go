@@ -78,12 +78,15 @@ func TestTranscodeMatchmakingCompleteMatch(t *testing.T) {
 		},
 		transcoder: &transcoder{clients: grpcClients{matchmaking: matchmakingv1.NewMatchmakingServiceClient(conn)}},
 	})
-	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/match-1/complete", "", map[string]string{
+	operationID := "10000000-0000-4000-8000-000000000001"
+	rec := performRequest(h, http.MethodPost, "/api/v1/matchmaking/matches/match-1/complete", `{"operationId":"`+operationID+`"}`, map[string]string{
 		"Authorization": "Bearer valid-user-token",
+		"Content-Type":  "application/json",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.NotNil(t, grpcRec.lastComplete)
 	require.Equal(t, "match-1", grpcRec.lastComplete.GetMatchId())
+	require.Equal(t, operationID, grpcRec.lastComplete.GetOperationId())
 	require.Contains(t, rec.Body.String(), "completed")
 }
 
