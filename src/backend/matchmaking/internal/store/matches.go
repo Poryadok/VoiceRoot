@@ -205,6 +205,56 @@ func responseSessionPartyKey(sess SearchSession, proposals []MatchProposal) stri
 	return ""
 }
 
+func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, declinedParty string, dbNow time.Time) ([]SearchSession, error) {
+	for _, proposal := range proposals {
+		if responsePartyKey(proposal) != declinedParty || proposal.Response != ProposalResponsePending {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE match_proposals SET response = $3, updated_at = $4
+			WHERE id = $1 AND match_id = $2 AND response = $5
+		`, proposal.ID, match.ID, ProposalResponseDeclined, dbNow, ProposalResponsePending); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE matches SET status = $2, completed_at = $3
+		WHERE id = $1 AND status = $4
+	`, match.ID, MatchStatusAbandoned, dbNow, MatchStatusPendingAccept); err != nil {
+		return nil, err
+	}
+	changed := make([]SearchSession, 0, len(sessions))
+	for _, sess := range sessions {
+		if sess.Status != SessionStatusPendingAccept {
+			continue
+		}
+		party := responseSessionPartyKey(sess, proposals)
+		if party == declinedParty {
+			updated, err := scanSession(tx.QueryRow(ctx, `
+				UPDATE search_sessions SET status = $2, updated_at = $3
+				WHERE id = $1 AND match_id = $4 AND status = $5
+				RETURNING `+sessionSelectCols+`
+			`, sess.ID, SessionStatusCancelled, dbNow, match.ID, SessionStatusPendingAccept))
+			if err != nil {
+				return nil, err
+			}
+			changed = append(changed, updated)
+			continue
+		}
+		updated, err := scanSession(tx.QueryRow(ctx, `
+			UPDATE search_sessions
+			SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+			WHERE id = $1 AND match_id = $4 AND status = $5
+			RETURNING `+sessionSelectCols+`
+		`, sess.ID, SessionStatusSearching, dbNow, match.ID, SessionStatusPendingAccept))
+		if err != nil {
+			return nil, err
+		}
+		changed = append(changed, updated)
+	}
+	return changed, nil
+}
+
 func loadMatchProposalsForUpdate(ctx context.Context, tx pgx.Tx, matchID uuid.UUID) ([]MatchProposal, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT id, match_id, search_session_id, profile_id, party_id, response, created_at, updated_at
@@ -324,7 +374,7 @@ func (s *MatchStore) RecordDecline(ctx context.Context, matchID, profileID uuid.
 	); err != nil {
 		return AcceptanceResult{}, err
 	}
-	changed, err := expirePendingMatchLocked(ctx, tx, match, proposals, sessions, dbNow)
+	changed, err := recoverDeclinedMatchLocked(ctx, tx, match, proposals, sessions, responsePartyKey(result.Proposal), dbNow)
 	if err != nil {
 		return AcceptanceResult{}, err
 	}
