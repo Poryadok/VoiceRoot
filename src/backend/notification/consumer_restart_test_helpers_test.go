@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,10 +19,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/dispatch"
 	"voice/backend/notification/internal/fcm"
+	"voice/backend/notification/internal/grouping"
 	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/pushenrich"
 	"voice/backend/notification/internal/store"
 	"voice/backend/pkg/integrationtest"
 )
@@ -35,6 +41,8 @@ type notificationConsumerRestartSpec struct {
 	recipientID    uuid.UUID
 	event          proto.Message
 	expected       push.Payload
+	recordDebug    bool
+	safeAssertions bool
 	run            func(context.Context, string, *store.DeviceTokenStore, *dispatch.PushDispatcher) error
 }
 
@@ -88,6 +96,7 @@ func TestNotificationJetStreamRestartDrainsBacklogForEachReadyDurable(t *testing
 		voiceMemberJoinedRestartSpec(),
 		matchFoundRestartSpec(),
 		storyMentionRestartSpec(),
+		messageSentRestartSpec(),
 	} {
 		spec := spec
 		t.Run(spec.name, func(t *testing.T) {
@@ -147,7 +156,21 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	require.NoError(t, err)
 
 	deliveries := make(chan notificationRestartPush, 4)
-	dispatcher := &dispatch.PushDispatcher{FCM: notificationRestartFCM{sent: deliveries}}
+	var sender fcm.Sender = notificationRestartFCM{sent: deliveries}
+	debugRecorderEnabled := false
+	if spec.recordDebug {
+		var configErr error
+		debugRecorderEnabled, configErr = parseDebugHTTPEnabled(func(name string) (string, bool) {
+			if name == debugHTTPEnabledEnv {
+				return "true", true
+			}
+			return "", false
+		}, true)
+		require.NoError(t, configErr)
+		require.True(t, debugRecorderEnabled)
+		sender = maybeRecordFCMSender(sender, debugRecorderEnabled)
+	}
+	dispatcher := &dispatch.PushDispatcher{FCM: sender}
 	start := func() *notificationConsumerRun {
 		runCtx, cancel := context.WithCancel(context.Background())
 		readiness := newNotificationConsumerReadiness(spec.service)
@@ -214,8 +237,13 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	second := start()
 	select {
 	case got := <-deliveries:
-		require.Equal(t, spec.recipientID, got.profileID, "%s push is delivered to the documented recipient", spec.service)
-		require.Equal(t, spec.expected, got.payload, "%s push payload follows the existing event contract", spec.service)
+		if spec.safeAssertions {
+			require.True(t, got.profileID == spec.recipientID, "%s push is delivered to the configured recipient", spec.service)
+			require.True(t, got.payload.Data != nil && got.payload.Data["type"] == spec.expected.Data["type"], "%s push follows the expected notification type", spec.service)
+		} else {
+			require.Equal(t, spec.recipientID, got.profileID, "%s push is delivered to the documented recipient", spec.service)
+			require.Equal(t, spec.expected, got.payload, "%s push payload follows the existing event contract", spec.service)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("%s consumer did not deliver the backed-up event", spec.service)
 	}
@@ -226,10 +254,42 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	}, 5*time.Second, 20*time.Millisecond, "%s successful push is acknowledged and backlog drains", spec.service)
 	select {
 	case duplicate := <-deliveries:
+		if spec.safeAssertions {
+			t.Fatalf("%s delivered a duplicate push after the durable ACK", spec.service)
+		}
 		t.Fatalf("%s delivered a duplicate push after the durable ACK: %#v", spec.service, duplicate)
 	default:
+	}
+	if spec.recordDebug {
+		request := httptest.NewRequest(http.MethodGet, "/debug/recorded-pushes?profile_id="+spec.recipientID.String(), nil)
+		response := httptest.NewRecorder()
+		notificationHTTPHandlerWithReadinessAndDebug(serviceName, nil, debugRecorderEnabled).ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, "%s capture is available through the gated recorder route", spec.service)
 	}
 	secondErr, secondJoined := second.stop()
 	require.True(t, secondJoined, "%s restarted consumer is joined before fixture shutdown", spec.service)
 	require.ErrorIs(t, secondErr, context.Canceled, "%s restarted consumer exits normally on cancellation", spec.service)
+}
+
+func messageSentRestartSpec() notificationConsumerRestartSpec {
+	senderID, recipientID := uuid.New(), uuid.New()
+	messageID, chatID := uuid.NewString(), uuid.NewString()
+	return notificationConsumerRestartSpec{
+		name: "message_sent", service: "message", stream: jsStreamMessageEvents, filter: jsSubjectMessageEvents,
+		deliverSubject: "_INBOX.voice.notification.message", subject: "message.sent", recipientID: recipientID,
+		event: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			MessageId: messageID, ChatId: chatID, SenderProfileId: senderID.String(),
+		}}},
+		expected: push.Payload{Data: map[string]string{"type": "new_message"}}, recordDebug: true, safeAssertions: true,
+		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, dispatcher *dispatch.PushDispatcher) error {
+			members := stubChatMembers{rows: []chatmembers.Member{
+				{ProfileID: senderID.String(), InboxBucket: "main"},
+				{ProfileID: recipientID.String(), InboxBucket: "main"},
+			}}
+			pusher := &dispatch.MessagePusher{
+				Tokens: tokens, Pusher: dispatcher, Grouping: grouping.NewMemoryStore(),
+			}
+			return runMessageEventsConsumer(ctx, natsURL, tokens, members, pusher, pushenrich.NoopResolver{}, nil)
+		},
+	}
 }
