@@ -261,10 +261,11 @@ void main() {
 
     await tester.longPress(find.text('Group Target'));
     await tester.pumpAndSettle();
-    chats.archiveError = 'archive failed';
+    chats.archiveError = 'private_archive_row_backend_detail';
     await tester.tap(find.byKey(ChatListBody.archiveActionKey(chatId)));
     await tester.pumpAndSettle();
-    expect(find.text('archive failed'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_archive_row_backend_detail'), findsNothing);
   });
 
   testWidgets('System folder row cannot remove implicit membership', (
@@ -334,14 +335,158 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('adding a chat to a folder hides API failure details', (
+    tester,
+  ) async {
+    const folderId = 'folder-custom';
+    const chatId = 'chat-add-failure';
+    final chats = _TrackingVoiceChatsClient(
+      pages: [
+        ChatListData(
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: chatId,
+                type: 'CHAT_TYPE_GROUP',
+                creatorProfileId: 'p1',
+                name: 'Add Failure Target',
+              ),
+            ),
+          ],
+        ),
+      ],
+    )..addError = 'private_folder_membership_diagnostic';
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        onboardingControllerProvider.overrideWith(
+          TestCompletedOnboardingController.new,
+        ),
+        voiceChatsClientProvider.overrideWith((ref) => chats),
+        chatFoldersProvider.overrideWith(
+          (_) async => FolderListData(
+            folders: [
+              VoiceFolder(id: folderId, name: 'Custom', folderType: 'custom'),
+            ],
+          ),
+        ),
+        quickAccessListProvider.overrideWith(
+          (_) async => const QuickAccessListData(items: []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatListBody(showHeader: false)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Add Failure Target'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatListBody.addToFolderActionKey(chatId)));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('chat_list_add_to_folder_$folderId')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(chats.added, [(folderId, chatId)]);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_membership_diagnostic'), findsNothing);
+  });
+
+  testWidgets('removing a chat from a folder hides API failure details', (
+    tester,
+  ) async {
+    const folderId = 'folder-custom';
+    const chatId = 'chat-remove-failure';
+    final chats = _TrackingVoiceChatsClient(
+      pages: [
+        ChatListData(
+          items: [
+            ChatListItem(
+              chat: VoiceChat(
+                id: chatId,
+                type: 'CHAT_TYPE_GROUP',
+                creatorProfileId: 'p1',
+                name: 'Remove Failure Target',
+              ),
+            ),
+          ],
+        ),
+      ],
+    )..removeError = 'private_folder_membership_diagnostic';
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => throw UnimplementedError()),
+        ),
+        onboardingControllerProvider.overrideWith(
+          TestCompletedOnboardingController.new,
+        ),
+        voiceChatsClientProvider.overrideWith((ref) => chats),
+        chatFoldersProvider.overrideWith(
+          (_) async => FolderListData(
+            folders: [
+              VoiceFolder(id: folderId, name: 'Custom', folderType: 'custom'),
+            ],
+          ),
+        ),
+        quickAccessListProvider.overrideWith(
+          (_) async => const QuickAccessListData(items: []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(selectedChatFolderIdProvider.notifier).state = folderId;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ChatListBody(showHeader: false)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Remove Failure Target'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ChatListBody.removeFromFolderActionKey(chatId)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(chats.removed, [(folderId, chatId)]);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_membership_diagnostic'), findsNothing);
+  });
 }
 
 class _TrackingVoiceChatsClient extends FakeVoiceChatsClient {
   _TrackingVoiceChatsClient({required super.pages});
 
   final List<(String, String)> added = [];
+  final List<(String, String)> removed = [];
   final List<String> archived = [];
   String? archiveError;
+  String? addError;
+  String? removeError;
 
   @override
   Future<ChatsApiResult<void>> addChatToFolder({
@@ -350,6 +495,22 @@ class _TrackingVoiceChatsClient extends FakeVoiceChatsClient {
     required String chatId,
   }) async {
     added.add((folderId, chatId));
+    if (addError case final error?) {
+      return ChatsApiFailure(message: error);
+    }
+    return const ChatsApiOk(null);
+  }
+
+  @override
+  Future<ChatsApiResult<void>> removeChatFromFolder({
+    required String authorization,
+    required String folderId,
+    required String chatId,
+  }) async {
+    removed.add((folderId, chatId));
+    if (removeError case final error?) {
+      return ChatsApiFailure(message: error);
+    }
     return const ChatsApiOk(null);
   }
 

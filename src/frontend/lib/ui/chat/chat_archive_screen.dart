@@ -241,7 +241,9 @@ class _ChatArchiveScreenState extends ConsumerState<ChatArchiveScreen> {
     if (!context.mounted) return;
     if (err == kChatActionStaleContext) return;
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
       return;
     }
     ref
