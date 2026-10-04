@@ -39,6 +39,7 @@ class _NotificationSettingsScreenState
   var _loading = true;
   var _saving = false;
   String? _error;
+  int? _errorStatusCode;
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _NotificationSettingsScreenState
       setState(() {
         _loading = false;
         _error = 'not authenticated';
+        _errorStatusCode = null;
       });
       return;
     }
@@ -104,11 +106,13 @@ class _NotificationSettingsScreenState
           _quietHours = quietHours;
           _loading = false;
           _error = null;
+          _errorStatusCode = null;
         });
-      case NotificationsApiFailure(:final message):
+      case NotificationsApiFailure(:final message, :final statusCode):
         setState(() {
           _loading = false;
           _error = message;
+          _errorStatusCode = statusCode;
         });
     }
   }
@@ -121,6 +125,7 @@ class _NotificationSettingsScreenState
     setState(() {
       _saving = true;
       _error = null;
+      _errorStatusCode = null;
     });
 
     final client = ref.read(voiceNotificationsClientProvider);
@@ -275,6 +280,7 @@ class _NotificationSettingsScreenState
                 message: settingsLoadErrorMessage(
                   l10n,
                   _error,
+                  statusCode: _errorStatusCode,
                   fallback: l10n.notificationLoadError,
                 ),
                 icon: Icons.cloud_off_outlined,
