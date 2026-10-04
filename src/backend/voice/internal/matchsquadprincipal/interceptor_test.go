@@ -87,7 +87,7 @@ func TestStrictUnaryInterceptorVerifiesExactServiceBinding(t *testing.T) {
 	verifier := &recordingVerifier{got: verified}
 	called := false
 	interceptor := StrictUnaryInterceptor(verifier)
-	_, err := interceptor(serviceMetadata(req.OperationId), req,
+	_, err = interceptor(serviceMetadata(req.OperationId), req,
 		&grpc.UnaryServerInfo{FullMethod: callsv1.MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName},
 		func(ctx context.Context, _ any) (any, error) {
 			called = true
