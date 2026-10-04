@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,7 +13,7 @@ import (
 )
 
 const (
-	MatchAcceptWindow         = 30 * time.Second
+	MatchAcceptWindow        = 30 * time.Second
 	MatchStatusPendingAccept = "pending_accept"
 	MatchStatusActive        = "active"
 	MatchStatusCompleted     = "completed"
@@ -166,25 +167,33 @@ func expirePendingMatchLocked(ctx context.Context, tx pgx.Tx, match Match, propo
 		if status == SessionStatusSearching {
 			updated, err := scanSession(tx.QueryRow(ctx, `
 				UPDATE search_sessions
-				SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+				SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3,
+				    recovery_generation = recovery_generation + 1
 				WHERE id = $1 AND match_id = $4 AND status = $5
 				RETURNING `+sessionSelectCols+`
 			`, sess.ID, status, dbNow, match.ID, SessionStatusPendingAccept))
 			if err != nil {
 				return nil, err
 			}
+			if err := insertRecoveryEffect(ctx, tx, match.ID, updated, "enqueue"); err != nil {
+				return nil, err
+			}
 			changed = append(changed, updated)
 			continue
 		}
-		if _, err := tx.Exec(ctx, `
-			UPDATE search_sessions SET status = $2, updated_at = $3
+		updated, err := scanSession(tx.QueryRow(ctx, `
+			UPDATE search_sessions SET status = $2, updated_at = $3,
+			    recovery_generation = recovery_generation + 1
 			WHERE id = $1 AND match_id = $4 AND status = $5
-		`, sess.ID, SessionStatusCancelled, dbNow, match.ID, SessionStatusPendingAccept); err != nil {
+			RETURNING `+sessionSelectCols+`
+		`, sess.ID, SessionStatusCancelled, dbNow, match.ID, SessionStatusPendingAccept))
+		if err != nil {
 			return nil, err
 		}
-		sess.Status = SessionStatusCancelled
-		sess.UpdatedAt = dbNow
-		changed = append(changed, sess)
+		if err := insertRecoveryEffect(ctx, tx, match.ID, updated, "release"); err != nil {
+			return nil, err
+		}
+		changed = append(changed, updated)
 	}
 	return changed, nil
 }
@@ -194,6 +203,13 @@ func responsePartyKey(p MatchProposal) string {
 		return "party:" + p.PartyID.String()
 	}
 	return "profile:" + p.ProfileID.String()
+}
+
+func samePartyID(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func responseSessionPartyKey(sess SearchSession, proposals []MatchProposal) string {
@@ -231,11 +247,15 @@ func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, pro
 		party := responseSessionPartyKey(sess, proposals)
 		if party == declinedParty {
 			updated, err := scanSession(tx.QueryRow(ctx, `
-				UPDATE search_sessions SET status = $2, updated_at = $3
-				WHERE id = $1 AND match_id = $4 AND status = $5
+			UPDATE search_sessions SET status = $2, updated_at = $3,
+			    recovery_generation = recovery_generation + 1
+			WHERE id = $1 AND match_id = $4 AND status = $5
 				RETURNING `+sessionSelectCols+`
 			`, sess.ID, SessionStatusCancelled, dbNow, match.ID, SessionStatusPendingAccept))
 			if err != nil {
+				return nil, err
+			}
+			if err := insertRecoveryEffect(ctx, tx, match.ID, updated, "release"); err != nil {
 				return nil, err
 			}
 			changed = append(changed, updated)
@@ -243,16 +263,126 @@ func recoverDeclinedMatchLocked(ctx context.Context, tx pgx.Tx, match Match, pro
 		}
 		updated, err := scanSession(tx.QueryRow(ctx, `
 			UPDATE search_sessions
-			SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+			SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3,
+			    recovery_generation = recovery_generation + 1
 			WHERE id = $1 AND match_id = $4 AND status = $5
 			RETURNING `+sessionSelectCols+`
 		`, sess.ID, SessionStatusSearching, dbNow, match.ID, SessionStatusPendingAccept))
 		if err != nil {
 			return nil, err
 		}
+		if err := insertRecoveryEffect(ctx, tx, match.ID, updated, "enqueue"); err != nil {
+			return nil, err
+		}
 		changed = append(changed, updated)
 	}
 	return changed, nil
+}
+
+func insertRecoveryEffect(ctx context.Context, tx pgx.Tx, matchID uuid.UUID, sess SearchSession, action string) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO matchmaking_match_recovery_effects (match_id, search_session_id, generation, action)
+		VALUES ($1, $2, $3, $4)
+	`, matchID, sess.ID, sess.RecoveryGeneration, action)
+	return err
+}
+
+// ApplyPendingRecoveryEffects projects committed session recovery to an
+// external queue while holding the match and session rows. A later transition
+// increments recovery_generation, making any delayed effect obsolete.
+func (s *MatchStore) ApplyPendingRecoveryEffects(ctx context.Context, limit int, apply func(context.Context, SearchSession, string) error) error {
+	if s == nil || s.Pool == nil {
+		return errors.New("match store unavailable")
+	}
+	if apply == nil {
+		return errors.New("recovery effect projector unavailable")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT match_id, search_session_id, generation
+		FROM matchmaking_match_recovery_effects
+		WHERE applied_at IS NULL
+		ORDER BY created_at, match_id, search_session_id
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return err
+	}
+	type candidate struct {
+		matchID, sessionID uuid.UUID
+		generation         int64
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var item candidate
+		if err := rows.Scan(&item.matchID, &item.sessionID, &item.generation); err != nil {
+			rows.Close()
+			return err
+		}
+		candidates = append(candidates, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, item := range candidates {
+		tx, err := s.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		var lockedMatch uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM matches WHERE id = $1 FOR UPDATE`, item.matchID).Scan(&lockedMatch); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		sess, err := scanSession(tx.QueryRow(ctx, `SELECT `+sessionSelectCols+` FROM search_sessions WHERE id = $1 FOR UPDATE`, item.sessionID))
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		var action string
+		err = tx.QueryRow(ctx, `
+			SELECT action FROM matchmaking_match_recovery_effects
+			WHERE match_id = $1 AND search_session_id = $2 AND generation = $3 AND applied_at IS NULL
+			FOR UPDATE
+		`, item.matchID, item.sessionID, item.generation).Scan(&action)
+		if errors.Is(err, pgx.ErrNoRows) {
+			if err := tx.Commit(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		valid := sess.RecoveryGeneration == item.generation &&
+			((action == "enqueue" && sess.Status == SessionStatusSearching) || (action == "release" && sess.Status == SessionStatusCancelled))
+		if valid {
+			projectionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			if err := apply(projectionCtx, sess, action); err != nil {
+				cancel()
+				_ = tx.Rollback(ctx)
+				return err
+			}
+			cancel()
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE matchmaking_match_recovery_effects SET applied_at = clock_timestamp()
+			WHERE match_id = $1 AND search_session_id = $2 AND generation = $3 AND applied_at IS NULL
+		`, item.matchID, item.sessionID, item.generation); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func loadMatchProposalsForUpdate(ctx context.Context, tx pgx.Tx, matchID uuid.UUID) ([]MatchProposal, error) {
@@ -296,12 +426,12 @@ func loadMatchSessionsForUpdate(ctx context.Context, tx pgx.Tx, matchID uuid.UUI
 }
 
 type AcceptanceResult struct {
-	Match          Match
-	Proposal       MatchProposal
+	Match           Match
+	Proposal        MatchProposal
 	ChangedSessions []SearchSession
-	AllAccepted    bool
-	Expired        bool
-	Replayed       bool
+	AllAccepted     bool
+	Expired         bool
+	Replayed        bool
 }
 
 // RecordDecline applies a party decline and the resulting whole-match recovery
@@ -628,10 +758,54 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	proposalSessions := append([]ProposalSession(nil), p.Sessions...)
+	sort.Slice(proposalSessions, func(i, j int) bool {
+		return proposalSessions[i].ProfileID.String() < proposalSessions[j].ProfileID.String()
+	})
+	sessionIDs := make([]uuid.UUID, 0, len(proposalSessions))
+	requestedByID := make(map[uuid.UUID]ProposalSession, len(proposalSessions))
+	for _, candidate := range proposalSessions {
+		if _, exists := requestedByID[candidate.SessionID]; exists {
+			return CreateProposalResult{}, errors.New("duplicate proposal session")
+		}
+		requestedByID[candidate.SessionID] = candidate
+		sessionIDs = append(sessionIDs, candidate.SessionID)
+	}
+	lockedRows, err := tx.Query(ctx, `
+		SELECT `+sessionSelectCols+`
+		FROM search_sessions WHERE id = ANY($1) ORDER BY id FOR UPDATE
+	`, sessionIDs)
+	if err != nil {
+		return CreateProposalResult{}, err
+	}
+	lockedSessions := make(map[uuid.UUID]SearchSession, len(proposalSessions))
+	for lockedRows.Next() {
+		sess, err := scanSession(lockedRows)
+		if err != nil {
+			lockedRows.Close()
+			return CreateProposalResult{}, err
+		}
+		lockedSessions[sess.ID] = sess
+	}
+	if err := lockedRows.Err(); err != nil {
+		lockedRows.Close()
+		return CreateProposalResult{}, err
+	}
+	lockedRows.Close()
+	if len(lockedSessions) != len(proposalSessions) {
+		return CreateProposalResult{}, ErrSessionNotSearchable
+	}
+	for _, candidate := range proposalSessions {
+		sess, ok := lockedSessions[candidate.SessionID]
+		if !ok || sess.Status != SessionStatusSearching || sess.ProfileID != candidate.ProfileID || !samePartyID(sess.PartyID, candidate.PartyID) {
+			return CreateProposalResult{}, ErrSessionNotSearchable
+		}
+	}
+
 	matchID := uuid.New()
 	now := time.Now().UTC()
-	participants := make([]MatchParticipant, len(p.Sessions))
-	for i, sess := range p.Sessions {
+	participants := make([]MatchParticipant, len(proposalSessions))
+	for i, sess := range proposalSessions {
 		participants[i] = MatchParticipant{
 			ProfileID: sess.ProfileID.String(),
 			SessionID: sess.SessionID.String(),
@@ -662,8 +836,8 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		return CreateProposalResult{}, err
 	}
 
-	proposals := make([]MatchProposal, 0, len(p.Sessions))
-	for _, sess := range p.Sessions {
+	proposals := make([]MatchProposal, 0, len(proposalSessions))
+	for _, sess := range proposalSessions {
 		var proposal MatchProposal
 		err = tx.QueryRow(ctx, `
 			INSERT INTO match_proposals (match_id, search_session_id, profile_id, party_id, response, created_at, updated_at)
@@ -678,13 +852,19 @@ func (s *MatchStore) CreateProposal(ctx context.Context, p CreateProposalParams)
 		}
 		proposals = append(proposals, proposal)
 
-		_, err = tx.Exec(ctx, `
+		var updatedID uuid.UUID
+		err = tx.QueryRow(ctx, `
 			UPDATE search_sessions
-			SET status = $2, match_id = $3, matched_at = $4, updated_at = $4
+			SET status = $2, match_id = $3, matched_at = $4, updated_at = $4,
+			    recovery_generation = recovery_generation + 1
 			WHERE id = $1 AND status = $5
-		`, sess.SessionID, SessionStatusPendingAccept, matchID, now, SessionStatusSearching)
+			RETURNING id
+		`, sess.SessionID, SessionStatusPendingAccept, matchID, now, SessionStatusSearching).Scan(&updatedID)
 		if err != nil {
 			return CreateProposalResult{}, err
+		}
+		if updatedID != sess.SessionID {
+			return CreateProposalResult{}, ErrSessionNotSearchable
 		}
 	}
 
@@ -852,7 +1032,7 @@ func (s *MatchStore) ActivateMatch(ctx context.Context, matchID uuid.UUID, voice
 
 	_, err = tx.Exec(ctx, `
 		UPDATE search_sessions
-		SET status = $2, updated_at = $3
+		SET status = $2, updated_at = $3, recovery_generation = recovery_generation + 1
 		WHERE match_id = $1 AND status = $4
 	`, matchID, SessionStatusMatched, now, SessionStatusPendingAccept)
 	if err != nil {

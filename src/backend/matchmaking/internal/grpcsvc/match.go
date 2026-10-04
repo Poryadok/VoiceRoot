@@ -12,6 +12,7 @@ import (
 
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/criteria"
+	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
@@ -186,26 +187,32 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	}, nil
 }
 
-func (s *MatchmakingGRPC) projectDeadlineRecovery(ctx context.Context, sessions []store.SearchSession) error {
+func (s *MatchmakingGRPC) projectDeadlineRecovery(ctx context.Context, _ []store.SearchSession) error {
 	if s.Queue == nil {
 		return nil
 	}
-	for _, sess := range sessions {
-		if sess.Status == store.SessionStatusSearching {
+	return s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
+		if action == "enqueue" {
 			crit, err := criteria.Parse(sess.Criteria)
 			if err != nil {
 				return status.Errorf(codes.Internal, "recover session criteria: %v", err)
 			}
-			if err := s.Queue.EnqueueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt); err != nil {
+			if err := s.Queue.RecoverSearch(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+				Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
 				return status.Errorf(codes.Unavailable, "recover search queue: %v", err)
 			}
-			continue
+			return nil
 		}
-		if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil {
+		crit, err := criteria.Parse(sess.Criteria)
+		if err != nil {
+			return status.Errorf(codes.Internal, "recover session criteria: %v", err)
+		}
+		if err := s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+			Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
 			return status.Errorf(codes.Unavailable, "release declined party search lock: %v", err)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func matchHasProfile(match store.Match, profileID uuid.UUID) bool {

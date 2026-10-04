@@ -230,7 +230,7 @@ func (w *Worker) tryMatchQueue(ctx context.Context, spaceID *uuid.UUID, gameID u
 		}
 
 		for _, sess := range group {
-			_ = w.Queue.DequeueScoped(ctx, spaceID, gameID, mode.Name, region, sess.ID)
+			_ = w.Queue.DequeueScopedGeneration(ctx, spaceID, gameID, mode.Name, region, sess.ID, sess.RecoveryGeneration)
 		}
 
 		if w.Events != nil {

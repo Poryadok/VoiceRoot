@@ -284,6 +284,157 @@ var GameSessionProvisioningService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName   = "/voice.calls.v1.MatchSquadVoiceService/CreateMatchSquadRoom"
+	MatchSquadVoiceService_TeardownMatchSquadRoom_FullMethodName = "/voice.calls.v1.MatchSquadVoiceService/TeardownMatchSquadRoom"
+)
+
+// MatchSquadVoiceServiceClient is the client API for MatchSquadVoiceService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Match-squad operations are served only by the dedicated protected
+// MatchSquadVoiceService listener, never by the ordinary VoiceService listener.
+type MatchSquadVoiceServiceClient interface {
+	// @voice.security=protected;callers=service:matchmaking
+	CreateMatchSquadRoom(ctx context.Context, in *CreateMatchSquadRoomRequest, opts ...grpc.CallOption) (*CreateMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	TeardownMatchSquadRoom(ctx context.Context, in *TeardownMatchSquadRoomRequest, opts ...grpc.CallOption) (*TeardownMatchSquadRoomResponse, error)
+}
+
+type matchSquadVoiceServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMatchSquadVoiceServiceClient(cc grpc.ClientConnInterface) MatchSquadVoiceServiceClient {
+	return &matchSquadVoiceServiceClient{cc}
+}
+
+func (c *matchSquadVoiceServiceClient) CreateMatchSquadRoom(ctx context.Context, in *CreateMatchSquadRoomRequest, opts ...grpc.CallOption) (*CreateMatchSquadRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateMatchSquadRoomResponse)
+	err := c.cc.Invoke(ctx, MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchSquadVoiceServiceClient) TeardownMatchSquadRoom(ctx context.Context, in *TeardownMatchSquadRoomRequest, opts ...grpc.CallOption) (*TeardownMatchSquadRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TeardownMatchSquadRoomResponse)
+	err := c.cc.Invoke(ctx, MatchSquadVoiceService_TeardownMatchSquadRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MatchSquadVoiceServiceServer is the server API for MatchSquadVoiceService service.
+// All implementations must embed UnimplementedMatchSquadVoiceServiceServer
+// for forward compatibility.
+//
+// Match-squad operations are served only by the dedicated protected
+// MatchSquadVoiceService listener, never by the ordinary VoiceService listener.
+type MatchSquadVoiceServiceServer interface {
+	// @voice.security=protected;callers=service:matchmaking
+	CreateMatchSquadRoom(context.Context, *CreateMatchSquadRoomRequest) (*CreateMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	TeardownMatchSquadRoom(context.Context, *TeardownMatchSquadRoomRequest) (*TeardownMatchSquadRoomResponse, error)
+	mustEmbedUnimplementedMatchSquadVoiceServiceServer()
+}
+
+// UnimplementedMatchSquadVoiceServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedMatchSquadVoiceServiceServer struct{}
+
+func (UnimplementedMatchSquadVoiceServiceServer) CreateMatchSquadRoom(context.Context, *CreateMatchSquadRoomRequest) (*CreateMatchSquadRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateMatchSquadRoom not implemented")
+}
+func (UnimplementedMatchSquadVoiceServiceServer) TeardownMatchSquadRoom(context.Context, *TeardownMatchSquadRoomRequest) (*TeardownMatchSquadRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TeardownMatchSquadRoom not implemented")
+}
+func (UnimplementedMatchSquadVoiceServiceServer) mustEmbedUnimplementedMatchSquadVoiceServiceServer() {
+}
+func (UnimplementedMatchSquadVoiceServiceServer) testEmbeddedByValue() {}
+
+// UnsafeMatchSquadVoiceServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MatchSquadVoiceServiceServer will
+// result in compilation errors.
+type UnsafeMatchSquadVoiceServiceServer interface {
+	mustEmbedUnimplementedMatchSquadVoiceServiceServer()
+}
+
+func RegisterMatchSquadVoiceServiceServer(s grpc.ServiceRegistrar, srv MatchSquadVoiceServiceServer) {
+	// If the following call pancis, it indicates UnimplementedMatchSquadVoiceServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&MatchSquadVoiceService_ServiceDesc, srv)
+}
+
+func _MatchSquadVoiceService_CreateMatchSquadRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateMatchSquadRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadVoiceServiceServer).CreateMatchSquadRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadVoiceServiceServer).CreateMatchSquadRoom(ctx, req.(*CreateMatchSquadRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchSquadVoiceService_TeardownMatchSquadRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TeardownMatchSquadRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadVoiceServiceServer).TeardownMatchSquadRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadVoiceService_TeardownMatchSquadRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadVoiceServiceServer).TeardownMatchSquadRoom(ctx, req.(*TeardownMatchSquadRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// MatchSquadVoiceService_ServiceDesc is the grpc.ServiceDesc for MatchSquadVoiceService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var MatchSquadVoiceService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.calls.v1.MatchSquadVoiceService",
+	HandlerType: (*MatchSquadVoiceServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateMatchSquadRoom",
+			Handler:    _MatchSquadVoiceService_CreateMatchSquadRoom_Handler,
+		},
+		{
+			MethodName: "TeardownMatchSquadRoom",
+			Handler:    _MatchSquadVoiceService_TeardownMatchSquadRoom_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/calls/v1/calls.proto",
+}
+
+const (
 	VoiceService_StartCall_FullMethodName                = "/voice.calls.v1.VoiceService/StartCall"
 	VoiceService_AcceptCall_FullMethodName               = "/voice.calls.v1.VoiceService/AcceptCall"
 	VoiceService_DeclineCall_FullMethodName              = "/voice.calls.v1.VoiceService/DeclineCall"

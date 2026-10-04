@@ -104,33 +104,39 @@ func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
 		return err
 	}
 	for _, matchID := range matchIDs {
-		expired, changed, err := s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
+		_, _, err := s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
 		if err != nil {
 			return err
 		}
-		if !expired {
-			continue
-		}
-		for _, sess := range changed {
-			if s.Queue == nil {
-				continue
-			}
-			if sess.Status == store.SessionStatusSearching {
-				crit, err := criteria.Parse(sess.Criteria)
-				if err != nil {
-					return err
-				}
-				if err := s.Queue.EnqueueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil {
+	}
+	if s.Queue == nil {
+		return nil
+	}
+	return s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
+		if action == "enqueue" {
+			crit, err := criteria.Parse(sess.Criteria)
+			if err != nil {
 				return err
 			}
+			if err := s.Queue.RecoverSearch(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+				Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+				return err
+			}
+			return nil
 		}
-	}
-	return nil
+		crit, err := criteria.Parse(sess.Criteria)
+		if err != nil {
+			return err
+		}
+		if err := s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+			Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+			if s.Logger != nil {
+				s.Logger.Warn("pending match recovery release failed", "session_id", sess.ID, "error", err)
+			}
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) error {
@@ -141,7 +147,7 @@ func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) er
 	if err != nil {
 		return err
 	}
-	if err := s.Queue.DequeueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID); err != nil {
+	if err := s.Queue.DequeueScopedGeneration(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.RecoveryGeneration); err != nil {
 		return err
 	}
 	return s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID)

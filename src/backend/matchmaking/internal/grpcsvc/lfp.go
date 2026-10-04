@@ -23,10 +23,10 @@ import (
 
 // lfpStoryCriteria is the Looking-for-party criteria_json shape from Story Service.
 type lfpStoryCriteria struct {
-	GameID string                 `json:"game_id"`
-	Mode   string                 `json:"mode"`
-	Region string                 `json:"region"`
-	Self   criteria.SelfCriteria  `json:"self"`
+	GameID string                  `json:"game_id"`
+	Mode   string                  `json:"mode"`
+	Region string                  `json:"region"`
+	Self   criteria.SelfCriteria   `json:"self"`
 	Sought criteria.SoughtCriteria `json:"sought"`
 }
 
@@ -175,7 +175,7 @@ func (s *MatchmakingGRPC) DecideLfpRequest(ctx context.Context, req *matchmaking
 
 	partyID := party.ID.String()
 	out := &matchmakingv1.DecideLfpRequestResponse{
-		Status: decided.Status,
+		Status:  decided.Status,
 		PartyId: &partyID,
 	}
 	for i := range sessions {
@@ -233,7 +233,7 @@ func (s *MatchmakingGRPC) enqueuePartySearch(
 			}
 			return nil, status.Error(codes.Unavailable, "queue unavailable")
 		}
-		if err := s.Queue.EnqueueScoped(ctx, nil, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt); err != nil {
+		if err := s.Queue.EnqueueScopedGeneration(ctx, nil, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt, sess.RecoveryGeneration); err != nil {
 			_ = s.Queue.ReleaseLock(ctx, profileID, sess.ID)
 			_, _ = s.Sessions.Cancel(ctx, sess.ID)
 			return nil, status.Error(codes.Unavailable, "queue unavailable")
@@ -262,7 +262,7 @@ func (s *MatchmakingGRPC) cancelActiveSearchIfAny(ctx context.Context, profileID
 	}
 	parsed, err := criteria.Parse(sess.Criteria)
 	if err == nil && s.Queue != nil {
-		_ = s.Queue.Dequeue(ctx, sess.GameID, sess.Mode, parsed.Region, sess.ID)
+		_ = s.Queue.DequeueScopedGeneration(ctx, nil, sess.GameID, sess.Mode, parsed.Region, sess.ID, sess.RecoveryGeneration)
 		_ = s.Queue.ReleaseLock(ctx, profileID, sess.ID)
 	}
 	if _, err := s.Sessions.Cancel(ctx, sess.ID); err != nil && !errors.Is(err, store.ErrSessionNotSearchable) {
