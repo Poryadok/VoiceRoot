@@ -298,6 +298,30 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Capture attachment recovery H/V outputs
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.ref == 'codex/fix-attachment-upload-recovery'
+        working-directory: src/frontend
+        env:
+          VOICE_UI_CAPTURE_DIR: ${{ runner.temp }}/attachment-upload-recovery
+        run: >-
+          timeout 180s flutter test
+          test/chat_room_panel_attachment_recovery_test.dart
+          --reporter expanded --concurrency=1 --update-goldens
+      - name: Retain attachment recovery H/V outputs
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.ref == 'codex/fix-attachment-upload-recovery'
+        uses: actions/upload-artifact@v6
+        with:
+          name: attachment-recovery-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/attachment-upload-recovery/attachment-upload-failed-h.png
+            ${{ runner.temp }}/attachment-upload-recovery/attachment-upload-failed-v.png
+          if-no-files-found: warn
+          retention-days: 1
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6
