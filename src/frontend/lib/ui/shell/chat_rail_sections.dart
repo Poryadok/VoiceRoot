@@ -9,6 +9,7 @@ import '../../state/chat_providers.dart';
 import '../../state/message_requests_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import 'message_requests_folder.dart';
 
 /// Folder icons in desktop rail (§1.1b) — functional, icon + tooltip.
@@ -207,9 +208,10 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
     chatIds.insert(newIndex, moved);
     final message = await ref.read(quickAccessActionsProvider).reorder(chatIds);
     if (message != null && context.mounted) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
     }
   }
 
@@ -227,10 +229,15 @@ class ChatRailQuickAccessSection extends ConsumerWidget {
     switch (result) {
       case ChatsApiOk<void>():
         invalidateChatNavigationData(ref);
-      case ChatsApiFailure(:final message):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+      case ChatsApiFailure(:final statusCode):
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
     }
   }
 }

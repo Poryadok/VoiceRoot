@@ -18,9 +18,10 @@ import 'support/fake_voice_api_clients.dart';
 import 'support/voice_test_theme.dart';
 
 class _ReorderChatsClient extends FakeVoiceChatsClient {
-  _ReorderChatsClient({this.failAtUpdate});
+  _ReorderChatsClient({this.failAtUpdate, this.failAtUpdates = const {}});
 
   final int? failAtUpdate;
+  final Set<int> failAtUpdates;
   Future<void> Function()? afterFirstUpdate;
   bool rejectOldBearer = false;
   final folders = <VoiceFolder>[
@@ -66,8 +67,9 @@ class _ReorderChatsClient extends FakeVoiceChatsClient {
     if (rejectOldBearer && authorization == 'Bearer test-access') {
       return const ChatsApiFailure(message: 'revoked token');
     }
-    if (updates.length == failAtUpdate) {
-      return const ChatsApiFailure(message: 'reorder failed');
+    if (updates.length == failAtUpdate ||
+        failAtUpdates.contains(updates.length)) {
+      return const ChatsApiFailure(message: 'private_folder_backend_detail');
     }
     final index = folders.indexWhere((folder) => folder.id == folderId);
     final old = folders[index];
@@ -210,7 +212,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(chats.updates, [('c', 5), ('a', 6), ('c', 7)]);
-    expect(find.text('reorder failed'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_backend_detail'), findsNothing);
     final rows = find.byType(ListTile);
     expect(
       [
@@ -224,6 +227,50 @@ void main() {
         const Key('manage_folder_c'),
       ],
     );
+  });
+
+  testWidgets('partial folder reorder keeps its localized warning', (
+    tester,
+  ) async {
+    final chats = _ReorderChatsClient(failAtUpdates: {2, 3});
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 404)),
+        ),
+        authorizationHeaderProvider.overrideWithValue('Bearer test'),
+        voiceChatsClientProvider.overrideWithValue(chats),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ManageFoldersSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    tester
+        .widget<ReorderableListView>(find.byType(ReorderableListView))
+        .onReorder(2, 0);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        AppLocalizations.of(
+          tester.element(find.byKey(ManageFoldersSheet.sheetKey)),
+        )!.chatFolderReorderMayBePartial,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('private_folder_backend_detail'), findsNothing);
   });
 
   testWidgets('folder controls are disabled while reorder is saving', (

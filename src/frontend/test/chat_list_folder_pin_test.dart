@@ -261,10 +261,11 @@ void main() {
 
     await tester.longPress(find.text('Group Target'));
     await tester.pumpAndSettle();
-    chats.archiveError = 'archive failed';
+    chats.archiveError = 'private_archive_row_backend_detail';
     await tester.tap(find.byKey(ChatListBody.archiveActionKey(chatId)));
     await tester.pumpAndSettle();
-    expect(find.text('archive failed'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_archive_row_backend_detail'), findsNothing);
   });
 
   testWidgets('System folder row cannot remove implicit membership', (
