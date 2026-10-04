@@ -327,7 +327,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                                       AuthErrorKeys.totpRequired) ...[
                                 const SizedBox(height: 12),
                                 Text(
-                                  authErrorMessage(l10n, auth.errorKey!),
+                                  authFormErrorMessage(l10n, auth.errorKey!),
                                   key: const Key('auth_error'),
                                   style: TextStyle(
                                     color: Theme.of(context).colorScheme.error,

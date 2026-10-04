@@ -8,11 +8,32 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
 	"voice/backend/notification/internal/dispatch"
-	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/store"
 )
+
+func storyMentionRestartSpec() notificationConsumerRestartSpec {
+	authorID, recipientID := uuid.New(), uuid.New()
+	storyID := uuid.NewString()
+	return notificationConsumerRestartSpec{
+		name: "story_created_mention", service: "story", stream: jsStreamStoryEvents, filter: "story.>",
+		deliverSubject: "_INBOX.voice.notification.story", subject: "story.created",
+		recipientID: recipientID,
+		event: &eventsv1.StoryStreamEvent{Payload: &eventsv1.StoryStreamEvent_StoryCreated{StoryCreated: &eventsv1.StoryCreated{
+			StoryId: storyID, AuthorProfileId: authorID.String(), MentionProfileIds: []string{recipientID.String()},
+		}}},
+		expected: push.Payload{Title: "Story mention", Body: "You were mentioned in a story", Data: map[string]string{
+			"type": "mention", "story_id": storyID, "sender_profile_id": authorID.String(),
+		}},
+		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, pusher *dispatch.PushDispatcher) error {
+			return runStoryEventsConsumer(ctx, natsURL, tokens, &dispatch.StoryPusher{Tokens: tokens, Pusher: pusher}, nil)
+		},
+	}
+}
 
 func TestRouteStoryNotification_StoryCreatedMention(t *testing.T) {
 	mentionedID := uuid.NewString()
