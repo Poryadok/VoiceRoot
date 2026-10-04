@@ -138,6 +138,7 @@ func TestComposeMultiProfileSpaceMembership_live(t *testing.T) {
 	invite := createComposeSpaceInvite(t, client, base, sess.AccessToken, spaceID)
 	altToken, altProfileID := composeCreateAltProfile(t, client, base, sess.AccessToken, "Space Alt", "personal")
 	require.NotEqual(t, sess.ProfileID, altProfileID)
+	allowComposeChatSpaceInvitesEveryone(t, client, base, altToken)
 
 	joinComposeSpaceByInvite(t, client, base, altToken, invite.Code)
 
