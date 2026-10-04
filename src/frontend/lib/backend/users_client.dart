@@ -52,6 +52,7 @@ class VoiceProfile {
     this.verificationType = 'none',
     this.verificationBadge,
     this.accentColor,
+    this.locale = '',
     this.frozenAt,
   });
 
@@ -67,6 +68,7 @@ class VoiceProfile {
   final String verificationType;
   final String? verificationBadge;
   final String? accentColor;
+  final String locale;
   final DateTime? frozenAt;
 
   bool get isFrozen => frozenAt != null;
@@ -75,10 +77,7 @@ class VoiceProfile {
 }
 
 /// Session bar label: guest accounts show the chosen nickname; others show @handle.
-String profileSessionBarLabel(
-  VoiceProfile profile, {
-  required bool isGuest,
-}) {
+String profileSessionBarLabel(VoiceProfile profile, {required bool isGuest}) {
   if (isGuest && profile.displayName.isNotEmpty) {
     return profile.displayName;
   }
@@ -266,6 +265,7 @@ class VoiceUsersClient {
     String? bio,
     String? avatarUrl,
     String? accentColor,
+    String? locale,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/users/me'),
@@ -275,6 +275,7 @@ class VoiceUsersClient {
         bio: bio,
         avatarUrl: avatarUrl,
         accentColor: accentColor,
+        locale: locale,
       ),
       createEmpty: user_pb.UpdateProfileResponse.create,
     );
