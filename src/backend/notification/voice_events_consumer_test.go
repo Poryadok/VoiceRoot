@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,10 +9,34 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/consumer"
 	"voice/backend/notification/internal/delivery"
-	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/notification/internal/dispatch"
+	"voice/backend/notification/internal/push"
+	"voice/backend/notification/internal/store"
 )
+
+func voiceMemberJoinedRestartSpec() notificationConsumerRestartSpec {
+	joinedID, recipientID := uuid.New(), uuid.New()
+	roomID, voiceRoomID, spaceID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	return notificationConsumerRestartSpec{
+		name: "voice_member_joined", service: "voice", stream: jsStreamVoiceEvents, filter: "voice.>",
+		deliverSubject: "_INBOX.voice.notification.voice", subject: "voice.member_joined",
+		recipientID: recipientID,
+		event: &eventsv1.VoiceStreamEvent{Payload: &eventsv1.VoiceStreamEvent_VoiceMemberJoined{VoiceMemberJoined: &eventsv1.VoiceMemberJoined{
+			RoomId: roomID, VoiceRoomId: voiceRoomID, SpaceId: spaceID,
+			JoinedProfileId: joinedID.String(), NotifyProfileIds: []string{recipientID.String()},
+		}}},
+		expected: push.Payload{Title: "Voice room", Body: "Someone joined the voice room", Data: map[string]string{
+			"type": "voice_member_joined", "room_id": roomID, "voice_room_id": voiceRoomID,
+			"space_id": spaceID, "joined_profile_id": joinedID.String(), "sender_profile_id": joinedID.String(),
+		}},
+		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, pusher *dispatch.PushDispatcher) error {
+			return runVoiceEventsConsumer(ctx, natsURL, tokens, pusher, nil, nil, nil)
+		},
+	}
+}
 
 func TestRouteVoiceNotification_CallIncomingOffline(t *testing.T) {
 	callee := uuid.NewString()
@@ -20,13 +45,13 @@ func TestRouteVoiceNotification_CallIncomingOffline(t *testing.T) {
 	env := &eventsv1.VoiceStreamEvent{
 		Payload: &eventsv1.VoiceStreamEvent_CallIncoming{
 			CallIncoming: &eventsv1.CallIncoming{
-				RoomId:              roomID,
-				ChatId:              uuid.NewString(),
-				InitiatorProfileId:  initiator,
-				CalleeProfileId:     callee,
-				MediaKind:           "audio",
-				LivekitRoomName:     "lk-" + roomID,
-				ExpiresAt:           timestamppb.New(time.Now().UTC().Add(30 * time.Second)),
+				RoomId:             roomID,
+				ChatId:             uuid.NewString(),
+				InitiatorProfileId: initiator,
+				CalleeProfileId:    callee,
+				MediaKind:          "audio",
+				LivekitRoomName:    "lk-" + roomID,
+				ExpiresAt:          timestamppb.New(time.Now().UTC().Add(30 * time.Second)),
 			},
 		},
 	}
