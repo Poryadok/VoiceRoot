@@ -1418,6 +1418,18 @@ abstract class AppLocalizations {
   /// **'Unable to install bot.'**
   String get botInstallActionError;
 
+  /// No description provided for @commonActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete this action.'**
+  String get commonActionFailed;
+
+  /// No description provided for @socialSearchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not search for people.'**
+  String get socialSearchFailed;
+
   /// No description provided for @spaceBotsUninstallSuccess.
   ///
   /// In en, this message translates to:

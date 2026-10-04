@@ -362,6 +362,8 @@
   "spaceBotsSelectChats": "Allowed text chats",
   "spaceBotsInstallSuccess": "Bot installed.",
   "botInstallActionError": "Unable to install bot.",
+  "commonActionFailed": "Could not complete this action.",
+  "socialSearchFailed": "Could not search for people.",
   "spaceBotsUninstallSuccess": "Bot removed from space.",
   "spaceBotsLoadError": "Could not load bots",
   "ephemeralMessageLabel": "Only visible to you",

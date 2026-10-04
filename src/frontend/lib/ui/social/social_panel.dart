@@ -284,9 +284,8 @@ class _SearchResults extends ConsumerWidget {
       return KeyedSubtree(
         key: SocialPanel.searchUnavailableKey,
         child: VoiceStatePanel(
-          title: socialActionErrorMessage(
+          title: socialSearchErrorMessage(
             l10n,
-            state.errorMessage!,
             statusCode: state.errorStatusCode,
           ),
           icon: Icons.cloud_off_outlined,
