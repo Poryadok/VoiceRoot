@@ -310,9 +310,9 @@ class ProfileDetailSheet extends ConsumerWidget {
         .openDmWithProfile(profileId);
     if (!context.mounted) return;
     if (err != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.socialActionError(err))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(chatActionErrorMessage(l10n, err))),
+      );
       return;
     }
     Navigator.of(context).pop();

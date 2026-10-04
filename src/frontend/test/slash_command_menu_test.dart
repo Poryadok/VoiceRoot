@@ -63,6 +63,39 @@ void main() {
     );
   }
 
+  testWidgets(
+    'SlashCommandMenuSheet hides load diagnostics and retries the chat provider',
+    (tester) async {
+      var attempts = 0;
+      await tester.pumpWidget(
+        slashMenuApp(
+          overrides: [
+            slashCommandsForChatProvider('chat-1').overrideWith((ref) async {
+              attempts++;
+              if (attempts == 1) {
+                throw BotsCommandsLoadException('private-upstream-diagnostic');
+              }
+              return _commands;
+            }),
+          ],
+          onSelected: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not load bot commands.'), findsOneWidget);
+      expect(find.text('private-upstream-diagnostic'), findsNothing);
+      expect(attempts, 1);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(attempts, 2);
+      expect(find.text('Could not load bot commands.'), findsNothing);
+      expect(find.text('/ping'), findsOneWidget);
+    },
+  );
+
   testWidgets('SlashCommandMenuSheet lists commands and handles selection', (
     tester,
   ) async {

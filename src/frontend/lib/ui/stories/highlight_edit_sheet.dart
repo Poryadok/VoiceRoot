@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_primary_button.dart';
 import 'story_audience_picker.dart';
@@ -112,10 +113,13 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
         }
         ref.invalidate(profileHighlightsProvider(profileId));
         if (mounted) Navigator.of(context).pop();
-      case StoriesApiFailure(:final message):
+      case StoriesApiFailure(:final statusCode):
         setState(() {
           _saving = false;
-          _error = message;
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
         });
     }
   }
@@ -126,7 +130,9 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     final profileId = ref.read(authControllerProvider).activeProfileId;
     if (highlight == null || auth == null || profileId == null) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).removeFromHighlight(
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .removeFromHighlight(
           authorization: auth,
           highlightId: highlight.id,
           storyId: storyId,
@@ -137,9 +143,16 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
       case StoriesApiOk():
         setState(() => _storyIds.remove(storyId));
         ref.invalidate(profileHighlightsProvider(profileId));
-      case StoriesApiFailure(:final message):
+      case StoriesApiFailure(:final statusCode):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(
+                AppLocalizations.of(context)!,
+                statusCode: statusCode,
+              ),
+            ),
+          ),
         );
     }
   }
@@ -151,6 +164,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     final storyId = await showVoiceBottomSheet<String>(
       context: context,
       initialSize: 0.5,
+      scrollable: false,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -170,9 +184,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
                   final label = story.textContent?.trim();
                   return ListTile(
                     title: Text(
-                      label != null && label.isNotEmpty
-                          ? label
-                          : story.type,
+                      label != null && label.isNotEmpty ? label : story.type,
                     ),
                     onTap: () => Navigator.of(ctx).pop(story.id),
                   );
@@ -192,20 +204,28 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     if (auth == null || profileId == null) return;
 
     if (highlight != null) {
-      final result =
-          await ref.read(voiceStoriesClientProvider).addToHighlight(
-                authorization: auth,
-                highlightId: highlight.id,
-                storyId: storyId,
-              );
+      final result = await ref
+          .read(voiceStoriesClientProvider)
+          .addToHighlight(
+            authorization: auth,
+            highlightId: highlight.id,
+            storyId: storyId,
+          );
       if (!mounted) return;
       switch (result) {
         case StoriesApiOk():
           setState(() => _storyIds.add(storyId));
           ref.invalidate(profileHighlightsProvider(profileId));
-        case StoriesApiFailure(:final message):
+        case StoriesApiFailure(:final statusCode):
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
+            SnackBar(
+              content: Text(
+                commonActionErrorMessage(
+                  AppLocalizations.of(context)!,
+                  statusCode: statusCode,
+                ),
+              ),
+            ),
           );
       }
     } else {
@@ -228,7 +248,9 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _isEdit ? l10n.storyHighlightEditTitle : l10n.storyHighlightCreate,
+              _isEdit
+                  ? l10n.storyHighlightEditTitle
+                  : l10n.storyHighlightCreate,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
@@ -266,11 +288,16 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
                 (storyId) => ListTile(
                   key: Key('highlight_story_$storyId'),
                   dense: true,
-                  title: Text(storyId, style: TextStyle(color: voice.textPrimary)),
+                  title: Text(
+                    storyId,
+                    style: TextStyle(color: voice.textPrimary),
+                  ),
                   trailing: _isEdit
                       ? IconButton(
-                          icon: Icon(Icons.remove_circle_outline,
-                              color: voice.error),
+                          icon: Icon(
+                            Icons.remove_circle_outline,
+                            color: voice.error,
+                          ),
                           onPressed: _saving
                               ? null
                               : () => _removeStory(storyId),
