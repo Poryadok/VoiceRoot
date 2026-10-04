@@ -54,6 +54,15 @@ func (r *recordingMessageFCM) Send(_ context.Context, _ uuid.UUID, _ store.Devic
 	return nil
 }
 
+type channelMessageFCM struct {
+	sent chan push.Payload
+}
+
+func (r channelMessageFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
+	r.sent <- push.Payload(payload)
+	return nil
+}
+
 type messageTokenRepo struct {
 	byProfile map[uuid.UUID][]store.DeviceToken
 }
@@ -323,6 +332,100 @@ func TestMessageEventsJetStreamRedeliveryRechecksQueuedGameConsentAndSuppressesE
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("message consumer did not stop after cancellation")
+	}
+}
+
+func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T) {
+	options := &natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1}
+	server, err := natsserver.NewServer(options)
+	require.NoError(t, err)
+	go server.Start()
+	require.True(t, server.ReadyForConnections(10*time.Second))
+	defer server.Shutdown()
+
+	provisioner, err := nats.Connect(server.ClientURL())
+	require.NoError(t, err)
+	defer provisioner.Close()
+	js, err := provisioner.JetStream()
+	require.NoError(t, err)
+	_, err = js.AddStream(&nats.StreamConfig{Name: jsStreamMessageEvents, Subjects: []string{jsSubjectMessageEvents}})
+	require.NoError(t, err)
+	durable := consumer.SharedDurable("message")
+	_, err = js.AddConsumer(jsStreamMessageEvents, &nats.ConsumerConfig{
+		Durable: durable, FilterSubject: jsSubjectMessageEvents,
+		DeliverSubject: "_INBOX.voice.notification.message", AckPolicy: nats.AckExplicitPolicy,
+		DeliverPolicy: nats.DeliverNewPolicy,
+	})
+	require.NoError(t, err)
+
+	senderID, recipientID := uuid.New(), uuid.New()
+	deliveries := make(chan push.Payload, 2)
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "recipient-token", PushService: "fcm"}}}},
+		Pusher: &dispatch.PushDispatcher{FCM: channelMessageFCM{sent: deliveries}}, Grouping: grouping.NewMemoryStore(),
+	}
+	members := stubChatMembers{ids: []string{senderID.String(), recipientID.String()}}
+
+	firstCtx, stopFirst := context.WithCancel(context.Background())
+	firstReadiness := newNotificationConsumerReadiness("message")
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- runMessageEventsConsumer(withNotificationConsumerReadiness(firstCtx, firstReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
+			members, pusher, pushenrich.NoopResolver{}, nil)
+	}()
+	require.Eventually(t, firstReadiness.ready, 5*time.Second, 10*time.Millisecond, "first message consumer binds the pre-provisioned durable")
+	stopFirst()
+	select {
+	case <-firstDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first message consumer did not stop after cancellation")
+	}
+
+	messageID, chatID := uuid.NewString(), uuid.NewString()
+	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: messageID, ChatId: chatID, SenderProfileId: senderID.String()},
+	}}
+	encoded, err := proto.Marshal(event)
+	require.NoError(t, err)
+	_, err = js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
+	}, 5*time.Second, 20*time.Millisecond, "published event remains pending on the durable while the consumer is stopped")
+
+	secondCtx, stopSecond := context.WithCancel(context.Background())
+	defer stopSecond()
+	secondReadiness := newNotificationConsumerReadiness("message")
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- runMessageEventsConsumer(withNotificationConsumerReadiness(secondCtx, secondReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
+			members, pusher, pushenrich.NoopResolver{}, nil)
+	}()
+	require.Eventually(t, secondReadiness.ready, 5*time.Second, 10*time.Millisecond, "restarted message consumer rebinds the same durable")
+	select {
+	case payload := <-deliveries:
+		require.Equal(t, "New message", payload.Title)
+		require.Equal(t, chatID, payload.Data["chat_id"])
+		require.Equal(t, messageID, payload.Data["message_id"])
+	case <-time.After(5 * time.Second):
+		t.Fatal("restarted message consumer did not deliver the pending event")
+	}
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0
+	}, 5*time.Second, 20*time.Millisecond, "successful delivery ACK clears the durable backlog")
+	select {
+	case payload := <-deliveries:
+		t.Fatalf("backlogged event was delivered more than once: %#v", payload)
+	default:
+	}
+
+	stopSecond()
+	select {
+	case <-secondDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("restarted message consumer did not stop after cancellation")
 	}
 }
 
