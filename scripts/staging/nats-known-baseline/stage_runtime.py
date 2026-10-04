@@ -36,8 +36,11 @@ class Kube:
     def get(self, kind, name): return self.run(['get',kind,name,'-o','json'])
 
     def secret_meta(self, name):
-        return self.run(['get','secret',name,'-o',
-            'jsonpath={"uid":"{.metadata.uid}","resourceVersion":"{.metadata.resourceVersion}"}'])
+        values=self.run(['get','secret',name,'-o',
+            "jsonpath-as-json={.metadata['uid','resourceVersion']}"])
+        if not isinstance(values,list) or len(values)!=2 or any(not isinstance(v,str) or not v for v in values):
+            raise Blocked('secret_metadata_projection_invalid')
+        return dict(zip(('uid','resourceVersion'),values))
 
     def cas(self, kind, row, changes):
         metadata = row['metadata']

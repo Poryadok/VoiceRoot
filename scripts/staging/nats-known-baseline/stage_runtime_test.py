@@ -7,6 +7,18 @@ from docker_runtime import NATS_IMAGE
 
 
 class StageFenceTests(unittest.TestCase):
+    def test_secret_metadata_projection_maps_atomic_json_values(self):
+        calls=[]
+        kube=Kube(lambda args:calls.append(args) or ['tls-uid','100'])
+        self.assertEqual(kube.secret_meta('tls'),{'uid':'tls-uid','resourceVersion':'100'})
+        self.assertEqual(calls,[['get','secret','tls','-o',
+            "jsonpath-as-json={.metadata['uid','resourceVersion']}"]])
+
+    def test_secret_metadata_projection_rejects_invalid_shape(self):
+        for value in ([],['uid'],['uid','100','extra'],['uid',100],['','100'],{'data':'never'}):
+            with self.subTest(value=value):
+                with self.assertRaises(Blocked):Kube(lambda args:value).secret_meta('tls')
+
     def test_second_preflight_rejects_changed_template(self):
         names=(HUB,'voice-gateway',*('voice-'+s for s in LEAVES))
         rows={name:{'metadata':{'name':name,'uid':name,'resourceVersion':'10'},
