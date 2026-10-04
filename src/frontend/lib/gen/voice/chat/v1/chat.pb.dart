@@ -1009,6 +1009,473 @@ class TeardownMatchSquadChatResponse extends $pb.GeneratedMessage {
   MatchSquadChatTeardownReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// Matchmaking sends this only after its durable teardown aggregate has been
+/// complete for at least 30 days. The stored teardown receipt hash binds the
+/// exact provider evidence whose large request and receipt bytes may be cleared.
+/// @voice.unknown_fields=reject
+/// @voice.hash=deterministic_protobuf_sha256
+class CompactMatchSquadChatRequest extends $pb.GeneratedMessage {
+  factory CompactMatchSquadChatRequest({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? teardownAggregateId,
+    $core.String? matchId,
+    $core.String? chatId,
+    $core.String? creationReceiptId,
+    $core.List<$core.int>? creationRequestSha256,
+    $core.String? teardownOperationId,
+    $core.String? teardownReceiptId,
+    $core.List<$core.int>? teardownReceiptSha256,
+    $core.List<$core.int>? participantManifestSha256,
+    $1.Timestamp? aggregateCompletedAt,
+    $1.Timestamp? compactionAuthorizedAt,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (teardownAggregateId != null)
+      result.teardownAggregateId = teardownAggregateId;
+    if (matchId != null) result.matchId = matchId;
+    if (chatId != null) result.chatId = chatId;
+    if (creationReceiptId != null) result.creationReceiptId = creationReceiptId;
+    if (creationRequestSha256 != null)
+      result.creationRequestSha256 = creationRequestSha256;
+    if (teardownOperationId != null)
+      result.teardownOperationId = teardownOperationId;
+    if (teardownReceiptId != null) result.teardownReceiptId = teardownReceiptId;
+    if (teardownReceiptSha256 != null)
+      result.teardownReceiptSha256 = teardownReceiptSha256;
+    if (participantManifestSha256 != null)
+      result.participantManifestSha256 = participantManifestSha256;
+    if (aggregateCompletedAt != null)
+      result.aggregateCompletedAt = aggregateCompletedAt;
+    if (compactionAuthorizedAt != null)
+      result.compactionAuthorizedAt = compactionAuthorizedAt;
+    return result;
+  }
+
+  CompactMatchSquadChatRequest._();
+
+  factory CompactMatchSquadChatRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompactMatchSquadChatRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompactMatchSquadChatRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'teardownAggregateId')
+    ..aOS(4, _omitFieldNames ? '' : 'matchId')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'creationReceiptId')
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'creationRequestSha256', $pb.PbFieldType.OY)
+    ..aOS(8, _omitFieldNames ? '' : 'teardownOperationId')
+    ..aOS(9, _omitFieldNames ? '' : 'teardownReceiptId')
+    ..a<$core.List<$core.int>>(
+        10, _omitFieldNames ? '' : 'teardownReceiptSha256', $pb.PbFieldType.OY)
+    ..a<$core.List<$core.int>>(11,
+        _omitFieldNames ? '' : 'participantManifestSha256', $pb.PbFieldType.OY)
+    ..aOM<$1.Timestamp>(12, _omitFieldNames ? '' : 'aggregateCompletedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(13, _omitFieldNames ? '' : 'compactionAuthorizedAt',
+        subBuilder: $1.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompactMatchSquadChatRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompactMatchSquadChatRequest copyWith(
+          void Function(CompactMatchSquadChatRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CompactMatchSquadChatRequest))
+          as CompactMatchSquadChatRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompactMatchSquadChatRequest create() =>
+      CompactMatchSquadChatRequest._();
+  @$core.override
+  CompactMatchSquadChatRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompactMatchSquadChatRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CompactMatchSquadChatRequest>(create);
+  static CompactMatchSquadChatRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get teardownAggregateId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set teardownAggregateId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasTeardownAggregateId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearTeardownAggregateId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get matchId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set matchId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasMatchId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearMatchId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get creationReceiptId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set creationReceiptId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCreationReceiptId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCreationReceiptId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get creationRequestSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set creationRequestSha256($core.List<$core.int> value) =>
+      $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasCreationRequestSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearCreationRequestSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get teardownOperationId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set teardownOperationId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasTeardownOperationId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearTeardownOperationId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get teardownReceiptId => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set teardownReceiptId($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasTeardownReceiptId() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearTeardownReceiptId() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.List<$core.int> get teardownReceiptSha256 => $_getN(9);
+  @$pb.TagNumber(10)
+  set teardownReceiptSha256($core.List<$core.int> value) =>
+      $_setBytes(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasTeardownReceiptSha256() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearTeardownReceiptSha256() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.List<$core.int> get participantManifestSha256 => $_getN(10);
+  @$pb.TagNumber(11)
+  set participantManifestSha256($core.List<$core.int> value) =>
+      $_setBytes(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasParticipantManifestSha256() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearParticipantManifestSha256() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $1.Timestamp get aggregateCompletedAt => $_getN(11);
+  @$pb.TagNumber(12)
+  set aggregateCompletedAt($1.Timestamp value) => $_setField(12, value);
+  @$pb.TagNumber(12)
+  $core.bool hasAggregateCompletedAt() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearAggregateCompletedAt() => $_clearField(12);
+  @$pb.TagNumber(12)
+  $1.Timestamp ensureAggregateCompletedAt() => $_ensure(11);
+
+  @$pb.TagNumber(13)
+  $1.Timestamp get compactionAuthorizedAt => $_getN(12);
+  @$pb.TagNumber(13)
+  set compactionAuthorizedAt($1.Timestamp value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasCompactionAuthorizedAt() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearCompactionAuthorizedAt() => $_clearField(13);
+  @$pb.TagNumber(13)
+  $1.Timestamp ensureCompactionAuthorizedAt() => $_ensure(12);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class MatchSquadChatCompactionReceipt extends $pb.GeneratedMessage {
+  factory MatchSquadChatCompactionReceipt({
+    $core.int? protocolVersion,
+    $core.String? receiptId,
+    $core.String? compactionOperationId,
+    $core.String? teardownAggregateId,
+    $core.String? matchId,
+    $core.String? chatId,
+    $core.List<$core.int>? requestSha256,
+    $1.Timestamp? aggregateCompletedAt,
+    $1.Timestamp? compactionAuthorizedAt,
+    MatchSquadChatCompactionStatus? status,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (receiptId != null) result.receiptId = receiptId;
+    if (compactionOperationId != null)
+      result.compactionOperationId = compactionOperationId;
+    if (teardownAggregateId != null)
+      result.teardownAggregateId = teardownAggregateId;
+    if (matchId != null) result.matchId = matchId;
+    if (chatId != null) result.chatId = chatId;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    if (aggregateCompletedAt != null)
+      result.aggregateCompletedAt = aggregateCompletedAt;
+    if (compactionAuthorizedAt != null)
+      result.compactionAuthorizedAt = compactionAuthorizedAt;
+    if (status != null) result.status = status;
+    return result;
+  }
+
+  MatchSquadChatCompactionReceipt._();
+
+  factory MatchSquadChatCompactionReceipt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory MatchSquadChatCompactionReceipt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'MatchSquadChatCompactionReceipt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(3, _omitFieldNames ? '' : 'compactionOperationId')
+    ..aOS(4, _omitFieldNames ? '' : 'teardownAggregateId')
+    ..aOS(5, _omitFieldNames ? '' : 'matchId')
+    ..aOS(6, _omitFieldNames ? '' : 'chatId')
+    ..a<$core.List<$core.int>>(
+        7, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'aggregateCompletedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'compactionAuthorizedAt',
+        subBuilder: $1.Timestamp.create)
+    ..aE<MatchSquadChatCompactionStatus>(10, _omitFieldNames ? '' : 'status',
+        enumValues: MatchSquadChatCompactionStatus.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadChatCompactionReceipt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  MatchSquadChatCompactionReceipt copyWith(
+          void Function(MatchSquadChatCompactionReceipt) updates) =>
+      super.copyWith(
+              (message) => updates(message as MatchSquadChatCompactionReceipt))
+          as MatchSquadChatCompactionReceipt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadChatCompactionReceipt create() =>
+      MatchSquadChatCompactionReceipt._();
+  @$core.override
+  MatchSquadChatCompactionReceipt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static MatchSquadChatCompactionReceipt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<MatchSquadChatCompactionReceipt>(
+          create);
+  static MatchSquadChatCompactionReceipt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get receiptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set receiptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasReceiptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearReceiptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get compactionOperationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set compactionOperationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCompactionOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCompactionOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get teardownAggregateId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set teardownAggregateId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasTeardownAggregateId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearTeardownAggregateId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get matchId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set matchId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasMatchId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearMatchId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get chatId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set chatId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.List<$core.int> get requestSha256 => $_getN(6);
+  @$pb.TagNumber(7)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasRequestSha256() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearRequestSha256() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $1.Timestamp get aggregateCompletedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set aggregateCompletedAt($1.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAggregateCompletedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAggregateCompletedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $1.Timestamp ensureAggregateCompletedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  $1.Timestamp get compactionAuthorizedAt => $_getN(8);
+  @$pb.TagNumber(9)
+  set compactionAuthorizedAt($1.Timestamp value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCompactionAuthorizedAt() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCompactionAuthorizedAt() => $_clearField(9);
+  @$pb.TagNumber(9)
+  $1.Timestamp ensureCompactionAuthorizedAt() => $_ensure(8);
+
+  @$pb.TagNumber(10)
+  MatchSquadChatCompactionStatus get status => $_getN(9);
+  @$pb.TagNumber(10)
+  set status(MatchSquadChatCompactionStatus value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasStatus() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearStatus() => $_clearField(10);
+}
+
+class CompactMatchSquadChatResponse extends $pb.GeneratedMessage {
+  factory CompactMatchSquadChatResponse({
+    MatchSquadChatCompactionReceipt? receipt,
+  }) {
+    final result = create();
+    if (receipt != null) result.receipt = receipt;
+    return result;
+  }
+
+  CompactMatchSquadChatResponse._();
+
+  factory CompactMatchSquadChatResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CompactMatchSquadChatResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CompactMatchSquadChatResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOM<MatchSquadChatCompactionReceipt>(1, _omitFieldNames ? '' : 'receipt',
+        subBuilder: MatchSquadChatCompactionReceipt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompactMatchSquadChatResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CompactMatchSquadChatResponse copyWith(
+          void Function(CompactMatchSquadChatResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CompactMatchSquadChatResponse))
+          as CompactMatchSquadChatResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CompactMatchSquadChatResponse create() =>
+      CompactMatchSquadChatResponse._();
+  @$core.override
+  CompactMatchSquadChatResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CompactMatchSquadChatResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CompactMatchSquadChatResponse>(create);
+  static CompactMatchSquadChatResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  MatchSquadChatCompactionReceipt get receipt => $_getN(0);
+  @$pb.TagNumber(1)
+  set receipt(MatchSquadChatCompactionReceipt value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceipt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceipt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  MatchSquadChatCompactionReceipt ensureReceipt() => $_ensure(0);
+}
+
 /// The operation_id is also the x-request-id principal binding. Request hash
 /// covers the deterministic protobuf encoding of the complete request.
 class ProvisionManagedChatRequest extends $pb.GeneratedMessage {

@@ -253,6 +253,84 @@ message CompactMatchSquadRoomResponse {
   MatchSquadRoomCompactionReceipt receipt = 1;
 }
 
+// Player self-membership for active MatchSquad rooms. This service is
+// registered only on Voice's dedicated delegated-user listener; ordinary
+// VoiceService methods do not grant MatchSquad access.
+service MatchSquadMemberService {
+  // @voice.security=protected;callers=delegated_user:gateway
+  rpc JoinMatchSquadRoom(JoinMatchSquadRoomRequest) returns (JoinMatchSquadRoomResponse);
+  // @voice.security=protected;callers=delegated_user:gateway
+  rpc GetMatchSquadJoinToken(GetMatchSquadJoinTokenRequest) returns (GetMatchSquadJoinTokenResponse);
+  // @voice.security=protected;callers=delegated_user:gateway
+  rpc LeaveMatchSquadRoom(LeaveMatchSquadRoomRequest) returns (LeaveMatchSquadRoomResponse);
+}
+
+enum MatchSquadMembershipState {
+  MATCH_SQUAD_MEMBERSHIP_STATE_UNSPECIFIED = 0;
+  MATCH_SQUAD_MEMBERSHIP_STATE_JOINING = 1;
+  MATCH_SQUAD_MEMBERSHIP_STATE_JOINED = 2;
+  MATCH_SQUAD_MEMBERSHIP_STATE_RECONNECTING = 3;
+  MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING = 4;
+  MATCH_SQUAD_MEMBERSHIP_STATE_LEFT = 5;
+  MATCH_SQUAD_MEMBERSHIP_STATE_EJECTED = 6;
+}
+
+// Match ID is caller-supplied request data and must match the immutable
+// Voice-owned room binding. Actor identity is derived from the verified
+// delegated-user principal, never from request fields or forwarded headers.
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message JoinMatchSquadRoomRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string match_id = 3;
+  string room_id = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message JoinMatchSquadRoomResponse {
+  CallSession call_session = 1;
+  string media_epoch = 2;
+  MatchSquadMembershipState membership_state = 3;
+}
+
+// Token issuance is an authenticated read of an already-current membership;
+// it never joins, resumes, or recreates a room.
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message GetMatchSquadJoinTokenRequest {
+  uint32 protocol_version = 1;
+  string match_id = 2;
+  string room_id = 3;
+  string media_epoch = 4;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message GetMatchSquadJoinTokenResponse {
+  GetJoinTokenResponse token = 1;
+  string media_epoch = 2;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message LeaveMatchSquadRoomRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string match_id = 3;
+  string room_id = 4;
+  string expected_media_epoch = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message LeaveMatchSquadRoomResponse {
+  CallSession call_session = 1;
+  string media_epoch = 2;
+  MatchSquadMembershipState membership_state = 3;
+}
+
 message ProvisionGameSessionRoomResponse {
   string operation_id = 1;
   string application_id = 2;

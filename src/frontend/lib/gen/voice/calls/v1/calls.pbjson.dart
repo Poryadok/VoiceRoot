@@ -139,6 +139,45 @@ final $typed_data.Uint8List matchSquadTeardownStatusDescriptor = $convert.base64
     'VTX1VOU1BFQ0lGSUVEEAASKQolTUFUQ0hfU1FVQURfVEVBUkRPV05fU1RBVFVTX0NPTVBMRVRF'
     'RBAB');
 
+@$core.Deprecated('Use matchSquadRoomCompactionStatusDescriptor instead')
+const MatchSquadRoomCompactionStatus$json = {
+  '1': 'MatchSquadRoomCompactionStatus',
+  '2': [
+    {'1': 'MATCH_SQUAD_ROOM_COMPACTION_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'MATCH_SQUAD_ROOM_COMPACTION_STATUS_COMPACTED', '2': 1},
+  ],
+};
+
+/// Descriptor for `MatchSquadRoomCompactionStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchSquadRoomCompactionStatusDescriptor =
+    $convert.base64Decode(
+        'Ch5NYXRjaFNxdWFkUm9vbUNvbXBhY3Rpb25TdGF0dXMSMgouTUFUQ0hfU1FVQURfUk9PTV9DT0'
+        '1QQUNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEjAKLE1BVENIX1NRVUFEX1JPT01fQ09NUEFD'
+        'VElPTl9TVEFUVVNfQ09NUEFDVEVEEAE=');
+
+@$core.Deprecated('Use matchSquadMembershipStateDescriptor instead')
+const MatchSquadMembershipState$json = {
+  '1': 'MatchSquadMembershipState',
+  '2': [
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINING', '2': 1},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED', '2': 2},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_RECONNECTING', '2': 3},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING', '2': 4},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEFT', '2': 5},
+    {'1': 'MATCH_SQUAD_MEMBERSHIP_STATE_EJECTED', '2': 6},
+  ],
+};
+
+/// Descriptor for `MatchSquadMembershipState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchSquadMembershipStateDescriptor = $convert.base64Decode(
+    'ChlNYXRjaFNxdWFkTWVtYmVyc2hpcFN0YXRlEiwKKE1BVENIX1NRVUFEX01FTUJFUlNISVBfU1'
+    'RBVEVfVU5TUEVDSUZJRUQQABIoCiRNQVRDSF9TUVVBRF9NRU1CRVJTSElQX1NUQVRFX0pPSU5J'
+    'TkcQARInCiNNQVRDSF9TUVVBRF9NRU1CRVJTSElQX1NUQVRFX0pPSU5FRBACEi0KKU1BVENIX1'
+    'NRVUFEX01FTUJFUlNISVBfU1RBVEVfUkVDT05ORUNUSU5HEAMSKAokTUFUQ0hfU1FVQURfTUVN'
+    'QkVSU0hJUF9TVEFURV9MRUFWSU5HEAQSJQohTUFUQ0hfU1FVQURfTUVNQkVSU0hJUF9TVEFURV'
+    '9MRUZUEAUSKAokTUFUQ0hfU1FVQURfTUVNQkVSU0hJUF9TVEFURV9FSkVDVEVEEAY=');
+
 @$core.Deprecated('Use gameSessionResourceRefDescriptor instead')
 const GameSessionResourceRef$json = {
   '1': 'GameSessionResourceRef',
@@ -451,6 +490,327 @@ final $typed_data.Uint8List teardownMatchSquadRoomResponseDescriptor =
     $convert.base64Decode(
         'Ch5UZWFyZG93bk1hdGNoU3F1YWRSb29tUmVzcG9uc2USRwoHcmVjZWlwdBgBIAEoCzItLnZvaW'
         'NlLmNhbGxzLnYxLk1hdGNoU3F1YWRSb29tVGVhcmRvd25SZWNlaXB0UgdyZWNlaXB0');
+
+@$core.Deprecated('Use compactMatchSquadRoomRequestDescriptor instead')
+const CompactMatchSquadRoomRequest$json = {
+  '1': 'CompactMatchSquadRoomRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'teardown_aggregate_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownAggregateId'
+    },
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 5, '4': 1, '5': 9, '10': 'roomId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'creation_request_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'creationRequestSha256'
+    },
+    {
+      '1': 'teardown_operation_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {
+      '1': 'teardown_receipt_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownReceiptId'
+    },
+    {
+      '1': 'teardown_receipt_sha256',
+      '3': 10,
+      '4': 1,
+      '5': 12,
+      '10': 'teardownReceiptSha256'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 11,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {
+      '1': 'aggregate_completed_at',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'aggregateCompletedAt'
+    },
+    {
+      '1': 'compaction_authorized_at',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'compactionAuthorizedAt'
+    },
+  ],
+};
+
+/// Descriptor for `CompactMatchSquadRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List compactMatchSquadRoomRequestDescriptor = $convert.base64Decode(
+    'ChxDb21wYWN0TWF0Y2hTcXVhZFJvb21SZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEjIK'
+    'FXRlYXJkb3duX2FnZ3JlZ2F0ZV9pZBgDIAEoCVITdGVhcmRvd25BZ2dyZWdhdGVJZBIZCghtYX'
+    'RjaF9pZBgEIAEoCVIHbWF0Y2hJZBIXCgdyb29tX2lkGAUgASgJUgZyb29tSWQSLgoTY3JlYXRp'
+    'b25fcmVjZWlwdF9pZBgGIAEoCVIRY3JlYXRpb25SZWNlaXB0SWQSNgoXY3JlYXRpb25fcmVxdW'
+    'VzdF9zaGEyNTYYByABKAxSFWNyZWF0aW9uUmVxdWVzdFNoYTI1NhIyChV0ZWFyZG93bl9vcGVy'
+    'YXRpb25faWQYCCABKAlSE3RlYXJkb3duT3BlcmF0aW9uSWQSLgoTdGVhcmRvd25fcmVjZWlwdF'
+    '9pZBgJIAEoCVIRdGVhcmRvd25SZWNlaXB0SWQSNgoXdGVhcmRvd25fcmVjZWlwdF9zaGEyNTYY'
+    'CiABKAxSFXRlYXJkb3duUmVjZWlwdFNoYTI1NhI+ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaG'
+    'EyNTYYCyABKAxSGXBhcnRpY2lwYW50TWFuaWZlc3RTaGEyNTYSUAoWYWdncmVnYXRlX2NvbXBs'
+    'ZXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSFGFnZ3JlZ2F0ZUNvbX'
+    'BsZXRlZEF0ElQKGGNvbXBhY3Rpb25fYXV0aG9yaXplZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90'
+    'b2J1Zi5UaW1lc3RhbXBSFmNvbXBhY3Rpb25BdXRob3JpemVkQXQ=');
+
+@$core.Deprecated('Use matchSquadRoomCompactionReceiptDescriptor instead')
+const MatchSquadRoomCompactionReceipt$json = {
+  '1': 'MatchSquadRoomCompactionReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'compaction_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'compactionOperationId'
+    },
+    {
+      '1': 'teardown_aggregate_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownAggregateId'
+    },
+    {'1': 'match_id', '3': 5, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 6, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'request_sha256', '3': 7, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'aggregate_completed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'aggregateCompletedAt'
+    },
+    {
+      '1': 'compaction_authorized_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'compactionAuthorizedAt'
+    },
+    {
+      '1': 'status',
+      '3': 10,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.MatchSquadRoomCompactionStatus',
+      '10': 'status'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadRoomCompactionReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadRoomCompactionReceiptDescriptor = $convert.base64Decode(
+    'Ch9NYXRjaFNxdWFkUm9vbUNvbXBhY3Rpb25SZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YAS'
+    'ABKA1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSNgoX'
+    'Y29tcGFjdGlvbl9vcGVyYXRpb25faWQYAyABKAlSFWNvbXBhY3Rpb25PcGVyYXRpb25JZBIyCh'
+    'V0ZWFyZG93bl9hZ2dyZWdhdGVfaWQYBCABKAlSE3RlYXJkb3duQWdncmVnYXRlSWQSGQoIbWF0'
+    'Y2hfaWQYBSABKAlSB21hdGNoSWQSFwoHcm9vbV9pZBgGIAEoCVIGcm9vbUlkEiUKDnJlcXVlc3'
+    'Rfc2hhMjU2GAcgASgMUg1yZXF1ZXN0U2hhMjU2ElAKFmFnZ3JlZ2F0ZV9jb21wbGV0ZWRfYXQY'
+    'CCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUhRhZ2dyZWdhdGVDb21wbGV0ZWRBdB'
+    'JUChhjb21wYWN0aW9uX2F1dGhvcml6ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
+    'ZXN0YW1wUhZjb21wYWN0aW9uQXV0aG9yaXplZEF0EkYKBnN0YXR1cxgKIAEoDjIuLnZvaWNlLm'
+    'NhbGxzLnYxLk1hdGNoU3F1YWRSb29tQ29tcGFjdGlvblN0YXR1c1IGc3RhdHVz');
+
+@$core.Deprecated('Use compactMatchSquadRoomResponseDescriptor instead')
+const CompactMatchSquadRoomResponse$json = {
+  '1': 'CompactMatchSquadRoomResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.MatchSquadRoomCompactionReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `CompactMatchSquadRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List compactMatchSquadRoomResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1Db21wYWN0TWF0Y2hTcXVhZFJvb21SZXNwb25zZRJJCgdyZWNlaXB0GAEgASgLMi8udm9pY2'
+        'UuY2FsbHMudjEuTWF0Y2hTcXVhZFJvb21Db21wYWN0aW9uUmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use joinMatchSquadRoomRequestDescriptor instead')
+const JoinMatchSquadRoomRequest$json = {
+  '1': 'JoinMatchSquadRoomRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 4, '4': 1, '5': 9, '10': 'roomId'},
+  ],
+};
+
+/// Descriptor for `JoinMatchSquadRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List joinMatchSquadRoomRequestDescriptor = $convert.base64Decode(
+    'ChlKb2luTWF0Y2hTcXVhZFJvb21SZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA1SD3'
+    'Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEhkKCG1h'
+    'dGNoX2lkGAMgASgJUgdtYXRjaElkEhcKB3Jvb21faWQYBCABKAlSBnJvb21JZA==');
+
+@$core.Deprecated('Use joinMatchSquadRoomResponseDescriptor instead')
+const JoinMatchSquadRoomResponse$json = {
+  '1': 'JoinMatchSquadRoomResponse',
+  '2': [
+    {
+      '1': 'call_session',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.CallSession',
+      '10': 'callSession'
+    },
+    {'1': 'media_epoch', '3': 2, '4': 1, '5': 9, '10': 'mediaEpoch'},
+    {
+      '1': 'membership_state',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.MatchSquadMembershipState',
+      '10': 'membershipState'
+    },
+  ],
+};
+
+/// Descriptor for `JoinMatchSquadRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List joinMatchSquadRoomResponseDescriptor = $convert.base64Decode(
+    'ChpKb2luTWF0Y2hTcXVhZFJvb21SZXNwb25zZRI+CgxjYWxsX3Nlc3Npb24YASABKAsyGy52b2'
+    'ljZS5jYWxscy52MS5DYWxsU2Vzc2lvblILY2FsbFNlc3Npb24SHwoLbWVkaWFfZXBvY2gYAiAB'
+    'KAlSCm1lZGlhRXBvY2gSVAoQbWVtYmVyc2hpcF9zdGF0ZRgDIAEoDjIpLnZvaWNlLmNhbGxzLn'
+    'YxLk1hdGNoU3F1YWRNZW1iZXJzaGlwU3RhdGVSD21lbWJlcnNoaXBTdGF0ZQ==');
+
+@$core.Deprecated('Use getMatchSquadJoinTokenRequestDescriptor instead')
+const GetMatchSquadJoinTokenRequest$json = {
+  '1': 'GetMatchSquadJoinTokenRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'match_id', '3': 2, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 3, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'media_epoch', '3': 4, '4': 1, '5': 9, '10': 'mediaEpoch'},
+  ],
+};
+
+/// Descriptor for `GetMatchSquadJoinTokenRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getMatchSquadJoinTokenRequestDescriptor =
+    $convert.base64Decode(
+        'Ch1HZXRNYXRjaFNxdWFkSm9pblRva2VuUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+        'gNUg9wcm90b2NvbFZlcnNpb24SGQoIbWF0Y2hfaWQYAiABKAlSB21hdGNoSWQSFwoHcm9vbV9p'
+        'ZBgDIAEoCVIGcm9vbUlkEh8KC21lZGlhX2Vwb2NoGAQgASgJUgptZWRpYUVwb2No');
+
+@$core.Deprecated('Use getMatchSquadJoinTokenResponseDescriptor instead')
+const GetMatchSquadJoinTokenResponse$json = {
+  '1': 'GetMatchSquadJoinTokenResponse',
+  '2': [
+    {
+      '1': 'token',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.GetJoinTokenResponse',
+      '10': 'token'
+    },
+    {'1': 'media_epoch', '3': 2, '4': 1, '5': 9, '10': 'mediaEpoch'},
+  ],
+};
+
+/// Descriptor for `GetMatchSquadJoinTokenResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getMatchSquadJoinTokenResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5HZXRNYXRjaFNxdWFkSm9pblRva2VuUmVzcG9uc2USOgoFdG9rZW4YASABKAsyJC52b2ljZS'
+        '5jYWxscy52MS5HZXRKb2luVG9rZW5SZXNwb25zZVIFdG9rZW4SHwoLbWVkaWFfZXBvY2gYAiAB'
+        'KAlSCm1lZGlhRXBvY2g=');
+
+@$core.Deprecated('Use leaveMatchSquadRoomRequestDescriptor instead')
+const LeaveMatchSquadRoomRequest$json = {
+  '1': 'LeaveMatchSquadRoomRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 4, '4': 1, '5': 9, '10': 'roomId'},
+    {
+      '1': 'expected_media_epoch',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'expectedMediaEpoch'
+    },
+  ],
+};
+
+/// Descriptor for `LeaveMatchSquadRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List leaveMatchSquadRoomRequestDescriptor = $convert.base64Decode(
+    'ChpMZWF2ZU1hdGNoU3F1YWRSb29tUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgASgNUg'
+    '9wcm90b2NvbFZlcnNpb24SIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIZCght'
+    'YXRjaF9pZBgDIAEoCVIHbWF0Y2hJZBIXCgdyb29tX2lkGAQgASgJUgZyb29tSWQSMAoUZXhwZW'
+    'N0ZWRfbWVkaWFfZXBvY2gYBSABKAlSEmV4cGVjdGVkTWVkaWFFcG9jaA==');
+
+@$core.Deprecated('Use leaveMatchSquadRoomResponseDescriptor instead')
+const LeaveMatchSquadRoomResponse$json = {
+  '1': 'LeaveMatchSquadRoomResponse',
+  '2': [
+    {
+      '1': 'call_session',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.CallSession',
+      '10': 'callSession'
+    },
+    {'1': 'media_epoch', '3': 2, '4': 1, '5': 9, '10': 'mediaEpoch'},
+    {
+      '1': 'membership_state',
+      '3': 3,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.MatchSquadMembershipState',
+      '10': 'membershipState'
+    },
+  ],
+};
+
+/// Descriptor for `LeaveMatchSquadRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List leaveMatchSquadRoomResponseDescriptor = $convert.base64Decode(
+    'ChtMZWF2ZU1hdGNoU3F1YWRSb29tUmVzcG9uc2USPgoMY2FsbF9zZXNzaW9uGAEgASgLMhsudm'
+    '9pY2UuY2FsbHMudjEuQ2FsbFNlc3Npb25SC2NhbGxTZXNzaW9uEh8KC21lZGlhX2Vwb2NoGAIg'
+    'ASgJUgptZWRpYUVwb2NoElQKEG1lbWJlcnNoaXBfc3RhdGUYAyABKA4yKS52b2ljZS5jYWxscy'
+    '52MS5NYXRjaFNxdWFkTWVtYmVyc2hpcFN0YXRlUg9tZW1iZXJzaGlwU3RhdGU=');
 
 @$core.Deprecated('Use provisionGameSessionRoomResponseDescriptor instead')
 const ProvisionGameSessionRoomResponse$json = {
