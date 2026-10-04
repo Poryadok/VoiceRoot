@@ -519,84 +519,88 @@ void main() {
     );
   });
 
-  testWidgets('a failed guest admission update keeps the authoritative value', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      testApp(
-        home: const SizedBox(
-          height: 700,
-          width: 400,
-          child: ChatInfoPanel(chatId: 'failed-update-group'),
-        ),
-        client: MockClient((req) async {
-          if (req.url.path == '/api/v1/chats') {
-            return http.Response(
-              jsonEncode({
-                'chat_list': {
-                  'items': [
-                    {
-                      'chat': {
-                        'id': 'failed-update-group',
-                        'type': 'CHAT_TYPE_GROUP',
-                        'creator_profile_id': 'prof-test',
-                        'allow_guests': true,
+  testWidgets(
+    'a failed guest admission update keeps the value and hides server details',
+    (tester) async {
+      await tester.pumpWidget(
+        testApp(
+          home: const SizedBox(
+            height: 700,
+            width: 400,
+            child: ChatInfoPanel(chatId: 'failed-update-group'),
+          ),
+          client: MockClient((req) async {
+            if (req.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode({
+                  'chat_list': {
+                    'items': [
+                      {
+                        'chat': {
+                          'id': 'failed-update-group',
+                          'type': 'CHAT_TYPE_GROUP',
+                          'creator_profile_id': 'prof-test',
+                          'allow_guests': true,
+                        },
                       },
-                    },
-                  ],
-                },
-              }),
-              200,
-            );
-          }
-          if (req.url.path == '/api/v1/chats/failed-update-group/members') {
-            return http.Response(
-              jsonEncode({
-                'member_list': {
-                  'members': [
-                    {'profile_id': 'prof-test', 'role': 'owner'},
-                  ],
-                },
-              }),
-              200,
-            );
-          }
-          if (req.url.path == '/api/v1/chats/failed-update-group') {
-            return http.Response(
-              jsonEncode({
-                'error': 'permission_denied',
-                'message': 'forbidden',
-              }),
-              403,
-            );
-          }
-          if (req.url.path.contains('/shared-media')) {
-            return http.Response(
-              jsonEncode({
-                'shared_media_list': {'items': []},
-              }),
-              200,
-            );
-          }
-          return http.Response('{}', 404);
-        }),
-      ),
-    );
-    await tester.pumpAndSettle();
+                    ],
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/chats/failed-update-group/members') {
+              return http.Response(
+                jsonEncode({
+                  'member_list': {
+                    'members': [
+                      {'profile_id': 'prof-test', 'role': 'owner'},
+                    ],
+                  },
+                }),
+                200,
+              );
+            }
+            if (req.url.path == '/api/v1/chats/failed-update-group') {
+              return http.Response(
+                jsonEncode({
+                  'error': 'internal_error',
+                  'message': 'db-password=guest-action-secret',
+                }),
+                500,
+              );
+            }
+            if (req.url.path.contains('/shared-media')) {
+              return http.Response(
+                jsonEncode({
+                  'shared_media_list': {'items': []},
+                }),
+                200,
+              );
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(StandaloneChatGuestSettingsSection.toggleKey));
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
-          )
-          .value,
-      isTrue,
-    );
-    expect(find.text('forbidden'), findsOneWidget);
-  });
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(StandaloneChatGuestSettingsSection.toggleKey),
+            )
+            .value,
+        isTrue,
+      );
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(find.textContaining('guest-action-secret'), findsNothing);
+    },
+  );
 
   testWidgets(
     'a failed refresh retains the successful guest admission update',

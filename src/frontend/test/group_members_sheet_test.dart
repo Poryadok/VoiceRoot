@@ -83,6 +83,33 @@ void main() {
     },
   );
 
+  testWidgets('group leave failure hides upstream details', (tester) async {
+    const chatId = 'group-leave-error';
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          groupMembersProvider(chatId).overrideWith(
+            (_) async => const MemberListData(
+              members: [ChatMember(profileId: 'prof-test', role: 'owner')],
+            ),
+          ),
+          chatActionsProvider.overrideWith(_FailingLeaveChatActions.new),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(GroupMembersSheet.leaveKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Leave group'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('group-leave-secret'), findsNothing);
+  });
+
   testWidgets('group members error is localized in the bottom sheet', (
     tester,
   ) async {
@@ -323,4 +350,12 @@ class _NoopRealtimeHub extends RealtimeHub {
 
   @override
   Future<void> disconnect() async {}
+}
+
+class _FailingLeaveChatActions extends ChatActions {
+  _FailingLeaveChatActions(super.ref);
+
+  @override
+  Future<String?> leaveGroup(String chatId) async =>
+      'internal failure trace=group-leave-secret';
 }
