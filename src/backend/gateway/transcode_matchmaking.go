@@ -4,6 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	callsv1 "voice.app/voice/calls/v1"
 	commonv1 "voice.app/voice/common/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
@@ -53,6 +57,9 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 	matchID := parts[0]
 	if matchID == "" {
 		return false
+	}
+	if len(parts) == 3 && parts[1] == "voice" {
+		return t.serveMatchSquadMember(w, r, matchID, parts[2])
 	}
 
 	switch {
@@ -106,6 +113,113 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	default:
+		return false
+	}
+}
+
+func (t *transcoder) serveMatchSquadMember(w http.ResponseWriter, r *http.Request, matchID, action string) bool {
+	parsedMatchID, err := uuid.Parse(matchID)
+	if err != nil || parsedMatchID.String() != matchID {
+		writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid match id"))
+		return true
+	}
+	if r.Method != http.MethodPost {
+		return false
+	}
+	if t.clients.matchSquadMember == nil {
+		writeGRPCError(w, status.Error(codes.Unavailable, "MatchSquad member transport unavailable"))
+		return true
+	}
+
+	var requestID string
+	switch action {
+	case "join":
+		req := &callsv1.JoinMatchSquadRoomRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.MatchId != "" && req.MatchId != matchID {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "match id does not match route"))
+			return true
+		}
+		req.MatchId = matchID
+		if req.ProtocolVersion != 1 || !canonicalLifecycleUUID(req.OperationId) || !canonicalLifecycleUUID(req.RoomId) {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid MatchSquad join request"))
+			return true
+		}
+		requestID = req.OperationId
+		ctx, err := t.matchSquadMemberContext(r, req, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, requestID)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchSquadMember.JoinMatchSquadRoom(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case "token":
+		req := &callsv1.GetMatchSquadJoinTokenRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.MatchId != "" && req.MatchId != matchID {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "match id does not match route"))
+			return true
+		}
+		req.MatchId = matchID
+		if req.ProtocolVersion != 1 || !canonicalLifecycleUUID(req.RoomId) || !canonicalLifecycleUUID(req.MediaEpoch) {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid MatchSquad token request"))
+			return true
+		}
+		requestID = uuid.NewString()
+		ctx, err := t.matchSquadMemberContext(r, req, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, requestID)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchSquadMember.GetMatchSquadJoinToken(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
+	case "leave":
+		req := &callsv1.LeaveMatchSquadRoomRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		if req.MatchId != "" && req.MatchId != matchID {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "match id does not match route"))
+			return true
+		}
+		req.MatchId = matchID
+		if req.ProtocolVersion != 1 || !canonicalLifecycleUUID(req.OperationId) || !canonicalLifecycleUUID(req.RoomId) || !canonicalLifecycleUUID(req.ExpectedMediaEpoch) {
+			writeGRPCError(w, status.Error(codes.InvalidArgument, "invalid MatchSquad leave request"))
+			return true
+		}
+		requestID = req.OperationId
+		ctx, err := t.matchSquadMemberContext(r, req, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, requestID)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchSquadMember.LeaveMatchSquadRoom(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
 	default:
 		return false
 	}

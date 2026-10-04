@@ -126,6 +126,104 @@ void main() {
     },
   );
 
+  testWidgets('MatchSquad leaves Voice membership before completing the match', (
+    tester,
+  ) async {
+    final paths = <String>[];
+    final client = MockClient((request) async {
+      paths.add(request.url.path);
+      switch (request.url.path) {
+        case '/api/v1/matchmaking/matches/match-voice/voice/join':
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'room-voice',
+                'livekit_room_name': 'squad-room',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+              'media_epoch': 'epoch-current',
+              'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-voice/voice/token':
+          // A stale token binding prevents media connection while retaining the
+          // successful server membership for the explicit Leave call below.
+          return http.Response(
+            jsonEncode({
+              'token': {'jwt': 'opaque'},
+              'media_epoch': 'stale-epoch',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-voice/voice/leave':
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'room-voice',
+                'livekit_room_name': 'squad-room',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+              'media_epoch': 'epoch-current',
+              'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_LEFT',
+            }),
+            200,
+          );
+        case '/api/v1/matchmaking/matches/match-voice/complete':
+          return http.Response(
+            jsonEncode({
+              'match': {
+                'id': 'match-voice',
+                'game_id': 'game-1',
+                'mode': 'ranked',
+                'region': 'eu',
+                'status': 'completed',
+                'profile_ids': ['prof-test', 'profile-2'],
+              },
+            }),
+            200,
+          );
+        default:
+          return http.Response('{}', 404);
+      }
+    });
+
+    await tester.pumpWidget(_postMatchFixture(client));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byKey(SocialPanel.panelKey))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MatchSquadScreen(
+          match: MatchData(
+            id: 'match-voice',
+            gameId: 'game-1',
+            mode: 'ranked',
+            region: 'eu',
+            status: 'active',
+            profileIds: const ['prof-test', 'profile-2'],
+            voiceRoomId: 'room-voice',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(MatchSquadScreen.leaveButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(paths.where((path) => path.contains('/voice/')).toList(), [
+      '/api/v1/matchmaking/matches/match-voice/voice/join',
+      '/api/v1/matchmaking/matches/match-voice/voice/token',
+      '/api/v1/matchmaking/matches/match-voice/voice/leave',
+    ]);
+    expect(
+      paths.indexOf('/api/v1/matchmaking/matches/match-voice/voice/leave'),
+      lessThan(
+        paths.indexOf('/api/v1/matchmaking/matches/match-voice/complete'),
+      ),
+    );
+  });
+
   testWidgets('leaving a squad enters rating and the Social history consumer', (
     tester,
   ) async {

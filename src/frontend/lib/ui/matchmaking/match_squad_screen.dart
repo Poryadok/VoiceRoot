@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/matchmaking_client.dart';
+import '../../backend/voice_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
@@ -35,16 +36,17 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     final voiceRoomId = widget.match.voiceRoomId;
     if (voiceRoomId == null || voiceRoomId.isEmpty) return;
     if (!ref.read(gatewayConfigProvider).canPlaceVoiceCalls) return;
-    await ref.read(callControllerProvider.notifier).joinGroupVoice(
-          roomId: voiceRoomId,
-        );
+    await ref
+        .read(callControllerProvider.notifier)
+        .joinGroupVoice(roomId: voiceRoomId, matchId: widget.match.id);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final chatId = widget.match.chatId;
-    final hasVoice = widget.match.voiceRoomId != null &&
+    final hasVoice =
+        widget.match.voiceRoomId != null &&
         widget.match.voiceRoomId!.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
@@ -77,9 +79,15 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     final token = ref.read(authControllerProvider).session?.accessToken;
     if (token == null || token.isEmpty) return;
 
-    final call = ref.read(callControllerProvider);
-    if (call.isActive && call.session != null) {
-      await ref.read(callControllerProvider.notifier).hangUp();
+    final voiceLeave = await ref
+        .read(callControllerProvider.notifier)
+        .leaveMatchSquad(matchId: widget.match.id);
+    if (voiceLeave case VoiceApiFailure()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
+      return;
     }
 
     final client = ref.read(voiceMatchmakingClientProvider);
@@ -91,16 +99,16 @@ class _MatchSquadScreenState extends ConsumerState<MatchSquadScreen> {
     if (!context.mounted) return;
 
     if (result is MatchmakingApiFailure) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.matchSquadLeaveError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.matchSquadLeaveError)));
       return;
     }
 
     final completed = (result as MatchmakingApiOk<MatchData>).data;
-    ref.read(matchmakingRatingControllerProvider.notifier).showRatingForMatch(
-          completed,
-        );
+    ref
+        .read(matchmakingRatingControllerProvider.notifier)
+        .showRatingForMatch(completed);
     Navigator.of(context).pop();
   }
 }
