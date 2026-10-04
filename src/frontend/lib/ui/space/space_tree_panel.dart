@@ -296,16 +296,21 @@ class _SpaceTreeCreateDialogState extends State<_SpaceTreeCreateDialog> {
       final messenger = ScaffoldMessenger.of(context);
       final mustClose = error.kind != SpaceTreeActionErrorKind.rejected;
       if (mustClose) Navigator.of(context).pop();
+      final detail = switch (error.message) {
+        'not_authenticated' => error.message,
+        'name_required' => error.message,
+        _ => widget.l10n.commonActionFailed,
+      };
       final message = switch (error.kind) {
         SpaceTreeActionErrorKind.rejected => widget.l10n.spaceTreeCreateError(
-          error.message,
+          detail,
         ),
         SpaceTreeActionErrorKind.partialSuccess =>
-          widget.l10n.spaceTreeCategoryAssignError(error.message),
+          widget.l10n.spaceTreeCategoryAssignError(detail),
         SpaceTreeActionErrorKind.placementUncertain =>
-          widget.l10n.spaceTreePlacementUnknown(error.message),
+          widget.l10n.spaceTreePlacementUnknown(detail),
         SpaceTreeActionErrorKind.outcomeUncertain =>
-          widget.l10n.spaceTreeCreateOutcomeUnknown(error.message),
+          widget.l10n.spaceTreeCreateOutcomeUnknown(detail),
         SpaceTreeActionErrorKind.refreshFailed =>
           widget.l10n.spaceTreeCreateRefreshFailed,
       };
