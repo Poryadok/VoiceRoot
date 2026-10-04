@@ -1,12 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Per-profile accent override until User Service exposes accent_color.
+/// Legacy per-profile accent data used only while a server profile has no accent.
 abstract class ProfileAccentStorage {
   Future<String?> readOverride(String profileId);
   Future<void> writeOverride(String profileId, String hex);
   Future<void> clearOverride(String profileId);
   Future<int?> readProfileIndex(String profileId);
   Future<void> writeProfileIndex(String profileId, int index);
+  Future<void> clearProfileIndex(String profileId);
 }
 
 class InMemoryProfileAccentStorage implements ProfileAccentStorage {
@@ -32,6 +33,11 @@ class InMemoryProfileAccentStorage implements ProfileAccentStorage {
   @override
   Future<void> writeProfileIndex(String profileId, int index) async {
     _indices[profileId] = index;
+  }
+
+  @override
+  Future<void> clearProfileIndex(String profileId) async {
+    _indices.remove(profileId);
   }
 }
 
@@ -66,5 +72,10 @@ class SharedPreferencesProfileAccentStorage implements ProfileAccentStorage {
   @override
   Future<void> writeProfileIndex(String profileId, int index) async {
     await _prefs.setInt(_indexKey(profileId), index);
+  }
+
+  @override
+  Future<void> clearProfileIndex(String profileId) async {
+    await _prefs.remove(_indexKey(profileId));
   }
 }
