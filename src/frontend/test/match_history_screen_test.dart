@@ -152,6 +152,128 @@ void main() {
     expect(find.byKey(MatchHistoryScreen.banKey('profile-2')), findsOneWidget);
   });
 
+  testWidgets(
+    'MatchHistoryScreen hides friend request API details and keeps match selected',
+    (tester) async {
+      const diagnostic = 'friend-request-private-diagnostic';
+      final invitationRequests = <http.Request>[];
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
+          return http.Response(
+            jsonEncode({
+              'matchList': {
+                'matches': [
+                  {
+                    'id': 'match-42',
+                    'gameId': 'g1',
+                    'mode': 'Duo',
+                    'region': 'eu',
+                    'status': 'completed',
+                    'profileIds': ['profile-1', 'profile-2'],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/matchmaking/games') {
+          return http.Response(
+            jsonEncode({
+              'gameList': {
+                'games': [
+                  {
+                    'id': 'g1',
+                    'name': 'Valorant',
+                    'status': 'active',
+                    'configJson': '{}',
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/users/profiles/profile-1') {
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'profile-1',
+                'displayName': 'Player One',
+                'username': 'one',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/users/profiles/profile-2') {
+          return http.Response(
+            jsonEncode({
+              'profile': {
+                'id': 'profile-2',
+                'displayName': 'Teammate',
+                'username': 'teammate',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/api/v1/friends/invitations' &&
+            request.method == 'POST') {
+          invitationRequests.add(request);
+          return http.Response(
+            jsonEncode({'error': 'internal', 'message': diagnostic}),
+            500,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [...voiceAppTestOverrides(client: client)],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const MatchHistoryScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(MatchHistoryScreen.matchTileKey('match-42')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(MatchHistoryScreen.addFriendKey('profile-2')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(invitationRequests, hasLength(1));
+      expect(invitationRequests.single.method, 'POST');
+      expect(invitationRequests.single.url.path, '/api/v1/friends/invitations');
+      expect(
+        (jsonDecode(invitationRequests.single.body)
+            as Map<String, dynamic>)['target_profile_id'],
+        'profile-2',
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byKey(MatchHistoryScreen.screenKey)),
+      )!;
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
+      expect(find.textContaining(diagnostic), findsNothing);
+      expect(
+        find.byKey(MatchHistoryScreen.matchTileKey('match-42')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(MatchHistoryScreen.addFriendKey('profile-2')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('MatchHistoryScreen shows error with retry on failure', (
     tester,
   ) async {
