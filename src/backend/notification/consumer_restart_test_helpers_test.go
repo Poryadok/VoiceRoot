@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -173,10 +175,26 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	require.NoError(t, err)
 	publishAck, err := fixture.js.Publish(spec.subject, encoded)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	var lastQuerySucceeded bool
+	var lastNumPending, lastNumAckPending int64 = -1, -1
+	var lastQueryErrorType string
+	pendingObserved := assert.Eventually(t, func() bool {
 		info, infoErr := fixture.js.ConsumerInfo(spec.stream, durable)
+		lastQuerySucceeded = infoErr == nil
+		if infoErr != nil {
+			lastNumPending, lastNumAckPending = -1, -1
+			lastQueryErrorType = fmt.Sprintf("%T", infoErr)
+			return false
+		}
+		lastNumPending = int64(info.NumPending)
+		lastNumAckPending = int64(info.NumAckPending)
+		lastQueryErrorType = ""
 		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
-	}, 5*time.Second, 20*time.Millisecond, "%s event stays pending while its durable consumer is stopped", spec.service)
+	}, 5*time.Second, 20*time.Millisecond)
+	if !pendingObserved {
+		t.Fatalf("%s event stays pending while its durable consumer is stopped; last ConsumerInfo query_succeeded=%t num_pending=%d num_ack_pending=%d error_type=%q",
+			spec.service, lastQuerySucceeded, lastNumPending, lastNumAckPending, lastQueryErrorType)
+	}
 
 	second := start()
 	select {
