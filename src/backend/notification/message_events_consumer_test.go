@@ -340,8 +340,8 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	server, err := natsserver.NewServer(options)
 	require.NoError(t, err)
 	go server.Start()
+	t.Cleanup(func() { server.Shutdown() })
 	require.True(t, server.ReadyForConnections(10*time.Second))
-	defer server.Shutdown()
 
 	provisioner, err := nats.Connect(server.ClientURL())
 	require.NoError(t, err)
@@ -368,11 +368,20 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 
 	firstCtx, stopFirst := context.WithCancel(context.Background())
 	firstReadiness := newNotificationConsumerReadiness("message")
-	firstDone := make(chan error, 1)
+	firstDone := make(chan struct{})
 	go func() {
-		firstDone <- runMessageEventsConsumer(withNotificationConsumerReadiness(firstCtx, firstReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
+		defer close(firstDone)
+		_ = runMessageEventsConsumer(withNotificationConsumerReadiness(firstCtx, firstReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
 			members, pusher, pushenrich.NoopResolver{}, nil)
 	}()
+	t.Cleanup(func() {
+		stopFirst()
+		select {
+		case <-firstDone:
+		case <-time.After(5 * time.Second):
+			t.Errorf("first message consumer did not stop during cleanup")
+		}
+	})
 	require.Eventually(t, firstReadiness.ready, 5*time.Second, 10*time.Millisecond, "first message consumer binds the pre-provisioned durable")
 	stopFirst()
 	select {
@@ -395,13 +404,21 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	}, 5*time.Second, 20*time.Millisecond, "published event remains pending on the durable while the consumer is stopped")
 
 	secondCtx, stopSecond := context.WithCancel(context.Background())
-	defer stopSecond()
 	secondReadiness := newNotificationConsumerReadiness("message")
-	secondDone := make(chan error, 1)
+	secondDone := make(chan struct{})
 	go func() {
-		secondDone <- runMessageEventsConsumer(withNotificationConsumerReadiness(secondCtx, secondReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
+		defer close(secondDone)
+		_ = runMessageEventsConsumer(withNotificationConsumerReadiness(secondCtx, secondReadiness, "message"), server.ClientURL(), &store.DeviceTokenStore{},
 			members, pusher, pushenrich.NoopResolver{}, nil)
 	}()
+	t.Cleanup(func() {
+		stopSecond()
+		select {
+		case <-secondDone:
+		case <-time.After(5 * time.Second):
+			t.Errorf("restarted message consumer did not stop during cleanup")
+		}
+	})
 	require.Eventually(t, secondReadiness.ready, 5*time.Second, 10*time.Millisecond, "restarted message consumer rebinds the same durable")
 	select {
 	case payload := <-deliveries:
