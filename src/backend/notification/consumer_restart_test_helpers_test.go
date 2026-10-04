@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,8 +19,11 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 
+	chatv1 "voice.app/voice/chat/v1"
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/notification/internal/chatmembers"
 	"voice/backend/notification/internal/consumer"
@@ -43,6 +48,8 @@ type notificationConsumerRestartSpec struct {
 	expected       push.Payload
 	recordDebug    bool
 	safeAssertions bool
+	prepare        func(*testing.T)
+	verify         func(*testing.T)
 	run            func(context.Context, string, *store.DeviceTokenStore, *dispatch.PushDispatcher) error
 }
 
@@ -59,6 +66,46 @@ type notificationRestartPush struct {
 
 type notificationRestartFCM struct {
 	sent chan notificationRestartPush
+}
+
+type notificationRestartChatServer struct {
+	chatv1.UnimplementedChatServiceServer
+	senderID       string
+	recipientID    string
+	chatID         string
+	listCalls      atomic.Int32
+	callerMatches  atomic.Bool
+	requestMatches atomic.Bool
+}
+
+func (s *notificationRestartChatServer) ListMembers(ctx context.Context, req *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
+	s.listCalls.Add(1)
+	md, _ := metadata.FromIncomingContext(ctx)
+	callers := md.Get("x-voice-internal-caller")
+	s.callerMatches.Store(len(callers) == 1 && callers[0] == "notification")
+	s.requestMatches.Store(req.GetChatId() == s.chatID && req.GetPage().GetCursor() == "")
+	bucket := "main"
+	return &chatv1.ListMembersResponse{MemberList: &chatv1.MemberList{Members: []*chatv1.ChatMember{
+		{ProfileId: s.senderID, InboxBucket: &bucket},
+		{ProfileId: s.recipientID, InboxBucket: &bucket},
+	}}}, nil
+}
+
+type notificationRestartTokenProbe struct {
+	store           *store.DeviceTokenStore
+	expectedProfile uuid.UUID
+	listCalls       atomic.Int32
+	profileMatches  atomic.Bool
+}
+
+func (p *notificationRestartTokenProbe) ListByProfile(ctx context.Context, profileID uuid.UUID) ([]store.DeviceToken, error) {
+	p.listCalls.Add(1)
+	p.profileMatches.Store(profileID == p.expectedProfile)
+	return p.store.ListByProfile(ctx, profileID)
+}
+
+func (p *notificationRestartTokenProbe) DeleteByToken(ctx context.Context, token string) error {
+	return p.store.DeleteByToken(ctx, token)
 }
 
 func (s notificationRestartFCM) Send(_ context.Context, profileID uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
@@ -143,6 +190,9 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	require.NotEmpty(t, spec.subject)
 	require.NotNil(t, spec.event)
 	require.NotNil(t, spec.run)
+	if spec.prepare != nil {
+		spec.prepare(t)
+	}
 
 	_, err := fixture.tokens.Register(context.Background(), spec.recipientID, "web", "be199-"+spec.service+"-"+uuid.NewString(), "fcm")
 	require.NoError(t, err)
@@ -269,11 +319,19 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	secondErr, secondJoined := second.stop()
 	require.True(t, secondJoined, "%s restarted consumer is joined before fixture shutdown", spec.service)
 	require.ErrorIs(t, secondErr, context.Canceled, "%s restarted consumer exits normally on cancellation", spec.service)
+	if spec.verify != nil {
+		spec.verify(t)
+	}
 }
 
 func messageSentRestartSpec() notificationConsumerRestartSpec {
 	senderID, recipientID := uuid.New(), uuid.New()
 	messageID, chatID := uuid.NewString(), uuid.NewString()
+	chatServer := &notificationRestartChatServer{
+		senderID: senderID.String(), recipientID: recipientID.String(), chatID: chatID,
+	}
+	var memberLister *chatmembers.GRPCLister
+	var tokenProbe *notificationRestartTokenProbe
 	return notificationConsumerRestartSpec{
 		name: "message_sent", service: "message", stream: jsStreamMessageEvents, filter: jsSubjectMessageEvents,
 		deliverSubject: "_INBOX.voice.notification.message", subject: "message.sent", recipientID: recipientID,
@@ -281,15 +339,32 @@ func messageSentRestartSpec() notificationConsumerRestartSpec {
 			MessageId: messageID, ChatId: chatID, SenderProfileId: senderID.String(),
 		}}},
 		expected: push.Payload{Data: map[string]string{"type": "new_message"}}, recordDebug: true, safeAssertions: true,
+		prepare: func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			server := grpc.NewServer()
+			chatv1.RegisterChatServiceServer(server, chatServer)
+			go func() { _ = server.Serve(listener) }()
+			t.Cleanup(func() {
+				server.Stop()
+				_ = listener.Close()
+			})
+			memberLister, err = chatmembers.NewGRPCLister(listener.Addr().String())
+			require.NoError(t, err)
+		},
+		verify: func(t *testing.T) {
+			require.EqualValues(t, 1, chatServer.listCalls.Load(), "production Chat member adapter makes one request")
+			require.True(t, chatServer.callerMatches.Load(), "production Chat member adapter uses the Notification S2S caller")
+			require.True(t, chatServer.requestMatches.Load(), "production Chat member adapter requests the event chat's first member page")
+			require.EqualValues(t, 1, tokenProbe.listCalls.Load(), "one target token lookup occurs after sender exclusion")
+			require.True(t, tokenProbe.profileMatches.Load(), "the selected member is the non-sender recipient")
+		},
 		run: func(ctx context.Context, natsURL string, tokens *store.DeviceTokenStore, dispatcher *dispatch.PushDispatcher) error {
-			members := stubChatMembers{rows: []chatmembers.Member{
-				{ProfileID: senderID.String(), InboxBucket: "main"},
-				{ProfileID: recipientID.String(), InboxBucket: "main"},
-			}}
+			tokenProbe = &notificationRestartTokenProbe{store: tokens, expectedProfile: recipientID}
 			pusher := &dispatch.MessagePusher{
-				Tokens: tokens, Pusher: dispatcher, Grouping: grouping.NewMemoryStore(),
+				Tokens: tokenProbe, Pusher: dispatcher, Grouping: grouping.NewMemoryStore(),
 			}
-			return runMessageEventsConsumer(ctx, natsURL, tokens, members, pusher, pushenrich.NoopResolver{}, nil)
+			return runMessageEventsConsumer(ctx, natsURL, tokens, memberLister, pusher, pushenrich.NoopResolver{}, nil)
 		},
 	}
 }
