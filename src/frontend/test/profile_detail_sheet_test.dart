@@ -60,7 +60,10 @@ void main() {
               if (req.url.path == '/api/v1/users/profiles/p-friend/presence') {
                 return http.Response(
                   jsonEncode({
-                    'presenceStatus': {'profileId': 'p-friend', 'status': 'online'},
+                    'presenceStatus': {
+                      'profileId': 'p-friend',
+                      'status': 'online',
+                    },
                   }),
                   200,
                 );
@@ -76,7 +79,9 @@ void main() {
               if (req.url.path == '/api/v1/friends') {
                 return http.Response(
                   jsonEncode({
-                    'friend_list': {'profile_ids': ['p-friend']},
+                    'friend_list': {
+                      'profile_ids': ['p-friend'],
+                    },
                   }),
                   200,
                 );
@@ -123,7 +128,10 @@ void main() {
             MockClient((req) async {
               if (req.url.path == '/api/v1/users/profiles/p-blocked') {
                 return http.Response(
-                  jsonEncode({'error': 'not_found', 'message': 'profile not found'}),
+                  jsonEncode({
+                    'error': 'not_found',
+                    'message': 'profile not found',
+                  }),
                   404,
                 );
               }
@@ -146,5 +154,185 @@ void main() {
 
     expect(find.text('User unavailable'), findsOneWidget);
     expect(find.text('Could not load profile'), findsNothing);
+  });
+
+  testWidgets('friend action failure hides upstream details', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/users/profiles/p-friend') {
+                return http.Response(
+                  jsonEncode({
+                    'profile': {
+                      'id': 'p-friend',
+                      'account_id': 'a-friend',
+                      'username': 'bob',
+                      'discriminator': '0001',
+                      'display_name': 'Bob',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends/requests') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_request_list': {'incoming': [], 'outgoing': []},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_list': {'profile_ids': <String>[]},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends/invitations' &&
+                  req.method == 'POST') {
+                return http.Response(
+                  jsonEncode({
+                    'error': 'internal',
+                    'message': 'friend-private-diagnostic',
+                  }),
+                  500,
+                );
+              }
+              return http.Response('{}', 200);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ProfileDetailSheet(profileId: 'p-friend')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileDetailSheet.addFriendKey));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('friend-private-diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+  });
+
+  testWidgets('block failure hides upstream details and keeps the sheet open', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/users/profiles/p-block') {
+                return http.Response(
+                  jsonEncode({
+                    'profile': {
+                      'id': 'p-block',
+                      'account_id': 'a-block',
+                      'username': 'blocked',
+                      'discriminator': '0001',
+                      'display_name': 'Block Target',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends/requests') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_request_list': {'incoming': [], 'outgoing': []},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_list': {'profile_ids': <String>[]},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends/blocks' &&
+                  req.method == 'POST') {
+                return http.Response(
+                  jsonEncode({
+                    'error': 'internal',
+                    'message': 'block-private-diagnostic',
+                  }),
+                  500,
+                );
+              }
+              return http.Response('{}', 200);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ProfileDetailSheet(profileId: 'p-block')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileDetailSheet.blockKey));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Block user'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('block-private-diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
   });
 }
