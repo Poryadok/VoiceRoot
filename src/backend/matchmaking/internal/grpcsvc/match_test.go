@@ -256,7 +256,9 @@ func TestRespondToMatch_RejectsNewAcceptAtOrAfterMatchDeadline(t *testing.T) {
 
 	// Seed an already-expired proposal using database time so this request is
 	// unambiguously late without relying on the periodic sweeper or host clock.
-	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = now() - interval '31 seconds' WHERE id = $1`, uuid.MustParse(matchID))
+	// now() is the transaction start time; the RPC's later clock_timestamp()
+	// read is therefore at or just after the acceptance boundary.
+	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = now() - ($2 * interval '1 millisecond') WHERE id = $1`, uuid.MustParse(matchID), store.MatchAcceptWindow.Milliseconds())
 	require.NoError(t, err)
 
 	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{
@@ -277,6 +279,192 @@ func TestRespondToMatch_RejectsNewAcceptAtOrAfterMatchDeadline(t *testing.T) {
 	queued, err := srv.Queue.ListSessionIDs(ctx, searchSession.GameID, searchSession.Mode, "eu", 0)
 	require.NoError(t, err)
 	require.NotContains(t, queued, searchSession.ID)
+}
+
+func TestRespondToMatch_AcceptsBeforeMatchDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, _, profileB := seedPendingDuoMatch(t, ctx, srv)
+
+	// Leave a one-second server-clock margin so the request is timely without
+	// relying on a host-side timing assertion at a sub-millisecond boundary.
+	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = now() - (($2 - 1000) * interval '1 millisecond') WHERE id = $1`, uuid.MustParse(matchID), store.MatchAcceptWindow.Milliseconds())
+	require.NoError(t, err)
+
+	resp, err := srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{
+		MatchId: matchID,
+		Accept:  true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusPendingAccept, resp.GetMatch().GetStatus())
+	proposal, err := srv.Matches.GetProposalForProfile(ctx, uuid.MustParse(matchID), profileB)
+	require.NoError(t, err)
+	require.Equal(t, store.ProposalResponseAccepted, proposal.Response)
+}
+
+func TestRespondToMatch_AcceptBlockedAcrossDeadlineIsRejectedAfterLocks(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, _, profileB := seedPendingDuoMatch(t, ctx, srv)
+	parsedMatchID := uuid.MustParse(matchID)
+
+	locker, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer locker.Release()
+	tx, err := locker.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	var lockedID uuid.UUID
+	require.NoError(t, tx.QueryRow(ctx, `SELECT id FROM matches WHERE id = $1 FOR UPDATE`, parsedMatchID).Scan(&lockedID))
+	require.Equal(t, parsedMatchID, lockedID)
+
+	var deadline time.Time
+	err = tx.QueryRow(ctx, `
+		UPDATE matches
+		SET created_at = clock_timestamp() - ($2 * interval '1 millisecond') + interval '500 milliseconds'
+		WHERE id = $1
+		RETURNING created_at + ($2 * interval '1 millisecond')
+	`, parsedMatchID, store.MatchAcceptWindow.Milliseconds()).Scan(&deadline)
+	require.NoError(t, err)
+
+	type response struct{ err error }
+	resultCh := make(chan response, 1)
+	callCtx, cancelCall := context.WithTimeout(ctxWithProfile(profileB), 10*time.Second)
+	defer cancelCall()
+	go func() {
+		_, callErr := srv.RespondToMatch(callCtx, &matchmakingv1.RespondToMatchRequest{
+			MatchId: matchID,
+			Accept:  true,
+		})
+		resultCh <- response{err: callErr}
+	}()
+
+	// Observe that the RPC has reached the row-locking acceptance transaction
+	// before letting the shared database deadline pass.
+	blocked := false
+	blockWaitUntil := time.Now().Add(5 * time.Second)
+	for time.Now().Before(blockWaitUntil) {
+		var waiting bool
+		err = pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE pid <> pg_backend_pid()
+				  AND wait_event_type = 'Lock' AND state = 'active'
+				  AND query LIKE '%FROM matches WHERE id = $1 FOR UPDATE%'
+			)
+		`).Scan(&waiting)
+		require.NoError(t, err)
+		if waiting {
+			blocked = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.True(t, blocked, "acceptance request must be waiting behind the held match row lock")
+
+	deadlinePassed := false
+	deadlineWaitUntil := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadlineWaitUntil) {
+		err = tx.QueryRow(ctx, `SELECT clock_timestamp() >= $1`, deadline).Scan(&deadlinePassed)
+		require.NoError(t, err)
+		if deadlinePassed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.True(t, deadlinePassed, "PostgreSQL deadline must pass while acceptance waits on the match lock")
+	require.NoError(t, tx.Commit(ctx))
+
+	select {
+	case result := <-resultCh:
+		require.Equal(t, codes.FailedPrecondition, status.Code(result.err))
+	case <-time.After(5 * time.Second):
+		t.Fatal("acceptance request did not finish after releasing the match lock")
+	}
+
+	match, err := srv.Matches.Get(ctx, parsedMatchID)
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
+	proposal, err := srv.Matches.GetProposalForProfile(ctx, parsedMatchID, profileB)
+	require.NoError(t, err)
+	require.NotEqual(t, store.ProposalResponseAccepted, proposal.Response)
+}
+
+func TestMatchDeadline_ConcurrentAcceptDeclineAndSweeperConverge(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, profileA, profileB := seedPendingDuoMatch(t, ctx, srv)
+	parsedMatchID := uuid.MustParse(matchID)
+	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = now() - ($2 * interval '1 millisecond') WHERE id = $1`, parsedMatchID, store.MatchAcceptWindow.Milliseconds())
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	type operationResult struct {
+		name string
+		err  error
+	}
+	results := make(chan operationResult, 3)
+	go func() {
+		<-start
+		_, callErr := srv.RespondToMatch(ctxWithProfile(profileA), &matchmakingv1.RespondToMatchRequest{
+			MatchId: matchID,
+			Accept:  true,
+		})
+		results <- operationResult{name: "accept", err: callErr}
+	}()
+	go func() {
+		<-start
+		_, callErr := srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{
+			MatchId: matchID,
+			Accept:  false,
+		})
+		results <- operationResult{name: "decline", err: callErr}
+	}()
+	go func() {
+		<-start
+		_, _, sweepErr := srv.Matches.ExpirePendingMatchAtDeadline(ctx, parsedMatchID)
+		results <- operationResult{name: "sweep", err: sweepErr}
+	}()
+	close(start)
+
+	for range 3 {
+		select {
+		case result := <-results:
+			switch result.name {
+			case "accept":
+				require.Equal(t, codes.FailedPrecondition, status.Code(result.err))
+			case "decline":
+				require.True(t, result.err == nil || status.Code(result.err) == codes.FailedPrecondition)
+			case "sweep":
+				require.NoError(t, result.err)
+			default:
+				t.Fatalf("unexpected operation result %q", result.name)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("concurrent deadline decisions did not converge")
+		}
+	}
+
+	match, err := srv.Matches.Get(ctx, parsedMatchID)
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
+	for _, profileID := range []uuid.UUID{profileA, profileB} {
+		proposal, err := srv.Matches.GetProposalForProfile(ctx, parsedMatchID, profileID)
+		require.NoError(t, err)
+		require.NotEqual(t, store.ProposalResponseAccepted, proposal.Response)
+	}
 }
 
 func TestRespondToMatch_AcceptRetryBeforeOtherResponsesIsIdempotent(t *testing.T) {
