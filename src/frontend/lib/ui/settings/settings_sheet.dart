@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../backend/users_client.dart';
 import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
@@ -301,45 +302,133 @@ class _AccentPicker extends ConsumerStatefulWidget {
 
 class _AccentPickerState extends ConsumerState<_AccentPicker> {
   int? _selectedIndex;
+  int _selectionGeneration = 0;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadIndex();
+    _loadSelection();
   }
 
-  Future<void> _loadIndex() async {
+  @override
+  void didUpdateWidget(covariant _AccentPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profileId == widget.profileId) return;
+    _selectionGeneration++;
+    _saving = false;
+    _selectedIndex = null;
+    _loadSelection();
+  }
+
+  Future<void> _loadSelection() async {
+    final generation = ++_selectionGeneration;
+    final profileId = widget.profileId;
+    VoiceProfile? profile;
+    try {
+      profile = await ref.read(profileProvider(profileId).future);
+    } on Object {
+      if (mounted && generation == _selectionGeneration) {
+        setState(() => _selectedIndex = -1);
+      }
+      return;
+    }
+    if (!mounted ||
+        generation != _selectionGeneration ||
+        widget.profileId != profileId) {
+      return;
+    }
+
+    final serverIndex = _indexForAccent(profile?.accentColor);
+    if (profile != null && profile.accentColor?.isNotEmpty == true) {
+      setState(() => _selectedIndex = serverIndex ?? -1);
+      return;
+    }
+    if (profile == null) {
+      setState(() => _selectedIndex = -1);
+      return;
+    }
+
     final storage = ref.read(profileAccentStorageProvider);
-    final index = await storage.readProfileIndex(widget.profileId);
-    if (!mounted) return;
-    setState(() => _selectedIndex = index ?? 0);
+    final override = await storage.readOverride(profileId);
+    final index = await storage.readProfileIndex(profileId);
+    if (!mounted ||
+        generation != _selectionGeneration ||
+        widget.profileId != profileId) {
+      return;
+    }
+    setState(
+      () =>
+          _selectedIndex = _indexForAccent(override) ?? _validIndex(index) ?? 0,
+    );
   }
 
   Future<void> _select(int index) async {
+    if (_saving || index < 0 || index >= widget.swatches.length) return;
+    final profileId = widget.profileId;
+    if (ref.read(authControllerProvider).activeProfileId != profileId) return;
     final storage = ref.read(profileAccentStorageProvider);
     final hex =
         '#${(widget.swatches[index].toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
     final auth = ref.read(authorizationHeaderProvider);
-    if (auth != null) {
-      await ref
+    if (auth == null) return;
+    final generation = ++_selectionGeneration;
+    setState(() => _saving = true);
+    try {
+      final result = await ref
           .read(voiceUsersClientProvider)
           .updateProfile(authorization: auth, accentColor: hex);
-      ref.invalidate(profileProvider(widget.profileId));
+      if (result is! UsersApiOk<VoiceProfile>) return;
+
+      await storage.clearOverride(profileId);
+      await storage.clearProfileIndex(profileId);
+      ref.invalidate(profileProvider(profileId));
+      ref.invalidate(profileAccentColorProvider(profileId));
+      VoiceProfile? updatedProfile;
+      try {
+        updatedProfile = await ref.read(profileProvider(profileId).future);
+      } on Object {
+        updatedProfile = result.data;
+      }
+      final authoritativeAccent =
+          updatedProfile?.accentColor ?? result.data.accentColor;
+      final selectedIndex = _indexForAccent(authoritativeAccent) ?? -1;
+      if (mounted &&
+          widget.profileId == profileId &&
+          ref.read(authControllerProvider).activeProfileId == profileId &&
+          generation == _selectionGeneration) {
+        setState(() => _selectedIndex = selectedIndex);
+      }
+    } finally {
+      if (mounted && widget.profileId == profileId) {
+        setState(() => _saving = false);
+      }
     }
-    await storage.writeProfileIndex(widget.profileId, index);
-    await storage.clearOverride(widget.profileId);
-    ref.invalidate(profileAccentColorProvider(widget.profileId));
-    setState(() => _selectedIndex = index);
+  }
+
+  int? _indexForAccent(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final normalized = hex.toUpperCase();
+    for (var index = 0; index < widget.swatches.length; index++) {
+      final candidate =
+          '#${(widget.swatches[index].toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+      if (candidate == normalized) return index;
+    }
+    return null;
+  }
+
+  int? _validIndex(int? index) {
+    if (index == null || index < 0 || index >= widget.swatches.length) {
+      return null;
+    }
+    return index;
   }
 
   @override
   Widget build(BuildContext context) {
     final selected = _selectedIndex;
     if (selected == null) {
-      return const SizedBox(
-        height: 36,
-        child: VoiceListSkeleton(rowCount: 1),
-      );
+      return const SizedBox(height: 36, child: VoiceListSkeleton(rowCount: 1));
     }
     return Wrap(
       spacing: 8,
@@ -347,7 +436,7 @@ class _AccentPickerState extends ConsumerState<_AccentPicker> {
       children: [
         for (var i = 0; i < widget.swatches.length; i++)
           GestureDetector(
-            onTap: () => _select(i),
+            onTap: _saving ? null : () => _select(i),
             child: Container(
               width: 32,
               height: 32,
