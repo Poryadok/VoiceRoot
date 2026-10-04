@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/pkg/principal"
 )
@@ -105,6 +106,40 @@ func TestStrictUnaryInterceptorRejectsDuplicateCredentialUnknownFieldsAndBinding
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	require.Equal(t, 1, verified)
 	require.Zero(t, handlerCalls)
+}
+
+func TestStrictUnaryInterceptorBindsAggregateCompactionAndRejectsNestedUnknownFields(t *testing.T) {
+	request := &chatv1.CompactMatchSquadChatRequest{
+		ProtocolVersion: 1, OperationId: uuid.NewString(), AggregateCompletedAt: timestamppb.New(time.Date(2040, 1, 2, 3, 4, 5, 0, time.UTC)),
+	}
+	verified := 0
+	var gotMethod, gotRequestID, gotHash string
+	interceptor := strictUnaryInterceptor(verifierFunc(func(_ context.Context, _, method, requestID, hash string) (principal.Principal, error) {
+		verified++
+		gotMethod, gotRequestID, gotHash = method, requestID, hash
+		return principal.Principal{Kind: "service", Issuer: "matchmaking", Subject: "service:matchmaking", Audience: "chat"}, nil
+	}))
+	handlerCalls := 0
+	handler := func(context.Context, any) (any, error) { handlerCalls++; return nil, nil }
+	metadataContext := func(id string) context.Context {
+		return metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer test-token", "x-request-id", id))
+	}
+	unknownNested := proto.Clone(request).(*chatv1.CompactMatchSquadChatRequest)
+	unknownNested.AggregateCompletedAt.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})
+	_, err := interceptor(metadataContext(request.GetOperationId()), unknownNested, &grpc.UnaryServerInfo{FullMethod: compactMethod}, handler)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Zero(t, verified)
+	require.Zero(t, handlerCalls)
+
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	_, err = interceptor(metadataContext(request.GetOperationId()), request, &grpc.UnaryServerInfo{FullMethod: compactMethod}, handler)
+	require.NoError(t, err)
+	require.Equal(t, 1, verified)
+	require.Equal(t, 1, handlerCalls)
+	require.Equal(t, compactMethod, gotMethod)
+	require.Equal(t, request.GetOperationId(), gotRequestID)
+	require.Equal(t, hash, gotHash)
 }
 
 func TestConfigLoadFromEnvIsDisabledOnlyWhenAllKeysAreAbsent(t *testing.T) {

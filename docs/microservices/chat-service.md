@@ -667,13 +667,14 @@ both owner services; each connection validates its own CA and server name.
 ## MatchFound temporary Chat ownership
 
 Matchmaking is the sole authority that creates and tears down temporary match
-chats. It calls `MatchSquadChatService.CreateMatchSquadChat` and
-`TeardownMatchSquadChat` on the dedicated protected gRPC listener. The service
-is not registered on Chat's public or ordinary gRPC listeners. Both methods
-accept only the verified `service:matchmaking` principal with audience `chat`,
+chats. It calls `MatchSquadChatService.CreateMatchSquadChat`,
+`TeardownMatchSquadChat`, and `CompactMatchSquadChat` on the dedicated
+protected gRPC listener. The service is not registered on Chat's public or
+ordinary gRPC listeners. All three methods accept only the verified
+`service:matchmaking` principal with audience `chat`,
 the exact full RPC, one bearer credential and one `x-request-id` bound to the
 operation UUID and deterministic request hash. Raw identity metadata, unknown
-protobuf fields, replayed JWT IDs and requests outside the two-method allowlist
+protobuf fields, replayed JWT IDs and requests outside the three-method allowlist
 are rejected before persistence.
 
 Enable the listener by setting every variable with prefix
@@ -684,10 +685,10 @@ any partial or invalid configuration fails Chat startup. The listener requires
 mTLS, a trusted HTTPS JWKS endpoint for issuer `matchmaking`, and reachable
 Redis for JTI replay protection.
 
-Both protected methods use the same replay guard and key namespace:
+All protected methods use the same replay guard and key namespace:
 `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>`. The
 operation method and request hash do not partition this key, so a credential
-replayed across Create and Teardown is still rejected.
+replayed across any two protected methods is rejected.
 
 Creation atomically writes one ordinary group chat, its exact participant
 membership and an immutable operation/receipt row. The match ID, chat ID,
@@ -702,10 +703,18 @@ participant access. Ordinary group APIs cannot change MatchSquad participants,
 and a database trigger prevents deleting a Chat protected by its permanent
 ownership fence.
 
-Full creation and teardown request/receipt bytes are retained with permanent
-match/chat/receipt IDs and digests. The frozen teardown request has no signal
-for aggregate teardown completion, so the Chat-local completion timestamp
-cannot safely start the documented 30-day aggregate retention period. Chat
-currently retains this evidence rather than compacting it early. Migration
-DOWN refuses while any operation or terminal fence remains. The aggregate
-completion signal remains an integration gap for the vertical owner.
+Full creation and teardown request/receipt bytes remain until Chat receives a
+valid Matchmaking aggregate-compaction command. The command binds the exact
+creation and teardown receipts, owner IDs, participant manifest, teardown
+aggregate ID, and immutable aggregate completion and authorization timestamps.
+It is accepted only when authorization is at least 30 days after aggregate
+completion; Chat does not infer eligibility from its local clock or teardown
+timestamp. One SQL transaction stores the exact command and stable compaction
+receipt, then clears only the full creation/teardown request and receipt bytes.
+The compact command/receipt and permanent ownership, operation, resource,
+receipt, digest, aggregate, and timestamp fences remain. Exact command retries
+return the saved receipt; changed commands conflict. Creation/teardown retries
+after compaction return terminal precondition failures instead of synthesizing
+old success receipts. SQL guards reject unauthorized evidence clearing,
+reopening, or fence deletion, and migration DOWN locks and refuses while any
+operation evidence remains.
