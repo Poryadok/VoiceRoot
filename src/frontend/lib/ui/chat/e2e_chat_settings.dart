@@ -12,6 +12,7 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/e2e_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 
 /// Opt-in confirmation for enabling E2E in a DM (docs/features/encryption.md).
@@ -255,7 +256,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
     if (upload is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(upload.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: upload.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -266,7 +274,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
     if (result is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: result.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -283,7 +298,14 @@ class _DmE2eSettingsSectionState extends ConsumerState<DmE2eSettingsSection> {
     if (result is E2eApiFailure) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(
+              AppLocalizations.of(context)!,
+              statusCode: result.statusCode,
+            ),
+          ),
+        ),
       );
       return;
     }
