@@ -66,7 +66,8 @@ func TestRunMatchmakingEventsConsumer_JetStreamToProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal match-found event: %v", err)
 	}
-	if _, err := js.Publish("mm.match_found", eventBytes); err != nil {
+	pubAck, err := js.Publish("mm.match_found", eventBytes)
+	if err != nil {
 		t.Fatalf("publish match-found event: %v", err)
 	}
 
@@ -84,6 +85,28 @@ func TestRunMatchmakingEventsConsumer_JetStreamToProfile(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for recipient match_found fan-out")
+	}
+
+	// subscribeMatchmakingEvents uses the default async auto-ack behavior. The nats.go wrapper
+	// sends the ACK only after the callback returns, so the consumer ack floor is a completion
+	// barrier for dispatchMatchmakingStreamEvent, not just evidence that delivery began.
+	ackFloorTicker := time.NewTicker(10 * time.Millisecond)
+	defer ackFloorTicker.Stop()
+	ackFloorTimeout := time.NewTimer(5 * time.Second)
+	defer ackFloorTimeout.Stop()
+	for {
+		info, err := js.ConsumerInfo(jsStreamMatchmakingEvents, matchmakingConsumerDurableName(instanceID))
+		if err != nil {
+			t.Fatalf("read matchmaking consumer ack floor: %v", err)
+		}
+		if info.AckFloor.Stream >= pubAck.Sequence {
+			break
+		}
+		select {
+		case <-ackFloorTicker.C:
+		case <-ackFloorTimeout.C:
+			t.Fatalf("timed out waiting for matchmaking callback ACK: ack floor=%d published sequence=%d", info.AckFloor.Stream, pubAck.Sequence)
+		}
 	}
 
 	select {
