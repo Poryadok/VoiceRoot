@@ -378,6 +378,7 @@ VoiceProfile voiceProfileFromProto(user_pb.Profile profile) {
     accentColor: profile.hasAccentColor()
         ? emptyToNull(profile.accentColor)
         : null,
+    locale: profile.hasLocale() ? profile.locale : '',
     frozenAt: protoTimestampToDateTime(
       profile.hasFrozenAt() ? profile.frozenAt : null,
     ),
@@ -487,12 +488,14 @@ user_pb.UpdateProfileRequest updateProfileRequestToProto({
   String? bio,
   String? avatarUrl,
   String? accentColor,
+  String? locale,
 }) {
   return user_pb.UpdateProfileRequest(
     displayName: displayName,
     bio: bio,
     avatarUrl: avatarUrl,
     accentColor: accentColor,
+    locale: locale,
   );
 }
 
