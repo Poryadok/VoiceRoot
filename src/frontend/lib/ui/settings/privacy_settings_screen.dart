@@ -34,6 +34,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   var _loading = true;
   var _saving = false;
   String? _error;
+  int? _errorStatusCode;
 
   @override
   void initState() {
@@ -63,11 +64,13 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
           _settings = data;
           _loading = false;
           _error = null;
+          _errorStatusCode = null;
         });
-      case UserPrivacyApiFailure(:final message):
+      case UserPrivacyApiFailure(:final message, :final statusCode):
         setState(() {
           _loading = false;
           _error = message;
+          _errorStatusCode = statusCode;
         });
     }
   }
@@ -80,6 +83,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
     setState(() {
       _saving = true;
       _error = null;
+      _errorStatusCode = null;
     });
 
     final result = await ref
@@ -96,10 +100,11 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context)!.privacySaved)),
         );
-      case UserPrivacyApiFailure(:final message):
+      case UserPrivacyApiFailure(:final message, :final statusCode):
         setState(() {
           _saving = false;
           _error = message;
+          _errorStatusCode = statusCode;
         });
     }
   }
@@ -143,6 +148,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                 message: settingsLoadErrorMessage(
                   l10n,
                   _error,
+                  statusCode: _errorStatusCode,
                   fallback: l10n.privacyLoadError,
                 ),
                 icon: Icons.cloud_off_outlined,
@@ -212,7 +218,10 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(
-                        _error!,
+                        commonActionErrorMessage(
+                          l10n,
+                          statusCode: _errorStatusCode,
+                        ),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),

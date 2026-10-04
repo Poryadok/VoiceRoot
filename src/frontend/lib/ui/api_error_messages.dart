@@ -226,9 +226,6 @@ String settingsLoadErrorMessage(
   if (isBackendUnavailable(statusCode)) {
     return l10n.backendUnavailable;
   }
-  if (message != null && message.isNotEmpty) {
-    return message;
-  }
   return fallback;
 }
 

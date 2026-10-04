@@ -181,4 +181,113 @@ void main() {
 
     expect(find.text('Все'), findsWidgets);
   });
+
+  testWidgets('privacy load failure hides upstream diagnostics', (
+    tester,
+  ) async {
+    const raw = 'internal trace id=privacy-load-secret';
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me/privacy') {
+        return http.Response(jsonEncode({'message': raw}), 500);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const PrivacySettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(raw), findsNothing);
+    expect(find.text('Could not load privacy settings'), findsWidgets);
+  });
+
+  testWidgets('privacy save failure uses safe action copy', (tester) async {
+    const raw = 'database password=privacy-save-secret';
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me/privacy' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'privacy_settings': {
+              'profile_id': 'prof-test',
+              'preset': 'gaming',
+              'show_online': _audience(),
+              'show_game_status': _audience(),
+              'show_mm_rating': _audience(),
+              'show_phone': _audience(),
+              'show_stories': _audience(),
+              'allow_dm': _audience(),
+              'allow_friend_requests': _audience(),
+              'allow_guest_dm': false,
+              'allow_phone_search': _audience(),
+              'allow_calls': _audience(),
+              'allow_chat_space_invites': _audience(),
+              'allow_files': _audience(),
+              'allow_voice_messages': _audience(),
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/users/me/privacy' && req.method == 'PATCH') {
+        return http.Response(jsonEncode({'message': raw}), 500);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const PrivacySettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final save = find.byKey(PrivacySettingsScreen.saveButtonKey);
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(find.text(raw), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+  });
 }
