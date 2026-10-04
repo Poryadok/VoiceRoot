@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -34,35 +35,46 @@ func TestFCMPushCaptureWrapperIsSelectedOnlyByDebugGate(t *testing.T) {
 }
 
 type fcmSendCapture struct {
-	calls     int
-	ctx       context.Context
-	profileID uuid.UUID
-	token     store.DeviceToken
-	payload   fcm.PushPayload
+	calls             int
+	expectedContext   context.Context
+	expectedProfileID uuid.UUID
+	expectedToken     store.DeviceToken
+	expectedPayload   fcm.PushPayload
+	contextPreserved  bool
+	profilePreserved  bool
+	tokenPreserved    bool
+	payloadPreserved  bool
 }
 
 func (s *fcmSendCapture) Send(ctx context.Context, profileID uuid.UUID, token store.DeviceToken, payload fcm.PushPayload) error {
 	s.calls++
-	s.ctx, s.profileID, s.token, s.payload = ctx, profileID, token, payload
+	s.contextPreserved = ctx == s.expectedContext
+	s.profilePreserved = profileID == s.expectedProfileID
+	s.tokenPreserved = reflect.DeepEqual(token, s.expectedToken)
+	s.payloadPreserved = reflect.DeepEqual(payload, s.expectedPayload)
 	return nil
 }
 
 func TestEnabledCaptureDelegatesExactlyOnceWithUnchangedArguments(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	profileID := uuid.New()
-	token := store.DeviceToken{}
-	payload := fcm.PushPayload{}
-	inner := &fcmSendCapture{}
+	token := store.DeviceToken{Token: "synthetic-fixture-token", PushService: "fcm"}
+	payload := fcm.PushPayload{Title: "fixture title", Body: "fixture body", Data: map[string]string{"type": "fixture"}}
+	inner := &fcmSendCapture{
+		expectedContext: ctx, expectedProfileID: profileID,
+		expectedToken: token, expectedPayload: payload,
+	}
 	wrapped := maybeRecordFCMSender(inner, true)
 
 	err := wrapped.Send(ctx, profileID, token, payload)
 
 	require.NoError(t, err)
 	require.Equal(t, 1, inner.calls)
-	require.Equal(t, ctx, inner.ctx)
-	require.Equal(t, profileID, inner.profileID)
-	require.Equal(t, token, inner.token)
-	require.Equal(t, payload, inner.payload)
+	require.True(t, inner.contextPreserved)
+	require.True(t, inner.profilePreserved)
+	require.True(t, inner.tokenPreserved)
+	require.True(t, inner.payloadPreserved)
 	_, recorded := fcm.GlobalPushRecorder.LastForProfile(profileID)
 	require.True(t, recorded)
 }
