@@ -110,4 +110,108 @@ $$;
 CREATE TRIGGER voice_match_squad_terminal_fence BEFORE UPDATE OR DELETE ON voice_match_squad_operations
     FOR EACH ROW EXECUTE FUNCTION voice_match_squad_terminal_fence_fn();
 
+-- Current member state remains in voice_room_memberships. These command,
+-- effect, and grant rows make each verified actor generation independently
+-- repairable and keep every bearer expiry durable before a token is returned.
+CREATE TABLE voice_match_squad_member_operations (
+    operation_id UUID PRIMARY KEY,
+    match_id UUID NOT NULL,
+    room_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    account_id UUID NOT NULL,
+    session_epoch BIGINT NOT NULL CHECK (session_epoch > 0),
+    media_epoch UUID NOT NULL,
+    method TEXT NOT NULL CHECK (method IN ('join', 'leave')),
+    request_sha256 BYTEA NOT NULL CHECK (octet_length(request_sha256) = 32),
+    request_bytes BYTEA NOT NULL CHECK (octet_length(request_bytes) > 0),
+    response_bytes BYTEA NULL,
+    failure_code TEXT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'complete', 'rejected')),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    FOREIGN KEY (room_id) REFERENCES voice_room_instances(room_id) ON DELETE RESTRICT,
+    CHECK (operation_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (match_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (room_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (profile_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (account_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (media_epoch <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK ((state = 'pending' AND response_bytes IS NULL AND failure_code IS NULL)
+        OR (state = 'complete' AND response_bytes IS NOT NULL AND failure_code IS NULL)
+        OR (state = 'rejected' AND response_bytes IS NULL AND failure_code IS NOT NULL))
+);
+CREATE INDEX voice_match_squad_member_operations_current ON voice_match_squad_member_operations(room_id, profile_id, created_at DESC);
+
+CREATE TABLE voice_match_squad_member_effects (
+    operation_id UUID NOT NULL REFERENCES voice_match_squad_member_operations(operation_id) ON DELETE RESTRICT,
+    effect_kind TEXT NOT NULL CHECK (effect_kind IN ('join_projection', 'leave_projection', 'leave_livekit')),
+    match_id UUID NOT NULL,
+    room_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    media_epoch UUID NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'confirmed')),
+    attempt_count BIGINT NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    last_error_code TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    confirmed_at TIMESTAMPTZ NULL,
+    PRIMARY KEY (operation_id, effect_kind),
+    FOREIGN KEY (room_id) REFERENCES voice_room_instances(room_id) ON DELETE RESTRICT,
+    CHECK ((state = 'pending' AND confirmed_at IS NULL) OR (state = 'confirmed' AND confirmed_at IS NOT NULL))
+);
+CREATE INDEX voice_match_squad_member_effects_repair ON voice_match_squad_member_effects(updated_at) WHERE state = 'pending';
+
+CREATE TABLE voice_match_squad_member_grants (
+    request_id UUID PRIMARY KEY,
+    match_id UUID NOT NULL,
+    room_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    account_id UUID NOT NULL,
+    session_epoch BIGINT NOT NULL CHECK (session_epoch > 0),
+    media_epoch UUID NOT NULL,
+    issued_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    FOREIGN KEY (room_id) REFERENCES voice_room_instances(room_id) ON DELETE RESTRICT,
+    CHECK (expires_at > issued_at AND expires_at <= issued_at + interval '60 seconds'),
+    CHECK (request_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (account_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    CHECK (media_epoch <> '00000000-0000-0000-0000-000000000000'::UUID)
+);
+CREATE INDEX voice_match_squad_member_grants_generation_expiry ON voice_match_squad_member_grants(room_id, profile_id, media_epoch, expires_at DESC);
+
+CREATE OR REPLACE FUNCTION voice_match_squad_member_fence_fn() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'MatchSquad member command, effects, and grants are permanent fences' USING ERRCODE = '55000';
+    END IF;
+    IF TG_TABLE_NAME = 'voice_match_squad_member_operations' AND TG_OP = 'UPDATE' THEN
+        IF ROW(NEW.operation_id, NEW.match_id, NEW.room_id, NEW.profile_id, NEW.account_id, NEW.session_epoch, NEW.media_epoch, NEW.method, NEW.request_sha256, NEW.request_bytes)
+           IS DISTINCT FROM ROW(OLD.operation_id, OLD.match_id, OLD.room_id, OLD.profile_id, OLD.account_id, OLD.session_epoch, OLD.media_epoch, OLD.method, OLD.request_sha256, OLD.request_bytes) THEN
+            RAISE EXCEPTION 'MatchSquad member operation binding is immutable' USING ERRCODE = '55000';
+        END IF;
+        IF OLD.response_bytes IS NOT NULL AND ROW(NEW.response_bytes, NEW.state) IS DISTINCT FROM ROW(OLD.response_bytes, OLD.state) THEN
+            RAISE EXCEPTION 'MatchSquad member operation receipt is immutable' USING ERRCODE = '55000';
+        END IF;
+        IF OLD.failure_code IS NOT NULL AND ROW(NEW.failure_code, NEW.state) IS DISTINCT FROM ROW(OLD.failure_code, OLD.state) THEN
+            RAISE EXCEPTION 'MatchSquad member rejection fence is immutable' USING ERRCODE = '55000';
+        END IF;
+    ELSIF TG_TABLE_NAME = 'voice_match_squad_member_effects' AND TG_OP = 'UPDATE' THEN
+        IF ROW(NEW.operation_id, NEW.effect_kind, NEW.match_id, NEW.room_id, NEW.profile_id, NEW.media_epoch)
+           IS DISTINCT FROM ROW(OLD.operation_id, OLD.effect_kind, OLD.match_id, OLD.room_id, OLD.profile_id, OLD.media_epoch) OR
+           (OLD.state = 'confirmed' AND NEW.state <> 'confirmed') THEN
+            RAISE EXCEPTION 'MatchSquad member effect fence is immutable' USING ERRCODE = '55000';
+        END IF;
+    ELSIF TG_TABLE_NAME = 'voice_match_squad_member_grants' AND TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'MatchSquad bearer grant expiry is immutable' USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER voice_match_squad_member_operations_fence BEFORE UPDATE OR DELETE ON voice_match_squad_member_operations
+    FOR EACH ROW EXECUTE FUNCTION voice_match_squad_member_fence_fn();
+CREATE TRIGGER voice_match_squad_member_effects_fence BEFORE UPDATE OR DELETE ON voice_match_squad_member_effects
+    FOR EACH ROW EXECUTE FUNCTION voice_match_squad_member_fence_fn();
+CREATE TRIGGER voice_match_squad_member_grants_fence BEFORE UPDATE OR DELETE ON voice_match_squad_member_grants
+    FOR EACH ROW EXECUTE FUNCTION voice_match_squad_member_fence_fn();
+
 COMMIT;

@@ -102,7 +102,7 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	require.ErrorIs(t, err, redis.Nil, "a MatchSquad projection must never claim ordinary Chat discovery")
 	match, err = store.AddParticipant(ctx, match.RoomID, "match-member", MaxGroupVoiceParticipants)
 	require.NoError(t, err, "only the owned current-membership adapter adds a participant")
-	left, err := store.RemoveParticipant(ctx, match.RoomID, "match-member")
+	left, err := store.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-id", "match-member")
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, left.Status, "PostgreSQL teardown owns MatchSquad terminal transition")
 	require.Empty(t, left.States)
@@ -118,6 +118,28 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	require.ErrorIs(t, err, ErrNotFound, "a stale Chat index cannot turn a MatchSquad marker into ordinary call authority")
 	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil, "the stale index is removed only when it points at the marked resource")
+}
+
+func TestRedisCallStore_MatchSquadRemovalPreservesDivergentActiveProfileLock(t *testing.T) {
+	ctx := context.Background()
+	store, client := newRedisCallStoreForTest(t, "voice-match-squad-divergence:")
+	match, err := store.CreateCall(ctx, Call{
+		RoomID: "match-room", ChatID: "match-chat", MatchSquadMatchID: "match-id",
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	match.States = map[string]ParticipantState{"member": {ProfileID: "member"}}
+	require.NoError(t, putRawCall(ctx, client, store.callKey(match.RoomID), match))
+	require.NoError(t, client.Set(ctx, store.activeKey("member"), "another-current-room", time.Minute).Err())
+
+	_, err = store.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-id", "member")
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged)
+	activeRoom, err := client.Get(ctx, store.activeKey("member")).Result()
+	require.NoError(t, err)
+	require.Equal(t, "another-current-room", activeRoom, "repairing a stale squad projection cannot delete an unrelated current profile lock")
+	unchanged, err := store.GetCall(ctx, match.RoomID)
+	require.NoError(t, err)
+	require.True(t, unchanged.IsParticipant("member"), "divergent projection stays visible for an explicit repair decision")
 }
 
 func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {

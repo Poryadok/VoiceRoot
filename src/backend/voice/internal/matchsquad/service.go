@@ -34,7 +34,12 @@ type Service struct {
 	Pool    *pgxpool.Pool
 	Calls   store.CallStore
 	Effects RoomEffects
-	Now     func() time.Time
+	Members interface {
+		ReadyForTeardown(context.Context, uuid.UUID, uuid.UUID) error
+		PrepareForTeardown(context.Context, uuid.UUID, uuid.UUID) error
+		FinalizeAfterRoomAbsent(context.Context, uuid.UUID, uuid.UUID) error
+	}
+	Now func() time.Time
 }
 
 func (s *Service) Create(ctx context.Context, req *callsv1.CreateMatchSquadRoomRequest) ([]byte, error) {
@@ -121,6 +126,15 @@ func (s *Service) Teardown(ctx context.Context, req *callsv1.TeardownMatchSquadR
 	if resourceState != "closing" && resourceState != "closed" {
 		return nil, status.Error(codes.FailedPrecondition, "MatchSquad resource is not in its current teardown state")
 	}
+	if s.Members == nil {
+		return nil, status.Error(codes.Unavailable, "Voice MatchSquad member drain unavailable")
+	}
+	if err := s.Members.ReadyForTeardown(ctx, match, room); err != nil {
+		return nil, err
+	}
+	if err := s.Members.PrepareForTeardown(ctx, match, room); err != nil {
+		return nil, err
+	}
 	call, callErr := s.Calls.GetCall(ctx, room.String())
 	if callErr == nil {
 		if call.RoomID != room.String() || call.ChatID != chatID || call.LivekitRoomName != livekitRoom || call.MatchSquadMatchID != match.String() || (call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE && call.Status != callsv1.CallStatus_CALL_STATUS_ENDED) {
@@ -137,6 +151,9 @@ func (s *Service) Teardown(ctx context.Context, req *callsv1.TeardownMatchSquadR
 	}
 	if err = s.Effects.CloseRoom(ctx, livekitRoom); err != nil {
 		return nil, status.Error(codes.Unavailable, "Voice MatchSquad teardown media effect pending")
+	}
+	if err = s.Members.FinalizeAfterRoomAbsent(ctx, match, room); err != nil {
+		return nil, err
 	}
 	completedAt := s.now()
 	receiptID, err := uuid.NewRandom()

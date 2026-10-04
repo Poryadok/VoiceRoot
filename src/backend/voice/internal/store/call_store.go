@@ -17,15 +17,16 @@ const (
 )
 
 var (
-	ErrNotFound          = errors.New("call not found")
-	ErrActiveCall        = errors.New("profile already has active call")
-	ErrInvalidState      = errors.New("invalid call state")
-	ErrNotParticipant    = errors.New("profile is not a call participant")
-	ErrRoomFull          = errors.New("voice room is full")
-	ErrScreenShareLimit  = errors.New("screen share limit reached")
-	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
-	ErrScreenShareDenied = errors.New("screen share not permitted")
-	ErrOperationConflict = errors.New("operation id conflicts with a different request")
+	ErrNotFound                     = errors.New("call not found")
+	ErrActiveCall                   = errors.New("profile already has active call")
+	ErrInvalidState                 = errors.New("invalid call state")
+	ErrNotParticipant               = errors.New("profile is not a call participant")
+	ErrRoomFull                     = errors.New("voice room is full")
+	ErrMatchSquadProjectionDiverged = errors.New("MatchSquad participant projection conflicts with current profile room")
+	ErrScreenShareLimit             = errors.New("screen share limit reached")
+	ErrNotScreenSharing             = errors.New("profile is not screen sharing")
+	ErrScreenShareDenied            = errors.New("screen share not permitted")
+	ErrOperationConflict            = errors.New("operation id conflicts with a different request")
 	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
 	// It is deliberately distinct from a dependency outage so the transport can
 	// expose the same safe retryable result without leaking Redis details.
@@ -300,6 +301,30 @@ func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID
 	}
 	if !call.IsParticipant(profileID) {
 		return Call{}, ErrNotParticipant
+	}
+	delete(call.States, profileID)
+	call = removeScreenSharesForProfile(call, profileID)
+	s.calls[roomID] = call
+	return call, nil
+}
+
+// RemoveMatchSquadParticipant is an exact owner-scoped projection repair.
+// Repeated removal is safe, but a stale or ordinary room marker is rejected.
+func (s *MemoryCallStore) RemoveMatchSquadParticipant(_ context.Context, roomID, matchID, profileID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	if call.RoomID != roomID || call.MatchSquadMatchID == "" || call.MatchSquadMatchID != matchID {
+		return Call{}, ErrMatchSquadProjectionDiverged
+	}
+	if !call.IsParticipant(profileID) {
+		return call, nil
+	}
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrInvalidState
 	}
 	delete(call.States, profileID)
 	call = removeScreenSharesForProfile(call, profileID)

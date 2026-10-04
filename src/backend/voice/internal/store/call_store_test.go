@@ -107,6 +107,31 @@ func TestCallStore_MatchSquadRosterDoesNotCreateMembershipOrReserveProfile(t *te
 	require.ErrorIs(t, err, ErrInvalidState, "the marker cannot bypass profile admission")
 }
 
+func TestCallStore_MatchSquadRemovalIsOwnerScopedAndKeepsEmptyRoomActive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := NewMemoryCallStore()
+	match, err := s.CreateCall(ctx, Call{
+		RoomID: "match-remove", MatchSquadMatchID: "match-owner",
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "member", Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = s.AddParticipant(ctx, match.RoomID, "member", MaxGroupVoiceParticipants)
+	require.NoError(t, err)
+	_, err = s.RemoveMatchSquadParticipant(ctx, match.RoomID, "other-match", "member")
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged)
+	left, err := s.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-owner", "member")
+	require.NoError(t, err)
+	require.Empty(t, left.States)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, left.Status)
+	_, err = s.RemoveMatchSquadParticipant(ctx, match.RoomID, "match-owner", "member")
+	require.NoError(t, err, "projection absence is an idempotent removal replay")
+	current, err := s.GetCall(ctx, match.RoomID)
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, current.Status)
+}
+
 // TestCallStore_oneActiveVoicePerProfileUntilLeave characterizes the documented
 // Voice Service invariant: a profile, rather than a device connection, can
 // occupy only one active voice session.  A successful leave frees that profile

@@ -510,6 +510,36 @@ open divergent call document. Teardown commits its completed receipt only
 after the database resource is closed and Redis/LiveKit effects are confirmed
 or absent.
 
+Delegated self-membership is available only on the separate
+`MatchSquadMemberService` listener configured by
+`VOICE_MATCH_SQUAD_MEMBER_PRINCIPAL_*`. It accepts only Join, GetJoinToken, and
+Leave with a Gateway delegated-user principal bound to the exact method,
+request ID, and request hash. The listener requires mutual TLS, HTTPS JWKS,
+replay protection, and a current Auth `auth:session:min_epoch:<account>` value.
+Voice rechecks that session and the User-owned profile-to-account mapping
+around durable admission decisions; forwarded profile or session metadata is
+not authority.
+
+The stored creation roster is only eligibility. A verified actor separately
+acquires one current `voice_room_memberships` generation; Voice never fills
+the active membership projection from the whole roster. MatchSquad command
+receipts, generation-bound effects, and each issued token expiry are retained
+in `voice_match_squad_member_operations`,
+`voice_match_squad_member_effects`, and
+`voice_match_squad_member_grants`. Redis `call:<room UUID>` and
+`session:<profile UUID>` records and the LiveKit room are projections of that
+same durable room and member generation.
+
+GetJoinToken requires the exact current JOINED generation and records its
+expiry before returning a token capped at 60 seconds and the actor's remaining
+validity. Self Leave removes only that actor's projections and stays LEAVING
+until the latest bearer expires and both effects are confirmed; a DB-clock
+repair then marks that generation LEFT and releases its account fence. This
+member completion does not delete the room or complete Matchmaking's aggregate.
+Aggregate teardown separately closes admission, waits for grants and pending
+effects to drain, confirms final LiveKit room absence, and only then stores
+the terminal teardown receipt.
+
 Full operation bytes remain stored until Matchmaking's durable teardown
 aggregate is complete and its PostgreSQL authority clock reaches
 `aggregate_completed_at + 30 days`. Matchmaking then sends one immutable
