@@ -19,6 +19,278 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('keeps display name validation local and avoids a request', (
+    tester,
+  ) async {
+    var patchRequests = 0;
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+        patchRequests++;
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ProfileEditSheet(
+              profile: VoiceProfile(
+                id: 'prof-test',
+                accountId: 'acc-test',
+                username: 'voiceuser',
+                discriminator: '4242',
+                displayName: 'Voice User',
+                bio: 'Old bio',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(ProfileEditSheet.displayNameFieldKey),
+      ' ',
+    );
+    await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(ProfileEditSheet.displayNameFieldKey)),
+    )!;
+    expect(find.text(l10n.profileErrorDisplayNameRequired), findsOneWidget);
+    expect(patchRequests, 0);
+  });
+
+  testWidgets('maps profile save diagnostics to neutral localized copy', (
+    tester,
+  ) async {
+    const upstreamDiagnostic = 'private profile save diagnostic';
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+        return http.Response(jsonEncode({'message': upstreamDiagnostic}), 500);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ProfileEditSheet(
+              profile: VoiceProfile(
+                id: 'prof-test',
+                accountId: 'acc-test',
+                username: 'voiceuser',
+                discriminator: '4242',
+                displayName: 'Voice User',
+                bio: 'Old bio',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(ProfileEditSheet.displayNameFieldKey),
+      'Updated Name',
+    );
+    await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining(upstreamDiagnostic), findsNothing);
+  });
+
+  testWidgets('maps avatar presign diagnostics to neutral localized copy', (
+    tester,
+  ) async {
+    const upstreamDiagnostic = 'private avatar presign diagnostic';
+    var presignRequests = 0;
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/me/avatar/presigned-upload' &&
+          req.method == 'POST') {
+        presignRequests++;
+        return http.Response(jsonEncode({'message': upstreamDiagnostic}), 500);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ProfileEditSheet(
+              profile: const VoiceProfile(
+                id: 'prof-test',
+                accountId: 'acc-test',
+                username: 'voiceuser',
+                discriminator: '4242',
+                displayName: 'Voice User',
+                bio: 'Old bio',
+              ),
+              avatarPicker: () async => ProfileAvatarFile(
+                bytes: base64Decode(
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
+                ),
+                contentType: 'image/png',
+                name: 'avatar.png',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileEditSheet.avatarButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(presignRequests, 1);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining(upstreamDiagnostic), findsNothing);
+  });
+
+  testWidgets('keeps missing authorization sentinel unchanged', (tester) async {
+    var requests = 0;
+    final client = MockClient((_) async {
+      requests++;
+      return http.Response('Not Found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          authorizationHeaderProvider.overrideWithValue(null),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ProfileEditSheet(
+              profile: const VoiceProfile(
+                id: 'prof-test',
+                accountId: 'acc-test',
+                username: 'voiceuser',
+                discriminator: '4242',
+                displayName: 'Voice User',
+                bio: 'Old bio',
+              ),
+              avatarPicker: () async => ProfileAvatarFile(
+                bytes: base64Decode(
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
+                ),
+                contentType: 'image/png',
+                name: 'avatar.png',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileEditSheet.avatarButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(ProfileEditSheet.saveButtonKey)),
+    )!;
+    expect(
+      find.text(l10n.profileEditSaveError('not_authenticated')),
+      findsOneWidget,
+    );
+    expect(requests, 0);
+  });
+
   testWidgets('saves display name and bio through profile actions', (
     tester,
   ) async {

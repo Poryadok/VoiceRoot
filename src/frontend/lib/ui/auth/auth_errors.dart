@@ -81,3 +81,9 @@ String authErrorMessage(AppLocalizations l10n, String key) {
       return key;
   }
 }
+
+/// Localized form error without exposing unknown API codes or diagnostics.
+String authFormErrorMessage(AppLocalizations l10n, String key) {
+  final message = authErrorMessage(l10n, key);
+  return message == key ? l10n.commonActionFailed : message;
+}

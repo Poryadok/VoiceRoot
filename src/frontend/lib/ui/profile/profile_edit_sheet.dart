@@ -197,7 +197,8 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
 
   Future<void> _pickAvatar() async {
     final l10n = AppLocalizations.of(context)!;
-    final picked = await (widget.avatarPicker ?? defaultPickProfileAvatar).call();
+    final picked = await (widget.avatarPicker ?? defaultPickProfileAvatar)
+        .call();
     if (!mounted || picked == null) return;
     final contentType = picked.contentType.trim().toLowerCase();
     if (!kProfileAvatarContentTypes.contains(contentType)) {
@@ -255,7 +256,9 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
     if (err != null) {
       setState(() {
         _saving = false;
-        _error = l10n.profileEditSaveError(err);
+        _error = err == 'not_authenticated'
+            ? l10n.profileEditSaveError(err)
+            : l10n.commonActionFailed;
       });
       return;
     }
@@ -287,8 +290,8 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
       contentLength: avatar.bytes.length,
     );
     switch (presignResult) {
-      case UsersApiFailure(:final message):
-        setState(() => _error = l10n.profileEditSaveError(message));
+      case UsersApiFailure():
+        setState(() => _error = l10n.commonActionFailed);
         return null;
       case UsersApiOk(:final data):
         final uploadResult = await client.uploadAvatarBytes(
@@ -297,8 +300,8 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
           bytes: avatar.bytes,
         );
         switch (uploadResult) {
-          case UsersApiFailure(:final message):
-            setState(() => _error = l10n.profileEditSaveError(message));
+          case UsersApiFailure():
+            setState(() => _error = l10n.commonActionFailed);
             return null;
           case UsersApiOk():
             return data.publicUrl;

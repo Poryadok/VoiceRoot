@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
@@ -18,15 +20,23 @@ import 'package:voice_frontend/ui/auth/password_reset_screen.dart';
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
-Widget _testApp({required Widget home, required http.Client client}) {
+Widget _testApp({
+  required Widget home,
+  required http.Client client,
+  VoiceAuthClient? authClient,
+}) {
   return ProviderScope(
     overrides: [
       profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
-      authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
       ),
       httpClientProvider.overrideWithValue(client),
+      if (authClient != null)
+        voiceAuthClientProvider.overrideWithValue(authClient),
     ],
     child: MaterialApp(
       theme: voiceTestTheme(),
@@ -42,7 +52,9 @@ Widget _authScreenApp({required http.Client client}) {
   return ProviderScope(
     overrides: [
       profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
-      authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
       ),
@@ -80,8 +92,7 @@ void main() {
       _testApp(
         home: const PasswordResetScreen(),
         client: MockClient((req) async {
-          if (req.method == 'POST' &&
-              req.url.path == '/api/v1/auth/otp/send') {
+          if (req.method == 'POST' && req.url.path == '/api/v1/auth/otp/send') {
             sendCalled = true;
             final body = jsonDecode(req.body) as Map<String, dynamic>;
             expect(body['email'], 'user@example.com');
@@ -117,8 +128,7 @@ void main() {
       _testApp(
         home: const PasswordResetScreen(initialEmail: 'user@example.com'),
         client: MockClient((req) async {
-          if (req.method == 'POST' &&
-              req.url.path == '/api/v1/auth/otp/send') {
+          if (req.method == 'POST' && req.url.path == '/api/v1/auth/otp/send') {
             return http.Response('', 204);
           }
           if (req.method == 'POST' &&
@@ -161,14 +171,98 @@ void main() {
     );
   });
 
+  testWidgets('password reset hides unknown failure details', (tester) async {
+    bindLargeTestViewport(tester);
+    const diagnostic = 'private-reset-stack-detail';
+    await tester.pumpWidget(
+      _testApp(
+        home: const PasswordResetScreen(initialEmail: 'user@example.com'),
+        client: MockClient((req) async {
+          if (req.method == 'POST' && req.url.path == '/api/v1/auth/otp/send') {
+            return http.Response('', 204);
+          }
+          if (req.method == 'POST' &&
+              req.url.path == '/api/v1/auth/password/reset') {
+            return http.Response(
+              jsonEncode({
+                'error': 'unrecognized_reset_failure',
+                'message': diagnostic,
+              }),
+              500,
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(PasswordResetScreen.sendLinkButtonKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.codeFieldKey),
+      '123456',
+    );
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.newPasswordFieldKey),
+      'newpass99',
+    );
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.confirmPasswordFieldKey),
+      'newpass99',
+    );
+    await tester.tap(find.byKey(PasswordResetScreen.resetButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('unrecognized_reset_failure'), findsNothing);
+    expect(find.text(diagnostic), findsNothing);
+  });
+
+  testWidgets('password reset shows neutral copy when failure has no key', (
+    tester,
+  ) async {
+    bindLargeTestViewport(tester);
+    await tester.pumpWidget(
+      _testApp(
+        home: const PasswordResetScreen(initialEmail: 'user@example.com'),
+        client: MockClient((_) async => http.Response('unused', 404)),
+        authClient: _NullResetFailureAuthClient(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(PasswordResetScreen.sendLinkButtonKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.codeFieldKey),
+      '123456',
+    );
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.newPasswordFieldKey),
+      'newpass99',
+    );
+    await tester.enterText(
+      find.byKey(PasswordResetScreen.confirmPasswordFieldKey),
+      'newpass99',
+    );
+    await tester.tap(find.byKey(PasswordResetScreen.resetButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(
+      find.text('Password reset. You can sign in with your new password.'),
+      findsNothing,
+    );
+  });
+
   testWidgets('password mismatch shows localized error', (tester) async {
     bindLargeTestViewport(tester);
     await tester.pumpWidget(
       _testApp(
         home: const PasswordResetScreen(initialEmail: 'user@example.com'),
         client: MockClient((req) async {
-          if (req.method == 'POST' &&
-              req.url.path == '/api/v1/auth/otp/send') {
+          if (req.method == 'POST' && req.url.path == '/api/v1/auth/otp/send') {
             return http.Response('', 204);
           }
           return http.Response('not found', 404);
@@ -197,4 +291,26 @@ void main() {
 
     expect(find.text("Passwords don't match."), findsOneWidget);
   });
+}
+
+class _NullResetFailureAuthClient extends VoiceAuthClient {
+  _NullResetFailureAuthClient()
+    : super(
+        gateway: GatewayHttpClient(
+          httpClient: MockClient((_) async => http.Response('', 204)),
+          config: const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+      );
+
+  @override
+  Future<AuthApiResult<void>> sendPasswordResetOtp({
+    required String email,
+  }) async => const AuthApiOk<void>(null);
+
+  @override
+  Future<AuthApiResult<void>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async => const AuthApiFailure(message: '');
 }

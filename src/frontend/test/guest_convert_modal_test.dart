@@ -18,24 +18,30 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
-  testWidgets('save-account reminder opens convert-guest modal', (tester) async {
+  testWidgets('save-account reminder opens convert-guest modal', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: guestShellTestOverrides(
-          client: MockClient((_) async => throw UnimplementedError()),
-        )..add(
-          authControllerProvider.overrideWith((ref) {
-            final c = authenticatedAuthController(ref);
-            c.state = c.state.copyWith(isGuest: true);
-            return c;
-          }),
-        ),
+        overrides:
+            guestShellTestOverrides(
+              client: MockClient((_) async => throw UnimplementedError()),
+            )..add(
+              authControllerProvider.overrideWith((ref) {
+                final c = authenticatedAuthController(ref);
+                c.state = c.state.copyWith(isGuest: true);
+                return c;
+              }),
+            ),
         child: const VoiceApp(locale: Locale('en')),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('guest_save_account_reminder')), findsOneWidget);
+    expect(
+      find.byKey(const Key('guest_save_account_reminder')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('guest_save_account_reminder_cta')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -84,10 +90,7 @@ void main() {
     await tester.tap(find.text('Create account'));
     await tester.pump();
 
-    expect(
-      find.text('Enter your email and password.'),
-      findsNWidgets(2),
-    );
+    expect(find.text('Enter your email and password.'), findsNWidgets(2));
     expect(find.byKey(GuestConvertSheet.errorKey), findsNothing);
 
     await tester.enterText(
@@ -175,5 +178,67 @@ void main() {
     );
     expect(find.byKey(GuestConvertSheet.errorKey), findsOneWidget);
     expect(find.text('validation_failed'), findsNothing);
+  });
+
+  testWidgets('convert sheet hides unknown Auth diagnostics', (tester) async {
+    const diagnostic = 'private-conversion-stack-detail';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          discoverHintStorageProvider.overrideWithValue(
+            testDiscoverHintStorage,
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final c = authenticatedAuthController(ref);
+            c.state = c.state.copyWith(isGuest: true);
+            return c;
+          }),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/auth/convert-guest') {
+                return http.Response(
+                  jsonEncode({
+                    'error': 'unknown_conversion_failure',
+                    'message': diagnostic,
+                  }),
+                  500,
+                );
+              }
+              return http.Response('not found', 404);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: GuestConvertSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(GuestConvertSheet.emailFieldKey),
+      'guest@example.com',
+    );
+    await tester.enterText(
+      find.byKey(GuestConvertSheet.passwordFieldKey),
+      'validpass',
+    );
+    await tester.tap(find.text('Create account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('unknown_conversion_failure'), findsNothing);
+    expect(find.text(diagnostic), findsNothing);
   });
 }
