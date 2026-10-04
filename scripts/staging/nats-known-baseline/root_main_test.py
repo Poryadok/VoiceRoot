@@ -4,6 +4,10 @@ import tempfile
 import json
 import hashlib
 import copy
+import ast
+import contextlib
+import io
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +17,24 @@ from controller import archive_closed_store
 
 
 class ResumeGuardTests(unittest.TestCase):
+    def test_operator_error_exposes_only_static_label_or_exception_type(self):
+        self.assertEqual(root_main.operator_error(Blocked('pv_storage_path_unsupported')),'pv_storage_path_unsupported')
+        self.assertEqual(root_main.operator_error(Blocked('PRIVATE_TEST_SEED_OR_STDERR')),'blocked_unclassified')
+        self.assertEqual(root_main.operator_error(KeyError('PRIVATE_TEST_SEED_OR_STDERR')),'exception_KeyError')
+        class PrivateCustomError(Exception):pass
+        self.assertEqual(root_main.operator_error(PrivateCustomError('PRIVATE_TEST_SEED_OR_STDERR')),'exception_unclassified')
+
+    def test_actual_entrypoint_catch_never_prints_private_exception_values(self):
+        tree=ast.parse(Path(root_main.__file__).read_text())
+        entry=tree.body[-1]
+        for error,expected in ((Blocked('pv_storage_node_unsupported'),'pv_storage_node_unsupported'),(KeyError('PRIVATE_SENTINEL'),'exception_KeyError')):
+            def fail(args):raise error
+            output=io.StringIO()
+            with contextlib.redirect_stderr(output),self.assertRaises(SystemExit):
+                exec(compile(ast.Module(body=[entry],type_ignores=[]),'<actual entrypoint>','exec'),{'__name__':'__main__','main':fail,'operator_error':root_main.operator_error,'sys':sys})
+            self.assertEqual(output.getvalue(),'KNOWN_NATS_BASELINE=BLOCKED\nKNOWN_NATS_ERROR='+expected+'\n')
+            self.assertNotIn('PRIVATE_SENTINEL',output.getvalue())
+
     def continuation_fixture(self,d):
         root=Path(d);base=root/'known-baseline-0049430b0dbb';base.mkdir()
         inputs=base/'inputs';inputs.mkdir();(base/'server.conf').write_bytes(b'nonsecret-test-public-config')
@@ -60,7 +82,7 @@ class ResumeGuardTests(unittest.TestCase):
             class Kube:
                 def get(self,kind,name):
                     if kind=='pvc':return {'metadata':{'uid':root_main.CURRENT['source_claim_uid']},'spec':{'volumeName':'original-pv'}}
-                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'hostPath':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']}}}
+                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']},'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
             with patch('root_main.ROOT',root),patch('root_main.Kube',Kube),patch('root_main.revalidate_inputs'),\
                  patch('root_main.Staging') as stage,patch('root_main.DockerRuntime') as runtime:
                 stage.return_value.verify_closed.side_effect=Blocked('maintenance_ownership_changed')
@@ -74,7 +96,7 @@ class ResumeGuardTests(unittest.TestCase):
             class Kube:
                 def get(self,kind,name):
                     if kind=='pvc':return {'metadata':{'uid':root_main.CURRENT['source_claim_uid']},'spec':{'volumeName':'original-pv'}}
-                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'hostPath':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']}}}
+                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']},'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
             class Stage:
                 def __init__(self,kube,operation,expected,save):self.operation=operation;self.save=save
                 def verify_closed(self):calls.append('verify-owned-fence')

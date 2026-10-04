@@ -22,6 +22,27 @@ HUB = 'voice-nats-pvc-candidate'
 MARKER = 'voice-nats-generation'
 NAMESPACE = 'voice-staging'
 
+
+def pv_storage_path(pv, claim_uid, claim_name, pv_uid):
+    """One UID-bound local-path volume on the captured staging node."""
+    uid=r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
+    if (not isinstance(claim_uid,str) or not re.fullmatch(uid,claim_uid) or
+        not isinstance(pv_uid,str) or not re.fullmatch(uid,pv_uid) or
+        not isinstance(claim_name,str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,252}',claim_name)):
+        raise Blocked('pv_storage_identity_invalid')
+    spec=pv.get('spec',{})
+    if pv.get('metadata',{}).get('uid')!=pv_uid or spec.get('claimRef',{}).get('uid')!=claim_uid:
+        raise Blocked('pv_storage_identity_changed')
+    kinds=[key for key in ('local','hostPath') if key in spec]
+    if len(kinds)!=1 or not isinstance(spec[kinds[0]],dict):raise Blocked('pv_storage_kind_unsupported')
+    expected='/var/lib/rancher/k3s/storage/pvc-'+claim_uid+'_'+NAMESPACE+'_'+claim_name
+    if spec[kinds[0]].get('path')!=expected:raise Blocked('pv_storage_path_unsupported')
+    affinity={'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}
+    if spec.get('nodeAffinity')!=affinity:raise Blocked('pv_storage_node_unsupported')
+    # Filesystem custody is checked component-by-component before any final
+    # store read; this selector does not open or mount the source store.
+    return expected
+
 # Fixed typed output: historical ReplicaSet templates can exceed the capture
 # cap. They are irrelevant to physical Pod ownership/PVC writer detection.
 FENCE_TEMPLATE = ('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
@@ -240,9 +261,7 @@ class Staging:
         pv=self.kube.get('pv',current['spec']['volumeName'])
         if pv['spec'].get('claimRef',{}).get('uid')!=claim['metadata']['uid']:
             raise Blocked('final_pv_claim_mismatch')
-        expected='/var/lib/rancher/k3s/storage/pvc-'+claim['metadata']['uid']+'_'+NAMESPACE+'_'+name
-        if pv['spec'].get('hostPath',{}).get('path')!=expected:
-            raise Blocked('final_pv_path_unsupported')
+        expected=pv_storage_path(pv,claim['metadata']['uid'],name,pv['metadata']['uid'])
         # Delete only the exact allocation Pod, then prove no Pod mounts the
         # final claim before handing its directory to the isolated broker.
         self.kube.run(['delete','--raw','/api/v1/namespaces/'+NAMESPACE+'/pods/'+binder,'-f','-'],
@@ -272,7 +291,7 @@ class Staging:
         self.verify_closed()
         claim=self.kube.get('pvc',self.final_claim['metadata']['name'])
         pv=self.kube.get('pv',claim['spec']['volumeName'])
-        if claim['metadata']['uid']!=self.final_claim['metadata']['uid'] or pv['metadata']['uid']!=self.final_pv['metadata']['uid'] or pv['spec'].get('claimRef',{}).get('uid')!=claim['metadata']['uid'] or pv['spec'].get('hostPath',{}).get('path')!=str(self.final_path):
+        if claim['metadata']['uid']!=self.final_claim['metadata']['uid'] or pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],self.final_pv['metadata']['uid'])!=str(self.final_path) or any(pv['spec'].get(k)!=self.final_pv['spec'].get(k) for k in ('local','hostPath')):
             raise Blocked('closed_final_storage_changed')
 
     def select_claim(self):

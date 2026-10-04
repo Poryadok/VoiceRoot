@@ -101,3 +101,12 @@ Failures remain stopped with `VERIFIED` only after observed refencing, otherwise
 `UNKNOWN`; there is no automatic unfence or generic blocked-operation retry.
 Use only the newly reviewed hash-pinned launcher. This does not make historical
 preservation or the separate ACL proof pass.
+
+The observed source PV uses `spec.local.path`, not `spec.hostPath.path`.
+The shared selector accepts exactly one of these forms, bound to the exact
+claim/PV identities, canonical local-path directory and single `pmdebook`
+hostname affinity. Final storage verification also preserves the selected kind.
+An early failure now prints `KNOWN_NATS_ERROR` as a fixed guard label or
+exception type; it never prints exception messages, command output or private
+values. A failed four-hour eligibility guard still requires reviewed recovery,
+and does not silently renew the captured operation.

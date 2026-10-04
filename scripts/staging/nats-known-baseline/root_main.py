@@ -18,7 +18,7 @@ sys.path.insert(0,str(Path(__file__).parent))
 from controller import Blocked, file_sha, archive_closed_store, verify_archive
 from docker_runtime import DockerRuntime
 from scenario import fixture, staging_baseline
-from stage_runtime import Kube, Staging, HUB, MARKER, LEAVES
+from stage_runtime import Kube, Staging, HUB, MARKER, LEAVES, pv_storage_path
 
 ROOT=Path('/var/lib/voice-nats-preservation')
 CURRENT={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
@@ -28,6 +28,18 @@ CURRENT={'namespace_uid':'ac7abaf3-241f-483f-ac33-71086e4dfd32',
          'source_claim':'voice-nats-jsdata-r20260930a4',
          'source_claim_uid':'5fae59b0-aea2-405a-a0f7-287e94a9b6a9',
          'source_pv_uid':'4a11a528-81f9-4404-9757-f4f32c411310'}
+
+
+def operator_error(error):
+    # Never disclose an exception message, command output or private value.
+    public={'pv_storage_identity_invalid','pv_storage_identity_changed','pv_storage_kind_unsupported',
+        'pv_storage_path_unsupported','pv_storage_node_unsupported','fence_continuation_source_changed',
+        'fence_continuation_ttl_invalid','mounted_credential_input_changed','bootstrap_input_changed',
+        'maintenance_ownership_changed','fenced_workload_changed','fence_projection_invalid',
+        'staging_fence_timeout','command_failed','command_output_limit','root_operation_phase_failed'}
+    if isinstance(error,Blocked):return str(error) if str(error) in public else 'blocked_unclassified'
+    types={'TypeError','KeyError','NameError','OSError','ValueError','TimeoutError','FileNotFoundError','PermissionError'}
+    return 'exception_'+type(error).__name__ if type(error).__name__ in types else 'exception_unclassified'
 
 @contextmanager
 def operation_lock():
@@ -334,10 +346,9 @@ def continue_fence(code, base):
     staging=Staging(kube,state['operation'],state['expected'],journal)
     staging.marker=state['marker'];staging.snapshots=state['snapshots'];staging.service=state['service']
     claim=kube.get('pvc',CURRENT['source_claim']);pv=kube.get('pv',claim['spec']['volumeName'])
-    if (claim['metadata']['uid']!=CURRENT['source_claim_uid'] or pv['metadata']['uid']!=CURRENT['source_pv_uid'] or
-        pv['spec'].get('claimRef',{}).get('uid')!=CURRENT['source_claim_uid'] or
-        pv['spec'].get('hostPath',{}).get('path')!='/var/lib/rancher/k3s/storage/pvc-'+CURRENT['source_claim_uid']+'_voice-staging_'+CURRENT['source_claim']):
+    if claim['metadata']['uid']!=CURRENT['source_claim_uid']:
         raise Blocked('fence_continuation_source_changed')
+    pv_storage_path(pv,CURRENT['source_claim_uid'],CURRENT['source_claim'],CURRENT['source_pv_uid'])
     staging.source_claim=claim
     staging.verify_closed() # Read-only ownership/template/zero/mount checks.
     state['previous_code_capture']=state['code_capture'];state['code_capture']=current
@@ -409,5 +420,6 @@ def main(args):
 
 if __name__=='__main__':
     try: main(sys.argv[1:])
-    except Exception:
-        print('KNOWN_NATS_BASELINE=BLOCKED',file=sys.stderr); sys.exit(1)
+    except Exception as error:
+        print('KNOWN_NATS_BASELINE=BLOCKED',file=sys.stderr)
+        print('KNOWN_NATS_ERROR='+operator_error(error),file=sys.stderr);sys.exit(1)

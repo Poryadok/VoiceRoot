@@ -4,11 +4,42 @@ import json
 from unittest.mock import patch
 
 from controller import Blocked
-from stage_runtime import Kube,Staging,MARKER,HUB,LEAVES,fence_objects
+from stage_runtime import Kube,Staging,MARKER,HUB,LEAVES,fence_objects,pv_storage_path
 from docker_runtime import NATS_IMAGE
 
 
 class StageFenceTests(unittest.TestCase):
+    def test_storage_selector_rejects_ambiguity_escape_foreign_node_and_reused_uid(self):
+        uid='5fae59b0-aea2-405a-a0f7-287e94a9b6a9';pvuid='4a11a528-81f9-4404-9757-f4f32c411310';name='voice-nats-jsdata-r20260930a4'
+        expected='/var/lib/rancher/k3s/storage/pvc-'+uid+'_voice-staging_'+name
+        original={'metadata':{'uid':pvuid},'spec':{'claimRef':{'uid':uid},'local':{'path':expected},'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
+        for kind in ('local','hostPath'):
+            row=copy.deepcopy(original);row['spec'][kind]=row['spec'].pop('local')
+            self.assertEqual(pv_storage_path(row,uid,name,pvuid),expected)
+        for label in ('both','none','escape','foreign-node','missing-affinity','claim-reuse','pv-reuse','relative'):
+            with self.subTest(label=label):
+                row=copy.deepcopy(original)
+                if label=='both':row['spec']['hostPath']={'path':expected}
+                if label=='none':del row['spec']['local']
+                if label=='escape':row['spec']['local']['path']=expected+'/../other'
+                if label=='relative':row['spec']['local']['path']='relative'
+                if label=='foreign-node':row['spec']['nodeAffinity']['required']['nodeSelectorTerms'][0]['matchExpressions'][0]['values']=['other']
+                if label=='missing-affinity':del row['spec']['nodeAffinity']
+                if label=='claim-reuse':row['spec']['claimRef']['uid']='00000000-0000-0000-0000-000000000001'
+                if label=='pv-reuse':row['metadata']['uid']='00000000-0000-0000-0000-000000000001'
+                with self.assertRaises(Blocked):pv_storage_path(row,uid,name,pvuid)
+
+    def test_final_storage_accepts_captured_local_pv(self):
+        uid='5fae59b0-aea2-405a-a0f7-287e94a9b6a9';pvuid='4a11a528-81f9-4404-9757-f4f32c411310';name='voice-nats-jsdata-r20260930a4'
+        path='/var/lib/rancher/k3s/storage/pvc-'+uid+'_voice-staging_'+name
+        claim={'metadata':{'uid':uid,'name':name},'spec':{'volumeName':'pv'}}
+        pv={'metadata':{'uid':pvuid},'spec':{'claimRef':{'uid':uid},'local':{'path':path},'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
+        class ReadOnlyKube:
+            def get(self,kind,name):return claim if kind=='pvc' else pv
+        stage=Staging(ReadOnlyKube(),'0049430b0dbb',{},lambda _:self.fail('unexpected mutation'))
+        stage.final_claim=claim;stage.final_pv=pv;stage.final_path=path
+        with patch.object(stage,'verify_closed',return_value={'verified':True}):stage.verify_final_storage()
+
     def test_fence_projection_rejects_malformed_or_unbounded_metadata(self):
         valid={'kind':'Pod','metadata':{'uid':'00000000-0000-0000-0000-000000000001','ownerReferences':[]},'spec':{'volumes':[]}}
         bad=[]
