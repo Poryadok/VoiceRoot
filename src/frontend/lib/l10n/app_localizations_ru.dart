@@ -761,6 +761,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get botInstallActionError => 'Не удалось установить бота.';
 
   @override
+  String get commonActionFailed => 'Не удалось выполнить действие.';
+
+  @override
+  String get socialSearchFailed => 'Не удалось найти людей.';
+
+  @override
   String get spaceBotsUninstallSuccess => 'Бот удалён из спейса.';
 
   @override

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/chats_client.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/folder_pin_providers.dart';
+import '../api_error_messages.dart';
 import 'quick_access_replace_sheet.dart';
 
 /// Add [chatId] to Quick Access; opens replace picker at 15/15 limit.
@@ -37,11 +39,18 @@ Future<void> addChatToQuickAccess(
     switch (addResult) {
       case ChatsApiOk<void>():
         return true;
-      case ChatsApiFailure(:final message):
+      case ChatsApiFailure(:final statusCode):
         ref.invalidate(quickAccessListProvider);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(
+                AppLocalizations.of(context)!,
+                statusCode: statusCode,
+              ),
+            ),
+          ),
+        );
         return false;
     }
   }
@@ -67,7 +76,7 @@ Future<void> addChatToQuickAccess(
   switch (addResult) {
     case ChatsApiOk<void>():
       invalidateChatNavigationData(ref);
-    case ChatsApiFailure(:final errorCode, :final message):
+    case ChatsApiFailure(:final errorCode, :final statusCode):
       if (errorCode == 'failed_precondition') {
         QuickAccessListData refreshed;
         try {
@@ -75,9 +84,16 @@ Future<void> addChatToQuickAccess(
           refreshed = await ref.read(quickAccessListProvider.future);
         } catch (_) {
           if (!context.mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                commonActionErrorMessage(
+                  AppLocalizations.of(context)!,
+                  statusCode: statusCode,
+                ),
+              ),
+            ),
+          );
           return;
         }
         if (!context.mounted) return;
@@ -90,9 +106,16 @@ Future<void> addChatToQuickAccess(
           invalidateChatNavigationData(ref);
         }
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(
+                AppLocalizations.of(context)!,
+                statusCode: statusCode,
+              ),
+            ),
+          ),
+        );
       }
   }
 }

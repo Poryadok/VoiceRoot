@@ -761,6 +761,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get botInstallActionError => 'Unable to install bot.';
 
   @override
+  String get commonActionFailed => 'Could not complete this action.';
+
+  @override
+  String get socialSearchFailed => 'Could not search for people.';
+
+  @override
   String get spaceBotsUninstallSuccess => 'Bot removed from space.';
 
   @override

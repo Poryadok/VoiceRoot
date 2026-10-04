@@ -8,6 +8,7 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/e2e_providers.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_disabled_action.dart';
@@ -134,8 +135,13 @@ class SpaceChatSlowModeSheet extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (result is ChatsApiFailure) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
       );
       return;
     }

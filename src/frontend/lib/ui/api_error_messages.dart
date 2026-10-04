@@ -62,10 +62,7 @@ String socialActionErrorMessage(
   String message, {
   int? statusCode,
 }) {
-  if (isBackendUnavailable(statusCode)) {
-    return l10n.backendUnavailable;
-  }
-  return l10n.socialActionError(message);
+  return commonActionErrorMessage(l10n, statusCode: statusCode);
 }
 
 String chatActionErrorMessage(
@@ -73,10 +70,21 @@ String chatActionErrorMessage(
   String message, {
   int? statusCode,
 }) {
+  return commonActionErrorMessage(l10n, statusCode: statusCode);
+}
+
+String commonActionErrorMessage(AppLocalizations l10n, {int? statusCode}) {
   if (isBackendUnavailable(statusCode)) {
     return l10n.backendUnavailable;
   }
-  return l10n.chatForwardError(message);
+  return l10n.commonActionFailed;
+}
+
+String socialSearchErrorMessage(AppLocalizations l10n, {int? statusCode}) {
+  if (isBackendUnavailable(statusCode)) {
+    return l10n.backendUnavailable;
+  }
+  return l10n.socialSearchFailed;
 }
 
 String spaceRolesErrorMessage(AppLocalizations l10n, Object error) {
