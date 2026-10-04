@@ -1459,3 +1459,196 @@ var VoiceService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "voice/calls/v1/calls.proto",
 }
+
+const (
+	MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName     = "/voice.calls.v1.MatchSquadMemberService/JoinMatchSquadRoom"
+	MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName = "/voice.calls.v1.MatchSquadMemberService/GetMatchSquadJoinToken"
+	MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName    = "/voice.calls.v1.MatchSquadMemberService/LeaveMatchSquadRoom"
+)
+
+// MatchSquadMemberServiceClient is the client API for MatchSquadMemberService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Player self-membership for active MatchSquad rooms. This service is
+// registered only on Voice's dedicated delegated-user listener; ordinary
+// VoiceService methods do not grant MatchSquad access.
+type MatchSquadMemberServiceClient interface {
+	// @voice.security=protected;callers=delegated_user:gateway
+	JoinMatchSquadRoom(ctx context.Context, in *JoinMatchSquadRoomRequest, opts ...grpc.CallOption) (*JoinMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=delegated_user:gateway
+	GetMatchSquadJoinToken(ctx context.Context, in *GetMatchSquadJoinTokenRequest, opts ...grpc.CallOption) (*GetMatchSquadJoinTokenResponse, error)
+	// @voice.security=protected;callers=delegated_user:gateway
+	LeaveMatchSquadRoom(ctx context.Context, in *LeaveMatchSquadRoomRequest, opts ...grpc.CallOption) (*LeaveMatchSquadRoomResponse, error)
+}
+
+type matchSquadMemberServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMatchSquadMemberServiceClient(cc grpc.ClientConnInterface) MatchSquadMemberServiceClient {
+	return &matchSquadMemberServiceClient{cc}
+}
+
+func (c *matchSquadMemberServiceClient) JoinMatchSquadRoom(ctx context.Context, in *JoinMatchSquadRoomRequest, opts ...grpc.CallOption) (*JoinMatchSquadRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinMatchSquadRoomResponse)
+	err := c.cc.Invoke(ctx, MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchSquadMemberServiceClient) GetMatchSquadJoinToken(ctx context.Context, in *GetMatchSquadJoinTokenRequest, opts ...grpc.CallOption) (*GetMatchSquadJoinTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMatchSquadJoinTokenResponse)
+	err := c.cc.Invoke(ctx, MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchSquadMemberServiceClient) LeaveMatchSquadRoom(ctx context.Context, in *LeaveMatchSquadRoomRequest, opts ...grpc.CallOption) (*LeaveMatchSquadRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveMatchSquadRoomResponse)
+	err := c.cc.Invoke(ctx, MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MatchSquadMemberServiceServer is the server API for MatchSquadMemberService service.
+// All implementations must embed UnimplementedMatchSquadMemberServiceServer
+// for forward compatibility.
+//
+// Player self-membership for active MatchSquad rooms. This service is
+// registered only on Voice's dedicated delegated-user listener; ordinary
+// VoiceService methods do not grant MatchSquad access.
+type MatchSquadMemberServiceServer interface {
+	// @voice.security=protected;callers=delegated_user:gateway
+	JoinMatchSquadRoom(context.Context, *JoinMatchSquadRoomRequest) (*JoinMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=delegated_user:gateway
+	GetMatchSquadJoinToken(context.Context, *GetMatchSquadJoinTokenRequest) (*GetMatchSquadJoinTokenResponse, error)
+	// @voice.security=protected;callers=delegated_user:gateway
+	LeaveMatchSquadRoom(context.Context, *LeaveMatchSquadRoomRequest) (*LeaveMatchSquadRoomResponse, error)
+	mustEmbedUnimplementedMatchSquadMemberServiceServer()
+}
+
+// UnimplementedMatchSquadMemberServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedMatchSquadMemberServiceServer struct{}
+
+func (UnimplementedMatchSquadMemberServiceServer) JoinMatchSquadRoom(context.Context, *JoinMatchSquadRoomRequest) (*JoinMatchSquadRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method JoinMatchSquadRoom not implemented")
+}
+func (UnimplementedMatchSquadMemberServiceServer) GetMatchSquadJoinToken(context.Context, *GetMatchSquadJoinTokenRequest) (*GetMatchSquadJoinTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMatchSquadJoinToken not implemented")
+}
+func (UnimplementedMatchSquadMemberServiceServer) LeaveMatchSquadRoom(context.Context, *LeaveMatchSquadRoomRequest) (*LeaveMatchSquadRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LeaveMatchSquadRoom not implemented")
+}
+func (UnimplementedMatchSquadMemberServiceServer) mustEmbedUnimplementedMatchSquadMemberServiceServer() {
+}
+func (UnimplementedMatchSquadMemberServiceServer) testEmbeddedByValue() {}
+
+// UnsafeMatchSquadMemberServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MatchSquadMemberServiceServer will
+// result in compilation errors.
+type UnsafeMatchSquadMemberServiceServer interface {
+	mustEmbedUnimplementedMatchSquadMemberServiceServer()
+}
+
+func RegisterMatchSquadMemberServiceServer(s grpc.ServiceRegistrar, srv MatchSquadMemberServiceServer) {
+	// If the following call pancis, it indicates UnimplementedMatchSquadMemberServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&MatchSquadMemberService_ServiceDesc, srv)
+}
+
+func _MatchSquadMemberService_JoinMatchSquadRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinMatchSquadRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadMemberServiceServer).JoinMatchSquadRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadMemberServiceServer).JoinMatchSquadRoom(ctx, req.(*JoinMatchSquadRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchSquadMemberService_GetMatchSquadJoinToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMatchSquadJoinTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadMemberServiceServer).GetMatchSquadJoinToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadMemberServiceServer).GetMatchSquadJoinToken(ctx, req.(*GetMatchSquadJoinTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchSquadMemberService_LeaveMatchSquadRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveMatchSquadRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadMemberServiceServer).LeaveMatchSquadRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadMemberServiceServer).LeaveMatchSquadRoom(ctx, req.(*LeaveMatchSquadRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// MatchSquadMemberService_ServiceDesc is the grpc.ServiceDesc for MatchSquadMemberService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var MatchSquadMemberService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "voice.calls.v1.MatchSquadMemberService",
+	HandlerType: (*MatchSquadMemberServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "JoinMatchSquadRoom",
+			Handler:    _MatchSquadMemberService_JoinMatchSquadRoom_Handler,
+		},
+		{
+			MethodName: "GetMatchSquadJoinToken",
+			Handler:    _MatchSquadMemberService_GetMatchSquadJoinToken_Handler,
+		},
+		{
+			MethodName: "LeaveMatchSquadRoom",
+			Handler:    _MatchSquadMemberService_LeaveMatchSquadRoom_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "voice/calls/v1/calls.proto",
+}

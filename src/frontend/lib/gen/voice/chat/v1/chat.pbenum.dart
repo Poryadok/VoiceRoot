@@ -61,5 +61,32 @@ class MatchSquadTeardownStatus extends $pb.ProtobufEnum {
   const MatchSquadTeardownStatus._(super.value, super.name);
 }
 
+class MatchSquadChatCompactionStatus extends $pb.ProtobufEnum {
+  static const MatchSquadChatCompactionStatus
+      MATCH_SQUAD_CHAT_COMPACTION_STATUS_UNSPECIFIED =
+      MatchSquadChatCompactionStatus._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'MATCH_SQUAD_CHAT_COMPACTION_STATUS_UNSPECIFIED');
+  static const MatchSquadChatCompactionStatus
+      MATCH_SQUAD_CHAT_COMPACTION_STATUS_COMPACTED =
+      MatchSquadChatCompactionStatus._(1,
+          _omitEnumNames ? '' : 'MATCH_SQUAD_CHAT_COMPACTION_STATUS_COMPACTED');
+
+  static const $core.List<MatchSquadChatCompactionStatus> values =
+      <MatchSquadChatCompactionStatus>[
+    MATCH_SQUAD_CHAT_COMPACTION_STATUS_UNSPECIFIED,
+    MATCH_SQUAD_CHAT_COMPACTION_STATUS_COMPACTED,
+  ];
+
+  static final $core.List<MatchSquadChatCompactionStatus?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static MatchSquadChatCompactionStatus? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MatchSquadChatCompactionStatus._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

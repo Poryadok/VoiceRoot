@@ -1465,6 +1465,14 @@ class MatchSquadChatServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CompactMatchSquadChatResponse> compactMatchSquadChat(
+    $0.CompactMatchSquadChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$compactMatchSquadChat, request, options: options);
+  }
+
   // method descriptors
 
   static final _$createMatchSquadChat = $grpc.ClientMethod<
@@ -1477,6 +1485,11 @@ class MatchSquadChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.MatchSquadChatService/TeardownMatchSquadChat',
       ($0.TeardownMatchSquadChatRequest value) => value.writeToBuffer(),
       $0.TeardownMatchSquadChatResponse.fromBuffer);
+  static final _$compactMatchSquadChat = $grpc.ClientMethod<
+          $0.CompactMatchSquadChatRequest, $0.CompactMatchSquadChatResponse>(
+      '/voice.chat.v1.MatchSquadChatService/CompactMatchSquadChat',
+      ($0.CompactMatchSquadChatRequest value) => value.writeToBuffer(),
+      $0.CompactMatchSquadChatResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.MatchSquadChatService')
@@ -1502,6 +1515,15 @@ abstract class MatchSquadChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.TeardownMatchSquadChatRequest.fromBuffer(value),
         ($0.TeardownMatchSquadChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompactMatchSquadChatRequest,
+            $0.CompactMatchSquadChatResponse>(
+        'CompactMatchSquadChat',
+        compactMatchSquadChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompactMatchSquadChatRequest.fromBuffer(value),
+        ($0.CompactMatchSquadChatResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.CreateMatchSquadChatResponse> createMatchSquadChat_Pre(
@@ -1521,4 +1543,13 @@ abstract class MatchSquadChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.TeardownMatchSquadChatResponse> teardownMatchSquadChat(
       $grpc.ServiceCall call, $0.TeardownMatchSquadChatRequest request);
+
+  $async.Future<$0.CompactMatchSquadChatResponse> compactMatchSquadChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CompactMatchSquadChatRequest> $request) async {
+    return compactMatchSquadChat($call, await $request);
+  }
+
+  $async.Future<$0.CompactMatchSquadChatResponse> compactMatchSquadChat(
+      $grpc.ServiceCall call, $0.CompactMatchSquadChatRequest request);
 }
