@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import tempfile
 import time
 
 from controller import Blocked, verify_archive
@@ -88,4 +89,27 @@ def staging_baseline(runtime, store):
     restored,receipt=closed_backup(runtime,broker,store,'staging-baseline',before,0)
     runtime.stop(restored)
     receipt['closed_census']=before
+    return receipt
+
+
+def recover_staging_baseline(runtime, store, fixture_manifest, before_start):
+    # Config authority comes from the already hash-bound fixture archive, not
+    # an unjournaled old census file or a newly invented configuration hash.
+    parent=Path(tempfile.mkdtemp(prefix='recovery-reference-',dir=runtime.base))
+    target=parent/'store'
+    runtime.restore(runtime.base/'fixture.tar',target,fixture_manifest)
+    reference=runtime.start_broker('recovery-reference',target);ready(runtime,reference)
+    expected=census(runtime,reference);runtime.stop(reference)
+    before_start() # Revalidate the physical fence and new paused-store cut.
+    broker=runtime.start_broker('final-baseline',store);ready(runtime,broker)
+    before=census(runtime,broker)
+    def configs(row):
+        return ([{k:s[k] for k in ('name','config_sha256')} for s in row['streams']],
+                [{k:c[k] for k in ('stream','name','config_sha256')} for c in row['consumers']])
+    if not zero(before) or configs(before)!=configs(expected):
+        raise Blocked('recovery_baseline_census_changed')
+    restored,receipt=closed_backup(runtime,broker,store,'staging-baseline',before,0)
+    runtime.stop(restored)
+    receipt['closed_census']=before
+    receipt['configuration_authority']='isolated INFO census of hash-bound fixture archive'
     return receipt
