@@ -1,62 +1,64 @@
+@import './tokens.css';
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
-  background: #0f1115;
-  color: #e8eaed;
+  background: var(--color-background-canvas);
+  color: var(--color-text-primary);
 }
 
 .page {
   max-width: 720px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: var(--space-32);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-16);
 }
 
 label {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-8);
 }
 
 input,
 textarea {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #3a3f4b;
-  background: #1a1d24;
+  padding: var(--space-8);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-background-surface);
   color: inherit;
 }
 
 .actions {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-12);
 }
 
 button {
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-md);
   border: none;
-  background: #5865f2;
-  color: white;
+  background: var(--profile-accent-0);
+  color: var(--color-background-canvas);
   cursor: pointer;
 }
 
 .hint,
 .status {
-  color: #9aa0a6;
+  color: var(--color-text-secondary);
 }
 
 .status.error {
-  color: #f28b82;
+  color: var(--color-semantic-error);
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-16);
 }
 
 .bot-list {
@@ -64,11 +66,11 @@ button {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-8);
 }
 
 .bot-list button.selected {
-  outline: 2px solid #5865f2;
+  outline: 2px solid var(--color-focus-ring);
 }
 
 code {
@@ -76,20 +78,20 @@ code {
 }
 
 .catalog {
-  border: 1px solid #3a3f4b;
-  border-radius: 8px;
-  padding: 1rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-16);
 }
 
 .command-catalog-list {
-  margin: 0.5rem 0 0;
-  padding-left: 1.25rem;
+  margin: var(--space-8) 0 0;
+  padding-left: var(--space-20);
 }
 
 .command-catalog-list ul {
-  margin: 0.25rem 0 0.75rem;
-  padding-left: 1.25rem;
-  color: #9aa0a6;
+  margin: var(--space-4) 0 var(--space-12);
+  padding-left: var(--space-20);
+  color: var(--color-text-secondary);
 }
 
 .secret-dialog-backdrop {
@@ -97,19 +99,19 @@ code {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 1rem;
-  background: rgb(0 0 0 / 65%);
+  padding: var(--space-16);
+  background: var(--color-background-overlay);
 }
 
 .secret-dialog {
   width: min(100%, 560px);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  border: 1px solid #3a3f4b;
-  border-radius: 8px;
-  background: #1a1d24;
+  gap: var(--space-16);
+  padding: var(--space-24);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-background-surface);
 }
 
 .secret-dialog h2,
@@ -121,10 +123,11 @@ code {
 .secret-value {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-8);
 }
 
 button.secondary {
   align-self: flex-end;
-  background: #3a3f4b;
+  background: var(--color-background-muted);
+  color: var(--color-text-primary);
 }
