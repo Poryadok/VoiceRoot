@@ -82,4 +82,32 @@ void main() {
       l10n.backendUnavailable,
     );
   });
+
+  test('settings load errors keep only known mappings and safe fallback', () {
+    expect(
+      settingsLoadErrorMessage(
+        l10n,
+        'internal trace id=settings-secret',
+        fallback: l10n.privacyLoadError,
+      ),
+      l10n.privacyLoadError,
+    );
+    expect(
+      settingsLoadErrorMessage(
+        l10n,
+        'not authenticated',
+        fallback: l10n.privacyLoadError,
+      ),
+      l10n.settingsNotAuthenticated,
+    );
+    expect(
+      settingsLoadErrorMessage(
+        l10n,
+        'ignored',
+        statusCode: 503,
+        fallback: l10n.privacyLoadError,
+      ),
+      l10n.backendUnavailable,
+    );
+  });
 }

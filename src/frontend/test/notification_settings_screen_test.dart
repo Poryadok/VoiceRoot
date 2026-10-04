@@ -298,4 +298,57 @@ void main() {
     expect(find.text(l10n.backendUnavailable), findsOneWidget);
     expect(find.text(upstreamDetail), findsNothing);
   });
+
+  testWidgets('notification load errors use safe copy and preserve 503 map', (
+    tester,
+  ) async {
+    const upstreamDetail = 'private notification load diagnostic';
+    var settingsGets = 0;
+    final quietStorage = _InMemoryQuietHoursStorage();
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
+        settingsGets++;
+        return http.Response(
+          jsonEncode({'error_code': 'internal', 'message': upstreamDetail}),
+          settingsGets == 1 ? 500 : 503,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceAppTestOverrides(client: client),
+          notificationQuietHoursStorageProvider.overrideWithValue(quietStorage),
+          pushNotificationsControllerProvider.overrideWith(
+            (ref) => _FakePushNotificationsController(ref),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: NotificationSettingsScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(upstreamDetail), findsNothing);
+    expect(find.text('Could not load notification settings'), findsWidgets);
+
+    final l10n = await AppLocalizations.delegate.load(const Locale('en'));
+    await tester.tap(find.text(l10n.commonRetry));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.backendUnavailable), findsOneWidget);
+    expect(find.text(upstreamDetail), findsNothing);
+  });
 }
