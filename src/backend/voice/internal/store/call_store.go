@@ -73,10 +73,13 @@ type ParticipantState struct {
 }
 
 type Call struct {
-	RoomID             string                      `json:"room_id"`
-	LivekitRoomName    string                      `json:"livekit_room_name"`
-	ChatID             string                      `json:"chat_id"`
-	ManagedGameSession bool                        `json:"managed_game_session,omitempty"`
+	RoomID             string `json:"room_id"`
+	LivekitRoomName    string `json:"livekit_room_name"`
+	ChatID             string `json:"chat_id"`
+	ManagedGameSession bool   `json:"managed_game_session,omitempty"`
+	// MatchSquadMatchID marks a Redis call document as a repairable projection
+	// of an exact current MatchSquad row. It never grants authorization.
+	MatchSquadMatchID  string                      `json:"match_squad_match_id,omitempty"`
 	ApplicationID      string                      `json:"application_id,omitempty"`
 	EnvironmentID      string                      `json:"environment_id,omitempty"`
 	SessionID          string                      `json:"session_id,omitempty"`
@@ -238,6 +241,7 @@ func (s *MemoryCallStore) GetActiveGroupCallForChat(_ context.Context, chatID st
 	for _, call := range s.calls {
 		if call.IsGroupVoice() &&
 			!call.ManagedGameSession &&
+			call.MatchSquadMatchID == "" &&
 			call.ChatID == chatID &&
 			call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			return call, nil

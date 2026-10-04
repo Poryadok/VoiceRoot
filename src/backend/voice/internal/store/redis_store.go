@@ -49,7 +49,7 @@ func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error
 	if call.IsVoiceRoom() {
 		keys = append(keys, s.activeVoiceRoomKey(call.VoiceRoomID))
 	}
-	if call.IsGroupVoice() && !call.ManagedGameSession {
+	if call.IsGroupVoice() && !call.ManagedGameSession && call.MatchSquadMatchID == "" {
 		keys = append(keys, s.activeChatKey(call.ChatID))
 	}
 	for _, profileID := range call.ProfileIDs() {
@@ -126,7 +126,7 @@ func (s *RedisCallStore) GetActiveGroupCallForChat(ctx context.Context, chatID s
 	if err != nil {
 		return Call{}, err
 	}
-	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+	if !call.IsGroupVoice() || call.MatchSquadMatchID != "" || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		_ = s.deleteIfValue(ctx, s.activeChatKey(chatID), roomID)
 		return Call{}, ErrNotFound
 	}
@@ -200,7 +200,7 @@ func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, prof
 				}
 				delete(call.States, profileID)
 				call = removeScreenSharesForProfile(call, profileID)
-				if len(call.States) == 0 && !call.ManagedGameSession {
+				if len(call.States) == 0 && !call.ManagedGameSession && call.MatchSquadMatchID == "" {
 					call.Status, call.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()
 				}
 			} else {
@@ -435,7 +435,7 @@ func (s *RedisCallStore) mutateCall(ctx context.Context, roomID string, mutate f
 		if before.IsVoiceRoom() {
 			keys = append(keys, s.activeVoiceRoomKey(before.VoiceRoomID))
 		}
-		if before.IsGroupVoice() {
+		if before.IsGroupVoice() && !before.ManagedGameSession && before.MatchSquadMatchID == "" {
 			keys = append(keys, s.activeChatKey(before.ChatID))
 		}
 		for _, profileID := range before.ProfileIDs() {
@@ -478,7 +478,7 @@ func (s *RedisCallStore) mutateCall(ctx context.Context, roomID string, mutate f
 
 func (s *RedisCallStore) writeCallProjection(pipe redis.Pipeliner, ctx context.Context, call Call, payload []byte) {
 	pipe.Set(ctx, s.callKey(call.RoomID), payload, 24*time.Hour)
-	if call.IsGroupVoice() && !call.ManagedGameSession && call.ChatID != "" {
+	if call.IsGroupVoice() && !call.ManagedGameSession && call.MatchSquadMatchID == "" && call.ChatID != "" {
 		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			pipe.Set(ctx, s.activeChatKey(call.ChatID), call.RoomID, 24*time.Hour)
 		} else {

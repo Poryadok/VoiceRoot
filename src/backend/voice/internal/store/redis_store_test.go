@@ -72,6 +72,49 @@ func TestRedisCallStore_PersistsGroupVoiceLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeaveEnds(t *testing.T) {
+	ctx := context.Background()
+	store, client := newRedisCallStoreForTest(t, "voice-match-squad-projection:")
+
+	ordinary, err := store.CreateCall(ctx, Call{
+		RoomID: "ordinary-room", ChatID: "ordinary-chat", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "ordinary-member", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	ended, err := store.RemoveParticipant(ctx, ordinary.RoomID, "ordinary-member")
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ENDED, ended.Status, "ordinary empty groups keep existing terminal behavior")
+	_, err = client.Get(ctx, store.activeChatKey(ordinary.ChatID)).Result()
+	require.ErrorIs(t, err, redis.Nil)
+
+	match, err := store.CreateCall(ctx, Call{
+		RoomID: "match-room", ChatID: "match-chat", MatchSquadMatchID: "match-id",
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: "match-member", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
+	require.ErrorIs(t, err, redis.Nil, "a MatchSquad projection must never claim ordinary Chat discovery")
+	left, err := store.RemoveParticipant(ctx, match.RoomID, "match-member")
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, left.Status, "PostgreSQL teardown owns MatchSquad terminal transition")
+	require.Empty(t, left.States)
+	require.Equal(t, "match-id", left.MatchSquadMatchID)
+	projected, err := store.GetCall(ctx, match.RoomID)
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, projected.Status)
+	require.Empty(t, projected.States)
+	_, err = client.Get(ctx, store.activeKey("match-member")).Result()
+	require.ErrorIs(t, err, redis.Nil, "last leave releases the disposable Redis profile projection")
+	require.NoError(t, client.Set(ctx, store.activeChatKey(match.ChatID), match.RoomID, time.Minute).Err(), "seed a stale legacy Chat index")
+	_, err = store.GetActiveGroupCallForChat(ctx, match.ChatID)
+	require.ErrorIs(t, err, ErrNotFound, "a stale Chat index cannot turn a MatchSquad marker into ordinary call authority")
+	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
+	require.ErrorIs(t, err, redis.Nil, "the stale index is removed only when it points at the marked resource")
+}
+
 func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-test:")

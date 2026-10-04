@@ -29,6 +29,8 @@ import (
 	"voice/backend/voice/internal/gameprovision"
 	grpcsvc "voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/livekit"
+	"voice/backend/voice/internal/matchsquad"
+	"voice/backend/voice/internal/matchsquadprincipal"
 	"voice/backend/voice/internal/principalgrpc"
 	"voice/backend/voice/internal/principaljwks"
 	"voice/backend/voice/internal/rolegrant"
@@ -129,16 +131,55 @@ func main() {
 		log.Fatal("Voice Role grant checker requires the Voice service principal signer")
 	}
 	var callStore voicestore.CallStore
+	var callProjectionRedis *redis.Client
 	if redisAddr := strings.TrimSpace(os.Getenv("VOICE_REDIS_ADDR")); redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     redisAddr,
 			Password: strings.TrimSpace(os.Getenv("VOICE_REDIS_PASSWORD")),
 		})
+		callProjectionRedis = rdb
 		defer func() { _ = rdb.Close() }()
 		callStore = voicestore.NewRedisCallStore(rdb, strings.TrimSpace(os.Getenv("VOICE_REDIS_PREFIX")))
 	} else {
 		callStore = voicestore.NewMemoryCallStore()
 		logger.Warn("VOICE_REDIS_ADDR not set; using in-memory call store")
+	}
+	matchSquadConfig, matchSquadEnabled, err := matchsquadprincipal.LoadFromEnv(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("voice MatchSquad principal configuration: %v", err)
+	}
+	var matchSquadRuntime *matchsquadprincipal.Runtime
+	var matchSquadServer *grpc.Server
+	var matchSquadListener net.Listener
+	if matchSquadEnabled {
+		if !lifecycleEnabled || lifecyclePool == nil || callProjectionRedis == nil {
+			log.Fatal("Voice MatchSquad requires the Voice lifecycle database and durable Redis projection")
+		}
+		matchSquadRuntime, err = matchsquadprincipal.New(runCtx, matchSquadConfig)
+		if err != nil {
+			log.Fatalf("voice MatchSquad principal runtime: %v", err)
+		}
+		defer func() { _ = matchSquadRuntime.Close() }()
+		controller := &matchsquad.Service{
+			Pool: lifecyclePool, Calls: callStore,
+			Effects: livekit.NewSDKRoomLifecycle(strings.TrimSpace(os.Getenv("LIVEKIT_URL")), strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")), strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET"))),
+			Now:     time.Now,
+		}
+		if err := controller.CheckSchema(runCtx); err != nil {
+			log.Fatalf("voice MatchSquad database schema: %v", err)
+		}
+		matchSquadListener, err = net.Listen("tcp", matchSquadConfig.ListenerAddr)
+		if err != nil {
+			log.Fatalf("voice MatchSquad listener: %v", err)
+		}
+		matchSquadServer = grpc.NewServer(matchSquadRuntime.ServerOptions()...)
+		callsv1.RegisterMatchSquadVoiceServiceServer(matchSquadServer, &grpcsvc.MatchSquadVoiceGRPC{Controller: controller})
+		go func() {
+			logger.Info("MatchSquad protected listener started", slog.String("addr", matchSquadConfig.ListenerAddr))
+			if serveErr := matchSquadServer.Serve(matchSquadListener); serveErr != nil {
+				logger.Error("MatchSquad protected listener stopped", slog.String("error", serveErr.Error()))
+			}
+		}()
 	}
 	var gamePrincipalRuntime *gameprincipal.Runtime
 	var gameProvisionServer *grpc.Server
@@ -449,6 +490,12 @@ func main() {
 		}
 		if gameProvisionListener != nil {
 			_ = gameProvisionListener.Close()
+		}
+		if matchSquadServer != nil {
+			matchSquadServer.GracefulStop()
+		}
+		if matchSquadListener != nil {
+			_ = matchSquadListener.Close()
 		}
 	}
 }

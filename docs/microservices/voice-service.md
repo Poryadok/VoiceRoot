@@ -481,3 +481,34 @@ terminally fences Space room/session/grant rows and Redis keys. It binds the
 root manifest without inventing chat-owned work. Full request/receipt bytes
 retain 30 days from this participant's completion; the compact max-generation
 `PURGED` fence is permanent.
+# MatchSquad room provider
+
+Voice exposes the typed `MatchSquadVoiceService` only on its dedicated protected
+listener. `VOICE_MATCH_SQUAD_PRINCIPAL_*` is disabled only when every variable
+in that namespace is absent. Partial configuration, missing Voice lifecycle
+schema, unavailable JWKS or replay Redis, invalid TLS material, and listener
+startup failure prevent the capability from starting. The listener uses
+mutual TLS and accepts only the exact create and teardown methods with a
+request-bound `service:matchmaking` principal.
+
+`voice_room_instances` owns the current MatchSquad resource and its
+`active`/`closing`/`closed` state. `voice_match_squad_operations` binds the
+creation and teardown operation IDs to exact request and receipt bytes, the
+Matchmaking receipt, participant manifest, and permanent replay/terminal
+fences. A repeated operation with matching bytes returns its stored receipt;
+changed bytes conflict. The resource is never reopened after teardown begins.
+
+Redis call records and LiveKit rooms are repairable effects using the same
+room UUID and deterministic `match-squad-<room UUID>` LiveKit name. A Redis
+MatchSquad marker is a projection label only. It does not authenticate a
+caller or grant membership, and ordinary call join, media-token, leave, and
+end operations reject marked rooms. Redis profile indexes are not authority;
+projection repair cannot replace a conflicting active profile lock or an
+open divergent call document. Teardown commits its completed receipt only
+after the database resource is closed and Redis/LiveKit effects are confirmed
+or absent.
+
+Full operation bytes remain stored until an aggregate-completion retention
+signal can establish the start of the 30-day retention interval. Voice does
+not infer this interval from its own teardown clock. The migration refuses
+DOWN while any operation or permanent fence remains.
