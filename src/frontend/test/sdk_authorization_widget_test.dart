@@ -5,14 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/sdk_authorization_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/state/sdk_authorization_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/sdk/sdk_authorization_screens.dart';
 
 void main() {
@@ -240,6 +246,44 @@ void main() {
     },
   );
 
+  testWidgets('localizes temporary consent approval failures', (tester) async {
+    await _pumpConsentApprovalFailure(tester, status: 503);
+
+    expect(
+      find.text(
+        'Voice временно недоступен. Попробуйте подтвердить запрос ещё раз или начните подключение заново в игре.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('upstream-sensitive-diagnostic'), findsNothing);
+  });
+
+  testWidgets('localizes definitive consent approval failures', (tester) async {
+    await _pumpConsentApprovalFailure(tester, status: 403);
+
+    expect(
+      find.text('Авторизация отклонена. Начните подключение заново в игре.'),
+      findsOneWidget,
+    );
+    expect(find.text('upstream-sensitive-diagnostic'), findsNothing);
+  });
+
+  testWidgets('localizes malformed consent approval responses', (tester) async {
+    await _pumpConsentApprovalFailure(
+      tester,
+      status: 200,
+      body: '{"unexpected":"upstream-sensitive-diagnostic"}',
+    );
+
+    expect(
+      find.text(
+        'Ответ авторизации некорректен. Начните подключение заново в игре.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('upstream-sensitive-diagnostic'), findsNothing);
+  });
+
   testWidgets(
     'retries transient device signer failure without exchanging callback code again',
     (tester) async {
@@ -345,6 +389,90 @@ void main() {
       expect(await sessions.read(), isNull);
     },
   );
+}
+
+Future<void> _pumpConsentApprovalFailure(
+  WidgetTester tester, {
+  required int status,
+  String? body,
+}) async {
+  const voiceBearer = 'voice-session';
+  const baseUrl = 'https://voice.example';
+  const testProfile = VoiceProfile(
+    id: 'voice-profile',
+    accountId: 'voice-account',
+    username: 'player',
+    discriminator: '1234',
+    displayName: 'Player',
+  );
+  final gateway = GatewayHttpClient(
+    httpClient: MockClient((request) async {
+      if (request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'requestId': 'request',
+            'applicationId': 'trusted-app',
+            'environmentId': 'production',
+            'displayName': 'Example Game',
+            'scopes': ['game.identity.read'],
+            'gameSubject': 'player-42',
+            'policyRevision': 4,
+            'expiresAt': '2030-01-01T00:00:00Z',
+          }),
+          200,
+        );
+      }
+      return http.Response(
+        body ?? '{"error":"upstream-sensitive-diagnostic"}',
+        status,
+      );
+    }),
+    config: const GatewayConfig(baseUrl: baseUrl),
+  );
+  final client = SdkAuthorizationClient(
+    gateway: gateway,
+    handoffStorage: _MemoryHandoffs(null),
+    linkedSessionStorage: _MemoryLinkedSessions(),
+    proofSigner: (_, _) async => 'signed-proof',
+  );
+  final auth =
+      AuthController(
+          authClient: VoiceAuthClient(gateway: gateway),
+          storage: InMemoryAuthSessionStorage(),
+          guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
+        )
+        ..state = const AuthState(
+          session: AuthSession(
+            accessToken: voiceBearer,
+            refreshToken: 'refresh-token',
+            accountId: 'voice-account',
+            activeProfileId: 'voice-profile',
+            expiresInSeconds: 900,
+            accountType: 'regular',
+          ),
+        );
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authControllerProvider.overrideWith((ref) => auth),
+        myProfilesProvider.overrideWith((ref) async => [testProfile]),
+        sdkAuthorizationClientProvider.overrideWithValue(client),
+      ],
+      child: MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const SdkAuthorizationConsentScreen(requestId: 'request'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.byType(RadioListTile<String>));
+  await tester.pump();
+  await tester.tap(find.text('Разрешить'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 class _MemoryHandoffs implements SdkAuthorizationHandoffStorage {

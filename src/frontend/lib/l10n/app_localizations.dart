@@ -116,6 +116,24 @@ abstract class AppLocalizations {
   /// **'Could not load authorization details.'**
   String get sdkAuthorizationLoadError;
 
+  /// No description provided for @sdkAuthorizationTemporaryFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice is temporarily unavailable. Try approving again or restart the authorization from the game.'**
+  String get sdkAuthorizationTemporaryFailure;
+
+  /// No description provided for @sdkAuthorizationDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization was denied. Start again from the game.'**
+  String get sdkAuthorizationDenied;
+
+  /// No description provided for @sdkAuthorizationInvalidResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The authorization response was invalid. Start again from the game.'**
+  String get sdkAuthorizationInvalidResponse;
+
   /// No description provided for @sdkAuthorizationApplication.
   ///
   /// In en, this message translates to:

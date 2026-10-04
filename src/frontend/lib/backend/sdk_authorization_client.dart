@@ -18,10 +18,21 @@ class SdkDeviceProofSigningException implements Exception {
   final bool isRetryable;
 }
 
+enum SdkAuthorizationErrorPresentation {
+  temporary,
+  authorizationDenied,
+  invalidResponse,
+}
+
 class SdkAuthorizationException implements Exception {
-  const SdkAuthorizationException(this.message, {this.canRetryResume = false});
+  const SdkAuthorizationException(
+    this.message, {
+    this.canRetryResume = false,
+    this.presentation,
+  });
   final String message;
   final bool canRetryResume;
+  final SdkAuthorizationErrorPresentation? presentation;
   @override
   String toString() => 'SdkAuthorizationException: $message';
 }
@@ -428,6 +439,7 @@ class SdkAuthorizationClient {
         !_validCode(code.single)) {
       throw const SdkAuthorizationException(
         'Auth returned an invalid callback',
+        presentation: SdkAuthorizationErrorPresentation.invalidResponse,
       );
     }
     return SdkAuthorizationApproval(
@@ -587,9 +599,15 @@ class SdkAuthorizationClient {
             ? 'Voice is temporarily unavailable.'
             : 'The authorization was denied. Start again from the game.',
         canRetryResume: retryable,
+        presentation: retryable
+            ? SdkAuthorizationErrorPresentation.temporary
+            : SdkAuthorizationErrorPresentation.authorizationDenied,
       );
     }
-    throw const SdkAuthorizationException('unexpected Auth response');
+    throw const SdkAuthorizationException(
+      'unexpected Auth response',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
 
   String _randomToken(int length) {
@@ -646,7 +664,10 @@ class SdkAuthorizationClient {
 String _requiredString(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String || value.isEmpty) {
-    throw SdkAuthorizationException('Auth response missing $key');
+    throw SdkAuthorizationException(
+      'Auth response missing $key',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
   return value;
 }
@@ -654,7 +675,10 @@ String _requiredString(Map<String, dynamic> json, String key) {
 int _requiredInt(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! int || value < 1) {
-    throw SdkAuthorizationException('Auth response missing $key');
+    throw SdkAuthorizationException(
+      'Auth response missing $key',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
   return value;
 }
@@ -662,7 +686,10 @@ int _requiredInt(Map<String, dynamic> json, String key) {
 Set<String> _stringSet(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! List || value.any((item) => item is! String)) {
-    throw SdkAuthorizationException('Auth response has invalid $key');
+    throw SdkAuthorizationException(
+      'Auth response has invalid $key',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
   return value.cast<String>().toSet();
 }
@@ -670,11 +697,17 @@ Set<String> _stringSet(Map<String, dynamic> json, String key) {
 DateTime _date(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String) {
-    throw SdkAuthorizationException('Auth response missing $key');
+    throw SdkAuthorizationException(
+      'Auth response missing $key',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
   final parsed = DateTime.tryParse(value)?.toUtc();
   if (parsed == null) {
-    throw SdkAuthorizationException('Auth response has invalid $key');
+    throw SdkAuthorizationException(
+      'Auth response has invalid $key',
+      presentation: SdkAuthorizationErrorPresentation.invalidResponse,
+    );
   }
   return parsed;
 }

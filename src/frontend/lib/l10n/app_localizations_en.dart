@@ -19,6 +19,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not load authorization details.';
 
   @override
+  String get sdkAuthorizationTemporaryFailure =>
+      'Voice is temporarily unavailable. Try approving again or restart the authorization from the game.';
+
+  @override
+  String get sdkAuthorizationDenied =>
+      'Authorization was denied. Start again from the game.';
+
+  @override
+  String get sdkAuthorizationInvalidResponse =>
+      'The authorization response was invalid. Start again from the game.';
+
+  @override
   String get sdkAuthorizationApplication => 'Application';
 
   @override
