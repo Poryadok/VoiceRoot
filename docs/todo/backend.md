@@ -571,7 +571,7 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Social] No `s2s` privacy tests** — `src/backend/social/internal/s2s/privacy.go` (`GRPCUserPrivacy`, `GRPCSpaceCoMembership`) untested; only `auth_phone_hash_test.go` in `s2s/`.
-- [ ] **[Social] Test helper ≠ production wiring** — `src/backend/social/testsocial/bufconn_server.go` omits `Privacy`, `PhoneHashes`, `SpaceCoMembership` wired in `main.go`.
+- [x] **[Social / BE-142] Bufconn test helper accepts explicit production contract dependencies** — `NewBufconnClient` requires `AccountProfiles` and passes through caller-supplied `Privacy`, `PhoneSearchPrivacy`, `PhoneHashes`, and `SpaceCoMembership`; focused bufconn coverage proves User privacy and Space membership forwarding and fail-closed denial. Phone contact sync remains disabled; this does not claim runtime phone-sync coverage. — `src/backend/social/testsocial/bufconn_server.go`, `bufconn_server_test.go`
 - [ ] **[Social] Flutter client surface incomplete** — `friends_client.dart` now has contacts/favorites (**Batch 23b**), `listBlocked`/`unblockAccount` + Blocked tab (**Batch 24a**), `syncPhoneContacts` stub + Contacts tab action (**Batch 25a**), QR add friend UI (**Batch 26a**). Gateway exposes phone sync (`transcode_friends.go`). **Deferred:** live camera QR scanner (paste link works).
 
 ### User

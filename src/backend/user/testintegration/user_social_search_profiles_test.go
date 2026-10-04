@@ -103,10 +103,10 @@ func TestSearchProfiles_UserSocialIntegration(t *testing.T) {
 	viewerPID := uuid.New()
 	targetPID := uuid.New()
 
-	socialConn, stopSocial := testsocial.NewBufconnClient(t, socialPool, integrationAccountProfiles{
+	socialConn, stopSocial := testsocial.NewBufconnClient(t, socialPool, testsocial.Dependencies{AccountProfiles: integrationAccountProfiles{
 		accountViewer: {viewerPID},
 		accountTarget: {targetPID},
-	})
+	}})
 	t.Cleanup(stopSocial)
 	socialCli := socialv1.NewSocialServiceClient(socialConn)
 
