@@ -8,8 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/principal"
 )
 
@@ -70,7 +70,7 @@ func (s *MatchSquadChatGRPC) CompactMatchSquadChat(ctx context.Context, req *cha
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid MatchSquad compaction request")
 	}
-	receiptBytes, err := s.Store.Compact(ctx, MatchSquadCompaction{
+	receiptBytes, err := s.Store.Compact(ctx, store.MatchSquadCompaction{
 		OperationID: operationID, AggregateID: aggregateID, MatchID: matchID, ChatID: chatID,
 		CreationReceiptID: creationReceiptID, CreationRequestSHA256: req.GetCreationRequestSha256(),
 		TeardownOperationID: teardownOperationID, TeardownReceiptID: teardownReceiptID,
