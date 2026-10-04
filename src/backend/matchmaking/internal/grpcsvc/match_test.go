@@ -152,6 +152,29 @@ func TestRespondToMatch_AcceptAllActivatesMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", got.GetMatch().GetStatus())
 	require.Len(t, got.GetMatch().GetProfileIds(), 2)
+	require.Equal(t, store.ProposalResponseAccepted, got.GetOwnProposalResponse())
+	require.Equal(t, store.SessionStatusMatched, got.GetOwnSearchSession().GetStatus())
+	require.Equal(t, got.GetMatch().GetCreatedAt().AsTime().Add(store.MatchAcceptWindow), got.GetAcceptanceDeadlineAt().AsTime())
+	require.True(t, got.GetServerNow().IsValid())
+}
+
+func TestGetMatch_AtDeadlineReturnsServerRecoveryState(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, _, profileB := seedPendingDuoMatch(t, ctx, srv)
+	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = clock_timestamp() - interval '31 seconds' WHERE id = $1`, uuid.MustParse(matchID))
+	require.NoError(t, err)
+
+	resp, err := srv.GetMatch(ctxWithProfile(profileB), &matchmakingv1.GetMatchRequest{MatchId: matchID})
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusAbandoned, resp.GetMatch().GetStatus())
+	require.Equal(t, store.ProposalResponseDeclined, resp.GetOwnProposalResponse())
+	require.Equal(t, store.SessionStatusCancelled, resp.GetOwnSearchSession().GetStatus())
+	require.True(t, resp.GetServerNow().AsTime().After(resp.GetAcceptanceDeadlineAt().AsTime()))
 }
 
 func TestRespondToMatch_RejectsNewAcceptAtOrAfterMatchDeadline(t *testing.T) {

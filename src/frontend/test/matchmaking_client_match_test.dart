@@ -24,6 +24,17 @@ void main() {
                 'status': 'pending_accept',
                 'profileIds': ['p1', 'p2'],
               },
+              'serverNow': '2026-10-04T12:00:00Z',
+              'acceptanceDeadlineAt': '2026-10-04T12:00:30Z',
+              'ownProposalResponse': 'accepted',
+              'ownSearchSession': {
+                'id': 'session-1',
+                'profileId': 'p1',
+                'gameId': 'g1',
+                'mode': 'Duo',
+                'status': 'pending_accept',
+                'matchId': 'match-1',
+              },
             }),
             200,
           );
@@ -42,6 +53,10 @@ void main() {
     expect(match.id, 'match-1');
     expect(match.status, 'pending_accept');
     expect(match.profileIds, ['p1', 'p2']);
+    expect(match.serverNow, DateTime.utc(2026, 10, 4, 12));
+    expect(match.acceptanceDeadlineAt, DateTime.utc(2026, 10, 4, 12, 0, 30));
+    expect(match.ownProposalResponse, 'accepted');
+    expect(match.ownSearchSession?.id, 'session-1');
   });
 
   test('respondToMatch posts accept to gateway', () async {
