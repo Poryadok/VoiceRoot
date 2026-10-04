@@ -28,7 +28,9 @@ case "$verb" in
         if [[ "$name" == voice-app-config ]]; then
           echo '{"kind":"ConfigMap","metadata":{"name":"voice-app-config","namespace":"voice-staging"},"data":{"SPACE_GRPC_ADDR":"voice-space:9090"}}'
         else
-          jq -cn --arg phase "${MOCK_PHASE:-rotating}" --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:"100"},data:{phase:$phase,generation:$generation,previousGeneration:"legacy"}}'
+          if [[ -f "$KUBE_MARKER_STATE" ]]; then cat "$KUBE_MARKER_STATE"; else
+            jq -cn --arg phase "${MOCK_PHASE:-rotating}" --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:"100"},data:{phase:$phase,generation:$generation,previousGeneration:"legacy"}}'
+          fi
         fi ;;
       service)
         echo '{"kind":"Service","metadata":{"name":"voice-nats","namespace":"voice-staging"},"spec":{"selector":{"app":"voice-nats-pvc-candidate"},"ports":[{"name":"client","port":4222,"targetPort":4222}]}}' ;;
@@ -149,17 +151,25 @@ case "$verb" in
       exit
     fi
     [[ "$2" == configmap && "$3" == voice-nats-generation ]] || exit 2
-    jq -e --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" 'type == "array" and length == 7 and
+    if [[ "${MOCK_MARKER_RACE:-0}" == 1 ]]; then
+      echo 'concurrent dataPVC insertion changed marker resourceVersion' >&2
+      exit 1
+    fi
+    rv=100
+    [[ ! -f "$KUBE_MARKER_STATE" ]] || rv="$(jq -r '.metadata.resourceVersion' "$KUBE_MARKER_STATE")"
+    jq -e --arg rv "$rv" --arg generation "${MOCK_TARGET_GENERATION:-r20260930a1}" 'type == "array" and length == 7 and
       ([.[] | select(.op == "test") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration","/metadata/resourceVersion"] and
       ([.[] | select(.op == "replace") | .path] | sort) == ["/data/generation","/data/phase","/data/previousGeneration"] and
-      any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == "100") and
+      any(.[]; .op == "test" and .path == "/metadata/resourceVersion" and .value == $rv) and
       any(.[]; .op == "test" and .path == "/data/phase" and .value == "rotating") and
       any(.[]; .op == "test" and .path == "/data/generation" and .value == $generation) and
       any(.[]; .op == "test" and .path == "/data/previousGeneration" and .value == "legacy") and
-      any(.[]; .op == "replace" and .path == "/data/phase" and .value == "active") and
-      any(.[]; .op == "replace" and .path == "/data/generation" and .value == "legacy") and
-      any(.[]; .op == "replace" and .path == "/data/previousGeneration" and .value == $generation)' <<<"$payload" >/dev/null || exit 2
-    printf 'marker patched\n' >>"${KUBE_PATCHES:?}" ;;
+      (any(.[]; .op == "replace" and .path == "/data/phase" and .value == "active") or any(.[]; .op == "replace" and .path == "/data/phase" and .value == "rotating"))' <<<"$payload" >/dev/null || exit 2
+    phase="$(jq -r '.[] | select(.op == "replace" and .path == "/data/phase") | .value' <<<"$payload")"
+    gen="$(jq -r '.[] | select(.op == "replace" and .path == "/data/generation") | .value' <<<"$payload")"
+    prev="$(jq -r '.[] | select(.op == "replace" and .path == "/data/previousGeneration") | .value' <<<"$payload")"
+    jq -cn --arg phase "$phase" --arg gen "$gen" --arg prev "$prev" --arg rv "$((rv+1))" '{kind:"ConfigMap",metadata:{name:"voice-nats-generation",namespace:"voice-staging",resourceVersion:$rv},data:{phase:$phase,generation:$gen,previousGeneration:$prev}}' >"$KUBE_MARKER_STATE"
+    printf 'marker %s\n' "$phase" >>"${KUBE_PATCHES:?}" ;;
   *) echo 'forbidden Kubernetes mutation' >&2; exit 2 ;;
 esac
 EOF
@@ -173,20 +183,29 @@ EOF
 chmod 700 "$work/sleep"
 mkdir "$work/started"
 export PATH="$work:$PATH" KUBE_CALLS="$work/calls" KUBE_SCALES="$work/scales" KUBE_ROLLOUTS="$work/rollouts" KUBE_PATCHES="$work/patches" KUBE_STARTED_DIR="$work/started" KUBE_USER_OVERRIDE="$work/user-override" KUBE_SPACE_READY="$work/space-ready" KUBE_USER_GET_COUNT="$work/user-gets" KUBE_USER_RESTORE_STARTED="$work/user-restore-started" KUBE_USER_PODS_GET_COUNT="$work/user-pod-gets" KUBE_SLEEP_CALLS="$work/sleep-calls"
+export KUBE_MARKER_STATE="$work/marker-state"
 
 run_case() {
   local generation="${MOCK_TARGET_GENERATION:-r20260930a1}"
   : >"$KUBE_CALLS"; : >"$KUBE_SCALES"; : >"$KUBE_ROLLOUTS"; : >"$KUBE_PATCHES"
-  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT" "$KUBE_USER_RESTORE_STARTED" "$KUBE_USER_PODS_GET_COUNT" "$KUBE_SLEEP_CALLS"
+  rm -f "$KUBE_STARTED_DIR"/* "$KUBE_USER_OVERRIDE" "$KUBE_SPACE_READY" "$KUBE_USER_GET_COUNT" "$KUBE_USER_RESTORE_STARTED" "$KUBE_USER_PODS_GET_COUNT" "$KUBE_SLEEP_CALLS" "$KUBE_MARKER_STATE"
   [[ "${MOCK_START_OWNED:-0}" != 1 ]] || touch "$KUBE_USER_OVERRIDE"
   VOICE_K8S_NAMESPACE=voice-staging bash "$rotate" --"${MOCK_OPERATION:-recover-legacy}" "$generation" >"$work/output" 2>"$work/error"
 }
+for operation in recover-legacy restore-user-cycle; do
+  export MOCK_OPERATION="$operation" MOCK_MARKER_RACE=1
+  if [[ "$operation" == restore-user-cycle ]]; then export MOCK_START_OWNED=1 MOCK_RESUME_ALL=1; else unset MOCK_START_OWNED MOCK_RESUME_ALL; fi
+  if run_case; then echo 'concurrent data PVC insertion did not block recovery' >&2; exit 1; fi
+  grep -Fq 'concurrent dataPVC insertion changed marker resourceVersion' "$work/error" || { cat "$work/error" >&2; echo 'race did not reach marker CAS' >&2; exit 1; }
+  [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" && $(grep -c '^patch deployment' "$KUBE_CALLS" || true) == 0 ]] || { echo 'marker race restarted or patched a legacy workload before CAS' >&2; exit 1; }
+done
+unset MOCK_OPERATION MOCK_MARKER_RACE MOCK_START_OWNED MOCK_RESUME_ALL
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'recovery success marker missing' >&2; exit 1; }
 grep -Fxq 'NATS_USER_SPACE_OVERRIDE=APPLIED' "$work/output" || { echo 'temporary fail-closed User override not applied' >&2; exit 1; }
 grep -Fxq 'NATS_USER_SPACE_OVERRIDE=REMOVED' "$work/output" || { echo 'temporary User override not removed' >&2; exit 1; }
 [[ ! -e "$KUBE_USER_OVERRIDE" ]] || { echo 'User override remains after successful recovery' >&2; exit 1; }
-[[ "$(wc -l <"$KUBE_SCALES")" == 15 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'recovery mutation count differs' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SCALES")" == 15 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 2 ]] || { echo 'recovery mutation count differs' >&2; exit 1; }
 expected='auth social user role space chat file messaging voice matchmaking search notification realtime bot subscription moderation story analytics'
 actual="$(sed 's|deployment/voice-||' "$KUBE_ROLLOUTS" | paste -sd ' ' -)"
 [[ "$actual" == "user space user $expected" ]] || { echo 'recovery leaf readiness order differs' >&2; exit 1; }
@@ -235,13 +254,13 @@ if run_case; then echo 'non-prefix partial state did not block recovery' >&2; ex
 unset MOCK_BAD_PREFIX
 export MOCK_FAIL_ROLLOUT=voice-chat
 if run_case; then echo 'failed leaf readiness did not block recovery' >&2; exit 1; fi
-[[ ! -s "$KUBE_PATCHES" ]] || { echo 'marker changed after failed rollout' >&2; exit 1; }
+! grep -Fxq 'marker active' "$KUBE_PATCHES" || { echo 'marker finalized after failed rollout' >&2; exit 1; }
 [[ "$(tail -1 "$KUBE_SCALES")" == 'deployment/voice-analytics' ]] || { echo 'all dependencies were not started before readiness failure' >&2; exit 1; }
 unset MOCK_FAIL_ROLLOUT
 for stage in apply temporary-user space remove restored-user; do
   export MOCK_FAIL_STAGE="$stage"
   if run_case; then echo "cycle stage ${stage} failure did not block recovery" >&2; exit 1; fi
-  [[ ! -s "$KUBE_PATCHES" ]] || { echo "cycle stage ${stage} changed marker" >&2; exit 1; }
+  ! grep -Fxq 'marker active' "$KUBE_PATCHES" || { echo "cycle stage ${stage} finalized marker" >&2; exit 1; }
   if [[ "$stage" == remove ]]; then
     [[ -e "$KUBE_USER_OVERRIDE" ]] || { echo 'failed cleanup was not retained for explicit recovery' >&2; exit 1; }
     grep -Fq 'temporary User override cleanup failed' "$work/error" || { echo 'failed cleanup was not diagnosed' >&2; exit 1; }
@@ -253,24 +272,24 @@ unset MOCK_FAIL_STAGE
 export MOCK_RESUME_ALL=1
 export MOCK_CLEAN_READY=1 MOCK_LINGERING_OVERRIDE_POD=1
 if run_case; then echo 'lingering temporary User Pod did not block active marker' >&2; exit 1; fi
-[[ ! -s "$KUBE_PATCHES" && $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 ]] || { echo 'lingering temporary User Pod caused mutation' >&2; exit 1; }
+! grep -Fxq 'marker active' "$KUBE_PATCHES" && [[ $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 ]] || { echo 'lingering temporary User Pod caused workload mutation or finalization' >&2; exit 1; }
 unset MOCK_CLEAN_READY MOCK_LINGERING_OVERRIDE_POD
 run_case || { cat "$work/error" >&2; exit 1; }
-[[ ! -s "$KUBE_SCALES" && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'retry re-scaled an already started leaf or missed readiness' >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 2 ]] || { echo 'retry re-scaled an already started leaf or missed readiness' >&2; exit 1; }
 export MOCK_START_OWNED=1
 run_case || { cat "$work/error" >&2; exit 1; }
-[[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'interrupted owned override did not resume and clean up' >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 2 ]] || { echo 'interrupted owned override did not resume and clean up' >&2; exit 1; }
 export MOCK_OPERATION=restore-user-cycle
 export MOCK_CLEAN_AT_BOOTSTRAP=1
 if run_case; then echo 'restore-user-cycle reapplied a vanished ownership override' >&2; exit 1; fi
-[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" && $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 ]] || { echo 'restore-user-cycle clean-state race caused mutation' >&2; exit 1; }
+! grep -Fxq 'marker active' "$KUBE_PATCHES" && [[ ! -s "$KUBE_SCALES" && $(grep -c '^patch deployment$' "$KUBE_CALLS" || true) == 0 ]] || { echo 'restore-user-cycle clean-state race caused workload mutation or finalization' >&2; exit 1; }
 unset MOCK_CLEAN_AT_BOOTSTRAP
 export MOCK_BAD_OVERRIDE=1
 if run_case; then echo 'nonempty User override was accepted' >&2; exit 1; fi
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'nonempty User override caused mutation' >&2; exit 1; }
 unset MOCK_BAD_OVERRIDE
 run_case || { cat "$work/error" >&2; exit 1; }
-[[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'restore-user-cycle changed unrelated state or missed cleanup' >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS")" == 1 && "$(wc -l <"$KUBE_PATCHES")" == 2 ]] || { echo 'restore-user-cycle changed unrelated state or missed cleanup' >&2; exit 1; }
 unset MOCK_START_OWNED
 if run_case; then echo 'restore-user-cycle accepted an unowned User Deployment' >&2; exit 1; fi
 [[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_PATCHES" ]] || { echo 'unowned restore-user-cycle caused mutation' >&2; exit 1; }
@@ -287,27 +306,27 @@ if run_case; then echo 'a2 recovery accepted a started leaf outside its all-stop
 export MOCK_ALL_STOPPED=1
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'a2 recovery success marker missing' >&2; exit 1; }
-[[ ! -e "$KUBE_USER_OVERRIDE" && "$(wc -l <"$KUBE_SCALES")" == 18 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 1 ]] || { echo 'a2 all-stopped recovery did not restore leaves and clear User override' >&2; exit 1; }
+[[ ! -e "$KUBE_USER_OVERRIDE" && "$(wc -l <"$KUBE_SCALES")" == 18 && "$(wc -l <"$KUBE_ROLLOUTS")" == 21 && "$(wc -l <"$KUBE_PATCHES")" == 2 ]] || { echo 'a2 all-stopped recovery did not restore leaves and clear User override' >&2; exit 1; }
 ! grep -Eq 'run_jobs|voice-nats-realtime-permissions-preflight|voice-nats-acl-proof' "$KUBE_CALLS" || { echo 'recovery reran bootstrap or proof' >&2; exit 1; }
 export MOCK_TRANSIENT_USER_DUPLICATE=1
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'transient User Pod did not settle before recovery completed' >&2; exit 1; }
-[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 1 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 1 ]] || { echo 'transient User Pod wait did not retry exactly once before marker commit' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 1 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 2 ]] || { echo 'transient User Pod wait did not retry exactly once before marker commit' >&2; exit 1; }
 unset MOCK_TRANSIENT_USER_DUPLICATE
 export MOCK_PERSISTENT_USER_DUPLICATE=1
 if run_case; then echo 'persistent extra non-override User Pod did not block recovery' >&2; exit 1; fi
-[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 0 ]] || { echo 'persistent extra User Pod did not time out before marker commit' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 1 ]] && ! grep -Fxq 'marker active' "$KUBE_PATCHES" || { echo 'persistent extra User Pod did not time out before marker commit' >&2; exit 1; }
 unset MOCK_PERSISTENT_USER_DUPLICATE
 export MOCK_UNREADY_USER_POD=1
 if run_case; then echo 'unready restored User Pod did not block recovery' >&2; exit 1; fi
-[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 0 ]] || { echo 'unready User Pod was not bounded before marker commit' >&2; exit 1; }
+[[ "$(wc -l <"$KUBE_SLEEP_CALLS")" == 29 && "$(grep -c '^patch configmap$' "$KUBE_CALLS" || true)" == 1 ]] && ! grep -Fxq 'marker active' "$KUBE_PATCHES" || { echo 'unready User Pod was not bounded before marker commit' >&2; exit 1; }
 unset MOCK_UNREADY_USER_POD
 
 unset MOCK_ALL_STOPPED
 export MOCK_RESUME_ALL=1 MOCK_ALL_READY=1
 run_case || { cat "$work/error" >&2; exit 1; }
 grep -Fxq 'NATS_RECOVERY=LEGACY_ACTIVE' "$work/output" || { echo 'fully restored a2 state did not finalize legacy marker' >&2; exit 1; }
-[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_ROLLOUTS" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS" || true)" == 0 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 1 ]] || { echo 'a2 resume-finalize mutated workloads instead of only CASing marker' >&2; exit 1; }
+[[ ! -s "$KUBE_SCALES" && ! -s "$KUBE_ROLLOUTS" && ! -e "$KUBE_USER_OVERRIDE" && "$(grep -c '^patch deployment$' "$KUBE_CALLS" || true)" == 0 && "$(grep -c '^patch configmap$' "$KUBE_CALLS")" == 2 ]] || { echo 'a2 resume-finalize mutated workloads instead of only CASing marker' >&2; exit 1; }
 for failure_case in not-ready missing-pod unready-pod mixed-reference lingering-user-override; do
   case "$failure_case" in
     not-ready) export MOCK_NOT_READY=voice-chat ;;

@@ -1,0 +1,80 @@
+import copy
+import unittest
+
+from controller import Blocked
+from stage_runtime import Kube,Staging,MARKER,HUB,LEAVES
+from docker_runtime import NATS_IMAGE
+
+
+class StageFenceTests(unittest.TestCase):
+    def test_second_preflight_rejects_changed_template(self):
+        names=(HUB,'voice-gateway',*('voice-'+s for s in LEAVES))
+        rows={name:{'metadata':{'name':name,'uid':name,'resourceVersion':'10'},
+            'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}],
+                'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':'original'}}]}}}} for name in names}
+        class Client:
+            def get(self,kind,name):
+                if kind=='namespace':return {'metadata':{'uid':'namespace'}}
+                if kind=='configmap':return {'metadata':{'uid':'marker','resourceVersion':'10'},'data':{'phase':'active','generation':'original'}}
+                if kind=='pvc':return {'metadata':{'uid':'pvc'},'spec':{'volumeName':'pv'}}
+                if kind=='pv':return {'metadata':{'uid':'pv'}}
+                if kind=='service':return {'metadata':{'uid':'svc'}}
+                return copy.deepcopy(rows[name])
+            def run(self,args):return {'items':[]}
+        expected={'namespace_uid':'namespace','marker_uid':'marker','generation':'original',
+            'source_claim':'original','source_claim_uid':'pvc','source_pv_uid':'pv',
+            'deployment_uids':{name:name for name in names}}
+        stage=Staging(Client(),'abcd1234',expected,lambda row:None)
+        stage.preflight()
+        rows['voice-user']['spec']['template']['spec']['containers'][0]['image']='changed'
+        with self.assertRaises(Blocked):stage.preflight()
+
+    def test_rescaled_deployment_is_not_a_verified_fence(self):
+        class Client:
+            def get(self,kind,name):return {'metadata':{'uid':'hub'},'spec':{'replicas':1,'template':{}}}
+            def run(self,args):return {'items':[]}
+        stage=Staging(Client(),'abcd1234',{},lambda row:None)
+        stage.snapshots={'hub':{'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}}
+        with self.assertRaises(Blocked):stage.no_pods(('hub',),timeout=1)
+
+    def test_manual_source_claim_pod_is_not_a_verified_fence(self):
+        class Client:
+            def get(self,kind,name):return {'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}
+            def run(self,args):return {'items':[{'kind':'Pod','metadata':{'uid':'manual'},'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':'source'}}]}}]}
+        stage=Staging(Client(),'abcd1234',{'source_claim':'source'},lambda row:None)
+        stage.snapshots={'hub':{'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}}
+        with self.assertRaises(Blocked):stage.no_pods(('hub',),timeout=0.01)
+
+    def test_exact_uid_and_rv_bound_in_actual_patch(self):
+        calls=[]
+        kube=Kube(lambda args,body=None,timeout=30:calls.append(args) or {})
+        kube.cas('deployment',{'metadata':{'name':'voice-user','uid':'u','resourceVersion':'10'}},
+            [{'op':'replace','path':'/spec/replicas','value':0}])
+        import json
+        patch=json.loads(calls[0][calls[0].index('--patch')+1])
+        self.assertEqual(patch[:2],[{'op':'test','path':'/metadata/uid','value':'u'},
+            {'op':'test','path':'/metadata/resourceVersion','value':'10'}])
+
+    def test_marker_race_never_scales_workload(self):
+        class Client:
+            def __init__(self):self.mutations=[]
+            def get(self,kind,name):return {'metadata':{'uid':'marker','resourceVersion':'11'}}
+            def cas(self,*args):self.mutations.append(args)
+        kube=Client();stage=Staging(kube,'abcd1234',{},lambda row:None)
+        stage.marker={'metadata':{'uid':'marker','resourceVersion':'10'}}
+        with self.assertRaises(Blocked):stage.fence()
+        self.assertEqual(kube.mutations,[])
+
+    def test_lost_maintenance_token_prevents_restart(self):
+        class Client:
+            def __init__(self):self.mutations=[]
+            def get(self,kind,name):return {'metadata':{'uid':'marker','resourceVersion':'11'},
+                'data':{'phase':'active','knownBaselineOperation':'other'}}
+            def cas(self,*args):self.mutations.append(args)
+        kube=Client();stage=Staging(kube,'abcd1234',{},lambda row:None)
+        stage.marker={'metadata':{'uid':'marker','resourceVersion':'10'}}
+        with self.assertRaises(Blocked):stage.restart()
+        self.assertEqual(kube.mutations,[])
+
+
+if __name__=='__main__':unittest.main()

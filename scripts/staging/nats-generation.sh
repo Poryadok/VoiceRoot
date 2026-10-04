@@ -18,6 +18,7 @@ nats_generation_load() {
     fi
   fi
   NATS_GENERATION=legacy
+  NATS_DATA_PVC=''
   NATS_PREVIOUS_GENERATION=''
   NATS_MARKER_PRESENT=false
   if [[ -n "$marker" ]]; then
@@ -36,6 +37,16 @@ nats_generation_load() {
     NATS_GENERATION="$generation"
     NATS_PREVIOUS_GENERATION="$previous"
     NATS_MARKER_PRESENT=true
+    # Data resets retain credential generation. Only the reviewed marker may
+    # select independently named NATS storage; never accept an env override.
+    if jq -e '.data | has("dataPVC")' <<<"$marker" >/dev/null; then
+      NATS_DATA_PVC="$(jq -er '.data.dataPVC | select(type == "string")' <<<"$marker")" || {
+        echo 'ERROR: invalid NATS data PVC marker' >&2; return 1;
+      }
+      [[ "$NATS_DATA_PVC" =~ ^voice-nats-jsdata-d[0-9]{8}[a-z0-9]{0,8}$ ]] || {
+        echo 'ERROR: invalid NATS data PVC marker' >&2; return 1;
+      }
+    fi
   fi
   if [[ "$NATS_GENERATION" == legacy ]]; then
     NATS_OPERATOR_SECRET=voice-nats-operator
@@ -50,6 +61,7 @@ nats_generation_load() {
     NATS_SERVICE_SECRET="voice-nats-service-credentials-${NATS_GENERATION}"
     NATS_PVC="voice-nats-jsdata-${NATS_GENERATION}"
   fi
+  if [[ -n "$NATS_DATA_PVC" ]]; then NATS_PVC="$NATS_DATA_PVC"; fi
   export NATS_GENERATION NATS_PREVIOUS_GENERATION NATS_MARKER_PRESENT NATS_OPERATOR_SECRET NATS_TLS_SECRET
   export NATS_BOOTSTRAP_SECRET NATS_SERVICE_SECRET NATS_PVC
 }
@@ -57,7 +69,7 @@ nats_generation_load() {
 nats_generation_render() {
   local source="${1:?manifest file required}"
   [[ -f "$source" ]] || { echo 'ERROR: NATS manifest missing' >&2; return 1; }
-  if [[ "$NATS_GENERATION" == legacy ]]; then
+  if [[ "$NATS_GENERATION" == legacy && -z "$NATS_DATA_PVC" ]]; then
     cat "$source"
   else
     sed -e "s|voice-nats-operator|${NATS_OPERATOR_SECRET}|g" \
