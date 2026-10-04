@@ -76,7 +76,7 @@ func (s *Service) Create(ctx context.Context, req *callsv1.CreateMatchSquadRoomR
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Voice MatchSquad receipt encoding failed")
 	}
-	roomID, receiptBytes, err = s.reserveCreate(ctx, operation, match, roomID, receiptID, mustUUID(req.GetParticipants()[0].GetProfileId()), chatReceipt, manifest, chatReceiptHash, requestHash, requestBytes, receiptBytes, createdAt)
+	roomID, receiptBytes, err = s.reserveCreate(ctx, operation, match, roomID, receiptID, match, chatReceipt, manifest, chatReceiptHash, requestHash, requestBytes, receiptBytes, createdAt)
 	if err != nil {
 		return nil, err
 	}

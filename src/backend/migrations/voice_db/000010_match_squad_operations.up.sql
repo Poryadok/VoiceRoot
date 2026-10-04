@@ -8,7 +8,7 @@ CREATE TABLE voice_match_squad_operations (
     match_id UUID NOT NULL UNIQUE CHECK (match_id <> '00000000-0000-0000-0000-000000000000'::UUID),
     room_id UUID NOT NULL UNIQUE REFERENCES voice_room_instances(room_id) ON DELETE RESTRICT,
     chat_id UUID NOT NULL CHECK (chat_id <> '00000000-0000-0000-0000-000000000000'::UUID),
-    owner_id UUID NOT NULL CHECK (owner_id <> '00000000-0000-0000-0000-000000000000'::UUID),
+    owner_id UUID NOT NULL CHECK (owner_id = match_id),
     creation_receipt_id UUID NOT NULL UNIQUE CHECK (creation_receipt_id <> '00000000-0000-0000-0000-000000000000'::UUID),
     chat_creation_receipt_id UUID NOT NULL CHECK (chat_creation_receipt_id <> '00000000-0000-0000-0000-000000000000'::UUID),
     participant_manifest_sha256 BYTEA NOT NULL CHECK (octet_length(participant_manifest_sha256) = 32),
