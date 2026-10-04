@@ -188,7 +188,7 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
               const SizedBox(height: 16),
               if (_apiErrorKey != null) ...[
                 Text(
-                  authErrorMessage(l10n, _apiErrorKey!),
+                  authFormErrorMessage(l10n, _apiErrorKey!),
                   key: GuestConvertSheet.errorKey,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),

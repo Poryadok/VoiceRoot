@@ -90,4 +90,40 @@ void main() {
       expect(authErrorMessage(l10n, 'some_unknown'), 'some_unknown');
     });
   });
+
+  group('authFormErrorMessage', () {
+    test('uses neutral copy for an unknown API code or diagnostic', () {
+      expect(
+        authFormErrorMessage(l10n, 'unknown_auth_failure'),
+        l10n.commonActionFailed,
+      );
+      expect(
+        authFormErrorMessage(l10n, 'private upstream diagnostic'),
+        l10n.commonActionFailed,
+      );
+      expect(authFormErrorMessage(l10n, ''), l10n.commonActionFailed);
+    });
+
+    test('preserves localized API and client-side errors', () {
+      expect(
+        authFormErrorMessage(l10n, AuthErrorKeys.invalidCredentials),
+        l10n.authErrorInvalidCredentials,
+      );
+      expect(
+        authFormErrorMessage(l10n, AuthErrorKeys.rateLimited),
+        l10n.authErrorRateLimited,
+      );
+      expect(
+        authFormErrorMessage(l10n, AuthErrorKeys.passwordMismatch),
+        l10n.authErrorPasswordMismatch,
+      );
+    });
+
+    test('leaves the generic renderer unknown-key behavior unchanged', () {
+      expect(
+        authErrorMessage(l10n, 'private upstream diagnostic'),
+        'private upstream diagnostic',
+      );
+    });
+  });
 }

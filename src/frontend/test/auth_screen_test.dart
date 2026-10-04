@@ -236,6 +236,116 @@ void main() {
     expect(find.text('Incorrect email or password.'), findsOneWidget);
   });
 
+  testWidgets('login hides unknown Auth diagnostics behind neutral copy', (
+    tester,
+  ) async {
+    bindLargeTestViewport(tester);
+    const diagnostic = 'private-auth-stack-detail';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/auth/login') {
+                return http.Response(
+                  jsonEncode({
+                    'error': 'unknown_auth_failure',
+                    'message': diagnostic,
+                  }),
+                  500,
+                );
+              }
+              if (request.url.path == '/health') {
+                return http.Response('ok', 200);
+              }
+              return http.Response('not found', 404);
+            }),
+          ),
+        ],
+        child: const VoiceApp(locale: Locale('en')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(AuthScreen.emailFieldKey),
+      'user@example.com',
+    );
+    await tester.enterText(find.byKey(AuthScreen.passwordFieldKey), 'secret12');
+    await tester.tap(find.byKey(AuthScreen.loginButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('unknown_auth_failure'), findsNothing);
+    expect(find.text(diagnostic), findsNothing);
+  });
+
+  testWidgets(
+    'registration hides unknown Auth diagnostics behind neutral copy',
+    (tester) async {
+      bindLargeTestViewport(tester);
+      const diagnostic = 'private-registration-stack-detail';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((request) async {
+                if (request.url.path == '/api/v1/auth/register') {
+                  return http.Response(
+                    jsonEncode({
+                      'error': 'unknown_registration_failure',
+                      'message': diagnostic,
+                    }),
+                    500,
+                  );
+                }
+                if (request.url.path == '/health') {
+                  return http.Response('ok', 200);
+                }
+                return http.Response('not found', 404);
+              }),
+            ),
+          ],
+          child: const VoiceApp(locale: Locale('en')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(AuthScreen.emailFieldKey),
+        'new-user@example.com',
+      );
+      await tester.enterText(
+        find.byKey(AuthScreen.passwordFieldKey),
+        'secret12',
+      );
+      await tester.tap(find.byKey(AuthScreen.registerButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(find.text('unknown_registration_failure'), findsNothing);
+      expect(find.text(diagnostic), findsNothing);
+    },
+  );
+
   testWidgets('login shows localized rate_limited on 429', (tester) async {
     bindLargeTestViewport(tester);
     await tester.pumpWidget(
