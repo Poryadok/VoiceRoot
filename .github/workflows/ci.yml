@@ -298,6 +298,30 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Retain incoming overlay golden diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: incoming-overlay-golden-failure-${{ github.run_id }}
+          path: |
+            src/frontend/test/failures/incoming_call_overlay_h_testImage.png
+            src/frontend/test/failures/incoming_call_overlay_h_masterImage.png
+            src/frontend/test/failures/incoming_call_overlay_h_isolatedDiff.png
+            src/frontend/test/failures/incoming_call_overlay_h_maskedDiff.png
+            src/frontend/test/failures/incoming_call_overlay_v_testImage.png
+            src/frontend/test/failures/incoming_call_overlay_v_masterImage.png
+            src/frontend/test/failures/incoming_call_overlay_v_isolatedDiff.png
+            src/frontend/test/failures/incoming_call_overlay_v_maskedDiff.png
+            src/frontend/test/failures/report_success_h_testImage.png
+            src/frontend/test/failures/report_success_h_masterImage.png
+            src/frontend/test/failures/report_success_h_isolatedDiff.png
+            src/frontend/test/failures/report_success_h_maskedDiff.png
+            src/frontend/test/failures/report_success_v_testImage.png
+            src/frontend/test/failures/report_success_v_masterImage.png
+            src/frontend/test/failures/report_success_v_isolatedDiff.png
+            src/frontend/test/failures/report_success_v_maskedDiff.png
+          if-no-files-found: ignore
+          retention-days: 1
 
   golangci:
     needs: changes
