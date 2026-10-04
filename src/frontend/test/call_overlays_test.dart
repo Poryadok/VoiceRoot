@@ -242,6 +242,113 @@ void main() {
     expect(requests, contains('/api/v1/voice/calls/room-1/decline'));
   });
 
+  testWidgets('IncomingCallOverlay returns focus after each dismissal', (
+    tester,
+  ) async {
+    final firstTrigger = FocusNode(debugLabel: 'first call trigger');
+    final secondTrigger = FocusNode(debugLabel: 'second call trigger');
+    addTearDown(firstTrigger.dispose);
+    addTearDown(secondTrigger.dispose);
+
+    final container = _incomingContainer(
+      client: MockClient((_) async => http.Response('{}', 200)),
+      phase: CallPhase.outgoing,
+    );
+    addTearDown(container.dispose);
+    final callController = container.read(callControllerProvider.notifier);
+    final session = container.read(callControllerProvider).session!;
+    var overlayMounted = true;
+    late StateSetter updateHost;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme().copyWith(
+            textTheme: voiceTestTheme().textTheme.apply(
+              fontFamily: 'Noto Sans',
+            ),
+          ),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              updateHost = setState;
+              return Scaffold(
+                body: Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            focusNode: firstTrigger,
+                            onPressed: () {},
+                            child: const Text('First trigger'),
+                          ),
+                          TextButton(
+                            focusNode: secondTrigger,
+                            onPressed: () {},
+                            child: const Text('Second trigger'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (overlayMounted) const IncomingCallOverlay(),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    firstTrigger.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(firstTrigger));
+
+    callController.state = CallState(
+      phase: CallPhase.incoming,
+      session: session,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(IncomingCallOverlay.overlayKey), findsOneWidget);
+
+    callController.state = CallState(
+      phase: CallPhase.outgoing,
+      session: session,
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(firstTrigger));
+
+    secondTrigger.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(secondTrigger));
+
+    callController.state = CallState(
+      phase: CallPhase.incoming,
+      session: session,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(IncomingCallOverlay.overlayKey), findsOneWidget);
+
+    callController.state = CallState(
+      phase: CallPhase.outgoing,
+      session: session,
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(secondTrigger));
+
+    // The app shell keeps the consumer mounted while no call is incoming. If
+    // the host removes it later, it must not restore the first call's target.
+    updateHost(() => overlayMounted = false);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(secondTrigger));
+  });
+
   testWidgets('IncomingCallOverlay fits the horizontal s19 viewport', (
     tester,
   ) async {

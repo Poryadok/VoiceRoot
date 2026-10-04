@@ -27,6 +27,26 @@ class IncomingCallOverlay extends ConsumerStatefulWidget {
 
 class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
   VoiceFocusReturn? _focusReturn;
+  bool _wasVisible = false;
+
+  void _updateFocusReturn(bool visible) {
+    if (_wasVisible == visible) return;
+    _wasVisible = visible;
+
+    if (visible) {
+      _focusReturn = VoiceFocusReturn.capture();
+      return;
+    }
+
+    final focusReturn = _focusReturn;
+    _focusReturn = null;
+    focusReturn?.restore();
+  }
+
+  Widget _hidden() {
+    _updateFocusReturn(false);
+    return const SizedBox.shrink();
+  }
 
   @override
   void dispose() {
@@ -39,17 +59,17 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
     // Native iOS already presents the incoming call through CallKit. Keep the
     // Flutter overlay on iOS web, where the native call UI is unavailable.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      return const SizedBox.shrink();
+      return _hidden();
     }
     if (!ref.watch(gatewayConfigProvider).canPlaceVoiceCalls) {
-      return const SizedBox.shrink();
+      return _hidden();
     }
     final call = ref.watch(callControllerProvider);
     final session = call.session;
     if (!call.isIncoming || session == null) {
-      return const SizedBox.shrink();
+      return _hidden();
     }
-    _focusReturn ??= VoiceFocusReturn.capture();
+    _updateFocusReturn(true);
 
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
