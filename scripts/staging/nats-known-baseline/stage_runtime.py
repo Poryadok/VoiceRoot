@@ -22,6 +22,37 @@ HUB = 'voice-nats-pvc-candidate'
 MARKER = 'voice-nats-generation'
 NAMESPACE = 'voice-staging'
 
+# Fixed typed output: historical ReplicaSet templates can exceed the capture
+# cap. They are irrelevant to physical Pod ownership/PVC writer detection.
+FENCE_TEMPLATE = ('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
+    '{"kind":{{printf "%q" $r.kind}},"metadata":{"uid":{{printf "%q" $r.metadata.uid}},'
+    '"ownerReferences":[{{range $j,$o := $r.metadata.ownerReferences}}{{if $j}},{{end}}'
+    '{"uid":{{printf "%q" $o.uid}}}{{end}}]},"spec":{"volumes":['
+    '{{range $j,$v := $r.spec.volumes}}{{if $j}},{{end}}'
+    '{"persistentVolumeClaim":{"claimName":{{if $v.persistentVolumeClaim}}'
+    '{{printf "%q" $v.persistentVolumeClaim.claimName}}{{else}}""{{end}}}}'
+    '{{end}}]}}{{end}}]}')
+
+
+def fence_objects(kube):
+    result=kube.run(['get','pods,replicasets','-o','go-template='+FENCE_TEMPLATE])
+    rows=result.get('items') if isinstance(result,dict) and set(result)=={'items'} else None
+    if not isinstance(rows,list) or len(rows)>2048:raise Blocked('fence_projection_invalid')
+    uid=re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
+    for row in rows:
+        try:
+            if set(row)!={'kind','metadata','spec'} or set(row['metadata'])!={'uid','ownerReferences'} or set(row['spec'])!={'volumes'}:raise ValueError()
+            if row['kind'] not in ('Pod','ReplicaSet') or not uid.fullmatch(row['metadata']['uid']):raise ValueError()
+            owners=row['metadata'].get('ownerReferences',[]);volumes=row.get('spec',{}).get('volumes',[])
+            if not isinstance(owners,list) or len(owners)>16 or not isinstance(volumes,list) or len(volumes)>64:raise ValueError()
+            if any(set(o)!={'uid'} or not uid.fullmatch(o['uid']) for o in owners):raise ValueError()
+            for volume in volumes:
+                if set(volume)!={'persistentVolumeClaim'} or set(volume['persistentVolumeClaim'])!={'claimName'}:raise ValueError()
+                claim=volume.get('persistentVolumeClaim',{}).get('claimName','')
+                if not isinstance(claim,str) or len(claim)>253 or (claim and not re.fullmatch(r'[a-z0-9][a-z0-9.-]*',claim)):raise ValueError()
+        except (KeyError,TypeError,AttributeError,ValueError):raise Blocked('fence_projection_invalid') from None
+    return rows
+
 
 class Kube:
     def __init__(self, run=None): self.run = run or self._run
@@ -145,7 +176,7 @@ class Staging:
                 row=self.kube.get('deployment',name)
                 if row['metadata']['uid']!=self.snapshots[name]['metadata']['uid'] or row['spec']['template']!=self.snapshots[name]['spec']['template'] or row['spec'].get('replicas',1)!=0:
                     raise Blocked('fenced_workload_changed')
-            rows=self.kube.run(['get','pods,replicasets','-o','json'])['items']
+            rows=fence_objects(self.kube)
             claims={self.expected.get('source_claim')}
             if hasattr(self,'final_claim'):claims.add(self.final_claim['metadata']['name'])
             if any(r['kind']=='Pod' and any(v.get('persistentVolumeClaim',{}).get('claimName') in claims for v in r['spec'].get('volumes',[])) for r in rows):

@@ -36,8 +36,18 @@ class CaptureTests(unittest.TestCase):
         self.launcher=Path('/tmp/known-nats-launch.sh')
         self.launcher.write_text(template.replace('__BUNDLE_SHA256__',hashlib.sha256(self.raw).hexdigest()).replace('__BUNDLE_BYTES__',str(len(self.raw))))
 
-    def run_launcher(self):
-        return subprocess.run(['/bin/bash',str(self.launcher),'--prepare'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=3)
+    def run_launcher(self,args=None):
+        return subprocess.run(['/bin/bash',str(self.launcher),*(args or ['--prepare'])],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=3)
+
+    def test_exact_fence_continuation_reaches_private_code(self):
+        result=self.run_launcher(['--continue-fence','/var/lib/voice-nats-preservation/known-baseline-0049430b0dbb'])
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertTrue(self.marker.exists())
+
+    def test_other_fence_continuation_operation_never_executes(self):
+        result=self.run_launcher(['--continue-fence','/var/lib/voice-nats-preservation/known-baseline-44debe2248bc'])
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.marker.exists())
 
     def test_exact_captured_bytes_execute_private_copy(self):
         result=self.run_launcher()

@@ -1,12 +1,43 @@
 import copy
 import unittest
+import json
+from unittest.mock import patch
 
 from controller import Blocked
-from stage_runtime import Kube,Staging,MARKER,HUB,LEAVES
+from stage_runtime import Kube,Staging,MARKER,HUB,LEAVES,fence_objects
 from docker_runtime import NATS_IMAGE
 
 
 class StageFenceTests(unittest.TestCase):
+    def test_fence_projection_rejects_malformed_or_unbounded_metadata(self):
+        valid={'kind':'Pod','metadata':{'uid':'00000000-0000-0000-0000-000000000001','ownerReferences':[]},'spec':{'volumes':[]}}
+        bad=[]
+        for key,value in (('kind','Secret'),('uid','not-uid'),('owners',[{'uid':'bad'}]),('claim','../escape'),('extra',{})):
+            row=copy.deepcopy(valid)
+            if key=='kind':row['kind']=value
+            if key=='uid':row['metadata']['uid']=value
+            if key=='owners':row['metadata']['ownerReferences']=value
+            if key=='claim':row['spec']['volumes']=[{'persistentVolumeClaim':{'claimName':value}}]
+            if key=='extra':row['spec']['containers']=value
+            bad.append({'items':[row]})
+        bad.extend(({'items':[valid]*2049},{'items':{},'extra':[]}))
+        for row in bad:
+            with self.subTest(row_count=len(row['items'])):
+                with self.assertRaisesRegex(Blocked,'fence_projection_invalid'):fence_objects(Kube(lambda args:row))
+
+    def test_fence_verifies_when_unused_pod_templates_exceed_capture_cap(self):
+        def captured(argv,**kwargs):
+            if 'pods,replicasets' in argv:
+                if argv[-1]=='json':raise Blocked('command_output_limit')
+                self.assertTrue(argv[-1].startswith('go-template='))
+                self.assertNotIn('containers',argv[-1])
+                self.assertNotIn('annotations',argv[-1])
+                return b'{"items":[]}'
+            return json.dumps({'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}).encode()
+        stage=Staging(Kube(),'abcd1234',{'source_claim':'source'},lambda row:None)
+        stage.snapshots={'hub':{'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}}
+        with patch('stage_runtime.capture',side_effect=captured):stage.no_pods(('hub',),timeout=1)
+
     def test_secret_metadata_projection_maps_atomic_json_values(self):
         calls=[]
         kube=Kube(lambda args:calls.append(args) or ['tls-uid','100'])
@@ -52,10 +83,10 @@ class StageFenceTests(unittest.TestCase):
     def test_manual_source_claim_pod_is_not_a_verified_fence(self):
         class Client:
             def get(self,kind,name):return {'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}
-            def run(self,args):return {'items':[{'kind':'Pod','metadata':{'uid':'manual'},'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':'source'}}]}}]}
+            def run(self,args):return {'items':[{'kind':'Pod','metadata':{'uid':'00000000-0000-0000-0000-000000000001','ownerReferences':[]},'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':'source'}}]}}]}
         stage=Staging(Client(),'abcd1234',{'source_claim':'source'},lambda row:None)
         stage.snapshots={'hub':{'metadata':{'uid':'hub'},'spec':{'replicas':0,'template':{}}}}
-        with self.assertRaises(Blocked):stage.no_pods(('hub',),timeout=0.01)
+        with self.assertRaisesRegex(Blocked,'staging_fence_timeout'):stage.no_pods(('hub',),timeout=0.01)
 
     def test_exact_uid_and_rv_bound_in_actual_patch(self):
         calls=[]

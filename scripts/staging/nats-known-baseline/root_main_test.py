@@ -2,6 +2,8 @@ import datetime as dt
 import unittest
 import tempfile
 import json
+import hashlib
+import copy
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +13,96 @@ from controller import archive_closed_store
 
 
 class ResumeGuardTests(unittest.TestCase):
+    def continuation_fixture(self,d):
+        root=Path(d);base=root/'known-baseline-0049430b0dbb';base.mkdir()
+        inputs=base/'inputs';inputs.mkdir();(base/'server.conf').write_bytes(b'nonsecret-test-public-config')
+        (base/'kernel').write_bytes(b'test-kernel')
+        code=root/'code';code.mkdir()
+        files={'root_main.py':'new-root','stage_runtime.py':'new-stage','kernel':hashlib.sha256(b'test-kernel').hexdigest()}
+        current={'schema':'known-nats-code-capture-v1','files':files}
+        (code/'capture-manifest.json').write_text(json.dumps(current));(code/'deployed-contract.json').write_text('{"scripts":[]}')
+        old=copy.deepcopy(current);old['files'].update({'root_main.py':'5938a72653b973c41ebe0bd138fe4f15f1671ff6dc0895af18f0132c794f3cb0','stage_runtime.py':'0a79beea09cbfe78679054c4b7b661e823b7bea25b0970641d9ef14bed1fbfa3'})
+        names=(root_main.HUB,'voice-gateway',*('voice-'+s for s in root_main.LEAVES))
+        provenance={}
+        for role in ('bootstrap','social','realtime'):
+            raw=('test-'+role).encode();(inputs/(role+'.creds')).write_bytes(raw)
+            provenance[role+'.creds']={'sha256':hashlib.sha256(raw).hexdigest()}
+        store=root/'test-store';store.mkdir();(store/'block').write_bytes(b'controlled-test-records')
+        manifest=archive_closed_store(store,base/'fixture.tar');root_main.save(base/'fixture-manifest.json',manifest)
+        state={'schema':'known-nats-root-checkpoint-v1','operation':'0049430b0dbb','status':'BLOCKED','phase':'FENCE_STAGE','error':'command_output_limit',
+            'created_at':dt.datetime.now(dt.timezone.utc).isoformat(),'code_capture':old,'expected':dict(root_main.CURRENT,deployment_uids=dict.fromkeys(names,'original-uid')),
+            'snapshots':{n:{'metadata':{'uid':'original-uid'},'spec':{'replicas':0,'template':{}}} for n in names},
+            'journal':[{'kind':'staging_preflight','replicas':dict.fromkeys(names,1)}],'provenance':provenance,'marker':{},'service':{},
+            'fixture_backup':{'messages':3,'streams':15,'consumers':42,'restore_verified':True,'node_copy_verified':True,
+                'archive':str(base/'fixture.tar'),'manifest':str(base/'fixture-manifest.json'),'archive_sha256':manifest['archive_sha256']}}
+        root_main.save(base/'checkpoint.json',state)
+        return root,base,code,state
+
+    def test_continuation_rejects_changed_state_code_archive_before_kubernetes(self):
+        for mutation in ('wrong-error','changed-kernel-code','tampered-archive','expired','replica-one','changed-private-creds'):
+            with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as d:
+                root,base,code,state=self.continuation_fixture(d)
+                if mutation=='wrong-error':state['error']='other'
+                if mutation=='changed-kernel-code':state['code_capture']['files']['kernel']='different'
+                if mutation=='tampered-archive':(base/'fixture.tar').write_bytes(b'tampered')
+                if mutation=='expired':state['created_at']=(dt.datetime.now(dt.timezone.utc)-dt.timedelta(hours=5)).isoformat()
+                if mutation=='replica-one':state['snapshots'][root_main.HUB]['spec']['replicas']=1
+                if mutation=='changed-private-creds':(base/'inputs'/'social.creds').write_bytes(b'changed')
+                root_main.save(base/'checkpoint.json',state)
+                with patch('root_main.ROOT',root),patch('root_main.Kube') as kube:
+                    with self.assertRaises(Blocked):root_main.continue_fence(code,base)
+                    kube.assert_not_called()
+
+    def test_continuation_lost_fence_does_not_allocate_or_rewrite_checkpoint(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,base,code,state=self.continuation_fixture(d)
+            checkpoint=(base/'checkpoint.json').read_bytes()
+            class Kube:
+                def get(self,kind,name):
+                    if kind=='pvc':return {'metadata':{'uid':root_main.CURRENT['source_claim_uid']},'spec':{'volumeName':'original-pv'}}
+                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'hostPath':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']}}}
+            with patch('root_main.ROOT',root),patch('root_main.Kube',Kube),patch('root_main.revalidate_inputs'),\
+                 patch('root_main.Staging') as stage,patch('root_main.DockerRuntime') as runtime:
+                stage.return_value.verify_closed.side_effect=Blocked('maintenance_ownership_changed')
+                with self.assertRaisesRegex(Blocked,'maintenance_ownership_changed'):root_main.continue_fence(code,base)
+                runtime.assert_not_called();stage.return_value.new_claim.assert_not_called()
+            self.assertEqual((base/'checkpoint.json').read_bytes(),checkpoint)
+
+    def test_continuation_reuses_fixture_and_stops_at_off_node_checkpoint(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,base,code,state=self.continuation_fixture(d);calls=[]
+            class Kube:
+                def get(self,kind,name):
+                    if kind=='pvc':return {'metadata':{'uid':root_main.CURRENT['source_claim_uid']},'spec':{'volumeName':'original-pv'}}
+                    return {'metadata':{'uid':root_main.CURRENT['source_pv_uid']},'spec':{'claimRef':{'uid':root_main.CURRENT['source_claim_uid']},'hostPath':{'path':'/var/lib/rancher/k3s/storage/pvc-'+root_main.CURRENT['source_claim_uid']+'_voice-staging_'+root_main.CURRENT['source_claim']}}}
+            class Stage:
+                def __init__(self,kube,operation,expected,save):self.operation=operation;self.save=save
+                def verify_closed(self):calls.append('verify-owned-fence')
+                def new_claim(self,date):
+                    calls.append('new-final-claim');self.final_claim={'uid':'new'};self.final_pv={'uid':'new-pv'};self.final_path=base/'new-store';self.save({'kind':'allocated'});return self.final_path
+                def select_claim(self):calls.append('select-final-claim');self.save({'kind':'selected'})
+            class Runtime:
+                def __init__(self,path,operation):self.owned=[];calls.append(('runtime',operation))
+            with patch('root_main.ROOT',root),patch('root_main.Kube',Kube),patch('root_main.Staging',Stage),\
+                 patch('root_main.revalidate_inputs'),patch('root_main.DockerRuntime',Runtime),\
+                 patch('root_main.staging_baseline',return_value={'messages':0}) as baseline,patch('root_main.fixture') as fixture:
+                result_base,result=root_main.continue_fence(code,base)
+            self.assertEqual(result_base,base);self.assertEqual(result['operation'],'0049430b0dbb')
+            self.assertEqual(result['status'],'AWAITING_OFF_NODE_COPY');self.assertEqual(result['fence_status'],'VERIFIED')
+            self.assertEqual(result['fixture_backup'],state['fixture_backup']);self.assertEqual(result['previous_code_capture'],state['code_capture'])
+            self.assertEqual(calls,['verify-owned-fence',('runtime','0049430b0dbb'),'new-final-claim','select-final-claim'])
+            baseline.assert_called_once();fixture.assert_not_called()
+
+    def test_continue_fence_routes_existing_operation_without_prepare(self):
+        with tempfile.TemporaryDirectory() as d,patch('root_main.ROOT',Path(d)):
+            base=Path(d)/'known-baseline-0049430b0dbb'
+            with patch('root_main.continue_fence',create=True,return_value=(base,{})) as continued,\
+                 patch('root_main.share_checkpoint',create=True) as shared,patch('root_main.prepare') as prepared:
+                root_main.main_unlocked(['--continue-fence',str(base)])
+            continued.assert_called_once()
+            shared.assert_called_once_with(base,{})
+            prepared.assert_not_called()
+
     def test_second_operator_never_enters_locked_operation(self):
         with tempfile.TemporaryDirectory() as d,patch('root_main.ROOT',Path(d)):
             with root_main.operation_lock():
