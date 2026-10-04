@@ -325,6 +325,8 @@
   "spaceBotsSelectChats": "Разрешённые текстовые чаты",
   "spaceBotsInstallSuccess": "Бот установлен.",
   "botInstallActionError": "Не удалось установить бота.",
+  "commonActionFailed": "Не удалось выполнить действие.",
+  "socialSearchFailed": "Не удалось найти людей.",
   "spaceBotsUninstallSuccess": "Бот удалён из спейса.",
   "spaceBotsLoadError": "Не удалось загрузить ботов",
   "ephemeralMessageLabel": "Только для вас",

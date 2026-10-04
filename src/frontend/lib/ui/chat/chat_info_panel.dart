@@ -205,8 +205,9 @@ class _StandaloneChatGuestSettingsSectionState
         .where((member) => member.profileId == activeProfileId)
         .map((member) => member.role)
         .firstOrNull;
-    if (role != kChatRoleOwner && role != 'admin')
+    if (role != kChatRoleOwner && role != 'admin') {
       return const SizedBox.shrink();
+    }
 
     final l10n = AppLocalizations.of(context)!;
     final value = _allowGuests ?? chat.allowGuests;
@@ -227,6 +228,7 @@ class _StandaloneChatGuestSettingsSectionState
   }
 
   Future<void> _update(bool enabled) async {
+    final l10n = AppLocalizations.of(context)!;
     final authorization = ref.read(authorizationHeaderProvider);
     if (authorization == null) return;
     setState(() => _updating = true);
@@ -257,11 +259,15 @@ class _StandaloneChatGuestSettingsSectionState
             _allowGuests = null;
           }
         });
-      case ChatsApiFailure(:final message):
+      case ChatsApiFailure(:final statusCode):
         setState(() => _updating = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
     }
   }
 }
@@ -784,10 +790,16 @@ class ChatBotsSettingsSection extends ConsumerWidget {
                             )),
                           );
                           ref.invalidate(slashCommandsForChatProvider(chatId));
-                        case BotsApiFailure(:final message):
+                        case BotsApiFailure(:final message, :final statusCode):
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(l10n.chatRoomError(message)),
+                              content: Text(
+                                chatRoomErrorMessage(
+                                  l10n,
+                                  message,
+                                  statusCode: statusCode,
+                                ),
+                              ),
                             ),
                           );
                       }

@@ -153,6 +153,68 @@ void main() {
     expect(find.byKey(ForwardMessageSheet.sheetKey), findsNothing);
   });
 
+  testWidgets('forward failure hides upstream details and keeps the sheet', (
+    tester,
+  ) async {
+    const raw = 'internal forward trace=forward-secret';
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => ForwardMessageSheet.show(
+              context,
+              sourceMessage: sourceMessage,
+              sourceChatId: 'chat-source',
+            ),
+            child: const Text('Open forward'),
+          ),
+        ),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'chat-target',
+                        'type': 'CHAT_TYPE_GROUP',
+                        'creator_profile_id': 'profile-test',
+                        'name': 'Target group',
+                      },
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/forward') {
+            return http.Response(
+              jsonEncode({'error': 'internal_error', 'message': raw}),
+              500,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open forward'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ForwardMessageSheet.chatTileKey('chat-target')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Forward'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ForwardMessageSheet.sheetKey), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('forward-secret'), findsNothing);
+  });
+
   testWidgets('ForwardMessageSheet forwards a multi-select batch (FW-05)', (
     tester,
   ) async {

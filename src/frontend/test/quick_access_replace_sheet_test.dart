@@ -168,7 +168,8 @@ void main() {
     expect(loads, 2);
     expect(client.replacedChatIds, [null]);
     expect(tester.takeException(), isNull);
-    expect(find.text('Quick Access unavailable'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('Quick Access unavailable'), findsNothing);
   });
 
   testWidgets('failed replacement refreshes a stale picker', (tester) async {
@@ -197,6 +198,28 @@ void main() {
     expect(loads, 2);
     expect(client.replacedChatIds, ['old-0', null]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unknown Quick Access failure hides upstream details', (
+    tester,
+  ) async {
+    const raw = 'internal trace credential=qa-secret';
+    final client = _ScriptedQuickAccessClient([
+      const ChatsApiFailure(
+        message: raw,
+        errorCode: 'internal',
+        statusCode: 500,
+      ),
+    ]);
+    await tester.pumpWidget(
+      _actionApp(client, () async => QuickAccessListData(items: _slots(14))),
+    );
+
+    await tester.tap(find.text('replace'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('qa-secret'), findsNothing);
   });
 }
 

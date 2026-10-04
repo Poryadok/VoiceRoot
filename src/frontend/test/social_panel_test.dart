@@ -317,6 +317,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Try again'), findsOneWidget);
+    expect(find.text('Could not search for people.'), findsOneWidget);
+    expect(find.text('temporary failure'), findsNothing);
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
 
