@@ -18,13 +18,17 @@ void main() {
     final client = MockClient((request) async {
       if (request.url.path == '/api/v1/matchmaking/profile/me/matches') {
         return http.Response(
-          jsonEncode({'matchList': {'matches': [], 'nextCursor': ''}}),
+          jsonEncode({
+            'matchList': {'matches': [], 'nextCursor': ''},
+          }),
           200,
         );
       }
       if (request.url.path == '/api/v1/matchmaking/games') {
         return http.Response(
-          jsonEncode({'gameList': {'games': [], 'nextCursor': ''}}),
+          jsonEncode({
+            'gameList': {'games': [], 'nextCursor': ''},
+          }),
           200,
         );
       }
@@ -33,9 +37,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          ...voiceAppTestOverrides(client: client),
-        ],
+        overrides: [...voiceAppTestOverrides(client: client)],
         child: MaterialApp(
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -75,7 +77,12 @@ void main() {
           jsonEncode({
             'gameList': {
               'games': [
-                {'id': 'g1', 'name': 'Valorant', 'status': 'active', 'configJson': '{}'},
+                {
+                  'id': 'g1',
+                  'name': 'Valorant',
+                  'status': 'active',
+                  'configJson': '{}',
+                },
               ],
             },
           }),
@@ -111,9 +118,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          ...voiceAppTestOverrides(client: client),
-        ],
+        overrides: [...voiceAppTestOverrides(client: client)],
         child: MaterialApp(
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -125,7 +130,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(MatchHistoryScreen.listKey), findsOneWidget);
-    expect(find.byKey(MatchHistoryScreen.matchTileKey('match-42')), findsOneWidget);
+    expect(
+      find.byKey(MatchHistoryScreen.matchTileKey('match-42')),
+      findsOneWidget,
+    );
     expect(find.text('Valorant'), findsOneWidget);
 
     await tester.tap(find.byKey(MatchHistoryScreen.matchTileKey('match-42')));
@@ -133,23 +141,28 @@ void main() {
 
     expect(find.text('Teammate'), findsOneWidget);
     expect(find.text('Player One'), findsOneWidget);
-    expect(find.byKey(MatchHistoryScreen.addFriendKey('profile-2')), findsOneWidget);
-    expect(find.byKey(MatchHistoryScreen.addFriendKey('profile-1')), findsOneWidget);
+    expect(
+      find.byKey(MatchHistoryScreen.addFriendKey('profile-2')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(MatchHistoryScreen.addFriendKey('profile-1')),
+      findsOneWidget,
+    );
     expect(find.byKey(MatchHistoryScreen.banKey('profile-2')), findsOneWidget);
   });
 
   testWidgets('MatchHistoryScreen shows error with retry on failure', (
     tester,
   ) async {
+    const diagnostic = 'match-history-secret-diagnostic';
     final client = MockClient((request) async {
-      return http.Response('{"message":"unavailable"}', 503);
+      return http.Response(jsonEncode({'message': diagnostic}), 503);
     });
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          ...voiceAppTestOverrides(client: client),
-        ],
+        overrides: [...voiceAppTestOverrides(client: client)],
         child: MaterialApp(
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -161,6 +174,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(MatchHistoryScreen.errorKey), findsOneWidget);
+    expect(find.text(diagnostic), findsNothing);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(MatchHistoryScreen.errorKey)),
+    )!;
+    expect(find.text(l10n.backendUnavailable), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('MatchHistoryScreen hides ordinary API error details', (
+    tester,
+  ) async {
+    const diagnostic = 'match-history-internal-detail';
+    final client = MockClient((request) async {
+      return http.Response(jsonEncode({'message': diagnostic}), 500);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [...voiceAppTestOverrides(client: client)],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const MatchHistoryScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(MatchHistoryScreen.errorKey), findsOneWidget);
+    expect(find.text(diagnostic), findsNothing);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(MatchHistoryScreen.errorKey)),
+    )!;
+    expect(find.text(l10n.matchHistoryLoadError), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
   });
 }
