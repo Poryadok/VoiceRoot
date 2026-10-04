@@ -68,9 +68,11 @@ Future<void> _onActiveProfileChanged(Ref ref) async {
 }
 
 Future<void> _migrateLocalAccentIfNeeded(Ref ref, String profileId) async {
+  if (ref.read(authControllerProvider).activeProfileId != profileId) return;
   final auth = ref.read(authorizationHeaderProvider);
   if (auth == null) return;
   final profile = await ref.read(profileProvider(profileId).future);
+  if (ref.read(authControllerProvider).activeProfileId != profileId) return;
   if (profile == null) return;
   if (profile.accentColor != null && profile.accentColor!.isNotEmpty) return;
 
@@ -90,7 +92,9 @@ Future<void> _migrateLocalAccentIfNeeded(Ref ref, String profileId) async {
   );
   if (result is UsersApiOk) {
     await storage.clearOverride(profileId);
+    await storage.clearProfileIndex(profileId);
     ref.invalidate(profileProvider(profileId));
+    ref.invalidate(profileAccentColorProvider(profileId));
   }
 }
 

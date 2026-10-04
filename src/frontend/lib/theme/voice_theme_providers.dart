@@ -18,7 +18,7 @@ final voiceTokenCatalogProvider = FutureProvider<VoiceTokenCatalog>((ref) {
   return VoiceTokenCatalog.load();
 });
 
-/// Resolved accent [Color] for [profileId] (server accent, then local override, then palette).
+/// Server accent for [profileId], with legacy local data used only during migration.
 final profileAccentColorProvider = FutureProvider.family<Color, String>((
   ref,
   profileId,
