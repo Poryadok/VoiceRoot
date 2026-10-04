@@ -9,6 +9,7 @@ import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
+import 'package:voice_frontend/ui/space/join_space_invite_sheet.dart';
 import 'package:voice_frontend/ui/space/space_invites_sheet.dart';
 
 import 'support/test_voice_token_catalog.dart';
@@ -194,5 +195,109 @@ void main() {
     await tester.pumpAndSettle();
     expect(mutationCount, 0);
     expect(find.text(l10n.spaceInviteMaxUsesInvalid), findsOneWidget);
+  });
+
+  testWidgets('join invite hides API diagnostics and keeps the form open', (
+    tester,
+  ) async {
+    var requestCount = 0;
+    String? requestedCode;
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((request) async {
+        requestCount++;
+        requestedCode =
+            request.url.pathSegments[request.url.pathSegments.length - 2];
+        return http.Response(
+          '{"error":"private_join_detail","message":"private_join_detail"}',
+          500,
+        );
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceThemeTestOverrides(),
+        gatewayHttpClientProvider.overrideWithValue(gateway),
+        authorizationHeaderProvider.overrideWithValue('Bearer test'),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: JoinSpaceInviteSheet()),
+        ),
+      ),
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(JoinSpaceInviteSheet)),
+    )!;
+    await tester.enterText(
+      find.byKey(JoinSpaceInviteSheet.codeFieldKey),
+      'join-code-42',
+    );
+    await tester.tap(find.byKey(JoinSpaceInviteSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(requestCount, 1);
+    expect(requestedCode, 'join-code-42');
+    expect(find.byType(JoinSpaceInviteSheet), findsOneWidget);
+    expect(container.read(selectedSpaceIdProvider), isNull);
+    expect(find.textContaining('private_join_detail'), findsNothing);
+    expect(
+      find.text(l10n.spaceInviteJoinError(l10n.commonActionFailed)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('join invite keeps the local unauthenticated message', (
+    tester,
+  ) async {
+    var requestCount = 0;
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((request) async {
+        requestCount++;
+        return http.Response('{}', 200);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          authorizationHeaderProvider.overrideWithValue(null),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: JoinSpaceInviteSheet()),
+        ),
+      ),
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(JoinSpaceInviteSheet)),
+    )!;
+    await tester.enterText(
+      find.byKey(JoinSpaceInviteSheet.codeFieldKey),
+      'join-code-42',
+    );
+    await tester.tap(find.byKey(JoinSpaceInviteSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(requestCount, 0);
+    expect(find.byType(JoinSpaceInviteSheet), findsOneWidget);
+    expect(
+      find.text(l10n.spaceInviteJoinError('not_authenticated')),
+      findsOneWidget,
+    );
   });
 }
