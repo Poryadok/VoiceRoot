@@ -659,7 +659,7 @@ and Voice IDs denied while history remains.
 
 
 - [ ] **[Chat] NATS event surface incomplete vs doc** — published: `chat.created`, `chat.member_changed` (`src/backend/chat/internal/chatevents/jetstream.go`). Not published: `chat.updated`, `chat.deleted`, granular `member_added`/`removed`/`left` (`docs/microservices/chat-service.md` table).
-- [ ] **[Chat] S2S enrichment fails open** — Messaging errors logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go:77-81`). Documented degradation, but no metric/alert on enrichment skip.
+- [x] **[Chat] S2S enrichment fails open** — Messaging errors remain logged and zeroed (`src/backend/chat/internal/grpcsvc/list_chats.go`); non-empty-page enrichment RPC failures increment the unlabelled `chat_list_enrichment_failures_total` counter, exposed on Chat `/metrics`, and the mirrored P2 warning rules alert on any increase within 5m. Successful enrichment, absent optional client, and empty pages do not increment it. Repository alert configuration is validated; no live/staging alert observation is claimed.
 - [x] **[Chat] README status** — describes the implemented gRPC core and keeps residual gaps explicit (`src/backend/chat/README.md`).
 
 ### Notification

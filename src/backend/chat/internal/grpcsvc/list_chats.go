@@ -145,6 +145,9 @@ func (s *ChatGRPC) ListChats(ctx context.Context, req *chatv1.ListChatsRequest) 
 	if s.ListEnrich != nil && len(ids) > 0 {
 		extras, err = s.ListEnrich.EnrichListChats(ctx, caller, ids)
 		if err != nil {
+			if s.ListEnrichmentFailures != nil {
+				s.ListEnrichmentFailures.Inc()
+			}
 			// Degrade: chat rows are still useful without preview/unread when Messaging
 			// is temporarily unavailable during stack startup or S2S errors.
 			log.Printf("chat: ListChats enrichment skipped: %v", err)

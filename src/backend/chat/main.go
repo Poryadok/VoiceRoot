@@ -360,24 +360,26 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger, grpcmw.WithRegistry(metricsReg))...)
+		listEnrichmentFailures := grpcsvc.NewListEnrichmentFailuresCounter(metricsReg)
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
-			DM:                 dmStore,
-			StickerPacks:       dmStore,
-			Profiles:           profiles,
-			DMPeerDisplayNames: dmPeerDisplayNames,
-			LifecycleOwners:    lifecycleOwners,
-			Blocks:             blocks,
-			Privacy:            privacy,
-			Friends:            friends,
-			Contacts:           contacts,
-			SpaceCoMembership:  spaceCoMembership,
-			ListEnrich:         listEnrich,
-			DeletedAccounts:    deletedAccounts,
-			E2EPreKeyGate:      e2ePreKeyGate,
-			ChatEvents:         chatEvents,
-			Roles:              roleClient,
-			SpaceMembers:       spaceMembers,
-			Logger:             logger,
+			DM:                     dmStore,
+			StickerPacks:           dmStore,
+			Profiles:               profiles,
+			DMPeerDisplayNames:     dmPeerDisplayNames,
+			LifecycleOwners:        lifecycleOwners,
+			Blocks:                 blocks,
+			Privacy:                privacy,
+			Friends:                friends,
+			Contacts:               contacts,
+			SpaceCoMembership:      spaceCoMembership,
+			ListEnrich:             listEnrich,
+			ListEnrichmentFailures: listEnrichmentFailures,
+			DeletedAccounts:        deletedAccounts,
+			E2EPreKeyGate:          e2ePreKeyGate,
+			ChatEvents:             chatEvents,
+			Roles:                  roleClient,
+			SpaceMembers:           spaceMembers,
+			Logger:                 logger,
 		})
 		go func() {
 			logger.Info("gRPC listening", slog.String("addr", grpcListen))
