@@ -710,9 +710,7 @@ and Voice IDs denied while history remains.
 ### Realtime
 
 
-- [ ] **[Realtime] Doc metrics vs implementation** — `realtime-service.md` lists `realtime.events.delivered`, `realtime.events.fanout_latency`, `realtime.reconnects`; `metrics.go` exposes only connections, connect counters, hello histogram, NATS lag. (`docs/features/observability.md` documents the implemented set — drift between service doc and observability spec.)
 - [ ] **[Realtime] Six separate NATS connections per instance** — `main.go` opens one connection per consumer + lag poller (no shared `*nats.Conn`), increasing reconnect churn and FD usage at scale.
-- [ ] **[Realtime] Matchmaking consumer integration coverage** — `matchmaking_events_consumer.go` still needs subscription/fan-out integration coverage. Role subscription routing is covered by `TestSubscribeRoleEvents_DoesNotRouteVoiceOrUnknownThroughChatID`; presence adapter gRPC identity/privacy-response handling is covered by `presence_identity_boundary_test.go` (adapter contract fixtures, not live User/Social E2E). Cross-instance `message_delivered` is covered by `TestRedisDeliveryAckFanoutCrossInstance`; friend WS presence is covered by `TestComposePresenceDNDInvisible_live`.
 
 ### Multi-Profile
 
