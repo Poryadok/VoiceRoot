@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -173,10 +175,41 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	require.NoError(t, err)
 	publishAck, err := fixture.js.Publish(spec.subject, encoded)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	type consumerInfoObservation struct {
+		querySucceeded bool
+		numPending     int64
+		numAckPending  int64
+		errorType      string
+	}
+	var observationMu sync.Mutex
+	lastCompletedObservation := consumerInfoObservation{
+		numPending:    -1,
+		numAckPending: -1,
+		errorType:     "not observed",
+	}
+	pendingObserved := assert.Eventually(t, func() bool {
 		info, infoErr := fixture.js.ConsumerInfo(spec.stream, durable)
+		observation := consumerInfoObservation{}
+		if infoErr != nil {
+			observation.numPending, observation.numAckPending = -1, -1
+			observation.errorType = fmt.Sprintf("%T", infoErr)
+		} else {
+			observation.querySucceeded = true
+			observation.numPending = int64(info.NumPending)
+			observation.numAckPending = int64(info.NumAckPending)
+		}
+		observationMu.Lock()
+		lastCompletedObservation = observation
+		observationMu.Unlock()
 		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
-	}, 5*time.Second, 20*time.Millisecond, "%s event stays pending while its durable consumer is stopped", spec.service)
+	}, 5*time.Second, 20*time.Millisecond)
+	if !pendingObserved {
+		observationMu.Lock()
+		lastCompleted := lastCompletedObservation
+		observationMu.Unlock()
+		t.Fatalf("%s event stays pending while its durable consumer is stopped; last completed ConsumerInfo observation query_succeeded=%t num_pending=%d num_ack_pending=%d error_type=%q",
+			spec.service, lastCompleted.querySucceeded, lastCompleted.numPending, lastCompleted.numAckPending, lastCompleted.errorType)
+	}
 
 	second := start()
 	select {
