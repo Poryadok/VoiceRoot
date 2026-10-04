@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -132,6 +134,127 @@ void main() {
       await tester.pumpAndSettle();
       expect(mutationPaths, ['/api/v1/spaces/space-1${action.suffix}']);
       expect(find.textContaining('private_backend_detail'), findsNothing);
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
+    });
+  }
+
+  for (final action in [
+    (name: 'assign', revoke: false, path: '/api/v1/roles/assign'),
+    (name: 'revoke', revoke: true, path: '/api/v1/roles/revoke'),
+  ]) {
+    testWidgets('${action.name} role failure hides API diagnostics', (
+      tester,
+    ) async {
+      final mutations =
+          <({String method, String path, Map<String, dynamic> body})>[];
+      final gateway = GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/roles') {
+            return http.Response(
+              jsonEncode({
+                'role_list': {
+                  'roles': [
+                    {
+                      'id': 'role-member',
+                      'space_id': 'space-1',
+                      'name': 'Member',
+                      'position': 1,
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/roles/members') {
+            return http.Response(
+              jsonEncode({
+                'role_list': {
+                  'roles': action.revoke
+                      ? [
+                          {
+                            'id': 'role-member',
+                            'space_id': 'space-1',
+                            'name': 'Member',
+                            'position': 1,
+                          },
+                        ]
+                      : <Map<String, Object?>>[],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.method == 'POST') {
+            mutations.add((
+              method: request.method,
+              path: request.url.path,
+              body: jsonDecode(request.body) as Map<String, dynamic>,
+            ));
+            return http.Response(
+              jsonEncode({
+                'error': 'private_role_backend_detail',
+                'message': 'private_role_backend_detail',
+              }),
+              500,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            authorizationHeaderProvider.overrideWithValue('Bearer test'),
+            spaceMembersProvider(
+              'space-1',
+            ).overrideWith((ref) async => sampleMembers),
+            spacePermissionProvider.overrideWith((ref, query) async => true),
+            profileProvider('member-1').overrideWith(
+              (ref) async => const VoiceProfile(
+                id: 'member-1',
+                accountId: 'account-1',
+                username: 'member',
+                discriminator: '0001',
+                displayName: 'Member',
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: SpaceMembersSheet(spaceId: 'space-1')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SpaceMembersSheet)),
+      )!;
+
+      await tester.tap(find.byKey(SpaceMembersSheet.assignRoleKey('member-1')));
+      await tester.pumpAndSettle();
+      final optionText = action.revoke
+          ? '${l10n.spaceRevokeRole}: Member'
+          : '${l10n.spaceAssignRole}: Member';
+      await tester.tap(find.text(optionText));
+      await tester.pumpAndSettle();
+
+      expect(mutations, hasLength(1));
+      expect(mutations.single.method, 'POST');
+      expect(mutations.single.path, action.path);
+      expect(mutations.single.body, {
+        'space_id': 'space-1',
+        'profile_id': 'member-1',
+        'role_id': 'role-member',
+      });
+      expect(find.textContaining('private_role_backend_detail'), findsNothing);
       expect(find.text(l10n.commonActionFailed), findsOneWidget);
     });
   }
