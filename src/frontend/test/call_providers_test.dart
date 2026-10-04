@@ -59,6 +59,7 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   }
 
   bool? lastSetMuted;
+  bool? lastSetVideoEnabled;
 
   @override
   Future<void> setMuted(bool muted) async {
@@ -79,7 +80,9 @@ class _FakeLiveKitRoom implements VoiceLiveKitRoom {
   }) async {}
 
   @override
-  Future<void> setVideoEnabled(bool enabled) async {}
+  Future<void> setVideoEnabled(bool enabled) async {
+    lastSetVideoEnabled = enabled;
+  }
 
   @override
   bool get isScreenSharing => false;
@@ -251,6 +254,94 @@ Future<void> drainMicrotasks({int rounds = 30}) async {
 }
 
 void main() {
+  test(
+    'MatchSquad mute and video stay local; ordinary calls still sync state',
+    () async {
+      final stateUpdates = <http.Request>[];
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path ==
+                '/api/v1/matchmaking/matches/match-id/voice/join') {
+          return http.Response(
+            jsonEncode({
+              'call_session': {
+                'room_id': 'squad-room',
+                'livekit_room_name': 'match-squad-room',
+                'room_type_enum': 'VOICE_SESSION_KIND_GROUP_VOICE',
+                'status': 'CALL_STATUS_ACTIVE',
+              },
+              'media_epoch': 'media-epoch',
+              'membership_state': 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED',
+            }),
+            200,
+          );
+        }
+        if (request.method == 'POST' &&
+            request.url.path ==
+                '/api/v1/matchmaking/matches/match-id/voice/token') {
+          return http.Response(
+            jsonEncode({
+              'token': {'jwt': 'opaque', 'livekit_url': 'wss://media.test'},
+              'media_epoch': 'media-epoch',
+            }),
+            200,
+          );
+        }
+        if (request.method == 'PATCH' && request.url.path.endsWith('/state')) {
+          stateUpdates.add(request);
+          return http.Response(
+            '{}',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        fail('Unexpected request: ${request.method} ${request.url.path}');
+      });
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final room = _FakeLiveKitRoom();
+      final container = _callTestContainer(
+        client: client,
+        realtime: realtime,
+        fakeRoom: room,
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+
+      final notifier = container.read(callControllerProvider.notifier);
+      await notifier.joinGroupVoice(roomId: 'squad-room', matchId: 'match-id');
+      expect(container.read(callControllerProvider).phase, CallPhase.active);
+      await notifier.setMuted(true);
+      await notifier.setVideoEnabled(true);
+      expect(room.lastSetMuted, isTrue);
+      expect(room.lastSetVideoEnabled, isTrue);
+      expect(stateUpdates, isEmpty);
+
+      notifier.state = CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'ordinary-room',
+          livekitRoomName: 'voice-dm-ordinary-room',
+          chatId: 'chat-1',
+          initiatorProfileId: 'prof-test',
+          calleeProfileId: 'peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+        ),
+      );
+      await notifier.setMuted(false);
+      await notifier.setVideoEnabled(false);
+      expect(stateUpdates, hasLength(2));
+      expect(
+        stateUpdates.every(
+          (request) =>
+              request.url.path == '/api/v1/voice/calls/ordinary-room/state',
+        ),
+        isTrue,
+      );
+    },
+  );
+
   test(
     'legacy room entry retains room and Space binding in active state',
     () async {

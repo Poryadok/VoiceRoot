@@ -598,7 +598,7 @@ class CallController extends StateNotifier<CallState> {
     try {
       await _room?.ensureAudioPlayback();
       await _applyEffectiveMicMute();
-      if (auth != null && current != null) {
+      if (auth != null && current != null && current.matchId == null) {
         await _ref
             .read(voiceCallsClientProvider)
             .updateVoiceState(
@@ -651,7 +651,7 @@ class CallController extends StateNotifier<CallState> {
     final current = state.session;
     state = state.copyWith(isVideoEnabled: enabled);
     await _room?.setVideoEnabled(enabled);
-    if (auth != null && current != null) {
+    if (auth != null && current != null && current.matchId == null) {
       await _ref
           .read(voiceCallsClientProvider)
           .updateVoiceState(
