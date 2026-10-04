@@ -10,7 +10,7 @@ func TestLoadFromEnvIsAbsentOrStrict(t *testing.T) {
 	if _, enabled, err := LoadFromEnv(lookup); err != nil || enabled {
 		t.Fatalf("empty config = enabled %v, err %v", enabled, err)
 	}
-	values := map[string]string{"TLS_CERT_FILE": "cert", "TLS_KEY_FILE": "key", "CLIENT_CA_FILE": "client-ca", "JWKS_CA_FILE": "jwks-ca", "JWKS_URL": "https://gateway.example/jwks", "REDIS_ADDR": "redis:6379"}
+	values := map[string]string{"TLS_CERT_FILE": "cert", "TLS_KEY_FILE": "key", "JWKS_CA_FILE": "jwks-ca", "JWKS_URL": "https://gateway.example/jwks", "REDIS_ADDR": "redis:6379"}
 	lookup = func(key string) (string, bool) {
 		value, ok := values[strings.TrimPrefix(key, envPrefix)]
 		return value, ok
@@ -18,6 +18,7 @@ func TestLoadFromEnvIsAbsentOrStrict(t *testing.T) {
 	if _, enabled, err := LoadFromEnv(lookup); err == nil || !enabled {
 		t.Fatalf("partial config = enabled %v, err %v; want enabled error", enabled, err)
 	}
+	values["CLIENT_CA_FILE"] = "client-ca"
 	values["GRPC_LISTEN"] = ":9093"
 	if cfg, enabled, err := LoadFromEnv(lookup); err != nil || !enabled || cfg.ListenerAddr != ":9093" {
 		t.Fatalf("complete config = %#v, enabled %v, err %v", cfg, enabled, err)

@@ -43,7 +43,7 @@ func TestMatchSquadJoinTokenIsBoundedByActorValidity(t *testing.T) {
 	publish := true
 	token, expiry, err := issuer.MatchSquadJoinToken("profile-a", "match-squad-room-1", &publish, now, actorExpiry)
 	require.NoError(t, err)
-	require.Equal(t, actorExpiry, expiry)
+	require.Equal(t, actorExpiry.UTC(), expiry)
 	parts := strings.Split(token, ".")
 	require.Len(t, parts, 3)
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -64,5 +64,5 @@ func TestMatchSquadJoinTokenCapsLongActorValidity(t *testing.T) {
 	issuer := NewHS256TokenIssuer("devkey", "secret", "ws://127.0.0.1:7880", time.Hour)
 	_, expiry, err := issuer.MatchSquadJoinToken("profile-a", "match-squad-room-1", nil, now, now.Add(5*time.Minute))
 	require.NoError(t, err)
-	require.Equal(t, now.Add(time.Minute), expiry)
+	require.Equal(t, now.UTC().Add(time.Minute), expiry)
 }
