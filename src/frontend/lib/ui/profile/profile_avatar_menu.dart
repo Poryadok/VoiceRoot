@@ -9,6 +9,7 @@ import '../../state/idle_presence_controller.dart';
 import '../../state/profile_switch_coordinator.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_avatar.dart';
 import 'create_profile_sheet.dart';
 
@@ -191,9 +192,16 @@ Future<void> _handleSelection(
         .updatePresence(authorization: auth, status: status);
     if (!context.mounted) return;
     if (result is UsersApiFailure) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(result.message)));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
+      );
       return;
     }
     ref.read(idlePresenceControllerProvider).onManualStatus(status);

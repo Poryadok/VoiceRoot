@@ -120,7 +120,11 @@ class SpaceRolesSheet extends ConsumerWidget {
                                   );
                                   if (context.mounted && err != null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(err)),
+                                      SnackBar(
+                                        content: Text(
+                                          commonActionErrorMessage(l10n),
+                                        ),
+                                      ),
                                     );
                                   }
                                 } else if (value == 'delete') {
@@ -130,7 +134,11 @@ class SpaceRolesSheet extends ConsumerWidget {
                                   );
                                   if (context.mounted && err != null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(err)),
+                                      SnackBar(
+                                        content: Text(
+                                          commonActionErrorMessage(l10n),
+                                        ),
+                                      ),
                                     );
                                   }
                                 }

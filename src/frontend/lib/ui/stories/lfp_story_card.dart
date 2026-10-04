@@ -9,6 +9,7 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 
 /// Looking-for-party story card with join/write actions.
 class LfpStoryCard extends StatelessWidget {
@@ -143,8 +144,13 @@ abstract final class LfpStoryActions {
         );
     if (!context.mounted) return;
     if (result is StoriesApiFailure) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
       );
       return;
     }
@@ -171,8 +177,13 @@ abstract final class LfpStoryActions {
         );
     if (!context.mounted) return;
     if (result is StoriesApiFailure) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
       );
       return;
     }

@@ -5,6 +5,7 @@ import '../../backend/roles_client.dart';
 import '../../backend/space_permissions.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/space_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_compact_banner.dart';
 import '../core/voice_disabled_action.dart';
@@ -165,7 +166,10 @@ class _SpaceRoleEditorSheetState extends ConsumerState<SpaceRoleEditorSheet> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(commonActionErrorMessage(l10n))),
+      );
       return;
     }
     Navigator.of(context).pop();
