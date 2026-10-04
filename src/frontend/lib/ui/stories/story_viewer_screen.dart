@@ -62,10 +62,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     if (storyId.isEmpty || _markedViewed.contains(storyId)) return;
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
-    final result = await ref.read(voiceStoriesClientProvider).markViewed(
-          authorization: auth,
-          storyId: storyId,
-        );
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .markViewed(authorization: auth, storyId: storyId);
     if (result is StoriesApiOk<void>) {
       _markedViewed.add(storyId);
     }
@@ -94,22 +93,24 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     final emoji = await _pickReactionEmoji();
     if (emoji == null || !mounted) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).reactToStory(
-          authorization: auth,
-          storyId: storyId,
-          emoji: emoji,
-        );
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .reactToStory(authorization: auth, storyId: storyId, emoji: emoji);
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
     switch (result) {
       case StoriesApiOk():
         ref.invalidate(storyReactionsProvider(storyId));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.storyReactSent)));
+      case StoriesApiFailure(:final statusCode):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.storyReactSent)),
-        );
-      case StoriesApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
         );
     }
   }
@@ -149,49 +150,28 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     if (auth == null || storyId.isEmpty) return;
 
     final l10n = AppLocalizations.of(context)!;
-    final controller = TextEditingController();
     final text = await showDialog<String>(
       context: context,
-      builder: (ctx) {
-        final dialogL10n = AppLocalizations.of(ctx)!;
-        return AlertDialog(
-          title: Text(dialogL10n.storyViewerReply),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            decoration: InputDecoration(hintText: dialogL10n.storyViewerReplyHint),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(dialogL10n.commonCancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: Text(dialogL10n.storyViewerReply),
-            ),
-          ],
-        );
-      },
+      builder: (_) => const _StoryReplyDialog(),
     );
-    controller.dispose();
     if (text == null || text.isEmpty || !mounted) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).replyToStory(
-          authorization: auth,
-          storyId: storyId,
-          text: text,
-        );
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .replyToStory(authorization: auth, storyId: storyId, text: text);
     if (!mounted) return;
     switch (result) {
       case StoriesApiOk():
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.storyViewerReplySent)));
+      case StoriesApiFailure(:final statusCode):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.storyViewerReplySent)),
-        );
-      case StoriesApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
         );
     }
   }
@@ -199,10 +179,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   void _report() {
     final storyId = _currentStoryId;
     if (storyId.isEmpty) return;
-    ReportSheet.show(
-      context,
-      target: ReportStoryTarget(storyId: storyId),
-    );
+    ReportSheet.show(context, target: ReportStoryTarget(storyId: storyId));
   }
 
   @override
@@ -286,6 +263,53 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   }
 }
 
+class _StoryReplyDialog extends StatefulWidget {
+  const _StoryReplyDialog();
+
+  @override
+  State<_StoryReplyDialog> createState() => _StoryReplyDialogState();
+}
+
+class _StoryReplyDialogState extends State<_StoryReplyDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      title: Text(l10n.storyViewerReply),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLines: 3,
+        decoration: InputDecoration(hintText: l10n.storyViewerReplyHint),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+          child: Text(l10n.storyViewerReply),
+        ),
+      ],
+    );
+  }
+}
+
 class _StoryContent extends ConsumerWidget {
   const _StoryContent({
     required this.story,
@@ -311,8 +335,9 @@ class _StoryContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final reactionsAsync =
-        isAuthor ? ref.watch(storyReactionsProvider(storyId)) : null;
+    final reactionsAsync = isAuthor
+        ? ref.watch(storyReactionsProvider(storyId))
+        : null;
     final reactionAggregates = reactionsAsync == null
         ? const <({String emoji, int count})>[]
         : reactionsAsync.when(
@@ -381,9 +406,9 @@ class _StoryContent extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Text(
               story.textContent ?? '',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: voice.textPrimary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: voice.textPrimary),
               textAlign: TextAlign.center,
             ),
           ),
@@ -391,7 +416,10 @@ class _StoryContent extends ConsumerWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
-            ColoredBox(color: bg, child: Center(child: body)),
+            ColoredBox(
+              color: bg,
+              child: Center(child: body),
+            ),
             ..._overlayChildren(
               context,
               l10n,
@@ -406,7 +434,10 @@ class _StoryContent extends ConsumerWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        ColoredBox(color: voice.elevated, child: Center(child: body)),
+        ColoredBox(
+          color: voice.elevated,
+          child: Center(child: body),
+        ),
         ..._overlayChildren(
           context,
           l10n,
@@ -537,9 +568,9 @@ class _StoryReactionChip extends StatelessWidget {
               Text(
                 '$count',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: voice.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  color: voice.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ],
@@ -583,10 +614,7 @@ class _StoryVideoPlayerState extends State<_StoryVideoPlayer> {
   Widget build(BuildContext context) {
     if (!_initialized) {
       return const Center(
-        child: SizedBox(
-          width: 280,
-          child: VoiceListSkeleton(rowCount: 3),
-        ),
+        child: SizedBox(width: 280, child: VoiceListSkeleton(rowCount: 3)),
       );
     }
     return AspectRatio(
