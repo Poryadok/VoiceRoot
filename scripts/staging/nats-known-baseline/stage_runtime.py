@@ -23,6 +23,58 @@ MARKER = 'voice-nats-generation'
 NAMESPACE = 'voice-staging'
 
 
+def pv_storage_path(pv, claim_uid, claim_name, pv_uid):
+    """One UID-bound local-path volume on the captured staging node."""
+    uid=r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}'
+    if (not isinstance(claim_uid,str) or not re.fullmatch(uid,claim_uid) or
+        not isinstance(pv_uid,str) or not re.fullmatch(uid,pv_uid) or
+        not isinstance(claim_name,str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,252}',claim_name)):
+        raise Blocked('pv_storage_identity_invalid')
+    spec=pv.get('spec',{})
+    if pv.get('metadata',{}).get('uid')!=pv_uid or spec.get('claimRef',{}).get('uid')!=claim_uid:
+        raise Blocked('pv_storage_identity_changed')
+    kinds=[key for key in ('local','hostPath') if key in spec]
+    if len(kinds)!=1 or not isinstance(spec[kinds[0]],dict):raise Blocked('pv_storage_kind_unsupported')
+    expected='/var/lib/rancher/k3s/storage/pvc-'+claim_uid+'_'+NAMESPACE+'_'+claim_name
+    if spec[kinds[0]].get('path')!=expected:raise Blocked('pv_storage_path_unsupported')
+    affinity={'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}
+    if spec.get('nodeAffinity')!=affinity:raise Blocked('pv_storage_node_unsupported')
+    # Filesystem custody is checked component-by-component before any final
+    # store read; this selector does not open or mount the source store.
+    return expected
+
+# Fixed typed output: historical ReplicaSet templates can exceed the capture
+# cap. They are irrelevant to physical Pod ownership/PVC writer detection.
+FENCE_TEMPLATE = ('{"items":[{{range $i,$r := .items}}{{if $i}},{{end}}'
+    '{"kind":{{printf "%q" $r.kind}},"metadata":{"uid":{{printf "%q" $r.metadata.uid}},'
+    '"ownerReferences":[{{range $j,$o := $r.metadata.ownerReferences}}{{if $j}},{{end}}'
+    '{"uid":{{printf "%q" $o.uid}}}{{end}}]},"spec":{"volumes":['
+    '{{range $j,$v := $r.spec.volumes}}{{if $j}},{{end}}'
+    '{"persistentVolumeClaim":{"claimName":{{if $v.persistentVolumeClaim}}'
+    '{{printf "%q" $v.persistentVolumeClaim.claimName}}{{else}}""{{end}}}}'
+    '{{end}}]}}{{end}}]}')
+
+
+def fence_objects(kube):
+    result=kube.run(['get','pods,replicasets','-o','go-template='+FENCE_TEMPLATE])
+    rows=result.get('items') if isinstance(result,dict) and set(result)=={'items'} else None
+    if not isinstance(rows,list) or len(rows)>2048:raise Blocked('fence_projection_invalid')
+    uid=re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
+    for row in rows:
+        try:
+            if set(row)!={'kind','metadata','spec'} or set(row['metadata'])!={'uid','ownerReferences'} or set(row['spec'])!={'volumes'}:raise ValueError()
+            if row['kind'] not in ('Pod','ReplicaSet') or not uid.fullmatch(row['metadata']['uid']):raise ValueError()
+            owners=row['metadata'].get('ownerReferences',[]);volumes=row.get('spec',{}).get('volumes',[])
+            if not isinstance(owners,list) or len(owners)>16 or not isinstance(volumes,list) or len(volumes)>64:raise ValueError()
+            if any(set(o)!={'uid'} or not uid.fullmatch(o['uid']) for o in owners):raise ValueError()
+            for volume in volumes:
+                if set(volume)!={'persistentVolumeClaim'} or set(volume['persistentVolumeClaim'])!={'claimName'}:raise ValueError()
+                claim=volume.get('persistentVolumeClaim',{}).get('claimName','')
+                if not isinstance(claim,str) or len(claim)>253 or (claim and not re.fullmatch(r'[a-z0-9][a-z0-9.-]*',claim)):raise ValueError()
+        except (KeyError,TypeError,AttributeError,ValueError):raise Blocked('fence_projection_invalid') from None
+    return rows
+
+
 class Kube:
     def __init__(self, run=None): self.run = run or self._run
 
@@ -36,8 +88,11 @@ class Kube:
     def get(self, kind, name): return self.run(['get',kind,name,'-o','json'])
 
     def secret_meta(self, name):
-        return self.run(['get','secret',name,'-o',
-            'jsonpath={"uid":"{.metadata.uid}","resourceVersion":"{.metadata.resourceVersion}"}'])
+        values=self.run(['get','secret',name,'-o',
+            "jsonpath-as-json={.metadata['uid','resourceVersion']}"])
+        if not isinstance(values,list) or len(values)!=2 or any(not isinstance(v,str) or not v for v in values):
+            raise Blocked('secret_metadata_projection_invalid')
+        return dict(zip(('uid','resourceVersion'),values))
 
     def cas(self, kind, row, changes):
         metadata = row['metadata']
@@ -142,7 +197,7 @@ class Staging:
                 row=self.kube.get('deployment',name)
                 if row['metadata']['uid']!=self.snapshots[name]['metadata']['uid'] or row['spec']['template']!=self.snapshots[name]['spec']['template'] or row['spec'].get('replicas',1)!=0:
                     raise Blocked('fenced_workload_changed')
-            rows=self.kube.run(['get','pods,replicasets','-o','json'])['items']
+            rows=fence_objects(self.kube)
             claims={self.expected.get('source_claim')}
             if hasattr(self,'final_claim'):claims.add(self.final_claim['metadata']['name'])
             if any(r['kind']=='Pod' and any(v.get('persistentVolumeClaim',{}).get('claimName') in claims for v in r['spec'].get('volumes',[])) for r in rows):
@@ -206,9 +261,7 @@ class Staging:
         pv=self.kube.get('pv',current['spec']['volumeName'])
         if pv['spec'].get('claimRef',{}).get('uid')!=claim['metadata']['uid']:
             raise Blocked('final_pv_claim_mismatch')
-        expected='/var/lib/rancher/k3s/storage/pvc-'+claim['metadata']['uid']+'_'+NAMESPACE+'_'+name
-        if pv['spec'].get('hostPath',{}).get('path')!=expected:
-            raise Blocked('final_pv_path_unsupported')
+        expected=pv_storage_path(pv,claim['metadata']['uid'],name,pv['metadata']['uid'])
         # Delete only the exact allocation Pod, then prove no Pod mounts the
         # final claim before handing its directory to the isolated broker.
         self.kube.run(['delete','--raw','/api/v1/namespaces/'+NAMESPACE+'/pods/'+binder,'-f','-'],
@@ -238,7 +291,7 @@ class Staging:
         self.verify_closed()
         claim=self.kube.get('pvc',self.final_claim['metadata']['name'])
         pv=self.kube.get('pv',claim['spec']['volumeName'])
-        if claim['metadata']['uid']!=self.final_claim['metadata']['uid'] or pv['metadata']['uid']!=self.final_pv['metadata']['uid'] or pv['spec'].get('claimRef',{}).get('uid')!=claim['metadata']['uid'] or pv['spec'].get('hostPath',{}).get('path')!=str(self.final_path):
+        if claim['metadata']['uid']!=self.final_claim['metadata']['uid'] or pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],self.final_pv['metadata']['uid'])!=str(self.final_path) or any(pv['spec'].get(k)!=self.final_pv['spec'].get(k) for k in ('local','hostPath')):
             raise Blocked('closed_final_storage_changed')
 
     def select_claim(self):

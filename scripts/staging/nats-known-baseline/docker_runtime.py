@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import stat
+import tempfile
 import time
 
 from controller import Blocked, archive_closed_store, restore_closed_store
@@ -36,6 +38,22 @@ class DockerRuntime:
         # Pod mounts. Existing identity-derived stores cannot match this path.
         os.chmod(path,0o700); os.chown(path,65532,65532)
         self.new_stores.add(str(path))
+
+    def allow_existing_store(self, path):
+        # Caller has revalidated the exact recorded PVC/PV identity, physical
+        # fence and paused native inventory. Never harden/reset existing data.
+        path=Path(path)
+        if not re.fullmatch(r'/var/lib/rancher/k3s/storage/pvc-[a-f0-9-]{36}_voice-staging_voice-nats-jsdata-d[0-9]{8}[a-z0-9]{1,8}',str(path)) or path.resolve(strict=True)!=path:
+            raise Blocked('existing_store_identity_invalid')
+        s=path.lstat()
+        if not stat.S_ISDIR(s.st_mode) or s.st_uid!=65532 or s.st_mode&0o077:
+            raise Blocked('existing_store_custody_invalid')
+        self.new_stores.add(str(path))
+
+    def no_operation_containers(self, *, running_only=False):
+        args=['ps'] if running_only else ['ps','-a']
+        if self.run([*args,'--filter','label='+LABEL+'='+self.operation,'--format','{{.ID}}']):
+            raise Blocked('operation_container_writer_present')
 
     @staticmethod
     def _run(args, timeout=60):
@@ -119,8 +137,10 @@ class DockerRuntime:
     def kernel(self, broker, phase):
         if phase not in ('seed', 'verify-closed', 'drain', 'verify-drained', 'census'):
             raise Blocked('kernel_phase_invalid')
-        out = self.base / ('out-'+str(len(self.owned)))
-        out.mkdir(mode=0o700); os.chown(out, 65532, 65532)
+        # A reconstructed operation has an empty owned-container ledger but
+        # retains previous proof files. Never reuse or overwrite those outputs.
+        out = Path(tempfile.mkdtemp(prefix='out-', dir=self.base))
+        os.chown(out, 65532, 65532)
         name = self.create('kernel-'+str(len(self.owned)), NATS_IMAGE,
             [(self.base/'kernel', '/kernel', False), (self.base/'inputs', '/inputs', False), (out, '/out', True)],
             ['/kernel', '--phase', phase], broker)
