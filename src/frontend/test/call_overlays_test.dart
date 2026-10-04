@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride, kIsWeb;
@@ -93,6 +95,11 @@ Future<void> _loadNotoSans() async {
     ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
     ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
   await loader.load();
+}
+
+String _incomingOverlayGolden(String orientation) {
+  final hostDirectory = Platform.isLinux ? 'linux/' : '';
+  return 'goldens/${hostDirectory}incoming_call_overlay_$orientation.png';
 }
 
 void main() {
@@ -369,7 +376,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await expectLater(
       find.byKey(IncomingCallOverlay.overlayKey),
-      matchesGoldenFile('goldens/incoming_call_overlay_h.png'),
+      matchesGoldenFile(_incomingOverlayGolden('h')),
     );
   });
 
@@ -393,7 +400,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await expectLater(
       find.byKey(IncomingCallOverlay.overlayKey),
-      matchesGoldenFile('goldens/incoming_call_overlay_v.png'),
+      matchesGoldenFile(_incomingOverlayGolden('v')),
     );
   });
 
