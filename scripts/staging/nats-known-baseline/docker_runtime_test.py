@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -47,6 +48,36 @@ class DockerSafetyTests(unittest.TestCase):
             with self.assertRaises(Blocked):
                 self.runtime.cold_archive('broker', '/anything', '/archive')
             archive.assert_not_called()
+
+    def test_second_runtime_kernel_preserves_previous_proof_output(self):
+        base = Path(self.tmp.name)
+        previous = base/'out-5'; previous.mkdir(mode=0o700)
+        sentinel = previous/'census.json'; sentinel.write_bytes(b'previous-proof')
+        outputs = []
+        for _ in range(2):
+            runtime = DockerRuntime(base, 'abcd1234', lambda args, timeout=60: '0')
+            runtime.owned = {str(i): {} for i in range(5)}
+            with patch.object(runtime, 'create', return_value='kernel'), patch.object(runtime, 'inspect', return_value={'State': {'Running': False}}):
+                outputs.append(runtime.kernel('broker', 'census'))
+        self.assertEqual(sentinel.read_bytes(), b'previous-proof')
+        self.assertNotEqual(outputs[0], outputs[1])
+        for output in outputs:
+            self.assertEqual(output.parent, base)
+            self.assertNotEqual(output, previous)
+            self.assertEqual(output.stat().st_uid, 65532)
+            self.assertEqual(output.stat().st_mode & 0o777, 0o700)
+
+    def test_old_output_symlink_is_never_reused(self):
+        base = Path(self.tmp.name)
+        outside = base/'outside'; outside.mkdir()
+        (base/'out-5').symlink_to(outside, target_is_directory=True)
+        runtime = DockerRuntime(base, 'abcd1234', lambda args, timeout=60: '0')
+        runtime.owned = {str(i): {} for i in range(5)}
+        with patch.object(runtime, 'create', return_value='kernel'), patch.object(runtime, 'inspect', return_value={'State': {'Running': False}}):
+            output = runtime.kernel('broker', 'census')
+        self.assertEqual(output.parent, base)
+        self.assertNotEqual(output.resolve(), outside)
+        self.assertEqual(list(outside.iterdir()), [])
 
 
 if __name__ == '__main__': unittest.main()
