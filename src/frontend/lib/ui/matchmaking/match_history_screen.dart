@@ -9,6 +9,7 @@ import '../../state/auth_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import '../social/profile_detail_sheet.dart';
@@ -245,7 +246,9 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
                     if (!context.mounted) return;
                     if (err != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.socialActionError(err))),
+                        SnackBar(
+                          content: Text(socialActionErrorMessage(l10n, err)),
+                        ),
                       );
                     }
                   },

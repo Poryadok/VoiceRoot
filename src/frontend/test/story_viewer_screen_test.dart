@@ -52,11 +52,15 @@ void main() {
     viewCount: 3,
   );
 
-  Widget wrap(Widget child, {String activeProfileId = 'prof-test'}) {
+  Widget wrap(
+    Widget child, {
+    String activeProfileId = 'prof-test',
+    http.Client? client,
+  }) {
     return ProviderScope(
       overrides: [
         ...voiceAppTestOverrides(
-          client: MockClient((_) async => throw UnimplementedError()),
+          client: client ?? MockClient((_) async => throw UnimplementedError()),
         ),
         authControllerProvider.overrideWith((ref) {
           final controller = AuthController(
@@ -109,8 +113,9 @@ void main() {
     expect(find.textContaining('3'), findsOneWidget);
   });
 
-  testWidgets('StoryViewerScreen applies text background from textStyleJson',
-      (tester) async {
+  testWidgets('StoryViewerScreen applies text background from textStyleJson', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -121,8 +126,9 @@ void main() {
             final controller = AuthController(
               authClient: ref.watch(voiceAuthClientProvider),
               storage: ref.watch(authSessionStorageProvider),
-              guestCredentialsStorage:
-                  ref.watch(guestCredentialsStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
             );
             controller.state = AuthState(
               session: AuthSession(
@@ -135,8 +141,9 @@ void main() {
             );
             return controller;
           }),
-          storyDetailProvider('story-text-accent')
-              .overrideWith((ref) async => textStoryAccent),
+          storyDetailProvider(
+            'story-text-accent',
+          ).overrideWith((ref) async => textStoryAccent),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -150,17 +157,20 @@ void main() {
     await tester.pumpAndSettle();
 
     final colored = tester.widget<ColoredBox>(
-      find.descendant(
-        of: find.byType(StoryViewerScreen),
-        matching: find.byType(ColoredBox),
-      ).first,
+      find
+          .descendant(
+            of: find.byType(StoryViewerScreen),
+            matching: find.byType(ColoredBox),
+          )
+          .first,
     );
     final theme = voiceTestTheme();
     expect(colored.color, theme.colorScheme.primary);
   });
 
-  testWidgets('StoryViewerScreen shows game tag chip on non-LFP story',
-      (tester) async {
+  testWidgets('StoryViewerScreen shows game tag chip on non-LFP story', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -168,8 +178,9 @@ void main() {
             client: MockClient((_) async => throw UnimplementedError()),
           ),
           authControllerProvider.overrideWith(authenticatedAuthController),
-          storyDetailProvider('story-photo-tag')
-              .overrideWith((ref) async => storyWithGameTag),
+          storyDetailProvider(
+            'story-photo-tag',
+          ).overrideWith((ref) async => storyWithGameTag),
           gameCatalogProvider.overrideWith(
             (ref) async => GameListData(
               games: [
@@ -198,8 +209,9 @@ void main() {
     expect(find.text('Dota 2'), findsOneWidget);
   });
 
-  testWidgets('StoryViewerScreen view count opens viewers sheet for author',
-      (tester) async {
+  testWidgets('StoryViewerScreen view count opens viewers sheet for author', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -210,8 +222,9 @@ void main() {
             final controller = AuthController(
               authClient: ref.watch(voiceAuthClientProvider),
               storage: ref.watch(authSessionStorageProvider),
-              guestCredentialsStorage:
-                  ref.watch(guestCredentialsStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
             );
             controller.state = AuthState(
               session: AuthSession(
@@ -225,12 +238,12 @@ void main() {
             return controller;
           }),
           storyDetailProvider('story-1').overrideWith((ref) async => story),
-          storyViewersProvider('story-1').overrideWith(
-            (ref) async => const ['viewer-1'],
-          ),
-          storyReactionsProvider('story-1').overrideWith(
-            (ref) async => const [],
-          ),
+          storyViewersProvider(
+            'story-1',
+          ).overrideWith((ref) async => const ['viewer-1']),
+          storyReactionsProvider(
+            'story-1',
+          ).overrideWith((ref) async => const []),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -250,8 +263,9 @@ void main() {
     expect(find.byKey(StoryViewersSheet.sheetKey), findsOneWidget);
   });
 
-  testWidgets('StoryViewerScreen react picker sends emoji to backend',
-      (tester) async {
+  testWidgets('StoryViewerScreen react picker sends emoji to backend', (
+    tester,
+  ) async {
     String? reactedEmoji;
     final mock = MockClient((req) async {
       if (req.method == 'POST' && req.url.path.endsWith('/views')) {
@@ -305,7 +319,120 @@ void main() {
     expect(find.text('Reaction sent'), findsOneWidget);
   });
 
-  testWidgets('StoryViewerScreen shows author-only reaction chips', (tester) async {
+  testWidgets('StoryViewerScreen hides upstream reaction error', (
+    tester,
+  ) async {
+    final mock = MockClient((req) async {
+      if (req.url.path.endsWith('/views')) return http.Response('', 204);
+      if (req.url.path.endsWith('/reactions')) {
+        return http.Response(
+          '{"error":"internal","message":"private reaction diagnostic"}',
+          500,
+          headers: const {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('', 404);
+    });
+    await tester.pumpWidget(
+      wrap(const StoryViewerScreen(storyIds: ['story-1']), client: mock),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(StoryViewerScreen.reactButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('story_viewer_react_emoji_❤️')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('private reaction diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+  });
+
+  testWidgets('StoryViewerScreen hides upstream reply error', (tester) async {
+    http.Request? replyRequest;
+    final mock = MockClient((req) async {
+      if (req.url.path.endsWith('/views')) return http.Response('', 204);
+      if (req.url.path.endsWith('/reply')) {
+        replyRequest = req;
+        return http.Response(
+          '{"error":"internal","message":"private reply diagnostic"}',
+          503,
+          headers: const {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('', 404);
+    });
+    await tester.pumpWidget(
+      wrap(const StoryViewerScreen(storyIds: ['story-1']), client: mock),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(StoryViewerScreen.replyButtonKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '  Please respond  ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Reply'));
+    await tester.pumpAndSettle();
+
+    expect(replyRequest?.method, 'POST');
+    expect(replyRequest?.url.path, '/api/v1/stories/story-1/reply');
+    expect(jsonDecode(replyRequest!.body)['text'], 'Please respond');
+    expect(find.text('private reply diagnostic'), findsNothing);
+    expect(
+      find.text(
+        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('StoryViewerScreen preserves reply cancel, empty, and success', (
+    tester,
+  ) async {
+    final replyBodies = <String>[];
+    final mock = MockClient((req) async {
+      if (req.url.path.endsWith('/views')) return http.Response('', 204);
+      if (req.url.path.endsWith('/reply')) {
+        replyBodies.add(
+          (jsonDecode(req.body) as Map<String, dynamic>)['text'] as String,
+        );
+        return http.Response(
+          '{"chatId":"chat-1","messageId":"message-1"}',
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('', 404);
+    });
+    await tester.pumpWidget(
+      wrap(const StoryViewerScreen(storyIds: ['story-1']), client: mock),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(StoryViewerScreen.replyButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(replyBodies, isEmpty);
+
+    await tester.tap(find.byKey(StoryViewerScreen.replyButtonKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '   ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Reply'));
+    await tester.pumpAndSettle();
+    expect(replyBodies, isEmpty);
+
+    await tester.tap(find.byKey(StoryViewerScreen.replyButtonKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '  Hello there  ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Reply'));
+    await tester.pumpAndSettle();
+
+    expect(replyBodies, ['Hello there']);
+    expect(find.text('Reply sent'), findsOneWidget);
+  });
+
+  testWidgets('StoryViewerScreen shows author-only reaction chips', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -316,8 +443,9 @@ void main() {
             final controller = AuthController(
               authClient: ref.watch(voiceAuthClientProvider),
               storage: ref.watch(authSessionStorageProvider),
-              guestCredentialsStorage:
-                  ref.watch(guestCredentialsStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
             );
             controller.state = AuthState(
               session: AuthSession(
