@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
-
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
@@ -91,44 +89,44 @@ func (s *Sweeper) RunOnce(ctx context.Context) error {
 			}
 		}
 	}
-	if err := s.expirePendingAccept(ctx, now, timing); err != nil {
+	if err := s.expirePendingAccept(ctx); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Sweeper) expirePendingAccept(ctx context.Context, now time.Time, timing runtimeconfig.SearchTiming) error {
-	if s.Sessions == nil {
+func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
+	if s.Matches == nil {
 		return nil
 	}
-	acceptTimeout := timing.AcceptTimeout
-	if acceptTimeout <= 0 {
-		acceptTimeout = runtimeconfig.LoadSearchTiming().AcceptTimeout
-	}
-	cutoff := now.Add(-acceptTimeout)
-	expired, err := s.Sessions.ListPendingAcceptExpired(ctx, cutoff, 100)
+	matchIDs, err := s.Matches.ListPendingDeadlineMatchIDs(ctx, 100)
 	if err != nil {
 		return err
 	}
-	abandoned := make(map[uuid.UUID]bool)
-	for _, sess := range expired {
-		if sess.MatchID != nil && !abandoned[*sess.MatchID] && s.Matches != nil {
-			_ = s.Matches.AbandonMatch(ctx, *sess.MatchID)
-			abandoned[*sess.MatchID] = true
+	for _, matchID := range matchIDs {
+		expired, changed, err := s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
+		if err != nil {
+			return err
 		}
-		if _, err := s.Sessions.ExpirePendingAccept(ctx, sess.ID); err != nil {
-			if s.Logger != nil {
-				s.Logger.Warn("expire pending_accept failed",
-					slog.String("session_id", sess.ID.String()),
-					slog.Any("error", err))
-			}
+		if !expired {
 			continue
 		}
-		if s.Queue != nil {
-			if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil && s.Logger != nil {
-				s.Logger.Warn("pending_accept lock release failed",
-					slog.String("session_id", sess.ID.String()),
-					slog.Any("error", err))
+		for _, sess := range changed {
+			if s.Queue == nil {
+				continue
+			}
+			if sess.Status == store.SessionStatusSearching {
+				crit, err := criteria.Parse(sess.Criteria)
+				if err != nil {
+					return err
+				}
+				if err := s.Queue.EnqueueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.CreatedAt); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil {
+				return err
 			}
 		}
 	}

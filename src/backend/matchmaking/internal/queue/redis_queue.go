@@ -72,17 +72,16 @@ func (q *RedisQueue) ReleaseLock(ctx context.Context, profileID, sessionID uuid.
 		return ErrQueueUnavailable
 	}
 	key := q.lockKey(profileID)
-	current, err := q.Client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return nil
-	}
-	if err != nil {
+	const compareAndDelete = `
+		if redis.call('GET', KEYS[1]) == ARGV[1] then
+			return redis.call('DEL', KEYS[1])
+		end
+		return 0
+	`
+	if err := q.Client.Eval(ctx, compareAndDelete, []string{key}, sessionID.String()).Err(); err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
 	}
-	if current != sessionID.String() {
-		return nil
-	}
-	return q.Client.Del(ctx, key).Err()
+	return nil
 }
 
 // Enqueue adds sessionID to the global FIFO queue for game/mode/region.

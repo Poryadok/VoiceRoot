@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	MatchAcceptWindow         = 30 * time.Second
 	MatchStatusPendingAccept = "pending_accept"
 	MatchStatusActive        = "active"
 	MatchStatusCompleted     = "completed"
@@ -21,6 +22,436 @@ const (
 	ProposalResponseAccepted = "accepted"
 	ProposalResponseDeclined = "declined"
 )
+
+// ExpirePendingMatchAtDeadline applies the common proposal deadline under the
+// match lock. It is also the request-time fence: a request that arrives after
+// the deadline cannot win merely because the background sweeper has not run.
+// It returns changed sessions so callers can project the committed recovery to
+// the queue; accepted parties retain their original criteria and scope.
+func (s *MatchStore) ExpirePendingMatchAtDeadline(ctx context.Context, matchID uuid.UUID) (bool, []SearchSession, error) {
+	if s == nil || s.Pool == nil {
+		return false, nil, errors.New("match store unavailable")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	match, err := scanMatch(tx.QueryRow(ctx, `
+		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
+		FROM matches WHERE id = $1 FOR UPDATE
+	`, matchID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, ErrMatchNotFound
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	if match.Status != MatchStatusPendingAccept {
+		return false, nil, nil
+	}
+
+	proposals, err := loadMatchProposalsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return false, nil, err
+	}
+	sessions, err := loadMatchSessionsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return false, nil, err
+	}
+	var dbNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&dbNow); err != nil {
+		return false, nil, err
+	}
+	if dbNow.Before(match.CreatedAt.Add(MatchAcceptWindow)) {
+		return false, nil, nil
+	}
+	allAccepted := len(proposals) > 0
+	for _, proposal := range proposals {
+		if proposal.Response != ProposalResponseAccepted {
+			allAccepted = false
+			break
+		}
+	}
+	if allAccepted {
+		// Acceptance completed before the deadline; provisioning may safely
+		// finish or be retried after it.
+		return false, nil, nil
+	}
+
+	changed, err := expirePendingMatchLocked(ctx, tx, match, proposals, sessions, dbNow)
+	if err != nil {
+		return false, nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, nil, err
+	}
+	return true, changed, nil
+}
+
+// ListPendingDeadlineMatchIDs returns candidate matches using database time;
+// ExpirePendingMatchAtDeadline rechecks each under its row lock.
+func (s *MatchStore) ListPendingDeadlineMatchIDs(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	if s == nil || s.Pool == nil {
+		return nil, errors.New("match store unavailable")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id FROM matches
+		WHERE status = $1 AND created_at + ($2 * interval '1 millisecond') <= clock_timestamp()
+		ORDER BY created_at, id
+		LIMIT $3
+	`, MatchStatusPendingAccept, MatchAcceptWindow.Milliseconds(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func expirePendingMatchLocked(ctx context.Context, tx pgx.Tx, match Match, proposals []MatchProposal, sessions []SearchSession, dbNow time.Time) ([]SearchSession, error) {
+	partyAccepted := make(map[string]bool)
+	partyHasPending := make(map[string]bool)
+	for _, proposal := range proposals {
+		key := responsePartyKey(proposal)
+		if _, exists := partyAccepted[key]; !exists {
+			partyAccepted[key] = true
+		}
+		if proposal.Response != ProposalResponseAccepted {
+			partyAccepted[key] = false
+		}
+		if proposal.Response == ProposalResponsePending {
+			partyHasPending[key] = true
+		}
+	}
+	for _, proposal := range proposals {
+		if proposal.Response != ProposalResponsePending || !partyHasPending[responsePartyKey(proposal)] {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE match_proposals SET response = $3, updated_at = $4
+			WHERE id = $1 AND match_id = $2 AND response = $5
+		`, proposal.ID, match.ID, ProposalResponseDeclined, dbNow, ProposalResponsePending); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE matches SET status = $2, completed_at = $3
+		WHERE id = $1 AND status = $4
+	`, match.ID, MatchStatusAbandoned, dbNow, MatchStatusPendingAccept); err != nil {
+		return nil, err
+	}
+
+	var changed []SearchSession
+	for _, sess := range sessions {
+		if sess.Status != SessionStatusPendingAccept {
+			continue
+		}
+		status := SessionStatusCancelled
+		key := responseSessionPartyKey(sess, proposals)
+		if partyAccepted[key] && !partyHasPending[key] {
+			status = SessionStatusSearching
+		}
+		if status == SessionStatusSearching {
+			updated, err := scanSession(tx.QueryRow(ctx, `
+				UPDATE search_sessions
+				SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+				WHERE id = $1 AND match_id = $4 AND status = $5
+				RETURNING `+sessionSelectCols+`
+			`, sess.ID, status, dbNow, match.ID, SessionStatusPendingAccept))
+			if err != nil {
+				return nil, err
+			}
+			changed = append(changed, updated)
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE search_sessions SET status = $2, updated_at = $3
+			WHERE id = $1 AND match_id = $4 AND status = $5
+		`, sess.ID, SessionStatusCancelled, dbNow, match.ID, SessionStatusPendingAccept); err != nil {
+			return nil, err
+		}
+		sess.Status = SessionStatusCancelled
+		sess.UpdatedAt = dbNow
+		changed = append(changed, sess)
+	}
+	return changed, nil
+}
+
+func responsePartyKey(p MatchProposal) string {
+	if p.PartyID != nil {
+		return "party:" + p.PartyID.String()
+	}
+	return "profile:" + p.ProfileID.String()
+}
+
+func responseSessionPartyKey(sess SearchSession, proposals []MatchProposal) string {
+	for _, p := range proposals {
+		if p.SearchSessionID == sess.ID {
+			return responsePartyKey(p)
+		}
+	}
+	return ""
+}
+
+func loadMatchProposalsForUpdate(ctx context.Context, tx pgx.Tx, matchID uuid.UUID) ([]MatchProposal, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, match_id, search_session_id, profile_id, party_id, response, created_at, updated_at
+		FROM match_proposals WHERE match_id = $1 ORDER BY profile_id, id FOR UPDATE
+	`, matchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MatchProposal
+	for rows.Next() {
+		var p MatchProposal
+		if err := rows.Scan(&p.ID, &p.MatchID, &p.SearchSessionID, &p.ProfileID, &p.PartyID, &p.Response, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func loadMatchSessionsForUpdate(ctx context.Context, tx pgx.Tx, matchID uuid.UUID) ([]SearchSession, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT `+sessionSelectCols+`
+		FROM search_sessions WHERE match_id = $1 ORDER BY id FOR UPDATE
+	`, matchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SearchSession
+	for rows.Next() {
+		sess, err := scanSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
+	}
+	return out, rows.Err()
+}
+
+type AcceptanceResult struct {
+	Match          Match
+	Proposal       MatchProposal
+	ChangedSessions []SearchSession
+	AllAccepted    bool
+	Expired        bool
+	Replayed       bool
+}
+
+// RecordDecline applies a party decline and the resulting whole-match recovery
+// under the same match/proposal/session locks used by deadline expiry.
+func (s *MatchStore) RecordDecline(ctx context.Context, matchID, profileID uuid.UUID) (AcceptanceResult, error) {
+	if s == nil || s.Pool == nil {
+		return AcceptanceResult{}, errors.New("match store unavailable")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	match, err := scanMatch(tx.QueryRow(ctx, `
+		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
+		FROM matches WHERE id = $1 FOR UPDATE
+	`, matchID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AcceptanceResult{}, ErrMatchNotFound
+	}
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	proposals, err := loadMatchProposalsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	sessions, err := loadMatchSessionsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	if len(proposals) == 0 || len(sessions) != len(proposals) {
+		return AcceptanceResult{}, errors.New("match proposal/session set is incomplete")
+	}
+	result := AcceptanceResult{Match: match}
+	for _, proposal := range proposals {
+		if proposal.ProfileID == profileID {
+			result.Proposal = proposal
+			break
+		}
+	}
+	if result.Proposal.ID == uuid.Nil {
+		return AcceptanceResult{}, ErrProposalNotFound
+	}
+	if match.Status != MatchStatusPendingAccept {
+		result.Replayed = result.Proposal.Response == ProposalResponseDeclined
+		if err := tx.Commit(ctx); err != nil {
+			return AcceptanceResult{}, err
+		}
+		return result, nil
+	}
+	var dbNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&dbNow); err != nil {
+		return AcceptanceResult{}, err
+	}
+	if result.Proposal.Response != ProposalResponsePending {
+		result.Replayed = result.Proposal.Response == ProposalResponseDeclined
+		if err := tx.Commit(ctx); err != nil {
+			return AcceptanceResult{}, err
+		}
+		return result, nil
+	}
+	if err := tx.QueryRow(ctx, `
+		UPDATE match_proposals SET response = $3, updated_at = $4
+		WHERE id = $1 AND match_id = $2 AND response = $5
+		RETURNING id, match_id, search_session_id, profile_id, party_id, response, created_at, updated_at
+	`, result.Proposal.ID, matchID, ProposalResponseDeclined, dbNow, ProposalResponsePending).Scan(
+		&result.Proposal.ID, &result.Proposal.MatchID, &result.Proposal.SearchSessionID, &result.Proposal.ProfileID,
+		&result.Proposal.PartyID, &result.Proposal.Response, &result.Proposal.CreatedAt, &result.Proposal.UpdatedAt,
+	); err != nil {
+		return AcceptanceResult{}, err
+	}
+	changed, err := expirePendingMatchLocked(ctx, tx, match, proposals, sessions, dbNow)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	result.Match.Status = MatchStatusAbandoned
+	result.Match.CompletedAt = &dbNow
+	result.ChangedSessions = changed
+	result.Expired = true
+	if err := tx.Commit(ctx); err != nil {
+		return AcceptanceResult{}, err
+	}
+	return result, nil
+}
+
+// RecordAcceptance serializes a new Accept with expiry. The database clock is
+// sampled only after the match, proposals, and sessions are locked, so a
+// request blocked across the deadline cannot commit as timely.
+func (s *MatchStore) RecordAcceptance(ctx context.Context, matchID, profileID uuid.UUID) (AcceptanceResult, error) {
+	if s == nil || s.Pool == nil {
+		return AcceptanceResult{}, errors.New("match store unavailable")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	match, err := scanMatch(tx.QueryRow(ctx, `
+		SELECT id, game_id, mode, region, participants, left_profile_ids, voice_room_id, chat_id, status, created_at, completed_at
+		FROM matches WHERE id = $1 FOR UPDATE
+	`, matchID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AcceptanceResult{}, ErrMatchNotFound
+	}
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	proposals, err := loadMatchProposalsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	sessions, err := loadMatchSessionsForUpdate(ctx, tx, matchID)
+	if err != nil {
+		return AcceptanceResult{}, err
+	}
+	if len(proposals) == 0 || len(sessions) != len(proposals) {
+		return AcceptanceResult{}, errors.New("match proposal/session set is incomplete")
+	}
+	var proposal MatchProposal
+	found := false
+	for _, candidate := range proposals {
+		if candidate.ProfileID == profileID {
+			proposal, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		return AcceptanceResult{}, ErrProposalNotFound
+	}
+	var dbNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&dbNow); err != nil {
+		return AcceptanceResult{}, err
+	}
+	result := AcceptanceResult{Match: match, Proposal: proposal}
+	if match.Status != MatchStatusPendingAccept {
+		result.Replayed = proposal.Response == ProposalResponseAccepted
+		result.AllAccepted = result.Replayed
+		if err := tx.Commit(ctx); err != nil {
+			return AcceptanceResult{}, err
+		}
+		return result, nil
+	}
+
+	allAccepted := true
+	for _, candidate := range proposals {
+		if candidate.Response != ProposalResponseAccepted {
+			allAccepted = false
+			break
+		}
+	}
+	if !dbNow.Before(match.CreatedAt.Add(MatchAcceptWindow)) && !allAccepted {
+		changed, err := expirePendingMatchLocked(ctx, tx, match, proposals, sessions, dbNow)
+		if err != nil {
+			return AcceptanceResult{}, err
+		}
+		result.Match.Status = MatchStatusAbandoned
+		result.Match.CompletedAt = &dbNow
+		result.ChangedSessions = changed
+		result.Expired = true
+		result.Replayed = proposal.Response == ProposalResponseAccepted
+		if proposal.Response == ProposalResponsePending {
+			result.Proposal.Response = ProposalResponseDeclined
+			result.Proposal.UpdatedAt = dbNow
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return AcceptanceResult{}, err
+		}
+		return result, nil
+	}
+
+	if proposal.Response == ProposalResponsePending {
+		err := tx.QueryRow(ctx, `
+			UPDATE match_proposals SET response = $3, updated_at = $4
+			WHERE id = $1 AND match_id = $2 AND response = $5
+			RETURNING id, match_id, search_session_id, profile_id, party_id, response, created_at, updated_at
+		`, proposal.ID, matchID, ProposalResponseAccepted, dbNow, ProposalResponsePending).Scan(
+			&result.Proposal.ID, &result.Proposal.MatchID, &result.Proposal.SearchSessionID, &result.Proposal.ProfileID,
+			&result.Proposal.PartyID, &result.Proposal.Response, &result.Proposal.CreatedAt, &result.Proposal.UpdatedAt,
+		)
+		if err != nil {
+			return AcceptanceResult{}, err
+		}
+		allAccepted = true
+		for _, candidate := range proposals {
+			if candidate.ProfileID != profileID && candidate.Response != ProposalResponseAccepted {
+				allAccepted = false
+				break
+			}
+		}
+	} else {
+		result.Replayed = proposal.Response == ProposalResponseAccepted
+	}
+	result.AllAccepted = allAccepted
+	if err := tx.Commit(ctx); err != nil {
+		return AcceptanceResult{}, err
+	}
+	return result, nil
+}
 
 var (
 	ErrMatchNotFound       = errors.New("match not found")
