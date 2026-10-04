@@ -106,8 +106,9 @@ class _ArchiveStoryTile extends ConsumerWidget {
     final profileId = ref.read(authControllerProvider).activeProfileId;
     if (profileId == null) return;
 
-    final highlights =
-        await ref.read(profileHighlightsProvider(profileId).future);
+    final highlights = await ref.read(
+      profileHighlightsProvider(profileId).future,
+    );
     if (!context.mounted) return;
 
     if (highlights.isEmpty) {
@@ -120,6 +121,7 @@ class _ArchiveStoryTile extends ConsumerWidget {
     final highlightId = await showVoiceBottomSheet<String>(
       context: context,
       initialSize: 0.45,
+      scrollable: false,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -153,7 +155,9 @@ class _ArchiveStoryTile extends ConsumerWidget {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
 
-    final result = await ref.read(voiceStoriesClientProvider).addToHighlight(
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .addToHighlight(
           authorization: auth,
           highlightId: highlightId,
           storyId: storyId,
@@ -163,12 +167,16 @@ class _ArchiveStoryTile extends ConsumerWidget {
     switch (result) {
       case StoriesApiOk():
         ref.invalidate(profileHighlightsProvider(profileId));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.storyHighlightSaved)));
+      case StoriesApiFailure(:final statusCode):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.storyHighlightSaved)),
-        );
-      case StoriesApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
         );
     }
   }
