@@ -113,7 +113,7 @@ func (q *RedisQueue) RecoverSearch(ctx context.Context, sess SearchRecovery) err
 	if current > wanted then return 0 end
 	local owner = redis.call('GET', KEYS[3])
 	if owner and owner ~= ARGV[1] then return -1 end
-	redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[5])
+	redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[4])
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 	redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 	return 1
