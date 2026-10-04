@@ -188,7 +188,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 - [ ] **Windows sign-off** — скилл `voice-project-full-verification`: `compose-config-ci`, `buf-ci`, `flutter-ci` — OK; `backend-test-ci-short` — после `c3598f3` fix [`jetstream_test.go`](../../src/backend/messaging/internal/messageevents/jetstream_test.go) (Flush + EnsureStream) **перепроверить на Windows/Docker**; compose smoke E2E не гонялся. См. [TESTING.md](../TESTING.md) § «Локальные грабли».
 ### Multi-profile
 
-- [ ] **[Multi-Profile] `profile_context_controller` untested** — MM cancel, space exit, WS reconnect on `activeProfileId` change; widget tests cover switcher only (`profile_switcher_test.dart`, `create_profile_sheet_test.dart`).
+- [x] **[Multi-Profile] `profile_context_controller` handoff regressions** — `profile_context_controller_test.dart` covers active MM cancellation/recovery clearing and Space retain/exit on profile switch; T-055 `t055_profile_switch_reconnect_inbox_e2e_live_test.dart` verifies the selected profile's real Realtime hello before its inbox REST/history.
 
 
 
