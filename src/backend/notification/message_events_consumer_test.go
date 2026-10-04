@@ -391,6 +391,27 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("first message consumer did not stop after cancellation")
 	}
+	var (
+		unbindAttempts   int
+		unbindErrorClass = "not observed"
+		lastPushBound    = true
+	)
+	unboundObserved := assert.Eventually(t, func() bool {
+		unbindAttempts++
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		if infoErr != nil {
+			unbindErrorClass = fmt.Sprintf("%T", infoErr)
+			lastPushBound = true
+			return false
+		}
+		unbindErrorClass = "none"
+		lastPushBound = info.PushBound
+		return !info.PushBound
+	}, 5*time.Second, 20*time.Millisecond, "stopped consumer is unbound from the durable before publishing")
+	if !unboundObserved {
+		t.Fatalf("stopped consumer unbind observation failed: query_attempts=%d query_error_class=%q push_bound=%t",
+			unbindAttempts, unbindErrorClass, lastPushBound)
+	}
 
 	messageID, chatID := uuid.NewString(), uuid.NewString()
 	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
