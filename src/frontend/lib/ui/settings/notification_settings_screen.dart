@@ -163,10 +163,13 @@ class _NotificationSettingsScreenState
             ),
           ),
         );
-      case NotificationsApiFailure(:final message):
+      case NotificationsApiFailure(:final statusCode):
         setState(() {
           _saving = false;
-          _error = message;
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
         });
     }
   }

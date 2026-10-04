@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
+	"voice/backend/chat/internal/grpcsvc"
 	"voice/backend/pkg/grpcmw"
 	voiceprom "voice/backend/pkg/promhttp"
 )
@@ -17,6 +18,8 @@ import (
 func TestHealthHandler_MetricsExposesGRPCServer(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	grpcmw.PrimeMetricsRegistry(reg)
+	listEnrichmentFailures := grpcsvc.NewListEnrichmentFailuresCounter(reg)
+	listEnrichmentFailures.Inc()
 
 	h := voiceprom.MountMetricsOnHealth(healthHandler(serviceName), reg)
 	rec := httptest.NewRecorder()
@@ -28,5 +31,6 @@ func TestHealthHandler_MetricsExposesGRPCServer(t *testing.T) {
 	text := string(body)
 	require.Contains(t, text, "grpc_server_handled_total")
 	require.Contains(t, text, "grpc_server_handling_seconds")
+	require.Contains(t, text, "chat_list_enrichment_failures_total 1")
 	require.True(t, strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain"))
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	chatv1 "voice.app/voice/chat/v1"
 
 	"voice/backend/chat/internal/chatevents"
@@ -18,19 +19,20 @@ import (
 // ChatGRPC implements ChatService RPCs backed by chat_db (app stack: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
-	DM                 DMStore
-	StickerPacks       StickerPackStore
-	Profiles           UserProfileLookup
-	DMPeerDisplayNames DMPeerDisplayNameLookup
-	LifecycleOwners    LifecycleOwnerLookup
-	Blocks             AccountBlockChecker
-	Privacy            PrivacyChecker
-	Friends            ProfileFriendChecker
-	Contacts           ProfileContactChecker
-	SpaceCoMembership  SpaceCoMembershipChecker
-	ListEnrich         ListChatsEnrichment   // optional; Messaging S2S for preview + unread
-	DeletedAccounts    AccountDeletedChecker // mandatory for DM list/open gates; Auth S2S reports deleted peer accounts
-	E2EPreKeyGate      E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
+	DM                     DMStore
+	StickerPacks           StickerPackStore
+	Profiles               UserProfileLookup
+	DMPeerDisplayNames     DMPeerDisplayNameLookup
+	LifecycleOwners        LifecycleOwnerLookup
+	Blocks                 AccountBlockChecker
+	Privacy                PrivacyChecker
+	Friends                ProfileFriendChecker
+	Contacts               ProfileContactChecker
+	SpaceCoMembership      SpaceCoMembershipChecker
+	ListEnrich             ListChatsEnrichment   // optional; Messaging S2S for preview + unread
+	ListEnrichmentFailures prometheus.Counter    // counts non-empty ListChats pages whose optional Messaging enrichment fails
+	DeletedAccounts        AccountDeletedChecker // mandatory for DM list/open gates; Auth S2S reports deleted peer accounts
+	E2EPreKeyGate          E2EPreKeyGate         // required for EnableChatE2E; Messaging S2S pre-key check (fail-closed)
 	// ChatEvents is optional; when set, new DM creation publishes to NATS JetStream (stream chat_events, subjects chat.*).
 	ChatEvents chatevents.Publisher
 	// Roles is optional; space channel slow mode checks TEXT_CHAT_SET_SLOW_MODE when set.
@@ -39,6 +41,18 @@ type ChatGRPC struct {
 	SpaceMembers *store.SpaceMembersStore
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+}
+
+// NewListEnrichmentFailuresCounter registers the Chat list-enrichment failure counter.
+func NewListEnrichmentFailuresCounter(reg prometheus.Registerer) prometheus.Counter {
+	counter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "chat_list_enrichment_failures_total",
+		Help: "Chat list enrichment RPC failures for non-empty chat pages.",
+	})
+	if reg != nil {
+		reg.MustRegister(counter)
+	}
+	return counter
 }
 
 // DMPeerDisplayNameLookup returns title-only metadata for authorized DM peers.

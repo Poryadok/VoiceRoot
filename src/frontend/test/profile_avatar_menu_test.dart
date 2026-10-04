@@ -19,6 +19,7 @@ import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_archive_screen.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';
 
+import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
@@ -257,5 +258,74 @@ void main() {
 
     expect(find.byKey(ChatArchiveScreen.screenKey), findsOneWidget);
     container.dispose();
+  });
+
+  testWidgets('presence update hides upstream failure details', (tester) async {
+    const upstreamDetail = 'private presence service diagnostic';
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/users/profiles') {
+        return http.Response(
+          jsonEncode({
+            'profile_list': {
+              'profiles': [
+                {
+                  'id': 'profile-primary',
+                  'account_id': 'account-1',
+                  'username': 'alice',
+                  'discriminator': '0001',
+                  'display_name': 'Alice',
+                  'is_primary': true,
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/users/me/presence') {
+        return http.Response(
+          jsonEncode({
+            'error_code': 'internal_error',
+            'message': upstreamDetail,
+          }),
+          500,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: voiceAppTestOverrides(client: client),
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ProfileAvatarMenuButton(
+              profile: VoiceProfile(
+                id: 'profile-primary',
+                accountId: 'account-1',
+                username: 'alice',
+                discriminator: '0001',
+                displayName: 'Alice',
+                isPrimary: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final l10n = await AppLocalizations.delegate.load(const Locale('en'));
+
+    await tester.tap(find.byType(ProfileAvatarMenuButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.socialPresenceDnd));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.commonActionFailed), findsOneWidget);
+    expect(find.text(upstreamDetail), findsNothing);
   });
 }
