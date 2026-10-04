@@ -70,7 +70,9 @@ final appLocalePreferenceProvider = Provider<Locale?>((ref) {
   final profileId = ref.watch(authControllerProvider).activeProfileId;
   final override = ref.watch(appLocaleOverrideProvider);
   ref.listen(authControllerProvider, (previous, next) {
-    if (previous?.activeProfileId != next.activeProfileId) {
+    if (previous?.activeProfileId != next.activeProfileId ||
+        previous?.session?.authorizationHeader !=
+            next.session?.authorizationHeader) {
       ref.read(appLocaleOverrideProvider.notifier).state = null;
     }
   });

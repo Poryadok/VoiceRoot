@@ -158,6 +158,45 @@ void main() {
     expect(container.read(appLocalePreferenceProvider), const Locale('en'));
   });
 
+  testWidgets('same-profile session refresh clears System override', (
+    tester,
+  ) async {
+    final client = MockClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/users/profiles/prof-test') {
+        return http.Response(
+          jsonEncode({'profile': _profile('prof-test', locale: 'ru')}),
+          200,
+        );
+      }
+      return http.Response('', 404);
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_settingsApp(container));
+    await tester.pumpAndSettle();
+    expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
+
+    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.tap(find.text('System default'));
+    await tester.pumpAndSettle();
+    expect(container.read(appLocalePreferenceProvider), isNull);
+
+    container.read(authControllerProvider.notifier).state = AuthState(
+      session: AuthSession(
+        accessToken: 'refreshed-token',
+        refreshToken: 'refreshed-refresh',
+        accountId: 'account-test',
+        activeProfileId: 'prof-test',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
+  });
+
   testWidgets('failed save keeps locale and retry applies returned profile', (
     tester,
   ) async {
