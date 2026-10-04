@@ -286,6 +286,7 @@ var GameSessionProvisioningService_ServiceDesc = grpc.ServiceDesc{
 const (
 	MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName   = "/voice.calls.v1.MatchSquadVoiceService/CreateMatchSquadRoom"
 	MatchSquadVoiceService_TeardownMatchSquadRoom_FullMethodName = "/voice.calls.v1.MatchSquadVoiceService/TeardownMatchSquadRoom"
+	MatchSquadVoiceService_CompactMatchSquadRoom_FullMethodName  = "/voice.calls.v1.MatchSquadVoiceService/CompactMatchSquadRoom"
 )
 
 // MatchSquadVoiceServiceClient is the client API for MatchSquadVoiceService service.
@@ -299,6 +300,8 @@ type MatchSquadVoiceServiceClient interface {
 	CreateMatchSquadRoom(ctx context.Context, in *CreateMatchSquadRoomRequest, opts ...grpc.CallOption) (*CreateMatchSquadRoomResponse, error)
 	// @voice.security=protected;callers=service:matchmaking
 	TeardownMatchSquadRoom(ctx context.Context, in *TeardownMatchSquadRoomRequest, opts ...grpc.CallOption) (*TeardownMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	CompactMatchSquadRoom(ctx context.Context, in *CompactMatchSquadRoomRequest, opts ...grpc.CallOption) (*CompactMatchSquadRoomResponse, error)
 }
 
 type matchSquadVoiceServiceClient struct {
@@ -329,6 +332,16 @@ func (c *matchSquadVoiceServiceClient) TeardownMatchSquadRoom(ctx context.Contex
 	return out, nil
 }
 
+func (c *matchSquadVoiceServiceClient) CompactMatchSquadRoom(ctx context.Context, in *CompactMatchSquadRoomRequest, opts ...grpc.CallOption) (*CompactMatchSquadRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompactMatchSquadRoomResponse)
+	err := c.cc.Invoke(ctx, MatchSquadVoiceService_CompactMatchSquadRoom_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchSquadVoiceServiceServer is the server API for MatchSquadVoiceService service.
 // All implementations must embed UnimplementedMatchSquadVoiceServiceServer
 // for forward compatibility.
@@ -340,6 +353,8 @@ type MatchSquadVoiceServiceServer interface {
 	CreateMatchSquadRoom(context.Context, *CreateMatchSquadRoomRequest) (*CreateMatchSquadRoomResponse, error)
 	// @voice.security=protected;callers=service:matchmaking
 	TeardownMatchSquadRoom(context.Context, *TeardownMatchSquadRoomRequest) (*TeardownMatchSquadRoomResponse, error)
+	// @voice.security=protected;callers=service:matchmaking
+	CompactMatchSquadRoom(context.Context, *CompactMatchSquadRoomRequest) (*CompactMatchSquadRoomResponse, error)
 	mustEmbedUnimplementedMatchSquadVoiceServiceServer()
 }
 
@@ -355,6 +370,9 @@ func (UnimplementedMatchSquadVoiceServiceServer) CreateMatchSquadRoom(context.Co
 }
 func (UnimplementedMatchSquadVoiceServiceServer) TeardownMatchSquadRoom(context.Context, *TeardownMatchSquadRoomRequest) (*TeardownMatchSquadRoomResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TeardownMatchSquadRoom not implemented")
+}
+func (UnimplementedMatchSquadVoiceServiceServer) CompactMatchSquadRoom(context.Context, *CompactMatchSquadRoomRequest) (*CompactMatchSquadRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompactMatchSquadRoom not implemented")
 }
 func (UnimplementedMatchSquadVoiceServiceServer) mustEmbedUnimplementedMatchSquadVoiceServiceServer() {
 }
@@ -414,6 +432,24 @@ func _MatchSquadVoiceService_TeardownMatchSquadRoom_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchSquadVoiceService_CompactMatchSquadRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompactMatchSquadRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchSquadVoiceServiceServer).CompactMatchSquadRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchSquadVoiceService_CompactMatchSquadRoom_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchSquadVoiceServiceServer).CompactMatchSquadRoom(ctx, req.(*CompactMatchSquadRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchSquadVoiceService_ServiceDesc is the grpc.ServiceDesc for MatchSquadVoiceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -428,6 +464,10 @@ var MatchSquadVoiceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TeardownMatchSquadRoom",
 			Handler:    _MatchSquadVoiceService_TeardownMatchSquadRoom_Handler,
+		},
+		{
+			MethodName: "CompactMatchSquadRoom",
+			Handler:    _MatchSquadVoiceService_CompactMatchSquadRoom_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
