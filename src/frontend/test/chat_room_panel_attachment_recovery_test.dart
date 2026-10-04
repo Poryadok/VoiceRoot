@@ -56,10 +56,10 @@ void main() {
               locale: const Locale('en'),
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(
-                body: RepaintBoundary(
-                  key: _captureBoundaryKey,
-                  child: ChatRoomPanel(
+              home: RepaintBoundary(
+                key: _captureBoundaryKey,
+                child: Scaffold(
+                  body: ChatRoomPanel(
                     chatId: 'chat-abc',
                     attachmentPicker: () async {
                       pickerCalls++;
@@ -154,10 +154,10 @@ void main() {
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: RepaintBoundary(
-              key: _captureBoundaryKey,
-              child: ChatRoomPanel(
+          home: RepaintBoundary(
+            key: _captureBoundaryKey,
+            child: Scaffold(
+              body: ChatRoomPanel(
                 chatId: 'chat-abc',
                 attachmentPicker: () async {
                   pickerCalls++;
