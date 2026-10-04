@@ -154,6 +154,40 @@ func TestRespondToMatch_AcceptAllActivatesMatch(t *testing.T) {
 	require.Len(t, got.GetMatch().GetProfileIds(), 2)
 }
 
+func TestRespondToMatch_RejectsNewAcceptAtOrAfterMatchDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startDB(t, ctx)
+	srv := matchTestServer(t, pool, &stubSquadProvisioner{})
+	matchID, _, profileB := seedPendingDuoMatch(t, ctx, srv)
+
+	// Seed an already-expired proposal using database time so this request is
+	// unambiguously late without relying on the periodic sweeper or host clock.
+	_, err := pool.Exec(ctx, `UPDATE matches SET created_at = now() - interval '31 seconds' WHERE id = $1`, uuid.MustParse(matchID))
+	require.NoError(t, err)
+
+	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{
+		MatchId: matchID,
+		Accept:  true,
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "a pending proposal cannot be newly accepted after the server deadline")
+
+	match, err := srv.Matches.Get(ctx, uuid.MustParse(matchID))
+	require.NoError(t, err)
+	require.Equal(t, store.MatchStatusAbandoned, match.Status)
+	proposal, err := srv.Matches.GetProposalForProfile(ctx, uuid.MustParse(matchID), profileB)
+	require.NoError(t, err)
+	require.Equal(t, store.ProposalResponseDeclined, proposal.Response)
+	searchSession, err := srv.Sessions.Get(ctx, proposal.SearchSessionID)
+	require.NoError(t, err)
+	require.Equal(t, store.SessionStatusCancelled, searchSession.Status)
+	queued, err := srv.Queue.ListSessionIDs(ctx, searchSession.GameID, searchSession.Mode, "eu", 0)
+	require.NoError(t, err)
+	require.NotContains(t, queued, searchSession.ID)
+}
+
 func TestRespondToMatch_AcceptRetryBeforeOtherResponsesIsIdempotent(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
