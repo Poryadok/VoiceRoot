@@ -108,6 +108,9 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
+	}
 	if row.Type != "group" && row.Type != "channel" {
 		return nil, status.Error(codes.InvalidArgument, "only group and channel chats can be updated")
 	}
@@ -190,6 +193,9 @@ func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest
 	}
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
 	}
 	if row.Type != "group" {
 		if row.Type != "channel" || row.SpaceID != nil {
@@ -295,6 +301,9 @@ func (s *ChatGRPC) RemoveMember(ctx context.Context, req *chatv1.RemoveMemberReq
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
+	}
 	if (row.Type != "group" && row.Type != "channel") || row.SpaceID != nil {
 		return nil, status.Error(codes.InvalidArgument, "remove member only supported for standalone groups and channels")
 	}
@@ -343,6 +352,9 @@ func (s *ChatGRPC) LeaveChat(ctx context.Context, req *chatv1.LeaveChatRequest) 
 	}
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
 	}
 	if (row.Type != "group" && row.Type != "channel") || row.SpaceID != nil {
 		return nil, status.Error(codes.InvalidArgument, "leave only supported for standalone groups and channels")
@@ -397,6 +409,9 @@ func (s *ChatGRPC) SetGroupMemberRole(ctx context.Context, req *chatv1.SetGroupM
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
+	}
 	if row.Type != "group" || row.SpaceID != nil {
 		return nil, status.Error(codes.InvalidArgument, "role changes are supported only for standalone groups")
 	}
@@ -443,6 +458,9 @@ func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.Trans
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if err := s.ensureMatchSquadMutable(ctx, chatID); err != nil {
+		return nil, err
+	}
 	if row.Type != "group" || row.SpaceID != nil {
 		return nil, status.Error(codes.InvalidArgument, "transfer only supported for standalone groups")
 	}
@@ -461,4 +479,23 @@ func (s *ChatGRPC) TransferGroupOwnership(ctx context.Context, req *chatv1.Trans
 		}
 	}
 	return &chatv1.TransferGroupOwnershipResponse{}, nil
+}
+
+type matchSquadOwnershipReader interface {
+	IsMatchSquadChat(context.Context, uuid.UUID) (bool, error)
+}
+
+func (s *ChatGRPC) ensureMatchSquadMutable(ctx context.Context, chatID uuid.UUID) error {
+	reader, ok := s.DM.(matchSquadOwnershipReader)
+	if !ok {
+		return nil
+	}
+	owned, err := reader.IsMatchSquadChat(ctx, chatID)
+	if err != nil {
+		return status.Error(codes.Unavailable, "Chat ownership lookup unavailable")
+	}
+	if owned {
+		return status.Error(codes.FailedPrecondition, "MatchSquad membership is controlled by Matchmaking")
+	}
+	return nil
 }

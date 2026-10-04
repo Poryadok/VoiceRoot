@@ -889,6 +889,18 @@ func (s *MatchStore) Get(ctx context.Context, id uuid.UUID) (Match, error) {
 	return match, err
 }
 
+// DatabaseNow returns the database clock used by match deadline decisions.
+func (s *MatchStore) DatabaseNow(ctx context.Context) (time.Time, error) {
+	if s == nil || s.Pool == nil {
+		return time.Time{}, errors.New("match store unavailable")
+	}
+	var now time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return time.Time{}, err
+	}
+	return now, nil
+}
+
 func scanMatch(row pgx.Row) (Match, error) {
 	var participantsJSON, leftJSON []byte
 	var m Match

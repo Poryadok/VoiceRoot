@@ -36,7 +36,7 @@ func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMa
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	if s.Matches == nil {
+	if s.Matches == nil || s.Sessions == nil {
 		return nil, status.Error(codes.Unavailable, "match unavailable")
 	}
 	matchID, err := uuid.Parse(strings.TrimSpace(req.GetMatchId()))
@@ -53,7 +53,36 @@ func (s *MatchmakingGRPC) GetMatch(ctx context.Context, req *matchmakingv1.GetMa
 	if !matchHasProfile(match, profileID) {
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
-	return &matchmakingv1.GetMatchResponse{Match: toProtoMatch(match)}, nil
+	_, _, err = s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "expire match deadline: %v", err)
+	}
+	match, err = s.Matches.Get(ctx, matchID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "reload match: %v", err)
+	}
+	proposal, err := s.Matches.GetProposalForProfile(ctx, matchID, profileID)
+	if errors.Is(err, store.ErrProposalNotFound) {
+		return nil, status.Error(codes.PermissionDenied, "not a match participant")
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get match response: %v", err)
+	}
+	session, err := s.Sessions.Get(ctx, proposal.SearchSessionID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get caller search session: %v", err)
+	}
+	serverNow, err := s.Matches.DatabaseNow(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read database clock: %v", err)
+	}
+	return &matchmakingv1.GetMatchResponse{
+		Match:                toProtoMatch(match),
+		AcceptanceDeadlineAt: timestamppb.New(match.CreatedAt.Add(store.MatchAcceptWindow)),
+		ServerNow:            timestamppb.New(serverNow),
+		OwnProposalResponse:  proposal.Response,
+		OwnSearchSession:     toProtoSession(session),
+	}, nil
 }
 
 func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1.RespondToMatchRequest) (*matchmakingv1.RespondToMatchResponse, error) {

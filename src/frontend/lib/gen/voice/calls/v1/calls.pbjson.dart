@@ -124,6 +124,21 @@ final $typed_data.Uint8List voiceRoomLifecycleOutcomeDescriptor = $convert.base6
     '1fTElGRUNZQ0xFX09VVENPTUVfTU9WRUQQAxImCiJWT0lDRV9ST09NX0xJRkVDWUNMRV9PVVRD'
     'T01FX05PX09QEAQ=');
 
+@$core.Deprecated('Use matchSquadTeardownStatusDescriptor instead')
+const MatchSquadTeardownStatus$json = {
+  '1': 'MatchSquadTeardownStatus',
+  '2': [
+    {'1': 'MATCH_SQUAD_TEARDOWN_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'MATCH_SQUAD_TEARDOWN_STATUS_COMPLETED', '2': 1},
+  ],
+};
+
+/// Descriptor for `MatchSquadTeardownStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchSquadTeardownStatusDescriptor = $convert.base64Decode(
+    'ChhNYXRjaFNxdWFkVGVhcmRvd25TdGF0dXMSKwonTUFUQ0hfU1FVQURfVEVBUkRPV05fU1RBVF'
+    'VTX1VOU1BFQ0lGSUVEEAASKQolTUFUQ0hfU1FVQURfVEVBUkRPV05fU1RBVFVTX0NPTVBMRVRF'
+    'RBAB');
+
 @$core.Deprecated('Use gameSessionResourceRefDescriptor instead')
 const GameSessionResourceRef$json = {
   '1': 'GameSessionResourceRef',
@@ -187,6 +202,255 @@ final $typed_data.Uint8List provisionGameSessionRoomRequestDescriptor = $convert
     '52b2ljZS5jYWxscy52MS5HYW1lU2Vzc2lvblJlc291cmNlUmVmUghyZXNvdXJjZRIXCgdjaGF0'
     'X2lkGAUgASgJUgZjaGF0SWQSOwoaY2hhdF9jcmVhdGlvbl9vcGVyYXRpb25faWQYBiABKAlSF2'
     'NoYXRDcmVhdGlvbk9wZXJhdGlvbklkEh0KCnNlc3Npb25faWQYByABKAlSCXNlc3Npb25JZA==');
+
+@$core.Deprecated('Use createMatchSquadRoomRequestDescriptor instead')
+const CreateMatchSquadRoomRequest$json = {
+  '1': 'CreateMatchSquadRoomRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {
+      '1': 'participants',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadParticipant',
+      '10': 'participants'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {
+      '1': 'chat_creation_receipt',
+      '3': 6,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadChatReceipt',
+      '10': 'chatCreationReceipt'
+    },
+  ],
+};
+
+/// Descriptor for `CreateMatchSquadRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createMatchSquadRoomRequestDescriptor = $convert.base64Decode(
+    'ChtDcmVhdGVNYXRjaFNxdWFkUm9vbVJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDV'
+    'IPcHJvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9uSWQSGQoI'
+    'bWF0Y2hfaWQYAyABKAlSB21hdGNoSWQSSAoMcGFydGljaXBhbnRzGAQgAygLMiQudm9pY2UuY2'
+    'hhdC52MS5NYXRjaFNxdWFkUGFydGljaXBhbnRSDHBhcnRpY2lwYW50cxI+ChtwYXJ0aWNpcGFu'
+    'dF9tYW5pZmVzdF9zaGEyNTYYBSABKAxSGXBhcnRpY2lwYW50TWFuaWZlc3RTaGEyNTYSWAoVY2'
+    'hhdF9jcmVhdGlvbl9yZWNlaXB0GAYgASgLMiQudm9pY2UuY2hhdC52MS5NYXRjaFNxdWFkQ2hh'
+    'dFJlY2VpcHRSE2NoYXRDcmVhdGlvblJlY2VpcHQ=');
+
+@$core.Deprecated('Use matchSquadRoomReceiptDescriptor instead')
+const MatchSquadRoomReceipt$json = {
+  '1': 'MatchSquadRoomReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 5, '4': 1, '5': 9, '10': 'roomId'},
+    {'1': 'chat_id', '3': 6, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'chat_creation_receipt_id',
+      '3': 7,
+      '4': 1,
+      '5': 9,
+      '10': 'chatCreationReceiptId'
+    },
+    {
+      '1': 'chat_creation_receipt_sha256',
+      '3': 8,
+      '4': 1,
+      '5': 12,
+      '10': 'chatCreationReceiptSha256'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 9,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {'1': 'request_sha256', '3': 10, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'created_at',
+      '3': 11,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadRoomReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadRoomReceiptDescriptor = $convert.base64Decode(
+    'ChVNYXRjaFNxdWFkUm9vbVJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG'
+    '9jb2xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJlY2VpcHRJZBIhCgxvcGVyYXRpb25f'
+    'aWQYAyABKAlSC29wZXJhdGlvbklkEhkKCG1hdGNoX2lkGAQgASgJUgdtYXRjaElkEhcKB3Jvb2'
+    '1faWQYBSABKAlSBnJvb21JZBIXCgdjaGF0X2lkGAYgASgJUgZjaGF0SWQSNwoYY2hhdF9jcmVh'
+    'dGlvbl9yZWNlaXB0X2lkGAcgASgJUhVjaGF0Q3JlYXRpb25SZWNlaXB0SWQSPwocY2hhdF9jcm'
+    'VhdGlvbl9yZWNlaXB0X3NoYTI1NhgIIAEoDFIZY2hhdENyZWF0aW9uUmVjZWlwdFNoYTI1NhI+'
+    'ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaGEyNTYYCSABKAxSGXBhcnRpY2lwYW50TWFuaWZlc3'
+    'RTaGEyNTYSJQoOcmVxdWVzdF9zaGEyNTYYCiABKAxSDXJlcXVlc3RTaGEyNTYSOQoKY3JlYXRl'
+    'ZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSCWNyZWF0ZWRBdA==');
+
+@$core.Deprecated('Use createMatchSquadRoomResponseDescriptor instead')
+const CreateMatchSquadRoomResponse$json = {
+  '1': 'CreateMatchSquadRoomResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.MatchSquadRoomReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `CreateMatchSquadRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createMatchSquadRoomResponseDescriptor =
+    $convert.base64Decode(
+        'ChxDcmVhdGVNYXRjaFNxdWFkUm9vbVJlc3BvbnNlEj8KB3JlY2VpcHQYASABKAsyJS52b2ljZS'
+        '5jYWxscy52MS5NYXRjaFNxdWFkUm9vbVJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use teardownMatchSquadRoomRequestDescriptor instead')
+const TeardownMatchSquadRoomRequest$json = {
+  '1': 'TeardownMatchSquadRoomRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'teardown_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 4, '4': 1, '5': 9, '10': 'roomId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {
+      '1': 'creation_request_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'creationRequestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `TeardownMatchSquadRoomRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List teardownMatchSquadRoomRequestDescriptor = $convert.base64Decode(
+    'Ch1UZWFyZG93bk1hdGNoU3F1YWRSb29tUmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SMgoVdGVhcmRvd25fb3BlcmF0aW9uX2lkGAIgASgJUhN0ZWFy'
+    'ZG93bk9wZXJhdGlvbklkEhkKCG1hdGNoX2lkGAMgASgJUgdtYXRjaElkEhcKB3Jvb21faWQYBC'
+    'ABKAlSBnJvb21JZBIuChNjcmVhdGlvbl9yZWNlaXB0X2lkGAUgASgJUhFjcmVhdGlvblJlY2Vp'
+    'cHRJZBI+ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaGEyNTYYBiABKAxSGXBhcnRpY2lwYW50TW'
+    'FuaWZlc3RTaGEyNTYSNgoXY3JlYXRpb25fcmVxdWVzdF9zaGEyNTYYByABKAxSFWNyZWF0aW9u'
+    'UmVxdWVzdFNoYTI1Ng==');
+
+@$core.Deprecated('Use matchSquadRoomTeardownReceiptDescriptor instead')
+const MatchSquadRoomTeardownReceipt$json = {
+  '1': 'MatchSquadRoomTeardownReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'teardown_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'room_id', '3': 5, '4': 1, '5': 9, '10': 'roomId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {'1': 'request_sha256', '3': 8, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'status',
+      '3': 9,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.calls.v1.MatchSquadTeardownStatus',
+      '10': 'status'
+    },
+    {
+      '1': 'completed_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadRoomTeardownReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadRoomTeardownReceiptDescriptor = $convert.base64Decode(
+    'Ch1NYXRjaFNxdWFkUm9vbVRlYXJkb3duUmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElkEjIKFXRl'
+    'YXJkb3duX29wZXJhdGlvbl9pZBgDIAEoCVITdGVhcmRvd25PcGVyYXRpb25JZBIZCghtYXRjaF'
+    '9pZBgEIAEoCVIHbWF0Y2hJZBIXCgdyb29tX2lkGAUgASgJUgZyb29tSWQSLgoTY3JlYXRpb25f'
+    'cmVjZWlwdF9pZBgGIAEoCVIRY3JlYXRpb25SZWNlaXB0SWQSPgobcGFydGljaXBhbnRfbWFuaW'
+    'Zlc3Rfc2hhMjU2GAcgASgMUhlwYXJ0aWNpcGFudE1hbmlmZXN0U2hhMjU2EiUKDnJlcXVlc3Rf'
+    'c2hhMjU2GAggASgMUg1yZXF1ZXN0U2hhMjU2EkAKBnN0YXR1cxgJIAEoDjIoLnZvaWNlLmNhbG'
+    'xzLnYxLk1hdGNoU3F1YWRUZWFyZG93blN0YXR1c1IGc3RhdHVzEj0KDGNvbXBsZXRlZF9hdBgK'
+    'IAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSC2NvbXBsZXRlZEF0');
+
+@$core.Deprecated('Use teardownMatchSquadRoomResponseDescriptor instead')
+const TeardownMatchSquadRoomResponse$json = {
+  '1': 'TeardownMatchSquadRoomResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.calls.v1.MatchSquadRoomTeardownReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `TeardownMatchSquadRoomResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List teardownMatchSquadRoomResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5UZWFyZG93bk1hdGNoU3F1YWRSb29tUmVzcG9uc2USRwoHcmVjZWlwdBgBIAEoCzItLnZvaW'
+        'NlLmNhbGxzLnYxLk1hdGNoU3F1YWRSb29tVGVhcmRvd25SZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use provisionGameSessionRoomResponseDescriptor instead')
 const ProvisionGameSessionRoomResponse$json = {

@@ -23,6 +23,7 @@ import (
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/gisprincipal"
 	grpcsvc "voice/backend/chat/internal/grpcsvc"
+	"voice/backend/chat/internal/matchsquadprincipal"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/grpcmw"
@@ -83,6 +84,10 @@ func main() {
 	if searchManifestConfigErr != nil {
 		log.Fatalf("Search manifest principal configuration: %v", searchManifestConfigErr)
 	}
+	matchSquadPrincipalConfig, matchSquadPrincipalConfigured, matchSquadPrincipalErr := matchsquadprincipal.LoadFromEnv(os.LookupEnv)
+	if matchSquadPrincipalErr != nil {
+		log.Fatalf("MatchSquad principal configuration: %v", matchSquadPrincipalErr)
+	}
 	if spacePurgeOwners.configured() && !spaceLifecycleConfigured {
 		log.Fatal("Chat Space purge owner clients require the Space lifecycle principal listener")
 	}
@@ -102,6 +107,8 @@ func main() {
 	var spaceLifecycleGRPCSrv *grpc.Server
 	var spaceLifecyclePrincipalRuntime *gisprincipal.Runtime
 	var searchManifestGRPCSrv *grpc.Server
+	var matchSquadGRPCSrv *grpc.Server
+	var matchSquadPrincipalRuntime *matchsquadprincipal.Runtime
 	var accountDeletedConsumerDone <-chan error
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -355,6 +362,26 @@ func main() {
 				}
 			}()
 		}
+		if matchSquadPrincipalConfigured {
+			matchSquadPrincipalRuntime, err = matchsquadprincipal.New(runCtx, matchSquadPrincipalConfig)
+			if err != nil {
+				log.Fatalf("MatchSquad principal runtime: %v", err)
+			}
+			defer func() { _ = matchSquadPrincipalRuntime.Close() }()
+			matchSquadLis, listenErr := net.Listen("tcp", matchSquadPrincipalConfig.ListenerAddr)
+			if listenErr != nil {
+				log.Fatalf("MatchSquad Chat gRPC listen: %v", listenErr)
+			}
+			matchSquadGRPCSrv = grpc.NewServer(matchSquadPrincipalRuntime.ServerOptions()...)
+			matchSquadStore := &store.MatchSquadStore{Pool: pool}
+			chatv1.RegisterMatchSquadChatServiceServer(matchSquadGRPCSrv, &grpcsvc.MatchSquadChatGRPC{Store: matchSquadStore})
+			go func() {
+				logger.Info("MatchSquad Chat mTLS gRPC listening", slog.String("addr", matchSquadPrincipalConfig.ListenerAddr))
+				if err := matchSquadGRPCSrv.Serve(matchSquadLis); err != nil {
+					log.Fatalf("MatchSquad Chat gRPC serve: %v", err)
+				}
+			}()
+		}
 		lis, err := net.Listen("tcp", grpcListen)
 		if err != nil {
 			log.Fatalf("grpc listen: %v", err)
@@ -388,7 +415,7 @@ func main() {
 			}
 		}()
 	} else {
-		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured {
+		if gisPrincipalConfigured || spaceLifecycleConfigured || searchManifestConfigured || matchSquadPrincipalConfigured {
 			log.Fatal("protected principal listeners require DATABASE_URL")
 		}
 		logger.Warn("DATABASE_URL not set; gRPC disabled (health only)")
@@ -453,6 +480,9 @@ func main() {
 	defer cancel()
 	waitForAccountDeletedConsumerShutdown(ctx, accountDeletedConsumerDone, logger)
 	if shutdownServer {
+		if matchSquadGRPCSrv != nil {
+			matchSquadGRPCSrv.GracefulStop()
+		}
 		if searchManifestGRPCSrv != nil {
 			searchManifestGRPCSrv.GracefulStop()
 		}

@@ -95,6 +95,8 @@ service MatchSquadChatService {
   rpc CreateMatchSquadChat(CreateMatchSquadChatRequest) returns (CreateMatchSquadChatResponse);
   // @voice.security=protected;callers=service:matchmaking
   rpc TeardownMatchSquadChat(TeardownMatchSquadChatRequest) returns (TeardownMatchSquadChatResponse);
+  // @voice.security=protected;callers=service:matchmaking
+  rpc CompactMatchSquadChat(CompactMatchSquadChatRequest) returns (CompactMatchSquadChatResponse);
 }
 
 enum ChatType {
@@ -194,6 +196,51 @@ message MatchSquadChatTeardownReceipt {
 
 message TeardownMatchSquadChatResponse {
   MatchSquadChatTeardownReceipt receipt = 1;
+}
+
+// Matchmaking sends this only after its durable teardown aggregate has been
+// complete for at least 30 days. The stored teardown receipt hash binds the
+// exact provider evidence whose large request and receipt bytes may be cleared.
+// @voice.unknown_fields=reject
+// @voice.hash=deterministic_protobuf_sha256
+message CompactMatchSquadChatRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string teardown_aggregate_id = 3;
+  string match_id = 4;
+  string chat_id = 5;
+  string creation_receipt_id = 6;
+  bytes creation_request_sha256 = 7;
+  string teardown_operation_id = 8;
+  string teardown_receipt_id = 9;
+  bytes teardown_receipt_sha256 = 10;
+  bytes participant_manifest_sha256 = 11;
+  google.protobuf.Timestamp aggregate_completed_at = 12;
+  google.protobuf.Timestamp compaction_authorized_at = 13;
+}
+
+enum MatchSquadChatCompactionStatus {
+  MATCH_SQUAD_CHAT_COMPACTION_STATUS_UNSPECIFIED = 0;
+  MATCH_SQUAD_CHAT_COMPACTION_STATUS_COMPACTED = 1;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message MatchSquadChatCompactionReceipt {
+  uint32 protocol_version = 1;
+  string receipt_id = 2;
+  string compaction_operation_id = 3;
+  string teardown_aggregate_id = 4;
+  string match_id = 5;
+  string chat_id = 6;
+  bytes request_sha256 = 7;
+  google.protobuf.Timestamp aggregate_completed_at = 8;
+  google.protobuf.Timestamp compaction_authorized_at = 9;
+  MatchSquadChatCompactionStatus status = 10;
+}
+
+message CompactMatchSquadChatResponse {
+  MatchSquadChatCompactionReceipt receipt = 1;
 }
 
 // The operation_id is also the x-request-id principal binding. Request hash

@@ -212,6 +212,97 @@ abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
           $0.CompleteSdkConversionActivationRequest request);
 }
 
+/// Match-squad operations are served only by the dedicated protected
+/// MatchSquadVoiceService listener, never by the ordinary VoiceService listener.
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadVoiceService')
+class MatchSquadVoiceServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  MatchSquadVoiceServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom(
+    $0.CreateMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createMatchSquadRoom, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.TeardownMatchSquadRoomResponse>
+      teardownMatchSquadRoom(
+    $0.TeardownMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$teardownMatchSquadRoom, request,
+        options: options);
+  }
+
+  // method descriptors
+
+  static final _$createMatchSquadRoom = $grpc.ClientMethod<
+          $0.CreateMatchSquadRoomRequest, $0.CreateMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadVoiceService/CreateMatchSquadRoom',
+      ($0.CreateMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.CreateMatchSquadRoomResponse.fromBuffer);
+  static final _$teardownMatchSquadRoom = $grpc.ClientMethod<
+          $0.TeardownMatchSquadRoomRequest, $0.TeardownMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadVoiceService/TeardownMatchSquadRoom',
+      ($0.TeardownMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.TeardownMatchSquadRoomResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadVoiceService')
+abstract class MatchSquadVoiceServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.calls.v1.MatchSquadVoiceService';
+
+  MatchSquadVoiceServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.CreateMatchSquadRoomRequest,
+            $0.CreateMatchSquadRoomResponse>(
+        'CreateMatchSquadRoom',
+        createMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CreateMatchSquadRoomRequest.fromBuffer(value),
+        ($0.CreateMatchSquadRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.TeardownMatchSquadRoomRequest,
+            $0.TeardownMatchSquadRoomResponse>(
+        'TeardownMatchSquadRoom',
+        teardownMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.TeardownMatchSquadRoomRequest.fromBuffer(value),
+        ($0.TeardownMatchSquadRoomResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CreateMatchSquadRoomRequest> $request) async {
+    return createMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom(
+      $grpc.ServiceCall call, $0.CreateMatchSquadRoomRequest request);
+
+  $async.Future<$0.TeardownMatchSquadRoomResponse> teardownMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.TeardownMatchSquadRoomRequest> $request) async {
+    return teardownMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.TeardownMatchSquadRoomResponse> teardownMatchSquadRoom(
+      $grpc.ServiceCall call, $0.TeardownMatchSquadRoomRequest request);
+}
+
 /// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 /// Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')

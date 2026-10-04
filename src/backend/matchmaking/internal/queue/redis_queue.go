@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,13 +113,15 @@ func (q *RedisQueue) RecoverSearch(ctx context.Context, sess SearchRecovery) err
 	if current > wanted then return 0 end
 	local owner = redis.call('GET', KEYS[3])
 	if owner and owner ~= ARGV[1] then return -1 end
-	redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[5])
+	redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[4])
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 	redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 	return 1
 	`
 	n, err := q.Client.Eval(ctx, script, []string{q.scopedQueueKey(sess.SpaceID, sess.GameID, sess.Mode, sess.Region), q.generationKey(), q.lockKey(sess.ProfileID)},
-		sess.SessionID.String(), sess.Generation, float64(sess.CreatedAt.UTC().UnixNano()), int64(defaultLockTTL/time.Second)).Int()
+		sess.SessionID.String(), strconv.FormatInt(sess.Generation, 10),
+		strconv.FormatFloat(float64(sess.CreatedAt.UTC().UnixNano()), 'f', -1, 64),
+		strconv.FormatInt(int64(defaultLockTTL/time.Second), 10)).Int()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
 	}
@@ -155,7 +158,8 @@ func (q *RedisQueue) EnqueueScopedGeneration(ctx context.Context, spaceID *uuid.
 	return 1
 	`
 	n, err := q.Client.Eval(ctx, script, []string{q.scopedQueueKey(spaceID, gameID, mode, region), q.generationKey()},
-		sessionID.String(), generation, float64(createdAt.UTC().UnixNano())).Int()
+		sessionID.String(), strconv.FormatInt(generation, 10),
+		strconv.FormatFloat(float64(createdAt.UTC().UnixNano()), 'f', -1, 64)).Int()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
 	}
@@ -181,7 +185,7 @@ func (q *RedisQueue) RecoverRelease(ctx context.Context, sess SearchRecovery) er
 	return 1
 	`
 	n, err := q.Client.Eval(ctx, script, []string{q.scopedQueueKey(sess.SpaceID, sess.GameID, sess.Mode, sess.Region), q.generationKey(), q.lockKey(sess.ProfileID)},
-		sess.SessionID.String(), sess.Generation).Int()
+		sess.SessionID.String(), strconv.FormatInt(sess.Generation, 10)).Int()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
 	}
@@ -214,7 +218,8 @@ func (q *RedisQueue) DequeueScopedGeneration(ctx context.Context, spaceID *uuid.
 	redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
 	return redis.call('ZREM', KEYS[1], ARGV[1])
 	`
-	removed, err := q.Client.Eval(ctx, script, []string{q.scopedQueueKey(spaceID, gameID, mode, region), q.generationKey()}, sessionID.String(), generation).Int()
+	removed, err := q.Client.Eval(ctx, script, []string{q.scopedQueueKey(spaceID, gameID, mode, region), q.generationKey()},
+		sessionID.String(), strconv.FormatInt(generation, 10)).Int()
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrQueueUnavailable, err)
 	}
