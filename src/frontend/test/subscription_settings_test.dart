@@ -94,12 +94,18 @@ void main() {
 
     expect(find.byKey(SubscriptionSettingsScreen.planStateKey), findsOneWidget);
     expect(find.text('Free'), findsWidgets);
-    expect(find.byKey(SubscriptionSettingsScreen.freeTierNoteKey), findsOneWidget);
+    expect(
+      find.byKey(SubscriptionSettingsScreen.freeTierNoteKey),
+      findsOneWidget,
+    );
     expect(
       find.text('Messages and chats stay free on the Free plan.'),
       findsOneWidget,
     );
-    expect(find.byKey(SubscriptionSettingsScreen.upgradeSectionKey), findsOneWidget);
+    expect(
+      find.byKey(SubscriptionSettingsScreen.upgradeSectionKey),
+      findsOneWidget,
+    );
     expect(find.text('Premium — monthly'), findsOneWidget);
     expect(find.text('Premium — yearly (−20%)'), findsOneWidget);
   });
@@ -120,8 +126,14 @@ void main() {
 
     expect(find.text('Premium'), findsWidgets);
     expect(find.text('Billing: Yearly'), findsOneWidget);
-    expect(find.byKey(SubscriptionSettingsScreen.upgradeSectionKey), findsNothing);
-    expect(find.byKey(SubscriptionSettingsScreen.freeTierNoteKey), findsNothing);
+    expect(
+      find.byKey(SubscriptionSettingsScreen.upgradeSectionKey),
+      findsNothing,
+    );
+    expect(
+      find.byKey(SubscriptionSettingsScreen.freeTierNoteKey),
+      findsNothing,
+    );
   });
 
   testWidgets('grace period shows payment issue state', (tester) async {
@@ -139,7 +151,10 @@ void main() {
       find.text('Update your payment method to keep Premium benefits.'),
       findsOneWidget,
     );
-    expect(find.byKey(SubscriptionSettingsScreen.upgradeSectionKey), findsNothing);
+    expect(
+      find.byKey(SubscriptionSettingsScreen.upgradeSectionKey),
+      findsNothing,
+    );
   });
 
   testWidgets('subscription load error shows retry panel', (tester) async {
@@ -155,4 +170,48 @@ void main() {
     expect(find.text('Could not load subscription'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets(
+    'cancel failure uses safe copy and preserves unavailable mapping',
+    (tester) async {
+      const genericSecret = 'provider diagnostic=cancel-private-456';
+      const unavailableSecret = 'provider diagnostic=cancel-unavailable-789';
+      var cancelAttempts = 0;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/subscription/me' && req.method == 'GET') {
+          return _subscriptionResponse(plan: 'premium', status: 'active');
+        }
+        if (req.url.path == '/api/v1/subscription/cancel' &&
+            req.method == 'POST') {
+          cancelAttempts++;
+          return http.Response(
+            jsonEncode({
+              'error_code': 'provider_error',
+              'message': cancelAttempts == 1
+                  ? genericSecret
+                  : unavailableSecret,
+            }),
+            cancelAttempts == 1 ? 500 : 503,
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await _pumpSubscriptionScreen(tester, client: client);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SubscriptionSettingsScreen)),
+      )!;
+      await tester.tap(find.text(l10n.subscriptionCancel));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
+      expect(find.textContaining(genericSecret), findsNothing);
+
+      await tester.tap(find.text(l10n.subscriptionCancel));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.backendUnavailable), findsOneWidget);
+      expect(find.textContaining(unavailableSecret), findsNothing);
+    },
+  );
 }
