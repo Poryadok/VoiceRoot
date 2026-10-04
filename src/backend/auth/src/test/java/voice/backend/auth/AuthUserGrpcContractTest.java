@@ -57,7 +57,7 @@ import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
 /** Contract boundary for the already-shipped User verification RPCs. */
 class AuthUserGrpcContractTest {
-  private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-04T12:00:00Z"), ZoneOffset.UTC);
+  private static final Clock CLOCK = Clock.fixed(Instant.now(), ZoneOffset.UTC);
 
   @Test
   void emailGuestLoginAndRefreshProvisionAUserProfileBeforeEachSession() throws Exception {
@@ -245,11 +245,14 @@ class AuthUserGrpcContractTest {
       Harness rejected = new Harness(UUID.randomUUID().toString());
       AuthSession original = rejected.service.register(
           new RegisterCommand(failure + "@example.com", null, "Correct horse battery staple", false, "{}"));
+      UUID accountId = UUID.fromString(original.accountId());
+      var sessionsBeforeSwitch = rejected.refreshTokens.listActiveByAccount(accountId);
+      assertThat(sessionsBeforeSwitch).hasSize(1);
       rejected.switches.failure = new ProfileSwitchException(failure, ProfileSwitchException.Kind.PRECONDITION);
 
       assertThatThrownBy(() -> rejected.service.switchActiveProfile(original.accessToken(), UUID.randomUUID().toString(), "{}"))
           .isInstanceOf(ProfileSwitchException.class).hasMessage(failure);
-      assertThat(rejected.refreshTokens.listActiveByAccount(UUID.fromString(original.accountId()))).hasSize(1);
+      assertThat(rejected.refreshTokens.listActiveByAccount(accountId)).isEqualTo(sessionsBeforeSwitch);
     }
   }
 
