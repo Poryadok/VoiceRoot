@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/matchmaking_client.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 
 /// Author Accept/Decline overlay for LFP JOIN/INVITE (matchmaking.md Social Discovery).
 class LfpRequestDecisionSheet extends ConsumerWidget {
@@ -85,8 +87,15 @@ class LfpRequestDecisionSheet extends ConsumerWidget {
     switch (result) {
       case MatchmakingApiOk(:final data):
         Navigator.of(context).pop(data);
-      case MatchmakingApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      case MatchmakingApiFailure(:final statusCode):
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
     }
   }
 }

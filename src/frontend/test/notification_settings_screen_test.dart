@@ -215,4 +215,87 @@ void main() {
     expect(quietStorage.value.startTime, '22:00');
     expect(quietStorage.writeCount, greaterThan(0));
   });
+
+  testWidgets('notification settings save hides upstream failure details', (
+    tester,
+  ) async {
+    const upstreamDetail = 'private notification service diagnostic';
+    final quietStorage = _InMemoryQuietHoursStorage();
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'global',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' && req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'quiet_hours': {
+              'enabled': false,
+              'start_time': '22:00',
+              'end_time': '07:00',
+              'timezone': 'UTC',
+              'override_mentions': true,
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'PUT') {
+        return http.Response(
+          jsonEncode({'error_code': 'unavailable', 'message': upstreamDetail}),
+          503,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' && req.method == 'PUT') {
+        return http.Response('', 204);
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceAppTestOverrides(client: client),
+          notificationQuietHoursStorageProvider.overrideWithValue(quietStorage),
+          pushNotificationsControllerProvider.overrideWith(
+            (ref) => _FakePushNotificationsController(ref),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: NotificationSettingsScreen()),
+        ),
+      ),
+    );
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (find
+          .byKey(NotificationSettingsScreen.saveButtonKey)
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
+    await tester.ensureVisible(
+      find.byKey(NotificationSettingsScreen.saveButtonKey),
+    );
+    await tester.tap(find.byKey(NotificationSettingsScreen.saveButtonKey));
+    await tester.pumpAndSettle();
+    final l10n = await AppLocalizations.delegate.load(const Locale('en'));
+
+    expect(find.text(l10n.backendUnavailable), findsOneWidget);
+    expect(find.text(upstreamDetail), findsNothing);
+  });
 }
