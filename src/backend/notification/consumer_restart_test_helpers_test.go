@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -57,6 +60,136 @@ type notificationConsumerRestartFixture struct {
 	serverURL string
 	js        nats.JetStreamContext
 	tokens    *store.DeviceTokenStore
+}
+
+type composeFCMCorrelation struct {
+	MessageID       string `json:"message_id"`
+	ChatID          string `json:"chat_id"`
+	SenderProfileID string `json:"sender_profile_id"`
+}
+
+// TestComposeFcmEventCorrelationProbe is opt-in from the failing disposable
+// Compose smoke only. It reads retained JetStream messages and consumer info;
+// it never creates or changes a stream, consumer, subscription, or message.
+func TestComposeFcmEventCorrelationProbe(t *testing.T) {
+	correlationPath := os.Getenv("VOICE_FCM_DIAGNOSTIC_FILE")
+	if correlationPath == "" {
+		return
+	}
+	fileInfo, err := os.Lstat(correlationPath)
+	if err != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode().Perm()&0o077 != 0 || fileInfo.Size() > 4096 {
+		composeFCMProbeUnavailable("correlation_file")
+		return
+	}
+	correlationBytes, err := os.ReadFile(correlationPath)
+	if err != nil {
+		composeFCMProbeUnavailable("correlation_file")
+		return
+	}
+	var correlation composeFCMCorrelation
+	if json.Unmarshal(correlationBytes, &correlation) != nil || correlation.MessageID == "" || correlation.ChatID == "" || correlation.SenderProfileID == "" {
+		composeFCMProbeUnavailable("correlation_invalid")
+		return
+	}
+	if _, err := uuid.Parse(correlation.MessageID); err != nil {
+		composeFCMProbeUnavailable("correlation_invalid")
+		return
+	}
+	if _, err := uuid.Parse(correlation.ChatID); err != nil {
+		composeFCMProbeUnavailable("correlation_invalid")
+		return
+	}
+	if _, err := uuid.Parse(correlation.SenderProfileID); err != nil {
+		composeFCMProbeUnavailable("correlation_invalid")
+		return
+	}
+	natsURL := os.Getenv("NATS_URL")
+	parsedURL, err := url.Parse(natsURL)
+	if err != nil || parsedURL.Scheme != "nats" || parsedURL.Hostname() != "127.0.0.1" || parsedURL.User != nil || parsedURL.Path != "" || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		composeFCMProbeUnavailable("endpoint_rejected")
+		return
+	}
+	port, err := strconv.Atoi(parsedURL.Port())
+	if err != nil || port < 1 || port > 65535 {
+		composeFCMProbeUnavailable("endpoint_rejected")
+		return
+	}
+	nc, err := nats.Connect(natsURL, nats.Timeout(2*time.Second), nats.MaxReconnects(0))
+	if err != nil {
+		composeFCMProbeUnavailable("nats_connect")
+		return
+	}
+	defer nc.Close()
+	js, err := nc.JetStream()
+	if err != nil {
+		composeFCMProbeUnavailable("jetstream")
+		return
+	}
+	streamInfo, err := js.StreamInfo(jsStreamMessageEvents)
+	if err != nil || streamInfo == nil {
+		composeFCMProbeUnavailable("stream_info")
+		return
+	}
+	const maxMessages = uint64(256)
+	first, last := streamInfo.State.FirstSeq, streamInfo.State.LastSeq
+	start := first
+	if last >= first && last-first+1 > maxMessages {
+		start = last - maxMessages + 1
+	}
+	coverage := "complete_retained"
+	if last >= first && start != first {
+		coverage = "bounded"
+	}
+	if last < first {
+		coverage = "unknown"
+	}
+	var matches uint64
+	var eventSequence uint64
+	for sequence := start; coverage != "unknown" && sequence <= last; sequence++ {
+		message, getErr := js.GetMsg(jsStreamMessageEvents, sequence)
+		if getErr != nil {
+			coverage = "unknown"
+			break
+		}
+		var event eventsv1.MessageStreamEvent
+		if proto.Unmarshal(message.Data, &event) != nil {
+			coverage = "unknown"
+			break
+		}
+		messageSent := event.GetMessageSent()
+		if messageSent != nil && messageSent.GetMessageId() == correlation.MessageID && messageSent.GetChatId() == correlation.ChatID && messageSent.GetSenderProfileId() == correlation.SenderProfileID {
+			matches++
+			eventSequence = message.Sequence
+		}
+		if sequence == ^uint64(0) {
+			break
+		}
+	}
+	if matches != 1 {
+		fmt.Printf("compose_fcm_probe available=true stage=scan event_match_count=%d event_scan=%s consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", matches, coverage)
+		return
+	}
+	consumerInfoAvailable := false
+	deliveredAtOrAfter := false
+	ackFloorAtOrAfter := false
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, consumer.SharedDurable("message"))
+		if infoErr == nil && info != nil {
+			consumerInfoAvailable = true
+			deliveredAtOrAfter = info.Delivered.Stream >= eventSequence
+			ackFloorAtOrAfter = info.AckFloor.Stream >= eventSequence
+			if ackFloorAtOrAfter {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	fmt.Printf("compose_fcm_probe available=true stage=consumer_info event_match_count=1 event_scan=%s consumer_info_available=%t delivered_seq_ge_event=%t ack_floor_seq_ge_event=%t\n", coverage, consumerInfoAvailable, deliveredAtOrAfter, ackFloorAtOrAfter)
+}
+
+func composeFCMProbeUnavailable(stage string) {
+	fmt.Printf("compose_fcm_probe available=false stage=%s event_match_count=0 event_scan=unknown consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", stage)
 }
 
 type notificationRestartPush struct {

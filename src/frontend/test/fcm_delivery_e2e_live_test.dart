@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -13,6 +14,8 @@ String notificationDebugBase() {
   if (fromEnv.isNotEmpty) return fromEnv;
   return 'http://127.0.0.1:18091';
 }
+
+const _diagnosticFile = String.fromEnvironment('VOICE_FCM_DIAGNOSTIC_FILE');
 
 void main() {
   test('offline DM triggers recorded FCM push payload', () async {
@@ -67,6 +70,21 @@ void main() {
         final map = jsonDecode(resp.body) as Map<String, dynamic>;
         recorded = RecordedPush.fromJson(map);
         break;
+      }
+    }
+    if (recorded == null && _diagnosticFile.isNotEmpty) {
+      try {
+        final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
+        await File(_diagnosticFile).writeAsString(
+          jsonEncode({
+            'message_id': sentMessage.id,
+            'chat_id': chatId,
+            'sender_profile_id': a.activeProfileId,
+          }),
+          flush: true,
+        );
+      } on Object {
+        // Correlation is best-effort; the original assertion remains authoritative.
       }
     }
     expect(
