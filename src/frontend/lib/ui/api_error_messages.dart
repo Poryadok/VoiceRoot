@@ -34,6 +34,12 @@ String sharedMediaErrorMessage(AppLocalizations l10n, Object error) {
   return l10n.chatSharedMediaLoadError;
 }
 
+String activeSessionsLoadErrorMessage(AppLocalizations l10n, Object error) {
+  // Auth gateway details may contain implementation diagnostics. This screen
+  // has a dedicated localized fallback, so never render the upstream message.
+  return l10n.securitySessionsLoadError;
+}
+
 String socialActionErrorMessage(
   AppLocalizations l10n,
   String message, {

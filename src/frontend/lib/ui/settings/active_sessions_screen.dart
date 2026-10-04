@@ -6,6 +6,8 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_state_panel.dart';
+import '../core/voice_skeleton.dart';
+import '../api_error_messages.dart';
 
 /// Lists active refresh-token sessions and allows revoking other devices.
 class ActiveSessionsScreen extends ConsumerStatefulWidget {
@@ -70,10 +72,9 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
 
     setState(() => _revokingId = deviceSession.id);
 
-    final result = await ref.read(voiceAuthClientProvider).revokeSession(
-      session: authSession,
-      sessionId: deviceSession.id,
-    );
+    final result = await ref
+        .read(voiceAuthClientProvider)
+        .revokeSession(session: authSession, sessionId: deviceSession.id);
 
     if (!mounted) return;
     setState(() => _revokingId = null);
@@ -81,14 +82,14 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
     final l10n = AppLocalizations.of(context)!;
     switch (result) {
       case AuthApiOk<void>():
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.securitySessionsRevoked)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.securitySessionsRevoked)));
         await _loadSessions();
       case AuthApiFailure(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -107,11 +108,11 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
       ),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const VoiceListSkeleton()
             : _error != null
             ? VoiceStatePanel(
                 title: l10n.securitySessionsLoadError,
-                message: _error,
+                message: activeSessionsLoadErrorMessage(l10n, _error!),
                 icon: Icons.devices_other_outlined,
                 actionLabel: l10n.commonRetry,
                 onAction: _loadSessions,
@@ -141,9 +142,7 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
                             : l10n.securitySessionsOtherDevice,
                       ),
                       trailing: deviceSession.current
-                          ? Chip(
-                              label: Text(l10n.securitySessionsCurrentBadge),
-                            )
+                          ? Chip(label: Text(l10n.securitySessionsCurrentBadge))
                           : TextButton(
                               key: ActiveSessionsScreen.revokeButtonKey(
                                 deviceSession.id,
