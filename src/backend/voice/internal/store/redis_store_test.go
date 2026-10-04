@@ -95,8 +95,13 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
 	})
 	require.NoError(t, err)
+	require.Empty(t, match.States, "the manifest does not create active Redis membership")
+	_, err = store.GetActiveCall(ctx, "match-member")
+	require.ErrorIs(t, err, ErrNotFound, "provisioning must not reserve a roster profile")
 	_, err = client.Get(ctx, store.activeChatKey(match.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil, "a MatchSquad projection must never claim ordinary Chat discovery")
+	match, err = store.AddParticipant(ctx, match.RoomID, "match-member", MaxGroupVoiceParticipants)
+	require.NoError(t, err, "only the owned current-membership adapter adds a participant")
 	left, err := store.RemoveParticipant(ctx, match.RoomID, "match-member")
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, left.Status, "PostgreSQL teardown owns MatchSquad terminal transition")

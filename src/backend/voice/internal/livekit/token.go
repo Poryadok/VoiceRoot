@@ -37,13 +37,43 @@ func NewHS256TokenIssuer(apiKey, secret, url string, tokenTTL time.Duration) *HS
 }
 
 func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, canPublish *bool, now time.Time) (string, time.Time, error) {
+	if i == nil {
+		return "", time.Time{}, fmt.Errorf("livekit credentials not configured")
+	}
+	return i.joinTokenUntil(profileID, roomName, canPublish, now, now.UTC().Add(i.tokenTTL))
+}
+
+// MatchSquadJoinToken creates a generation-scoped bearer that cannot outlive
+// its verified Gateway principal and never exceeds the MatchSquad 60-second
+// grant bound. Callers must durably record the returned expiry before sending
+// the token to a client.
+func (i *HS256TokenIssuer) MatchSquadJoinToken(profileID, roomName string, canPublish *bool, now, actorExpiresAt time.Time) (string, time.Time, error) {
+	now = now.UTC()
+	if !actorExpiresAt.After(now) {
+		return "", time.Time{}, fmt.Errorf("delegated user credential expired")
+	}
+	expiresAt := now.Add(time.Minute)
+	if actorExpiresAt.Before(expiresAt) {
+		expiresAt = actorExpiresAt.UTC()
+	}
+	if expiresAt.Unix() <= now.Unix() {
+		return "", time.Time{}, fmt.Errorf("delegated user credential expires too soon")
+	}
+	return i.joinTokenUntil(profileID, roomName, canPublish, now, expiresAt)
+}
+
+func (i *HS256TokenIssuer) joinTokenUntil(profileID, roomName string, canPublish *bool, now, expiresAt time.Time) (string, time.Time, error) {
 	if i == nil || strings.TrimSpace(i.apiKey) == "" || strings.TrimSpace(i.secret) == "" {
 		return "", time.Time{}, fmt.Errorf("livekit credentials not configured")
 	}
 	if strings.TrimSpace(profileID) == "" || strings.TrimSpace(roomName) == "" {
 		return "", time.Time{}, fmt.Errorf("profile and room are required")
 	}
-	expiresAt := now.UTC().Add(i.tokenTTL)
+	now = now.UTC()
+	expiresAt = expiresAt.UTC()
+	if !expiresAt.After(now) {
+		return "", time.Time{}, fmt.Errorf("token expiry must be after issue time")
+	}
 	issuedAt := now.UTC().Unix()
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
 	video := map[string]any{

@@ -42,7 +42,12 @@ func NewRedisCallStore(client *redis.Client, prefix string) *RedisCallStore {
 }
 
 func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error) {
-	if call.States == nil {
+	if call.MatchSquadMatchID != "" {
+		if len(call.States) != 0 {
+			return Call{}, ErrInvalidState
+		}
+		call.States = map[string]ParticipantState{}
+	} else if call.States == nil {
 		call.States = defaultStates(call)
 	}
 	keys := []string{s.callKey(call.RoomID)}

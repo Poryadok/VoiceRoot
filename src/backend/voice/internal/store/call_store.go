@@ -185,17 +185,25 @@ func NewMemoryCallStore() *MemoryCallStore {
 }
 
 func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error) {
+	if call.MatchSquadMatchID != "" {
+		if len(call.States) != 0 {
+			return Call{}, ErrInvalidState
+		}
+		call.States = map[string]ParticipantState{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing, exists := s.calls[call.RoomID]; exists && (call.ManagedGameSession || existing.ManagedGameSession) {
+	if existing, exists := s.calls[call.RoomID]; exists && (call.ManagedGameSession || existing.ManagedGameSession || call.MatchSquadMatchID != "" || existing.MatchSquadMatchID != "") {
 		return Call{}, ErrInvalidState
 	}
-	if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
-		return Call{}, err
-	}
-	if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
-		if err := s.ensureNoActiveCallLocked(call.CalleeProfileID); err != nil {
+	if call.MatchSquadMatchID == "" {
+		if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
 			return Call{}, err
+		}
+		if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
+			if err := s.ensureNoActiveCallLocked(call.CalleeProfileID); err != nil {
+				return Call{}, err
+			}
 		}
 	}
 	if call.States == nil {

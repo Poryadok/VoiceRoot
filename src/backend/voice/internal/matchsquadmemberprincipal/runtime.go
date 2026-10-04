@@ -197,6 +197,22 @@ func (r *Runtime) checkEpoch(ctx context.Context, account string, claimed int64)
 	return nil
 }
 
+// CheckCurrent repeats the time and Auth minimum-epoch checks after a handler
+// has waited on database or media dependencies, immediately before it commits
+// an admission decision or returns a short-lived grant.
+func (r *Runtime) CheckCurrent(ctx context.Context, actor principal.Principal, now time.Time) error {
+	if actor.Kind != "delegated_user" || actor.Issuer != issuer || actor.Audience != audience || actor.ExpiresAt.IsZero() || !now.Before(actor.ExpiresAt) {
+		return status.Error(codes.Unauthenticated, "delegated user credential expired")
+	}
+	if err := r.checkEpoch(ctx, actor.AccountID, actor.SessionEpoch); err != nil {
+		if errors.Is(err, errDependencyUnavailable) {
+			return status.Error(codes.Unavailable, "Voice MatchSquad member verifier unavailable")
+		}
+		return status.Error(codes.Unauthenticated, "delegated user session is no longer current")
+	}
+	return nil
+}
+
 func (r *Runtime) refreshLoop(ctx context.Context) {
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()

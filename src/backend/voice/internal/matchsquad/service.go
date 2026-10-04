@@ -227,15 +227,7 @@ func (s *Service) applyCreate(ctx context.Context, room, chatID string, match uu
 		}
 		return errors.New("MatchSquad resource is not current and active")
 	}
-	call := store.Call{
-		RoomID: room, LivekitRoomName: "match-squad-" + room, ChatID: chatID, MatchSquadMatchID: match.String(),
-		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
-		InitiatorProfileID: participants[0], MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
-		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: s.now(), States: make(map[string]store.ParticipantState, len(participants)),
-	}
-	for _, id := range participants {
-		call.States[id] = store.ParticipantState{ProfileID: id}
-	}
+	call := newMatchSquadProjection(room, chatID, match, participants[0], s.now())
 	if _, err = s.Calls.CreateCall(ctx, call); err != nil {
 		current, readErr := s.Calls.GetCall(ctx, room)
 		if readErr != nil || !sameProjection(current, call) {
@@ -250,6 +242,18 @@ func (s *Service) applyCreate(ctx context.Context, room, chatID string, match uu
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// newMatchSquadProjection contains no active participants. The creation
+// manifest is durable entitlement; only a verified member Join may create a
+// current participant projection.
+func newMatchSquadProjection(room, chatID string, match uuid.UUID, initiator string, now time.Time) store.Call {
+	return store.Call{
+		RoomID: room, LivekitRoomName: "match-squad-" + room, ChatID: chatID, MatchSquadMatchID: match.String(),
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		InitiatorProfileID: initiator, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: now, States: make(map[string]store.ParticipantState),
+	}
 }
 
 func (s *Service) CheckSchema(ctx context.Context) error {

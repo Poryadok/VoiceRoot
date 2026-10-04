@@ -14,6 +14,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/matchsquadprincipal"
+	"voice/backend/voice/internal/store"
 )
 
 func validCreateRequest() *callsv1.CreateMatchSquadRoomRequest {
@@ -31,6 +32,23 @@ func validCreateRequest() *callsv1.CreateMatchSquadRoomRequest {
 			OperationId: operation.String(), MatchId: match.String(), ChatId: "00000000-0000-4000-8000-000000000040",
 			ParticipantManifestSha256: manifest[:], RequestSha256: make([]byte, sha256.Size),
 		},
+	}
+}
+
+func TestNewMatchSquadProjectionDoesNotActivateRosterEntitlements(t *testing.T) {
+	match := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	first := "00000000-0000-4000-8000-000000000010"
+	second := "00000000-0000-4000-8000-000000000020"
+	projected := newMatchSquadProjection("00000000-0000-4000-8000-000000000050", "00000000-0000-4000-8000-000000000040", match, first, time.Unix(100, 0))
+	if projected.MatchSquadMatchID != match.String() || projected.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		t.Fatalf("projection lost its durable MatchSquad identity: %#v", projected)
+	}
+	if len(projected.States) != 0 || projected.IsParticipant(first) || projected.IsParticipant(second) {
+		t.Fatalf("provisioned manifest became active membership: %#v", projected.States)
+	}
+	var ordinary store.Call
+	if projected.MatchSquadMatchID == ordinary.MatchSquadMatchID {
+		t.Fatal("MatchSquad projection can be confused with an ordinary group")
 	}
 }
 
