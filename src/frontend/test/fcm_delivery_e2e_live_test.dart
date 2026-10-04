@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/notification_settings_models.dart';
 import 'package:voice_frontend/backend/notifications_client.dart';
 
 import 'support/live_gateway_harness.dart';
@@ -16,6 +17,17 @@ String notificationDebugBase() {
 }
 
 const _diagnosticFile = String.fromEnvironment('VOICE_FCM_DIAGNOSTIC_FILE');
+
+Future<T?> _bestEffortDiagnosticRead<T>(Future<T> Function() read) async {
+  try {
+    return await read().timeout(const Duration(seconds: 2));
+  } on Object {
+    return null;
+  }
+}
+
+String _diagnosticHttpStatus(int? statusCode) =>
+    statusCode == null ? 'unavailable' : 'http_$statusCode';
 
 void main() {
   test('offline DM triggers recorded FCM push payload', () async {
@@ -72,6 +84,7 @@ void main() {
         break;
       }
     }
+    var failureDiagnostics = '';
     if (recorded == null && _diagnosticFile.isNotEmpty) {
       try {
         final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
@@ -86,11 +99,121 @@ void main() {
       } on Object {
         // Correlation is best-effort; the original assertion remains authoritative.
       }
+
+      final reads = await Future.wait<Object?>([
+        _bestEffortDiagnosticRead(
+          () => ctx.chatsClient().listGroupMembers(
+            authorization: a.authorizationHeader,
+            chatId: chatId,
+            pageSize: 500,
+          ),
+        ),
+        _bestEffortDiagnosticRead(
+          () => notifications.getSettings(authorization: b.authorizationHeader),
+        ),
+        _bestEffortDiagnosticRead(
+          () => notifications.getSettings(
+            authorization: b.authorizationHeader,
+            scopeType: 'chat',
+            scopeId: chatId,
+          ),
+        ),
+        _bestEffortDiagnosticRead(
+          () => notifications.getQuietHours(authorization: b.authorizationHeader),
+        ),
+      ]);
+
+      final memberResult = reads[0];
+      final memberData = memberResult is ChatsApiOk<MemberListData>
+          ? memberResult.data
+          : null;
+      final membersStatus = memberData != null
+          ? 'ok'
+          : memberResult is ChatsApiFailure
+              ? _diagnosticHttpStatus(memberResult.statusCode)
+              : 'unavailable';
+      final recipientPresent = memberData == null
+          ? 'unknown'
+          : memberData.members.any((member) => member.profileId == b.activeProfileId).toString();
+      final memberCount = memberData?.members.length.toString() ?? 'unknown';
+
+      final globalResult = reads[1];
+      final globalSettings = globalResult is NotificationsApiOk<VoiceNotificationSettings>
+          ? globalResult.data
+          : null;
+      final globalStatus = globalSettings == null
+          ? globalResult is NotificationsApiFailure
+              ? _diagnosticHttpStatus(globalResult.statusCode)
+              : 'unavailable'
+          : globalSettings.profileId == b.activeProfileId &&
+                  globalSettings.scopeType == 'global' &&
+                  globalSettings.scopeId == null
+              ? 'ok'
+              : 'scope_mismatch';
+      final globalScopeMatches = globalStatus == 'ok';
+
+      final chatResult = reads[2];
+      final chatSettings = chatResult is NotificationsApiOk<VoiceNotificationSettings>
+          ? chatResult.data
+          : null;
+      final chatStatus = chatSettings == null
+          ? chatResult is NotificationsApiFailure
+              ? _diagnosticHttpStatus(chatResult.statusCode)
+              : 'unavailable'
+          : chatSettings.profileId == b.activeProfileId &&
+                  chatSettings.scopeType == 'chat' &&
+                  chatSettings.scopeId == chatId
+              ? 'ok'
+              : 'scope_mismatch';
+      final chatScopeMatches = chatStatus == 'ok';
+
+      final quietResult = reads[3];
+      final quietHours = quietResult is NotificationsApiOk<VoiceQuietHours>
+          ? quietResult.data
+          : null;
+      final quietStatus = quietHours == null
+          ? quietResult is NotificationsApiFailure
+              ? _diagnosticHttpStatus(quietResult.statusCode)
+              : 'unavailable'
+          : 'ok';
+      final globalEnabled = globalScopeMatches ? globalSettings!.enabled.toString() : 'unknown';
+      final globalSuppressesNewMessage = globalScopeMatches
+          ? globalSettings!.suppressedTypes.contains(NotificationEventTypes.newMessage).toString()
+          : 'unknown';
+      final globalSuppressesMessageRequest = globalScopeMatches
+          ? globalSettings!.suppressedTypes.contains(NotificationEventTypes.messageRequest).toString()
+          : 'unknown';
+      final globalMuteUntilPresent = globalScopeMatches
+          ? (globalSettings!.muteUntil != null).toString()
+          : 'unknown';
+      final chatEnabled = chatScopeMatches ? chatSettings!.enabled.toString() : 'unknown';
+      final chatSuppressesNewMessage = chatScopeMatches
+          ? chatSettings!.suppressedTypes.contains(NotificationEventTypes.newMessage).toString()
+          : 'unknown';
+      final chatSuppressesMessageRequest = chatScopeMatches
+          ? chatSettings!.suppressedTypes.contains(NotificationEventTypes.messageRequest).toString()
+          : 'unknown';
+      final chatMuteUntilPresent = chatScopeMatches
+          ? (chatSettings!.muteUntil != null).toString()
+          : 'unknown';
+      final quietHoursEnabled = quietStatus == 'ok' ? quietHours!.enabled.toString() : 'unknown';
+
+      failureDiagnostics =
+          '; members_api=$membersStatus member_count_returned=$memberCount recipient_present=$recipientPresent'
+          ' global_settings_api=$globalStatus global_enabled=$globalEnabled'
+          ' global_suppresses_new_message=$globalSuppressesNewMessage'
+          ' global_suppresses_message_request=$globalSuppressesMessageRequest'
+          ' global_mute_until_present=$globalMuteUntilPresent'
+          ' chat_settings_api=$chatStatus chat_enabled=$chatEnabled'
+          ' chat_suppresses_new_message=$chatSuppressesNewMessage'
+          ' chat_suppresses_message_request=$chatSuppressesMessageRequest'
+          ' chat_mute_until_present=$chatMuteUntilPresent'
+          ' quiet_hours_api=$quietStatus quiet_hours_enabled=$quietHoursEnabled';
     }
     expect(
       recorded,
       isNotNull,
-      reason: 'no recorded push; final recorder HTTP status was $lastStatusCode',
+      reason: 'no recorded push; final recorder HTTP status was $lastStatusCode$failureDiagnostics',
     );
     expect(recorded!.body, isNotEmpty);
   }, skip: runLiveIntegration ? null : 'opt-in live');
