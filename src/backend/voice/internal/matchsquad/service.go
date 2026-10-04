@@ -171,8 +171,16 @@ func (s *Service) reserveCreate(ctx context.Context, operation, match, roomID, r
 	var prior []byte
 	var priorReceipt []byte
 	var priorRoom uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT room_id,create_request_bytes,create_receipt_bytes FROM voice_match_squad_operations WHERE operation_id=$1 FOR UPDATE`, operation).Scan(&priorRoom, &prior, &priorReceipt)
+	var priorHash []byte
+	var compacted bool
+	err = tx.QueryRow(ctx, `SELECT room_id,create_request_bytes,create_receipt_bytes,create_request_sha256,compaction_operation_id IS NOT NULL FROM voice_match_squad_operations WHERE operation_id=$1 FOR UPDATE`, operation).Scan(&priorRoom, &prior, &priorReceipt, &priorHash, &compacted)
 	if err == nil {
+		if compacted {
+			if !bytes.Equal(priorHash, requestHash[:]) {
+				return uuid.Nil, nil, status.Error(codes.AlreadyExists, "MatchSquad operation id conflicts with another request")
+			}
+			return uuid.Nil, nil, status.Error(codes.FailedPrecondition, "MatchSquad creation evidence has been compacted")
+		}
 		if !bytes.Equal(prior, request) {
 			return uuid.Nil, nil, status.Error(codes.AlreadyExists, "MatchSquad operation id conflicts with another request")
 		}
@@ -248,8 +256,11 @@ func (s *Service) CheckSchema(ctx context.Context) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("Voice MatchSquad database unavailable")
 	}
-	for _, table := range []string{"voice_room_instances", "voice_match_squad_operations"} {
-		rows, err := s.Pool.Query(ctx, `SELECT 1 FROM `+table+` LIMIT 0`)
+	for _, query := range []string{
+		`SELECT 1 FROM voice_room_instances LIMIT 0`,
+		`SELECT compaction_operation_id,teardown_aggregate_id,compaction_request_sha256,compaction_request_bytes,compaction_receipt_id,compaction_receipt_bytes,teardown_receipt_sha256,aggregate_completed_at,compaction_authorized_at FROM voice_match_squad_operations LIMIT 0`,
+	} {
+		rows, err := s.Pool.Query(ctx, query)
 		if err != nil {
 			return errors.New("Voice MatchSquad database schema unavailable")
 		}
@@ -274,21 +285,31 @@ func (s *Service) beginTeardown(ctx context.Context, req *callsv1.TeardownMatchS
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var owner uuid.UUID
-	var storedManifest, storedRequestHash, priorRequest, priorReceipt []byte
+	var storedManifest, storedRequestHash, priorRequest, priorReceipt, priorTeardownHash []byte
 	var state string
 	var priorOperation *uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT owner_id,participant_manifest_sha256,create_request_sha256,state,teardown_operation_id,teardown_request_bytes,teardown_receipt_bytes FROM voice_match_squad_operations WHERE room_id=$1 AND match_id=$2 AND creation_receipt_id=$3 FOR UPDATE`, room, match, creation).Scan(&owner, &storedManifest, &storedRequestHash, &state, &priorOperation, &priorRequest, &priorReceipt)
+	var compacted bool
+	err = tx.QueryRow(ctx, `SELECT owner_id,participant_manifest_sha256,create_request_sha256,state,teardown_operation_id,teardown_request_bytes,teardown_receipt_bytes,teardown_request_sha256,compaction_operation_id IS NOT NULL FROM voice_match_squad_operations WHERE room_id=$1 AND match_id=$2 AND creation_receipt_id=$3 FOR UPDATE`, room, match, creation).Scan(&owner, &storedManifest, &storedRequestHash, &state, &priorOperation, &priorRequest, &priorReceipt, &priorTeardownHash, &compacted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return status.Error(codes.NotFound, "MatchSquad resource not found")
 	}
 	if err != nil {
 		return status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
 	}
-	if !bytes.Equal(storedManifest, req.GetParticipantManifestSha256()) || !bytes.Equal(storedRequestHash, req.GetCreationRequestSha256()) {
+	if owner != match || !bytes.Equal(storedManifest, req.GetParticipantManifestSha256()) || !bytes.Equal(storedRequestHash, req.GetCreationRequestSha256()) {
 		return status.Error(codes.FailedPrecondition, "MatchSquad teardown binding mismatch")
 	}
 	if priorOperation != nil {
-		if *priorOperation != operation || !bytes.Equal(priorRequest, request) {
+		if *priorOperation != operation {
+			return status.Error(codes.AlreadyExists, "MatchSquad teardown operation conflicts")
+		}
+		if compacted && len(priorRequest) == 0 && len(priorReceipt) == 0 {
+			if !bytes.Equal(priorTeardownHash, requestHash[:]) {
+				return status.Error(codes.AlreadyExists, "MatchSquad teardown operation conflicts")
+			}
+			return status.Error(codes.FailedPrecondition, "MatchSquad teardown evidence has been compacted")
+		}
+		if !bytes.Equal(priorRequest, request) {
 			return status.Error(codes.AlreadyExists, "MatchSquad teardown operation conflicts")
 		}
 		if state == "closed" && len(priorReceipt) > 0 {

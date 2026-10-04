@@ -489,7 +489,9 @@ in that namespace is absent. Partial configuration, missing Voice lifecycle
 schema, unavailable JWKS or replay Redis, invalid TLS material, and listener
 startup failure prevent the capability from starting. The listener uses
 mutual TLS and accepts only the exact create and teardown methods with a
-request-bound `service:matchmaking` principal.
+request-bound `service:matchmaking` principal. It also accepts the exact
+`CompactMatchSquadRoom` method for that same principal; no ordinary listener
+exposes it.
 
 `voice_room_instances` owns the current MatchSquad resource and its
 `active`/`closing`/`closed` state. `voice_match_squad_operations` binds the
@@ -508,7 +510,17 @@ open divergent call document. Teardown commits its completed receipt only
 after the database resource is closed and Redis/LiveKit effects are confirmed
 or absent.
 
-Full operation bytes remain stored until an aggregate-completion retention
-signal can establish the start of the 30-day retention interval. Voice does
-not infer this interval from its own teardown clock. The migration refuses
-DOWN while any operation or permanent fence remains.
+Full operation bytes remain stored until Matchmaking's durable teardown
+aggregate is complete and its PostgreSQL authority clock reaches
+`aggregate_completed_at + 30 days`. Matchmaking then sends one immutable
+protected compaction command binding the aggregate, match, room, creation and
+teardown receipts, request hashes, manifest, and both authority timestamps.
+Voice checks that binding against its own closed, effects-confirmed database
+resource and commits the exact command and stable compact receipt in one SQL
+transaction while clearing only the full create/teardown payload bytes. Voice
+does not infer eligibility from its own clock or perform Redis/LiveKit effects
+during compaction. The compact command/receipt and permanent ownership,
+operation, resource, and digest fences remain; matching compact-command replay
+returns the exact stored receipt, while old create/teardown replay gets a
+terminal precondition instead of recreating or fabricating historic receipts.
+The migration refuses DOWN while any operation or permanent fence remains.

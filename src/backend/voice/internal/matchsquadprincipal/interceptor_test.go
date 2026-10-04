@@ -23,10 +23,33 @@ type recordingVerifier struct {
 
 func (v *recordingVerifier) Verify(_ context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 	v.called = true
-	if token != "service-token" || method != callsv1.MatchSquadVoiceService_CreateMatchSquadRoom_FullMethodName || requestID == "" || requestHash == "" {
+	if token != "service-token" || (method != CreateMethod && method != TeardownMethod && method != CompactMethod) || requestID == "" || requestHash == "" {
 		return principal.Principal{}, status.Error(codes.Unauthenticated, "unexpected verification binding")
 	}
 	return v.got, v.err
+}
+
+func TestStrictUnaryInterceptorVerifiesCompactOperationBinding(t *testing.T) {
+	req := &callsv1.CompactMatchSquadRoomRequest{
+		ProtocolVersion: 1, OperationId: uuid.NewString(), TeardownAggregateId: uuid.NewString(),
+		MatchId: uuid.NewString(), RoomId: uuid.NewString(), CreationReceiptId: uuid.NewString(),
+		CreationRequestSha256: make([]byte, 32), TeardownOperationId: uuid.NewString(), TeardownReceiptId: uuid.NewString(),
+		TeardownReceiptSha256: make([]byte, 32), ParticipantManifestSha256: make([]byte, 32),
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier := &recordingVerifier{got: principal.Principal{
+		Kind: "service", Issuer: "matchmaking", Subject: "service:matchmaking", Audience: "voice",
+		RPC: CompactMethod, RequestID: req.GetOperationId(), RequestHash: hash,
+	}}
+	called := false
+	_, err = StrictUnaryInterceptor(verifier)(serviceMetadata(req.GetOperationId()), req,
+		&grpc.UnaryServerInfo{FullMethod: CompactMethod}, func(context.Context, any) (any, error) { called = true; return nil, nil })
+	if err != nil || !called || !verifier.called || operationID(req) != req.GetOperationId() {
+		t.Fatalf("compact interceptor binding: err=%v handler=%v verifier=%v", err, called, verifier.called)
+	}
 }
 
 func validCreateRequest() *callsv1.CreateMatchSquadRoomRequest {

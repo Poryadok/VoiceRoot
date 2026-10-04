@@ -1,5 +1,7 @@
 BEGIN;
 
+LOCK TABLE voice_match_squad_operations IN ACCESS EXCLUSIVE MODE;
+
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM voice_match_squad_operations) THEN
