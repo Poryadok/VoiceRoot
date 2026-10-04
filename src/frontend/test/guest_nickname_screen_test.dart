@@ -39,6 +39,55 @@ AuthController _guestAuthController(Ref ref) {
 }
 
 void main() {
+  testWidgets(
+    'GuestNicknameScreen ignores an empty nickname without a request',
+    (tester) async {
+      var patchRequests = 0;
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
+          patchRequests++;
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            authControllerProvider.overrideWith(_guestAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(client),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const GuestNicknameScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('guest_nickname_submit')));
+      await tester.pumpAndSettle();
+
+      expect(patchRequests, 0);
+      expect(find.byKey(const Key('guest_nickname_screen')), findsOneWidget);
+    },
+  );
+
   testWidgets('GuestNicknameScreen submits nickname and clears guest flag', (
     tester,
   ) async {
@@ -115,10 +164,13 @@ void main() {
     expect(await guestStorage.isNicknameCompleted('guest-acc'), isTrue);
   });
 
-  testWidgets('GuestNicknameScreen shows API error', (tester) async {
+  testWidgets('GuestNicknameScreen hides upstream API diagnostics', (
+    tester,
+  ) async {
+    const upstreamDiagnostic = 'private nickname diagnostic';
     final client = MockClient((req) async {
       if (req.url.path == '/api/v1/users/me' && req.method == 'PATCH') {
-        return http.Response('{"message":"nickname taken"}', 409);
+        return http.Response(jsonEncode({'message': upstreamDiagnostic}), 409);
       }
       return http.Response('Not Found', 404);
     });
@@ -161,6 +213,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('nickname taken'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining(upstreamDiagnostic), findsNothing);
   });
 }
