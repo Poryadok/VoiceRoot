@@ -19,6 +19,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось загрузить сведения об авторизации.';
 
   @override
+  String get sdkAuthorizationTemporaryFailure =>
+      'Voice временно недоступен. Попробуйте подтвердить запрос ещё раз или начните подключение заново в игре.';
+
+  @override
+  String get sdkAuthorizationDenied =>
+      'Авторизация отклонена. Начните подключение заново в игре.';
+
+  @override
+  String get sdkAuthorizationInvalidResponse =>
+      'Ответ авторизации некорректен. Начните подключение заново в игре.';
+
+  @override
   String get sdkAuthorizationApplication => 'Приложение';
 
   @override
