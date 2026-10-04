@@ -1832,7 +1832,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsHelpMatchmakingBody =>
-      'Ищите команду по игре и критериям во вкладке матчмейкинга.';
+      'Ищите команду по игре и критериям в матчмейкинге.';
 
   @override
   String get settingsHelpVoiceTitle => 'Голос';

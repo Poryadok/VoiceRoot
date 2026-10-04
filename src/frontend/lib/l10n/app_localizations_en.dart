@@ -1824,7 +1824,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHelpMatchmakingBody =>
-      'Find teammates by game and criteria from the matchmaking tab.';
+      'Use Matchmaking to find teammates by game and criteria.';
 
   @override
   String get settingsHelpVoiceTitle => 'Voice';
