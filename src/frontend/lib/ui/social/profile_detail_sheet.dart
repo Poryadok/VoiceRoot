@@ -22,7 +22,10 @@ import '../stories/story_ring_avatar.dart';
 import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
 
-String _mmEntryLabel(AsyncValue<GameListData> catalogAsync, PlayerGameEntry entry) {
+String _mmEntryLabel(
+  AsyncValue<GameListData> catalogAsync,
+  PlayerGameEntry entry,
+) {
   final games = catalogAsync.valueOrNull?.games ?? const [];
   var name = entry.gameId;
   for (final g in games) {
@@ -60,9 +63,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     final mmRatingAsync = firstGameId == null
         ? const AsyncValue<PlayerRatingData?>.data(null)
         : ref.watch(
-            playerRatingProvider(
-              (profileId: profileId, gameId: firstGameId),
-            ),
+            playerRatingProvider((profileId: profileId, gameId: firstGameId)),
           );
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
@@ -156,9 +157,11 @@ class ProfileDetailSheet extends ConsumerWidget {
                           ),
                           mmRatingAsync.when(
                             loading: () => const SizedBox.shrink(),
-                            error: (error, stackTrace) => const SizedBox.shrink(),
+                            error: (error, stackTrace) =>
+                                const SizedBox.shrink(),
                             data: (rating) {
-                              if (rating == null) return const SizedBox.shrink();
+                              if (rating == null)
+                                return const SizedBox.shrink();
                               return Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
@@ -173,9 +176,7 @@ class ProfileDetailSheet extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    if (!isGuest &&
-                        profile.username.isNotEmpty &&
-                        !isSelf)
+                    if (!isGuest && profile.username.isNotEmpty && !isSelf)
                       VoiceShareLinkButton(
                         link: profileShareUrl(profile.username),
                         tooltip: l10n.shareLinkAction,
@@ -191,7 +192,8 @@ class ProfileDetailSheet extends ConsumerWidget {
                   loading: () => const SizedBox.shrink(),
                   error: (error, stackTrace) => const SizedBox.shrink(),
                   data: (mmProfile) {
-                    if (mmProfile.entries.isEmpty) return const SizedBox.shrink();
+                    if (mmProfile.entries.isEmpty)
+                      return const SizedBox.shrink();
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -214,7 +216,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                   const SizedBox(height: 20),
                   OutlinedButton(
                     key: ProfileDetailSheet.messageKey,
-                    onPressed: isGuest ? null : () => _openDm(context, ref, profileId),
+                    onPressed: isGuest
+                        ? null
+                        : () => _openDm(context, ref, profileId),
                     child: Text(l10n.profileMessage),
                   ),
                   const SizedBox(height: 8),
@@ -288,7 +292,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.socialActionError(err))),
+        SnackBar(content: Text(socialActionErrorMessage(l10n, err))),
       );
       return;
     }
@@ -403,7 +407,7 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(
-              l10n.socialActionError(_error!),
+              socialActionErrorMessage(l10n, _error!),
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ],
@@ -421,7 +425,7 @@ class _FriendActionButtonState extends ConsumerState<_FriendActionButton> {
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(
-            l10n.socialActionError(_error!),
+            socialActionErrorMessage(l10n, _error!),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
