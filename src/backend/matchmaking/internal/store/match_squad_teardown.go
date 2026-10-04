@@ -363,6 +363,9 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 		} else if err := validateVoiceTeardownReceipt(item, receiptID, receiptBytes); err != nil || item.VoiceReceiptID == nil || *item.VoiceReceiptID != receiptID || !bytes.Equal(item.VoiceReceiptBytes, receiptBytes) {
 			return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
 		}
+		if err := recordMatchSquadTeardownParticipantReceiptTx(ctx, tx, item, provider, receiptID, receiptBytes); err != nil {
+			return MatchSquadTeardownAggregate{}, err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return MatchSquadTeardownAggregate{}, err
 		}
@@ -401,6 +404,9 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 			}
 			item.VoiceReceiptID, item.VoiceReceiptBytes = &receiptID, append([]byte(nil), receiptBytes...)
 		}
+	}
+	if err := recordMatchSquadTeardownParticipantReceiptTx(ctx, tx, item, provider, receiptID, receiptBytes); err != nil {
+		return MatchSquadTeardownAggregate{}, err
 	}
 	if item.ChatReceiptID != nil && item.VoiceReceiptID != nil {
 		var completedAt time.Time

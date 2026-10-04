@@ -224,17 +224,36 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	`, intent.MatchID).Scan(&aggregateID, &aggregateState, &chatTeardownBytes, &voiceTeardownBytes))
 	require.NotEqual(t, uuid.Nil, aggregateID)
 	require.Equal(t, "pending", aggregateState, "provider room absence is still pending after Matchmaking completion")
+	var chatTeardown chatv1.TeardownMatchSquadChatRequest
+	require.NoError(t, proto.Unmarshal(chatTeardownBytes, &chatTeardown))
+	var voiceTeardown callsv1.TeardownMatchSquadRoomRequest
+	require.NoError(t, proto.Unmarshal(voiceTeardownBytes, &voiceTeardown))
+	participants, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, participants, 2, "Chat and Voice provider work has independent durable rows")
+	participantByProvider := map[string]MatchSquadTeardownParticipant{}
+	for _, participant := range participants {
+		participantByProvider[participant.Provider] = participant
+		require.Equal(t, aggregateID, participant.AggregateID)
+		require.Equal(t, "NOT_STARTED", participant.State)
+		require.Equal(t, sumSHA256(participant.Request), participant.RequestHash)
+	}
+	require.Equal(t, chatTeardown.GetTeardownOperationId(), participantByProvider["chat"].OperationID.String())
+	require.Equal(t, chatTeardownBytes, participantByProvider["chat"].Request)
+	require.Equal(t, voiceTeardown.GetTeardownOperationId(), participantByProvider["voice"].OperationID.String())
+	require.Equal(t, voiceTeardownBytes, participantByProvider["voice"].Request)
+	require.NoError(t, matches.SetMatchSquadTeardownParticipantState(ctx, aggregateID, "chat", "IN_FLIGHT"))
+	require.NoError(t, matches.SetMatchSquadTeardownParticipantState(ctx, aggregateID, "chat", "RETRYABLE_FAILURE"))
+	retryable, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, retryable, 2, "a retryable provider request stays discoverable with the same request bytes")
 	completedReplay, replayTransition, err := matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileBOperation)
 	require.NoError(t, err)
 	require.False(t, replayTransition, "replaying the final actor operation must not start a second teardown")
 	require.Equal(t, completedMatch.CompletedAt, completedReplay.CompletedAt)
-	var chatTeardown chatv1.TeardownMatchSquadChatRequest
-	require.NoError(t, proto.Unmarshal(chatTeardownBytes, &chatTeardown))
 	require.Equal(t, intent.MatchID.String(), chatTeardown.GetMatchId())
 	require.Equal(t, chatID.String(), chatTeardown.GetChatId())
 	require.Equal(t, chatReceiptID.String(), chatTeardown.GetCreationReceiptId())
-	var voiceTeardown callsv1.TeardownMatchSquadRoomRequest
-	require.NoError(t, proto.Unmarshal(voiceTeardownBytes, &voiceTeardown))
 	require.Equal(t, intent.MatchID.String(), voiceTeardown.GetMatchId())
 	require.Equal(t, roomID.String(), voiceTeardown.GetRoomId())
 	require.Equal(t, voiceReceiptID.String(), voiceTeardown.GetCreationReceiptId())
@@ -263,6 +282,14 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	require.NoError(t, err)
 	require.Equal(t, "complete", completedAggregate.State)
 	require.NotNil(t, completedAggregate.AggregateCompletedAt)
+	remainingParticipants, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	require.NoError(t, err)
+	require.Empty(t, remainingParticipants, "only exact receipts complete provider participants")
+	var chatParticipantState, voiceParticipantState string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM matchmaking_match_squad_teardown_participants WHERE aggregate_id=$1 AND provider='chat'`, aggregateID).Scan(&chatParticipantState))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM matchmaking_match_squad_teardown_participants WHERE aggregate_id=$1 AND provider='voice'`, aggregateID).Scan(&voiceParticipantState))
+	require.Equal(t, "COMPLETE", chatParticipantState)
+	require.Equal(t, "COMPLETE", voiceParticipantState)
 	pendingEvents, err := matches.ListPendingMatchSquadCompletionEvents(ctx, 100)
 	require.NoError(t, err)
 	require.Len(t, pendingEvents, 1, "both exact provider receipts atomically admit one completion event")

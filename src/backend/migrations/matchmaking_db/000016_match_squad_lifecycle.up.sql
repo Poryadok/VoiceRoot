@@ -58,6 +58,60 @@ CREATE TABLE matchmaking_match_squad_teardowns (
     CHECK (state <> 'complete' OR (chat_teardown_receipt_id IS NOT NULL AND voice_teardown_receipt_id IS NOT NULL))
 );
 
+CREATE TABLE matchmaking_match_squad_teardown_participants (
+    aggregate_id UUID NOT NULL REFERENCES matchmaking_match_squad_teardowns(aggregate_id),
+    provider TEXT NOT NULL CHECK (provider IN ('chat', 'voice')),
+    operation_id UUID NOT NULL UNIQUE,
+    state TEXT NOT NULL CHECK (state IN ('NOT_STARTED', 'IN_FLIGHT', 'COMPLETE', 'RETRYABLE_FAILURE', 'CONTRACT_MISMATCH')),
+    request_sha256 BYTEA NOT NULL CHECK (octet_length(request_sha256) = 32),
+    request_bytes BYTEA NOT NULL,
+    receipt_id UUID,
+    receipt_bytes BYTEA,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (aggregate_id, provider),
+    CHECK ((receipt_id IS NULL) = (receipt_bytes IS NULL)),
+    CHECK ((state = 'COMPLETE') = (receipt_id IS NOT NULL)),
+    CHECK (state <> 'CONTRACT_MISMATCH' OR receipt_id IS NULL)
+);
+
+CREATE INDEX matchmaking_match_squad_teardown_participants_pending_idx
+    ON matchmaking_match_squad_teardown_participants (created_at, aggregate_id, provider)
+    WHERE state IN ('NOT_STARTED', 'IN_FLIGHT', 'RETRYABLE_FAILURE');
+
+CREATE FUNCTION guard_matchmaking_match_squad_teardown_participant() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'cannot delete MatchSquad provider participant evidence';
+    END IF;
+    IF ROW(NEW.aggregate_id, NEW.provider, NEW.operation_id, NEW.request_sha256, NEW.request_bytes)
+       IS DISTINCT FROM ROW(OLD.aggregate_id, OLD.provider, OLD.operation_id, OLD.request_sha256, OLD.request_bytes) THEN
+        RAISE EXCEPTION 'cannot rewrite MatchSquad provider participant identity or request';
+    END IF;
+    IF OLD.receipt_id IS NOT NULL AND ROW(NEW.receipt_id, NEW.receipt_bytes) IS DISTINCT FROM ROW(OLD.receipt_id, OLD.receipt_bytes) THEN
+        RAISE EXCEPTION 'cannot rewrite MatchSquad provider participant receipt';
+    END IF;
+    IF OLD.state = 'COMPLETE' AND NEW.state <> OLD.state THEN
+        RAISE EXCEPTION 'cannot reopen completed MatchSquad provider participant';
+    END IF;
+    IF OLD.state = 'CONTRACT_MISMATCH' AND NEW.state <> OLD.state THEN
+        RAISE EXCEPTION 'cannot retry a MatchSquad provider contract mismatch';
+    END IF;
+    IF OLD.state <> NEW.state AND NOT (
+        (OLD.state = 'NOT_STARTED' AND NEW.state IN ('IN_FLIGHT', 'COMPLETE', 'RETRYABLE_FAILURE', 'CONTRACT_MISMATCH')) OR
+        (OLD.state = 'IN_FLIGHT' AND NEW.state IN ('COMPLETE', 'RETRYABLE_FAILURE', 'CONTRACT_MISMATCH')) OR
+        (OLD.state = 'RETRYABLE_FAILURE' AND NEW.state IN ('IN_FLIGHT', 'COMPLETE', 'CONTRACT_MISMATCH'))
+    ) THEN
+        RAISE EXCEPTION 'invalid MatchSquad provider participant state transition';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER matchmaking_match_squad_teardown_participant_fence
+    BEFORE UPDATE OR DELETE ON matchmaking_match_squad_teardown_participants
+    FOR EACH ROW EXECUTE FUNCTION guard_matchmaking_match_squad_teardown_participant();
+
 CREATE TABLE matchmaking_match_squad_compaction_intents (
     aggregate_id UUID NOT NULL REFERENCES matchmaking_match_squad_teardowns(aggregate_id),
     provider TEXT NOT NULL CHECK (provider IN ('chat', 'voice')),

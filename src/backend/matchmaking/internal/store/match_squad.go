@@ -515,6 +515,32 @@ func persistMatchSquadTeardownIntentTx(ctx context.Context, tx pgx.Tx, match Mat
 		!bytes.Equal(storedChatRequest, chatBytes) || !bytes.Equal(storedVoiceRequest, voiceBytes) {
 		return ErrMatchSquadConflict
 	}
+	for _, participant := range []struct {
+		provider    string
+		operationID uuid.UUID
+		request     []byte
+	}{{"chat", chatOperationID, chatBytes}, {"voice", voiceOperationID, voiceBytes}} {
+		requestHash := sumSHA256(participant.request)
+		_, err := tx.Exec(ctx, `
+			INSERT INTO matchmaking_match_squad_teardown_participants
+			(aggregate_id,provider,operation_id,state,request_sha256,request_bytes)
+			VALUES ($1,$2,$3,'NOT_STARTED',$4,$5) ON CONFLICT (aggregate_id,provider) DO NOTHING
+		`, storedAggregate, participant.provider, participant.operationID, requestHash, participant.request)
+		if err != nil {
+			return err
+		}
+		var storedOperation uuid.UUID
+		var storedHash, storedBytes []byte
+		if err := tx.QueryRow(ctx, `
+			SELECT operation_id,request_sha256,request_bytes FROM matchmaking_match_squad_teardown_participants
+			WHERE aggregate_id=$1 AND provider=$2 FOR UPDATE
+		`, storedAggregate, participant.provider).Scan(&storedOperation, &storedHash, &storedBytes); err != nil {
+			return err
+		}
+		if storedOperation != participant.operationID || !bytes.Equal(storedHash, requestHash) || !bytes.Equal(storedBytes, participant.request) {
+			return ErrMatchSquadConflict
+		}
+	}
 	return nil
 }
 
