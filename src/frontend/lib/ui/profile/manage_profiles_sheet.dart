@@ -10,6 +10,8 @@ import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/profile_accent_dot.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import 'create_profile_sheet.dart';
 
 class ManageProfilesSheet extends ConsumerStatefulWidget {
@@ -19,7 +21,8 @@ class ManageProfilesSheet extends ConsumerStatefulWidget {
   static const Key addProfileKey = Key('manage_profiles_add');
 
   @override
-  ConsumerState<ManageProfilesSheet> createState() => _ManageProfilesSheetState();
+  ConsumerState<ManageProfilesSheet> createState() =>
+      _ManageProfilesSheetState();
 }
 
 class _ManageProfilesSheetState extends ConsumerState<ManageProfilesSheet> {
@@ -65,10 +68,9 @@ class _ManageProfilesSheetState extends ConsumerState<ManageProfilesSheet> {
       _error = null;
     });
 
-    final result = await ref.read(voiceUsersClientProvider).deleteProfile(
-      authorization: auth,
-      profileId: profile.id,
-    );
+    final result = await ref
+        .read(voiceUsersClientProvider)
+        .deleteProfile(authorization: auth, profileId: profile.id);
 
     if (!mounted) return;
     switch (result) {
@@ -94,8 +96,11 @@ class _ManageProfilesSheetState extends ConsumerState<ManageProfilesSheet> {
         key: ManageProfilesSheet.sheetKey,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         child: profilesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => Text(l10n.backendUnavailable),
+          loading: () => const VoiceListSkeleton(rowCount: 3),
+          error: (_, _) => VoiceStatePanel(
+            title: l10n.backendUnavailable,
+            icon: Icons.cloud_off_outlined,
+          ),
           data: (profiles) {
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -129,9 +134,14 @@ class _ManageProfilesSheetState extends ConsumerState<ManageProfilesSheet> {
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : Icon(Icons.delete_outline, color: voice.error),
+                                : Icon(
+                                    Icons.delete_outline,
+                                    color: voice.error,
+                                  ),
                           ),
                   ),
                 if (_error != null) ...[

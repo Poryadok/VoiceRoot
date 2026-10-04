@@ -10,6 +10,8 @@ import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 import '../settings/privacy_presets.dart';
 import '../settings/subscription_settings_screen.dart';
 import 'profile_edit_sheet.dart';
@@ -64,12 +66,14 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
       _error = null;
     });
 
-    final result = await ref.read(voiceUsersClientProvider).createProfile(
-      authorization: auth,
-      displayName: name,
-      preset: _preset,
-      accentColor: _accentHexForSubmit(context),
-    );
+    final result = await ref
+        .read(voiceUsersClientProvider)
+        .createProfile(
+          authorization: auth,
+          displayName: name,
+          preset: _preset,
+          accentColor: _accentHexForSubmit(context),
+        );
 
     if (!mounted) return;
     switch (result) {
@@ -136,9 +140,9 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
     if (catalog == null || catalog.profileAccentDefaults.isEmpty) {
       return null;
     }
-    final color = catalog.profileAccentDefaults[
-      _selectedAccentIndex % catalog.profileAccentDefaults.length
-    ];
+    final color =
+        catalog.profileAccentDefaults[_selectedAccentIndex %
+            catalog.profileAccentDefaults.length];
     return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
@@ -180,7 +184,9 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
             );
             return switch (updateResult) {
               UsersApiOk() => null,
-              UsersApiFailure(:final message) => l10n.profileEditSaveError(message),
+              UsersApiFailure(:final message) => l10n.profileEditSaveError(
+                message,
+              ),
             };
         }
     }
@@ -200,8 +206,11 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
         key: CreateProfileSheet.sheetKey,
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         child: profilesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => Text(l10n.backendUnavailable),
+          loading: () => const VoiceListSkeleton(rowCount: 3),
+          error: (_, _) => VoiceStatePanel(
+            title: l10n.backendUnavailable,
+            icon: Icons.cloud_off_outlined,
+          ),
           data: (profiles) {
             if (profiles.length >= maxProfiles) {
               return Column(
@@ -246,10 +255,14 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundImage:
-                          _avatar != null ? MemoryImage(_avatar!.bytes) : null,
+                      backgroundImage: _avatar != null
+                          ? MemoryImage(_avatar!.bytes)
+                          : null,
                       child: _avatar == null
-                          ? Icon(Icons.person_outline, color: voice.textSecondary)
+                          ? Icon(
+                              Icons.person_outline,
+                              color: voice.textSecondary,
+                            )
                           : null,
                     ),
                     const SizedBox(width: 16),
@@ -310,7 +323,11 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (var i = 0; i < catalog.profileAccentDefaults.length; i++)
+                      for (
+                        var i = 0;
+                        i < catalog.profileAccentDefaults.length;
+                        i++
+                      )
                         GestureDetector(
                           onTap: _submitting
                               ? null
@@ -361,5 +378,8 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
 }
 
 Future<bool?> showCreateProfileSheet(BuildContext context) {
-  return showVoiceBottomSheet<bool>(context: context, child: const CreateProfileSheet());
+  return showVoiceBottomSheet<bool>(
+    context: context,
+    child: const CreateProfileSheet(),
+  );
 }

@@ -6,6 +6,8 @@ import '../../l10n/app_localizations.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/chat_providers.dart';
 import '../core/voice_bottom_sheet.dart';
+import '../core/voice_skeleton.dart';
+import '../core/voice_state_panel.dart';
 
 /// Create, rename, and delete custom chat folders (navigation.md § folders).
 class ManageFoldersSheet extends ConsumerStatefulWidget {
@@ -175,8 +177,11 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
             const SizedBox(height: 8),
             Flexible(
               child: foldersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text(l10n.backendUnavailable),
+                loading: () => const VoiceListSkeleton(rowCount: 3),
+                error: (_, _) => VoiceStatePanel(
+                  title: l10n.backendUnavailable,
+                  icon: Icons.cloud_off_outlined,
+                ),
                 data: (data) {
                   final custom = data.folders
                       .where((f) => !f.isSystem)

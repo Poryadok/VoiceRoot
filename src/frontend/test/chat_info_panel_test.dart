@@ -7,9 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/bots_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/bot_providers.dart';
+import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
@@ -20,6 +23,39 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('chat bot list uses the canonical skeleton while loading', (
+    tester,
+  ) async {
+    final pending = Completer<List<ChatBotSettings>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spacePermissionProvider.overrideWith((ref, query) async => true),
+          botsInChatProvider.overrideWith((ref, key) => pending.future),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: ChatBotsSettingsSection(
+              chatId: 'chat-loading',
+              spaceId: 'space-loading',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(VoiceListSkeleton), findsOneWidget);
+
+    pending.complete(const []);
+  });
+
   Widget testApp({required Widget home, required http.Client client}) {
     return ProviderScope(
       overrides: [
