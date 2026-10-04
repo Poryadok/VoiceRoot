@@ -533,7 +533,9 @@ class _FavoriteToggleButtonState extends ConsumerState<_FavoriteToggleButton> {
         if (!mounted) return;
         if (err != null) {
           setState(() => _overrideFavorite = !next);
-          messenger.showSnackBar(SnackBar(content: Text(err)));
+          messenger.showSnackBar(
+            SnackBar(content: Text(socialActionErrorMessage(l10n, err))),
+          );
         } else {
           ref.invalidate(favoritesListProvider);
           ref.invalidate(contactsListProvider);
@@ -673,9 +675,11 @@ class _BlockedTab extends ConsumerWidget {
                   );
                   if (!context.mounted) return;
                   if (err != null) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(err)));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(socialActionErrorMessage(l10n, err)),
+                      ),
+                    );
                   } else {
                     ref.invalidate(blockedListProvider);
                   }
