@@ -42,7 +42,8 @@ class SpaceChatOverrideSheet extends ConsumerStatefulWidget {
       _SpaceChatOverrideSheetState();
 }
 
-class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet> {
+class _SpaceChatOverrideSheetState
+    extends ConsumerState<SpaceChatOverrideSheet> {
   final Set<String> _denyViewRoleIds = {};
   final Set<String> _denySendRoleIds = {};
   bool _busy = false;
@@ -91,11 +92,11 @@ class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet>
                           onChanged: _busy
                               ? null
                               : (enabled) => _setDeny(
-                                    role.id,
-                                    enabled,
-                                    SpacePermissions.textChatView,
-                                    _denyViewRoleIds,
-                                  ),
+                                  role.id,
+                                  enabled,
+                                  SpacePermissions.textChatView,
+                                  _denyViewRoleIds,
+                                ),
                         ),
                         SwitchListTile(
                           title: Text(role.name),
@@ -104,11 +105,11 @@ class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet>
                           onChanged: _busy
                               ? null
                               : (enabled) => _setDeny(
-                                    role.id,
-                                    enabled,
-                                    SpacePermissions.textChatSendMessages,
-                                    _denySendRoleIds,
-                                  ),
+                                  role.id,
+                                  enabled,
+                                  SpacePermissions.textChatSendMessages,
+                                  _denySendRoleIds,
+                                ),
                         ),
                       ],
                   ],
@@ -140,7 +141,9 @@ class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet>
     final denyMask = deny
         ? SpacePermissions.setPermission(0, permissionName, true)
         : 0;
-    final result = await ref.read(voiceRolesClientProvider).setChatOverride(
+    final result = await ref
+        .read(voiceRolesClientProvider)
+        .setChatOverride(
           authorization: auth,
           spaceId: widget.spaceId,
           chatId: widget.chatId,
@@ -157,8 +160,13 @@ class _SpaceChatOverrideSheetState extends ConsumerState<SpaceChatOverrideSheet>
           tracked.add(roleId);
         }
       });
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
       );
     }
   }

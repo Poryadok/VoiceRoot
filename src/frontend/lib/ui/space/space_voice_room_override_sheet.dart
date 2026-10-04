@@ -119,7 +119,9 @@ class _SpaceVoiceRoomOverrideSheetState
     final denyMask = deny
         ? SpacePermissions.setPermission(0, SpacePermissions.voiceJoin, true)
         : 0;
-    final result = await ref.read(voiceRolesClientProvider).setVoiceRoomOverride(
+    final result = await ref
+        .read(voiceRolesClientProvider)
+        .setVoiceRoomOverride(
           authorization: auth,
           spaceId: widget.spaceId,
           voiceRoomId: widget.voiceRoomId,
@@ -136,8 +138,13 @@ class _SpaceVoiceRoomOverrideSheetState
           _denyJoinRoleIds.add(roleId);
         }
       });
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(l10n, statusCode: result.statusCode),
+          ),
+        ),
       );
     }
   }
