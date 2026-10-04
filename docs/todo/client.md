@@ -108,9 +108,8 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **VoiceListSkeleton / VoiceStatePanel — wave A residual loaders** — PR #128: `chat_room_panel` pagination, space members/bots/invites, `player_profile_sheet`, `story_viewer_screen`, settings/search/subscription list loads → skeleton/state panel; `VoiceListSkeleton` uses `shrinkWrap: true` + `primary: false` (sheet CI).
 
-- [ ] **VoiceListSkeleton / VoiceStatePanel — остаточные loaders** — list loads still CPI: `chat_info_panel`, `manage_profiles_sheet` / `create_profile_sheet`, `active_sessions_screen`, `manage_folders_sheet`, `bot_install_page`, `profile_downgrade_picker_screen` (button-level CPI OK).
 
-- [x] **VoiceListSkeleton + VoiceStatePanel widget tests** — `src/frontend/test/voice_state_components_test.dart`: `VoiceListSkeleton renders configured placeholder rows`; `VoiceStatePanel` empty-state semantics, keyboard retry action и suppression неполного action. Остаточные loader surfaces остаются отдельным пунктом выше.
+- [x] **VoiceListSkeleton + VoiceStatePanel widget tests** — `src/frontend/test/voice_state_components_test.dart`: `VoiceListSkeleton renders configured placeholder rows`; `VoiceStatePanel` empty-state semantics, keyboard retry action и suppression неполного action.
 
 - [ ] **api_error_messages — extend residual coverage** — chat-room history now maps unknown upstream text and `permission_denied` to localized safe states; PR #128 helpers still cover chat/search/settings/subscription/space bots|members|invites/player profile. Audit the remaining action and loader surfaces individually before claiming that raw API strings are absent globally.
 
@@ -145,7 +144,6 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **[Voice] Reconnect restores active media projection** — every accepted Realtime `hello` reconciles `GetActiveCall`; no active session clears stale LiveKit/screen UI, active session replaces it, and REST failure retains state for retry. `GetVoiceStates` is authoritative for screen sharers while LiveKit tracks gate renderability.
 - [ ] **Screen share: desktop source picker + system audio (Windows); явный simulcast 720/360/180** — [screen-share.md](../features/screen-share.md).
 - [ ] **Settings language sync** — profile.locale vs OS pref; API error codes локализация. [i18n.md](../features/i18n.md).
-- [ ] **Help FAQ vs реальный UI** — онбординг ядро complete; FAQ не совпадает со спейсами/ММ.
 
 
 **Промпт-якорь:** `Growth/A11y from docs/todo/client.md Common Batch 5`.
@@ -173,7 +171,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 - [x] **[Multi-Profile] Create flow missing avatar** — `CreateProfileSheet` optional avatar pick + presigned upload after profile switch (`parallel/client-qa-rail-profiles`).
 - [ ] **[Multi-Profile] Change primary profile API/UI missing** — `is_primary` set at bootstrap only; no way to reassign which profile phone search returns.
 - [x] **[Multi-Profile] Accent color not choosable on create** — `CreateProfileSheet` accent swatches from token catalog; sends `accent_color` on create (**Batch 17**).
-- [ ] **[Multi-Profile] `profile_accent_storage` legacy dual-write** — stale comment «until User Service exposes accent_color» (`profile_accent_storage.dart`); settings picker still writes local index while server has `profiles.accent_color`.
+- [x] **[Multi-Profile] Server-authoritative accent picker** — settings picker displays the active profile's `profiles.accent_color` and reflects a new choice only after `UpdateProfile` succeeds. Legacy local override/index is used only when the server profile has no accent and is cleared only after successful migration/update; late responses cannot replace the newly active profile's selection (PR #623).
 - [ ] **[Multi-Profile] Guest + multi-profile product rule undocumented** — no `CreateProfile` tier/guest guard; settings create action visible for guests; clarify in `multi-profile.md` or gate in UI/API.
 
 
