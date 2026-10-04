@@ -12,6 +12,15 @@ void main() {
     expect(mapped, isNot(contains('secret-123')));
   });
 
+  test('active-session load mapping never exposes upstream details', () {
+    const raw = 'internal trace id=secret-session-123';
+
+    final mapped = activeSessionsLoadErrorMessage(l10n, raw);
+
+    expect(mapped, l10n.securitySessionsLoadError);
+    expect(mapped, isNot(contains('secret-session-123')));
+  });
+
   test('chat room error mapping renders permission denial locally', () {
     expect(
       chatRoomErrorMessage(l10n, 'permission_denied'),

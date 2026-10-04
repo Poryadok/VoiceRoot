@@ -15,6 +15,7 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/settings/active_sessions_screen.dart';
+import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 
 import 'support/test_voice_token_catalog.dart';
 
@@ -110,7 +111,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(ActiveSessionsScreen.sessionRowKey('sess-other')), findsOneWidget);
+    expect(
+      find.byKey(ActiveSessionsScreen.sessionRowKey('sess-other')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-other')),
       findsOneWidget,
@@ -127,5 +131,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(revokeCalled, isTrue);
+  });
+
+  testWidgets('active-session load failure hides upstream details', (
+    tester,
+  ) async {
+    const raw = 'internal trace id=secret-session-456';
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((req) async {
+        if (req.method == 'GET' && req.url.path == '/api/v1/auth/sessions') {
+          return http.Response(
+            jsonEncode({'error': 'internal_error', 'message': raw}),
+            500,
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      authorizationProvider: () => 'Bearer token',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          voiceAuthClientProvider.overrideWithValue(
+            VoiceAuthClient(gateway: gateway),
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final controller = AuthController(
+              authClient: ref.watch(voiceAuthClientProvider),
+              storage: ref.watch(authSessionStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
+            );
+            controller.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'token',
+                refreshToken: 'refresh',
+                expiresInSeconds: 900,
+                accountId: 'account-1',
+                activeProfileId: 'profile-primary',
+              ),
+            );
+            return controller;
+          }),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ActiveSessionsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)))!;
+    expect(find.textContaining('secret-session-456'), findsNothing);
+    expect(find.text(l10n.securitySessionsLoadError), findsNWidgets(2));
+    expect(find.byType(VoiceListSkeleton), findsNothing);
   });
 }
