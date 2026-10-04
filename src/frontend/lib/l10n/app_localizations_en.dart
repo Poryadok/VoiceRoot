@@ -758,6 +758,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceBotsInstallSuccess => 'Bot installed.';
 
   @override
+  String get botInstallActionError => 'Unable to install bot.';
+
+  @override
   String get spaceBotsUninstallSuccess => 'Bot removed from space.';
 
   @override
@@ -2114,6 +2117,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get securitySessionsRevoked => 'Session revoked';
+
+  @override
+  String get securitySessionRevokeError => 'Unable to revoke session.';
 
   @override
   String get securitySessionsLoadError => 'Could not load sessions';

@@ -208,10 +208,14 @@ class _BotInstallPageState extends ConsumerState<BotInstallPage> {
           context,
         ).showSnackBar(SnackBar(content: Text(l10n.spaceBotsInstallSuccess)));
         Navigator.of(context).pop();
-      case BotsApiFailure(:final message):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.chatRoomError(message))));
+      case BotsApiFailure(:final statusCode):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              botInstallActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
     }
   }
 }

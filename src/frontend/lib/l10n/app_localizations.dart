@@ -1412,6 +1412,12 @@ abstract class AppLocalizations {
   /// **'Bot installed.'**
   String get spaceBotsInstallSuccess;
 
+  /// No description provided for @botInstallActionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to install bot.'**
+  String get botInstallActionError;
+
   /// No description provided for @spaceBotsUninstallSuccess.
   ///
   /// In en, this message translates to:
@@ -3841,6 +3847,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Session revoked'**
   String get securitySessionsRevoked;
+
+  /// No description provided for @securitySessionRevokeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to revoke session.'**
+  String get securitySessionRevokeError;
 
   /// No description provided for @securitySessionsLoadError.
   ///
