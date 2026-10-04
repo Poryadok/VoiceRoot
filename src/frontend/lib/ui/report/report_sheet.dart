@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/trust_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_metrics.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_primary_button.dart';
 
@@ -21,10 +22,7 @@ sealed class ReportTarget {
 }
 
 final class ReportMessageTarget extends ReportTarget {
-  const ReportMessageTarget({
-    required this.messageId,
-    required this.chatId,
-  });
+  const ReportMessageTarget({required this.messageId, required this.chatId});
 
   final String messageId;
   final String chatId;
@@ -96,14 +94,7 @@ abstract final class ReportCategories {
   static const mmToxic = 'mm_toxic';
   static const other = 'other';
 
-  static const all = [
-    spam,
-    harassment,
-    offensive,
-    fake,
-    mmToxic,
-    other,
-  ];
+  static const all = [spam, harassment, offensive, fake, mmToxic, other];
 }
 
 const int kReportCommentMaxLength = 500;
@@ -120,7 +111,10 @@ class ReportSheet extends ConsumerStatefulWidget {
 
   final ReportTarget target;
 
-  static Future<void> show(BuildContext context, {required ReportTarget target}) {
+  static Future<void> show(
+    BuildContext context, {
+    required ReportTarget target,
+  }) {
     return showVoiceBottomSheet<void>(
       context: context,
       initialSize: 0.65,
@@ -137,7 +131,6 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
   String? _category;
   final _commentController = TextEditingController();
   var _submitting = false;
-  var _accepted = false;
   String? _error;
 
   @override
@@ -165,22 +158,85 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
     });
 
     final description = _commentController.text.trim();
-    final result = await ref.read(voiceModerationClientProvider).createReport(
-      authorization: auth,
-      targetType: widget.target.targetType,
-      targetId: widget.target.targetId,
-      category: _category!,
-      description: description.isEmpty ? null : description,
-      evidence: widget.target.evidence,
-    );
+    final result = await ref
+        .read(voiceModerationClientProvider)
+        .createReport(
+          authorization: auth,
+          targetType: widget.target.targetType,
+          targetId: widget.target.targetId,
+          category: _category!,
+          description: description.isEmpty ? null : description,
+          evidence: widget.target.evidence,
+        );
 
     if (!mounted) return;
     switch (result) {
       case ModerationApiOk():
-        setState(() {
-          _submitting = false;
-          _accepted = true;
-        });
+        final messenger = ScaffoldMessenger.of(context);
+        final l10n = AppLocalizations.of(context)!;
+        final voice = VoiceColors.of(context);
+        final metrics = context.voiceMetrics;
+        final textTheme = Theme.of(context).textTheme;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final margin = screenWidth >= 600
+            ? EdgeInsets.fromLTRB(
+                screenWidth - 360,
+                0,
+                metrics.spacing('20'),
+                metrics.spacing('20'),
+              )
+            : EdgeInsets.fromLTRB(
+                metrics.spacing('16'),
+                0,
+                metrics.spacing('16'),
+                metrics.spacing('20'),
+              );
+
+        Navigator.of(context).pop();
+        messenger.showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            showCloseIcon: true,
+            closeIconColor: voice.textSecondary,
+            margin: margin,
+            padding: EdgeInsets.symmetric(
+              horizontal: metrics.spacing('16'),
+              vertical: metrics.spacing('12'),
+            ),
+            backgroundColor: voice.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(metrics.corner('xl')),
+            ),
+            content: Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: voice.success),
+                SizedBox(width: metrics.spacing('12')),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.reportAcceptedTitle,
+                        style: textTheme.titleSmall?.copyWith(
+                          color: voice.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        l10n.reportAcceptedMessage,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: voice.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       case ModerationApiFailure(:final message):
         setState(() {
           _submitting = false;
@@ -205,39 +261,6 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-
-    if (_accepted) {
-      return SafeArea(
-        key: ReportSheet.acceptedKey,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.check_circle_outline, size: 48, color: voice.profileAccent),
-              const SizedBox(height: 16),
-              Text(
-                l10n.reportAcceptedTitle,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.reportAcceptedMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 24),
-              VoicePrimaryButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.commonCancel),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return SafeArea(
       child: Padding(

@@ -377,7 +377,7 @@ class AuthUserGrpcContractTest {
 
   private static final class Harness {
     final InMemoryAccountRepository accounts = new InMemoryAccountRepository();
-    final InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository();
+    final InMemoryRefreshTokenRepository refreshTokens = new InMemoryRefreshTokenRepository(CLOCK);
     final RecordingProvisioner profiles;
     final RecordingPhoneResolver phone = new RecordingPhoneResolver();
     final RecordingSwitchValidator switches = new RecordingSwitchValidator();
