@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +8,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
+import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/ui/shell/manage_folders_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -333,5 +336,98 @@ void main() {
 
     pending.complete();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('folder create rename and delete hide API failure details', (
+    tester,
+  ) async {
+    final requests = <String>[];
+    final httpClient = MockClient((request) async {
+      requests.add('${request.method} ${request.url.path}');
+      return http.Response(
+        jsonEncode({'message': 'private_folder_backend_detail'}),
+        500,
+        headers: const {'content-type': 'application/json'},
+      );
+    });
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(client: httpClient),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(httpClient),
+        authorizationHeaderProvider.overrideWithValue('Bearer test'),
+        chatFoldersProvider.overrideWith(
+          (_) async => const FolderListData(
+            folders: [
+              VoiceFolder(
+                id: 'a',
+                name: 'Alpha',
+                folderType: 'custom',
+                sortOrder: 5,
+              ),
+            ],
+          ),
+        ),
+        voiceChatsClientProvider.overrideWith(
+          (ref) =>
+              VoiceChatsClient(gateway: ref.watch(gatewayHttpClientProvider)),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ManageFoldersSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('manage_folders_create_field')),
+      'Projects',
+    );
+    await tester.tap(find.byKey(const Key('manage_folders_create_button')));
+    await tester.pumpAndSettle();
+    expect(requests, ['POST /api/v1/chats/folders']);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_backend_detail'), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+
+    await tester.tap(find.byKey(const Key('manage_folder_edit_a')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('manage_folder_rename_a')),
+      'Renamed',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(requests, [
+      'POST /api/v1/chats/folders',
+      'PATCH /api/v1/chats/folders/a',
+    ]);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_backend_detail'), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+
+    await tester.tap(find.byKey(const Key('manage_folder_delete_a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+    await tester.pumpAndSettle();
+    expect(requests, [
+      'POST /api/v1/chats/folders',
+      'PATCH /api/v1/chats/folders/a',
+      'DELETE /api/v1/chats/folders/a',
+    ]);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_folder_backend_detail'), findsNothing);
   });
 }
