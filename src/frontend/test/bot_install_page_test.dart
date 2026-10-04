@@ -1,13 +1,20 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
+import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/bots/bot_install_page.dart';
 
@@ -58,6 +65,107 @@ void main() {
     final l10n = AppLocalizationsEn();
     expect(find.text(l10n.spaceBotsLoadError), findsOneWidget);
     expect(find.textContaining('secret-bot-456'), findsNothing);
+  });
+
+  testWidgets('BotInstallPage hides upstream details on install failure', (
+    tester,
+  ) async {
+    const raw = 'internal trace id=secret-install-456';
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((req) async {
+        if (req.method == 'POST' &&
+            req.url.path == '/api/v1/bots/bot-stats/spaces/space-1/install') {
+          return http.Response(
+            jsonEncode({'error': 'internal_error', 'message': raw}),
+            500,
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      authorizationProvider: () => auth,
+    );
+    const installableBot = VoiceBotSummary(
+      id: 'bot-stats',
+      name: 'StatsBot',
+      slug: slug,
+      description: 'Stats',
+      scopesJson: '["TEXT_CHAT_SEND_MESSAGES"]',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authorizationHeaderProvider.overrideWithValue(auth),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          voiceBotsClientProvider.overrideWithValue(
+            VoiceBotsClient(gateway: gateway),
+          ),
+          botBySlugProvider(slug).overrideWith((ref) async => installableBot),
+          mySpacesProvider.overrideWith(
+            (ref) async => const SpaceListData(
+              spaces: [
+                VoiceSpace(
+                  id: 'space-1',
+                  name: 'Test Space',
+                  visibility: 'private',
+                  ownerProfileId: 'owner-1',
+                ),
+              ],
+            ),
+          ),
+          spaceTreeProvider('space-1').overrideWith(
+            (ref) async => const SpaceTreeData(
+              categories: [],
+              voiceRooms: [],
+              nodes: [
+                SpaceTreeNodeData(
+                  id: 'node-1',
+                  spaceId: 'space-1',
+                  kind: 'text_chat',
+                  sortOrder: 0,
+                  displayName: 'general',
+                  linkedChatId: 'chat-1',
+                  chatType: 'CHAT_TYPE_CHANNEL',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const BotInstallPage(slug: slug),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bot_install_space_picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test Space').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bot_install_chat_chat-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bot_install_confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unable to install bot.'), findsOneWidget);
+    expect(find.textContaining('secret-install-456'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('bot_install_confirm')))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets(

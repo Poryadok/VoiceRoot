@@ -21,6 +21,25 @@ void main() {
     expect(mapped, isNot(contains('secret-session-123')));
   });
 
+  test(
+    'action failures use safe localized fallbacks and known unavailable map',
+    () {
+      expect(
+        activeSessionRevokeErrorMessage(l10n),
+        l10n.securitySessionRevokeError,
+      );
+      expect(
+        activeSessionRevokeErrorMessage(l10n, statusCode: 503),
+        l10n.backendUnavailable,
+      );
+      expect(botInstallActionErrorMessage(l10n), l10n.botInstallActionError);
+      expect(
+        botInstallActionErrorMessage(l10n, statusCode: 504),
+        l10n.backendUnavailable,
+      );
+    },
+  );
+
   test('chat room error mapping renders permission denial locally', () {
     expect(
       chatRoomErrorMessage(l10n, 'permission_denied'),
