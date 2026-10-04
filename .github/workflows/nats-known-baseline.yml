@@ -77,7 +77,7 @@ jobs:
             --mount type=volume,source="$volume",target=/owned \
             -w /work/scripts/staging/nats-known-baseline \
             -e GOPROXY=off -e GOSUMDB=off -e GOTOOLCHAIN=local -e CGO_ENABLED=0 \
-            golang:1.26-bookworm go build -trimpath -o /owned/kernel .
+            golang:1.26-bookworm go build -buildvcs=false -trimpath -o /owned/kernel .
           docker build -t voice-known-baseline-ci -f "$helper/integration.Dockerfile" "$helper"
           docker run --rm --network none \
             --mount type=bind,source="$helper",target=/work,readonly -w /work \
