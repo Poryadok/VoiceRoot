@@ -120,3 +120,42 @@ func TestComposeSpacesInvites_live(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
+
+// TestComposeMultiProfileSpaceMembership_live proves one regular account can join
+// the same Space with two distinct profiles, as documented in multi-profile.md.
+func TestComposeMultiProfileSpaceMembership_live(t *testing.T) {
+	if !liveComposeEnabled() {
+		t.Skip("set VOICE_RUN_LIVE_COMPOSE=true to run against local compose")
+	}
+	clearLiveComposeAuthRateLimit(t)
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	base := liveGatewayBaseURL()
+	sess := registerComposeUser(t, client, base, formatComposeEmail("space-multiprofile", time.Now().UnixNano()), "VoiceQaTest1!")
+	require.Equal(t, "regular", sess.AccountType)
+
+	spaceID := createComposeSpace(t, client, base, sess.AccessToken, "Multi-profile QA", "membership isolation")
+	invite := createComposeSpaceInvite(t, client, base, sess.AccessToken, spaceID)
+	altToken, altProfileID := composeCreateAltProfile(t, client, base, sess.AccessToken, "Space Alt", "personal")
+	require.NotEqual(t, sess.ProfileID, altProfileID)
+
+	joinComposeSpaceByInvite(t, client, base, altToken, invite.Code)
+
+	switchBackResp := composePostJSON(t, client, base+"/api/v1/auth/switch-profile", altToken,
+		`{"profile_id":"`+sess.ProfileID+`"}`)
+	require.Equal(t, http.StatusOK, switchBackResp.StatusCode, composeReadBody(t, switchBackResp))
+	var switchBackBody struct {
+		AccessToken string `json:"access_token"`
+	}
+	composeDecodeJSON(t, switchBackResp.Body, &switchBackBody)
+	require.NotEmpty(t, switchBackBody.AccessToken)
+
+	members := listComposeSpaceMembers(t, client, base, switchBackBody.AccessToken, spaceID)
+	require.Len(t, members, 2, "fresh Space must have only its owner and alternate profile")
+	require.True(t, slices.ContainsFunc(members, func(member composeSpaceMember) bool {
+		return member.ProfileID == sess.ProfileID
+	}), "primary profile must remain a Space member: %+v", members)
+	require.True(t, slices.ContainsFunc(members, func(member composeSpaceMember) bool {
+		return member.ProfileID == altProfileID
+	}), "alternate profile must join the same Space: %+v", members)
+}
