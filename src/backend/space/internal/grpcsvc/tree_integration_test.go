@@ -3,6 +3,8 @@ package grpcsvc
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -310,6 +312,7 @@ func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
+	applySpaceAuditLedgerMigration(t, ctx, pool)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 
@@ -400,6 +403,7 @@ func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
 	ctx := context.Background()
 	pool := startSpacePostgresForTest(t, ctx)
 	applySpaceMigration(t, ctx, pool)
+	applySpaceAuditLedgerMigration(t, ctx, pool)
 	client, cleanup := startSpaceGRPCTestServer(t, pool)
 	t.Cleanup(cleanup)
 	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit rollback"})
@@ -423,6 +427,14 @@ CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EX
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, spaceID).Scan(&outbox))
 	require.Zero(t, audits)
 	require.Zero(t, outbox)
+}
+
+func applySpaceAuditLedgerMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000015_audit_ledger.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(auditMigration))
+	require.NoError(t, err)
 }
 
 func requireTreeAuditEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, wantDetails map[string]any) {
