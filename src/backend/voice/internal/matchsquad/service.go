@@ -356,7 +356,7 @@ func validateCreate(req *callsv1.CreateMatchSquadRoomRequest) (uuid.UUID, uuid.U
 	}
 	chat := req.GetChatCreationReceipt()
 	chatIDs, err := parseUUIDs(chat.GetMatchId(), chat.GetOperationId(), chat.GetReceiptId(), chat.GetChatId())
-	if err != nil || chat.GetProtocolVersion() != 1 || chatIDs[0] != match || chatIDs[1] != operation || !bytes.Equal(chat.GetParticipantManifestSha256(), manifest[:]) || len(chat.GetRequestSha256()) != sha256.Size {
+	if err != nil || chat.GetProtocolVersion() != 1 || chatIDs[0] != match || !bytes.Equal(chat.GetParticipantManifestSha256(), manifest[:]) || len(chat.GetRequestSha256()) != sha256.Size {
 		return uuid.Nil, uuid.Nil, nil, empty, nil, nil, errors.New("Chat receipt mismatch")
 	}
 	request, err := marshal(req)

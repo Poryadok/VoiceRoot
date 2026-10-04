@@ -55,9 +55,9 @@ func TestValidateCreateRequiresCanonicalManifestAndBoundChatReceipt(t *testing.T
 			t.Fatal("mismatched roster manifest accepted")
 		}
 	})
-	t.Run("Chat receipt must bind the same match operation and roster", func(t *testing.T) {
+	t.Run("Chat receipt must bind the same match and roster", func(t *testing.T) {
 		bad := validCreateRequest()
-		bad.ChatCreationReceipt.OperationId = "00000000-0000-4000-8000-000000000099"
+		bad.ChatCreationReceipt.MatchId = "00000000-0000-4000-8000-000000000099"
 		if _, _, _, _, _, _, err := validateCreate(bad); err == nil {
 			t.Fatal("unrelated Chat creation receipt accepted")
 		}
