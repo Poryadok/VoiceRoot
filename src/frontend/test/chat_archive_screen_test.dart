@@ -119,6 +119,7 @@ void main() {
       activeProfileId: 'profile-1',
     );
     await storage.write(session);
+    var unarchiveAttempts = 0;
     final unarchived = <String>[];
     final mock = MockClient((req) async {
       if (req.url.path == '/api/v1/chats' &&
@@ -143,6 +144,17 @@ void main() {
       if (req.url.path == '/api/v1/chats/chat-archived/archive' &&
           req.method == 'POST') {
         if (jsonDecode(req.body)['archived'] == false) {
+          unarchiveAttempts++;
+          if (unarchiveAttempts == 1) {
+            return http.Response(
+              jsonEncode({
+                'code': 'ERROR_CODE_UNAVAILABLE',
+                'message': 'private_archive_backend_detail',
+              }),
+              503,
+              headers: {'content-type': 'application/json'},
+            );
+          }
           unarchived.add('chat-archived');
         }
         return http.Response('{}', 200);
@@ -185,6 +197,18 @@ void main() {
     await tester.drag(row, const Offset(-600, 0));
     await tester.pumpAndSettle();
 
+    expect(row, findsOneWidget);
+    expect(unarchiveAttempts, 1);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_archive_backend_detail'), findsNothing);
+    expect(find.text('private_archive_backend_detail'), findsNothing);
+    await tester.tap(find.text('Could not complete this action.'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(row, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+
+    expect(unarchiveAttempts, 2);
     expect(unarchived, ['chat-archived']);
     expect(row, findsNothing);
   });

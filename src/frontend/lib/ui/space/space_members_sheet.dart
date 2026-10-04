@@ -308,7 +308,13 @@ class _MemberTile extends ConsumerWidget {
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceBanError(err))),
+        SnackBar(
+          content: Text(
+            err == 'not_authenticated'
+                ? l10n.spaceBanError(err)
+                : commonActionErrorMessage(l10n),
+          ),
+        ),
       );
     }
   }
@@ -349,7 +355,13 @@ class _MemberTile extends ConsumerWidget {
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceTimeoutError(err))),
+        SnackBar(
+          content: Text(
+            err == 'not_authenticated'
+                ? l10n.spaceTimeoutError(err)
+                : commonActionErrorMessage(l10n),
+          ),
+        ),
       );
     }
   }
@@ -388,7 +400,13 @@ class _MemberTile extends ConsumerWidget {
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceKickError(err))),
+        SnackBar(
+          content: Text(
+            err == 'not_authenticated'
+                ? l10n.spaceKickError(err)
+                : commonActionErrorMessage(l10n),
+          ),
+        ),
       );
     }
   }

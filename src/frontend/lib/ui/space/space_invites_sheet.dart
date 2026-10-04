@@ -73,7 +73,13 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     setState(() => _creating = false);
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceInviteCreateError(err))),
+        SnackBar(
+          content: Text(
+            err == 'not_authenticated'
+                ? l10n.spaceInviteCreateError(err)
+                : commonActionErrorMessage(l10n),
+          ),
+        ),
       );
     }
   }
@@ -95,7 +101,13 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     if (!mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceInviteRevokeError(err))),
+        SnackBar(
+          content: Text(
+            err == 'not_authenticated'
+                ? l10n.spaceInviteRevokeError(err)
+                : commonActionErrorMessage(l10n),
+          ),
+        ),
       );
     }
   }
