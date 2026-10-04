@@ -30,8 +30,7 @@ String subscriptionPlanLabel(
     _SubscriptionPlanDisplay.free => l10n.subscriptionStatusFree,
     _SubscriptionPlanDisplay.premiumActive ||
     _SubscriptionPlanDisplay.gracePeriod ||
-    _SubscriptionPlanDisplay.premiumUntilEnd =>
-      l10n.subscriptionStatusPremium,
+    _SubscriptionPlanDisplay.premiumUntilEnd => l10n.subscriptionStatusPremium,
   };
 }
 
@@ -115,6 +114,7 @@ class _SubscriptionSettingsScreenState
     extends ConsumerState<SubscriptionSettingsScreen> {
   var _busy = false;
   String? _errorKey;
+  int? _errorStatusCode;
 
   Future<void> _startCheckout(String billingPeriod) async {
     final session = ref.read(authControllerProvider).session;
@@ -122,6 +122,7 @@ class _SubscriptionSettingsScreenState
     setState(() {
       _busy = true;
       _errorKey = null;
+      _errorStatusCode = null;
     });
     final origin = Uri.base.origin;
     final result = await ref
@@ -152,10 +153,11 @@ class _SubscriptionSettingsScreenState
           _busy = false;
           if (!launched) _errorKey = 'checkout_launch_failed';
         });
-      case SubscriptionApiFailure(:final message):
+      case SubscriptionApiFailure(:final message, :final statusCode):
         setState(() {
           _busy = false;
           _errorKey = message;
+          _errorStatusCode = statusCode;
         });
     }
   }
@@ -175,6 +177,7 @@ class _SubscriptionSettingsScreenState
     setState(() {
       _busy = true;
       _errorKey = null;
+      _errorStatusCode = null;
     });
     final result = await ref
         .read(voiceSubscriptionClientProvider)
@@ -187,16 +190,25 @@ class _SubscriptionSettingsScreenState
       case SubscriptionApiOk():
         ref.invalidate(subscriptionProvider);
         setState(() => _busy = false);
-      case SubscriptionApiFailure(:final message):
+      case SubscriptionApiFailure(:final message, :final statusCode):
         setState(() {
           _busy = false;
           _errorKey = message;
+          _errorStatusCode = statusCode;
         });
     }
   }
 
-  String _checkoutErrorMessage(AppLocalizations l10n, String errorKey) {
-    return subscriptionActionErrorMessage(l10n, errorKey);
+  String _checkoutErrorMessage(
+    AppLocalizations l10n,
+    String errorKey, {
+    int? statusCode,
+  }) {
+    return subscriptionActionErrorMessage(
+      l10n,
+      errorKey,
+      statusCode: statusCode,
+    );
   }
 
   @override
@@ -222,6 +234,7 @@ class _SubscriptionSettingsScreenState
           subscription: subscription,
           busy: _busy,
           errorKey: _errorKey,
+          errorStatusCode: _errorStatusCode,
           checkoutErrorMessage: _checkoutErrorMessage,
           onUpgradeMonthly: () => _startCheckout('monthly'),
           onUpgradeYearly: () => _startCheckout('yearly'),
@@ -244,6 +257,7 @@ class _SubscriptionBody extends StatelessWidget {
     required this.subscription,
     required this.busy,
     required this.errorKey,
+    required this.errorStatusCode,
     required this.checkoutErrorMessage,
     required this.onUpgradeMonthly,
     required this.onUpgradeYearly,
@@ -256,7 +270,12 @@ class _SubscriptionBody extends StatelessWidget {
   final VoiceSubscription? subscription;
   final bool busy;
   final String? errorKey;
-  final String Function(AppLocalizations l10n, String errorKey)
+  final int? errorStatusCode;
+  final String Function(
+    AppLocalizations l10n,
+    String errorKey, {
+    int? statusCode,
+  })
   checkoutErrorMessage;
   final VoidCallback onUpgradeMonthly;
   final VoidCallback onUpgradeYearly;
@@ -268,8 +287,7 @@ class _SubscriptionBody extends StatelessWidget {
     final display = _resolveSubscriptionPlanDisplay(subscription);
     final isPremium = subscription?.isPremium ?? false;
     final showUpsell = display == _SubscriptionPlanDisplay.free;
-    final canManage =
-        subscription?.providerSubscriptionId?.isNotEmpty == true;
+    final canManage = subscription?.providerSubscriptionId?.isNotEmpty == true;
     final statusHint = subscriptionStatusHint(l10n, subscription);
 
     return ListView(
@@ -284,20 +302,14 @@ class _SubscriptionBody extends StatelessWidget {
         ),
         if (statusHint != null) ...[
           const SizedBox(height: 12),
-          Text(
-            statusHint,
-            style: TextStyle(color: voice.textSecondary),
-          ),
+          Text(statusHint, style: TextStyle(color: voice.textSecondary)),
         ],
         if (subscription?.billingPeriod.isNotEmpty == true &&
             display != _SubscriptionPlanDisplay.free) ...[
           const SizedBox(height: 8),
           Text(
             l10n.subscriptionBillingPeriod(
-              subscriptionBillingPeriodLabel(
-                l10n,
-                subscription!.billingPeriod,
-              ),
+              subscriptionBillingPeriodLabel(l10n, subscription!.billingPeriod),
             ),
             style: TextStyle(color: voice.textSecondary),
           ),
@@ -336,7 +348,7 @@ class _SubscriptionBody extends StatelessWidget {
         if (errorKey != null) ...[
           const SizedBox(height: 16),
           Text(
-            checkoutErrorMessage(l10n, errorKey!),
+            checkoutErrorMessage(l10n, errorKey!, statusCode: errorStatusCode),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
@@ -421,7 +433,9 @@ class _PlanStatusChip extends StatelessWidget {
         color: isPremium ? accent.withValues(alpha: 0.15) : voice.muted,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: isPremium ? accent.withValues(alpha: 0.45) : voice.borderDefault,
+          color: isPremium
+              ? accent.withValues(alpha: 0.45)
+              : voice.borderDefault,
         ),
       ),
       child: Text(

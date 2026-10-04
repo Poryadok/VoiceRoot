@@ -119,4 +119,57 @@ void main() {
     expect(find.text('Alt A'), findsOneWidget);
     expect(find.text('Alt B'), findsOneWidget);
   });
+
+  testWidgets(
+    'downgrade submission hides upstream details and maps unavailable',
+    (tester) async {
+      const secret = 'profile service trace=downgrade-private-789';
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/users/profiles' && req.method == 'GET') {
+          return http.Response(
+            '{"profile_list":{"profiles":['
+            '{"id":"p1","display_name":"Main","is_primary":true},'
+            '{"id":"p2","display_name":"Alt A","is_primary":false},'
+            '{"id":"p3","display_name":"Alt B","is_primary":false}'
+            ']}}',
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/subscription/downgrade/profiles' &&
+            req.method == 'POST') {
+          return http.Response(
+            '{"error_code":"provider_error","message":"$secret"}',
+            500,
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: voiceAppTestOverrides(client: client),
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ProfileDowngradePickerScreen()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Main'));
+      await tester.tap(find.text('Alt A'));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProfileDowngradePickerScreen)),
+      )!;
+      await tester.tap(find.text(l10n.downgradeProfilePickerConfirm));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.commonActionFailed), findsOneWidget);
+      expect(find.textContaining(secret), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
 }
