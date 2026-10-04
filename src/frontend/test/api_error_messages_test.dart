@@ -60,4 +60,26 @@ void main() {
       );
     },
   );
+
+  test('social and chat actions never expose upstream failure details', () {
+    const raw = 'database password=private-trace-123';
+
+    expect(socialActionErrorMessage(l10n, raw), l10n.commonActionFailed);
+    expect(chatActionErrorMessage(l10n, raw), l10n.commonActionFailed);
+    expect(socialActionErrorMessage(l10n, raw), isNot(contains('private')));
+    expect(chatActionErrorMessage(l10n, raw), isNot(contains('private')));
+    expect(
+      commonActionErrorMessage(l10n, statusCode: 503),
+      l10n.backendUnavailable,
+    );
+    expect(commonActionErrorMessage(l10n), l10n.commonActionFailed);
+  });
+
+  test('social search has its own safe fallback and preserves 503 mapping', () {
+    expect(socialSearchErrorMessage(l10n), l10n.socialSearchFailed);
+    expect(
+      socialSearchErrorMessage(l10n, statusCode: 503),
+      l10n.backendUnavailable,
+    );
+  });
 }
