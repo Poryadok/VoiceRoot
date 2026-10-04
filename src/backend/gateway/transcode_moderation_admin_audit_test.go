@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	moderationv1 "voice.app/voice/moderation/v1"
@@ -24,13 +27,13 @@ func (r *recordingModerationAudit) ExportAuditLog(_ context.Context, _ *moderati
 	return &moderationv1.ExportAuditLogResponse{
 		AuditLogExport: &moderationv1.AuditLogExport{
 			Entries: []*moderationv1.AuditLogEntry{{
-				Id:              "audit-1",
-				ActorProfileId:  "staff-profile",
-				Action:          "apply_sanction",
-				TargetType:      "account",
-				TargetId:        "acct-1",
-				Details:         `{"type":"warning"}`,
-				CreatedAt:       now,
+				Id:             "audit-1",
+				ActorProfileId: "staff-profile",
+				Action:         "apply_sanction",
+				TargetType:     "account",
+				TargetId:       "acct-1",
+				Details:        `{"type":"warning"}`,
+				CreatedAt:      now,
 			}},
 		},
 	}, nil
@@ -39,11 +42,54 @@ func (r *recordingModerationAudit) ExportAuditLog(_ context.Context, _ *moderati
 type revokeSanctionRecorder struct {
 	moderationv1.UnimplementedModerationServiceServer
 	sanctionID string
+	calls      int
 }
 
 func (r *revokeSanctionRecorder) RevokeSanction(_ context.Context, req *moderationv1.RevokeSanctionRequest) (*moderationv1.RevokeSanctionResponse, error) {
+	r.calls++
 	r.sanctionID = req.GetSanctionId()
 	return &moderationv1.RevokeSanctionResponse{}, nil
+}
+
+type getReportRecorder struct {
+	moderationv1.UnimplementedModerationServiceServer
+	reportID string
+	calls    int
+	err      error
+}
+
+func (r *getReportRecorder) GetReport(_ context.Context, req *moderationv1.GetReportRequest) (*moderationv1.GetReportResponse, error) {
+	r.calls++
+	r.reportID = req.GetReportId()
+	if r.err != nil {
+		return nil, r.err
+	}
+	return &moderationv1.GetReportResponse{Report: &moderationv1.Report{
+		Id: "report-42", TargetType: "user", TargetId: "target-42", Status: "pending",
+	}}, nil
+}
+
+type reviewAppealRecorder struct {
+	moderationv1.UnimplementedModerationServiceServer
+	appealID      string
+	status        string
+	moderatorNote string
+	calls         int
+	err           error
+}
+
+func (r *reviewAppealRecorder) ReviewAppeal(_ context.Context, req *moderationv1.ReviewAppealRequest) (*moderationv1.ReviewAppealResponse, error) {
+	r.calls++
+	r.appealID = req.GetAppealId()
+	r.status = req.GetStatus()
+	r.moderatorNote = req.GetModeratorNote()
+	if r.err != nil {
+		return nil, r.err
+	}
+	reviewNotes := req.GetModeratorNote()
+	return &moderationv1.ReviewAppealResponse{Appeal: &moderationv1.Appeal{
+		Id: req.GetAppealId(), SanctionId: "sanction-42", Status: req.GetStatus(), ReviewNotes: &reviewNotes,
+	}}, nil
 }
 
 type accountSanctionsRecorder struct {
@@ -112,11 +158,97 @@ func TestTranscodeModerationAdmin_revokeSanction_staffOnly(t *testing.T) {
 	})
 	require.Equal(t, http.StatusNoContent, staff.Code)
 	require.Equal(t, "sanction-1", rec.sanctionID)
+	require.Equal(t, 1, rec.calls)
 
 	member := performRequest(h, http.MethodPost, "/api/v1/admin/moderation/sanctions/sanction-1/revoke", "", map[string]string{
 		"Authorization": "Bearer member-token",
 	})
 	require.Equal(t, http.StatusForbidden, member.Code)
+	require.Equal(t, 1, rec.calls, "member request must not reach Moderation")
+}
+
+func TestTranscodeModerationAdmin_getReport_staffOnly(t *testing.T) {
+	t.Parallel()
+
+	rec := &getReportRecorder{}
+	modClient, cleanup := startBufconnModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token":  {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+			"member-token": {UserID: "account-1", ProfileID: "profile-1", Roles: []string{"member"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+	})
+
+	staff := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/reports/report-42", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, staff.Code)
+	require.Equal(t, "report-42", rec.reportID)
+	require.Equal(t, 1, rec.calls)
+	var body moderationv1.GetReportResponse
+	require.NoError(t, protojson.Unmarshal(staff.Body.Bytes(), &body))
+	require.Equal(t, "report-42", body.GetReport().GetId())
+	require.Equal(t, "user", body.GetReport().GetTargetType())
+	require.Equal(t, "target-42", body.GetReport().GetTargetId())
+	require.Equal(t, "pending", body.GetReport().GetStatus())
+
+	member := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/reports/report-43", "", map[string]string{
+		"Authorization": "Bearer member-token",
+	})
+	require.Equal(t, http.StatusForbidden, member.Code)
+	require.Equal(t, 1, rec.calls, "member request must not reach Moderation")
+
+	rec.err = status.Error(codes.NotFound, "report not found")
+	missing := performRequest(h, http.MethodGet, "/api/v1/admin/moderation/reports/missing", "", map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusNotFound, missing.Code)
+	require.Equal(t, "missing", rec.reportID)
+}
+
+func TestTranscodeModerationAdmin_reviewAppeal_staffOnly(t *testing.T) {
+	t.Parallel()
+
+	rec := &reviewAppealRecorder{}
+	modClient, cleanup := startBufconnModerationClient(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"staff-token":  {UserID: "staff-account", ProfileID: "staff-profile", Roles: []string{"staff"}},
+			"member-token": {UserID: "account-1", ProfileID: "profile-1", Roles: []string{"member"}},
+		},
+		transcoder: &transcoder{clients: grpcClients{moderation: modClient}},
+	})
+
+	staff := performRequest(h, http.MethodPost, "/api/v1/admin/moderation/appeals/appeal-42/review", `{"status":"approved","moderator_note":"reviewed"}`, map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusOK, staff.Code)
+	require.Equal(t, "appeal-42", rec.appealID)
+	require.Equal(t, "approved", rec.status)
+	require.Equal(t, "reviewed", rec.moderatorNote)
+	require.Equal(t, 1, rec.calls)
+	var body moderationv1.ReviewAppealResponse
+	require.NoError(t, protojson.Unmarshal(staff.Body.Bytes(), &body))
+	require.Equal(t, "appeal-42", body.GetAppeal().GetId())
+	require.Equal(t, "sanction-42", body.GetAppeal().GetSanctionId())
+	require.Equal(t, "approved", body.GetAppeal().GetStatus())
+	require.Equal(t, "reviewed", body.GetAppeal().GetReviewNotes())
+
+	member := performRequest(h, http.MethodPost, "/api/v1/admin/moderation/appeals/appeal-43/review", `{"status":"denied"}`, map[string]string{
+		"Authorization": "Bearer member-token",
+	})
+	require.Equal(t, http.StatusForbidden, member.Code)
+	require.Equal(t, 1, rec.calls, "member request must not reach Moderation")
+
+	rec.err = status.Error(codes.NotFound, "appeal not found")
+	missing := performRequest(h, http.MethodPost, "/api/v1/admin/moderation/appeals/missing/review", `{"status":"denied"}`, map[string]string{
+		"Authorization": "Bearer staff-token",
+	})
+	require.Equal(t, http.StatusNotFound, missing.Code)
+	require.Equal(t, "missing", rec.appealID)
 }
 
 func TestTranscodeModerationAdmin_getAccountSanctions_staffOnly(t *testing.T) {
