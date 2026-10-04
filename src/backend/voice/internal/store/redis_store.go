@@ -42,14 +42,19 @@ func NewRedisCallStore(client *redis.Client, prefix string) *RedisCallStore {
 }
 
 func (s *RedisCallStore) CreateCall(ctx context.Context, call Call) (Call, error) {
-	if call.States == nil {
+	if call.MatchSquadMatchID != "" {
+		if len(call.States) != 0 {
+			return Call{}, ErrInvalidState
+		}
+		call.States = map[string]ParticipantState{}
+	} else if call.States == nil {
 		call.States = defaultStates(call)
 	}
 	keys := []string{s.callKey(call.RoomID)}
 	if call.IsVoiceRoom() {
 		keys = append(keys, s.activeVoiceRoomKey(call.VoiceRoomID))
 	}
-	if call.IsGroupVoice() && !call.ManagedGameSession {
+	if call.IsGroupVoice() && !call.ManagedGameSession && call.MatchSquadMatchID == "" {
 		keys = append(keys, s.activeChatKey(call.ChatID))
 	}
 	for _, profileID := range call.ProfileIDs() {
@@ -126,7 +131,7 @@ func (s *RedisCallStore) GetActiveGroupCallForChat(ctx context.Context, chatID s
 	if err != nil {
 		return Call{}, err
 	}
-	if !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+	if !call.IsGroupVoice() || call.MatchSquadMatchID != "" || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		_ = s.deleteIfValue(ctx, s.activeChatKey(chatID), roomID)
 		return Call{}, ErrNotFound
 	}
@@ -175,6 +180,12 @@ func (s *RedisCallStore) RemoveParticipant(ctx context.Context, roomID, profileI
 	return s.transitionParticipant(ctx, roomID, profileID, 0, true)
 }
 
+// RemoveMatchSquadParticipant removes a member only from the exact current
+// MatchSquad room. It preserves a profile lock that already points elsewhere.
+func (s *RedisCallStore) RemoveMatchSquadParticipant(ctx context.Context, roomID, matchID, profileID string) (Call, error) {
+	return s.transitionMatchSquadParticipant(ctx, roomID, matchID, profileID)
+}
+
 func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error) {
 	return s.transitionParticipant(ctx, roomID, profileID, maxParticipants, false)
 }
@@ -183,13 +194,32 @@ func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID s
 // the move path.  It watches the roster document and the subject session key,
 // so neither a stale add nor a stale remove can restore a move's old roster.
 func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, profileID string, maxParticipants int, remove bool) (Call, error) {
+	return s.transitionParticipantOwned(ctx, roomID, "", profileID, maxParticipants, remove)
+}
+
+func (s *RedisCallStore) transitionMatchSquadParticipant(ctx context.Context, roomID, matchID, profileID string) (Call, error) {
+	if strings.TrimSpace(matchID) == "" {
+		return Call{}, ErrMatchSquadProjectionDiverged
+	}
+	return s.transitionParticipantOwned(ctx, roomID, matchID, profileID, 0, true)
+}
+
+func (s *RedisCallStore) transitionParticipantOwned(ctx context.Context, roomID, matchID, profileID string, maxParticipants int, remove bool) (Call, error) {
 	keys := []string{s.callKey(roomID), s.activeKey(profileID)}
 	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
 		var result Call
+		removeActiveIndex := true
 		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
 			call, err := s.getCallTx(ctx, tx, roomID)
 			if err != nil {
 				return err
+			}
+			if matchID != "" && (call.RoomID != roomID || call.MatchSquadMatchID == "" || call.MatchSquadMatchID != matchID) {
+				return ErrMatchSquadProjectionDiverged
+			}
+			if remove && matchID != "" && !call.IsParticipant(profileID) {
+				result = call
+				return nil
 			}
 			if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 				return ErrInvalidState
@@ -198,9 +228,19 @@ func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, prof
 				if !call.IsParticipant(profileID) {
 					return ErrNotParticipant
 				}
+				if matchID != "" {
+					activeRoomID, activeErr := tx.Get(ctx, s.activeKey(profileID)).Result()
+					if activeErr != nil && !errors.Is(activeErr, redis.Nil) {
+						return activeErr
+					}
+					if activeRoomID != "" && activeRoomID != roomID {
+						return ErrMatchSquadProjectionDiverged
+					}
+					removeActiveIndex = activeRoomID == roomID
+				}
 				delete(call.States, profileID)
 				call = removeScreenSharesForProfile(call, profileID)
-				if len(call.States) == 0 && !call.ManagedGameSession {
+				if len(call.States) == 0 && !call.ManagedGameSession && call.MatchSquadMatchID == "" {
 					call.Status, call.EndedAt = callsv1.CallStatus_CALL_STATUS_ENDED, time.Now().UTC()
 				}
 			} else {
@@ -237,7 +277,9 @@ func (s *RedisCallStore) transitionParticipant(ctx context.Context, roomID, prof
 					}
 				}
 				if remove {
-					pipe.Del(ctx, s.activeKey(profileID))
+					if removeActiveIndex {
+						pipe.Del(ctx, s.activeKey(profileID))
+					}
 				} else {
 					pipe.Set(ctx, s.activeKey(profileID), call.RoomID, 24*time.Hour)
 				}
@@ -435,7 +477,7 @@ func (s *RedisCallStore) mutateCall(ctx context.Context, roomID string, mutate f
 		if before.IsVoiceRoom() {
 			keys = append(keys, s.activeVoiceRoomKey(before.VoiceRoomID))
 		}
-		if before.IsGroupVoice() {
+		if before.IsGroupVoice() && !before.ManagedGameSession && before.MatchSquadMatchID == "" {
 			keys = append(keys, s.activeChatKey(before.ChatID))
 		}
 		for _, profileID := range before.ProfileIDs() {
@@ -478,7 +520,7 @@ func (s *RedisCallStore) mutateCall(ctx context.Context, roomID string, mutate f
 
 func (s *RedisCallStore) writeCallProjection(pipe redis.Pipeliner, ctx context.Context, call Call, payload []byte) {
 	pipe.Set(ctx, s.callKey(call.RoomID), payload, 24*time.Hour)
-	if call.IsGroupVoice() && !call.ManagedGameSession && call.ChatID != "" {
+	if call.IsGroupVoice() && !call.ManagedGameSession && call.MatchSquadMatchID == "" && call.ChatID != "" {
 		if call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			pipe.Set(ctx, s.activeChatKey(call.ChatID), call.RoomID, 24*time.Hour)
 		} else {

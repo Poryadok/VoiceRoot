@@ -17,15 +17,16 @@ const (
 )
 
 var (
-	ErrNotFound          = errors.New("call not found")
-	ErrActiveCall        = errors.New("profile already has active call")
-	ErrInvalidState      = errors.New("invalid call state")
-	ErrNotParticipant    = errors.New("profile is not a call participant")
-	ErrRoomFull          = errors.New("voice room is full")
-	ErrScreenShareLimit  = errors.New("screen share limit reached")
-	ErrNotScreenSharing  = errors.New("profile is not screen sharing")
-	ErrScreenShareDenied = errors.New("screen share not permitted")
-	ErrOperationConflict = errors.New("operation id conflicts with a different request")
+	ErrNotFound                     = errors.New("call not found")
+	ErrActiveCall                   = errors.New("profile already has active call")
+	ErrInvalidState                 = errors.New("invalid call state")
+	ErrNotParticipant               = errors.New("profile is not a call participant")
+	ErrRoomFull                     = errors.New("voice room is full")
+	ErrMatchSquadProjectionDiverged = errors.New("MatchSquad participant projection conflicts with current profile room")
+	ErrScreenShareLimit             = errors.New("screen share limit reached")
+	ErrNotScreenSharing             = errors.New("profile is not screen sharing")
+	ErrScreenShareDenied            = errors.New("screen share not permitted")
+	ErrOperationConflict            = errors.New("operation id conflicts with a different request")
 	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
 	// It is deliberately distinct from a dependency outage so the transport can
 	// expose the same safe retryable result without leaking Redis details.
@@ -73,10 +74,13 @@ type ParticipantState struct {
 }
 
 type Call struct {
-	RoomID             string                      `json:"room_id"`
-	LivekitRoomName    string                      `json:"livekit_room_name"`
-	ChatID             string                      `json:"chat_id"`
-	ManagedGameSession bool                        `json:"managed_game_session,omitempty"`
+	RoomID             string `json:"room_id"`
+	LivekitRoomName    string `json:"livekit_room_name"`
+	ChatID             string `json:"chat_id"`
+	ManagedGameSession bool   `json:"managed_game_session,omitempty"`
+	// MatchSquadMatchID marks a Redis call document as a repairable projection
+	// of an exact current MatchSquad row. It never grants authorization.
+	MatchSquadMatchID  string                      `json:"match_squad_match_id,omitempty"`
 	ApplicationID      string                      `json:"application_id,omitempty"`
 	EnvironmentID      string                      `json:"environment_id,omitempty"`
 	SessionID          string                      `json:"session_id,omitempty"`
@@ -182,17 +186,25 @@ func NewMemoryCallStore() *MemoryCallStore {
 }
 
 func (s *MemoryCallStore) CreateCall(_ context.Context, call Call) (Call, error) {
+	if call.MatchSquadMatchID != "" {
+		if len(call.States) != 0 {
+			return Call{}, ErrInvalidState
+		}
+		call.States = map[string]ParticipantState{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing, exists := s.calls[call.RoomID]; exists && (call.ManagedGameSession || existing.ManagedGameSession) {
+	if existing, exists := s.calls[call.RoomID]; exists && (call.ManagedGameSession || existing.ManagedGameSession || call.MatchSquadMatchID != "" || existing.MatchSquadMatchID != "") {
 		return Call{}, ErrInvalidState
 	}
-	if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
-		return Call{}, err
-	}
-	if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
-		if err := s.ensureNoActiveCallLocked(call.CalleeProfileID); err != nil {
+	if call.MatchSquadMatchID == "" {
+		if err := s.ensureNoActiveCallLocked(call.InitiatorProfileID); err != nil {
 			return Call{}, err
+		}
+		if !call.isOpenVoiceSession() && call.CalleeProfileID != "" {
+			if err := s.ensureNoActiveCallLocked(call.CalleeProfileID); err != nil {
+				return Call{}, err
+			}
 		}
 	}
 	if call.States == nil {
@@ -238,6 +250,7 @@ func (s *MemoryCallStore) GetActiveGroupCallForChat(_ context.Context, chatID st
 	for _, call := range s.calls {
 		if call.IsGroupVoice() &&
 			!call.ManagedGameSession &&
+			call.MatchSquadMatchID == "" &&
 			call.ChatID == chatID &&
 			call.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE {
 			return call, nil
@@ -288,6 +301,30 @@ func (s *MemoryCallStore) RemoveParticipant(_ context.Context, roomID, profileID
 	}
 	if !call.IsParticipant(profileID) {
 		return Call{}, ErrNotParticipant
+	}
+	delete(call.States, profileID)
+	call = removeScreenSharesForProfile(call, profileID)
+	s.calls[roomID] = call
+	return call, nil
+}
+
+// RemoveMatchSquadParticipant is an exact owner-scoped projection repair.
+// Repeated removal is safe, but a stale or ordinary room marker is rejected.
+func (s *MemoryCallStore) RemoveMatchSquadParticipant(_ context.Context, roomID, matchID, profileID string) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call, ok := s.calls[roomID]
+	if !ok {
+		return Call{}, ErrNotFound
+	}
+	if call.RoomID != roomID || call.MatchSquadMatchID == "" || call.MatchSquadMatchID != matchID {
+		return Call{}, ErrMatchSquadProjectionDiverged
+	}
+	if !call.IsParticipant(profileID) {
+		return call, nil
+	}
+	if !call.isOpenVoiceSession() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return Call{}, ErrInvalidState
 	}
 	delete(call.States, profileID)
 	call = removeScreenSharesForProfile(call, profileID)
