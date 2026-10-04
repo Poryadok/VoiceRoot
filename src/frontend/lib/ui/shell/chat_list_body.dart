@@ -651,14 +651,26 @@ Future<void> _showChatRowActions(
           .read(folderActionsProvider)
           .addChatToFolder(folderId: folder.id, chatId: item.chatId);
       if (!context.mounted || err == null) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(AppLocalizations.of(context)!),
+          ),
+        ),
+      );
     case 'remove_from_folder':
       if (folderId == null || !isCustomFolder) return;
       final err = await ref
           .read(folderActionsProvider)
           .removeChatFromFolder(folderId: folderId, chatId: item.chatId);
       if (!context.mounted || err == null) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(AppLocalizations.of(context)!),
+          ),
+        ),
+      );
     case 'mute':
       final until = DateTime.utc(9999, 12, 31);
       final err = await controller.muteChat(item.chatId, mutedUntil: until);
@@ -687,7 +699,13 @@ Future<void> _showChatRowActions(
       if (!context.mounted || err == null || err == kChatActionStaleContext) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(AppLocalizations.of(context)!),
+          ),
+        ),
+      );
   }
 }
 

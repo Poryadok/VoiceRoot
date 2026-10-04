@@ -66,7 +66,9 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/chats') {
             return http.Response(
-              jsonEncode({'chat_list': {'items': []}}),
+              jsonEncode({
+                'chat_list': {'items': []},
+              }),
               200,
             );
           }
@@ -121,10 +123,7 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(CreateGroupSheet.nameFieldKey),
-      'Squad',
-    );
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
     await tester.pump();
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
@@ -136,6 +135,103 @@ void main() {
     expect(calls, contains('POST /api/v1/chats'));
     expect(calls, contains('POST /api/v1/chats/group-new/members'));
     expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets('CreateGroupSheet hides upstream failure details', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((req) async {
+          calls.add('${req.method} ${req.url.path}');
+          if (req.method == 'POST' && req.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({'message': 'private_group_gateway_diagnostic'}),
+              500,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+          .onPressed,
+      isNull,
+    );
+    expect(calls, isNot(contains('POST /api/v1/chats')));
+
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    await tester.pump();
+    expect(
+      find.byKey(CreateGroupSheet.submitKey).hitTestable(),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(calls, contains('POST /api/v1/chats'));
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_group_gateway_diagnostic'), findsNothing);
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+  });
+
+  testWidgets('CreateGroupSheet retains the local not-authenticated message', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((req) async {
+          calls.add('${req.method} ${req.url.path}');
+          return http.Response('{}', 500);
+        }),
+        extraOverrides: [authorizationHeaderProvider.overrideWithValue(null)],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Could not create group: not_authenticated'),
+      findsOneWidget,
+    );
+    expect(
+      calls.where((call) => call.startsWith('POST /api/v1/chats')),
+      isEmpty,
+    );
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
   });
 }
 

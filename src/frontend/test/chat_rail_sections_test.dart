@@ -87,10 +87,70 @@ void main() {
       expect(chats.reorderedChatIds, ['chat-qa-2', 'chat-qa-1']);
     },
   );
+
+  testWidgets('ChatRailQuickAccessSection hides action failure details', (
+    tester,
+  ) async {
+    final chats = _RecordingQuickAccessClient()
+      ..reorderError = 'private_quick_access_reorder_detail'
+      ..removeError = 'private_quick_access_remove_detail';
+    const qaData = QuickAccessListData(
+      items: [
+        VoiceQuickAccessItem(chatId: 'chat-qa-1'),
+        VoiceQuickAccessItem(chatId: 'chat-qa-2'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authorizationHeaderProvider.overrideWithValue('Bearer test'),
+          voiceChatsClientProvider.overrideWithValue(chats),
+          quickAccessListProvider.overrideWith((_) async => qaData),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SizedBox(width: 96, child: ChatRailQuickAccessSection()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final list = tester.widget<ReorderableListView>(
+      find.byKey(ChatRailQuickAccessSection.reorderListKey),
+    );
+    list.onReorder(0, 2);
+    await tester.pumpAndSettle();
+    expect(chats.reorderedChatIds, ['chat-qa-2', 'chat-qa-1']);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.text('private_quick_access_reorder_detail'), findsNothing);
+    await tester.tap(find.text('Could not complete this action.'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+
+    await tester.longPress(
+      find.byKey(ChatRailQuickAccessSection.itemKey('chat-qa-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(chats.removedChatIds, ['chat-qa-1']);
+    final l10n = AppLocalizations.of(
+      tester.element(
+        find.byKey(ChatRailQuickAccessSection.itemKey('chat-qa-1')),
+      ),
+    )!;
+    expect(find.text(l10n.backendUnavailable), findsOneWidget);
+    expect(find.text('private_quick_access_remove_detail'), findsNothing);
+  });
 }
 
 class _RecordingQuickAccessClient extends FakeVoiceChatsClient {
   List<String>? reorderedChatIds;
+  String? reorderError;
+  String? removeError;
+  final removedChatIds = <String>[];
 
   @override
   Future<ChatsApiResult<void>> reorderQuickAccess({
@@ -98,6 +158,21 @@ class _RecordingQuickAccessClient extends FakeVoiceChatsClient {
     required List<String> chatIds,
   }) async {
     reorderedChatIds = List.of(chatIds);
+    if (reorderError case final message?) {
+      return ChatsApiFailure(message: message);
+    }
+    return const ChatsApiOk<void>(null);
+  }
+
+  @override
+  Future<ChatsApiResult<void>> removeQuickAccess({
+    required String authorization,
+    required String chatId,
+  }) async {
+    removedChatIds.add(chatId);
+    if (removeError case final message?) {
+      return ChatsApiFailure(message: message, statusCode: 503);
+    }
     return const ChatsApiOk<void>(null);
   }
 }

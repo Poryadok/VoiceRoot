@@ -5,6 +5,7 @@ import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/chat_providers.dart';
+import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
@@ -46,9 +47,13 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
     final error = await ref.read(folderActionsProvider).createFolder(name);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(AppLocalizations.of(context)!),
+          ),
+        ),
+      );
       return;
     }
     _createController.clear();
@@ -64,9 +69,13 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
         .updateFolder(folderId: folderId, name: name);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            commonActionErrorMessage(AppLocalizations.of(context)!),
+          ),
+        ),
+      );
       return;
     }
     setState(() {
@@ -101,7 +110,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
     if (error != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
     } else {
       setState(() {});
     }
@@ -126,7 +135,7 @@ class _ManageFoldersSheetState extends ConsumerState<ManageFoldersSheet> {
     if (error != null && error != kChatActionStaleContext) {
       final message = error == kFolderReorderMayBePartial
           ? AppLocalizations.of(context)!.chatFolderReorderMayBePartial
-          : error;
+          : commonActionErrorMessage(AppLocalizations.of(context)!);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));

@@ -60,16 +60,21 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
     final l10n = AppLocalizations.of(context)!;
-    final err = await ref.read(chatActionsProvider).createGroupWithMembers(
-      name: _nameController.text.trim(),
-      memberProfileIds: _selected.toList(growable: false),
-    );
+    final err = await ref
+        .read(chatActionsProvider)
+        .createGroupWithMembers(
+          name: _nameController.text.trim(),
+          memberProfileIds: _selected.toList(growable: false),
+        );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.chatCreateGroupError(err))),
-      );
+      final errorMessage = err == 'not_authenticated'
+          ? l10n.chatCreateGroupError(err)
+          : commonActionErrorMessage(l10n);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
       return;
     }
     Navigator.of(context).pop();
@@ -102,7 +107,10 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
-            Text(l10n.chatCreateGroupMembers, style: theme.textTheme.titleSmall),
+            Text(
+              l10n.chatCreateGroupMembers,
+              style: theme.textTheme.titleSmall,
+            ),
             const SizedBox(height: 4),
             Text(
               l10n.chatCreateGroupMembersHint,
@@ -131,12 +139,12 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                     itemCount: ids.length,
                     itemBuilder: (context, index) {
                       final profileId = ids[index];
-                      final profileAsync = ref.watch(profileProvider(profileId));
+                      final profileAsync = ref.watch(
+                        profileProvider(profileId),
+                      );
                       final profile = profileAsync.valueOrNull;
                       final label =
-                          profile?.displayName ??
-                          profile?.handle ??
-                          profileId;
+                          profile?.displayName ?? profile?.handle ?? profileId;
                       final selected = _selected.contains(profileId);
                       return CheckboxListTile(
                         key: CreateGroupSheet.memberTileKey(profileId),
