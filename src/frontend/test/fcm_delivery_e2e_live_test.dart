@@ -23,10 +23,21 @@ void main() {
     final b = await ctx.registerUser('fcm-del-b');
     final notifications = VoiceNotificationsClient(gateway: ctx.gatewayHttp());
 
-    await notifications.registerDevice(
+    final registration = await notifications.registerDevice(
       authorization: b.authorizationHeader,
       platform: 'web',
       token: 'qa-fcm-delivery-${b.activeProfileId}',
+    );
+    if (registration case NotificationsApiFailure(:final statusCode)) {
+      fail('synthetic FCM device registration failed with HTTP ${statusCode ?? 0}');
+    }
+
+    final recorderEndpoint = Uri.parse('${notificationDebugBase()}/debug/recorded-pushes');
+    final routeProbe = await http.get(recorderEndpoint);
+    expect(
+      routeProbe.statusCode,
+      400,
+      reason: 'expected enabled debug recorder route (HTTP ${routeProbe.statusCode})',
     );
 
     final dm = await ctx.chatsClient().createDm(
@@ -43,20 +54,26 @@ void main() {
     );
     expect(send, isA<MessagesApiOk<VoiceMessage>>());
 
-    final uri = Uri.parse(
-      '${notificationDebugBase()}/debug/recorded-pushes?profile_id=${b.activeProfileId}',
+    final uri = recorderEndpoint.replace(
+      queryParameters: {'profile_id': b.activeProfileId},
     );
     RecordedPush? recorded;
+    int? lastStatusCode;
     for (var i = 0; i < 20; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       final resp = await http.get(uri);
+      lastStatusCode = resp.statusCode;
       if (resp.statusCode == 200) {
         final map = jsonDecode(resp.body) as Map<String, dynamic>;
         recorded = RecordedPush.fromJson(map);
         break;
       }
     }
-    expect(recorded, isNotNull);
+    expect(
+      recorded,
+      isNotNull,
+      reason: 'no recorded push; final recorder HTTP status was $lastStatusCode',
+    );
     expect(recorded!.body, isNotEmpty);
   }, skip: runLiveIntegration ? null : 'opt-in live');
 }
