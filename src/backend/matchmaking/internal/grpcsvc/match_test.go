@@ -2,6 +2,9 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -12,15 +15,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/matchmaking/internal/config"
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
+	"voice/backend/matchmaking/internal/squad"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/principal"
 
+	callsv1 "voice.app/voice/calls/v1"
+	chatv1 "voice.app/voice/chat/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
@@ -57,6 +67,61 @@ func (s *stubSquadProvisioner) Provision(_ context.Context, _ uuid.UUID, _ []uui
 	return s.voiceRoomID, s.chatID, nil
 }
 
+type testMatchSquadChatClient struct {
+	chatv1.MatchSquadChatServiceClient
+}
+
+func (testMatchSquadChatClient) CreateMatchSquadChat(_ context.Context, req *chatv1.CreateMatchSquadChatRequest, _ ...grpc.CallOption) (*chatv1.CreateMatchSquadChatResponse, error) {
+	requestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	requestHash := sha256.Sum256(requestBytes)
+	return &chatv1.CreateMatchSquadChatResponse{Receipt: &chatv1.MatchSquadChatReceipt{
+		ProtocolVersion: 1, ReceiptId: uuid.NewString(), OperationId: req.GetOperationId(), MatchId: req.GetMatchId(),
+		ChatId: uuid.NewString(), ParticipantManifestSha256: append([]byte(nil), req.GetParticipantManifestSha256()...),
+		RequestSha256: requestHash[:], CreatedAt: timestamppb.Now(),
+	}}, nil
+}
+
+type testMatchSquadVoiceClient struct {
+	callsv1.MatchSquadVoiceServiceClient
+}
+
+func (testMatchSquadVoiceClient) CreateMatchSquadRoom(_ context.Context, req *callsv1.CreateMatchSquadRoomRequest, _ ...grpc.CallOption) (*callsv1.CreateMatchSquadRoomResponse, error) {
+	requestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	requestHash := sha256.Sum256(requestBytes)
+	chatReceiptBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(req.GetChatCreationReceipt())
+	if err != nil {
+		return nil, err
+	}
+	chatReceiptHash := sha256.Sum256(chatReceiptBytes)
+	return &callsv1.CreateMatchSquadRoomResponse{Receipt: &callsv1.MatchSquadRoomReceipt{
+		ProtocolVersion: 1, ReceiptId: uuid.NewString(), OperationId: req.GetOperationId(), MatchId: req.GetMatchId(),
+		RoomId: uuid.NewString(), ChatId: req.GetChatCreationReceipt().GetChatId(),
+		ChatCreationReceiptId: req.GetChatCreationReceipt().GetReceiptId(), ChatCreationReceiptSha256: chatReceiptHash[:],
+		ParticipantManifestSha256: append([]byte(nil), req.GetParticipantManifestSha256()...), RequestSha256: requestHash[:],
+		CreatedAt: timestamppb.Now(),
+	}}, nil
+}
+
+func newTestProtectedProvisioner(t *testing.T, pool *pgxpool.Pool) *squad.MatchSquadProviderWorker {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "matchmaking", KeyID: "test", PrivateKey: key})
+	require.NoError(t, err)
+	return &squad.MatchSquadProviderWorker{
+		Store:  &store.MatchStore{Pool: pool},
+		Chat:   testMatchSquadChatClient{},
+		Voice:  testMatchSquadVoiceClient{},
+		Issuer: issuer,
+	}
+}
+
 type errSquadProvisioner struct{ err error }
 
 func (s errSquadProvisioner) Provision(context.Context, uuid.UUID, []uuid.UUID) (string, string, error) {
@@ -65,6 +130,9 @@ func (s errSquadProvisioner) Provision(context.Context, uuid.UUID, []uuid.UUID) 
 
 func matchTestServer(t *testing.T, pool *pgxpool.Pool, provisioner squadProvisioner) *MatchmakingGRPC {
 	t.Helper()
+	if _, ok := provisioner.(*stubSquadProvisioner); ok {
+		provisioner = newTestProtectedProvisioner(t, pool)
+	}
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() {

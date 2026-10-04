@@ -186,10 +186,10 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	require.Equal(t, MatchStatusActive, active.Status)
 	require.Equal(t, chatID.String(), *active.ChatID)
 	require.Equal(t, roomID.String(), *active.VoiceRoomID)
-	replayed, err = matches.ActivateProvisionedMatch(ctx, intent.MatchID)
+	replayedActive, err := matches.ActivateProvisionedMatch(ctx, intent.MatchID)
 	require.NoError(t, err)
-	require.Equal(t, active.ChatID, replayed.ChatID)
-	require.Equal(t, active.VoiceRoomID, replayed.VoiceRoomID)
+	require.Equal(t, active.ChatID, replayedActive.ChatID)
+	require.Equal(t, active.VoiceRoomID, replayedActive.VoiceRoomID)
 	for _, sessionID := range []uuid.UUID{searchA.ID, searchB.ID} {
 		var sessionStatus string
 		require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM search_sessions WHERE id=$1`, sessionID).Scan(&sessionStatus))
@@ -228,11 +228,11 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	require.NoError(t, proto.Unmarshal(chatTeardownBytes, &chatTeardown))
 	var voiceTeardown callsv1.TeardownMatchSquadRoomRequest
 	require.NoError(t, proto.Unmarshal(voiceTeardownBytes, &voiceTeardown))
-	participants, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	teardownParticipants, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
 	require.NoError(t, err)
-	require.Len(t, participants, 2, "Chat and Voice provider work has independent durable rows")
+	require.Len(t, teardownParticipants, 2, "Chat and Voice provider work has independent durable rows")
 	participantByProvider := map[string]MatchSquadTeardownParticipant{}
-	for _, participant := range participants {
+	for _, participant := range teardownParticipants {
 		participantByProvider[participant.Provider] = participant
 		require.Equal(t, aggregateID, participant.AggregateID)
 		require.Equal(t, "NOT_STARTED", participant.State)

@@ -23,6 +23,12 @@ type SquadProvisioner interface {
 	Provision(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (voiceRoomID, chatID string, err error)
 }
 
+// ActivatedSquadProvisioner owns the durable receipt-gated activation
+// transaction, so the request handler must not activate the same match again.
+type ActivatedSquadProvisioner interface {
+	ProvisionAndActivate(ctx context.Context, matchID uuid.UUID, profileIDs []uuid.UUID) (store.Match, error)
+}
+
 // SquadCleanup releases temporary squad resources after a match's durable
 // active-to-completed transition. It is intentionally an internal provider
 // seam: A2 roster/session events and concrete Chat/Voice cleanup wiring remain
@@ -195,6 +201,23 @@ func (s *MatchmakingGRPC) RespondToMatch(ctx context.Context, req *matchmakingv1
 	}
 
 	profileIDs := match.ProfileIDs()
+	if s.Squad == nil {
+		return nil, status.Error(codes.Unavailable, "MatchSquad provisioning is not configured")
+	}
+	if provisioner, ok := s.Squad.(ActivatedSquadProvisioner); ok {
+		match, err = provisioner.ProvisionAndActivate(ctx, matchID, profileIDs)
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "squad provisioning unavailable: %v", err)
+		}
+		sess, err := s.Sessions.Get(ctx, proposal.SearchSessionID)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "get session: %v", err)
+		}
+		return &matchmakingv1.RespondToMatchResponse{
+			Match:         toProtoMatch(match),
+			SearchSession: toProtoSession(sess),
+		}, nil
+	}
 	var voiceRoomID, chatID string
 	if s.Squad != nil {
 		voiceRoomID, chatID, err = s.Squad.Provision(ctx, matchID, profileIDs)

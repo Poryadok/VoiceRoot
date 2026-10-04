@@ -16,7 +16,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
 )
