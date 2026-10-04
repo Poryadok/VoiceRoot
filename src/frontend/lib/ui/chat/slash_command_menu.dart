@@ -53,9 +53,7 @@ class SlashCommandMenuSheet extends ConsumerWidget {
             ),
             error: (error, _) => VoiceStatePanel(
               title: l10n.slashCommandsTitle,
-              message: error is BotsCommandsLoadException
-                  ? error.message
-                  : l10n.slashCommandsLoadError,
+              message: l10n.slashCommandsLoadError,
               icon: Icons.cloud_off_outlined,
               actionLabel: l10n.commonRetry,
               onAction: () =>
