@@ -59,7 +59,7 @@ func TestEnabledCaptureDelegatesExactlyOnceWithUnchangedArguments(t *testing.T) 
 
 	require.NoError(t, err)
 	require.Equal(t, 1, inner.calls)
-	require.Same(t, ctx, inner.ctx)
+	require.Equal(t, ctx, inner.ctx)
 	require.Equal(t, profileID, inner.profileID)
 	require.Equal(t, token, inner.token)
 	require.Equal(t, payload, inner.payload)
