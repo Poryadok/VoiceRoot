@@ -156,6 +156,111 @@ void main() {
     expect(find.text('Could not load profile'), findsNothing);
   });
 
+  testWidgets('opening a DM hides upstream details and keeps profile open', (
+    tester,
+  ) async {
+    const diagnostic = 'dm-private-diagnostic';
+    final dmRequests = <http.Request>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.url.path == '/api/v1/users/profiles/p-dm') {
+                return http.Response(
+                  jsonEncode({
+                    'profile': {
+                      'id': 'p-dm',
+                      'account_id': 'a-dm',
+                      'username': 'dm-target',
+                      'discriminator': '0001',
+                      'display_name': 'DM Target',
+                      'locale': 'en',
+                      'theme': 'dark',
+                      'is_primary': true,
+                      'verification_type': 'none',
+                    },
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/users/profiles/p-dm/presence') {
+                return http.Response(
+                  jsonEncode({
+                    'presenceStatus': {'profileId': 'p-dm', 'status': 'online'},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends/requests') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_request_list': {'incoming': [], 'outgoing': []},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/friends') {
+                return http.Response(
+                  jsonEncode({
+                    'friend_list': {'profile_ids': <String>[]},
+                  }),
+                  200,
+                );
+              }
+              if (req.url.path == '/api/v1/chats/dm' && req.method == 'POST') {
+                dmRequests.add(req);
+                return http.Response(
+                  jsonEncode({'error': 'internal', 'message': diagnostic}),
+                  500,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: ProfileDetailSheet(profileId: 'p-dm')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ProfileDetailSheet.messageKey));
+    await tester.pumpAndSettle();
+
+    expect(dmRequests, hasLength(1));
+    expect(dmRequests.single.method, 'POST');
+    expect(dmRequests.single.url.path, '/api/v1/chats/dm');
+    expect(
+      (jsonDecode(dmRequests.single.body)
+          as Map<String, dynamic>)['other_profile_id'],
+      'p-dm',
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(ProfileDetailSheet.sheetKey)),
+    )!;
+    expect(find.text(l10n.commonActionFailed), findsOneWidget);
+    expect(find.textContaining(diagnostic), findsNothing);
+    expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+  });
+
   testWidgets('friend action failure hides upstream details', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
