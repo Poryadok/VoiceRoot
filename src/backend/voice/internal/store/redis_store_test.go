@@ -85,6 +85,8 @@ func TestRedisCallStore_MatchSquadLastLeaveRemainsProjectionAndOrdinaryLastLeave
 	ended, err := store.RemoveParticipant(ctx, ordinary.RoomID, "ordinary-member")
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ENDED, ended.Status, "ordinary empty groups keep existing terminal behavior")
+	_, err = store.GetActiveGroupCallForChat(ctx, ordinary.ChatID)
+	require.ErrorIs(t, err, ErrNotFound, "ordinary empty groups are no longer discoverable")
 	_, err = client.Get(ctx, store.activeChatKey(ordinary.ChatID)).Result()
 	require.ErrorIs(t, err, redis.Nil)
 
