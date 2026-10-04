@@ -437,6 +437,9 @@ marker_state() {
   local marker
   if marker="$(read_optional configmap voice-nats-generation)"; then
     check_identity "$marker" ConfigMap voice-nats-generation
+    if jq -e '.data | has("dataPVC")' <<<"$marker" >/dev/null; then
+      fail 'independent data PVC requires the data-reset recovery workflow'
+    fi
     MARKER_PHASE="$(jq -er '.data.phase' <<<"$marker")" || fail 'invalid generation marker phase'
     MARKER_GENERATION="$(jq -er '.data.generation' <<<"$marker")" || fail 'invalid generation marker generation'
     MARKER_PREVIOUS="$(jq -er '.data.previousGeneration' <<<"$marker")" || fail 'invalid generation marker previous generation'
@@ -563,6 +566,10 @@ recover_legacy() {
     .metadata.resourceVersion == $rv and .data.phase == "rotating" and
     .data.generation == $target and .data.previousGeneration == "legacy"
   ' <<<"$marker" >/dev/null || fail 'generation marker changed during recovery preflight'
+
+  # Claim the exact observed marker before any recovery workload mutation.
+  # Identity fields alone do not fence a concurrent independent-data reset.
+  set_marker rotating "$target" legacy
 
   if [[ "$resume_finalize" == true ]]; then
     wait_for_restored_user_pod || fail 'restored User Pod did not settle before legacy marker finalization'
@@ -837,8 +844,10 @@ EOF
   else
     # Compare-and-swap the state observed by this process. A concurrent
     # operator cannot silently overwrite an activation or rollback marker.
-    patch="$(jq -cn --arg oldPhase "$MARKER_PHASE" --arg oldGen "$MARKER_GENERATION" --arg oldPrev "$MARKER_PREVIOUS" --arg phase "$phase" --arg gen "$generation" --arg prev "$previous" '
-      [{op:"test",path:"/data/phase",value:$oldPhase},
+    [[ "$MARKER_RESOURCE_VERSION" =~ ^[0-9]+$ ]] || fail 'generation marker has no resourceVersion'
+    patch="$(jq -cn --arg version "$MARKER_RESOURCE_VERSION" --arg oldPhase "$MARKER_PHASE" --arg oldGen "$MARKER_GENERATION" --arg oldPrev "$MARKER_PREVIOUS" --arg phase "$phase" --arg gen "$generation" --arg prev "$previous" '
+      [{op:"test",path:"/metadata/resourceVersion",value:$version},
+       {op:"test",path:"/data/phase",value:$oldPhase},
        {op:"test",path:"/data/generation",value:$oldGen},
        {op:"test",path:"/data/previousGeneration",value:$oldPrev},
        {op:"replace",path:"/data/phase",value:$phase},
@@ -847,9 +856,9 @@ EOF
     ')" || fail 'cannot prepare generation marker transition'
     kubectl patch configmap voice-nats-generation -n "$NS" --type=json -p "$patch" >/dev/null || fail 'generation marker changed concurrently'
   fi
-  MARKER_PHASE="$phase"
-  MARKER_GENERATION="$generation"
-  MARKER_PREVIOUS="$previous"
+  marker_state
+  [[ "$MARKER_PHASE" == "$phase" && "$MARKER_GENERATION" == "$generation" && "$MARKER_PREVIOUS" == "$previous" ]] ||
+    fail 'generation marker changed after transition'
 }
 
 render_job() {
@@ -942,6 +951,7 @@ continue_activation() {
   check_source_pvc "$target_pvc" "$(ref voice-nats-jsdata "$target")" "$class" "$size"
   check_recoverable_workloads "$source" "$target"
   prepare_realtime_image
+  set_marker rotating "$target" "$source"
   recover_proof_resources "$target"
   preflight_proof_resources "$PROOF_NAME" "$target" "$proof_credential"
 
@@ -1023,7 +1033,6 @@ main() {
       valid_generation "$target" || fail 'legacy generation has no root rotation to roll back'
       [[ "$source" == legacy ]] || valid_generation "$source" || fail 'invalid retained generation'
       [[ "$source" != "$target" ]] || fail 'rollback would be a no-op'
-      recover_proof_resources "$target"
       check_selector
       check_no_second_hub
       check_secret_set "$source" source
@@ -1043,6 +1052,7 @@ main() {
       done
       prepare_realtime_image
       set_marker rotating "$target" "$source"
+      recover_proof_resources "$target"
       stop_leaves
       stop_hub
       patch_hub "$source"

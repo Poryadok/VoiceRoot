@@ -1,0 +1,86 @@
+name: NATS known baseline backup
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/staging/nats-known-baseline/**'
+      - 'scripts/staging/nats-generation.sh'
+      - 'scripts/staging/nats-*-contract_test.sh'
+      - 'scripts/staging/rotate-nats-root.sh'
+      - 'deploy/nats/acl-intent.yaml'
+      - '.github/workflows/nats-known-baseline.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/staging/nats-known-baseline/**'
+      - 'scripts/staging/nats-generation.sh'
+      - 'scripts/staging/nats-*-contract_test.sh'
+      - 'scripts/staging/rotate-nats-root.sh'
+      - 'deploy/nats/acl-intent.yaml'
+      - '.github/workflows/nats-known-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-known-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.2'
+          cache-dependency-path: scripts/staging/nats-known-baseline/go.sum
+      - name: Fetch public Go modules for network-isolated checks
+        working-directory: scripts/staging/nats-known-baseline
+        run: go mod download
+      - name: Linux unit and safety contracts
+        run: |
+          helper="$GITHUB_WORKSPACE/scripts/staging/nats-known-baseline"
+          docker run --rm --network none \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/work,readonly \
+            --mount type=bind,source="$(go env GOPATH)/pkg/mod",target=/go/pkg/mod,readonly \
+            -w /work/scripts/staging/nats-known-baseline \
+            -e GOPROXY=off -e GOSUMDB=off -e GOTOOLCHAIN=local \
+            golang:1.26-bookworm go test -count=1 -timeout=90s ./...
+          docker run --rm --network none \
+            --mount type=bind,source="$helper",target=/work,readonly -w /work \
+            python:3.12-slim@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016 \
+            python -m unittest controller_test commands_test docker_runtime_test root_main_test stage_runtime_test launcher_test
+      - name: Owned Docker nonempty fixture and actual zero baseline restore
+        run: |
+          # This daemon and all signing inputs belong solely to this hosted VM.
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          volume=voice-known-test-20261004
+          if docker volume inspect "$volume" >/dev/null 2>&1; then exit 1; fi
+          docker volume create "$volume" >/dev/null
+          trap 'docker volume rm "$volume" >/dev/null' EXIT
+          root="/var/lib/docker/volumes/$volume/_data"
+          helper="$GITHUB_WORKSPACE/scripts/staging/nats-known-baseline"
+          docker pull nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
+          docker run --rm --network none \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/work,readonly \
+            --mount type=bind,source="$(go env GOPATH)/pkg/mod",target=/go/pkg/mod,readonly \
+            --mount type=volume,source="$volume",target="$root" \
+            -w /work/scripts/staging/nats-known-baseline \
+            -e GOPROXY=off -e GOSUMDB=off -e GOTOOLCHAIN=local \
+            -e KNOWN_NATS_TEST_INPUTS="$root" golang:1.26-bookworm \
+            go test -tags=linuxintegration -run '^TestDockerFixtureInputs$' -count=1 .
+          docker run --rm --network none \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/work,readonly \
+            --mount type=bind,source="$(go env GOPATH)/pkg/mod",target=/go/pkg/mod,readonly \
+            --mount type=volume,source="$volume",target=/owned \
+            -w /work/scripts/staging/nats-known-baseline \
+            -e GOPROXY=off -e GOSUMDB=off -e GOTOOLCHAIN=local -e CGO_ENABLED=0 \
+            golang:1.26-bookworm go build -trimpath -o /owned/kernel .
+          docker build -t voice-known-baseline-ci -f "$helper/integration.Dockerfile" "$helper"
+          docker run --rm --network none \
+            --mount type=bind,source="$helper",target=/work,readonly -w /work \
+            --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+            --mount type=volume,source="$volume",target="$root" \
+            voice-known-baseline-ci python docker_integration.py

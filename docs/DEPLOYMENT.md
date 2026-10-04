@@ -754,6 +754,22 @@ state-preserving migration of the eight existing stream messages before
 cutover. Do not silently increase the limit, discard consumer state, or start
 the JWT hub on empty storage during an ordinary migration.
 
+The explicitly authorized staging-only **known-baseline NATS data reset**
+replaces the earlier historical-preservation criterion for that new scenario;
+it does not claim the original 566-consumer/eight-message preservation passed.
+Only NATS data is reset. Existing operator/account identities, credential Secret
+references, TLS, Service/DNS and all non-NATS databases, Redis and files remain.
+Retain previous NATS PVCs; use a fresh clean NATS PVC instead of purging them.
+An optional `dataPVC` field in `voice-nats-generation` selects independent data
+storage while `generation` still selects credential identities. The field must
+match `voice-nats-jsdata-dYYYYMMDD` followed by at most eight lowercase letters
+or digits. Ordinary manifest rendering preserves this selection; an absent field
+retains the earlier identity-bound PVC behavior. Every non-`active` phase blocks
+ordinary deployment. Never set this marker by hand to bypass maintenance guards.
+The reset operation requires a separately reviewed fenced procedure and known
+record/config/consumer-state backup restored into an owned isolated broker.
+Broker backup success does not attest current service ACLs or business replay.
+
 For the explicitly authorized staging-only **NATS root rotation**, the owner
 accepts an outage and loss of staging NATS streams, consumers, and messages.
 That maintenance operation must leave the namespace and all non-NATS resources
