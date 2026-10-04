@@ -125,6 +125,64 @@ class ResumeGuardTests(unittest.TestCase):
             shared.assert_called_once_with(base,{})
             prepared.assert_not_called()
 
+    def test_baseline_recovery_routes_same_operation_without_prepare_or_allocation(self):
+        with tempfile.TemporaryDirectory() as d,patch('root_main.ROOT',Path(d)):
+            base=Path(d)/'known-baseline-0049430b0dbb'
+            with patch('root_main.continue_staging_baseline',return_value=(base,{})) as continued,patch('root_main.share_checkpoint') as shared,patch('root_main.prepare') as prepared:
+                root_main.main_unlocked(['--continue-staging-baseline',str(base)])
+            continued.assert_called_once();shared.assert_called_once_with(base,{})
+            prepared.assert_not_called()
+
+    def test_baseline_recovery_container_present_does_not_rewrite_checkpoint(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,base,code,state=self.continuation_fixture(d)
+            before=(base/'checkpoint.json').read_bytes()
+            with patch('root_main.continuation_preflight',return_value=(state,{},unittest.mock.Mock())),patch('root_main.DockerRuntime') as runtime:
+                runtime.return_value.no_operation_containers.side_effect=Blocked('operation_container_writer_present')
+                with self.assertRaisesRegex(Blocked,'operation_container_writer_present'):root_main.continue_staging_baseline(code,base)
+                runtime.return_value.allow_existing_store.assert_not_called()
+            self.assertEqual((base/'checkpoint.json').read_bytes(),before)
+
+    def test_baseline_recovery_preserves_existing_store_and_creation_cut(self):
+        with tempfile.TemporaryDirectory() as d:
+            root,base,code,state=self.continuation_fixture(d)
+            store=base/'existing-store';store.mkdir();(store/'block').write_bytes(b'existing')
+            stage=unittest.mock.Mock(final_path=store,marker=state['marker'],snapshots=state['snapshots'])
+            runtime=unittest.mock.Mock(owned=[])
+            created=state['created_at'];current={'schema':'known-nats-code-capture-v1','files':{}}
+            def recover(rt,path,manifest,guard):
+                self.assertEqual(path,store);guard();return {'messages':0,'streams':15,'consumers':42}
+            with patch('root_main.continuation_preflight',return_value=(state,current,stage)) as preflight,patch('root_main.DockerRuntime',return_value=runtime),patch('root_main.revalidate_inputs'),patch('root_main.recover_staging_baseline',side_effect=recover):
+                result_base,result=root_main.continue_staging_baseline(code,base)
+            preflight.assert_called_once_with(code,base,baseline=True)
+            self.assertEqual(result_base,base);self.assertEqual(result['created_at'],created)
+            self.assertEqual(result['status'],'AWAITING_OFF_NODE_COPY')
+            self.assertEqual(result['fixture_backup'],state['fixture_backup'])
+            self.assertEqual((store/'block').read_bytes(),b'existing')
+            runtime.allow_existing_store.assert_called_once_with(store)
+            runtime.no_operation_containers.assert_any_call(running_only=True)
+            stage.new_claim.assert_not_called();stage.restart.assert_not_called();stage.select_claim.assert_called_once()
+            self.assertTrue(any(r['kind']=='baseline_recovery_custody_revalidated' for r in result['journal']))
+
+    def test_baseline_recovery_invalid_checkpoint_never_opens_kubernetes(self):
+        for mutation in ('wrong-phase','wrong-code','expired-recovery-window','wrong-archive'):
+            with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as d:
+                root,base,code,state=self.continuation_fixture(d)
+                state.update(phase='STAGING_BACKUP_RESTORE',error='root_operation_phase_failed',fence_status='VERIFIED')
+                current=json.loads((code/'capture-manifest.json').read_text())
+                current['files'].update({'docker_runtime.py':'new-runtime','scenario.py':'new-scenario'})
+                (code/'capture-manifest.json').write_text(json.dumps(current))
+                state['code_capture']=copy.deepcopy(current)
+                state['code_capture']['files'].update({'root_main.py':'28ee5551af7d4a2d9037977f1d6866cf64c682dcbe48932459724d65b507e12f','docker_runtime.py':'c5bd8a4adf22b3dabb7d8d2b7a1c2f88185974e2b532804fb8131cdd10d4e18b','scenario.py':'169a67428404cfb9021415bc4b6c9f9b2da39330a097562b92cf76acec7b75d9'})
+                if mutation=='wrong-phase':state['phase']='FENCE_STAGE'
+                if mutation=='wrong-code':state['code_capture']['files']['kernel']='wrong'
+                if mutation=='expired-recovery-window':state['created_at']=(dt.datetime.now(dt.timezone.utc)-dt.timedelta(hours=25)).isoformat()
+                if mutation=='wrong-archive':(base/'fixture.tar').write_bytes(b'tamper')
+                root_main.save(base/'checkpoint.json',state)
+                with patch('root_main.ROOT',root),patch('root_main.Kube') as kube:
+                    with self.assertRaises(Blocked):root_main.continuation_preflight(code,base,baseline=True)
+                    kube.assert_not_called()
+
     def test_second_operator_never_enters_locked_operation(self):
         with tempfile.TemporaryDirectory() as d,patch('root_main.ROOT',Path(d)):
             with root_main.operation_lock():

@@ -49,6 +49,16 @@ class CaptureTests(unittest.TestCase):
         self.assertNotEqual(result.returncode,0)
         self.assertFalse(self.marker.exists())
 
+    def test_exact_existing_baseline_recovery_reaches_private_code(self):
+        result=self.run_launcher(['--continue-staging-baseline','/var/lib/voice-nats-preservation/known-baseline-0049430b0dbb'])
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertTrue(self.marker.exists())
+
+    def test_other_baseline_recovery_operation_never_executes(self):
+        result=self.run_launcher(['--continue-staging-baseline','/var/lib/voice-nats-preservation/known-baseline-44debe2248bc'])
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(self.marker.exists())
+
     def test_exact_captured_bytes_execute_private_copy(self):
         result=self.run_launcher()
         self.assertEqual(result.returncode,0,result.stderr.decode())

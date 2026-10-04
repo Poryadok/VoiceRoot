@@ -110,3 +110,29 @@ An early failure now prints `KNOWN_NATS_ERROR` as a fixed guard label or
 exception type; it never prints exception messages, command output or private
 values. A failed four-hour eligibility guard still requires reviewed recovery,
 and does not silently renew the captured operation.
+
+The subsequent blocked `STAGING_BACKUP_RESTORE` cut allocated final claim
+`voice-nats-jsdata-d202610040049430b` (UID
+`e319328f-1fb4-4a02-9c95-1dfa1997a668`, PV UID
+`01ef090e-a221-4aa4-9a6d-7f74304cf4c6`). Reconstructed runtimes formerly reused
+`out-5`, colliding with retained fixture evidence. Kernel outputs now use unique
+private directories; previous proof files are preserved.
+
+`--continue-staging-baseline` accepts only that exact operation, allocated
+identities, reviewed previous capture and blocked phase. Its explicit recovery
+window is 24 hours from the original `created_at`, which is preserved. Before
+renewing custody it revalidates inputs, maintenance UID/RV, all workload templates
+and zero replicas, source/final PVs, Pod mounts and absence of owned Docker
+containers. It records a newly observed paused-store inventory and checks it
+again immediately before isolated broker startup. This new cut is not presented
+as a historical inventory or a previously verified staging backup.
+
+Recovery preserves the allocated store and performs no bootstrap, publication,
+consumer delivery or new PVC allocation. It restores the previously hash-bound
+fixture archive into a separate owned broker, reads its canonical configuration
+digests through INFO, and compares the existing final store's complete 15/42
+census and zero message/ACK state against that authority. The actual final-store
+cold archive, separate node copy and isolated restore then pass through the same
+off-node custody checkpoint. Applications remain stopped until the separately
+verified off-node copies and reviewed resume. Failed recovery does not authorize
+repeating an old continuation, deleting the claim or bypassing custody checks.

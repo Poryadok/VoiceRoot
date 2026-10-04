@@ -12,7 +12,8 @@ FILES = {'root_main.py', 'controller.py', 'commands.py', 'docker_runtime.py',
          'kernel', 'capture-manifest.json'}
 try:
     args=sys.argv[1:]
-    continuation=args==['--continue-fence',str(ROOT/'known-baseline-0049430b0dbb')]
+    continuation=args in (['--continue-fence',str(ROOT/'known-baseline-0049430b0dbb')],
+                          ['--continue-staging-baseline',str(ROOT/'known-baseline-0049430b0dbb')])
     if args!=['--prepare'] and not continuation and not (len(args)==4 and args[0]=='--resume') and not (len(args)==2 and args[0] in ('--refresh','--status')):
         raise ValueError('arguments')
     for parent in (pathlib.Path('/var'),pathlib.Path('/var/lib'),ROOT):
