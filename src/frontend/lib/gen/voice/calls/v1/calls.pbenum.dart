@@ -216,5 +216,74 @@ class MatchSquadTeardownStatus extends $pb.ProtobufEnum {
   const MatchSquadTeardownStatus._(super.value, super.name);
 }
 
+class MatchSquadRoomCompactionStatus extends $pb.ProtobufEnum {
+  static const MatchSquadRoomCompactionStatus
+      MATCH_SQUAD_ROOM_COMPACTION_STATUS_UNSPECIFIED =
+      MatchSquadRoomCompactionStatus._(
+          0,
+          _omitEnumNames
+              ? ''
+              : 'MATCH_SQUAD_ROOM_COMPACTION_STATUS_UNSPECIFIED');
+  static const MatchSquadRoomCompactionStatus
+      MATCH_SQUAD_ROOM_COMPACTION_STATUS_COMPACTED =
+      MatchSquadRoomCompactionStatus._(1,
+          _omitEnumNames ? '' : 'MATCH_SQUAD_ROOM_COMPACTION_STATUS_COMPACTED');
+
+  static const $core.List<MatchSquadRoomCompactionStatus> values =
+      <MatchSquadRoomCompactionStatus>[
+    MATCH_SQUAD_ROOM_COMPACTION_STATUS_UNSPECIFIED,
+    MATCH_SQUAD_ROOM_COMPACTION_STATUS_COMPACTED,
+  ];
+
+  static final $core.List<MatchSquadRoomCompactionStatus?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 1);
+  static MatchSquadRoomCompactionStatus? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MatchSquadRoomCompactionStatus._(super.value, super.name);
+}
+
+class MatchSquadMembershipState extends $pb.ProtobufEnum {
+  static const MatchSquadMembershipState
+      MATCH_SQUAD_MEMBERSHIP_STATE_UNSPECIFIED = MatchSquadMembershipState._(
+          0, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_UNSPECIFIED');
+  static const MatchSquadMembershipState MATCH_SQUAD_MEMBERSHIP_STATE_JOINING =
+      MatchSquadMembershipState._(
+          1, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINING');
+  static const MatchSquadMembershipState MATCH_SQUAD_MEMBERSHIP_STATE_JOINED =
+      MatchSquadMembershipState._(
+          2, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_JOINED');
+  static const MatchSquadMembershipState
+      MATCH_SQUAD_MEMBERSHIP_STATE_RECONNECTING = MatchSquadMembershipState._(
+          3, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_RECONNECTING');
+  static const MatchSquadMembershipState MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING =
+      MatchSquadMembershipState._(
+          4, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING');
+  static const MatchSquadMembershipState MATCH_SQUAD_MEMBERSHIP_STATE_LEFT =
+      MatchSquadMembershipState._(
+          5, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_LEFT');
+  static const MatchSquadMembershipState MATCH_SQUAD_MEMBERSHIP_STATE_EJECTED =
+      MatchSquadMembershipState._(
+          6, _omitEnumNames ? '' : 'MATCH_SQUAD_MEMBERSHIP_STATE_EJECTED');
+
+  static const $core.List<MatchSquadMembershipState> values =
+      <MatchSquadMembershipState>[
+    MATCH_SQUAD_MEMBERSHIP_STATE_UNSPECIFIED,
+    MATCH_SQUAD_MEMBERSHIP_STATE_JOINING,
+    MATCH_SQUAD_MEMBERSHIP_STATE_JOINED,
+    MATCH_SQUAD_MEMBERSHIP_STATE_RECONNECTING,
+    MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING,
+    MATCH_SQUAD_MEMBERSHIP_STATE_LEFT,
+    MATCH_SQUAD_MEMBERSHIP_STATE_EJECTED,
+  ];
+
+  static final $core.List<MatchSquadMembershipState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 6);
+  static MatchSquadMembershipState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const MatchSquadMembershipState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
