@@ -3317,7 +3317,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsHelpMatchmakingBody.
   ///
   /// In en, this message translates to:
-  /// **'Find teammates by game and criteria from the matchmaking tab.'**
+  /// **'Use Matchmaking to find teammates by game and criteria.'**
   String get settingsHelpMatchmakingBody;
 
   /// No description provided for @settingsHelpVoiceTitle.
