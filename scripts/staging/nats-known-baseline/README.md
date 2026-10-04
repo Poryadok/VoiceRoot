@@ -73,3 +73,66 @@ same production fixture/zero-baseline cold archive/restore functions with
 disposable test-only JWTs and pinned NATS/NATS-box images. It never accesses
 staging credentials or Kubernetes. Operator delivery requires expert acceptance
 and exact-head scoped CI success; source templates alone are not activation.
+### Interrupted fence verification: operation 0049430b0dbb
+
+The human operation stopped at `FENCE_STAGE` with `command_output_limit` after
+scaling the hub, Gateway and 18 leaves to zero. The old joint Pod/ReplicaSet
+JSON was 3,187,996 bytes, exceeding the unchanged 2 MiB subprocess cap.
+The fixed typed projection reads only kinds, UIDs, owner UIDs and PVC claim
+references (50,731 bytes in the observed namespace); historical templates,
+environment values and annotations are excluded. Row/shape limits fail closed.
+
+`--continue-fence /var/lib/voice-nats-preservation/known-baseline-0049430b0dbb`
+is a narrowly guarded human-root continuation for that exact blocked operation.
+It accepts only the recorded phase/error, the two exact reviewed old code hashes
+with all other module/kernel hashes unchanged, the protected original inputs,
+the verified three-record fixture archive, and the original replica ledger.
+It rechecks mounted Secret/ConfigMap identities, source PVC/PV, maintenance
+UID/resourceVersion/token, templates, zero replicas, controllers and Pod mounts
+before allocating any final claim. The capture must be at most four hours old.
+The process lock still excludes duplicate callers.
+
+Continuation preserves the operation, fixture and maintenance token; it does
+not reseed the fixture or restart applications. It performs the existing final
+zero-message 15-stream/42-durable baseline backup/restore and stops at the same
+off-node copy checkpoint. The previous capture hashes remain in the private
+journal and the new reviewed capture binds subsequent resume/refresh commands.
+Failures remain stopped with `VERIFIED` only after observed refencing, otherwise
+`UNKNOWN`; there is no automatic unfence or generic blocked-operation retry.
+Use only the newly reviewed hash-pinned launcher. This does not make historical
+preservation or the separate ACL proof pass.
+
+The observed source PV uses `spec.local.path`, not `spec.hostPath.path`.
+The shared selector accepts exactly one of these forms, bound to the exact
+claim/PV identities, canonical local-path directory and single `pmdebook`
+hostname affinity. Final storage verification also preserves the selected kind.
+An early failure now prints `KNOWN_NATS_ERROR` as a fixed guard label or
+exception type; it never prints exception messages, command output or private
+values. A failed four-hour eligibility guard still requires reviewed recovery,
+and does not silently renew the captured operation.
+
+The subsequent blocked `STAGING_BACKUP_RESTORE` cut allocated final claim
+`voice-nats-jsdata-d202610040049430b` (UID
+`e319328f-1fb4-4a02-9c95-1dfa1997a668`, PV UID
+`01ef090e-a221-4aa4-9a6d-7f74304cf4c6`). Reconstructed runtimes formerly reused
+`out-5`, colliding with retained fixture evidence. Kernel outputs now use unique
+private directories; previous proof files are preserved.
+
+`--continue-staging-baseline` accepts only that exact operation, allocated
+identities, reviewed previous capture and blocked phase. Its explicit recovery
+window is 24 hours from the original `created_at`, which is preserved. Before
+renewing custody it revalidates inputs, maintenance UID/RV, all workload templates
+and zero replicas, source/final PVs, Pod mounts and absence of owned Docker
+containers. It records a newly observed paused-store inventory and checks it
+again immediately before isolated broker startup. This new cut is not presented
+as a historical inventory or a previously verified staging backup.
+
+Recovery preserves the allocated store and performs no bootstrap, publication,
+consumer delivery or new PVC allocation. It restores the previously hash-bound
+fixture archive into a separate owned broker, reads its canonical configuration
+digests through INFO, and compares the existing final store's complete 15/42
+census and zero message/ACK state against that authority. The actual final-store
+cold archive, separate node copy and isolated restore then pass through the same
+off-node custody checkpoint. Applications remain stopped until the separately
+verified off-node copies and reviewed resume. Failed recovery does not authorize
+repeating an old continuation, deleting the claim or bypassing custody checks.
