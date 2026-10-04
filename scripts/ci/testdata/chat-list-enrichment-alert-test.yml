@@ -1,0 +1,24 @@
+rule_files:
+  - /rules/alerts-p2.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: no failure growth stays quiet and a recent failure alerts
+    interval: 1m
+    input_series:
+      - series: chat_list_enrichment_failures_total
+        values: "0+0x4 1+0x3"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ChatListEnrichmentFailures
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ChatListEnrichmentFailures
+        exp_alerts:
+          - exp_labels:
+              cluster: voice-staging
+              severity: warning
+            exp_annotations:
+              summary: Chat list enrichment is degrading
+              description: Chat list requests failed to fetch Messaging preview and unread enrichment during the last 5m; Chat continues serving rows without those fields.

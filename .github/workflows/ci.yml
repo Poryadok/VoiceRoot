@@ -180,6 +180,33 @@ jobs:
           fetch-depth: 2
       - name: Validate docker compose file
         run: docker compose config --quiet
+      - name: Validate Prometheus alert rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          rules_dir="$GITHUB_WORKSPACE/deploy/observability/prometheus/rules"
+          full_profile="$GITHUB_WORKSPACE/deploy/observability/profiles/full/prometheus-rules.yaml"
+          scratch="$RUNNER_TEMP/chat-list-alert-rules"
+          mkdir -p "$scratch"
+          {
+            printf 'groups:\n  - name: voice_alerts_p2\n    rules:\n'
+            sed -n '/^      - alert: ChatListEnrichmentFailures$/,/^      - alert:/p' "$rules_dir/alerts-p2.yaml" | sed '$d'
+          } > "$scratch/k3s-chat-alerts.yaml"
+          {
+            printf 'groups:\n  - name: voice_alerts_p2\n    rules:\n'
+            sed -n '/^        - alert: ChatListEnrichmentFailures$/,/^        - alert:/p' "$full_profile" | sed '$d; s/^  //'
+          } > "$scratch/full-profile-chat-alerts.yaml"
+          diff -u "$scratch/k3s-chat-alerts.yaml" "$scratch/full-profile-chat-alerts.yaml"
+          docker run --rm --entrypoint /bin/promtool \
+            --volume "$rules_dir:/rules:ro" \
+            prom/prometheus:v2.54.1 check rules /rules/alerts-p2.yaml
+          docker run --rm --entrypoint /bin/promtool \
+            --volume "$scratch/full-profile-chat-alerts.yaml:/rules/chat-alerts.yaml:ro" \
+            prom/prometheus:v2.54.1 check rules /rules/chat-alerts.yaml
+          docker run --rm --entrypoint /bin/promtool \
+            --volume "$rules_dir:/rules:ro" \
+            --volume "$GITHUB_WORKSPACE/scripts/ci/testdata/chat-list-enrichment-alert-test.yml:/tests/chat-list-enrichment-alert-test.yml:ro" \
+            prom/prometheus:v2.54.1 test rules /tests/chat-list-enrichment-alert-test.yml
       - name: Verify PostgreSQL TCP readiness healthcheck
         run: |
           docker pull postgres:16-alpine

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -222,7 +224,8 @@ func TestListChats_EnrichmentFailureDegrades(t *testing.T) {
 	failing := enricherFunc(func(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]ListChatExtra, error) {
 		return nil, errors.New("messaging unavailable")
 	})
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, failing)
+	failures := prometheus.NewCounter(prometheus.CounterOpts{Name: "test_chat_list_enrichment_failures_total"})
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, failing, withListEnrichmentFailuresCounter(failures))
 	t.Cleanup(cleanup)
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
 	_, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
@@ -236,6 +239,18 @@ func TestListChats_EnrichmentFailureDegrades(t *testing.T) {
 	it := list.GetChatList().GetItems()[0]
 	require.Empty(t, it.GetLastMessagePreview())
 	require.Equal(t, int64(0), it.GetUnreadCount())
+	require.Equal(t, float64(1), listEnrichmentFailureCount(t, failures))
+}
+
+func withListEnrichmentFailuresCounter(counter prometheus.Counter) chatServerOption {
+	return func(s *ChatGRPC) { s.ListEnrichmentFailures = counter }
+}
+
+func listEnrichmentFailureCount(t *testing.T, counter prometheus.Counter) float64 {
+	t.Helper()
+	metric := &dto.Metric{}
+	require.NoError(t, counter.Write(metric))
+	return metric.GetCounter().GetValue()
 }
 
 type enricherFunc func(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]ListChatExtra, error)
@@ -258,7 +273,8 @@ func TestListChats_EnrichmentFromMessagingHook(t *testing.T) {
 	profiles := mapProfileAccounts{profA: accA, profB: accA}
 
 	enrich := make(mapListEnricher)
-	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, enrich)
+	failures := prometheus.NewCounter(prometheus.CounterOpts{Name: "test_chat_list_enrichment_failures_total"})
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, enrich, withListEnrichmentFailuresCounter(failures))
 	t.Cleanup(cleanup)
 	ctxA := withAccountProfileCtx(ctx, accA, profA)
 	r, err := client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
@@ -275,6 +291,35 @@ func TestListChats_EnrichmentFromMessagingHook(t *testing.T) {
 	it := list.GetChatList().GetItems()[0]
 	require.Equal(t, "hello from messaging", it.GetLastMessagePreview())
 	require.Equal(t, int64(4), it.GetUnreadCount())
+	require.Equal(t, float64(0), listEnrichmentFailureCount(t, failures), "successful enrichment must not count as a failure")
+}
+
+func TestListChats_EnrichmentCounterIgnoresNilClientAndEmptyPage(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, pool)
+
+	accA, profA, profB := uuid.New(), uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{profA: accA, profB: accA}
+	failures := prometheus.NewCounter(prometheus.CounterOpts{Name: "test_chat_list_enrichment_failures_total"})
+	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, withListEnrichmentFailuresCounter(failures))
+	t.Cleanup(cleanup)
+	ctxA := withAccountProfileCtx(ctx, accA, profA)
+
+	list, err := client.ListChats(ctxA, &chatv1.ListChatsRequest{Page: &commonv1.CursorPageRequest{PageSize: 10}})
+	require.NoError(t, err)
+	require.Empty(t, list.GetChatList().GetItems())
+	require.Equal(t, float64(0), listEnrichmentFailureCount(t, failures), "empty pages do not call optional enrichment")
+
+	_, err = client.CreateDM(ctxA, &chatv1.CreateDMRequest{OtherProfileId: profB.String()})
+	require.NoError(t, err)
+	list, err = client.ListChats(ctxA, &chatv1.ListChatsRequest{Page: &commonv1.CursorPageRequest{PageSize: 10}})
+	require.NoError(t, err)
+	require.Len(t, list.GetChatList().GetItems(), 1)
+	require.Equal(t, float64(0), listEnrichmentFailureCount(t, failures), "an absent optional enrichment client does not count as a failure")
 }
 
 type recordingMessagingMetadata struct {

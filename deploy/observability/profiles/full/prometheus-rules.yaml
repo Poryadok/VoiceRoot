@@ -187,6 +187,16 @@ spec:
             summary: Space ownership outbox delivery failures persist
             description: One or more Space ownership outbox events have failed delivery at least 10 consecutive times and remain retryable.
 
+        - alert: ChatListEnrichmentFailures
+          expr: increase(chat_list_enrichment_failures_total[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            cluster: voice-staging
+          annotations:
+            summary: Chat list enrichment is degrading
+            description: Chat list requests failed to fetch Messaging preview and unread enrichment during the last 5m; Chat continues serving rows without those fields.
+
         - alert: DiskSpaceLow
           expr: |
             (
