@@ -758,6 +758,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceBotsInstallSuccess => 'Бот установлен.';
 
   @override
+  String get botInstallActionError => 'Не удалось установить бота.';
+
+  @override
   String get spaceBotsUninstallSuccess => 'Бот удалён из спейса.';
 
   @override
@@ -2126,6 +2129,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get securitySessionsRevoked => 'Сессия отозвана';
+
+  @override
+  String get securitySessionRevokeError => 'Не удалось отозвать сессию.';
 
   @override
   String get securitySessionsLoadError => 'Не удалось загрузить сессии';

@@ -133,6 +133,94 @@ void main() {
     expect(revokeCalled, isTrue);
   });
 
+  testWidgets('active-session revoke failure hides upstream details', (
+    tester,
+  ) async {
+    const raw = 'internal trace id=secret-revoke-456';
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((req) async {
+        if (req.method == 'GET' && req.url.path == '/api/v1/auth/sessions') {
+          return http.Response(
+            jsonEncode({
+              'sessions': [
+                {'id': 'sess-current', 'current': true},
+                {'id': 'sess-other', 'current': false},
+              ],
+            }),
+            200,
+          );
+        }
+        if (req.method == 'POST' &&
+            req.url.path == '/api/v1/auth/sessions/sess-other/revoke') {
+          return http.Response(
+            jsonEncode({'error': 'internal_error', 'message': raw}),
+            500,
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+      authorizationProvider: () => 'Bearer token',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          voiceAuthClientProvider.overrideWithValue(
+            VoiceAuthClient(gateway: gateway),
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final controller = AuthController(
+              authClient: ref.watch(voiceAuthClientProvider),
+              storage: ref.watch(authSessionStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
+            );
+            controller.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'token',
+                refreshToken: 'refresh',
+                expiresInSeconds: 900,
+                accountId: 'account-1',
+                activeProfileId: 'profile-primary',
+              ),
+            );
+            return controller;
+          }),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ActiveSessionsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-other')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unable to revoke session.'), findsOneWidget);
+    expect(find.textContaining('secret-revoke-456'), findsNothing);
+    expect(
+      find.byKey(ActiveSessionsScreen.revokeButtonKey('sess-other')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('active-session load failure hides upstream details', (
     tester,
   ) async {

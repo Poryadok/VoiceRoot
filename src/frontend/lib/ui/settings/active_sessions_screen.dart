@@ -86,10 +86,14 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text(l10n.securitySessionsRevoked)));
         await _loadSessions();
-      case AuthApiFailure(:final message):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+      case AuthApiFailure(:final statusCode):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              activeSessionRevokeErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
     }
   }
 

@@ -40,6 +40,23 @@ String activeSessionsLoadErrorMessage(AppLocalizations l10n, Object error) {
   return l10n.securitySessionsLoadError;
 }
 
+String activeSessionRevokeErrorMessage(
+  AppLocalizations l10n, {
+  int? statusCode,
+}) {
+  if (isBackendUnavailable(statusCode)) {
+    return l10n.backendUnavailable;
+  }
+  return l10n.securitySessionRevokeError;
+}
+
+String botInstallActionErrorMessage(AppLocalizations l10n, {int? statusCode}) {
+  if (isBackendUnavailable(statusCode)) {
+    return l10n.backendUnavailable;
+  }
+  return l10n.botInstallActionError;
+}
+
 String socialActionErrorMessage(
   AppLocalizations l10n,
   String message, {
