@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../backend/api_errors.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
@@ -38,6 +39,7 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  int? _errorStatusCode;
 
   @override
   void initState() {
@@ -49,6 +51,7 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorStatusCode = null;
       _matches.clear();
       _nextCursor = null;
     });
@@ -67,7 +70,10 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
     final auth = ref.read(authControllerProvider);
     final token = auth.session?.accessToken;
     if (token == null || token.isEmpty) {
-      setState(() => _error = 'not authenticated');
+      setState(() {
+        _error = 'not authenticated';
+        _errorStatusCode = null;
+      });
       return;
     }
     final client = ref.read(voiceMatchmakingClientProvider);
@@ -82,9 +88,13 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
           _matches.addAll(data.matches);
           _nextCursor = data.nextCursor;
           _error = null;
+          _errorStatusCode = null;
         });
-      case MatchmakingApiFailure(:final message):
-        setState(() => _error = message);
+      case MatchmakingApiFailure(:final statusCode):
+        setState(() {
+          _error = '';
+          _errorStatusCode = statusCode;
+        });
     }
   }
 
@@ -130,15 +140,14 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
     final auth = ref.read(authControllerProvider);
     final token = auth.session?.accessToken;
     if (token == null) return;
-    final result = await ref.read(voiceMatchmakingClientProvider).banFromMM(
-          authorization: 'Bearer $token',
-          targetProfileId: profileId,
-        );
+    final result = await ref
+        .read(voiceMatchmakingClientProvider)
+        .banFromMM(authorization: 'Bearer $token', targetProfileId: profileId);
     if (!mounted) return;
     if (result is MatchmakingApiFailure) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.matchRatingBanError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.matchRatingBanError)));
     }
   }
 
@@ -172,75 +181,79 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
       body: _loading
           ? const VoiceListSkeleton()
           : _error != null && _matches.isEmpty
-              ? VoiceStatePanel(
-                  key: MatchHistoryScreen.errorKey,
-                  title: l10n.matchHistoryLoadError,
-                  message: _error,
-                  icon: Icons.error_outline,
-                  actionLabel: l10n.commonRetry,
-                  onAction: _loadInitial,
-                )
-              : _matches.isEmpty
-                  ? VoiceStatePanel(
-                      key: MatchHistoryScreen.emptyKey,
-                      title: l10n.matchHistoryEmpty,
-                      icon: Icons.sports_esports_outlined,
-                    )
-                  : ListView.builder(
-                      key: MatchHistoryScreen.listKey,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: _matches.length + (_nextCursor != null ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index >= _matches.length) {
-                          return Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Center(
-                              child: _loadingMore
-                                  ? const CircularProgressIndicator()
-                                  : TextButton(
-                                      key: MatchHistoryScreen.loadMoreKey,
-                                      onPressed: _loadMore,
-                                      child: Text(l10n.matchHistoryLoadMore),
-                                    ),
+          ? VoiceStatePanel(
+              key: MatchHistoryScreen.errorKey,
+              title: l10n.matchHistoryLoadError,
+              message: _errorStatusCode == null
+                  ? _error
+                  : isBackendUnavailable(_errorStatusCode)
+                  ? l10n.backendUnavailable
+                  : null,
+              icon: Icons.error_outline,
+              actionLabel: l10n.commonRetry,
+              onAction: _loadInitial,
+            )
+          : _matches.isEmpty
+          ? VoiceStatePanel(
+              key: MatchHistoryScreen.emptyKey,
+              title: l10n.matchHistoryEmpty,
+              icon: Icons.sports_esports_outlined,
+            )
+          : ListView.builder(
+              key: MatchHistoryScreen.listKey,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _matches.length + (_nextCursor != null ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= _matches.length) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: _loadingMore
+                          ? const CircularProgressIndicator()
+                          : TextButton(
+                              key: MatchHistoryScreen.loadMoreKey,
+                              onPressed: _loadMore,
+                              child: Text(l10n.matchHistoryLoadMore),
                             ),
-                          );
-                        }
-                        final match = _matches[index];
-                        return _MatchHistoryTile(
-                          key: MatchHistoryScreen.matchTileKey(match.id),
-                          match: match,
-                          gameName: _gameName(match, catalogAsync.valueOrNull),
-                          statusLabel: _statusLabel(l10n, match.status),
-                          activeProfileId: activeId,
-                          onOpenGame: () {
-                            final catalog = catalogAsync.valueOrNull;
-                            CatalogGame? game;
-                            for (final g in catalog?.games ?? const <CatalogGame>[]) {
-                              if (g.id == match.gameId) {
-                                game = g;
-                                break;
-                              }
-                            }
-                            if (game != null) {
-                              _openGame(game);
-                            }
-                          },
-                          onAddFriend: (profileId) async {
-                            final err = await ref
-                                .read(socialActionsProvider)
-                                .sendFriendInvitation(profileId);
-                            if (!context.mounted) return;
-                            if (err != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(l10n.socialActionError(err))),
-                              );
-                            }
-                          },
-                          onBan: _banParticipant,
-                          onOpenProfile: _openProfile,
-                        );
-                      },
                     ),
+                  );
+                }
+                final match = _matches[index];
+                return _MatchHistoryTile(
+                  key: MatchHistoryScreen.matchTileKey(match.id),
+                  match: match,
+                  gameName: _gameName(match, catalogAsync.valueOrNull),
+                  statusLabel: _statusLabel(l10n, match.status),
+                  activeProfileId: activeId,
+                  onOpenGame: () {
+                    final catalog = catalogAsync.valueOrNull;
+                    CatalogGame? game;
+                    for (final g in catalog?.games ?? const <CatalogGame>[]) {
+                      if (g.id == match.gameId) {
+                        game = g;
+                        break;
+                      }
+                    }
+                    if (game != null) {
+                      _openGame(game);
+                    }
+                  },
+                  onAddFriend: (profileId) async {
+                    final err = await ref
+                        .read(socialActionsProvider)
+                        .sendFriendInvitation(profileId);
+                    if (!context.mounted) return;
+                    if (err != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.socialActionError(err))),
+                      );
+                    }
+                  },
+                  onBan: _banParticipant,
+                  onOpenProfile: _openProfile,
+                );
+              },
+            ),
     );
   }
 }
@@ -344,17 +357,16 @@ class _ParticipantRow extends ConsumerWidget {
         ),
         title: Text('…'),
       ),
-      error: (_, _) => ListTile(
-        dense: true,
-        title: Text(profileId),
-        onTap: onOpenProfile,
-      ),
+      error: (_, _) =>
+          ListTile(dense: true, title: Text(profileId), onTap: onOpenProfile),
       data: (profile) {
         final name = profile?.displayName ?? profileId;
         return ListTile(
           dense: true,
           title: Text(name),
-          subtitle: profile?.username != null ? Text('@${profile!.username}') : null,
+          subtitle: profile?.username != null
+              ? Text('@${profile!.username}')
+              : null,
           onTap: onOpenProfile,
           trailing: isSelf
               ? null
@@ -369,7 +381,10 @@ class _ParticipantRow extends ConsumerWidget {
                     IconButton(
                       key: MatchHistoryScreen.banKey(profileId),
                       tooltip: l10n.matchRatingBanAction,
-                      icon: Icon(Icons.block, color: VoiceColors.of(context).textSecondary),
+                      icon: Icon(
+                        Icons.block,
+                        color: VoiceColors.of(context).textSecondary,
+                      ),
                       onPressed: () => onBan(name),
                     ),
                   ],
