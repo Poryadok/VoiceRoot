@@ -25,7 +25,9 @@ class PasswordResetScreen extends ConsumerStatefulWidget {
   static const Key backButtonKey = Key('password_reset_back');
   static const Key codeFieldKey = Key('password_reset_code');
   static const Key newPasswordFieldKey = Key('password_reset_new_password');
-  static const Key confirmPasswordFieldKey = Key('password_reset_confirm_password');
+  static const Key confirmPasswordFieldKey = Key(
+    'password_reset_confirm_password',
+  );
   static const Key resetButtonKey = Key('password_reset_submit');
 
   @override
@@ -90,11 +92,13 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       case AuthApiFailure(:final errorCode, :final statusCode, :final message):
         setState(() {
           _busy = false;
-          _errorKey = resolveAuthErrorKey(
-            errorCode: errorCode,
-            statusCode: statusCode,
-            message: message,
-          );
+          _errorKey =
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              '';
         });
     }
   }
@@ -116,11 +120,9 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       _errorKey = null;
     });
 
-    final result = await ref.read(voiceAuthClientProvider).resetPassword(
-      email: email,
-      code: code,
-      newPassword: newPassword,
-    );
+    final result = await ref
+        .read(voiceAuthClientProvider)
+        .resetPassword(email: email, code: code, newPassword: newPassword);
 
     if (!mounted) return;
     switch (result) {
@@ -132,11 +134,13 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       case AuthApiFailure(:final errorCode, :final statusCode, :final message):
         setState(() {
           _busy = false;
-          _errorKey = resolveAuthErrorKey(
-            errorCode: errorCode,
-            statusCode: statusCode,
-            message: message,
-          );
+          _errorKey =
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              '';
         });
     }
   }
@@ -176,7 +180,9 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: VoiceLayout.authFormMaxWidth),
+            constraints: const BoxConstraints(
+              maxWidth: VoiceLayout.authFormMaxWidth,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Material(
@@ -231,7 +237,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                           if (_errorKey != null) ...[
                             const SizedBox(height: 12),
                             Text(
-                              authErrorMessage(l10n, _errorKey!),
+                              authFormErrorMessage(l10n, _errorKey!),
                               key: const Key('password_reset_error'),
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.error,
@@ -255,7 +261,9 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                           ),
                         ] else ...[
                           Text(
-                            l10n.passwordResetCodeSent(_emailController.text.trim()),
+                            l10n.passwordResetCodeSent(
+                              _emailController.text.trim(),
+                            ),
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 16),
@@ -296,7 +304,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                           if (_errorKey != null) ...[
                             const SizedBox(height: 12),
                             Text(
-                              authErrorMessage(l10n, _errorKey!),
+                              authFormErrorMessage(l10n, _errorKey!),
                               key: const Key('password_reset_error'),
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.error,
