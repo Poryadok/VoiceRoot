@@ -377,12 +377,17 @@ DM дополнительно применяется account-level block policy:
 
 Ни глобальная сверка inbox, ни догрузка пропущенных **сообщений** не проходят через Realtime: клиент обращается через API Gateway к Chat `ListChats`, затем при необходимости к Messaging Service `GetMessages` (без обязательного gRPC Realtime → Messaging для catch-up).
 
-## Метрики (→ Analytics)
+## Метрики (Prometheus)
 
-- `realtime.connections.active` — текущие WebSocket соединения
-- `realtime.events.delivered` — доставленных событий/сек
-- `realtime.events.fanout_latency` — задержка fan-out (p50/p95)
-- `realtime.reconnects` — количество reconnect
+Сервис регистрирует следующие collectors для `/metrics`. Это инвентарь реализованных метрик, а не утверждение о текущем scrape, dashboard или alert; см. также [контракт observability](../features/observability.md).
+
+| Метрика | Тип | Labels |
+|---|---|---|
+| `realtime_ws_connections_active` | Gauge | — |
+| `realtime_ws_connect_total` | Counter | `code` (`success`, `fail`) |
+| `realtime_ws_hello_duration_seconds` | Histogram | — |
+| `realtime_nats_consume_lag` | Gauge | `stream`, `consumer` |
+| `realtime_ws_fanout_enqueue_total` | Counter | `outcome` (`enqueued`, `dropped`, `disconnect_on_overflow`) |
 
 ## Масштабирование
 
