@@ -36,15 +36,9 @@ class SpaceMembersContent extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showHeader) ...[
-          Text(
-            l10n.spaceMembersTitle,
-            style: theme.textTheme.titleMedium,
-          ),
+          Text(l10n.spaceMembersTitle, style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
-          Text(
-            l10n.spaceMembersSubtitle,
-            style: theme.textTheme.bodySmall,
-          ),
+          Text(l10n.spaceMembersSubtitle, style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
         ],
         Expanded(
@@ -58,7 +52,8 @@ class SpaceMembersContent extends ConsumerWidget {
               onAction: () => ref.invalidate(spaceMembersProvider(spaceId)),
             ),
             data: (members) {
-              final canAssignRole = ref
+              final canAssignRole =
+                  ref
                       .watch(
                         spacePermissionProvider((
                           spaceId: spaceId,
@@ -69,7 +64,8 @@ class SpaceMembersContent extends ConsumerWidget {
                       )
                       .valueOrNull ??
                   false;
-              final canKick = ref
+              final canKick =
+                  ref
                       .watch(
                         spacePermissionProvider((
                           spaceId: spaceId,
@@ -80,7 +76,8 @@ class SpaceMembersContent extends ConsumerWidget {
                       )
                       .valueOrNull ??
                   false;
-              final canBan = ref
+              final canBan =
+                  ref
                       .watch(
                         spacePermissionProvider((
                           spaceId: spaceId,
@@ -91,7 +88,8 @@ class SpaceMembersContent extends ConsumerWidget {
                       )
                       .valueOrNull ??
                   false;
-              final canTimeout = ref
+              final canTimeout =
+                  ref
                       .watch(
                         spacePermissionProvider((
                           spaceId: spaceId,
@@ -116,10 +114,12 @@ class SpaceMembersContent extends ConsumerWidget {
                     canAssignRole: canAssignRole && !member.isOwner,
                     kickKey: SpaceMembersSheet.kickMemberKey(member.profileId),
                     banKey: SpaceMembersSheet.banMemberKey(member.profileId),
-                    timeoutKey:
-                        SpaceMembersSheet.timeoutMemberKey(member.profileId),
-                    assignRoleKey:
-                        SpaceMembersSheet.assignRoleKey(member.profileId),
+                    timeoutKey: SpaceMembersSheet.timeoutMemberKey(
+                      member.profileId,
+                    ),
+                    assignRoleKey: SpaceMembersSheet.assignRoleKey(
+                      member.profileId,
+                    ),
                   );
                 },
               );
@@ -204,8 +204,7 @@ class _MemberTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final profileAsync = ref.watch(profileProvider(member.profileId));
     final profile = profileAsync.valueOrNull;
-    final label =
-        profile?.displayName ?? profile?.handle ?? member.profileId;
+    final label = profile?.displayName ?? profile?.handle ?? member.profileId;
 
     return ListTile(
       leading: VoiceAvatar(
@@ -300,11 +299,13 @@ class _MemberTile extends ConsumerWidget {
       },
     );
     if (confirmed != true || !context.mounted) return;
-    final err = await ref.read(spaceMemberActionsProvider).banMember(
-      spaceId: spaceId,
-      accountId: accountId,
-      profileId: member.profileId,
-    );
+    final err = await ref
+        .read(spaceMemberActionsProvider)
+        .banMember(
+          spaceId: spaceId,
+          accountId: accountId,
+          profileId: member.profileId,
+        );
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -347,11 +348,13 @@ class _MemberTile extends ConsumerWidget {
       },
     );
     if (confirmed != true || !context.mounted) return;
-    final err = await ref.read(spaceMemberActionsProvider).timeoutMember(
-      spaceId: spaceId,
-      profileId: member.profileId,
-      durationSeconds: durationSeconds,
-    );
+    final err = await ref
+        .read(spaceMemberActionsProvider)
+        .timeoutMember(
+          spaceId: spaceId,
+          profileId: member.profileId,
+          durationSeconds: durationSeconds,
+        );
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -393,10 +396,9 @@ class _MemberTile extends ConsumerWidget {
       },
     );
     if (confirmed != true || !context.mounted) return;
-    final err = await ref.read(spaceMemberActionsProvider).kickMember(
-      spaceId: spaceId,
-      profileId: member.profileId,
-    );
+    final err = await ref
+        .read(spaceMemberActionsProvider)
+        .kickMember(spaceId: spaceId, profileId: member.profileId);
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -419,17 +421,19 @@ class _MemberTile extends ConsumerWidget {
         .toList(growable: false);
     if (!context.mounted) return;
     if (assignable.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.spaceAssignRoleEmpty)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.spaceAssignRoleEmpty)));
       return;
     }
 
-    final memberRoles = await ref.read(voiceRolesClientProvider).getMemberRoles(
-      authorization: ref.read(authorizationHeaderProvider)!,
-      spaceId: spaceId,
-      profileId: member.profileId,
-    );
+    final memberRoles = await ref
+        .read(voiceRolesClientProvider)
+        .getMemberRoles(
+          authorization: ref.read(authorizationHeaderProvider)!,
+          spaceId: spaceId,
+          profileId: member.profileId,
+        );
     final assignedIds = switch (memberRoles) {
       RolesApiOk(:final data) => data.map((r) => r.id).toSet(),
       RolesApiFailure() => <String>{},
@@ -447,13 +451,15 @@ class _MemberTile extends ConsumerWidget {
             for (final role in assignable)
               if (!assignedIds.contains(role.id))
                 SimpleDialogOption(
-                  onPressed: () => Navigator.of(ctx).pop((roleId: role.id, revoke: false)),
+                  onPressed: () =>
+                      Navigator.of(ctx).pop((roleId: role.id, revoke: false)),
                   child: Text('${dialogL10n.spaceAssignRole}: ${role.name}'),
                 ),
             for (final role in assignable)
               if (assignedIds.contains(role.id) && role.name != kSpaceRoleOwner)
                 SimpleDialogOption(
-                  onPressed: () => Navigator.of(ctx).pop((roleId: role.id, revoke: true)),
+                  onPressed: () =>
+                      Navigator.of(ctx).pop((roleId: role.id, revoke: true)),
                   child: Text('${dialogL10n.spaceRevokeRole}: ${role.name}'),
                 ),
           ],
@@ -463,27 +469,30 @@ class _MemberTile extends ConsumerWidget {
     if (action == null || !context.mounted) return;
 
     final err = action.revoke
-        ? await ref.read(spaceMemberActionsProvider).revokeRole(
-            spaceId: spaceId,
-            profileId: member.profileId,
-            roleId: action.roleId,
-          )
-        : await ref.read(spaceMemberActionsProvider).assignRole(
-            spaceId: spaceId,
-            profileId: member.profileId,
-            roleId: action.roleId,
-          );
+        ? await ref
+              .read(spaceMemberActionsProvider)
+              .revokeRole(
+                spaceId: spaceId,
+                profileId: member.profileId,
+                roleId: action.roleId,
+              )
+        : await ref
+              .read(spaceMemberActionsProvider)
+              .assignRole(
+                spaceId: spaceId,
+                profileId: member.profileId,
+                roleId: action.roleId,
+              );
     if (!context.mounted) return;
     if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            action.revoke
+      final message = err == 'not_authenticated'
+          ? action.revoke
                 ? l10n.spaceRevokeRoleError(err)
-                : l10n.spaceAssignRoleError(err),
-          ),
-        ),
-      );
+                : l10n.spaceAssignRoleError(err)
+          : commonActionErrorMessage(l10n);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }

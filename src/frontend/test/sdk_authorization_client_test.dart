@@ -28,6 +28,8 @@ void main() {
   var failLinkedResumeOnce = false;
   var failLinkedSigningOnce = false;
   var rejectExchangeOnce = false;
+  int? approvalFailureStatus;
+  String approvalFailureBody = '{"error":"upstream-sensitive-diagnostic"}';
   late SdkAuthorizationClient client;
 
   setUp(() {
@@ -39,6 +41,8 @@ void main() {
     failLinkedResumeOnce = false;
     failLinkedSigningOnce = false;
     rejectExchangeOnce = false;
+    approvalFailureStatus = null;
+    approvalFailureBody = '{"error":"upstream-sensitive-diagnostic"}';
     final httpClient = MockClient((request) async {
       requests.add(request);
       final path = request.url.path;
@@ -75,6 +79,9 @@ void main() {
       if (request.method == 'POST' && path.endsWith('/$requestId/approve')) {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body, {'profileId': profileId, 'policyRevision': 7});
+        if (approvalFailureStatus != null) {
+          return http.Response(approvalFailureBody, approvalFailureStatus!);
+        }
         return http.Response(
           jsonEncode({
             'code': code,
@@ -255,6 +262,90 @@ void main() {
       await expectLater(
         client.acceptCallbackAndResume(Uri.parse(approvalResponse.redirectUri)),
         throwsA(isA<SdkAuthorizationException>()),
+      );
+    },
+  );
+
+  test(
+    'tags local approval error presentation without changing its contract',
+    () async {
+      approvalFailureStatus = 503;
+      await expectLater(
+        client.approveAuthorization(
+          requestId: requestId,
+          voiceAuthorization: voiceBearer,
+          profileId: profileId,
+          policyRevision: 7,
+        ),
+        throwsA(
+          isA<SdkAuthorizationException>()
+              .having(
+                (error) => error.presentation,
+                'presentation',
+                SdkAuthorizationErrorPresentation.temporary,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                'Voice is temporarily unavailable.',
+              )
+              .having((error) => error.canRetryResume, 'canRetryResume', true)
+              .having(
+                (error) =>
+                    error.message.contains('upstream-sensitive-diagnostic'),
+                'does not include upstream response text',
+                isFalse,
+              ),
+        ),
+      );
+
+      approvalFailureStatus = 403;
+      await expectLater(
+        client.approveAuthorization(
+          requestId: requestId,
+          voiceAuthorization: voiceBearer,
+          profileId: profileId,
+          policyRevision: 7,
+        ),
+        throwsA(
+          isA<SdkAuthorizationException>()
+              .having(
+                (error) => error.presentation,
+                'presentation',
+                SdkAuthorizationErrorPresentation.authorizationDenied,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                'The authorization was denied. Start again from the game.',
+              )
+              .having((error) => error.canRetryResume, 'canRetryResume', false),
+        ),
+      );
+
+      approvalFailureStatus = 200;
+      approvalFailureBody = '{"unexpected":"upstream-sensitive-diagnostic"}';
+      await expectLater(
+        client.approveAuthorization(
+          requestId: requestId,
+          voiceAuthorization: voiceBearer,
+          profileId: profileId,
+          policyRevision: 7,
+        ),
+        throwsA(
+          isA<SdkAuthorizationException>()
+              .having(
+                (error) => error.presentation,
+                'presentation',
+                SdkAuthorizationErrorPresentation.invalidResponse,
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                'Auth response missing redirectUri',
+              )
+              .having((error) => error.canRetryResume, 'canRetryResume', false),
+        ),
       );
     },
   );
