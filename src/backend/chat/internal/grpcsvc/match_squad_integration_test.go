@@ -34,7 +34,7 @@ func newMatchSquadCreateRequest(matchID, operationID uuid.UUID, participants ...
 	return request
 }
 
-func newMatchSquadCompactionRequest(matchID, chatID, creationReceiptID, creationRequestHash, teardownOperationID, teardownReceiptID uuid.UUID, manifest, teardownReceiptBytes []byte) *chatv1.CompactMatchSquadChatRequest {
+func newMatchSquadCompactionRequest(matchID, chatID, creationReceiptID uuid.UUID, creationRequestHash []byte, teardownOperationID, teardownReceiptID uuid.UUID, manifest, teardownReceiptBytes []byte) *chatv1.CompactMatchSquadChatRequest {
 	aggregateCompletedAt := time.Date(2040, 1, 2, 3, 4, 5, 123456000, time.UTC)
 	return &chatv1.CompactMatchSquadChatRequest{
 		ProtocolVersion: 1, OperationId: uuid.NewString(), TeardownAggregateId: uuid.NewString(),
