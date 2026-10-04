@@ -664,6 +664,59 @@ void main() {
     expect(find.byKey(SocialPanel.favoritesUnavailableKey), findsNothing);
   });
 
+  testWidgets('favorite failure hides upstream details and rolls back', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 1),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends') {
+            return http.Response(
+              jsonEncode({
+                'friend_list': {
+                  'friends': [
+                    {'profile_id': 'p-favorite'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/favorites' &&
+              req.method == 'GET') {
+            return http.Response(
+              jsonEncode({
+                'friend_list': {'profile_ids': <String>[]},
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/favorites' &&
+              req.method == 'POST') {
+            return http.Response(
+              jsonEncode({
+                'error': 'internal',
+                'message': 'favorite-private-diagnostic',
+              }),
+              500,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.favoriteToggleKey('p-favorite')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('favorite-private-diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.byIcon(Icons.star_border), findsOneWidget);
+  });
+
   testWidgets('incoming request accept calls gateway', (tester) async {
     var accepted = false;
     await tester.pumpWidget(
@@ -785,6 +838,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(unblocked, isTrue);
+  });
+
+  testWidgets('unblock failure hides upstream details', (tester) async {
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 5),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/blocks' && req.method == 'GET') {
+            return http.Response(
+              jsonEncode({
+                'blocked_list': {
+                  'blocked': [
+                    {
+                      'blocked_account_id': 'acc-blocked',
+                      'blocked_profile_id':
+                          '00000000-0000-4000-8000-000000000002',
+                      'display_name': 'Blocked User',
+                      'username': 'blocked',
+                      'discriminator': '0001',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/blocks/acc-blocked' &&
+              req.method == 'DELETE') {
+            return http.Response(
+              jsonEncode({
+                'error': 'internal',
+                'message': 'unblock-private-diagnostic',
+              }),
+              500,
+            );
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.unblockButtonKey('acc-blocked')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('unblock-private-diagnostic'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
   });
 
   testWidgets('blocked tab hides account ID when identity is unavailable', (
