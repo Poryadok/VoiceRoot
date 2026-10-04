@@ -50,7 +50,41 @@ final activeProfileAccentColorProvider = Provider<AsyncValue<Color>>((ref) {
 enum AppThemePreference { system, light, dark, highContrast }
 
 /// When null, [MaterialApp] uses platform locale.
-final appLocalePreferenceProvider = StateProvider<Locale?>((ref) => null);
+final appLocaleOverrideProvider = StateProvider<ProfileLocaleOverride?>(
+  (ref) => null,
+);
+
+/// An in-memory choice made in the current active-profile context. A null
+/// [locale] represents the Settings "System" option; it is never sent to the
+/// profile API as a reset value.
+class ProfileLocaleOverride {
+  const ProfileLocaleOverride({required this.profileId, required this.locale});
+
+  final String? profileId;
+  final Locale? locale;
+}
+
+/// Uses an explicit current-context override first, otherwise the active
+/// profile's persisted locale. Switching profile clears the transient choice.
+final appLocalePreferenceProvider = Provider<Locale?>((ref) {
+  final profileId = ref.watch(authControllerProvider).activeProfileId;
+  final override = ref.watch(appLocaleOverrideProvider);
+  ref.listen(authControllerProvider, (previous, next) {
+    if (previous?.activeProfileId != next.activeProfileId) {
+      ref.read(appLocaleOverrideProvider.notifier).state = null;
+    }
+  });
+  if (override != null && override.profileId == profileId) {
+    return override.locale;
+  }
+  final profile = ref.watch(activeProfileProvider).valueOrNull;
+  if (profile == null || profile.id != profileId) return null;
+  return switch (profile.locale) {
+    'en' => const Locale('en'),
+    'ru' => const Locale('ru'),
+    _ => null,
+  };
+});
 
 VoiceThemeMode _resolveMode(AppThemePreference pref, Brightness platform) {
   return switch (pref) {
