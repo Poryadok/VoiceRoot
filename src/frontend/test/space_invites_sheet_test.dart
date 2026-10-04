@@ -111,10 +111,19 @@ void main() {
   testWidgets('unauthenticated create retains its local action copy', (
     tester,
   ) async {
+    var requestCount = 0;
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((request) async {
+        requestCount++;
+        return http.Response('{}', 200);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
           authorizationHeaderProvider.overrideWithValue(null),
           spaceInvitesProvider(
             'space-1',
@@ -139,6 +148,7 @@ void main() {
       find.text(l10n.spaceInviteCreateError('not_authenticated')),
       findsOneWidget,
     );
+    expect(requestCount, 0);
   });
 
   testWidgets('invalid max uses stays local and sends no request', (
