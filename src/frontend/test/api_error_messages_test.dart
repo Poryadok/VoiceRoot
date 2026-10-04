@@ -83,6 +83,36 @@ void main() {
     );
   });
 
+  test(
+    'subscription actions hide unknown details and retain known mappings',
+    () {
+      const raw = 'payment gateway trace=subscription-private-123';
+
+      expect(
+        subscriptionActionErrorMessage(l10n, raw),
+        l10n.commonActionFailed,
+      );
+      expect(
+        subscriptionActionErrorMessage(l10n, raw),
+        isNot(contains('subscription-private-123')),
+      );
+      expect(
+        subscriptionActionErrorMessage(l10n, 'invalid_checkout_url'),
+        l10n.subscriptionInvalidCheckoutUrl,
+      );
+      expect(
+        subscriptionActionErrorMessage(l10n, 'checkout_launch_failed'),
+        l10n.subscriptionCheckoutLaunchFailed,
+      );
+      for (final statusCode in [502, 503, 504]) {
+        expect(
+          subscriptionActionErrorMessage(l10n, raw, statusCode: statusCode),
+          l10n.backendUnavailable,
+        );
+      }
+    },
+  );
+
   test('settings load errors keep only known mappings and safe fallback', () {
     expect(
       settingsLoadErrorMessage(

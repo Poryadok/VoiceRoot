@@ -210,7 +210,7 @@ String subscriptionActionErrorMessage(
   return switch (message) {
     'invalid_checkout_url' => l10n.subscriptionInvalidCheckoutUrl,
     'checkout_launch_failed' => l10n.subscriptionCheckoutLaunchFailed,
-    _ => l10n.subscriptionActionError(message),
+    _ => l10n.commonActionFailed,
   };
 }
 

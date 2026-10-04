@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
@@ -46,10 +47,13 @@ class _ProfileDowngradePickerScreenState
       case SubscriptionApiOk():
         ref.invalidate(myProfilesProvider);
         Navigator.of(context).maybePop();
-      case SubscriptionApiFailure(:final message):
+      case SubscriptionApiFailure(:final statusCode):
         setState(() {
           _submitting = false;
-          _error = message;
+          _error = commonActionErrorMessage(
+            AppLocalizations.of(context)!,
+            statusCode: statusCode,
+          );
         });
     }
   }
