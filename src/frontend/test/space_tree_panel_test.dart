@@ -421,10 +421,11 @@ void main() {
     expect(assignmentAttempted, isTrue, reason: requestPaths.join(', '));
     expect(
       find.text(
-        'Chat was created but could not be placed in the selected category: category assignment denied',
+        'Chat was created but could not be placed in the selected category: Could not complete this action.',
       ),
       findsOneWidget,
     );
+    expect(find.textContaining('category assignment denied'), findsNothing);
     expect(find.text('announcements'), findsOneWidget);
   });
 
@@ -475,9 +476,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Could not create item: missing tree permission'),
+      find.text('Could not create item: Could not complete this action.'),
       findsOneWidget,
     );
+    expect(find.textContaining('missing tree permission'), findsNothing);
   });
 
   testWidgets('reconciles uncertain category placement before advising retry', (
@@ -566,10 +568,11 @@ void main() {
     expect(find.text('Create text chat'), findsNothing);
     expect(
       find.text(
-        'Chat was created, but its category placement could not be confirmed. Refresh and check its current placement before retrying or reordering: response timed out',
+        'Chat was created, but its category placement could not be confirmed. Refresh and check its current placement before retrying or reordering: Could not complete this action.',
       ),
       findsOneWidget,
     );
+    expect(find.textContaining('response timed out'), findsNothing);
     expect(treeReads, 2, reason: 'uncertain placement triggers reconciliation');
     expect(find.text('announcements'), findsOneWidget);
   });
@@ -625,10 +628,11 @@ void main() {
     expect(find.text('Create text chat'), findsNothing);
     expect(
       find.text(
-        'Could not confirm whether the item was created. Refresh or check the tree before trying again: upstream timeout',
+        'Could not confirm whether the item was created. Refresh or check the tree before trying again: Could not complete this action.',
       ),
       findsOneWidget,
     );
+    expect(find.textContaining('upstream timeout'), findsNothing);
     expect(
       treeReads,
       2,
