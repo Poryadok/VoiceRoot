@@ -27,6 +27,7 @@ import (
 const (
 	createMethod      = "/voice.chat.v1.MatchSquadChatService/CreateMatchSquadChat"
 	teardownMethod    = "/voice.chat.v1.MatchSquadChatService/TeardownMatchSquadChat"
+	compactMethod     = "/voice.chat.v1.MatchSquadChatService/CompactMatchSquadChat"
 	dependencyTimeout = 2 * time.Second
 )
 
@@ -111,7 +112,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestH
 	if r == nil || r.resolver == nil || r.replay == nil {
 		return principal.Principal{}, errors.New("MatchSquad principal runtime unavailable")
 	}
-	if method != createMethod && method != teardownMethod {
+	if method != createMethod && method != teardownMethod && method != compactMethod {
 		return principal.Principal{}, errors.New("method is not allowed on MatchSquad listener")
 	}
 	p, err := principal.VerifyService(ctx, token, principal.VerifyConfig{
@@ -142,7 +143,7 @@ type verifier interface {
 
 func strictUnaryInterceptor(v verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info.FullMethod != createMethod && info.FullMethod != teardownMethod {
+		if info.FullMethod != createMethod && info.FullMethod != teardownMethod && info.FullMethod != compactMethod {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on MatchSquad listener")
 		}
 		transport, err := principal.IncomingMetadata(ctx)
@@ -181,6 +182,8 @@ func operationID(message proto.Message) (string, bool) {
 		return request.GetOperationId(), true
 	case *chatv1.TeardownMatchSquadChatRequest:
 		return request.GetTeardownOperationId(), true
+	case *chatv1.CompactMatchSquadChatRequest:
+		return request.GetOperationId(), true
 	default:
 		return "", false
 	}
