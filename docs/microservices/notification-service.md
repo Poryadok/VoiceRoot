@@ -241,6 +241,23 @@ Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` 
 
 ## Публикуемые события (→ NATS)
 
+### Debug push recorder (disposable Compose E2E only)
+
+The unauthenticated `GET /debug/recorded-pushes?profile_id=...` route is absent
+by default. It is available only when both `NOTIFICATION_RECORD_PUSHES=true`
+and `NOTIFICATION_DEBUG_HTTP_ENABLED=true` are explicitly configured. The
+debug flag accepts only `true` or `false` (case-insensitive, surrounding
+whitespace ignored); a present empty or malformed value fails startup, and
+enabling the debug route without push recording also fails startup. The
+recording flag continues to select offline presence routing independently;
+only the two-flag opt-in captures push data or registers the debug route.
+
+The disposable Compose Notification fixture opts in to both flags for its
+existing FCM delivery E2E consumer. Production and staging configuration keep
+their existing recording/routing setting but omit the debug HTTP flag, so the
+unauthenticated route and capture wrapper remain disabled there. This is a
+configuration/source boundary, not evidence of deployed runtime acceptance.
+
 Отдельного доменного stream **`notification.events`** нет: события ниже — **телеметрия доставки**; публикация в **`analytics.notification.*`** (см. [MICROSERVICES.md](../MICROSERVICES.md) — раздел «Аналитика»).
 
 | Событие                       | Данные                              |
