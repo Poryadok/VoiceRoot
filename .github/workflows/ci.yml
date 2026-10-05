@@ -298,6 +298,26 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Capture NetworkOffline banner reference (manual full profile only)
+        if: github.event_name == 'workflow_dispatch' && inputs.profile == 'full'
+        working-directory: src/frontend
+        env:
+          VOICE_NETWORK_OFFLINE_CAPTURE_DIR: ${{ runner.temp }}/network-offline-captures
+        run: |
+          mkdir -p "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR"
+          flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1
+          test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-h.png"
+          test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-v.png"
+      - name: Upload NetworkOffline banner reference captures
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.profile == 'full'
+        uses: actions/upload-artifact@v6
+        with:
+          name: network-offline-banner-reference-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/network-offline-captures/network-offline-h.png
+            ${{ runner.temp }}/network-offline-captures/network-offline-v.png
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6
