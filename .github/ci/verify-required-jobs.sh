@@ -22,13 +22,13 @@ require_job() {
   fi
 }
 
-if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-  echo "ci-gate: non-PR event; nothing to verify"
+if [[ "${EVENT_NAME}" != "pull_request" && "${EVENT_NAME}" != "push" ]]; then
+  echo "ci-gate: event outside PR/master-push policy; nothing to verify"
   exit 0
 fi
 
 if [[ "${CODE}" != "true" ]]; then
-  echo "ci-gate: docs-only PR; skip gate"
+  echo "ci-gate: docs-only change; skip gate"
   exit 0
 fi
 
