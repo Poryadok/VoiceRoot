@@ -500,6 +500,55 @@ func newMatchSquadPostgresFixture(t *testing.T) *matchSquadPostgresFixture {
 		creationReceipt: receipt, creationRequest: request}
 }
 
+func TestCreateInsertErrorClassificationIsBoundToVerifiedConstraints(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	operation, match, _, manifest, chatReceipt, requestBytes, err := validateCreate(f.creationRequest)
+	require.NoError(t, err)
+	requestHash, err := principalHash(f.creationRequest)
+	require.NoError(t, err)
+	chatReceiptBytes, err := marshal(chatReceipt)
+	require.NoError(t, err)
+	chatReceiptHash := sha256.Sum256(chatReceiptBytes)
+	recoveredRoom, recoveredReceipt, found, err := f.service.recoverCreateBinding(f.ctx, operation, match, match, chatReceipt, manifest, chatReceiptHash, requestHash, requestBytes)
+	require.NoError(t, err)
+	require.True(t, found, "exact durable operation recovers its original committed binding")
+	require.Equal(t, f.roomID, recoveredRoom)
+	recovered := new(callsv1.MatchSquadRoomReceipt)
+	require.NoError(t, proto.Unmarshal(recoveredReceipt, recovered))
+	require.Equal(t, f.creationReceipt, recovered)
+
+	conflict := proto.Clone(f.creationRequest).(*callsv1.CreateMatchSquadRoomRequest)
+	conflict.OperationId = uuid.NewString()
+	conflict.ChatCreationReceipt.OperationId = conflict.OperationId
+	conflictCtx := verifiedServiceContext(t, conflict, matchsquadprincipal.CreateMethod, conflict.GetOperationId())
+	_, err := f.service.Create(conflictCtx, conflict)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "the verified current owner index is a terminal binding conflict")
+	var conflicts int
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_operations WHERE operation_id=$1`, uuid.MustParse(conflict.GetOperationId())).Scan(&conflicts))
+	require.Zero(t, conflicts)
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_room_instances`).Scan(&conflicts))
+	require.Equal(t, 1, conflicts, "failed create transaction leaves no partial owned room")
+
+	_, err = f.pool.Exec(f.ctx, `CREATE FUNCTION test_match_squad_unexpected_unique() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'injected private fixture fault' USING ERRCODE='23505', CONSTRAINT='unexpected_voice_constraint'; END; $$;
+CREATE TRIGGER test_match_squad_unexpected_unique BEFORE INSERT ON voice_match_squad_operations
+FOR EACH ROW EXECUTE FUNCTION test_match_squad_unexpected_unique()`)
+	require.NoError(t, err)
+	unrecognized := proto.Clone(validCreateRequest()).(*callsv1.CreateMatchSquadRoomRequest)
+	unrecognized.OperationId = uuid.NewString()
+	unrecognized.MatchId = uuid.NewString()
+	unrecognized.ChatCreationReceipt.OperationId = unrecognized.OperationId
+	unrecognized.ChatCreationReceipt.MatchId = unrecognized.MatchId
+	unrecognizedCtx := verifiedServiceContext(t, unrecognized, matchsquadprincipal.CreateMethod, unrecognized.GetOperationId())
+	_, err = f.service.Create(unrecognizedCtx, unrecognized)
+	require.Equal(t, codes.Unavailable, status.Code(err), "an unrecognized 23505 is a persistence fault, not proof of a binding conflict")
+	require.NotContains(t, status.Convert(err).Message(), "injected private fixture fault")
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_operations WHERE operation_id=$1`, uuid.MustParse(unrecognized.GetOperationId())).Scan(&conflicts))
+	require.Zero(t, conflicts)
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_room_instances WHERE creation_operation_id=$1`, uuid.MustParse(unrecognized.GetOperationId())).Scan(&conflicts))
+	require.Zero(t, conflicts, "unknown unique violation rolls the complete transaction back")
+}
+
 func startMatchSquadPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	integrationtest.ConfigureDockerTesting()

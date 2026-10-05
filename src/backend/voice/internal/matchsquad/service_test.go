@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -16,6 +17,29 @@ import (
 	"voice/backend/voice/internal/matchsquadprincipal"
 	"voice/backend/voice/internal/store"
 )
+
+func TestKnownCreateBindingUniqueViolationRequiresExactConstraint(t *testing.T) {
+	for _, name := range []string{
+		"voice_room_instances_match_owner", "voice_room_instances_creation_operation",
+		"voice_match_squad_operations_pkey", "voice_match_squad_operations_match_id_key",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !knownCreateBindingUniqueViolation(&pgconn.PgError{Code: "23505", ConstraintName: name}) {
+				t.Fatal("verified immutable binding constraint was not recognized")
+			}
+		})
+	}
+	for _, err := range []error{
+		&pgconn.PgError{Code: "23505", ConstraintName: "voice_match_squad_operations_room_id_key"},
+		&pgconn.PgError{Code: "23505", ConstraintName: "unknown_unique"},
+		&pgconn.PgError{Code: "23514", ConstraintName: "voice_room_instances_match_owner"},
+		&pgconn.PgError{Code: "40001"},
+	} {
+		if knownCreateBindingUniqueViolation(err) {
+			t.Fatalf("unrecognized/transient database failure was classified as terminal: %v", err)
+		}
+	}
+}
 
 func validCreateRequest() *callsv1.CreateMatchSquadRoomRequest {
 	operation := uuid.MustParse("00000000-0000-4000-8000-000000000001")

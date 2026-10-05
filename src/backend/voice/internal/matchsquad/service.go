@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -210,20 +211,94 @@ func (s *Service) reserveCreate(ctx context.Context, operation, match, roomID, r
 		return uuid.Nil, nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
 	}
 	created := now.UTC()
+	insertFailure := func(insertErr error) (uuid.UUID, []byte, error) {
+		if !knownCreateBindingUniqueViolation(insertErr) {
+			return uuid.Nil, nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
+		}
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			return uuid.Nil, nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
+		}
+		priorRoom, priorReceipt, found, recoveryErr := s.recoverCreateBinding(ctx, operation, match, owner, chat, manifest, chatReceiptHash, requestHash, request)
+		if recoveryErr != nil {
+			if status.Code(recoveryErr) == codes.FailedPrecondition {
+				return uuid.Nil, nil, recoveryErr
+			}
+			return uuid.Nil, nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
+		}
+		if found {
+			return priorRoom, priorReceipt, nil
+		}
+		return uuid.Nil, nil, status.Error(codes.FailedPrecondition, "MatchSquad match or resource already exists")
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO voice_room_instances(room_id,room_type,purpose,chat_id,owner_id,creation_operation_id,creation_manifest_hash,creation_receipt_id,chat_creation_receipt_id,livekit_room_name,state,roster_version,created_at,updated_at)
 VALUES($1,'group_voice','MATCH_SQUAD',$2,$3,$4,$5,$6,$7,$8,'active',0,$9,$9)`, roomID, mustUUID(chat.GetChatId()), owner, operation, manifest[:], receiptID, mustUUID(chat.GetReceiptId()), "match-squad-"+roomID.String(), created)
 	if err != nil {
-		return uuid.Nil, nil, status.Error(codes.FailedPrecondition, "MatchSquad match or resource already exists")
+		return insertFailure(err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO voice_match_squad_operations(operation_id,match_id,room_id,chat_id,owner_id,creation_receipt_id,chat_creation_receipt_id,participant_manifest_sha256,chat_creation_receipt_sha256,create_request_sha256,create_request_bytes,create_receipt_bytes,state,created_at,updated_at)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',$13,$13)`, operation, match, roomID, mustUUID(chat.GetChatId()), owner, receiptID, mustUUID(chat.GetReceiptId()), manifest[:], chatReceiptHash[:], requestHash[:], request, receipt, created)
 	if err != nil {
-		return uuid.Nil, nil, status.Error(codes.FailedPrecondition, "MatchSquad operation or match already exists")
+		return insertFailure(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return uuid.Nil, nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
 	}
 	return roomID, receipt, nil
+}
+
+func knownCreateBindingUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return false
+	}
+	switch pgErr.ConstraintName {
+	case "voice_room_instances_match_owner", "voice_room_instances_creation_operation",
+		"voice_match_squad_operations_pkey", "voice_match_squad_operations_match_id_key":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) recoverCreateBinding(ctx context.Context, operation, match, owner uuid.UUID, chat *chatv1.MatchSquadChatReceipt, manifest, chatReceiptHash, requestHash [32]byte, request []byte) (uuid.UUID, []byte, bool, error) {
+	var roomID, storedMatch, storedOwner, storedChat, storedCreationReceipt, storedChatReceipt uuid.UUID
+	var storedManifest, storedChatHash, storedRequestHash, storedRequest, storedReceipt, roomManifest []byte
+	var roomOwner, roomOperation, roomCreationReceipt, roomChatReceipt, roomChat uuid.UUID
+	var purpose string
+	err := s.Pool.QueryRow(ctx, `SELECT o.room_id,o.match_id,o.owner_id,o.chat_id,o.creation_receipt_id,o.chat_creation_receipt_id,
+o.participant_manifest_sha256,o.chat_creation_receipt_sha256,o.create_request_sha256,o.create_request_bytes,o.create_receipt_bytes,
+r.purpose,r.owner_id,r.creation_operation_id,r.creation_manifest_hash,r.creation_receipt_id,r.chat_creation_receipt_id,r.chat_id
+FROM voice_match_squad_operations o JOIN voice_room_instances r USING(room_id)
+WHERE o.operation_id=$1`, operation).Scan(&roomID, &storedMatch, &storedOwner, &storedChat, &storedCreationReceipt, &storedChatReceipt,
+		&storedManifest, &storedChatHash, &storedRequestHash, &storedRequest, &storedReceipt, &purpose, &roomOwner, &roomOperation,
+		&roomManifest, &roomCreationReceipt, &roomChatReceipt, &roomChat)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, nil, false, err
+	}
+	valid := storedMatch == match && storedOwner == owner && storedChat == mustUUID(chat.GetChatId()) &&
+		storedChatReceipt == mustUUID(chat.GetReceiptId()) && purpose == "MATCH_SQUAD" &&
+		roomOwner == owner && roomOperation == operation && roomCreationReceipt == storedCreationReceipt &&
+		roomChatReceipt == storedChatReceipt && roomChat == storedChat &&
+		bytes.Equal(storedManifest, manifest[:]) && bytes.Equal(roomManifest, manifest[:]) &&
+		bytes.Equal(storedChatHash, chatReceiptHash[:]) && bytes.Equal(storedRequestHash, requestHash[:]) &&
+		bytes.Equal(storedRequest, request) && len(storedReceipt) != 0 && storedCreationReceipt != uuid.Nil
+	if !valid {
+		return uuid.Nil, nil, false, status.Error(codes.FailedPrecondition, "MatchSquad operation binding conflicts with an existing resource")
+	}
+	stored := new(callsv1.MatchSquadRoomReceipt)
+	if err := proto.Unmarshal(storedReceipt, stored); err != nil || stored.GetOperationId() != operation.String() ||
+		stored.GetMatchId() != match.String() || stored.GetRoomId() != roomID.String() ||
+		stored.GetReceiptId() != storedCreationReceipt.String() || stored.GetChatId() != storedChat.String() ||
+		stored.GetChatCreationReceiptId() != storedChatReceipt.String() ||
+		!bytes.Equal(stored.GetChatCreationReceiptSha256(), chatReceiptHash[:]) ||
+		!bytes.Equal(stored.GetParticipantManifestSha256(), manifest[:]) ||
+		!bytes.Equal(stored.GetRequestSha256(), requestHash[:]) {
+		return uuid.Nil, nil, false, errors.New("stored MatchSquad creation receipt is inconsistent")
+	}
+	return roomID, storedReceipt, true, nil
 }
 
 func (s *Service) applyCreate(ctx context.Context, room, chatID string, match uuid.UUID, participants []string) error {
