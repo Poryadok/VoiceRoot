@@ -110,6 +110,10 @@ voice_fcm_diag_status_valid() {
   [[ "${1-}" == 0 && "${data}" =~ ${status_re} ]] || return 1
   pre="${BASH_REMATCH[1]}"
   post="${BASH_REMATCH[2]}"
+  case "${pre}/${post}" in
+    unknown/unknown|failed/unknown|ok/unknown|ok/ok|ok/failed) ;;
+    *) return 1 ;;
+  esac
   VOICE_FCM_DIAG_STATUS_SUMMARY="compose_fcm_status pre=${pre} post=${post}"
 }
 
