@@ -70,20 +70,48 @@ printf '%s\n' 'compose_fcm_contract_case=timestamp_window state=completed'
 printf '%s\n' 'compose_fcm_contract_case=collected_normalization state=started'
 normalized=''
 complete_status=$'pre=failed\npost=unknown\n'
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_missing_call state=started'
 voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 '' missing normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_missing_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_missing_output state=started'
 [[ "${normalized}" == $'compose_fcm_status pre=failed post=unknown\ncompose_fcm_lifecycle_status sample_invalid=missing sample_valid=missing window_expiry=missing' ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_missing_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_complete_call state=started'
 voice_fcm_diag_normalize_collected 0 $'pre=ok\npost=ok\n' 0 "${lifecycle}" accepted normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_complete_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_complete_output state=started'
 [[ "${normalized}" == $'compose_fcm_status pre=ok post=ok\ncompose_fcm_lifecycle_status sample_invalid=observed sample_valid=observed window_expiry=observed' ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=accept_complete_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_status_read_call state=started'
 ! voice_fcm_diag_normalize_collected 1 "${complete_status}" 0 '' missing normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_status_read_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_status_read_output state=started'
 [[ -z "${normalized}" && -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" && -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_status_read_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_log_timeout_call state=started'
 ! voice_fcm_diag_normalize_collected 0 "${complete_status}" 124 '' missing normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_log_timeout_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_log_timeout_output state=started'
 [[ -z "${normalized}" ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_log_timeout_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_malformed_lifecycle_call state=started'
 ! voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 $'compose_fcm_lifecycle unknown=invalid' missing normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_malformed_lifecycle_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_malformed_lifecycle_output state=started'
 [[ -z "${normalized}" ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_malformed_lifecycle_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_invalid_status_pair_call state=started'
 ! voice_fcm_diag_normalize_collected 0 $'pre=unknown\npost=failed\n' 0 '' missing normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_invalid_status_pair_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_invalid_status_pair_output state=started'
 [[ -z "${normalized}" && -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" && -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_invalid_status_pair_output state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_duplicate_lifecycle_call state=started'
 ! voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 "${lifecycle}" duplicate normalized
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_duplicate_lifecycle_call state=completed'
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_duplicate_lifecycle_output state=started'
 [[ -z "${normalized}" && -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" && -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
+printf '%s\n' 'compose_fcm_normalization_assertion=reject_duplicate_lifecycle_output state=completed'
 printf '%s\n' 'compose_fcm_contract_case=collected_normalization state=completed'
 printf '%s\n' 'compose_fcm_contract_case=record_reason_invariants state=started'
 voice_fcm_diag_parse_collected_log 0 "${valid}" parsed
