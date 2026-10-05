@@ -113,8 +113,7 @@ func TestPostgresMatchSquadMember_LeaveRepairWaitsForDatabaseGrantExpiry(t *test
 	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "confirmed")
 	assertMatchSquadFence(t, f, account, f.firstProfile, true)
 
-	_, err = f.pool.Exec(f.ctx, `UPDATE voice_room_memberships SET latest_grant_expires_at=clock_timestamp()-interval '1 second' WHERE profile_id=$1 AND room_id=$2`, f.firstProfile, f.roomID)
-	require.NoError(t, err)
+	requireDatabaseGrantExpiry(t, f, f.firstProfile, tokenRequestID)
 	require.NoError(t, member.RepairExpiredLeaves(f.ctx, 16))
 	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
 	assertMatchSquadFence(t, f, account, f.firstProfile, false)
@@ -154,8 +153,7 @@ func TestPostgresMatchSquadTeardown_WaitsForGrantAndOrdersProjectionBeforeClose(
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, call.Status)
 
-	_, err = f.pool.Exec(f.ctx, `UPDATE voice_room_memberships SET latest_grant_expires_at=clock_timestamp()-interval '1 second' WHERE profile_id=$1 AND room_id=$2`, f.firstProfile, f.roomID)
-	require.NoError(t, err)
+	requireDatabaseGrantExpiry(t, f, f.firstProfile, tokenRequestID)
 	f.effects.requireProjectionDrainedBeforeClose = true
 	receipt, err := f.service.Teardown(teardownCtx, teardown)
 	require.NoError(t, err)
@@ -425,4 +423,34 @@ func (e *testMatchSquadEffects) closeCalls() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.closeCount
+}
+
+func requireDatabaseGrantExpiry(t *testing.T, f *matchSquadPostgresFixture, profileID, requestID uuid.UUID) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(f.ctx, 70*time.Second)
+	defer cancel()
+	var grantExpiry, latestExpiry time.Time
+	err := f.pool.QueryRow(ctx, `SELECT g.expires_at,m.latest_grant_expires_at
+FROM voice_match_squad_member_grants g
+JOIN voice_room_memberships m ON m.profile_id=g.profile_id AND m.media_epoch=g.media_epoch
+WHERE g.request_id=$1 AND g.profile_id=$2 AND m.room_id=$3`, requestID, profileID, f.roomID).Scan(&grantExpiry, &latestExpiry)
+	require.NoError(t, err, "read the durable grant and monotonic membership expiry")
+	require.True(t, grantExpiry.Equal(latestExpiry), "the issued grant expiry must be the current durable generation bound")
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var expired bool
+		err := f.pool.QueryRow(ctx, `SELECT latest_grant_expires_at=$3 AND latest_grant_expires_at<=clock_timestamp()
+FROM voice_room_memberships WHERE profile_id=$1 AND room_id=$2`, profileID, f.roomID, latestExpiry).Scan(&expired)
+		require.NoError(t, err, "check the durable grant against PostgreSQL clock")
+		if expired {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("PostgreSQL did not reach the recorded MatchSquad grant expiry within 70 seconds: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
