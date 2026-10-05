@@ -3307,4 +3307,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Начать';
+
+  @override
+  String get deepLinkAccessDenied => 'Нет доступа';
+
+  @override
+  String get deepLinkResourceNotFound => 'Не найдено';
+
+  @override
+  String get deepLinkReturnHome => 'На главную';
 }

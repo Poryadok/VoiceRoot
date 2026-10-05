@@ -1443,5 +1443,8 @@
   "onboardingMatchmakingTry": "Try it",
   "onboardingWrapUpTitle": "You are all set",
   "onboardingWrapUpBody": "You know the basics! If something is unclear — Help is always available in Settings.",
-  "onboardingWrapUpStart": "Start"
+  "onboardingWrapUpStart": "Start",
+  "deepLinkAccessDenied": "Access denied",
+  "deepLinkResourceNotFound": "Not found",
+  "deepLinkReturnHome": "Go to Home"
 }

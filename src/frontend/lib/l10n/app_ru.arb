@@ -1344,5 +1344,8 @@
   "onboardingMatchmakingTry": "Попробовать",
   "onboardingWrapUpTitle": "Готово!",
   "onboardingWrapUpBody": "Ты разобрался с основами! Если что-то непонятно — раздел помощи всегда в настройках.",
-  "onboardingWrapUpStart": "Начать"
+  "onboardingWrapUpStart": "Начать",
+  "deepLinkAccessDenied": "Нет доступа",
+  "deepLinkResourceNotFound": "Не найдено",
+  "deepLinkReturnHome": "На главную"
 }

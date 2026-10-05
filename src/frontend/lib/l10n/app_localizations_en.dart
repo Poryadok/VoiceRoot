@@ -3282,4 +3282,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Start';
+
+  @override
+  String get deepLinkAccessDenied => 'Access denied';
+
+  @override
+  String get deepLinkResourceNotFound => 'Not found';
+
+  @override
+  String get deepLinkReturnHome => 'Go to Home';
 }
