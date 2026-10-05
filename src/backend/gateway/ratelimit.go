@@ -180,6 +180,8 @@ func rateLimitGroup(method, path string) string {
 		return "E2EKeyBackupPut"
 	case method == http.MethodGet && path == "/api/v1/auth/e2e-key-backup":
 		return "E2EKeyBackupGet"
+	case method == http.MethodDelete && path == "/api/v1/auth/e2e-key-backup":
+		return "E2EKeyBackupPut"
 	case method == http.MethodPost && path == "/api/v1/messages/prekeys":
 		return "PreKeyUpload"
 	case method == http.MethodGet && path == "/api/v1/messages/prekeys":
