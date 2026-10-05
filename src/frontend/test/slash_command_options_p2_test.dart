@@ -1,20 +1,32 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:file_selector/file_selector.dart';
+// The in-memory picker fixture uses file_selector's platform contract directly.
+// ignore: depend_on_referenced_packages
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart'
+    show FileSelectorPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
+import 'package:voice_frontend/backend/files_client.dart';
+import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/roles_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/bot_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/slash_command_options_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/gateway_test_client.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
@@ -26,6 +38,123 @@ BotSlashCommand _commandWithOptions(List<BotSlashCommandOption> options) {
     description: 'Assign with pickers',
     options: options,
   );
+}
+
+class _ScriptedFilesClient extends VoiceFilesClient {
+  _ScriptedFilesClient({
+    Set<String> failOnce = const {},
+    Set<String> throwOnce = const {},
+    this.pendingTicket,
+    this.ticketStarted,
+  }) : failOnce = Set.of(failOnce),
+       throwOnce = Set.of(throwOnce),
+       super(
+         gateway: gatewayHttpForTest(
+           MockClient((_) async => http.Response('{}', 200)),
+           config: const GatewayConfig(baseUrl: 'http://api.test'),
+         ),
+       );
+
+  final Set<String> failOnce;
+  final Set<String> throwOnce;
+  final Completer<FilesApiResult<FileUploadTicket>>? pendingTicket;
+  final Completer<void>? ticketStarted;
+  final Map<String, int> calls = {};
+
+  FilesApiFailure? _failure(String stage) {
+    final count = (calls[stage] ?? 0) + 1;
+    calls[stage] = count;
+    if (count != 1) return null;
+    if (throwOnce.remove(stage)) throw StateError('synthetic upload failure');
+    return failOnce.remove(stage)
+        ? const FilesApiFailure(message: 'private upload diagnostic')
+        : null;
+  }
+
+  @override
+  Future<FilesApiResult<FileUploadTicket>> requestUpload({
+    required String authorization,
+    required String originalName,
+    required String mimeType,
+    required int sizeBytes,
+    String? chatId,
+    String? chatType,
+    String? storyId,
+    bool isE2e = false,
+  }) async {
+    final failure = _failure('ticket');
+    if (failure != null) return failure;
+    ticketStarted?.complete();
+    final pending = pendingTicket;
+    if (pending != null) return pending.future;
+    return FilesApiOk(
+      FileUploadTicket(
+        fileId: 'file-1',
+        presignedPutUrl: Uri.https('upload.test', '/upload'),
+        r2Key: 'synthetic-object-key',
+      ),
+    );
+  }
+
+  @override
+  Future<FilesApiResult<void>> putBytes({
+    required Uri uploadUrl,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    final failure = _failure('put');
+    if (failure != null) return failure;
+    return const FilesApiOk(null);
+  }
+
+  @override
+  Future<FilesApiResult<FileMetadataData>> confirmUpload({
+    required String authorization,
+    required String fileId,
+    required Uint8List bytes,
+  }) async {
+    final failure = _failure('confirm');
+    if (failure != null) return failure;
+    return const FilesApiOk(
+      FileMetadataData(
+        fileId: 'file-1',
+        fileType: 'document',
+        status: 'ready',
+        originalName: 'attachment.txt',
+      ),
+    );
+  }
+}
+
+class _TestFileSelectorPlatform extends FileSelectorPlatform {
+  _TestFileSelectorPlatform(this.open);
+
+  final Future<XFile?> Function() open;
+
+  @override
+  Future<XFile?> openFile({
+    List<XTypeGroup>? acceptedTypeGroups,
+    String? initialDirectory,
+    String? confirmButtonText,
+  }) => open();
+}
+
+void _useFileSelector(Future<XFile?> Function() open) {
+  final previous = FileSelectorPlatform.instance;
+  FileSelectorPlatform.instance = _TestFileSelectorPlatform(open);
+  addTearDown(() => FileSelectorPlatform.instance = previous);
+}
+
+XFile _memoryAttachment() => XFile.fromData(
+  Uint8List.fromList('synthetic test attachment'.codeUnits),
+  name: 'attachment.txt',
+  mimeType: 'text/plain',
+);
+
+Future<void> _settlePickedFile(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
 }
 
 void main() {
@@ -387,8 +516,222 @@ void main() {
     );
     container.read(sessionAuthorization.notifier).state =
         'Bearer switched-session';
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(tester.widget<FilledButton>(runFinder).onPressed, isNull);
+  });
+
+  testWidgets('attachment picker cancellation makes no upload requests', (
+    tester,
+  ) async {
+    _useFileSelector(() async => null);
+    final files = _ScriptedFilesClient();
+    await pumpOptionsSheet(
+      tester,
+      command: _commandWithOptions(const [
+        BotSlashCommandOption(name: 'file', type: 'attachment', required: true),
+      ]),
+      extraOverrides: [voiceFilesClientProvider.overrideWithValue(files)],
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('slash_option_attachment_picker_file')),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(files.calls, isEmpty);
+    expect(find.text('Could not upload file. Try again.'), findsNothing);
+  });
+
+  testWidgets('attachment upload success selects the file and enables Run', (
+    tester,
+  ) async {
+    var pickerCalls = 0;
+    _useFileSelector(() async {
+      pickerCalls++;
+      return _memoryAttachment();
+    });
+    final files = _ScriptedFilesClient();
+    await pumpOptionsSheet(
+      tester,
+      command: _commandWithOptions(const [
+        BotSlashCommandOption(name: 'file', type: 'attachment', required: true),
+      ]),
+      extraOverrides: [voiceFilesClientProvider.overrideWithValue(files)],
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('slash_option_attachment_picker_file')),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    await _settlePickedFile(tester);
+
+    expect(pickerCalls, 1);
+    expect(find.text('Could not upload file. Try again.'), findsNothing);
+    expect(files.calls, {'ticket': 1, 'put': 1, 'confirm': 1});
+    expect(find.textContaining('Selected:'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Run command'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'ticket, PUT, and confirmation failures show mapped copy and recover on retry',
+    (tester) async {
+      _useFileSelector(() async => _memoryAttachment());
+
+      for (final stage in ['ticket', 'put', 'confirm']) {
+        for (final throws in [false, true]) {
+          final files = _ScriptedFilesClient(
+            failOnce: throws ? const {} : {stage},
+            throwOnce: throws ? {stage} : const {},
+          );
+          await pumpOptionsSheet(
+            tester,
+            command: _commandWithOptions(const [
+              BotSlashCommandOption(
+                name: 'file',
+                type: 'attachment',
+                required: true,
+              ),
+            ]),
+            extraOverrides: [voiceFilesClientProvider.overrideWithValue(files)],
+          );
+
+          final picker = find.descendant(
+            of: find.byKey(const Key('slash_option_attachment_picker_file')),
+            matching: find.byType(OutlinedButton),
+          );
+          await tester.tap(picker);
+          await _settlePickedFile(tester);
+          expect(
+            find.text('Could not upload file. Try again.'),
+            findsOneWidget,
+          );
+          expect(find.text('private upload diagnostic'), findsNothing);
+          expect(find.textContaining('Selected:'), findsNothing);
+
+          await tester.tap(picker);
+          await _settlePickedFile(tester);
+          expect(find.text('Could not upload file. Try again.'), findsNothing);
+          expect(find.textContaining('Selected:'), findsOneWidget);
+          expect(files.calls['ticket'], 2);
+          expect(files.calls['put'], stage == 'ticket' ? 1 : 2);
+          expect(files.calls['confirm'], stage == 'confirm' ? 2 : 1);
+
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+        }
+      }
+    },
+  );
+
+  testWidgets('attachment picker exception shows mapped copy and can retry', (
+    tester,
+  ) async {
+    var pickerCalls = 0;
+    _useFileSelector(() async {
+      pickerCalls++;
+      if (pickerCalls == 1) {
+        throw StateError('synthetic picker error');
+      }
+      return _memoryAttachment();
+    });
+    final files = _ScriptedFilesClient();
+    await pumpOptionsSheet(
+      tester,
+      command: _commandWithOptions(const [
+        BotSlashCommandOption(name: 'file', type: 'attachment', required: true),
+      ]),
+      extraOverrides: [voiceFilesClientProvider.overrideWithValue(files)],
+    );
+    final picker = find.descendant(
+      of: find.byKey(const Key('slash_option_attachment_picker_file')),
+      matching: find.byType(OutlinedButton),
+    );
+
+    await tester.tap(picker);
+    await tester.pumpAndSettle();
+    expect(find.text('Could not upload file. Try again.'), findsOneWidget);
+    expect(files.calls, isEmpty);
+
+    await tester.tap(picker);
+    await _settlePickedFile(tester);
+    expect(find.text('Could not upload file. Try again.'), findsNothing);
+    expect(find.textContaining('Selected:'), findsOneWidget);
+    expect(files.calls, {'ticket': 1, 'put': 1, 'confirm': 1});
+  });
+
+  testWidgets('late attachment ticket after session switch is discarded', (
+    tester,
+  ) async {
+    _useFileSelector(() async => _memoryAttachment());
+    final sessionAuthorization = StateProvider<String?>((ref) => auth);
+    final ticket = Completer<FilesApiResult<FileUploadTicket>>();
+    final ticketStarted = Completer<void>();
+    final files = _ScriptedFilesClient(
+      pendingTicket: ticket,
+      ticketStarted: ticketStarted,
+    );
+    await pumpOptionsSheet(
+      tester,
+      command: _commandWithOptions(const [
+        BotSlashCommandOption(name: 'file', type: 'attachment', required: true),
+      ]),
+      sessionAuthorization: sessionAuthorization,
+      extraOverrides: [voiceFilesClientProvider.overrideWithValue(files)],
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('slash_option_attachment_picker_file')),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    await tester.runAsync(
+      () => Future.any([
+        ticketStarted.future,
+        Future<void>.delayed(const Duration(seconds: 1)),
+      ]),
+    );
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.text('open')),
+    );
+    container.read(sessionAuthorization.notifier).state =
+        'Bearer switched-session';
+    await tester.pump();
+    ticket.complete(
+      FilesApiOk(
+        FileUploadTicket(
+          fileId: 'file-1',
+          presignedPutUrl: Uri.https('upload.test', '/upload'),
+          r2Key: 'synthetic-object-key',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(files.calls, {'ticket': 1});
+    expect(find.textContaining('Selected:'), findsNothing);
+    expect(find.text('Could not upload file. Try again.'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Run command'),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets(
@@ -416,8 +759,7 @@ void main() {
 
       final run = tester.getSemantics(find.text('Run command'));
       expect(run.label, 'Run command');
-      expect(run.hasFlag(ui.SemanticsFlag.hasEnabledState), isTrue);
-      expect(run.hasFlag(ui.SemanticsFlag.isEnabled), isFalse);
+      expect(run.flagsCollection.isEnabled, ui.Tristate.isFalse);
       expect(tester.getSemantics(find.text('Cancel')).label, 'Cancel');
 
       for (var i = 0; i < 6; i++) {

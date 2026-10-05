@@ -52,8 +52,10 @@ class _SlashCommandOptionsSheetState
   final _controllers = <String, TextEditingController>{};
   final _suggestions = <String, List<BotAutocompleteChoice>>{};
   final _attachmentNames = <String, String>{};
-  Timer? _debounce;
-  String? _autocompleteError;
+  final _debounces = <String, Timer>{};
+  final _autocompleteGeneration = <String, int>{};
+  final _autocompleteErrors = <String, String>{};
+  final _attachmentErrors = <String, String>{};
   String? _openedAuthorization;
   var _uploadingAttachment = false;
 
@@ -65,7 +67,9 @@ class _SlashCommandOptionsSheetState
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    for (final timer in _debounces.values) {
+      timer.cancel();
+    }
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -76,7 +80,11 @@ class _SlashCommandOptionsSheetState
     return _controllers.putIfAbsent(name, TextEditingController.new);
   }
 
-  Future<void> _fetchAutocomplete(String optionName, String focused) async {
+  Future<void> _fetchAutocomplete(
+    String optionName,
+    String focused,
+    int generation,
+  ) async {
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null || auth != _openedAuthorization) return;
     final chatType =
@@ -88,7 +96,7 @@ class _SlashCommandOptionsSheetState
     String? lastError;
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      if (!_isCurrentAuthorization(auth)) return;
+      if (!_isCurrentAutocomplete(auth, optionName, generation)) return;
       final result = await ref
           .read(voiceBotsClientProvider)
           .autocompleteOption(
@@ -101,7 +109,7 @@ class _SlashCommandOptionsSheetState
             focusedValue: focused,
             optionsJson: jsonEncode(selected),
           );
-      if (!_isCurrentAuthorization(auth)) return;
+      if (!_isCurrentAutocomplete(auth, optionName, generation)) return;
       switch (result) {
         case BotsApiOk(:final data):
           lastResult = data;
@@ -109,7 +117,7 @@ class _SlashCommandOptionsSheetState
           if (data.choices.isNotEmpty || !data.pending) {
             setState(() {
               _suggestions[optionName] = data.choices;
-              _autocompleteError = null;
+              _autocompleteErrors.remove(optionName);
             });
             return;
           }
@@ -118,36 +126,54 @@ class _SlashCommandOptionsSheetState
       }
       if (attempt < maxAttempts - 1) {
         await Future<void>.delayed(retryDelay);
-        if (!_isCurrentAuthorization(auth)) return;
+        if (!_isCurrentAutocomplete(auth, optionName, generation)) return;
       }
     }
 
-    if (!_isCurrentAuthorization(auth)) return;
+    if (!_isCurrentAutocomplete(auth, optionName, generation)) return;
     setState(() {
       _suggestions[optionName] = lastResult?.choices ?? const [];
-      _autocompleteError = lastError;
+      if (lastError == null) {
+        _autocompleteErrors.remove(optionName);
+      } else {
+        _autocompleteErrors[optionName] = lastError;
+      }
     });
   }
 
   void _onOptionChanged(BotSlashCommandOption option, String value) {
-    setState(() => _values[option.name] = value);
+    final generation = (_autocompleteGeneration[option.name] ?? 0) + 1;
+    _autocompleteGeneration[option.name] = generation;
+    setState(() {
+      _values[option.name] = value;
+      _suggestions[option.name] = const [];
+      _autocompleteErrors.remove(option.name);
+    });
     if (!option.autocomplete) return;
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      _fetchAutocomplete(option.name, value);
+    _debounces.remove(option.name)?.cancel();
+    _debounces[option.name] = Timer(const Duration(milliseconds: 250), () {
+      _fetchAutocomplete(option.name, value, generation);
     });
   }
+
+  bool _isCurrentAutocomplete(
+    String authorization,
+    String optionName,
+    int generation,
+  ) =>
+      _isCurrentAuthorization(authorization) &&
+      _autocompleteGeneration[optionName] == generation;
 
   Future<void> _pickAttachment(BotSlashCommandOption option) async {
     if (_uploadingAttachment) return;
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null || auth != _openedAuthorization) return;
 
-    final picked = await openFile();
-    if (picked == null || !_isCurrentAuthorization(auth)) return;
-
     setState(() => _uploadingAttachment = true);
     try {
+      final picked = await openFile();
+      if (picked == null || !_isCurrentAuthorization(auth)) return;
+      setState(() => _attachmentErrors.remove(option.name));
       final bytes = await picked.readAsBytes();
       if (!_isCurrentAuthorization(auth)) return;
       final chatType = ref.read(chatTypeForChatProvider(widget.chatId));
@@ -162,6 +188,7 @@ class _SlashCommandOptionsSheetState
       );
       if (ticketResult is! FilesApiOk<FileUploadTicket> ||
           !_isCurrentAuthorization(auth)) {
+        if (_isCurrentAuthorization(auth)) _showAttachmentError(option.name);
         return;
       }
       final ticket = ticketResult.data;
@@ -170,7 +197,10 @@ class _SlashCommandOptionsSheetState
         bytes: Uint8List.fromList(bytes),
         mimeType: picked.mimeType ?? 'application/octet-stream',
       );
-      if (put is! FilesApiOk<void> || !_isCurrentAuthorization(auth)) return;
+      if (put is! FilesApiOk<void> || !_isCurrentAuthorization(auth)) {
+        if (_isCurrentAuthorization(auth)) _showAttachmentError(option.name);
+        return;
+      }
       final confirmed = await files.confirmUpload(
         authorization: auth,
         fileId: ticket.fileId,
@@ -178,17 +208,30 @@ class _SlashCommandOptionsSheetState
       );
       if (confirmed is! FilesApiOk<FileMetadataData> ||
           !_isCurrentAuthorization(auth)) {
+        if (_isCurrentAuthorization(auth)) _showAttachmentError(option.name);
         return;
       }
       setState(() {
         _values[option.name] = ticket.fileId;
         _attachmentNames[option.name] = picked.name;
+        _attachmentErrors.remove(option.name);
       });
+    } catch (_) {
+      if (_isCurrentAuthorization(auth)) _showAttachmentError(option.name);
     } finally {
       if (mounted) {
         setState(() => _uploadingAttachment = false);
       }
     }
+  }
+
+  void _showAttachmentError(String optionName) {
+    if (!mounted) return;
+    setState(() {
+      _attachmentErrors[optionName] = AppLocalizations.of(
+        context,
+      )!.chatAttachmentUploadFailed;
+    });
   }
 
   bool get _canSubmit {
@@ -274,6 +317,7 @@ class _SlashCommandOptionsSheetState
           key: Key('slash_option_attachment_picker_${opt.name}'),
           option: opt,
           fileName: _attachmentNames[opt.name],
+          errorMessage: _attachmentErrors[opt.name],
           uploading: _uploadingAttachment,
           onPick: () => _pickAttachment(opt),
         );
@@ -302,9 +346,13 @@ class _SlashCommandOptionsSheetState
                       label: Text(choice.name),
                       onPressed: () {
                         _controllerFor(opt.name).text = choice.value;
+                        _debounces.remove(opt.name)?.cancel();
+                        _autocompleteGeneration[opt.name] =
+                            (_autocompleteGeneration[opt.name] ?? 0) + 1;
                         setState(() {
                           _values[opt.name] = choice.value;
                           _suggestions[opt.name] = const [];
+                          _autocompleteErrors.remove(opt.name);
                         });
                       },
                     ),
@@ -338,10 +386,10 @@ class _SlashCommandOptionsSheetState
               widget.command.displayName,
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (_autocompleteError != null) ...[
+            for (final error in _autocompleteErrors.values) ...[
               const SizedBox(height: 8),
               Text(
-                _autocompleteError!,
+                error,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
@@ -572,12 +620,14 @@ class _AttachmentOptionPicker extends StatelessWidget {
     super.key,
     required this.option,
     required this.fileName,
+    required this.errorMessage,
     required this.uploading,
     required this.onPick,
   });
 
   final BotSlashCommandOption option;
   final String? fileName;
+  final String? errorMessage;
   final bool uploading;
   final VoidCallback onPick;
 
@@ -607,6 +657,13 @@ class _AttachmentOptionPicker extends StatelessWidget {
           Text(
             l10n.slashOptionAttachmentSelected(fileName!),
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        if (errorMessage != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            errorMessage!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
       ],

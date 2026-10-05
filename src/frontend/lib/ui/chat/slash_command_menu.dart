@@ -6,8 +6,9 @@ import '../../l10n/app_localizations.dart';
 import '../../state/bot_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_state_panel.dart';
+import '../a11y/voice_focus_return.dart';
 
-class SlashCommandMenuSheet extends ConsumerWidget {
+class SlashCommandMenuSheet extends ConsumerStatefulWidget {
   const SlashCommandMenuSheet({
     super.key,
     required this.chatId,
@@ -19,21 +20,45 @@ class SlashCommandMenuSheet extends ConsumerWidget {
   static const Key emptyStateKey = Key('slash_commands_empty_panel');
   static const Key noMatchStateKey = Key('slash_commands_no_match_panel');
   static const Key helpFooterKey = Key('slash_commands_help_footer');
+  static const Key searchFieldKey = Key('slash_commands_search_field');
 
   final String chatId;
   final ValueChanged<BotSlashCommand> onSelected;
   final String filter;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  @override
+  ConsumerState<SlashCommandMenuSheet> createState() =>
+      _SlashCommandMenuSheetState();
+}
+
+class _SlashCommandMenuSheetState extends ConsumerState<SlashCommandMenuSheet> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: widget.filter);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    final commandsAsync = ref.watch(slashCommandsForChatProvider(chatId));
-    final spaceId = ref.watch(spaceIdForChatProvider(chatId));
-    final normalizedFilter = filter.trim().toLowerCase();
+    final commandsAsync = ref.watch(
+      slashCommandsForChatProvider(widget.chatId),
+    );
+    final spaceId = ref.watch(spaceIdForChatProvider(widget.chatId));
+    final normalizedFilter = _searchController.text.trim().toLowerCase();
 
     return SafeArea(
-      key: sheetKey,
+      key: SlashCommandMenuSheet.sheetKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -43,6 +68,19 @@ class SlashCommandMenuSheet extends ConsumerWidget {
             child: Text(
               l10n.slashCommandsTitle,
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: TextField(
+              key: SlashCommandMenuSheet.searchFieldKey,
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: l10n.socialTabSearch,
+                prefixIcon: const Icon(Icons.search),
+              ),
+              onChanged: (_) => setState(() {}),
             ),
           ),
           const Divider(height: 1),
@@ -57,7 +95,7 @@ class SlashCommandMenuSheet extends ConsumerWidget {
               icon: Icons.cloud_off_outlined,
               actionLabel: l10n.commonRetry,
               onAction: () =>
-                  ref.invalidate(slashCommandsForChatProvider(chatId)),
+                  ref.invalidate(slashCommandsForChatProvider(widget.chatId)),
             ),
             data: (commands) {
               final filtered = normalizedFilter.isEmpty
@@ -65,9 +103,9 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                   : commands
                         .where(
                           (cmd) =>
-                              cmd.fullCommandName
-                                  .toLowerCase()
-                                  .contains(normalizedFilter) ||
+                              cmd.fullCommandName.toLowerCase().contains(
+                                normalizedFilter,
+                              ) ||
                               cmd.botName.toLowerCase().contains(
                                 normalizedFilter,
                               ),
@@ -77,7 +115,9 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                 final isFilterMiss =
                     normalizedFilter.isNotEmpty && commands.isNotEmpty;
                 return VoiceStatePanel(
-                  key: isFilterMiss ? noMatchStateKey : emptyStateKey,
+                  key: isFilterMiss
+                      ? SlashCommandMenuSheet.noMatchStateKey
+                      : SlashCommandMenuSheet.emptyStateKey,
                   title: isFilterMiss
                       ? l10n.slashCommandsNoMatch
                       : l10n.slashCommandsEmpty,
@@ -106,10 +146,10 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                             entry.label,
                             style: Theme.of(context).textTheme.labelLarge
                                 ?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         );
                       }
@@ -144,14 +184,14 @@ class SlashCommandMenuSheet extends ConsumerWidget {
                                 ? TextStyle(color: voice.textDisabled)
                                 : null,
                           ),
-                          onTap: offline ? null : () => onSelected(cmd),
+                          onTap: offline ? null : () => widget.onSelected(cmd),
                         ),
                       );
                     },
                   ),
                   const Divider(height: 1),
                   _SlashCommandsHelpFooter(
-                    key: helpFooterKey,
+                    key: SlashCommandMenuSheet.helpFooterKey,
                     message: l10n.slashCommandsHelp,
                   ),
                 ],
@@ -165,7 +205,9 @@ class SlashCommandMenuSheet extends ConsumerWidget {
 
   String _emptyHint(AppLocalizations l10n, String? spaceId) {
     final inSpace = spaceId != null && spaceId.isNotEmpty;
-    return inSpace ? l10n.slashCommandsEmptyHint : l10n.slashCommandsDmEmptyHint;
+    return inSpace
+        ? l10n.slashCommandsEmptyHint
+        : l10n.slashCommandsDmEmptyHint;
   }
 
   List<_SlashMenuEntry> _groupCommands(List<BotSlashCommand> commands) {
@@ -218,9 +260,9 @@ class _SlashCommandsHelpFooter extends StatelessWidget {
       child: Text(
         message,
         textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: voice.textSecondary,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: voice.textSecondary),
       ),
     );
   }
@@ -233,6 +275,7 @@ Future<void> showSlashCommandMenu({
   String filter = '',
   required Future<void> Function(BotSlashCommand command) onSelected,
 }) {
+  final focusReturn = VoiceFocusReturn.capture();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -248,5 +291,5 @@ Future<void> showSlashCommandMenu({
         );
       },
     ),
-  );
+  ).whenComplete(focusReturn.restore);
 }
