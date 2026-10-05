@@ -87,6 +87,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
       msg.hasCreatedAt() ? msg.createdAt : null,
     ),
     isPinned: msg.hasIsPinned() && msg.isPinned,
+    contentType: msg.hasContentType() ? msg.contentType : null,
     threadParentId: msg.hasThreadParentId()
         ? emptyToNull(msg.threadParentId)
         : null,

@@ -597,7 +597,13 @@ void main() {
             .value,
         isTrue,
       );
-      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text('Could not complete this action.'),
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('guest-action-secret'), findsNothing);
     },
   );

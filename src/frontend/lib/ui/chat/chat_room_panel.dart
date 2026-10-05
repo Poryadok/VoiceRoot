@@ -29,6 +29,7 @@ import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
+import '../../theme/voice_layout.dart';
 import '../api_error_messages.dart';
 import '../core/voice_disabled_action.dart';
 import '../core/chat_author_label.dart';
@@ -66,6 +67,7 @@ import '../../backend/e2e_client.dart';
 import 'slash_command_menu.dart';
 import 'slash_command_options_sheet.dart';
 import 'thread_side_panel.dart';
+import 'pinned_messages_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -96,6 +98,9 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key pinnedBarKey = Key('chat_room_pinned_bar');
+  static const Key pinnedMessagesHeaderKey = Key(
+    'chat_room_pinned_messages_header',
+  );
   static const Key groupMembersKey = Key('chat_room_group_members');
   static const Key slashCommandsKey = Key('chat_room_slash_commands');
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
@@ -185,6 +190,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
+  var _pinnedBarHidden = false;
+  var _pinnedJumpGeneration = 0;
+  String? _shownPinnedMessageId;
   var _highlightedMessageId = null as String?;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
@@ -198,6 +206,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   @override
   void dispose() {
+    _pinnedJumpGeneration++;
     _attachmentOperation++;
     _pendingAttachmentUpload = null;
     _attachmentUploadFailure = null;
@@ -214,6 +223,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _pinnedJumpGeneration++;
+      _pinnedBarHidden = false;
+      _shownPinnedMessageId = null;
       _attachmentOperation++;
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
@@ -258,21 +270,81 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     });
   }
 
-  void _scrollToMessage(String messageId) {
-    final room = ref.read(chatRoomControllerProvider(widget.chatId));
-    final index = room.messages.indexWhere((m) => m.id == messageId);
-    if (index < 0) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+  Future<bool> _scrollToMessage(
+    String messageId, {
+    bool Function()? isCancelled,
+  }) async {
+    final generation = ++_pinnedJumpGeneration;
+    final controller = ref.read(
+      chatRoomControllerProvider(widget.chatId).notifier,
+    );
+    var room = ref.read(chatRoomControllerProvider(widget.chatId));
+    if (!room.messages.any((message) => message.id == messageId)) {
+      final found = await controller.loadHistoryUntilMessage(
+        messageId,
+        isCancelled: () =>
+            !mounted ||
+            generation != _pinnedJumpGeneration ||
+            (isCancelled?.call() ?? false),
+      );
+      if (!found) return false;
+      room = ref.read(chatRoomControllerProvider(widget.chatId));
+    }
+    if (!mounted ||
+        generation != _pinnedJumpGeneration ||
+        (isCancelled?.call() ?? false)) {
+      return false;
+    }
+    final index = room.messages.indexWhere(
+      (message) => message.id == messageId,
+    );
+    if (index < 0) return false;
+    final completed = Completer<bool>();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted ||
+          generation != _pinnedJumpGeneration ||
+          (isCancelled?.call() ?? false) ||
+          !_scrollController.hasClients) {
+        completed.complete(false);
+        return;
+      }
       final max = _scrollController.position.maxScrollExtent;
       final count = room.messages.length;
       final target = count <= 1 ? max : max * (index / (count - 1));
-      _scrollController.animateTo(
-        target,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      try {
+        await _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+        completed.complete(
+          mounted &&
+              generation == _pinnedJumpGeneration &&
+              !(isCancelled?.call() ?? false),
+        );
+      } catch (_) {
+        completed.complete(false);
+      }
     });
+    return completed.future;
+  }
+
+  void _handlePendingPinnedMessageJump(PendingPinnedMessageJump request) {
+    unawaited(() async {
+      final opened = await _scrollToMessage(
+        request.messageId,
+        isCancelled: () => request.cancelled,
+      );
+      request.complete(opened);
+      if (!mounted) return;
+      final pending = ref.read(pendingPinnedMessageJumpProvider(widget.chatId));
+      if (identical(pending, request)) {
+        ref
+                .read(pendingPinnedMessageJumpProvider(widget.chatId).notifier)
+                .state =
+            null;
+      }
+    }());
   }
 
   @override
@@ -308,6 +380,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             errorMessage: controllerRoom.errorMessage,
             realtimeStatus: controllerRoom.realtimeStatus,
           );
+    final pinnedMessages = room.pinnedMessages;
+    final shownPinIndex = pinnedMessages.indexWhere(
+      (message) => message.id == _shownPinnedMessageId,
+    );
+    final currentPinnedIndex = shownPinIndex < 0 ? 0 : shownPinIndex;
+    final currentPinnedMessage = pinnedMessages.isEmpty
+        ? null
+        : pinnedMessages[currentPinnedIndex];
     final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final isGuest = ref.watch(authControllerProvider).isGuest;
@@ -406,12 +486,30 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
     ref.listen(pendingChatMessageScrollProvider(widget.chatId), (prev, next) {
       if (next != null && next.isNotEmpty) {
-        _scrollToMessage(next);
-        ref
-                .read(pendingChatMessageScrollProvider(widget.chatId).notifier)
-                .state =
-            null;
+        unawaited(
+          _scrollToMessage(next).then((_) {
+            if (!mounted) return;
+            final pending = ref.read(
+              pendingChatMessageScrollProvider(widget.chatId),
+            );
+            if (pending == next) {
+              ref
+                      .read(
+                        pendingChatMessageScrollProvider(
+                          widget.chatId,
+                        ).notifier,
+                      )
+                      .state =
+                  null;
+            }
+          }),
+        );
       }
+    });
+
+    ref.listen(pendingPinnedMessageJumpProvider(widget.chatId), (prev, next) {
+      if (next == null) return;
+      _handlePendingPinnedMessageJump(next);
     });
 
     ref.listen(pendingChatMessageHighlightProvider(widget.chatId), (
@@ -632,6 +730,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                         icon: const Icon(Icons.info_outline),
                       ),
+                      if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
+                        IconButton(
+                          key: ChatRoomPanel.pinnedMessagesHeaderKey,
+                          tooltip: l10n.chatPinnedMessagesRestore,
+                          onPressed: () =>
+                              setState(() => _pinnedBarHidden = false),
+                          icon: const Icon(Icons.push_pin_outlined),
+                        ),
                       if (shareUrlForChat(
                             chatId: widget.chatId,
                             spaceId: spaceId,
@@ -723,6 +829,74 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   icon: Icons.cloud_off_outlined,
                   tone: VoiceBannerTone.warning,
                 ),
+              if (room.pinnedMessages.isEmpty &&
+                  room.pinnedMessagesStatus == PinnedMessagesLoadStatus.loading)
+                const LinearProgressIndicator(
+                  key: Key('chat_room_pins_loading'),
+                  minHeight: 2,
+                ),
+              if (room.pinnedMessagesStatus == PinnedMessagesLoadStatus.failed)
+                Builder(
+                  builder: (context) {
+                    final message = commonActionErrorMessage(
+                      l10n,
+                      statusCode: room.pinnedMessagesErrorStatusCode,
+                    );
+                    final voice = VoiceColors.of(context);
+                    return Material(
+                      key: const Key('chat_room_pins_error'),
+                      color: voice.error.withValues(alpha: 0.15),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.cloud_off_outlined,
+                              size: 16,
+                              color: voice.error,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Tooltip(
+                                message: message,
+                                child: Semantics(
+                                  label: message,
+                                  child: ExcludeSemantics(
+                                    child: Text(
+                                      message,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: voice.error),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => ref
+                                  .read(
+                                    chatRoomControllerProvider(
+                                      widget.chatId,
+                                    ).notifier,
+                                  )
+                                  .retryPinnedMessages(),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                              child: Text(l10n.commonRetry),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               if (peerId != null &&
                   ref
                       .watch(e2eIdentityTrustProvider)
@@ -781,12 +955,33 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     _scrollToBottom();
                   },
                 ),
-              if (room.pinnedMessages.isNotEmpty)
+              if (currentPinnedMessage != null && !_pinnedBarHidden)
                 _PinnedMessagesBar(
                   key: ChatRoomPanel.pinnedBarKey,
-                  pinned: room.pinnedMessages,
-                  label: l10n.chatPinnedBar(room.pinnedMessages.length),
-                  onTap: (messageId) => _scrollToMessage(messageId),
+                  message: currentPinnedMessage,
+                  label: l10n.chatPinnedBar(pinnedMessages.length),
+                  contentTypeLabel: pinnedMessageContentTypeLabel(
+                    l10n,
+                    currentPinnedMessage.contentType,
+                  ),
+                  onTap: () {
+                    unawaited(_scrollToMessage(currentPinnedMessage.id));
+                    if (pinnedMessages.length > 1) {
+                      setState(() {
+                        _shownPinnedMessageId =
+                            pinnedMessages[(currentPinnedIndex + 1) %
+                                    pinnedMessages.length]
+                                .id;
+                      });
+                    }
+                  },
+                  onOpenAll: () => PinnedMessagesPanel.show(
+                    context,
+                    messages: pinnedMessages,
+                    onOpenMessage: _scrollToMessage,
+                    onCancel: () => _pinnedJumpGeneration++,
+                  ),
+                  onHide: () => setState(() => _pinnedBarHidden = true),
                 ),
               if (room.isDmPeerDeleted && room.messages.isNotEmpty)
                 Padding(
@@ -914,6 +1109,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     children: [
                       Expanded(
                         child: VoiceCompactBanner(
+                          key: failure.errorCode == 'file_infected'
+                              ? null
+                              : ChatRoomPanel.attachmentUploadRetryKey,
                           message: _attachmentFailureMessage(
                             AppLocalizations.of(context)!,
                             failure,
@@ -2431,59 +2629,91 @@ String _presenceLabel(AppLocalizations l10n, String status) {
 class _PinnedMessagesBar extends StatelessWidget {
   const _PinnedMessagesBar({
     super.key,
-    required this.pinned,
+    required this.message,
     required this.label,
+    required this.contentTypeLabel,
     required this.onTap,
+    required this.onOpenAll,
+    required this.onHide,
   });
 
-  final List<VoiceMessage> pinned;
+  final VoiceMessage message;
   final String label;
-  final void Function(String messageId) onTap;
+  final String? contentTypeLabel;
+  final VoidCallback onTap;
+  final VoidCallback onOpenAll;
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
-    final preview = pinned.first;
-    final collapsed = pinned.length > 1;
+    final l10n = AppLocalizations.of(context)!;
     final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
       color: voice.profileAccent,
       fontWeight: FontWeight.w600,
     );
-    return Material(
+    final bar = Material(
       color: voice.surface,
-      child: InkWell(
-        onTap: () => onTap(preview.id),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
-              const SizedBox(width: 8),
-              Expanded(
-                child: collapsed
-                    ? Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: labelStyle,
-                      )
-                    : Column(
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(label, style: labelStyle),
                           Text(
-                            preview.content,
+                            message.content.trim().isNotEmpty
+                                ? message.content.trim()
+                                : (contentTypeLabel ??
+                                      l10n.chatPinnedMessagesTitle),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: voice.textSecondary),
                           ),
+                          if (contentTypeLabel != null)
+                            Text(
+                              contentTypeLabel!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: voice.textSecondary),
+                            ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+          IconButton(
+            tooltip: l10n.chatPinnedMessagesOpen,
+            onPressed: onOpenAll,
+            icon: const Icon(Icons.keyboard_arrow_down),
+          ),
+          IconButton(
+            tooltip: l10n.chatPinnedMessagesHide,
+            onPressed: onHide,
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
+    );
+    if (!VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) return bar;
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -100) onHide();
+      },
+      child: bar,
     );
   }
 }
