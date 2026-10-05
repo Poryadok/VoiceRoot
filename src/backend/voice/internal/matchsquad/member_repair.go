@@ -102,7 +102,7 @@ AND ((m.membership_state='LEAVING' AND (m.latest_grant_expires_at IS NULL OR m.l
 			return status.Error(codes.Unavailable, "Voice MatchSquad leave repair unavailable")
 		}
 		if state == "LEAVING" {
-			_, err = tx.Exec(ctx, `UPDATE voice_room_memberships m SET membership_state='LEFT',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=clock_timestamp() WHERE m.profile_id=$1 AND m.room_id=$2 AND m.media_epoch=$3 AND m.membership_state='LEAVING' AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id WHERE r.room_id=m.room_id AND r.owner_id=$4 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice')`, c.profile, c.room, c.epoch, c.match)
+			_, err = tx.Exec(ctx, `UPDATE voice_room_memberships m SET membership_state='LEFT',updated_at=clock_timestamp() WHERE m.profile_id=$1 AND m.room_id=$2 AND m.media_epoch=$3 AND m.membership_state='LEAVING' AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id WHERE r.room_id=m.room_id AND r.owner_id=$4 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice')`, c.profile, c.room, c.epoch, c.match)
 			if err != nil {
 				_ = tx.Rollback(ctx)
 				return status.Error(codes.Unavailable, "Voice MatchSquad leave repair unavailable")
@@ -172,7 +172,7 @@ WHERE operation_id=$1 AND match_id=$2 AND room_id=$3 AND profile_id=$4 AND accou
 			return status.Error(codes.Unavailable, "Voice MatchSquad join repair unavailable")
 		}
 		if state == "pending" {
-			command, updateErr := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='EJECTED',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=clock_timestamp()
+			command, updateErr := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='EJECTED',updated_at=clock_timestamp()
 WHERE profile_id=$1 AND account_id=$2 AND session_epoch=$3 AND room_id=$4 AND media_epoch=$5 AND membership_state='JOINING'
 AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id WHERE r.room_id=$4 AND r.owner_id=$6 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice')`, item.profile, item.account, item.session, item.room, item.epoch, item.match)
 			if updateErr != nil || command.RowsAffected() != 1 {
@@ -280,7 +280,7 @@ WHERE m.profile_id=$3 AND m.account_id=$4 AND m.session_epoch=$5 AND m.media_epo
 		membership := callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING
 		if left {
 			membership = callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEFT
-			if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='LEFT',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=clock_timestamp() WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='LEAVING'`, item.profile, item.room, item.epoch); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='LEFT',updated_at=clock_timestamp() WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='LEAVING'`, item.profile, item.room, item.epoch); err != nil {
 				_ = tx.Rollback(ctx)
 				return status.Error(codes.Unavailable, "Voice MatchSquad member effect repair unavailable")
 			}
@@ -415,7 +415,7 @@ WHERE r.room_id=$1 FOR UPDATE OF r,o`, roomID, matchID).Scan(&absent); err != ni
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_match_squad_member_effects WHERE match_id=$2 AND room_id=$1 AND state<>'confirmed')`, roomID, matchID).Scan(&pending); err != nil || pending {
 		return status.Error(codes.Unavailable, "MatchSquad member effects are still draining")
 	}
-	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships m SET membership_state='EJECTED',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=clock_timestamp()
+	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships m SET membership_state='EJECTED',updated_at=clock_timestamp()
 WHERE m.room_id=$1 AND m.membership_state IN ('JOINING','JOINED','LEAVING')
 AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id WHERE r.room_id=m.room_id AND r.owner_id=$2 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice')`, roomID, matchID); err != nil {
 		return status.Error(codes.Unavailable, "could not persist MatchSquad terminal member state")

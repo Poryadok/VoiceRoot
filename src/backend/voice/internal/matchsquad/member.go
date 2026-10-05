@@ -623,7 +623,7 @@ func (s *MatchSquadMemberService) abortJoin(ctx context.Context, operation, room
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	now := s.now()
-	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='EJECTED',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=$3 WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$4 AND membership_state='JOINING'`, profile, room, now, epoch); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='EJECTED',updated_at=$3 WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$4 AND membership_state='JOINING'`, profile, room, now, epoch); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE voice_match_squad_member_effects SET state='confirmed',confirmed_at=$3,updated_at=$3 WHERE operation_id=$1 AND effect_kind='join_projection' AND media_epoch=$2 AND state='pending'`, operation, epoch, now); err != nil {
@@ -695,7 +695,7 @@ func (s *MatchSquadMemberService) finishLeave(ctx context.Context, actor princip
 	}
 	if expired {
 		response.MembershipState = callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEFT
-		if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='LEFT',can_join=false,can_publish_audio=false,can_publish_video=false,can_publish_screen_share=false,can_subscribe=false,updated_at=clock_timestamp() WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='LEAVING'`, profile, room, epoch); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='LEFT',updated_at=clock_timestamp() WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='LEAVING'`, profile, room, epoch); err != nil {
 			return status.Error(codes.Unavailable, "could not finish MatchSquad leave")
 		}
 	}
