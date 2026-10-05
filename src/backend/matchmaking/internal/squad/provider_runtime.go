@@ -91,12 +91,12 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 	}
 	chatConn, err := grpc.NewClient(grpcclient.DialTarget(config.ChatAddr), grpc.WithTransportCredentials(chatCredentials))
 	if err != nil {
-		return nil, nil, true, errors.New("Chat MatchSquad mTLS client could not be constructed")
+		return nil, nil, true, errors.New("chat MatchSquad mTLS client could not be constructed")
 	}
 	voiceConn, err := grpc.NewClient(grpcclient.DialTarget(config.VoiceAddr), grpc.WithTransportCredentials(voiceCredentials))
 	if err != nil {
 		_ = chatConn.Close()
-		return nil, nil, true, errors.New("Voice MatchSquad mTLS client could not be constructed")
+		return nil, nil, true, errors.New("voice MatchSquad mTLS client could not be constructed")
 	}
 	worker := &MatchSquadProviderWorker{
 		Store: matchStore, Issuer: issuer,
@@ -125,7 +125,7 @@ func providerTLSCredentials(caFile, serverName string, certificate tls.Certifica
 func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, error) {
 	directory, activeKID = strings.TrimSpace(directory), strings.TrimSpace(activeKID)
 	if directory == "" || !principalKIDPattern.MatchString(activeKID) {
-		return nil, errors.New("Matchmaking principal signing configuration is invalid")
+		return nil, errors.New("matchmaking principal signing configuration is invalid")
 	}
 	canonicalDir, err := filepath.EvalSymlinks(directory)
 	if err != nil {
