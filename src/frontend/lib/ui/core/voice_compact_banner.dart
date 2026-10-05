@@ -8,16 +8,20 @@ class VoiceCompactBanner extends StatelessWidget {
   const VoiceCompactBanner({
     super.key,
     required this.message,
+    this.detail,
     this.icon = Icons.info_outline,
     this.actionLabel,
     this.onAction,
+    this.onDismiss,
     this.tone = VoiceBannerTone.neutral,
   });
 
   final String message;
+  final String? detail;
   final IconData icon;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final VoidCallback? onDismiss;
   final VoiceBannerTone tone;
 
   @override
@@ -25,8 +29,14 @@ class VoiceCompactBanner extends StatelessWidget {
     final voice = VoiceColors.of(context);
     final pad = context.voiceMetrics.spacing('12', fallback: 12);
     final (bg, fg) = switch (tone) {
-      VoiceBannerTone.error => (voice.error.withValues(alpha: 0.15), voice.error),
-      VoiceBannerTone.warning => (voice.focusRing.withValues(alpha: 0.12), voice.textPrimary),
+      VoiceBannerTone.error => (
+        voice.error.withValues(alpha: 0.15),
+        voice.error,
+      ),
+      VoiceBannerTone.warning => (
+        voice.focusRing.withValues(alpha: 0.12),
+        voice.textPrimary,
+      ),
       VoiceBannerTone.neutral => (voice.elevated, voice.textSecondary),
     };
     return Material(
@@ -38,15 +48,34 @@ class VoiceCompactBanner extends StatelessWidget {
             Icon(icon, size: 16, color: fg),
             SizedBox(width: pad / 2),
             Expanded(
-              child: Text(
-                message,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: fg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    message,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: fg),
+                  ),
+                  if (detail != null)
+                    Text(
+                      detail!,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: fg),
+                    ),
+                ],
               ),
             ),
             if (actionLabel != null && onAction != null)
-              TextButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
+              TextButton(onPressed: onAction, child: Text(actionLabel!)),
+            if (onDismiss != null)
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close),
+                visualDensity: VisualDensity.compact,
               ),
           ],
         ),

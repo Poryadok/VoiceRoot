@@ -70,6 +70,48 @@ void main() {
     expect(harness.connection(1).resumeLastSequences, [42]);
   });
 
+  test('manual retry is single-flight and uses the current session', () async {
+    final harness = _ResumeReconnectHarness();
+    addTearDown(harness.dispose);
+
+    await harness.connectInitial();
+    await harness.connection(0).closeFrames();
+    await pumpEventQueue();
+
+    final first = harness.hub.retryCurrentSession();
+    final duplicate = harness.hub.retryCurrentSession();
+    await harness.transport.waitForConnect(1);
+    await Future.wait([first, duplicate]);
+
+    expect(harness.transport.sessions, [_session, _session]);
+    expect(harness.transport.connections, hasLength(2));
+    expect(harness.hub.canRetryCurrentSession, isFalse);
+    harness.connection(1).addHello();
+    await pumpEventQueue();
+    expect(
+      harness.container.read(realtimeLinkStatusProvider),
+      RealtimeLinkStatus.connected,
+    );
+  });
+
+  test('a session change invalidates a pending manual retry', () async {
+    final harness = _ResumeReconnectHarness();
+    addTearDown(harness.dispose);
+
+    await harness.connectInitial();
+    await harness.connection(0).closeFrames();
+    await pumpEventQueue();
+
+    final staleRetry = harness.hub.retryCurrentSession();
+    harness.auth.state = const AuthState(session: _rotatedSession);
+    await staleRetry;
+    expect(harness.transport.connections, hasLength(1));
+
+    await harness.hub.ensureConnected();
+    await harness.transport.waitForConnect(1);
+    expect(harness.transport.sessions[1], _rotatedSession);
+  });
+
   test(
     'reconnect retains last_s when an intermediate transport closes pre-hello',
     () async {

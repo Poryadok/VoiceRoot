@@ -2586,6 +2586,7 @@ class RealtimeHub {
   RealtimeHelloBinding? _helloBinding;
   int? _lastSequence;
   int? _resumeLastSequence;
+  Future<void>? _manualRetry;
 
   RealtimeLinkStatus get status => _status;
   Stream<RealtimeFrame> get events => _eventController.stream;
@@ -2604,6 +2605,45 @@ class RealtimeHub {
     if (auth == null || !config.hasBaseUrl) return;
     final binding = _activateBinding(auth);
     await _connect(binding, config.baseUrl);
+  }
+
+  bool get canRetryCurrentSession =>
+      !_disposed &&
+      _manualRetry == null &&
+      _connectingBinding == null &&
+      (_connection == null || identical(_helloAcceptedConnection, _connection));
+
+  /// Immediately retries the currently authenticated session without using
+  /// the profile-switch path or resetting automatic backoff state.
+  Future<void> retryCurrentSession() {
+    final pending = _manualRetry;
+    if (pending != null) return pending;
+    if (!canRetryCurrentSession) return Future<void>.value();
+    final session = _ref.read(authControllerProvider).session;
+    final config = _ref.read(gatewayConfigProvider);
+    if (session == null || !config.hasBaseUrl) return Future<void>.value();
+    if (_status == RealtimeLinkStatus.connected) return Future<void>.value();
+
+    final currentBinding = _binding;
+    final binding = currentBinding != null && currentBinding.session == session
+        ? currentBinding
+        : _activateBinding(session);
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    final operation = () async {
+      await _tearDownConnection(preserveLastSequence: true);
+      if (!_isCurrent(binding) ||
+          _ref.read(authControllerProvider).session != session) {
+        return;
+      }
+      final latestConfig = _ref.read(gatewayConfigProvider);
+      if (!latestConfig.hasBaseUrl) return;
+      await _connect(binding, latestConfig.baseUrl, isReconnectAttempt: true);
+    }();
+    _manualRetry = operation;
+    return operation.whenComplete(() {
+      if (identical(_manualRetry, operation)) _manualRetry = null;
+    });
   }
 
   _RealtimeHubBinding _activateBinding(AuthSession session, {int? generation}) {
@@ -2954,19 +2994,34 @@ final profileBoundRealtimeEventProvider =
 const reconnectBannerShowDelay = Duration(seconds: 2);
 const reconnectBannerHideDelay = Duration(seconds: 1);
 
-class ReconnectBannerController extends Notifier<bool> {
+class NetworkStatusBannerState {
+  const NetworkStatusBannerState({
+    this.visible = false,
+    this.dismissed = false,
+    this.retrying = false,
+  });
+
+  final bool visible;
+  final bool dismissed;
+  final bool retrying;
+}
+
+class ReconnectBannerController extends Notifier<NetworkStatusBannerState> {
   Timer? _showTimer;
   Timer? _hideTimer;
   var _wasConnected = false;
   var _disposed = false;
 
+  bool _isOffline = false;
+
   @override
-  bool build() {
+  NetworkStatusBannerState build() {
     ref.onDispose(() {
       _disposed = true;
       _cancelTimers();
     });
     final initialStatus = ref.read(realtimeLinkStatusProvider);
+    _isOffline = ref.read(isDeviceOfflineProvider);
     if (initialStatus == RealtimeLinkStatus.connected) {
       _wasConnected = true;
     } else if (_isUnhealthy(initialStatus)) {
@@ -2976,7 +3031,82 @@ class ReconnectBannerController extends Notifier<bool> {
     ref.listen<RealtimeLinkStatus>(realtimeLinkStatusProvider, (prev, next) {
       _onLinkStatusChanged(prev, next);
     });
-    return false;
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (previous?.session == next.session) return;
+      _cancelTimers();
+      _wasConnected =
+          ref.read(realtimeLinkStatusProvider) == RealtimeLinkStatus.connected;
+      state = NetworkStatusBannerState(
+        visible:
+            _isOffline || _isUnhealthy(ref.read(realtimeLinkStatusProvider)),
+      );
+    });
+    ref.listen<bool>(isDeviceOfflineProvider, (_, offline) {
+      _isOffline = offline;
+      if (offline) {
+        _showTimer?.cancel();
+        _showTimer = null;
+        _hideTimer?.cancel();
+        _hideTimer = null;
+        state = NetworkStatusBannerState(
+          visible: !state.dismissed,
+          dismissed: state.dismissed,
+          retrying: state.retrying,
+        );
+      } else if (_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
+        state = NetworkStatusBannerState(
+          visible: !state.dismissed,
+          dismissed: state.dismissed,
+          retrying: state.retrying,
+        );
+      } else if (!_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
+        state = NetworkStatusBannerState(
+          visible: false,
+          dismissed: false,
+          retrying: state.retrying,
+        );
+      }
+    });
+    return NetworkStatusBannerState(visible: _isOffline);
+  }
+
+  void dismiss() {
+    _showTimer?.cancel();
+    _showTimer = null;
+    _hideTimer?.cancel();
+    _hideTimer = null;
+    state = NetworkStatusBannerState(dismissed: true, retrying: state.retrying);
+  }
+
+  Future<void> retry() async {
+    if (_isOffline || state.retrying) return;
+    final auth = ref.read(authControllerProvider).session;
+    final hub = ref.read(realtimeHubProvider);
+    if (auth == null || !hub.canRetryCurrentSession) return;
+    state = NetworkStatusBannerState(
+      visible: state.visible,
+      dismissed: state.dismissed,
+      retrying: true,
+    );
+    try {
+      await hub.retryCurrentSession();
+    } finally {
+      if (!_disposed && ref.read(authControllerProvider).session == auth) {
+        state = NetworkStatusBannerState(
+          visible: state.visible,
+          dismissed: state.dismissed,
+          retrying: false,
+        );
+      }
+    }
+  }
+
+  void _setVisible(bool visible, {bool? dismissed}) {
+    state = NetworkStatusBannerState(
+      visible: visible,
+      dismissed: dismissed ?? state.dismissed,
+      retrying: state.retrying,
+    );
   }
 
   void _cancelTimers() {
@@ -2997,7 +3127,7 @@ class ReconnectBannerController extends Notifier<bool> {
       _showTimer = null;
       if (_disposed) return;
       if (_isUnhealthy(ref.read(realtimeLinkStatusProvider))) {
-        state = true;
+        if (!state.dismissed && !_isOffline) _setVisible(true);
       }
     });
   }
@@ -3007,12 +3137,12 @@ class ReconnectBannerController extends Notifier<bool> {
       _wasConnected = true;
       _showTimer?.cancel();
       _showTimer = null;
-      if (state) {
+      if (state.visible || state.dismissed) {
         _hideTimer?.cancel();
         _hideTimer = Timer(reconnectBannerHideDelay, () {
           _hideTimer = null;
-          if (_disposed) return;
-          state = false;
+          if (_disposed || _isOffline) return;
+          _setVisible(false, dismissed: false);
         });
       } else {
         _hideTimer?.cancel();
@@ -3024,7 +3154,7 @@ class ReconnectBannerController extends Notifier<bool> {
     if (next == RealtimeLinkStatus.disconnected) {
       _cancelTimers();
       _wasConnected = false;
-      state = false;
+      _setVisible(_isOffline, dismissed: false);
       return;
     }
 
@@ -3034,7 +3164,7 @@ class ReconnectBannerController extends Notifier<bool> {
 
     final lostConnection = prev == RealtimeLinkStatus.connected;
     if (_isUnhealthy(next) &&
-        (lostConnection || (!state && _showTimer == null))) {
+        (lostConnection || (!state.visible && _showTimer == null))) {
       _hideTimer?.cancel();
       _hideTimer = null;
       _scheduleShow();
@@ -3043,7 +3173,7 @@ class ReconnectBannerController extends Notifier<bool> {
 }
 
 final reconnectBannerVisibleProvider =
-    NotifierProvider<ReconnectBannerController, bool>(
+    NotifierProvider<ReconnectBannerController, NetworkStatusBannerState>(
       ReconnectBannerController.new,
     );
 

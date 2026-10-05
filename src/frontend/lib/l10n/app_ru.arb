@@ -347,6 +347,7 @@
   "chatRealtimeConnected": "Онлайн",
   "chatRealtimeConnecting": "Подключение…",
   "chatRealtimeReconnecting": "Переподключение…",
+  "networkReconnectDetails": "Черновики остаются на устройстве. Обновления чата продолжатся после подключения.",
   "chatRealtimeOffline": "Офлайн",
   "chatOfflineReadOnly": "Нет сети. Показаны сохранённые сообщения.",
   "chatOfflineSendBlocked": "Нельзя отправить сообщение без сети.",

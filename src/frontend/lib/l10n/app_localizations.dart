@@ -1508,6 +1508,12 @@ abstract class AppLocalizations {
   /// **'Reconnecting…'**
   String get chatRealtimeReconnecting;
 
+  /// No description provided for @networkReconnectDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafts stay on this device. Realtime updates resume after reconnection.'**
+  String get networkReconnectDetails;
+
   /// No description provided for @chatRealtimeOffline.
   ///
   /// In en, this message translates to:

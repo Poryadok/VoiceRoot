@@ -384,6 +384,7 @@
   "chatRealtimeConnected": "Live",
   "chatRealtimeConnecting": "Connecting…",
   "chatRealtimeReconnecting": "Reconnecting…",
+  "networkReconnectDetails": "Drafts stay on this device. Realtime updates resume after reconnection.",
   "chatRealtimeOffline": "Offline",
   "chatOfflineReadOnly": "You're offline. Showing saved messages.",
   "chatOfflineSendBlocked": "Can't send messages while offline.",

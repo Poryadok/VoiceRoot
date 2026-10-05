@@ -320,7 +320,12 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final voice = VoiceColors.of(context);
     final shellNav = ref.read(shellNavigationProvider);
     final inSpace = selectedSpaceId != null;
-    final reconnectBannerVisible = ref.watch(reconnectBannerVisibleProvider);
+    final reconnectBanner = ref.watch(reconnectBannerVisibleProvider);
+    final deviceOffline = ref.watch(isDeviceOfflineProvider);
+    final canRetryBanner =
+        !deviceOffline &&
+        !reconnectBanner.retrying &&
+        ref.read(realtimeHubProvider).canRetryCurrentSession;
 
     final isGuest = ref.watch(authControllerProvider).isGuest;
     final sessionLabel = profileAsync.when(
@@ -416,12 +421,34 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                             children: [
                               const GuestSaveAccountReminderBanner(),
                               const GuestRestrictedActions(),
-                              if (reconnectBannerVisible &&
+                              if (reconnectBanner.visible &&
                                   selectedChatId == null)
                                 VoiceCompactBanner(
                                   key: const Key('global_reconnect_banner'),
-                                  message: l10n.chatRealtimeReconnecting,
-                                  icon: Icons.sync_problem,
+                                  message: deviceOffline
+                                      ? l10n.chatRealtimeOffline
+                                      : l10n.chatRealtimeReconnecting,
+                                  detail: deviceOffline
+                                      ? l10n.chatOfflineSendBlocked
+                                      : l10n.networkReconnectDetails,
+                                  icon: deviceOffline
+                                      ? Icons.cloud_off_outlined
+                                      : Icons.sync_problem,
+                                  actionLabel:
+                                      canRetryBanner ? l10n.commonRetry : null,
+                                  onAction: !canRetryBanner
+                                      ? null
+                                      : () => ref
+                                            .read(
+                                              reconnectBannerVisibleProvider
+                                                  .notifier,
+                                            )
+                                            .retry(),
+                                  onDismiss: () => ref
+                                      .read(
+                                        reconnectBannerVisibleProvider.notifier,
+                                      )
+                                      .dismiss(),
                                   tone: VoiceBannerTone.warning,
                                 ),
                               _SessionBar(

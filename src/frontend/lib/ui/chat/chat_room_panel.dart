@@ -389,6 +389,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         ? null
         : pinnedMessages[currentPinnedIndex];
     final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
+    final reconnectBanner = ref.watch(reconnectBannerVisibleProvider);
+    final canRetryBanner =
+        !isOffline &&
+        !reconnectBanner.retrying &&
+        ref.read(realtimeHubProvider).canRetryCurrentSession;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final isGuest = ref.watch(authControllerProvider).isGuest;
     String? groupName;
@@ -815,18 +820,32 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ),
                 ),
               ),
-              if (ref.watch(reconnectBannerVisibleProvider))
+              if (!reconnectBanner.dismissed &&
+                  (reconnectBanner.visible || room.isOfflineCache))
                 VoiceCompactBanner(
-                  key: ChatRoomPanel.reconnectBannerKey,
-                  message: l10n.chatRealtimeReconnecting,
-                  icon: Icons.sync_problem,
-                  tone: VoiceBannerTone.warning,
-                ),
-              if (room.isOfflineCache || ref.watch(isDeviceOfflineProvider))
-                VoiceCompactBanner(
-                  key: ChatRoomPanel.offlineBannerKey,
-                  message: l10n.chatOfflineReadOnly,
-                  icon: Icons.cloud_off_outlined,
+                  key: isOffline
+                      ? ChatRoomPanel.offlineBannerKey
+                      : ChatRoomPanel.reconnectBannerKey,
+                  message: isOffline
+                      ? (room.isOfflineCache
+                            ? l10n.chatOfflineReadOnly
+                            : l10n.chatRealtimeOffline)
+                      : l10n.chatRealtimeReconnecting,
+                  detail: isOffline
+                      ? l10n.chatOfflineSendBlocked
+                      : l10n.networkReconnectDetails,
+                  icon: isOffline
+                      ? Icons.cloud_off_outlined
+                      : Icons.sync_problem,
+                  actionLabel: canRetryBanner ? l10n.commonRetry : null,
+                  onAction: !canRetryBanner
+                      ? null
+                      : () => ref
+                            .read(reconnectBannerVisibleProvider.notifier)
+                            .retry(),
+                  onDismiss: () => ref
+                      .read(reconnectBannerVisibleProvider.notifier)
+                      .dismiss(),
                   tone: VoiceBannerTone.warning,
                 ),
               if (room.pinnedMessages.isEmpty &&

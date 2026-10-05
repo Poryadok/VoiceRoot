@@ -113,6 +113,38 @@ void main() {
     );
     expect(attach.onPressed, isNull);
   });
+
+  testWidgets('offline chat banner includes truthful send status and actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      offlineChatApp(
+        cache: InMemoryMessageCacheStore(),
+        home: const ChatRoomPanel(chatId: 'chat-offline'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatRoomPanel.offlineBannerKey), findsOneWidget);
+    expect(find.text("Can't send messages while offline."), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsOneWidget);
+  });
+
+  testWidgets('offline chat banner exposes retry and dismiss controls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      offlineChatApp(
+        cache: InMemoryMessageCacheStore(),
+        home: const ChatRoomPanel(chatId: 'chat-offline'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsOneWidget);
+  });
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
