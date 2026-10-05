@@ -27,7 +27,7 @@ MatchData _pendingMatch() {
     mode: 'Duo',
     region: 'eu',
     status: 'pending_accept',
-    profileIds: ['p1', 'p2'],
+    profileIds: ['prof-test', 'p2'],
     gameName: 'Valorant',
   );
 }
@@ -103,7 +103,7 @@ void main() {
                   deadlineClock: clock,
                   onRefresh: () async {
                     refreshes++;
-                    return true;
+                    return false;
                   },
                 ),
               ],
@@ -134,7 +134,7 @@ void main() {
                   deadlineClock: clock,
                   onRefresh: () async {
                     refreshes++;
-                    return true;
+                    return false;
                   },
                 ),
               ],
@@ -209,7 +209,7 @@ void main() {
                       match: _pendingMatch(),
                       searchSession: const SearchSessionData(
                         id: 'session-1',
-                        profileId: 'p1',
+                        profileId: 'prof-test',
                         gameId: 'g-val',
                         mode: 'Duo',
                         criteriaJson: '{}',
@@ -274,7 +274,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('H and V MatchFound layouts fit with the bundled Noto font', (
+  testWidgets('H and V MatchFound fit at 1.5x with bundled Noto font', (
     tester,
   ) async {
     for (final size in [const Size(1280, 800), const Size(390, 844)]) {
@@ -338,11 +338,11 @@ void main() {
               'mode': 'Duo',
               'region': 'eu',
               'status': 'abandoned',
-              'profileIds': ['p1', 'p2'],
+              'profileIds': ['prof-test', 'p2'],
             },
             'searchSession': {
               'id': 'recovered-session',
-              'profileId': 'p1',
+              'profileId': 'prof-test',
               'gameId': 'g-val',
               'mode': 'Duo',
               'criteriaJson': '{"partyId":"party-1"}',
@@ -360,7 +360,7 @@ void main() {
             'mode': 'Duo',
             'region': 'eu',
             'status': 'pending_accept',
-            'profileIds': ['p1', 'p2'],
+            'profileIds': ['prof-test', 'p2'],
           },
           'serverNow': '2026-10-05T12:00:00Z',
           'acceptanceDeadlineAt': '2026-10-05T12:00:30Z',
@@ -375,7 +375,7 @@ void main() {
     addTearDown(container.dispose);
     final priorSession = const SearchSessionData(
       id: 'old-session',
-      profileId: 'p1',
+      profileId: 'prof-test',
       gameId: 'g-val',
       mode: 'Duo',
       criteriaJson: '{}',
@@ -422,7 +422,7 @@ void main() {
               'mode': 'Duo',
               'region': 'eu',
               'status': 'pending_accept',
-              'profileIds': ['p1', 'p2'],
+              'profileIds': ['prof-test', 'p2'],
             },
             'serverNow': '2026-10-05T12:00:00Z',
             'acceptanceDeadlineAt': '2026-10-05T12:00:30Z',
@@ -462,7 +462,7 @@ void main() {
               'mode': 'Duo',
               'region': 'eu',
               'status': 'pending_accept',
-              'profileIds': ['p1', 'p2'],
+              'profileIds': ['prof-test', 'p2'],
             },
             'serverNow': '2026-10-05T12:00:00Z',
             'acceptanceDeadlineAt': '2026-10-05T12:00:30Z',
@@ -496,7 +496,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(
         container.read(matchmakingMatchControllerProvider).match?.id,
-        'new-match',
+        isNull,
       );
     },
   );
@@ -519,7 +519,7 @@ void main() {
               'mode': 'Duo',
               'region': 'eu',
               'status': 'pending_accept',
-              'profileIds': ['p1', 'p2'],
+              'profileIds': ['prof-test', 'p2'],
             },
             'serverNow': '2026-10-05T12:00:00Z',
             'acceptanceDeadlineAt': '2026-10-05T12:00:30Z',
@@ -561,13 +561,13 @@ void main() {
               'mode': 'Duo',
               'region': 'eu',
               'status': 'active',
-              'profileIds': ['p1', 'p2'],
+              'profileIds': ['prof-test', 'p2'],
               'chatId': 'chat-1',
               'voiceRoomId': 'room-1',
             },
             'searchSession': {
               'id': 'session-1',
-              'profileId': 'p1',
+              'profileId': 'prof-test',
               'gameId': 'g-val',
               'mode': 'Duo',
               'criteriaJson': '{}',
@@ -579,10 +579,7 @@ void main() {
       );
 
       expect(await response, isNull);
-      expect(
-        container.read(matchmakingMatchControllerProvider).match?.status,
-        'pending_accept',
-      );
+      expect(container.read(matchmakingMatchControllerProvider).match, isNull);
       expect(container.read(activeSquadMatchProvider), isNull);
     },
   );
@@ -597,6 +594,12 @@ void main() {
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(1.5)),
+            child: child!,
+          ),
           home: Scaffold(
             body: Stack(children: [MatchFoundOverlay(match: _pendingMatch())]),
           ),
@@ -640,11 +643,11 @@ void main() {
                               mode: 'Duo',
                               region: 'eu',
                               status: 'active',
-                              profileIds: ['p1', 'p2'],
+                              profileIds: ['prof-test', 'p2'],
                             ),
                             searchSession: SearchSessionData(
                               id: 'sess-1',
-                              profileId: 'p1',
+                              profileId: 'prof-test',
                               gameId: 'g-val',
                               mode: 'Duo',
                               criteriaJson: '{}',
@@ -669,4 +672,408 @@ void main() {
     expect(accepted, isTrue);
     expect(find.byType(MatchFoundOverlay), findsNothing);
   });
+
+  test('a failed or mismatched preflight never posts a response', () async {
+    for (final preflight in ['failed', 'different-match']) {
+      var gets = 0;
+      var posts = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          posts++;
+          return http.Response('{}', 500);
+        }
+        gets++;
+        if (gets == 1) {
+          return _matchResponse(id: 'match-1', deadline: true);
+        }
+        if (preflight == 'failed') {
+          return http.Response('{}', 503);
+        }
+        return _matchResponse(id: 'different-match', deadline: true);
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+      await controller.respond(true);
+      expect(posts, 0, reason: preflight);
+      container.dispose();
+    }
+  });
+
+  test('response flight is controller-owned across duplicate actions', () async {
+    final respondStarted = Completer<void>();
+    final response = Completer<http.Response>();
+    var posts = 0;
+    final client = MockClient((request) async {
+      if (request.url.path.endsWith('/respond')) {
+        posts++;
+        if (!respondStarted.isCompleted) respondStarted.complete();
+        return response.future;
+      }
+      return _matchResponse(id: 'match-1', deadline: true);
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    final controller = container.read(
+      matchmakingMatchControllerProvider.notifier,
+    );
+    controller.onPushNotificationData({
+      'type': 'match_found',
+      'match_id': 'match-1',
+    });
+    await _waitForMatch(container, 'match-1');
+
+    final first = controller.respond(true);
+    expect(
+      container.read(matchmakingMatchControllerProvider).isResponding,
+      isTrue,
+    );
+    final duplicate = controller.respond(true);
+    await respondStarted.future;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(posts, 1);
+    expect(await controller.respond(false), isNull);
+
+    response.complete(_acceptedMatchResponse());
+    await Future.wait([first, duplicate]);
+    expect(container.read(activeSquadMatchProvider)?.id, 'match-1');
+    container.dispose();
+  });
+
+  testWidgets('overlay disables actions when controller response is active', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: voiceThemeTestOverrides(),
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                MatchFoundOverlay(match: _pendingMatch(), isResponding: true),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(MatchFoundOverlay.acceptButtonKey))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(MatchFoundOverlay.declineButtonKey),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  test('disposed container ignores late GetMatch results', () async {
+    final getStarted = Completer<void>();
+    final getResponse = Completer<http.Response>();
+    final client = MockClient((request) async {
+      getStarted.complete();
+      return getResponse.future;
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    final controller = container.read(
+      matchmakingMatchControllerProvider.notifier,
+    );
+    controller.onPushNotificationData({
+      'type': 'match_found',
+      'match_id': 'match-1',
+    });
+    await getStarted.future;
+    container.dispose();
+    getResponse.complete(_matchResponse(id: 'match-1', deadline: true));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  });
+
+  test(
+    'partial accepted response preserves the server deadline clock',
+    () async {
+      var gets = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          return http.Response(
+            jsonEncode({
+              'match': {
+                'id': 'match-1',
+                'gameId': 'g-val',
+                'mode': 'Duo',
+                'region': 'eu',
+                'status': 'active',
+                'profileIds': ['prof-test', 'p2'],
+              },
+            }),
+            200,
+          );
+        }
+        gets++;
+        return _matchResponse(id: 'match-1', deadline: true);
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+      final originalClock = container
+          .read(matchmakingMatchControllerProvider)
+          .deadlineClock;
+      await controller.respond(true);
+      expect(gets, greaterThanOrEqualTo(2));
+      expect(
+        container.read(matchmakingMatchControllerProvider).deadlineClock,
+        same(originalClock),
+      );
+      container.dispose();
+    },
+  );
+
+  test('server-time refresh cannot increase the remaining countdown', () async {
+    var gets = 0;
+    final client = MockClient((request) async {
+      gets++;
+      return _matchResponse(id: 'match-1', deadline: true);
+    });
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: client),
+    );
+    final controller = container.read(
+      matchmakingMatchControllerProvider.notifier,
+    );
+    controller.onPushNotificationData({
+      'type': 'match_found',
+      'match_id': 'match-1',
+    });
+    await _waitForMatch(container, 'match-1');
+    final before = container
+        .read(matchmakingMatchControllerProvider)
+        .deadlineClock!
+        .remaining;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await controller.refreshMatch('match-1');
+    final after = container
+        .read(matchmakingMatchControllerProvider)
+        .deadlineClock!
+        .remaining;
+    expect(gets, greaterThanOrEqualTo(2));
+    expect(after, lessThanOrEqualTo(before));
+    container.dispose();
+  });
+
+  testWidgets('deadline refresh retries pending results without overlap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    var active = 0;
+    var maximumActive = 0;
+    var attempts = 0;
+    final first = Completer<bool>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: voiceThemeTestOverrides(),
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                MatchFoundOverlay(
+                  match: _pendingMatch(),
+                  deadlineClock: MatchDeadlineClock(
+                    serverNow: DateTime.utc(2026, 10, 5, 12),
+                    deadline: DateTime.utc(2026, 10, 5, 12),
+                    elapsed: () => Duration.zero,
+                  ),
+                  onRefresh: () async {
+                    active++;
+                    if (active > maximumActive) maximumActive = active;
+                    attempts++;
+                    if (attempts == 1) {
+                      return first.future.whenComplete(() {
+                        active--;
+                      });
+                    }
+                    active--;
+                    return attempts < 3;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(attempts, 1);
+    await tester.pump(const Duration(seconds: 1));
+    expect(attempts, 1);
+    first.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(attempts, 2);
+    await tester.pump(const Duration(seconds: 2));
+    expect(attempts, 3);
+    await tester.pump(const Duration(seconds: 10));
+    expect(attempts, 3);
+    expect(maximumActive, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('MatchFound is modal, keyboard contained, and restores focus', (
+    tester,
+  ) async {
+    final backgroundFocus = FocusNode(debugLabel: 'background trigger');
+    addTearDown(backgroundFocus.dispose);
+    var showOverlay = false;
+    late StateSetter update;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: voiceThemeTestOverrides(),
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return Scaffold(
+                body: Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: Focus(
+                        focusNode: backgroundFocus,
+                        child: TextButton(
+                          key: const Key('background-trigger'),
+                          onPressed: () {},
+                          child: const Text('Background'),
+                        ),
+                      ),
+                    ),
+                    if (showOverlay) MatchFoundOverlay(match: _pendingMatch()),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    backgroundFocus.requestFocus();
+    await tester.pump();
+    update(() => showOverlay = true);
+    await tester.pump();
+    expect(
+      tester
+          .getSemantics(find.byKey(MatchFoundOverlay.modalSemanticsKey))
+          .flagsCollection
+          .scopesRoute,
+      isTrue,
+    );
+    final acceptFocus = tester
+        .widget<FilledButton>(find.byKey(MatchFoundOverlay.acceptButtonKey))
+        .focusNode!;
+    final declineFocus = tester
+        .widget<OutlinedButton>(find.byKey(MatchFoundOverlay.declineButtonKey))
+        .focusNode!;
+    declineFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(acceptFocus));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(declineFocus));
+    expect(
+      tester
+          .getSemantics(find.byKey(MatchFoundOverlay.timerKey))
+          .flagsCollection
+          .isLiveRegion,
+      isTrue,
+    );
+    update(() => showOverlay = false);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(backgroundFocus));
+  });
 }
+
+http.Response _matchResponse({required String id, required bool deadline}) {
+  final serverNow = DateTime.now().toUtc();
+  return http.Response(
+    jsonEncode({
+      'match': {
+        'id': id,
+        'gameId': 'g-val',
+        'mode': 'Duo',
+        'region': 'eu',
+        'status': 'pending_accept',
+        'profileIds': ['prof-test', 'p2'],
+      },
+      if (deadline) ...{
+        'serverNow': serverNow.toIso8601String(),
+        'acceptanceDeadlineAt': serverNow
+            .add(const Duration(seconds: 30))
+            .toIso8601String(),
+      },
+      'ownProposalResponse': 'pending',
+    }),
+    200,
+  );
+}
+
+http.Response _acceptedMatchResponse() => http.Response(
+  jsonEncode({
+    'match': {
+      'id': 'match-1',
+      'gameId': 'g-val',
+      'mode': 'Duo',
+      'region': 'eu',
+      'status': 'active',
+      'profileIds': ['prof-test', 'p2'],
+      'chatId': 'chat-1',
+      'voiceRoomId': 'room-1',
+    },
+    'searchSession': {
+      'id': 'session-1',
+      'profileId': 'prof-test',
+      'gameId': 'g-val',
+      'mode': 'Duo',
+      'criteriaJson': '{}',
+      'status': 'matched',
+    },
+  }),
+  200,
+);
