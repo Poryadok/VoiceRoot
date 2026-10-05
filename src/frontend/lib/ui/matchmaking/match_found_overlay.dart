@@ -99,6 +99,7 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
   late int? _secondsLeft;
   Timer? _timer;
   late final FocusScopeNode _modalScope;
+  late final FocusNode _modalContentFocusNode;
   late final FocusNode _acceptFocusNode;
   late final FocusNode _declineFocusNode;
   FocusNode? _returnFocus;
@@ -108,12 +109,18 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
   void initState() {
     super.initState();
     _modalScope = FocusScopeNode(debugLabel: 'MatchFound modal');
+    _modalContentFocusNode = FocusNode(debugLabel: 'MatchFound modal content');
     _acceptFocusNode = FocusNode(debugLabel: 'MatchFound accept');
     _declineFocusNode = FocusNode(debugLabel: 'MatchFound decline');
     _returnFocus = FocusManager.instance.primaryFocus;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _acceptFocusNode.requestFocus();
+      if (!mounted) return;
+      if (widget.isResponding) {
+        _modalContentFocusNode.requestFocus();
+      } else {
+        _acceptFocusNode.requestFocus();
+      }
     });
     _secondsLeft = _readSecondsLeft();
     _timer = Timer.periodic(const Duration(milliseconds: 200), (_) {
@@ -136,6 +143,7 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
     _timer?.cancel();
     _deadlineRetryTimer?.cancel();
     _modalScope.dispose();
+    _modalContentFocusNode.dispose();
     _acceptFocusNode.dispose();
     _declineFocusNode.dispose();
     final returnFocus = _returnFocus;
@@ -152,6 +160,19 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
   @override
   void didUpdateWidget(covariant MatchFoundOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isResponding && widget.isResponding) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isResponding) {
+          _modalContentFocusNode.requestFocus();
+        }
+      });
+    } else if (oldWidget.isResponding && !widget.isResponding && !_busy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.isResponding && !_busy) {
+          _acceptFocusNode.requestFocus();
+        }
+      });
+    }
     if (oldWidget.match.id != widget.match.id) {
       _deadlineRefreshAttempts = 0;
       _deadlineRefreshStopped = false;
@@ -242,12 +263,16 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
   Future<void> _respond(bool accept) async {
     if (_busy) return;
     setState(() => _busy = true);
+    _modalContentFocusNode.requestFocus();
     try {
       if (widget.onRespond != null) {
         await widget.onRespond!(accept);
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _acceptFocusNode.requestFocus();
+      }
     }
   }
 
@@ -263,10 +288,15 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay>
         autofocus: true,
         child: FocusTraversalGroup(
           child: Focus(
+            focusNode: _modalContentFocusNode,
             onKeyEvent: (node, event) {
               if (event is! KeyDownEvent ||
                   event.logicalKey != LogicalKeyboardKey.tab) {
                 return KeyEventResult.ignored;
+              }
+              if (_busy || widget.isResponding) {
+                _modalContentFocusNode.requestFocus();
+                return KeyEventResult.handled;
               }
               final primary = FocusManager.instance.primaryFocus;
               if (HardwareKeyboard.instance.isShiftPressed &&

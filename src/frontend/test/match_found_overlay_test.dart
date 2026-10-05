@@ -288,6 +288,12 @@ void main() {
             theme: _notoTheme(),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(1.5)),
+              child: child!,
+            ),
             home: Scaffold(
               body: Stack(
                 children: [
@@ -307,6 +313,12 @@ void main() {
           tester.element(find.byKey(MatchFoundOverlay.timerKey)),
         ).textTheme.bodyMedium?.fontFamily,
         'Noto Sans',
+      );
+      expect(
+        MediaQuery.textScalerOf(
+          tester.element(find.byKey(MatchFoundOverlay.timerKey)),
+        ).scale(10),
+        15,
       );
       for (final key in [
         MatchFoundOverlay.timerKey,
@@ -708,46 +720,264 @@ void main() {
     }
   });
 
-  test('response flight is controller-owned across duplicate actions', () async {
-    final respondStarted = Completer<void>();
-    final response = Completer<http.Response>();
-    var posts = 0;
-    final client = MockClient((request) async {
-      if (request.url.path.endsWith('/respond')) {
-        posts++;
-        if (!respondStarted.isCompleted) respondStarted.complete();
-        return response.future;
-      }
-      return _matchResponse(id: 'match-1', deadline: true);
-    });
-    final container = ProviderContainer(
-      overrides: voiceAppTestOverrides(client: client),
-    );
-    final controller = container.read(
-      matchmakingMatchControllerProvider.notifier,
-    );
-    controller.onPushNotificationData({
-      'type': 'match_found',
-      'match_id': 'match-1',
-    });
-    await _waitForMatch(container, 'match-1');
+  test(
+    'response flight is controller-owned across duplicate actions',
+    () async {
+      final respondStarted = Completer<void>();
+      final response = Completer<http.Response>();
+      var posts = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          posts++;
+          if (!respondStarted.isCompleted) respondStarted.complete();
+          return response.future;
+        }
+        return _matchResponse(id: 'match-1', deadline: true);
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
 
-    final first = controller.respond(true);
-    expect(
-      container.read(matchmakingMatchControllerProvider).isResponding,
-      isTrue,
-    );
-    final duplicate = controller.respond(true);
-    await respondStarted.future;
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(posts, 1);
-    expect(await controller.respond(false), isNull);
+      final first = controller.respond(true);
+      expect(
+        container.read(matchmakingMatchControllerProvider).isResponding,
+        isTrue,
+      );
+      final duplicate = controller.respond(true);
+      await respondStarted.future;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(posts, 1);
+      expect(await controller.respond(false), isNull);
 
-    response.complete(_acceptedMatchResponse());
-    await Future.wait([first, duplicate]);
-    expect(container.read(activeSquadMatchProvider)?.id, 'match-1');
-    container.dispose();
-  });
+      response.complete(_acceptedMatchResponse());
+      await Future.wait([first, duplicate]);
+      expect(container.read(activeSquadMatchProvider)?.id, 'match-1');
+      container.dispose();
+    },
+  );
+
+  testWidgets(
+    'held MatchFound response survives host remount and stale auth flight cannot clear replacement busy state',
+    (tester) async {
+      final firstPostStarted = Completer<void>();
+      final secondPostStarted = Completer<void>();
+      final firstResponse = Completer<http.Response>();
+      final secondResponse = Completer<http.Response>();
+      final backgroundFocus = FocusNode(debugLabel: 'MatchFound background');
+      addTearDown(backgroundFocus.dispose);
+      var postCount = 0;
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          postCount++;
+          if (postCount == 1) {
+            firstPostStarted.complete();
+            return firstResponse.future;
+          }
+          if (postCount == 2) {
+            secondPostStarted.complete();
+            return secondResponse.future;
+          }
+          fail('Unexpected extra MatchFound response POST');
+        }
+        return _matchResponse(id: 'match-1', deadline: true);
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+
+      var hostVisible = false;
+      late StateSetter setHostState;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: StatefulBuilder(
+              builder: (context, setState) {
+                setHostState = setState;
+                return Scaffold(
+                  body: Column(
+                    children: [
+                      TextButton(
+                        key: const Key('match_found_background_action'),
+                        focusNode: backgroundFocus,
+                        onPressed: () {},
+                        child: const Text('Background action'),
+                      ),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            if (hostVisible)
+                              const MatchmakingMatchOverlayHost(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('match_found_background_action')));
+      backgroundFocus.requestFocus();
+      await tester.pump();
+      expect(backgroundFocus.hasFocus, isTrue);
+      setHostState(() => hostVisible = true);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(MatchFoundOverlay.acceptButtonKey), findsOneWidget);
+
+      // Verify the modal focus loop as part of the real controller host.
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(MatchFoundOverlay.declineButtonKey),
+            )
+            .focusNode
+            ?.hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(MatchFoundOverlay.acceptButtonKey))
+            .focusNode
+            ?.hasFocus,
+        isTrue,
+      );
+
+      final firstClock = container
+          .read(matchmakingMatchControllerProvider)
+          .deadlineClock!;
+      final initialRemaining = firstClock.remaining;
+      await tester.tap(find.byKey(MatchFoundOverlay.acceptButtonKey));
+      await firstPostStarted.future.timeout(const Duration(seconds: 2));
+      final firstFlight = controller.respond(true);
+      expect(postCount, 1);
+      expect(
+        container.read(matchmakingMatchControllerProvider).isResponding,
+        isTrue,
+      );
+      expect(await controller.respond(false), isNull);
+
+      setHostState(() => hostVisible = false);
+      await tester.pump();
+      await tester.pump();
+      expect(backgroundFocus.hasFocus, isTrue);
+      setHostState(() => hostVisible = true);
+      await tester.pump();
+      await tester.pump();
+      final modalFocusScope = FocusScope.of(
+        tester.element(find.byKey(MatchFoundOverlay.modalSemanticsKey)),
+      );
+      expect(modalFocusScope.hasFocus, isTrue);
+      expect(
+        container
+            .read(matchmakingMatchControllerProvider)
+            .deadlineClock!
+            .remaining,
+        lessThanOrEqualTo(initialRemaining),
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(MatchFoundOverlay.acceptButtonKey))
+            .onPressed,
+        isNull,
+      );
+      final remountedDuplicate = controller.respond(true);
+      expect(await controller.respond(false), isNull);
+      expect(postCount, 1);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(modalFocusScope.hasFocus, isTrue);
+      expect(backgroundFocus.hasFocus, isFalse);
+
+      final replacementSearch = container.read(activeSearchSessionProvider);
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'replacement-access',
+          refreshToken: 'replacement-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-test',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+      await tester.pump();
+      final secondClock = container
+          .read(matchmakingMatchControllerProvider)
+          .deadlineClock!;
+
+      await tester.tap(find.byKey(MatchFoundOverlay.acceptButtonKey));
+      await secondPostStarted.future.timeout(const Duration(seconds: 2));
+      final secondFlight = controller.respond(true);
+      expect(postCount, 2);
+      expect(
+        container.read(matchmakingMatchControllerProvider).isResponding,
+        isTrue,
+      );
+
+      firstResponse.complete(_acceptedMatchResponse());
+      await Future.wait([firstFlight, remountedDuplicate]);
+      await tester.pump();
+      expect(
+        container.read(matchmakingMatchControllerProvider).isResponding,
+        isTrue,
+        reason: 'The stale first flight must not clear the replacement flight.',
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(MatchFoundOverlay.acceptButtonKey))
+            .onPressed,
+        isNull,
+      );
+      expect(container.read(activeSquadMatchProvider), isNull);
+      expect(container.read(activeSearchSessionProvider), replacementSearch);
+      expect(postCount, 2);
+      expect(
+        container.read(matchmakingMatchControllerProvider).deadlineClock,
+        same(secondClock),
+      );
+
+      secondResponse.complete(_acceptedMatchResponse());
+      await secondFlight;
+      await tester.pump();
+      expect(container.read(activeSquadMatchProvider)?.id, 'match-1');
+      expect(container.read(matchmakingMatchControllerProvider).match, isNull);
+      await tester.pump();
+      expect(backgroundFocus.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('overlay disables actions when controller response is active', (
     tester,

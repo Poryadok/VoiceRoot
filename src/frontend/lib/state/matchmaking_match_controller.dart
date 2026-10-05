@@ -315,13 +315,21 @@ class MatchmakingMatchController extends Notifier<PendingMatchState> {
           contextGeneration: contextGeneration,
           operationGeneration: operationGeneration,
         ).whenComplete(() {
+          final ownsCurrentFlight =
+              identical(_responseFlight, flight) &&
+              _responseFlightMatchId == matchId &&
+              _responseFlightAuthGeneration == binding.authGeneration &&
+              _operationGeneration == operationGeneration;
           if (identical(_responseFlight, flight)) {
             _responseFlight = null;
             _responseFlightMatchId = null;
             _responseFlightAction = null;
             _responseFlightAuthGeneration = null;
           }
-          if (!_disposed && state.match?.id == matchId && state.isResponding) {
+          if (ownsCurrentFlight &&
+              !_disposed &&
+              state.match?.id == matchId &&
+              state.isResponding) {
             state = PendingMatchState(
               match: state.match,
               deadlineClock: state.deadlineClock,
