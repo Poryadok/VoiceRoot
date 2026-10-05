@@ -234,7 +234,7 @@ func (r *observerCaptureFCM) Send(ctx context.Context, profile uuid.UUID, token 
 func TestComposeFcmObserverPreservesRouteSenderArgumentsAndArchivedSuppression(t *testing.T) {
 	senderID, recipientID, chatID, messageID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	path := filepath.Join(t.TempDir(), "control.json")
-	writeDiagnosticControl(t, path, messageID.String())
+	writeDiagnosticControlValues(t, path, messageID.String(), chatID.String(), senderID.String(), recipientID.String())
 	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
 	cacheDiagnosticControl(t, o)
 	trace := o.begin("event-route", messageID.String(), chatID.String(), senderID.String())
@@ -371,16 +371,27 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	}
 	deadline := time.Now().Add(4 * time.Second)
 	acked := false
+	infoAvailable := false
+	infoErrors := 0
+	var pending, ackPending, ackFloor uint64
+	var redeliveries uint64
 	for time.Now().Before(deadline) {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
-		if infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 && info.AckFloor.Stream >= publishAck.Sequence && info.NumRedelivered >= 1 {
-			acked = true
-			break
+		if infoErr != nil {
+			infoErrors = boundedCount(infoErrors + 1)
+		} else {
+			infoAvailable = true
+			pending, ackPending, ackFloor, redeliveries = info.NumPending, info.NumAckPending, info.AckFloor.Stream, info.NumRedelivered
+			if pending == 0 && ackPending == 0 && ackFloor >= publishAck.Sequence && redeliveries >= 1 {
+				acked = true
+				break
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if !acked || members.calls.Load() < 2 || fcmRecorder.calls.Load() != 1 {
-		t.Fatal("handler retry or final durable ACK changed")
+		t.Fatalf("handler retry or final durable ACK changed acked=%t member_calls=%d fcm_calls=%d consumer_info_available=%t info_errors=%d pending=%d ack_pending=%d ack_floor_reached=%t redeliveries=%d",
+			acked, boundedCount(int(members.calls.Load())), boundedCount(int(fcmRecorder.calls.Load())), infoAvailable, infoErrors, pending, ackPending, ackFloor >= publishAck.Sequence, redeliveries)
 	}
 	// Simulate the Flutter HTTP response arriving only after the consumer has
 	// already completed its route and durable ACK.
