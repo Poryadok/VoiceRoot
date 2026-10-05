@@ -238,6 +238,47 @@ class SourceTests(unittest.TestCase):
         self.run.update(status='in_progress',conclusion=None)
         self.assertTrue(self.capture()['verified'])
 
+    def test_real_postmerge_known_failure_cannot_capture_while_parent_active(self):
+        fixture = json.loads(Path(__file__).with_name('source_authority_postmerge_fixture.json').read_text())
+        actual = fixture['observed_run']
+        self.run = dict(actual, id=123, status='in_progress', conclusion=None)
+        self.jobs = [dict(job, run_id=123) for job in fixture['jobs']]
+        self.repo = actual['repository'] | {'private': False, 'default_branch': 'master'}
+        self.assertTrue(any(job['name'] == 'grafana-analytics-smoke' and job['conclusion'] == 'failure'
+                            for job in self.jobs))
+        self.assertTrue(all(any(job['name'] == name and job['conclusion'] == 'success' for job in self.jobs)
+                            for name in ('ci-gate', 'staging-stack-lock')))
+        with patch(__name__ + '.SHA', actual['head_sha']), self.assertRaises(module.SourceError): self.capture()
+
+    def test_in_progress_known_nondeployment_failures_reject_capture(self):
+        self.run.update(status='in_progress', conclusion=None)
+        baseline = copy.deepcopy(self.jobs)
+        for name in ('grafana-analytics-smoke', 'backend-auth'):
+            for conclusion in ('failure', 'cancelled', 'timed_out', 'neutral', 'action_required'):
+                self.jobs = copy.deepcopy(baseline)
+                self.jobs.append(dict(self.jobs[0], id=3, name=name, conclusion=conclusion))
+                self.jobs.append(dict(self.jobs[0], id=4, name='compose-e2e', status='in_progress', conclusion=None))
+                with self.subTest(name=name, conclusion=conclusion), self.assertRaises(module.SourceError):
+                    self.capture()
+
+    def test_in_progress_complete_job_inventory_ownership_is_required(self):
+        self.run.update(status='in_progress', conclusion=None)
+        baseline = copy.deepcopy(self.jobs)
+        for key, value in (('run_id', 124), ('run_attempt', 2), ('head_sha', 'f'*40)):
+            self.jobs = copy.deepcopy(baseline)
+            self.jobs.append(dict(self.jobs[0], id=3, name='compose-e2e', status='in_progress', conclusion=None))
+            self.jobs[-1][key] = value
+            with self.subTest(key=key), self.assertRaises(module.SourceError): self.capture()
+        self.jobs = copy.deepcopy(baseline)
+        self.jobs.append(dict(self.jobs[0], id=3))
+        with self.assertRaises(module.SourceError): self.capture()
+
+    def test_in_progress_exact_deployment_and_pending_jobs_remain_approved(self):
+        self.run.update(status='in_progress', conclusion=None)
+        self.jobs.append(dict(self.jobs[0], id=3, name='deploy-staging / deploy', conclusion='failure'))
+        self.jobs.append(dict(self.jobs[0], id=4, name='compose-e2e', status='in_progress', conclusion=None))
+        self.assertTrue(self.capture()['verified'])
+
     def test_archive_metadata_bomb_and_source_bytes_tamper(self):
         import gzip
         member=tarfile.TarInfo('oversized-pax'); member.type=tarfile.XHDTYPE; member.size=2*1024**2
