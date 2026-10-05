@@ -6043,6 +6043,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Go to Home'**
   String get deepLinkReturnHome;
+
+  /// No description provided for @e2eBackupStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking encrypted key backup…'**
+  String get e2eBackupStatusChecking;
+
+  /// No description provided for @e2eBackupStatusPresent.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted key backup is available for this account.'**
+  String get e2eBackupStatusPresent;
+
+  /// No description provided for @e2eBackupStatusAbsent.
+  ///
+  /// In en, this message translates to:
+  /// **'No encrypted key backup is saved for this account.'**
+  String get e2eBackupStatusAbsent;
+
+  /// No description provided for @e2eBackupActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t update the encrypted key backup. Try again.'**
+  String get e2eBackupActionFailed;
+
+  /// No description provided for @e2eBackupRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t restore this backup. Check the password and try again.'**
+  String get e2eBackupRestoreFailed;
+
+  /// No description provided for @e2eBackupChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change backup password'**
+  String get e2eBackupChange;
+
+  /// No description provided for @e2eBackupDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete encrypted backup?'**
+  String get e2eBackupDeleteTitle;
+
+  /// No description provided for @e2eBackupDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the encrypted backup from this account. Your keys on this device will stay intact.'**
+  String get e2eBackupDeleteConfirm;
+
+  /// No description provided for @e2eBackupDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete backup'**
+  String get e2eBackupDelete;
+
+  /// No description provided for @e2eBackupRestoreCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore encrypted history'**
+  String get e2eBackupRestoreCta;
+
+  /// No description provided for @e2eKeyBackupManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage encrypted key backup'**
+  String get e2eKeyBackupManage;
 }
 
 class _AppLocalizationsDelegate

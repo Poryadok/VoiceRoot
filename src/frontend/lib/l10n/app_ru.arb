@@ -1350,5 +1350,16 @@
   "onboardingWrapUpStart": "Начать",
   "deepLinkAccessDenied": "Нет доступа",
   "deepLinkResourceNotFound": "Не найдено",
-  "deepLinkReturnHome": "На главную"
+  "deepLinkReturnHome": "На главную",
+  "e2eBackupStatusChecking": "Проверяем резервную копию ключей…",
+  "e2eBackupStatusPresent": "В этом аккаунте доступна зашифрованная резервная копия ключей.",
+  "e2eBackupStatusAbsent": "В этом аккаунте нет сохранённой зашифрованной копии ключей.",
+  "e2eBackupActionFailed": "Не удалось обновить зашифрованную копию ключей. Попробуйте ещё раз.",
+  "e2eBackupRestoreFailed": "Не удалось восстановить копию. Проверьте пароль и попробуйте ещё раз.",
+  "e2eBackupChange": "Изменить пароль копии",
+  "e2eBackupDeleteTitle": "Удалить зашифрованную копию?",
+  "e2eBackupDeleteConfirm": "Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.",
+  "e2eBackupDelete": "Удалить копию",
+  "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
+  "e2eKeyBackupManage": "Управление резервной копией ключей"
 }

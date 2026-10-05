@@ -18,11 +18,14 @@ abstract class SecureSignalStorage {
 /// Production storage backed by OS secure storage (mobile/desktop/web).
 class FlutterSecureSignalStorage implements SecureSignalStorage {
   FlutterSecureSignalStorage({required String profileId})
-      : _prefix = 'voice_e2e_signal_${profileId}_',
-        _storage = const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          webOptions: WebOptions(dbName: 'VoiceE2eSignal', publicKey: 'VoiceE2eSignal'),
-        );
+    : _prefix = 'voice_e2e_signal_${profileId}_',
+      _storage = const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+        webOptions: WebOptions(
+          dbName: 'VoiceE2eSignal',
+          publicKey: 'VoiceE2eSignal',
+        ),
+      );
 
   final String _prefix;
   final FlutterSecureStorage _storage;
@@ -47,8 +50,8 @@ class SecureSignalStore implements SignalProtocolStore {
     this._storage, {
     Set<String>? sessionAddresses,
     Map<String, String>? trustedIdentities,
-  })  : _sessionAddresses = sessionAddresses ?? <String>{},
-        _trustedIdentities = trustedIdentities ?? <String, String>{};
+  }) : _sessionAddresses = sessionAddresses ?? <String>{},
+       _trustedIdentities = trustedIdentities ?? <String, String>{};
 
   final InMemorySignalProtocolStore _inner;
   final SecureSignalStorage _storage;
@@ -71,7 +74,8 @@ class SecureSignalStore implements SignalProtocolStore {
       final raw = await store._storage.read(key: _stateKey);
       if (raw == null || raw.isEmpty) {
         await store.close();
-        return jsonDecode(await store._serializeState()) as Map<String, dynamic>;
+        return jsonDecode(await store._serializeState())
+            as Map<String, dynamic>;
       }
       return jsonDecode(raw) as Map<String, dynamic>;
     } finally {
@@ -82,10 +86,29 @@ class SecureSignalStore implements SignalProtocolStore {
   /// Restores cryptographic state from a decrypted backup payload.
   static Future<void> importFromBackup(
     String profileId,
+    Map<String, dynamic> payload, {
+    SecureSignalStorage? storage,
+  }) async {
+    await validateBackupPayload(payload);
+    final backing = storage ?? FlutterSecureSignalStorage(profileId: profileId);
+    await backing.write(key: _stateKey, value: jsonEncode(payload));
+  }
+
+  /// Validates the full persisted state format without reading or writing local storage.
+  static Future<void> validateBackupPayload(
     Map<String, dynamic> payload,
   ) async {
-    final backing = FlutterSecureSignalStorage(profileId: profileId);
-    await backing.write(key: _stateKey, value: jsonEncode(payload));
+    try {
+      await _deserializeState(payload);
+      final sessionAddresses = payload['session_addresses'];
+      if (sessionAddresses != null &&
+          (sessionAddresses is! List ||
+              sessionAddresses.any((address) => address is! String))) {
+        throw const FormatException('invalid Signal session addresses');
+      }
+    } on Object {
+      throw const FormatException('invalid Signal backup state');
+    }
   }
 
   static Future<SecureSignalStore> open({
@@ -104,8 +127,9 @@ class SecureSignalStore implements SignalProtocolStore {
             .map((e) => e as String)
             .toSet(),
         trustedIdentities:
-            (parsed['trusted_identities'] as Map<String, dynamic>? ?? {})
-                .map((k, v) => MapEntry(k, v as String)),
+            (parsed['trusted_identities'] as Map<String, dynamic>? ?? {}).map(
+              (k, v) => MapEntry(k, v as String),
+            ),
       );
     }
     final inner = await createInitializedSignalStore();
@@ -222,8 +246,9 @@ class SecureSignalStore implements SignalProtocolStore {
   ) async {
     _markDirty();
     if (identityKey != null) {
-      _trustedIdentities[_addressKey(address)] =
-          base64Encode(identityKey.serialize());
+      _trustedIdentities[_addressKey(address)] = base64Encode(
+        identityKey.serialize(),
+      );
     }
     return _inner.saveIdentity(address, identityKey);
   }

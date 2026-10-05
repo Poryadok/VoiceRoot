@@ -10,6 +10,7 @@ import '../../theme/voice_colors.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import 'active_sessions_screen.dart';
+import 'e2e_key_backup_screen.dart';
 
 enum _SecurityStep { password, enroll, verify }
 
@@ -410,6 +411,25 @@ class _SecuritySettingsScreenState
                           );
                         },
                   child: Text(l10n.securitySessionsManage),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.e2eKeyBackupTitle,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(l10n.e2eKeyBackupHint),
+                const SizedBox(height: 12),
+                VoiceSecondaryButton(
+                  key: const Key('security_e2e_key_backup'),
+                  onPressed: _busy
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const E2eKeyBackupScreen(),
+                          ),
+                        ),
+                  child: Text(l10n.e2eKeyBackupManage),
                 ),
                 const SizedBox(height: 32),
                 Divider(color: voice.borderDefault),
