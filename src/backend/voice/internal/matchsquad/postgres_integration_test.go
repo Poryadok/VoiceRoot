@@ -598,11 +598,31 @@ func TestPostgresMatchSquadMember_SignerFinishesAfterActorExpiryRetainsReservati
 	case <-time.After(5 * time.Second):
 		t.Fatal("token signer was not reached after reservation")
 	}
+	leave := f.leaveRequest(joined.GetMediaEpoch())
+	leaveCtx := verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile)
+	_, err = member.Leave(leaveCtx, leave)
+	require.NoError(t, err, "Leave records the durable cleanup while the old signer remains blocked")
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "confirmed")
 	requireDatabaseTimeAtLeast(t, f, actorExpiry)
+	require.NoError(t, member.RepairExpiredLeaves(f.ctx, 16))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+
+	// A new authorized media generation may start only after the old grant and
+	// removal effects have drained. The old signer must not affect this epoch.
+	newJoin := f.joinRequest()
+	newJoined, err := member.Join(verifiedMemberContext(t, newJoin, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoin.GetOperationId(), account, f.firstProfile), newJoin)
+	require.NoError(t, err)
+	require.NotEqual(t, joined.GetMediaEpoch(), newJoined.GetMediaEpoch())
+	newTokenRequest := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: newJoined.GetMediaEpoch()}
+	newToken, err := member.GetJoinToken(verifiedMemberContext(t, newTokenRequest, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, uuid.NewString(), account, f.firstProfile), newTokenRequest)
+	require.NoError(t, err)
+	require.NotEmpty(t, newToken.GetToken().GetJwt())
+
 	issuer.unblock()
 	select {
 	case result := <-done:
-		require.Equal(t, codes.FailedPrecondition, status.Code(result.err), "the final DB/Auth gate rejects a signer result after actor expiry")
+		require.Equal(t, codes.FailedPrecondition, status.Code(result.err), "the final DB/Auth gate rejects a signer result after the old epoch is terminal")
 		require.Nil(t, result.response)
 	case <-time.After(10 * time.Second):
 		t.Fatal("expired token request did not settle")
@@ -610,6 +630,75 @@ func TestPostgresMatchSquadMember_SignerFinishesAfterActorExpiryRetainsReservati
 	var grantCount int
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE request_id=$1`, requestID).Scan(&grantCount))
 	require.Equal(t, 1, grantCount, "expired signing never deletes or rewrites its reservation")
+	assertMatchSquadMemberState(t, f, f.firstProfile, "JOINED", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+	require.Equal(t, newJoined.GetMediaEpoch(), f.memberEpoch(t, f.firstProfile))
+}
+
+func TestPostgresMatchSquadMember_LateOldRemovalCannotAffectNewGeneration(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	account := uuid.New()
+	member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+	join := f.joinRequest()
+	joined, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+	require.NoError(t, err)
+	oldIdentity, err := livekit.MatchSquadIdentity(f.firstProfile.String(), joined.GetMediaEpoch())
+	require.NoError(t, err)
+	var livekitRoom string
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT livekit_room_name FROM voice_room_instances WHERE room_id=$1`, f.roomID).Scan(&livekitRoom))
+	f.effects.seedParticipant(livekitRoom, oldIdentity)
+	f.effects.blockNextRemoval()
+	defer f.effects.releaseRemoval()
+
+	leave := f.leaveRequest(joined.GetMediaEpoch())
+	leaveCtx, cancel := context.WithCancel(verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile))
+	leaveDone := make(chan error, 1)
+	go func() {
+		_, leaveErr := member.Leave(leaveCtx, leave)
+		leaveDone <- leaveErr
+	}()
+	select {
+	case <-f.effects.removeEntered:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("old-generation LiveKit removal did not reach the downstream barrier")
+	}
+	// The dispatched request deliberately ignores caller cancellation: canceling
+	// a handler cannot prove that a remote effect stopped executing.
+	cancel()
+	require.NoError(t, member.RepairPendingLeaves(f.ctx, 16), "a replacement worker confirms the persisted old-epoch effect")
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+
+	newJoin := f.joinRequest()
+	newJoined, err := member.Join(verifiedMemberContext(t, newJoin, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoin.GetOperationId(), account, f.firstProfile), newJoin)
+	require.NoError(t, err, "a new media epoch is admitted only after old effects are durably confirmed")
+	require.NotEqual(t, joined.GetMediaEpoch(), newJoined.GetMediaEpoch())
+	newIdentity, err := livekit.MatchSquadIdentity(f.firstProfile.String(), newJoined.GetMediaEpoch())
+	require.NoError(t, err)
+	f.effects.seedParticipant(livekitRoom, newIdentity)
+	f.effects.releaseRemoval()
+	select {
+	case leaveErr := <-leaveDone:
+		require.Error(t, leaveErr, "canceled old handler cannot turn a late media reply into a successful current receipt")
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled old handler did not settle after its dispatched effect returned")
+	}
+
+	f.effects.mu.Lock()
+	_, newParticipantPresent := f.effects.participants[livekitRoom][newIdentity]
+	oldRemovalCount := 0
+	for _, target := range f.effects.removalTargets {
+		if target == oldIdentity {
+			oldRemovalCount++
+		}
+	}
+	f.effects.mu.Unlock()
+	require.True(t, newParticipantPresent, "late removal by Eold must not remove the distinct Enew target")
+	require.Equal(t, 2, oldRemovalCount, "the original worker and repairer both target only the persisted old generation")
+	require.Equal(t, newJoined.GetMediaEpoch(), f.memberEpoch(t, f.firstProfile))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "JOINED", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
 }
 
 func requireDatabaseTimeAtLeast(t *testing.T, f *matchSquadPostgresFixture, target time.Time) {
@@ -1006,8 +1095,11 @@ func (b *blockingMemberTokens) MatchSquadTokenWindow(now, actorExpiry time.Time)
 }
 
 func (b *blockingMemberTokens) MatchSquadJoinTokenUntil(identity, room string, canPublish *bool, issuedAt, expiresAt time.Time) (string, error) {
-	b.once.Do(func() { close(b.entered) })
-	<-b.release
+	block := false
+	b.once.Do(func() { close(b.entered); block = true })
+	if block {
+		<-b.release
+	}
 	return (*testMemberTokens)(nil).MatchSquadJoinTokenUntil(identity, room, canPublish, issuedAt, expiresAt)
 }
 
@@ -1034,6 +1126,12 @@ type testMatchSquadEffects struct {
 	closeRelease                        chan struct{}
 	closeOnce                           sync.Once
 	releaseOnce                         sync.Once
+	removeEntered                       chan struct{}
+	removeRelease                       chan struct{}
+	removeOnce                          sync.Once
+	removeReleaseOnce                   sync.Once
+	removalTargets                      []string
+	participants                        map[string]map[string]struct{}
 }
 
 func (e *testMatchSquadEffects) EnsureRoom(context.Context, string) error { return nil }
@@ -1060,14 +1158,49 @@ func (e *testMatchSquadEffects) CloseRoom(ctx context.Context, room string) erro
 	return nil
 }
 
-func (e *testMatchSquadEffects) RemoveParticipant(context.Context, string, string) error {
+func (e *testMatchSquadEffects) RemoveParticipant(ctx context.Context, room, identity string) error {
+	block := false
+	if e.removeEntered != nil {
+		e.removeOnce.Do(func() { close(e.removeEntered); block = true })
+	}
+	if block {
+		<-e.removeRelease
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.removalTargets = append(e.removalTargets, identity)
 	if e.removeFailures > 0 {
 		e.removeFailures--
 		return errors.New("injected hosted LiveKit participant removal failure")
 	}
+	if e.participants != nil {
+		delete(e.participants[room], identity)
+	}
+	_ = ctx
 	return nil
+}
+
+func (e *testMatchSquadEffects) blockNextRemoval() {
+	e.mu.Lock()
+	e.removeEntered = make(chan struct{})
+	e.removeRelease = make(chan struct{})
+	e.participants = make(map[string]map[string]struct{})
+	e.mu.Unlock()
+}
+
+func (e *testMatchSquadEffects) seedParticipant(room, identity string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.participants[room] == nil {
+		e.participants[room] = make(map[string]struct{})
+	}
+	e.participants[room][identity] = struct{}{}
+}
+
+func (e *testMatchSquadEffects) releaseRemoval() {
+	if e.removeRelease != nil {
+		e.removeReleaseOnce.Do(func() { close(e.removeRelease) })
+	}
 }
 
 func (e *testMatchSquadEffects) failNextRemoval() {

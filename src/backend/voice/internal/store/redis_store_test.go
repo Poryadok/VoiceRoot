@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -184,6 +185,61 @@ func TestRedisCallStore_MatchSquadEpochCASRejectsDelayedOldEffects(t *testing.T)
 	call, err = store.GetCall(ctx, room)
 	require.NoError(t, err)
 	require.Empty(t, call.States)
+}
+
+func TestRedisCallStore_MatchSquadAddRechecksAuthorityAfterWatchConflict(t *testing.T) {
+	ctx := context.Background()
+	callStore, client := newRedisCallStoreForTest(t, "voice-match-squad-watch-authority:")
+	room, match, profile := "match-room", "match-id", "member"
+	call, err := callStore.CreateCall(ctx, Call{
+		RoomID: room, MatchSquadMatchID: match,
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	var currentEpoch atomic.Value
+	currentEpoch.Store("epoch-one")
+	authority := func(context.Context) error {
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+			return nil
+		}
+		if currentEpoch.Load().(string) != "epoch-one" {
+			return ErrMatchSquadProjectionDiverged
+		}
+		return nil
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, addErr := callStore.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, authority)
+		result <- addErr
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first Redis WATCH attempt did not reach its authority barrier")
+	}
+	// Mutate a watched key after authority was approved but before EXEC. The
+	// failed CAS must loop through the callback and observe current DB authority.
+	call.StartedAt = time.Now().UTC()
+	require.NoError(t, putRawCall(ctx, client, callStore.callKey(room), call))
+	currentEpoch.Store("epoch-two")
+	close(release)
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged)
+	case <-time.After(5 * time.Second):
+		t.Fatal("stale Redis add did not settle after the WATCH conflict")
+	}
+	require.GreaterOrEqual(t, calls.Load(), int32(2), "each CAS retry re-reads current durable authority")
+	current, err := callStore.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.False(t, current.IsParticipant(profile), "the stale epoch must not be installed after authority changes")
+	require.Empty(t, current.MatchSquadMemberEpochs[profile])
 }
 
 func TestRedisCallStore_MatchSquadEpochRemovalRequiresEvidence(t *testing.T) {
