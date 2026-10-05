@@ -298,6 +298,22 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: Capture Channel Settings horizontal and vertical views
+        if: github.event_name == 'pull_request' && github.head_ref == 'codex/channel-policy-settings'
+        working-directory: src/frontend
+        env:
+          VOICE_CHANNEL_SETTINGS_CAPTURE_DIR: ${{ runner.temp }}/channel-settings-capture
+        run: timeout 300s flutter test --no-pub --reporter expanded --concurrency=1 test/channel_settings_capture_test.dart
+      - name: Upload Channel Settings horizontal and vertical captures
+        if: always() && github.event_name == 'pull_request' && github.head_ref == 'codex/channel-policy-settings'
+        uses: actions/upload-artifact@v6
+        with:
+          name: channel-settings-hv-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/channel-settings-capture/channel-settings-wide.png
+            ${{ runner.temp }}/channel-settings-capture/channel-settings-narrow.png
+          if-no-files-found: warn
+          retention-days: 1
       - name: Retain incoming overlay golden diffs on failure
         if: failure()
         uses: actions/upload-artifact@v6

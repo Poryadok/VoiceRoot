@@ -4892,6 +4892,24 @@ abstract class AppLocalizations {
   /// **'Let invited guest accounts enter this chat.'**
   String get chatAllowGuestsSubtitle;
 
+  /// No description provided for @channelSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel settings'**
+  String get channelSettingsTitle;
+
+  /// No description provided for @channelSettingsThreads.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable threads'**
+  String get channelSettingsThreads;
+
+  /// No description provided for @channelSettingsMemberPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow member posts'**
+  String get channelSettingsMemberPosts;
+
   /// No description provided for @privacyShowOnlineIncludeGuests.
   ///
   /// In en, this message translates to:

@@ -85,6 +85,16 @@ run_gate 1 \
   JOB_BACKEND_AUTH="${JOB_BACKEND_AUTH}" JOB_DEVELOPER_PORTAL="${JOB_DEVELOPER_PORTAL}" \
   JOB_ADMIN="${JOB_ADMIN}"
 
+echo "== selected Flutter job abandoned result fails =="
+run_gate 1 \
+  RUN_FLUTTER=true \
+  JOB_FLUTTER=abandoned JOB_FLUTTER_DEVICE_DRIVER=success JOB_WEB=success
+
+echo "== selected Flutter device-driver abandoned result fails =="
+run_gate 1 \
+  RUN_FLUTTER=true \
+  JOB_FLUTTER=success JOB_FLUTTER_DEVICE_DRIVER=abandoned JOB_WEB=success
+
 echo "== broad Go CI with empty PR integration matrix permits skipped integration job =="
 all_jobs_success
 run_gate 0 \
