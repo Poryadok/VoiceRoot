@@ -230,7 +230,7 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	replayBody, err := io.ReadAll(replay.Body)
 	require.NoError(t, err)
 	replay.Body.Close()
-	require.Equal(http.StatusOK, replay.StatusCode)
+	require.Equal(t, http.StatusOK, replay.StatusCode)
 	require.JSONEq(t, string(retryBody), string(replayBody), "cross-Gateway replay must return the persisted actor outcome")
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileA, true)
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileB, false)
