@@ -32,8 +32,8 @@ These are existing endpoint/infra intentions, not application or NATS secrets.
 Use the configured values; placeholder domains are not a valid deployment plan.
 
 For the reviewed bundle SHA256
-`88436b838ebec0f28f9e54dcba6726d1fd4b847ef24d5cef059c39f1a1eb223b`
-(9871360 bytes), run this exact command in the human root shell. It captures and
+`94cd5ce566dacd5bca77f6131853f2047d6fe961c84b7cb8ecc06f339be094f3`
+(9881600 bytes), run this exact command in the human root shell. It captures and
 checks the launcher bytes before executing that captured content; it does not
 execute the mutable pmd-owned launcher path.
 
@@ -53,7 +53,7 @@ try:
         raise SystemExit('LAUNCHER_CUSTODY=BLOCKED')
     raw=os.read(fd,4350);after=os.fstat(fd)
     fields=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
-    if fields(before)!=fields(after) or len(raw)!=4349 or hashlib.sha256(raw).hexdigest()!='275b7f98e320e4903e999bfb649d31eb34d77c06dd3c1bc7d0816dae518b8a36':
+    if fields(before)!=fields(after) or len(raw)!=4349 or hashlib.sha256(raw).hexdigest()!='3e085b498cb4bb59e89fdb8c3f135eac0edeb30c8e2f3eac34dcdf92d7ed72ae':
         raise SystemExit('LAUNCHER_SHA256=BLOCKED')
 finally:
     os.close(fd)
@@ -210,6 +210,12 @@ redelivery/pending ACK and an ephemeral, complete native/census equality and
 restored known payloads. This does not prove an actual staging Kubernetes
 release. Actual rollout activation and before/after receipt are still required
 after installation and review.
+
+Every observed job is bound to the selected run/head/attempt and has a unique name.
+Known nondeployment failures, cancellations, timeouts or unknown terminal results
+reject source approval even while the overall CI run remains in progress; successful
+`ci-gate` and `staging-stack-lock` do not override an already failed optional job.
+Owned pending jobs and the exact deployment-only failure exception remain allowed.
 
 A completed CI failure is eligible only when the exact `deploy-staging / deploy`
 job is the sole failed job, every current-attempt job is terminal and bound to
