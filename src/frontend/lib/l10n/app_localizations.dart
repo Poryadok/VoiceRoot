@@ -1964,6 +1964,12 @@ abstract class AppLocalizations {
   /// **'Requests'**
   String get chatInboxRequests;
 
+  /// No description provided for @chatMessageRequestsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Message requests'**
+  String get chatMessageRequestsTitle;
+
   /// No description provided for @chatMessageRequestsEmpty.
   ///
   /// In en, this message translates to:

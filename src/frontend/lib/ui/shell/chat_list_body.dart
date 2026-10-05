@@ -10,6 +10,7 @@ import '../../state/chat_providers.dart';
 import '../../state/chat_draft_providers.dart';
 import '../../state/in_app_notifications.dart';
 import '../../state/inbox_reconciler.dart';
+import '../../state/message_requests_providers.dart';
 import '../../state/presence_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
@@ -145,33 +146,43 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
               padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
               child: Row(
                 children: [
+                  if (inbox == 'requests')
+                    IconButton(
+                      tooltip: l10n.chatRoomBack,
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => selectChatFolder(ref, null),
+                    ),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: Text(
-                        l10n.chatListTitle,
+                        inbox == 'requests'
+                            ? l10n.chatMessageRequestsTitle
+                            : l10n.chatListTitle,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                   ),
-                  IconButton(
-                    key: ChatListBody.createSpaceKey,
-                    icon: const Icon(Icons.hub_outlined),
-                    tooltip: l10n.spaceCreateTooltip,
-                    onPressed: () => CreateSpaceSheet.show(context),
-                  ),
-                  IconButton(
-                    key: ChatListBody.joinSpaceInviteKey,
-                    icon: const Icon(Icons.link),
-                    tooltip: l10n.spaceInviteJoinTooltip,
-                    onPressed: () => JoinSpaceInviteSheet.show(context),
-                  ),
-                  IconButton(
-                    key: ChatListBody.createGroupKey,
-                    icon: const Icon(Icons.group_add_outlined),
-                    tooltip: l10n.chatCreateGroupTooltip,
-                    onPressed: () => CreateGroupSheet.show(context),
-                  ),
+                  if (inbox != 'requests') ...[
+                    IconButton(
+                      key: ChatListBody.createSpaceKey,
+                      icon: const Icon(Icons.hub_outlined),
+                      tooltip: l10n.spaceCreateTooltip,
+                      onPressed: () => CreateSpaceSheet.show(context),
+                    ),
+                    IconButton(
+                      key: ChatListBody.joinSpaceInviteKey,
+                      icon: const Icon(Icons.link),
+                      tooltip: l10n.spaceInviteJoinTooltip,
+                      onPressed: () => JoinSpaceInviteSheet.show(context),
+                    ),
+                    IconButton(
+                      key: ChatListBody.createGroupKey,
+                      icon: const Icon(Icons.group_add_outlined),
+                      tooltip: l10n.chatCreateGroupTooltip,
+                      onPressed: () => CreateGroupSheet.show(context),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -462,12 +473,26 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   );
                 }
 
+                final hasRequestIntro = inbox == 'requests';
                 return ListView.builder(
                   key: ChatListBody.listKey,
                   controller: _scrollController,
-                  itemCount: items.length + (hasFooter ? 1 : 0),
+                  itemCount:
+                      items.length +
+                      (hasFooter ? 1 : 0) +
+                      (hasRequestIntro ? 1 : 0),
                   itemBuilder: (context, index) {
-                    if (index == items.length) {
+                    if (hasRequestIntro && index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        child: Text(
+                          l10n.chatMessageRequestsEmptyHint,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      );
+                    }
+                    final rowIndex = index - (hasRequestIntro ? 1 : 0);
+                    if (rowIndex == items.length) {
                       if (hasReconcilerError) {
                         final error = isBackendUnavailable(errorStatusCode)
                             ? const BackendUnavailableException()
@@ -508,7 +533,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                               ),
                       );
                     }
-                    return buildRow(items[index]);
+                    return buildRow(items[rowIndex]);
                   },
                 );
               },

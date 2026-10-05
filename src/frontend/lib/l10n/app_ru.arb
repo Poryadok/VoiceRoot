@@ -472,6 +472,7 @@
   "commonLoading": "…",
   "chatInboxDm": "Личные",
   "chatInboxRequests": "Запросы",
+  "chatMessageRequestsTitle": "Запросы сообщений",
   "chatMessageRequestsEmpty": "Нет запросов сообщений",
   "chatMessageRequestsEmptyHint": "Сообщения от незнакомцев появятся здесь.",
   "chatTyping": "Печатает…",
