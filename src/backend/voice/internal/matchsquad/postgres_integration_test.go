@@ -602,8 +602,8 @@ WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan
 	for profile, state := range newProjectionBeforeReplay.States {
 		newProjectionStates[profile] = state
 	}
-	require.Equal(t, newJoined.GetMediaEpoch(), newProjectionEpochs[f.firstProfile])
-	require.Contains(t, newProjectionStates, f.firstProfile)
+	require.Equal(t, newJoined.GetMediaEpoch(), newProjectionEpochs[f.firstProfile.String()])
+	require.Contains(t, newProjectionStates, f.firstProfile.String())
 	newEpochBeforeOldReplay := f.memberEpoch(t, f.firstProfile)
 	removalsBeforeOldReplay := f.effects.removalCount()
 	replayedLeave, err = member.Leave(leaveCtx, leave)
