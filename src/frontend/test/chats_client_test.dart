@@ -121,6 +121,44 @@ void main() {
     });
   });
 
+  group('VoiceChatsClient.canCreateDm', () {
+    test(
+      'GETs the selected target and parses only the allowed boolean',
+      () async {
+        final mock = MockClient((req) async {
+          expect(req.method, 'GET');
+          expect(req.url.path, '/api/v1/chats/dm-permission/target-profile');
+          expect(req.headers['Authorization'], auth);
+          return http.Response(jsonEncode({'allowed': false}), 200);
+        });
+        final client = VoiceChatsClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.canCreateDm(
+          authorization: auth,
+          otherProfileId: 'target-profile',
+        );
+        expect(result, isA<ChatsApiOk<bool>>());
+        expect((result as ChatsApiOk<bool>).data, isFalse);
+      },
+    );
+
+    test('malformed permission payload fails closed', () async {
+      final mock = MockClient((_) async => http.Response('{}', 200));
+      final client = VoiceChatsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      final result = await client.canCreateDm(
+        authorization: auth,
+        otherProfileId: 'target-profile',
+      );
+      expect(result, isA<ChatsApiFailure>());
+      expect((result as ChatsApiFailure).errorCode, 'invalid_response');
+    });
+  });
+
   group('VoiceChatsClient.dmRequests', () {
     test('POST accept and decline request routes', () async {
       final paths = <String>[];

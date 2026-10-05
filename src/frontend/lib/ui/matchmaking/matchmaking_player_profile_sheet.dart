@@ -7,6 +7,7 @@ import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/dm_permission_provider.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
 import '../api_error_messages.dart';
@@ -28,6 +29,9 @@ class MatchmakingPlayerProfileSheet extends ConsumerStatefulWidget {
   );
   static const Key friendKey = Key('matchmaking_player_profile_friend');
   static const Key messageKey = Key('matchmaking_player_profile_message');
+  static const Key messagePermissionRetryKey = Key(
+    'matchmaking_player_profile_message_permission_retry',
+  );
   static const Key banKey = Key('matchmaking_player_profile_ban');
 
   final String profileId;
@@ -254,12 +258,7 @@ class _MatchmakingPlayerProfileSheetState
         if (canContact) ...[
           _friendAction(context, l10n, friends, requests),
           const SizedBox(height: 8),
-          OutlinedButton.icon(
-            key: MatchmakingPlayerProfileSheet.messageKey,
-            onPressed: () => _message(context, ref, l10n),
-            icon: const Icon(Icons.chat_bubble_outline),
-            label: Text(l10n.profileMessage),
-          ),
+          _messagePermissionAction(context, ref, l10n, auth),
         ],
         if (canBan) ...[
           const SizedBox(height: 8),
@@ -271,6 +270,57 @@ class _MatchmakingPlayerProfileSheetState
           ),
         ],
       ],
+    );
+  }
+
+  Widget _messagePermissionAction(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    AuthState auth,
+  ) {
+    final session = auth.session;
+    final viewerProfileId = auth.activeProfileId;
+    if (session == null || viewerProfileId == null || viewerProfileId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final request = (
+      authorization: session.authorizationHeader,
+      accountId: session.accountId,
+      viewerProfileId: viewerProfileId,
+      targetProfileId: widget.profileId,
+    );
+    final permission = ref.watch(dmPermissionProvider(request));
+    return permission.when(
+      loading: () => const SizedBox(
+        height: 48,
+        child: Center(
+          child: SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      error: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.chatListLoadError),
+          TextButton.icon(
+            key: MatchmakingPlayerProfileSheet.messagePermissionRetryKey,
+            onPressed: () => ref.invalidate(dmPermissionProvider(request)),
+            icon: const Icon(Icons.refresh),
+            label: Text(l10n.commonRetry),
+          ),
+        ],
+      ),
+      data: (allowed) => allowed
+          ? OutlinedButton.icon(
+              key: MatchmakingPlayerProfileSheet.messageKey,
+              onPressed: () => _message(context, ref, l10n),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: Text(l10n.profileMessage),
+            )
+          : const SizedBox.shrink(),
     );
   }
 

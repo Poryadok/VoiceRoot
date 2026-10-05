@@ -314,6 +314,19 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "dm-permission/"):
+		other := strings.TrimPrefix(rest, "dm-permission/")
+		if other == "" || strings.Contains(other, "/") {
+			return false
+		}
+		resp, err := t.clients.chat.CanCreateDM(ctx, &chatv1.CanCreateDMRequest{OtherProfileId: other})
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
+
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "dm/"):
 		other := strings.TrimPrefix(rest, "dm/")
 		resp, err := t.clients.chat.GetDM(ctx, &chatv1.GetDMRequest{OtherProfileId: other})

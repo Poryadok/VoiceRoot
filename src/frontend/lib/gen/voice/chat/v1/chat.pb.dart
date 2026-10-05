@@ -7041,6 +7041,115 @@ class GetSpacePurgeManifestPageResponse extends $pb.GeneratedMessage {
   SpacePurgeManifestPage ensurePage() => $_ensure(0);
 }
 
+/// Caller-relative, read-only DM action capability; this never creates a chat.
+class CanCreateDMRequest extends $pb.GeneratedMessage {
+  factory CanCreateDMRequest({
+    $core.String? otherProfileId,
+  }) {
+    final result = create();
+    if (otherProfileId != null) result.otherProfileId = otherProfileId;
+    return result;
+  }
+
+  CanCreateDMRequest._();
+
+  factory CanCreateDMRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CanCreateDMRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CanCreateDMRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'otherProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CanCreateDMRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CanCreateDMRequest copyWith(void Function(CanCreateDMRequest) updates) =>
+      super.copyWith((message) => updates(message as CanCreateDMRequest))
+          as CanCreateDMRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CanCreateDMRequest create() => CanCreateDMRequest._();
+  @$core.override
+  CanCreateDMRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CanCreateDMRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CanCreateDMRequest>(create);
+  static CanCreateDMRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get otherProfileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set otherProfileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOtherProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOtherProfileId() => $_clearField(1);
+}
+
+class CanCreateDMResponse extends $pb.GeneratedMessage {
+  factory CanCreateDMResponse({
+    $core.bool? allowed,
+  }) {
+    final result = create();
+    if (allowed != null) result.allowed = allowed;
+    return result;
+  }
+
+  CanCreateDMResponse._();
+
+  factory CanCreateDMResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CanCreateDMResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CanCreateDMResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'allowed')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CanCreateDMResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CanCreateDMResponse copyWith(void Function(CanCreateDMResponse) updates) =>
+      super.copyWith((message) => updates(message as CanCreateDMResponse))
+          as CanCreateDMResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CanCreateDMResponse create() => CanCreateDMResponse._();
+  @$core.override
+  CanCreateDMResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CanCreateDMResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CanCreateDMResponse>(create);
+  static CanCreateDMResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get allowed => $_getBF(0);
+  @$pb.TagNumber(1)
+  set allowed($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAllowed() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAllowed() => $_clearField(1);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

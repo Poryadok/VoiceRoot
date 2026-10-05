@@ -130,6 +130,13 @@ http.Response _ratingResponse(double value) => http.Response(
   200,
 );
 
+http.Response _fallbackResponse(http.Request request) {
+  if (request.url.path.startsWith('/api/v1/chats/dm-permission/')) {
+    return http.Response(jsonEncode({'allowed': true}), 200);
+  }
+  return http.Response('{}', 200);
+}
+
 void main() {
   testWidgets('profile load error retries and shows the selected profile', (
     tester,
@@ -151,7 +158,7 @@ void main() {
             case '/api/v1/friends/requests':
               return _friendRequestsResponse();
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
       ),
@@ -193,7 +200,7 @@ void main() {
             case '/api/v1/friends/requests':
               return _friendRequestsResponse();
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
       ),
@@ -235,6 +242,98 @@ void main() {
     expect(find.byKey(MatchmakingPlayerProfileSheet.sheetKey), findsNothing);
   });
 
+  testWidgets('DM permission denial hides the message action', (tester) async {
+    final permissionRequests = <http.Request>[];
+    await tester.pumpWidget(
+      _app(
+        MockClient((request) async {
+          if (request.url.path.startsWith('/api/v1/chats/dm-permission/')) {
+            permissionRequests.add(request);
+            return http.Response(jsonEncode({'allowed': false}), 200);
+          }
+          switch (request.url.path) {
+            case '/api/v1/users/profiles/profile-2':
+              return _profileResponse();
+            case '/api/v1/matchmaking/players/profile-2/rating':
+              return _ratingResponse(4.8);
+            case '/api/v1/friends':
+              return _friendsResponse();
+            case '/api/v1/friends/requests':
+              return _friendRequestsResponse();
+            default:
+              return _fallbackResponse(request);
+          }
+        }),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(permissionRequests, hasLength(1));
+    expect(permissionRequests.single.method, 'GET');
+    expect(
+      permissionRequests.single.url.path,
+      '/api/v1/chats/dm-permission/profile-2',
+    );
+    expect(find.byKey(MatchmakingPlayerProfileSheet.messageKey), findsNothing);
+    expect(find.byKey(MatchmakingPlayerProfileSheet.friendKey), findsOneWidget);
+  });
+
+  testWidgets('DM permission failure can retry into the allowed action', (
+    tester,
+  ) async {
+    var permissionRequests = 0;
+    final requests = <http.Request>[];
+    await tester.pumpWidget(
+      _app(
+        MockClient((request) async {
+          requests.add(request);
+          if (request.url.path.startsWith('/api/v1/chats/dm-permission/')) {
+            permissionRequests++;
+            return permissionRequests == 1
+                ? http.Response('{}', 503)
+                : http.Response(jsonEncode({'allowed': true}), 200);
+          }
+          switch (request.url.path) {
+            case '/api/v1/users/profiles/profile-2':
+              return _profileResponse();
+            case '/api/v1/matchmaking/players/profile-2/rating':
+              return _ratingResponse(4.8);
+            case '/api/v1/friends':
+              return _friendsResponse();
+            case '/api/v1/friends/requests':
+              return _friendRequestsResponse();
+            default:
+              return _fallbackResponse(request);
+          }
+        }),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load chats'), findsOneWidget);
+    expect(find.byKey(MatchmakingPlayerProfileSheet.messageKey), findsNothing);
+
+    await tester.tap(
+      find.byKey(MatchmakingPlayerProfileSheet.messagePermissionRetryKey),
+    );
+    await tester.pumpAndSettle();
+
+    expect(permissionRequests, 2);
+    expect(find.text('Could not load chats'), findsNothing);
+    expect(
+      find.byKey(MatchmakingPlayerProfileSheet.messageKey),
+      findsOneWidget,
+    );
+    expect(requests.where((r) => r.url.path == '/api/v1/chats/dm'), isEmpty);
+  });
+
   testWidgets('profile panel fits horizontal and vertical viewports', (
     tester,
   ) async {
@@ -262,7 +361,7 @@ void main() {
             case '/api/v1/friends/requests':
               return _friendRequestsResponse();
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
         theme: captureDirectory == null || captureDirectory.isEmpty
@@ -312,7 +411,7 @@ void main() {
             case '/api/v1/matchmaking/bans':
               return http.Response('{}', 200);
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
       ),
@@ -361,7 +460,7 @@ void main() {
             case '/api/v1/friends/requests':
               return _friendRequestsResponse();
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
         navigatorObserver: navigatorObserver,
@@ -441,7 +540,7 @@ void main() {
                 200,
               );
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
       ),
@@ -488,7 +587,7 @@ void main() {
             case '/api/v1/friends/requests':
               return _friendRequestsResponse();
             default:
-              return http.Response('{}', 200);
+              return _fallbackResponse(request);
           }
         }),
       ),
@@ -537,6 +636,71 @@ void main() {
     expect(find.text('MM rating: 4.8'), findsNothing);
   });
 
+  testWidgets('late DM permission cannot cross active-profile switch', (
+    tester,
+  ) async {
+    final viewerAPermission = Completer<http.Response>();
+    var permissionRequests = 0;
+    await tester.pumpWidget(
+      _app(
+        MockClient((request) async {
+          if (request.url.path.startsWith('/api/v1/chats/dm-permission/')) {
+            permissionRequests++;
+            if (permissionRequests == 1) return viewerAPermission.future;
+            return http.Response(jsonEncode({'allowed': false}), 200);
+          }
+          switch (request.url.path) {
+            case '/api/v1/users/profiles/profile-2':
+              return _profileResponse();
+            case '/api/v1/matchmaking/players/profile-2/rating':
+              return _ratingResponse(4.8);
+            case '/api/v1/friends':
+              return _friendsResponse();
+            case '/api/v1/friends/requests':
+              return _friendRequestsResponse();
+            default:
+              return _fallbackResponse(request);
+          }
+        }),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pump();
+    expect(permissionRequests, 1);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MatchSquadScreen)),
+      listen: false,
+    );
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'test-access',
+        refreshToken: 'test-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'secondary-profile',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(MatchmakingPlayerProfileSheet.sheetKey), findsNothing);
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(permissionRequests, 2);
+    expect(find.byKey(MatchmakingPlayerProfileSheet.messageKey), findsNothing);
+
+    viewerAPermission.complete(
+      http.Response(jsonEncode({'allowed': true}), 200),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(MatchmakingPlayerProfileSheet.messageKey), findsNothing);
+  });
+
   testWidgets(
     'late rating cannot cross active-profile switch on same account',
     (tester) async {
@@ -559,7 +723,7 @@ void main() {
               case '/api/v1/friends/requests':
                 return _friendRequestsResponse();
               default:
-                return http.Response('{}', 200);
+                return _fallbackResponse(request);
             }
           }),
         ),
