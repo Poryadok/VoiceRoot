@@ -197,6 +197,13 @@ class AuthServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getE2EKeyBackup, request, options: options);
   }
 
+  $grpc.ResponseFuture<$0.DeleteE2EKeyBackupResponse> deleteE2EKeyBackup(
+    $0.DeleteE2EKeyBackupRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$deleteE2EKeyBackup, request, options: options);
+  }
+
   /// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
   $grpc.ResponseFuture<$0.ResolvePhoneHashesResponse> resolvePhoneHashes(
     $0.ResolvePhoneHashesRequest request, {
@@ -397,6 +404,11 @@ class AuthServiceClient extends $grpc.Client {
           '/voice.auth.v1.AuthService/GetE2EKeyBackup',
           ($0.GetE2EKeyBackupRequest value) => value.writeToBuffer(),
           $0.GetE2EKeyBackupResponse.fromBuffer);
+  static final _$deleteE2EKeyBackup = $grpc.ClientMethod<
+          $0.DeleteE2EKeyBackupRequest, $0.DeleteE2EKeyBackupResponse>(
+      '/voice.auth.v1.AuthService/DeleteE2EKeyBackup',
+      ($0.DeleteE2EKeyBackupRequest value) => value.writeToBuffer(),
+      $0.DeleteE2EKeyBackupResponse.fromBuffer);
   static final _$resolvePhoneHashes = $grpc.ClientMethod<
           $0.ResolvePhoneHashesRequest, $0.ResolvePhoneHashesResponse>(
       '/voice.auth.v1.AuthService/ResolvePhoneHashes',
@@ -637,6 +649,15 @@ abstract class AuthServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetE2EKeyBackupRequest.fromBuffer(value),
         ($0.GetE2EKeyBackupResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.DeleteE2EKeyBackupRequest,
+            $0.DeleteE2EKeyBackupResponse>(
+        'DeleteE2EKeyBackup',
+        deleteE2EKeyBackup_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.DeleteE2EKeyBackupRequest.fromBuffer(value),
+        ($0.DeleteE2EKeyBackupResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ResolvePhoneHashesRequest,
             $0.ResolvePhoneHashesResponse>(
         'ResolvePhoneHashes',
@@ -918,6 +939,15 @@ abstract class AuthServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetE2EKeyBackupResponse> getE2EKeyBackup(
       $grpc.ServiceCall call, $0.GetE2EKeyBackupRequest request);
+
+  $async.Future<$0.DeleteE2EKeyBackupResponse> deleteE2EKeyBackup_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.DeleteE2EKeyBackupRequest> $request) async {
+    return deleteE2EKeyBackup($call, await $request);
+  }
+
+  $async.Future<$0.DeleteE2EKeyBackupResponse> deleteE2EKeyBackup(
+      $grpc.ServiceCall call, $0.DeleteE2EKeyBackupRequest request);
 
   $async.Future<$0.ResolvePhoneHashesResponse> resolvePhoneHashes_Pre(
       $grpc.ServiceCall $call,

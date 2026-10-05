@@ -2411,6 +2411,85 @@ class GetE2EKeyBackupResponse extends $pb.GeneratedMessage {
   void clearPasswordHint() => $_clearField(2);
 }
 
+class DeleteE2EKeyBackupRequest extends $pb.GeneratedMessage {
+  factory DeleteE2EKeyBackupRequest() => create();
+
+  DeleteE2EKeyBackupRequest._();
+
+  factory DeleteE2EKeyBackupRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeleteE2EKeyBackupRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeleteE2EKeyBackupRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteE2EKeyBackupRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteE2EKeyBackupRequest copyWith(
+          void Function(DeleteE2EKeyBackupRequest) updates) =>
+      super.copyWith((message) => updates(message as DeleteE2EKeyBackupRequest))
+          as DeleteE2EKeyBackupRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeleteE2EKeyBackupRequest create() => DeleteE2EKeyBackupRequest._();
+  @$core.override
+  DeleteE2EKeyBackupRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeleteE2EKeyBackupRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DeleteE2EKeyBackupRequest>(create);
+  static DeleteE2EKeyBackupRequest? _defaultInstance;
+}
+
+class DeleteE2EKeyBackupResponse extends $pb.GeneratedMessage {
+  factory DeleteE2EKeyBackupResponse() => create();
+
+  DeleteE2EKeyBackupResponse._();
+
+  factory DeleteE2EKeyBackupResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DeleteE2EKeyBackupResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DeleteE2EKeyBackupResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.auth.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteE2EKeyBackupResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DeleteE2EKeyBackupResponse copyWith(
+          void Function(DeleteE2EKeyBackupResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as DeleteE2EKeyBackupResponse))
+          as DeleteE2EKeyBackupResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DeleteE2EKeyBackupResponse create() => DeleteE2EKeyBackupResponse._();
+  @$core.override
+  DeleteE2EKeyBackupResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DeleteE2EKeyBackupResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DeleteE2EKeyBackupResponse>(create);
+  static DeleteE2EKeyBackupResponse? _defaultInstance;
+}
+
 class ResolvePhoneHashesRequest extends $pb.GeneratedMessage {
   factory ResolvePhoneHashesRequest({
     $core.Iterable<$core.String>? phoneHashes,

@@ -267,6 +267,7 @@ func TestRateLimitGroup_e2eKeyBackupAndPreKeys(t *testing.T) {
 	}{
 		{http.MethodPut, "/api/v1/auth/e2e-key-backup", "E2EKeyBackupPut"},
 		{http.MethodGet, "/api/v1/auth/e2e-key-backup", "E2EKeyBackupGet"},
+		{http.MethodDelete, "/api/v1/auth/e2e-key-backup", "E2EKeyBackupPut"},
 		{http.MethodPost, "/api/v1/messages/prekeys", "PreKeyUpload"},
 		{http.MethodGet, "/api/v1/messages/prekeys", "PreKeyGet"},
 	}
