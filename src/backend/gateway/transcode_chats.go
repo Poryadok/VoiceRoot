@@ -324,7 +324,7 @@ func (t *transcoder) serveChats(w http.ResponseWriter, r *http.Request, rest str
 			writeGRPCError(w, err)
 			return true
 		}
-		writeProtoJSON(w, http.StatusOK, resp)
+		writeJSON(w, http.StatusOK, map[string]bool{"allowed": resp.GetAllowed()})
 		return true
 
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "dm/"):
