@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type TokenIssuer interface {
@@ -20,6 +22,20 @@ type HS256TokenIssuer struct {
 	secret   string
 	url      string
 	tokenTTL time.Duration
+}
+
+// MatchSquadIdentity binds a media participant target to one immutable member
+// generation. Ordinary calls continue to use profile IDs directly.
+func MatchSquadIdentity(profileID, mediaEpoch string) (string, error) {
+	profile, err := uuid.Parse(profileID)
+	if err != nil || profile == uuid.Nil || profile.String() != profileID {
+		return "", fmt.Errorf("invalid MatchSquad profile identity")
+	}
+	epoch, err := uuid.Parse(mediaEpoch)
+	if err != nil || epoch == uuid.Nil || epoch.String() != mediaEpoch {
+		return "", fmt.Errorf("invalid MatchSquad media generation")
+	}
+	return "ms:" + profile.String() + ":" + epoch.String(), nil
 }
 
 func (i *HS256TokenIssuer) LivekitURL() string {
@@ -43,23 +59,48 @@ func (i *HS256TokenIssuer) JoinToken(profileID, roomName string, canPublish *boo
 	return i.joinTokenUntil(profileID, roomName, canPublish, now, now.UTC().Add(i.tokenTTL))
 }
 
-// MatchSquadJoinToken creates a generation-scoped bearer that cannot outlive
-// its verified Gateway principal and never exceeds the MatchSquad 60-second
-// grant bound. Callers must durably record the returned expiry before sending
-// the token to a client.
-func (i *HS256TokenIssuer) MatchSquadJoinToken(profileID, roomName string, canPublish *bool, now, actorExpiresAt time.Time) (string, time.Time, error) {
+// MatchSquadTokenWindow chooses an integer-second issuance window from the
+// database clock. Its expiry is capped by both the verified principal and the
+// fixed MatchSquad bearer bound, so it can be durably reserved before signing.
+func (i *HS256TokenIssuer) MatchSquadTokenWindow(now, actorExpiresAt time.Time) (time.Time, time.Time, error) {
 	now = now.UTC()
 	if !actorExpiresAt.After(now) {
-		return "", time.Time{}, fmt.Errorf("delegated user credential expired")
+		return time.Time{}, time.Time{}, fmt.Errorf("delegated user credential expired")
 	}
-	expiresAt := now.Add(time.Minute)
-	if actorExpiresAt.Before(expiresAt) {
-		expiresAt = actorExpiresAt.UTC()
+	issuedAt := time.Unix(now.Unix(), 0).UTC()
+	expiresAt := issuedAt.Add(time.Minute)
+	actorExpiry := time.Unix(actorExpiresAt.UTC().Unix(), 0).UTC()
+	if actorExpiry.Before(expiresAt) {
+		expiresAt = actorExpiry
 	}
-	if expiresAt.Unix() <= now.Unix() {
-		return "", time.Time{}, fmt.Errorf("delegated user credential expires too soon")
+	if !expiresAt.After(issuedAt) || !expiresAt.After(now) {
+		return time.Time{}, time.Time{}, fmt.Errorf("delegated user credential expires too soon")
 	}
-	return i.joinTokenUntil(profileID, roomName, canPublish, now, expiresAt)
+	return issuedAt, expiresAt, nil
+}
+
+// MatchSquadJoinTokenUntil signs exactly the previously reserved generation
+// window. It never samples a new issue time or extends the durable expiry.
+func (i *HS256TokenIssuer) MatchSquadJoinTokenUntil(profileID, roomName string, canPublish *bool, issuedAt, expiresAt time.Time) (string, error) {
+	issuedAt = issuedAt.UTC()
+	expiresAt = expiresAt.UTC()
+	if !expiresAt.After(issuedAt) || expiresAt.Sub(issuedAt) > time.Minute {
+		return "", fmt.Errorf("invalid MatchSquad token window")
+	}
+	jwt, _, err := i.joinTokenUntil(profileID, roomName, canPublish, issuedAt, expiresAt)
+	return jwt, err
+}
+
+// MatchSquadJoinToken is a compatibility wrapper for direct issuer callers.
+// The member service reserves MatchSquadTokenWindow before using the fixed
+// expiry signing method above.
+func (i *HS256TokenIssuer) MatchSquadJoinToken(profileID, roomName string, canPublish *bool, now, actorExpiresAt time.Time) (string, time.Time, error) {
+	issuedAt, expiresAt, err := i.MatchSquadTokenWindow(now, actorExpiresAt)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	jwt, err := i.MatchSquadJoinTokenUntil(profileID, roomName, canPublish, issuedAt, expiresAt)
+	return jwt, expiresAt, err
 }
 
 func (i *HS256TokenIssuer) joinTokenUntil(profileID, roomName string, canPublish *bool, now, expiresAt time.Time) (string, time.Time, error) {

@@ -144,6 +144,73 @@ func TestRedisCallStore_MatchSquadRemovalPreservesDivergentActiveProfileLock(t *
 	require.True(t, unchanged.IsParticipant("member"), "divergent projection stays visible for an explicit repair decision")
 }
 
+func TestRedisCallStore_MatchSquadEpochCASRejectsDelayedOldEffects(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newRedisCallStoreForTest(t, "voice-match-squad-epoch-cas:")
+	room, match, profile := "match-room", "match-id", "member"
+	_, err := store.CreateCall(ctx, Call{
+		RoomID: room, MatchSquadMatchID: match,
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	currentEpoch := "epoch-one"
+	current := func(context.Context) error {
+		if currentEpoch != "epoch-one" {
+			return ErrMatchSquadProjectionDiverged
+		}
+		return nil
+	}
+	_, err = store.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	_, err = store.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, "epoch-one")
+	require.NoError(t, err)
+	currentEpoch = "epoch-two"
+	_, err = store.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-two", MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.NoError(t, err, "a new DB-authorized epoch can replace its terminal predecessor")
+	_, err = store.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, "epoch-one")
+	require.NoError(t, err, "a late old removal must not remove the current member")
+	_, err = store.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, current)
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "an old add must be rejected by durable SQL authority and its terminal tombstone")
+	call, err := store.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Equal(t, "epoch-two", call.MatchSquadMemberEpochs[profile])
+	require.True(t, call.IsParticipant(profile))
+	require.Equal(t, "1", mustRedisValue(t, store, store.matchSquadTerminalEpochKey(room, profile, "epoch-one")))
+	_, err = store.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, "epoch-two")
+	require.NoError(t, err)
+	_, err = store.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "the per-epoch terminal tombstone survives a later generation")
+	call, err = store.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Empty(t, call.States)
+}
+
+func TestRedisCallStore_MatchSquadEpochRemovalRequiresEvidence(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newRedisCallStoreForTest(t, "voice-match-squad-epoch-missing:")
+	call, err := store.CreateCall(ctx, Call{
+		RoomID: "room", MatchSquadMatchID: "match",
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	call.States["member"] = ParticipantState{ProfileID: "member"}
+	require.NoError(t, putRawCall(ctx, store.client, store.callKey(call.RoomID), call))
+	_, err = store.RemoveMatchSquadParticipantEpoch(ctx, call.RoomID, "match", "member", "epoch-one")
+	require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "missing epoch evidence must fail closed")
+	current, err := store.GetCall(ctx, call.RoomID)
+	require.NoError(t, err)
+	require.True(t, current.IsParticipant("member"), "a failed removal leaves the projection intact for explicit repair")
+}
+
+func mustRedisValue(t *testing.T, store *RedisCallStore, key string) string {
+	t.Helper()
+	value, err := store.client.Get(context.Background(), key).Result()
+	require.NoError(t, err)
+	return value
+}
+
 func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-test:")

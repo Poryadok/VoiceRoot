@@ -186,6 +186,195 @@ func (s *RedisCallStore) RemoveMatchSquadParticipant(ctx context.Context, roomID
 	return s.transitionMatchSquadParticipant(ctx, roomID, matchID, profileID)
 }
 
+// AddMatchSquadParticipant applies an epoch-bound projection only after the
+// caller rereads durable authority for every Redis CAS attempt. Epoch markers
+// have no TTL so a delayed command cannot outlive its terminal tombstone.
+func (s *RedisCallStore) AddMatchSquadParticipant(ctx context.Context, roomID, matchID, profileID, epoch string, maxParticipants int, current MatchSquadProjectionAuthority) (Call, error) {
+	if matchID == "" || profileID == "" || epoch == "" || current == nil {
+		return Call{}, ErrMatchSquadProjectionDiverged
+	}
+	keys := []string{s.callKey(roomID), s.activeKey(profileID), s.matchSquadEpochKey(roomID, profileID), s.matchSquadTerminalEpochKey(roomID, profileID, epoch)}
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		var result Call
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			if err := current(ctx); err != nil {
+				return ErrMatchSquadProjectionDiverged
+			}
+			call, err := s.getCallTx(ctx, tx, roomID)
+			if err != nil {
+				return err
+			}
+			if call.RoomID != roomID || call.MatchSquadMatchID != matchID || !call.IsGroupVoice() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+				return ErrMatchSquadProjectionDiverged
+			}
+			activeRoom, activeErr := tx.Get(ctx, s.activeKey(profileID)).Result()
+			if activeErr == nil && activeRoom != "" && activeRoom != roomID {
+				return ErrMatchSquadProjectionDiverged
+			}
+			if activeErr != nil && !errors.Is(activeErr, redis.Nil) {
+				return activeErr
+			}
+			marker, markerErr := tx.Get(ctx, s.matchSquadEpochKey(roomID, profileID)).Result()
+			if markerErr != nil && !errors.Is(markerErr, redis.Nil) {
+				return markerErr
+			}
+			if markerErr == nil {
+				state, priorEpoch, ok := parseMatchSquadEpochMarker(marker)
+				if !ok || (state == "active" && priorEpoch != epoch) || (state == "terminal" && priorEpoch == epoch) {
+					return ErrMatchSquadProjectionDiverged
+				}
+				if state == "active" && priorEpoch == epoch && call.MatchSquadMemberEpochs[profileID] == epoch && call.IsParticipant(profileID) {
+					result = call
+					return nil
+				}
+			}
+			if tombstone, tombstoneErr := tx.Get(ctx, s.matchSquadTerminalEpochKey(roomID, profileID, epoch)).Result(); tombstoneErr == nil {
+				return ErrMatchSquadProjectionDiverged
+			} else if !errors.Is(tombstoneErr, redis.Nil) {
+				return tombstoneErr
+			}
+			if call.IsParticipant(profileID) && call.MatchSquadMemberEpochs[profileID] == "" {
+				return ErrMatchSquadProjectionDiverged
+			}
+			if call.IsParticipant(profileID) {
+				delete(call.States, profileID)
+			}
+			if len(call.States) >= maxParticipants {
+				return ErrRoomFull
+			}
+			if call.States == nil {
+				call.States = map[string]ParticipantState{}
+			}
+			if call.MatchSquadMemberEpochs == nil {
+				call.MatchSquadMemberEpochs = map[string]string{}
+			}
+			if call.MatchSquadTerminalEpochs == nil {
+				call.MatchSquadTerminalEpochs = map[string]map[string]bool{}
+			}
+			if prior := call.MatchSquadMemberEpochs[profileID]; prior != "" && prior != epoch {
+				if call.MatchSquadTerminalEpochs[profileID] == nil {
+					call.MatchSquadTerminalEpochs[profileID] = map[string]bool{}
+				}
+				call.MatchSquadTerminalEpochs[profileID][prior] = true
+			}
+			call.States[profileID] = ParticipantState{ProfileID: profileID, IsVideoOn: call.MediaKind == callsv1.CallMediaKind_CALL_MEDIA_KIND_VIDEO}
+			call.MatchSquadMemberEpochs[profileID] = epoch
+			payload, err := json.Marshal(call)
+			if err != nil {
+				return err
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, s.callKey(roomID), payload, 24*time.Hour)
+				pipe.Set(ctx, s.activeKey(profileID), roomID, 24*time.Hour)
+				pipe.Set(ctx, s.matchSquadEpochKey(roomID, profileID), "active:"+epoch, 0)
+				return nil
+			})
+			if err == nil {
+				result = call
+			}
+			return err
+		}, keys...)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return Call{}, err
+		}
+		return result, nil
+	}
+	return Call{}, ErrMoveContention
+}
+
+// RemoveMatchSquadParticipantEpoch is an idempotent CAS over the exact owned
+// generation. A delayed old remove can never clear a newer active epoch.
+func (s *RedisCallStore) RemoveMatchSquadParticipantEpoch(ctx context.Context, roomID, matchID, profileID, epoch string) (Call, error) {
+	if matchID == "" || profileID == "" || epoch == "" {
+		return Call{}, ErrMatchSquadProjectionDiverged
+	}
+	keys := []string{s.callKey(roomID), s.activeKey(profileID), s.matchSquadEpochKey(roomID, profileID), s.matchSquadTerminalEpochKey(roomID, profileID, epoch)}
+	for attempt := 0; attempt < redisTransitionAttempts; attempt++ {
+		var result Call
+		err := s.client.Watch(ctx, func(tx *redis.Tx) error {
+			call, err := s.getCallTx(ctx, tx, roomID)
+			if err != nil {
+				return err
+			}
+			if call.RoomID != roomID || call.MatchSquadMatchID != matchID || !call.IsGroupVoice() {
+				return ErrMatchSquadProjectionDiverged
+			}
+			marker, err := tx.Get(ctx, s.matchSquadEpochKey(roomID, profileID)).Result()
+			if errors.Is(err, redis.Nil) {
+				return ErrMatchSquadProjectionDiverged
+			}
+			if err != nil {
+				return err
+			}
+			state, currentEpoch, ok := parseMatchSquadEpochMarker(marker)
+			if !ok {
+				return ErrMatchSquadProjectionDiverged
+			}
+			if currentEpoch != epoch {
+				result = call
+				return nil
+			}
+			if state == "terminal" {
+				result = call
+				return nil
+			}
+			if state != "active" || call.MatchSquadMemberEpochs[profileID] != epoch || !call.IsParticipant(profileID) {
+				return ErrMatchSquadProjectionDiverged
+			}
+			delete(call.States, profileID)
+			delete(call.MatchSquadMemberEpochs, profileID)
+			if call.MatchSquadTerminalEpochs == nil {
+				call.MatchSquadTerminalEpochs = map[string]map[string]bool{}
+			}
+			if call.MatchSquadTerminalEpochs[profileID] == nil {
+				call.MatchSquadTerminalEpochs[profileID] = map[string]bool{}
+			}
+			call.MatchSquadTerminalEpochs[profileID][epoch] = true
+			call = removeScreenSharesForProfile(call, profileID)
+			payload, err := json.Marshal(call)
+			if err != nil {
+				return err
+			}
+			activeRoom, activeErr := tx.Get(ctx, s.activeKey(profileID)).Result()
+			if activeErr != nil && !errors.Is(activeErr, redis.Nil) {
+				return activeErr
+			}
+			if activeRoom != roomID {
+				return ErrMatchSquadProjectionDiverged
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, s.callKey(roomID), payload, 24*time.Hour)
+				pipe.Set(ctx, s.matchSquadEpochKey(roomID, profileID), "terminal:"+epoch, 0)
+				pipe.Set(ctx, s.matchSquadTerminalEpochKey(roomID, profileID, epoch), "1", 0)
+				if activeRoom == roomID {
+					pipe.Del(ctx, s.activeKey(profileID))
+				}
+				return nil
+			})
+			if err == nil {
+				result = call
+			}
+			return err
+		}, keys...)
+		if errors.Is(err, redis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return Call{}, err
+		}
+		return result, nil
+	}
+	return Call{}, ErrMoveContention
+}
+
+func parseMatchSquadEpochMarker(marker string) (state, epoch string, ok bool) {
+	state, epoch, ok = strings.Cut(marker, ":")
+	return state, epoch, ok && (state == "active" || state == "terminal") && epoch != ""
+}
+
 func (s *RedisCallStore) AddParticipant(ctx context.Context, roomID, profileID string, maxParticipants int) (Call, error) {
 	return s.transitionParticipant(ctx, roomID, profileID, maxParticipants, false)
 }
@@ -709,6 +898,14 @@ func (s *RedisCallStore) callKey(roomID string) string {
 
 func (s *RedisCallStore) activeKey(profileID string) string {
 	return s.prefix + "session:" + profileID
+}
+
+func (s *RedisCallStore) matchSquadEpochKey(roomID, profileID string) string {
+	return s.prefix + "match_squad_epoch:" + roomID + ":" + profileID
+}
+
+func (s *RedisCallStore) matchSquadTerminalEpochKey(roomID, profileID, epoch string) string {
+	return s.prefix + "match_squad_terminal_epoch:" + roomID + ":" + profileID + ":" + epoch
 }
 
 func (s *RedisCallStore) activeChatKey(chatID string) string {
