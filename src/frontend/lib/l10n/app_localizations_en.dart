@@ -973,6 +973,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createProfileTitle => 'Add profile';
 
   @override
+  String get profileCreateUsernameLabel => 'Profile tag';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'The signed-in account or active profile changed. Reopen profile creation to continue.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Profile created, but setup is incomplete. Try again to finish.';
+
+  @override
   String get createProfileSubmit => 'Create profile';
 
   @override
