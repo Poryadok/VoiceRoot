@@ -122,8 +122,8 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 	var version int64
 	var dirty bool
 	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
-	require.EqualValues(t, 16, version)
-	require.True(t, dirty, "failed runner Down must leave its version dirty for operator repair")
+	require.EqualValues(t, 15, version, "the runner records the failed Down target as the dirty version")
+	require.True(t, dirty, "failed runner Down must leave its target version dirty for operator repair")
 
 	var operationCount int
 	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operationCount))
