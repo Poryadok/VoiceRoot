@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -120,7 +121,10 @@ void main() {
                 onPressed: () => PinnedMessagesPanel.show(
                   context,
                   messages: List.generate(5, (index) => _message(index)),
-                  onOpenMessage: (id) => selectedId = id,
+                  onOpenMessage: (id) async {
+                    selectedId = id;
+                    return true;
+                  },
                 ),
                 child: const Text('Open pins'),
               ),
@@ -147,7 +151,144 @@ void main() {
     expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
   });
 
-  testWidgets('Chat Info control #11 opens the shared pinned list', (
+  testWidgets('pin jump loads an older cursor page before closing the list', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    await tester.pumpWidget(_pinnedRoomApp(pageHistoryForPinnedTarget: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('chat_pinned_message_pin-0')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+    expect(find.byKey(const Key('chat_room_messages')), findsOneWidget);
+  });
+
+  testWidgets('failed older-page pin jump stays open and retries its cursor', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    var olderRequests = 0;
+    final cursors = <String?>[];
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        pageHistoryForPinnedTarget: true,
+        failFirstOlderHistoryRequest: true,
+        onOlderHistoryRequest: (cursor) {
+          olderRequests++;
+          cursors.add(cursor);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chat_pinned_message_pin-0')));
+    await tester.pumpAndSettle();
+
+    expect(olderRequests, 1);
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    expect(find.byKey(const Key('chat_pinned_jump_error')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chat_pinned_jump_retry')));
+    await tester.pumpAndSettle();
+
+    expect(olderRequests, 2);
+    expect(cursors, ['older-pins', 'older-pins']);
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+  });
+
+  testWidgets('cancelling a pending older-page jump prevents follow-up pages', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final releaseOlderPage = Completer<void>();
+    var olderRequests = 0;
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        pageHistoryForPinnedTarget: true,
+        holdFirstOlderHistoryRequest: releaseOlderPage,
+        onOlderHistoryRequest: (_) => olderRequests++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chat_pinned_message_pin-0')));
+    await tester.pump();
+
+    expect(olderRequests, 1);
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    await tester.tap(find.byKey(PinnedMessagesPanel.closeKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+
+    releaseOlderPage.complete();
+    await tester.pumpAndSettle();
+    expect(olderRequests, 1);
+  });
+
+  testWidgets('pinned list supports Escape and mobile swipe dismissal', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    await tester.pumpWidget(_pinnedRoomApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    await _setViewport(tester, const Size(390, 844));
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    await tester.drag(find.text('Pinned messages'), const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+  });
+
+  testWidgets('failed pin fetch is not treated as a confirmed empty list', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    var pinRequests = 0;
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        pinCount: 0,
+        failFirstPinnedRequest: true,
+        onPinnedRequest: () => pinRequests++,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(pinRequests, 1);
+    final error = find.byKey(const Key('chat_room_pins_error'));
+    expect(error, findsOneWidget);
+    final l10n = AppLocalizations.of(tester.element(error))!;
+    expect(
+      find.descendant(of: error, matching: find.text(l10n.backendUnavailable)),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.descendant(of: error, matching: find.text('Try again')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(pinRequests, 2);
+    expect(find.byKey(const Key('chat_room_pins_error')), findsNothing);
+    expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsNothing);
+  });
+
+  testWidgets('standalone Chat Info pin jump can be cancelled safely', (
     tester,
   ) async {
     await _setDesktopViewport(tester);
@@ -171,8 +312,11 @@ void main() {
     expect(find.text('Pinned messages'), findsNWidgets(2));
 
     await tester.tap(find.byKey(const ValueKey('chat_pinned_message_pin-0')));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(realtimeHub, isNotNull);
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsOneWidget);
+    await tester.tap(find.byKey(PinnedMessagesPanel.closeKey));
+    await tester.pumpAndSettle();
     expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
   });
 
@@ -230,6 +374,28 @@ void main() {
     await _pumpCaptureRoom(tester);
     await _writeCapture(tester, captureDir, 'pinned_navigation_v');
   });
+
+  testWidgets('production-font open pin list capture H', (tester) async {
+    final captureDir = Platform.environment['VOICE_PINNED_CAPTURE_DIR'];
+    if (captureDir == null || captureDir.isEmpty) return;
+    await _setViewport(tester, const Size(1280, 800));
+    await tester.pumpWidget(_pinnedRoomApp(pinCount: 5, captureBoundary: true));
+    await _pumpCaptureRoom(tester);
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    await _writeCapture(tester, captureDir, 'pinned_list_h');
+  });
+
+  testWidgets('production-font open pin list capture V', (tester) async {
+    final captureDir = Platform.environment['VOICE_PINNED_CAPTURE_DIR'];
+    if (captureDir == null || captureDir.isEmpty) return;
+    await _setViewport(tester, const Size(390, 844));
+    await tester.pumpWidget(_pinnedRoomApp(pinCount: 5, captureBoundary: true));
+    await _pumpCaptureRoom(tester);
+    await tester.tap(find.byTooltip('Open all pinned messages'));
+    await tester.pumpAndSettle();
+    await _writeCapture(tester, captureDir, 'pinned_list_v');
+  });
 }
 
 Future<void> _pumpCaptureRoom(WidgetTester tester) async {
@@ -259,7 +425,11 @@ Widget _pinnedRoomApp({
   bool standaloneInfo = false,
   bool captureBoundary = false,
   bool failFirstPinnedRequest = false,
+  bool failFirstOlderHistoryRequest = false,
+  Completer<void>? holdFirstOlderHistoryRequest,
+  bool pageHistoryForPinnedTarget = false,
   void Function()? onPinnedRequest,
+  void Function(String?)? onOlderHistoryRequest,
   void Function(_NoopRealtimeHub)? onRealtimeHubCreated,
 }) {
   final pinned = List.generate(pinCount, (index) {
@@ -285,11 +455,52 @@ Widget _pinnedRoomApp({
     };
   });
   var pinnedRequestCount = 0;
+  var olderHistoryRequestCount = 0;
   final client = MockClient((request) async {
     if (request.url.path == '/api/v1/messages') {
+      final cursor = request.url.queryParameters['cursor'];
+      if (cursor == 'older-pins') {
+        olderHistoryRequestCount++;
+        onOlderHistoryRequest?.call(cursor);
+        if (olderHistoryRequestCount == 1 &&
+            holdFirstOlderHistoryRequest != null) {
+          await holdFirstOlderHistoryRequest.future;
+        }
+        if (failFirstOlderHistoryRequest && olderHistoryRequestCount == 1) {
+          return http.Response('{}', 503);
+        }
+        final olderPage = pinned.first;
+        return utf8JsonResponse(
+          jsonEncode({
+            'message_list': {
+              'messages': [olderPage],
+              'has_more': false,
+            },
+          }),
+        );
+      }
       return utf8JsonResponse(
         jsonEncode({
-          'message_list': {'messages': pinned},
+          'message_list': pageHistoryForPinnedTarget
+              ? {
+                  'messages': [
+                    {
+                      'id': 'newest',
+                      'chat': {'id': 'chat-pins'},
+                      'sender_profile_id': 'profile-b',
+                      'content': 'Newest message',
+                      'is_pinned': false,
+                      'reactions_json': '[]',
+                      'mentions_json': '[]',
+                      'attachments_json': '[]',
+                      'type': 'regular',
+                      'created_at': '2024-01-10T00:00:00Z',
+                    },
+                  ],
+                  'next_cursor': 'older-pins',
+                  'has_more': true,
+                }
+              : {'messages': pinned},
         }),
       );
     }
@@ -352,19 +563,21 @@ Widget _pinnedRoomApp({
     }),
     selectedChatIdProvider.overrideWith((ref) => 'chat-pins'),
   ];
+  final app = MaterialApp(
+    theme: voiceTestTheme().copyWith(
+      textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
+    ),
+    debugShowCheckedModeBanner: false,
+    locale: const Locale('en'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: room,
+  );
   return ProviderScope(
     overrides: overrides,
-    child: MaterialApp(
-      theme: voiceTestTheme().copyWith(
-        textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
-      ),
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: captureBoundary
-          ? RepaintBoundary(key: _captureBoundaryKey, child: room)
-          : room,
-    ),
+    child: captureBoundary
+        ? RepaintBoundary(key: _captureBoundaryKey, child: app)
+        : app,
   );
 }
 

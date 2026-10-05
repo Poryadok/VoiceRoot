@@ -88,8 +88,10 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final auth = ref.watch(authControllerProvider);
     final authorization = ref.watch(authorizationHeaderProvider);
     final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
+    PendingPinnedMessageJump? pendingPinnedJump;
+    final roomState = roomExists ? ref.watch(roomProvider) : null;
     final pinnedMessages = roomExists
-        ? ref.watch(roomProvider).pinnedMessages
+        ? roomState!.pinnedMessages
         : _standaloneMessagesFor(pinsKey);
     if (!roomExists) {
       _ensureStandalonePinnedMessagesLoaded(
@@ -127,20 +129,47 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
                 // the room. Initialize it only when the user explicitly jumps
                 // to a pinned message.
                 if (!ref.exists(roomProvider)) ref.read(roomProvider);
-                _openMessage(context, ref, widget.chatId, messageId);
+                final request = PendingPinnedMessageJump(messageId);
+                pendingPinnedJump = request;
+                ref
+                        .read(
+                          pendingPinnedMessageJumpProvider(
+                            widget.chatId,
+                          ).notifier,
+                        )
+                        .state =
+                    request;
+                return request.result;
+              },
+              onCancel: () {
+                final request = pendingPinnedJump;
+                if (request == null) return;
+                request.cancelled = true;
+                request.complete(false);
+              },
+              onMessageOpened: () {
+                ref.read(shellNavigationProvider).closeSidePanel();
+                if (context.mounted) Navigator.of(context).maybePop();
               },
             ),
           ),
-        if (!roomExists &&
-            _standalonePinsLoading &&
-            _standalonePinsKey == pinsKey)
+        if ((roomExists &&
+                roomState!.pinnedMessagesStatus ==
+                    PinnedMessagesLoadStatus.loading &&
+                pinnedMessages.isEmpty) ||
+            (!roomExists &&
+                _standalonePinsLoading &&
+                _standalonePinsKey == pinsKey))
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: VoiceListSkeleton(rowCount: 1),
           ),
-        if (!roomExists &&
-            _standalonePinsFailed &&
-            _standalonePinsKey == pinsKey)
+        if ((roomExists &&
+                roomState!.pinnedMessagesStatus ==
+                    PinnedMessagesLoadStatus.failed) ||
+            (!roomExists &&
+                _standalonePinsFailed &&
+                _standalonePinsKey == pinsKey))
           ListTile(
             key: const Key('chat_info_pins_error'),
             leading: const Icon(Icons.cloud_off_outlined),
@@ -148,15 +177,19 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             subtitle: Text(
               commonActionErrorMessage(
                 l10n,
-                statusCode: _standalonePinsStatusCode,
+                statusCode: roomExists
+                    ? roomState!.pinnedMessagesErrorStatusCode
+                    : _standalonePinsStatusCode,
               ),
             ),
             trailing: IconButton(
               tooltip: l10n.commonRetry,
-              onPressed: () => _loadStandalonePinnedMessages(
-                pinsKey,
-                authorization: authorization,
-              ),
+              onPressed: roomExists
+                  ? () => ref.read(roomProvider.notifier).retryPinnedMessages()
+                  : () => _loadStandalonePinnedMessages(
+                      pinsKey,
+                      authorization: authorization,
+                    ),
               icon: const Icon(Icons.refresh),
             ),
           ),

@@ -24,37 +24,81 @@ String? pinnedMessageContentTypeLabel(
   };
 }
 
-class PinnedMessagesPanel extends StatelessWidget {
+class PinnedMessagesPanel extends StatefulWidget {
   const PinnedMessagesPanel({
     super.key,
     required this.messages,
     required this.onOpenMessage,
+    this.onCancel,
+    this.onMessageOpened,
   });
 
   static const Key panelKey = Key('chat_pinned_messages_panel');
   static const Key closeKey = Key('chat_pinned_messages_close');
 
   final List<VoiceMessage> messages;
-  final ValueChanged<String> onOpenMessage;
+  final Future<bool> Function(String messageId) onOpenMessage;
+  final VoidCallback? onCancel;
+  final VoidCallback? onMessageOpened;
 
   static Future<void> show(
     BuildContext context, {
     required List<VoiceMessage> messages,
-    required ValueChanged<String> onOpenMessage,
+    required Future<bool> Function(String messageId) onOpenMessage,
+    VoidCallback? onCancel,
+    VoidCallback? onMessageOpened,
   }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (_) => SafeArea(
         child: PinnedMessagesPanel(
           messages: messages,
-          onOpenMessage: (messageId) {
-            Navigator.of(sheetContext).pop();
-            onOpenMessage(messageId);
-          },
+          onOpenMessage: onOpenMessage,
+          onCancel: onCancel,
+          onMessageOpened: onMessageOpened,
         ),
       ),
     );
+  }
+
+  @override
+  State<PinnedMessagesPanel> createState() => _PinnedMessagesPanelState();
+}
+
+class _PinnedMessagesPanelState extends State<PinnedMessagesPanel> {
+  String? _openingMessageId;
+  String? _failedMessageId;
+  var _openedMessage = false;
+
+  @override
+  void dispose() {
+    if (!_openedMessage) widget.onCancel?.call();
+    super.dispose();
+  }
+
+  Future<void> _openMessage(String messageId) async {
+    if (_openingMessageId != null) return;
+    setState(() {
+      _openingMessageId = messageId;
+      _failedMessageId = null;
+    });
+    var opened = false;
+    try {
+      opened = await widget.onOpenMessage(messageId);
+    } catch (_) {
+      opened = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _openingMessageId = null;
+      _failedMessageId = opened ? null : messageId;
+    });
+    if (opened) {
+      _openedMessage = true;
+      Navigator.of(context).pop();
+      widget.onMessageOpened?.call();
+    }
   }
 
   @override
@@ -67,7 +111,7 @@ class PinnedMessagesPanel extends StatelessWidget {
         maxWidth: 560,
       ),
       child: Material(
-        key: panelKey,
+        key: PinnedMessagesPanel.panelKey,
         color: voice.surface,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -88,11 +132,14 @@ class PinnedMessagesPanel extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    key: closeKey,
+                    key: PinnedMessagesPanel.closeKey,
                     tooltip: MaterialLocalizations.of(
                       context,
                     ).closeButtonTooltip,
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      widget.onCancel?.call();
+                      Navigator.of(context).pop();
+                    },
                     icon: const Icon(Icons.close),
                   ),
                 ],
@@ -102,11 +149,26 @@ class PinnedMessagesPanel extends StatelessWidget {
               fit: FlexFit.loose,
               child: ListView.separated(
                 shrinkWrap: true,
-                itemCount: messages.length,
+                itemCount:
+                    widget.messages.length + (_failedMessageId == null ? 0 : 1),
                 separatorBuilder: (_, _) =>
                     Divider(height: 1, color: voice.borderDefault, indent: 56),
                 itemBuilder: (context, index) {
-                  final message = messages[index];
+                  if (index == widget.messages.length) {
+                    return ListTile(
+                      key: const Key('chat_pinned_jump_error'),
+                      leading: const Icon(Icons.cloud_off_outlined),
+                      title: Text(l10n.commonActionFailed),
+                      trailing: TextButton.icon(
+                        key: const Key('chat_pinned_jump_retry'),
+                        onPressed: () => _openMessage(_failedMessageId!),
+                        icon: const Icon(Icons.refresh),
+                        label: Text(l10n.commonRetry),
+                      ),
+                    );
+                  }
+                  final message = widget.messages[index];
+                  final opening = _openingMessageId == message.id;
                   final typeLabel = pinnedMessageContentTypeLabel(
                     l10n,
                     message.contentType,
@@ -126,8 +188,16 @@ class PinnedMessagesPanel extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: typeLabel == null ? null : Text(typeLabel),
-                    trailing: const Icon(Icons.arrow_forward),
-                    onTap: () => onOpenMessage(message.id),
+                    trailing: opening
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.arrow_forward),
+                    onTap: _openingMessageId == null
+                        ? () => _openMessage(message.id)
+                        : null,
                   );
                 },
               ),
