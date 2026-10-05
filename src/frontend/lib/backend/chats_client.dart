@@ -662,6 +662,8 @@ class VoiceChatsClient {
     String? avatarUrl,
     int? slowModeSeconds,
     bool? allowGuests,
+    bool? threadsEnabled,
+    bool? allowUserMainFeed,
   }) async {
     final result = await _gateway.patchProto(
       uri: _gateway.resolve('/api/v1/chats/$chatId'),
@@ -671,6 +673,8 @@ class VoiceChatsClient {
         avatarUrl: avatarUrl,
         slowModeSeconds: slowModeSeconds,
         allowGuests: allowGuests,
+        threadsEnabled: threadsEnabled,
+        allowUserMainFeed: allowUserMainFeed,
       ),
       createEmpty: chat_pb.UpdateChatResponse.create,
     );
