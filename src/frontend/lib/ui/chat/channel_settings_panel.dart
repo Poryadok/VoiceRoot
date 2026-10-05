@@ -84,24 +84,18 @@ class _ChannelSettingsPanelState extends ConsumerState<ChannelSettingsPanel> {
     }
 
     if (_loading) {
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            key: ChannelSettingsPanel.panelKey,
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(l10n.channelSettingsTitle),
-              const VoiceListSkeleton(rowCount: 2),
-            ],
-          ),
+      return _stateLayout(
+        l10n,
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: VoiceListSkeleton(rowCount: 2),
         ),
       );
     }
     if (_loadErrorStatusCode != null) {
-      return SafeArea(
-        child: VoiceStatePanel(
+      return _stateLayout(
+        l10n,
+        VoiceStatePanel(
           title: l10n.channelSettingsTitle,
           message: commonActionErrorMessage(
             l10n,
@@ -114,7 +108,7 @@ class _ChannelSettingsPanelState extends ConsumerState<ChannelSettingsPanel> {
       );
     }
     if (!_authorized || _serverChat == null || contextKey != _activeContext) {
-      return const SizedBox.shrink();
+      return _stateLayout(l10n, const SizedBox.shrink());
     }
 
     final voice = VoiceColors.of(context);
@@ -194,6 +188,39 @@ class _ChannelSettingsPanelState extends ConsumerState<ChannelSettingsPanel> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _stateLayout(AppLocalizations l10n, Widget body) {
+    return SafeArea(
+      child: Column(
+        key: ChannelSettingsPanel.panelKey,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.channelSettingsTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  key: ChannelSettingsPanel.closeKey,
+                  tooltip: l10n.chatInfoTitle,
+                  onPressed: _saving ? null : _close,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: VoiceColors.of(context).borderDefault),
+          body,
+        ],
       ),
     );
   }
