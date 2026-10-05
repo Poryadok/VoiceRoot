@@ -509,6 +509,7 @@
   "commonLoading": "…",
   "chatInboxDm": "DMs",
   "chatInboxRequests": "Requests",
+  "chatMessageRequestsTitle": "Message requests",
   "chatMessageRequestsEmpty": "No message requests",
   "chatMessageRequestsEmptyHint": "When someone you do not know messages you, their chat appears here.",
   "chatTyping": "Typing…",

@@ -1064,6 +1064,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatInboxRequests => 'Запросы';
 
   @override
+  String get chatMessageRequestsTitle => 'Запросы сообщений';
+
+  @override
   String get chatMessageRequestsEmpty => 'Нет запросов сообщений';
 
   @override
