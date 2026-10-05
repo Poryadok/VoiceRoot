@@ -8,7 +8,32 @@ import '../../theme/voice_colors.dart';
 import '../../theme/voice_metrics.dart';
 import '../call/call_modal_overlay.dart';
 
-typedef MatchRespondCallback = Future<RespondToMatchData?> Function(bool accept);
+typedef MatchRespondCallback =
+    Future<RespondToMatchData?> Function(bool accept);
+typedef MatchRefreshCallback = Future<bool> Function();
+
+/// A server-authored deadline measured from a monotonic clock after receipt.
+/// Keeping this object in controller state prevents a widget remount from
+/// restarting the user's acceptance window.
+class MatchDeadlineClock {
+  MatchDeadlineClock({
+    required DateTime serverNow,
+    required DateTime deadline,
+    Duration Function()? elapsed,
+  }) : _remainingAtReceipt = deadline.difference(serverNow),
+       _elapsed = Stopwatch()..start(),
+       _elapsedOverride = elapsed;
+
+  final Duration _remainingAtReceipt;
+  final Stopwatch _elapsed;
+  final Duration Function()? _elapsedOverride;
+
+  Duration get remaining {
+    final value =
+        _remainingAtReceipt - (_elapsedOverride?.call() ?? _elapsed.elapsed);
+    return value.isNegative ? Duration.zero : value;
+  }
+}
 
 /// High-priority accept/decline popup when a match is found (Penpot §6.4 · v2).
 class MatchFoundOverlay extends StatefulWidget {
@@ -16,12 +41,14 @@ class MatchFoundOverlay extends StatefulWidget {
     super.key,
     required this.match,
     this.onRespond,
-    this.acceptTimeoutSeconds = 30,
+    this.deadlineClock,
+    this.onRefresh,
   });
 
   final MatchData match;
   final MatchRespondCallback? onRespond;
-  final int acceptTimeoutSeconds;
+  final MatchDeadlineClock? deadlineClock;
+  final MatchRefreshCallback? onRefresh;
 
   static const Key acceptButtonKey = Key('match_found_accept');
   static const Key declineButtonKey = Key('match_found_decline');
@@ -31,26 +58,69 @@ class MatchFoundOverlay extends StatefulWidget {
   State<MatchFoundOverlay> createState() => _MatchFoundOverlayState();
 }
 
-class _MatchFoundOverlayState extends State<MatchFoundOverlay> {
+class _MatchFoundOverlayState extends State<MatchFoundOverlay>
+    with WidgetsBindingObserver {
   bool _busy = false;
-  late int _secondsLeft;
+  bool _deadlineRefreshRequested = false;
+  late int? _secondsLeft;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _secondsLeft = widget.acceptTimeoutSeconds;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    WidgetsBinding.instance.addObserver(this);
+    _secondsLeft = _readSecondsLeft();
+    _timer = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (!mounted) return;
-      if (_secondsLeft <= 0) return;
-      setState(() => _secondsLeft -= 1);
+      final next = _readSecondsLeft();
+      if (next != _secondsLeft) setState(() => _secondsLeft = next);
+      if (next == 0) _refreshAtDeadline();
     });
+    if (_secondsLeft == 0) unawaited(_refreshAtDeadline());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant MatchFoundOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.match.id != widget.match.id ||
+        oldWidget.match.acceptanceDeadlineAt !=
+            widget.match.acceptanceDeadlineAt) {
+      _deadlineRefreshRequested = false;
+    }
+    final next = _readSecondsLeft();
+    if (next != _secondsLeft) _secondsLeft = next;
+    if (next == 0) unawaited(_refreshAtDeadline());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+  }
+
+  int? _readSecondsLeft() {
+    final clock = widget.deadlineClock;
+    if (clock == null) return null;
+    final milliseconds = clock.remaining.inMilliseconds;
+    return (milliseconds / Duration.millisecondsPerSecond).ceil();
+  }
+
+  Future<void> _refreshAtDeadline() async {
+    if (_deadlineRefreshRequested || widget.onRefresh == null) return;
+    _deadlineRefreshRequested = true;
+    await _refresh();
+  }
+
+  Future<bool> _refresh() async {
+    final refresh = widget.onRefresh;
+    if (refresh == null || !mounted) return false;
+    return refresh();
   }
 
   Future<void> _respond(bool accept) async {
@@ -96,17 +166,17 @@ class _MatchFoundOverlayState extends State<MatchFoundOverlay> {
                 Text(
                   l10n.matchFoundSubtitle(gameName, widget.match.mode),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: voice.textSecondary,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: voice.textSecondary),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '${_secondsLeft}s',
+                  _secondsLeft == null ? '—' : '${_secondsLeft}s',
                   key: MatchFoundOverlay.timerKey,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: voice.textSecondary,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(color: voice.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 Row(
