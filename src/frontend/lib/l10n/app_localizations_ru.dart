@@ -1535,6 +1535,51 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get spaceInviteExpiryLabel => 'Срок действия';
+
+  @override
+  String get spaceInviteExpiry30Minutes => '30 минут';
+
+  @override
+  String get spaceInviteExpiry1Hour => '1 час';
+
+  @override
+  String get spaceInviteExpiry6Hours => '6 часов';
+
+  @override
+  String get spaceInviteExpiry12Hours => '12 часов';
+
+  @override
+  String get spaceInviteExpiry1Day => '1 день';
+
+  @override
+  String get spaceInviteExpiry7Days => '7 дней';
+
+  @override
+  String get spaceInviteExpiryNever => 'Без срока';
+
+  @override
+  String spaceInviteExpiresAt(String date) {
+    return 'Истекает: $date';
+  }
+
+  @override
+  String get spaceInviteShowQr => 'Показать QR-код';
+
+  @override
+  String get spaceInviteQrTitle => 'QR-код приглашения';
+
+  @override
+  String get spaceInviteQrSemanticLabel => 'QR-код приглашения в спейс';
+
+  @override
+  String get spaceInviteRevokeConfirmTitle => 'Отозвать ссылку-приглашение?';
+
+  @override
+  String get spaceInviteRevokeConfirmBody =>
+      'После отзыва эту ссылку больше нельзя будет использовать.';
+
+  @override
   String get spaceInviteJoinTooltip => 'Вступить по инвайту';
 
   @override

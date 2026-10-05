@@ -725,6 +725,25 @@
   "spaceInviteCopied": "Invite link copied",
   "spaceInviteRevoke": "Revoke",
   "spaceInviteUses": "{used} uses{maxSuffix}",
+  "spaceInviteExpiryLabel": "Expires after",
+  "spaceInviteExpiry30Minutes": "30 minutes",
+  "spaceInviteExpiry1Hour": "1 hour",
+  "spaceInviteExpiry6Hours": "6 hours",
+  "spaceInviteExpiry12Hours": "12 hours",
+  "spaceInviteExpiry1Day": "1 day",
+  "spaceInviteExpiry7Days": "7 days",
+  "spaceInviteExpiryNever": "Never",
+  "spaceInviteExpiresAt": "Expires {date}",
+  "@spaceInviteExpiresAt": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "spaceInviteShowQr": "Show QR code",
+  "spaceInviteQrTitle": "Invite QR code",
+  "spaceInviteQrSemanticLabel": "QR code for space invite",
+  "spaceInviteRevokeConfirmTitle": "Revoke invite link?",
+  "spaceInviteRevokeConfirmBody": "People with this link will no longer be able to use it.",
   "@spaceInviteUses": {
     "placeholders": {
       "used": { "type": "int" },

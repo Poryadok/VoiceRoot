@@ -2798,6 +2798,90 @@ abstract class AppLocalizations {
   /// **'{used} uses{maxSuffix}'**
   String spaceInviteUses(int used, String maxSuffix);
 
+  /// No description provided for @spaceInviteExpiryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires after'**
+  String get spaceInviteExpiryLabel;
+
+  /// No description provided for @spaceInviteExpiry30Minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'30 minutes'**
+  String get spaceInviteExpiry30Minutes;
+
+  /// No description provided for @spaceInviteExpiry1Hour.
+  ///
+  /// In en, this message translates to:
+  /// **'1 hour'**
+  String get spaceInviteExpiry1Hour;
+
+  /// No description provided for @spaceInviteExpiry6Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'6 hours'**
+  String get spaceInviteExpiry6Hours;
+
+  /// No description provided for @spaceInviteExpiry12Hours.
+  ///
+  /// In en, this message translates to:
+  /// **'12 hours'**
+  String get spaceInviteExpiry12Hours;
+
+  /// No description provided for @spaceInviteExpiry1Day.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day'**
+  String get spaceInviteExpiry1Day;
+
+  /// No description provided for @spaceInviteExpiry7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get spaceInviteExpiry7Days;
+
+  /// No description provided for @spaceInviteExpiryNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get spaceInviteExpiryNever;
+
+  /// No description provided for @spaceInviteExpiresAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires {date}'**
+  String spaceInviteExpiresAt(String date);
+
+  /// No description provided for @spaceInviteShowQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR code'**
+  String get spaceInviteShowQr;
+
+  /// No description provided for @spaceInviteQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite QR code'**
+  String get spaceInviteQrTitle;
+
+  /// No description provided for @spaceInviteQrSemanticLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code for space invite'**
+  String get spaceInviteQrSemanticLabel;
+
+  /// No description provided for @spaceInviteRevokeConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke invite link?'**
+  String get spaceInviteRevokeConfirmTitle;
+
+  /// No description provided for @spaceInviteRevokeConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'People with this link will no longer be able to use it.'**
+  String get spaceInviteRevokeConfirmBody;
+
   /// No description provided for @spaceInviteJoinTooltip.
   ///
   /// In en, this message translates to:
