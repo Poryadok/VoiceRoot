@@ -341,6 +341,55 @@ void main() {
     });
 
     testWidgets(
+      'acknowledged same-account receipt with empty ID is never switched or retried',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          createResponseProfileId: '',
+          tier: 'premium',
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await _pumpCreateProfileSheet(tester, harness, avatar: _testAvatar());
+        await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+        await tester.pump();
+        final profileListRequests = harness.profileListRequests;
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.authSwitchRequests, 0);
+        expect(harness.avatarPresignRequests, 0);
+        expect(harness.avatarPutRequests, 0);
+        expect(harness.profileUpdateRequests, 0);
+        expect(harness.profileListRequests, profileListRequests);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        expect(
+          find.text(
+            'Profile created, but setup is incomplete. Try again to finish.',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.authSwitchRequests, 0);
+        expect(harness.avatarPresignRequests, 0);
+        expect(harness.avatarPutRequests, 0);
+        expect(harness.profileUpdateRequests, 0);
+        expect(harness.profileListRequests, profileListRequests);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    testWidgets(
       'delayed create response cannot continue in a changed account',
       (tester) async {
         final harness = _EntryHarness(
@@ -572,6 +621,55 @@ void main() {
         },
       );
     }
+
+    testWidgets(
+      'avatar presign completion after same-account profile change has no later side effects',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          pauseAvatarStage: 'presign',
+          tier: 'premium',
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await _pumpCreateProfileSheet(tester, harness, avatar: _testAvatar());
+        await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+        await tester.pump();
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await _expectOnePausedCoordinatorTransition(
+          tester,
+          harness,
+          expectedProfileId: 'profile-created',
+        );
+        harness.realtime.complete();
+        await tester.pump();
+        await harness.avatarStageEntered!.future;
+        expect(
+          harness.container.read(authControllerProvider).activeProfileId,
+          'profile-created',
+        );
+
+        harness.container.read(authControllerProvider.notifier).state =
+            AuthState(session: _sessionFor('profile-alt'));
+        harness.releaseAvatarStage!.complete();
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.authSwitchRequests, 1);
+        expect(harness.avatarPresignRequests, 1);
+        expect(harness.avatarPutRequests, 0);
+        expect(harness.profileUpdateRequests, 0);
+        expect(
+          harness.container.read(authControllerProvider).activeProfileId,
+          'profile-alt',
+        );
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
 
     testWidgets(
       'creating a second profile keeps the routed shell mounted while switching',
@@ -908,6 +1006,7 @@ class _EntryHarness {
     this.useRealTheme = false,
     this.tokenCatalog,
     this.createResponseAccountId,
+    this.createResponseProfileId,
   }) {
     final client = MockClient(_respond);
     storage = _MemoryAuthStorage(_primarySession);
@@ -957,11 +1056,13 @@ class _EntryHarness {
   final bool useRealTheme;
   final VoiceTokenCatalog? tokenCatalog;
   final String? createResponseAccountId;
+  final String? createResponseProfileId;
   late final ProviderContainer container;
   late final _MemoryAuthStorage storage;
   late final _PausedProfileSwitchRealtimeBoundary realtime;
   var authSwitchRequests = 0;
   var createRequests = 0;
+  var profileListRequests = 0;
   final List<Map<String, dynamic>> createBodies = [];
   final bool pauseCreate;
   Completer<void>? createRequestEntered;
@@ -1015,12 +1116,16 @@ class _EntryHarness {
       }
       profileCreated = true;
       final responseProfile = _profileJson(_createdProfile);
+      if (createResponseProfileId != null) {
+        responseProfile['id'] = createResponseProfileId;
+      }
       if (createResponseAccountId != null) {
         responseProfile['account_id'] = createResponseAccountId;
       }
       return http.Response(jsonEncode({'profile': responseProfile}), 200);
     }
     if (request.url.path == '/api/v1/users/profiles') {
+      profileListRequests++;
       return http.Response(
         jsonEncode({
           'profile_list': {

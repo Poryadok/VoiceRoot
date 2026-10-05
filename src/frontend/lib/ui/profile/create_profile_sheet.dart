@@ -109,6 +109,10 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
           _showRecoveryError(l10n.profileCreateRecoveryFailed);
           return;
         }
+        if (data.id.trim().isEmpty) {
+          _showRecoveryError(l10n.profileCreateRecoveryFailed);
+          return;
+        }
         ref.invalidate(myProfilesProvider);
         await _recover(_receipt!, l10n);
       case UsersApiFailure(:final message, :final statusCode, :final errorCode):
@@ -144,6 +148,10 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
     AppLocalizations l10n,
   ) async {
     if (receipt.profile.accountId != receipt.accountId) {
+      _showRecoveryError(l10n.profileCreateRecoveryFailed);
+      return;
+    }
+    if (receipt.profile.id.trim().isEmpty) {
       _showRecoveryError(l10n.profileCreateRecoveryFailed);
       return;
     }
