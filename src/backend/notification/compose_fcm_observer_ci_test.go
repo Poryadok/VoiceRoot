@@ -373,8 +373,8 @@ func TestComposeFcmObserverActualConsumerNakRetryThenAckWithoutResponseWait(t *t
 	acked := false
 	infoAvailable := false
 	infoErrors := 0
-	var pending, ackPending, ackFloor uint64
-	var redeliveries uint64
+	var pending, ackFloor uint64
+	var ackPending, redeliveries int
 	for time.Now().Before(deadline) {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
 		if infoErr != nil {
