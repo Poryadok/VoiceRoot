@@ -11,7 +11,6 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
-import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/matchmaking_match_controller.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/state/matchmaking_search_controller.dart';
