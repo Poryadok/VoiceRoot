@@ -103,8 +103,26 @@ voice_fcm_diag_parse_collected_log() {
   voice_fcm_diag_parse_log "${data}" "${output_var}"
 }
 
+voice_fcm_diag_status_valid() {
+  [[ "${1-}" == 0 && "${2-}" == "pre=ok"$'\n'"post=ok" ]]
+}
+
+voice_fcm_diag_lifecycle_valid() {
+  local data="${1-}" line invalid=0 valid=0 expired=0
+  while IFS= read -r line; do
+    case "${line}" in
+      'compose_fcm_lifecycle control_sample=invalid') ((invalid+=1)) ;;
+      'compose_fcm_lifecycle control_sample=valid') ((valid+=1)) ;;
+      'compose_fcm_lifecycle window_expiry=completed') ((expired+=1)) ;;
+      *compose_fcm_lifecycle*) return 1 ;;
+    esac
+  done <<<"${data}"
+  ((invalid <= 1 && valid == 1 && expired == 1))
+}
+
 voice_fcm_diag_cleanup() {
-  local file="${1-}" dir="${2-}"
+  local file="${1-}" dir="${2-}" status="${3-}"
+  [[ -z "${status}" ]] || rm -f -- "${status}" || return 1
   [[ -n "${file}" ]] && rm -f -- "${file}" || return 1
   [[ -n "${dir}" ]] && rmdir -- "${dir}" 2>/dev/null || return 1
 }

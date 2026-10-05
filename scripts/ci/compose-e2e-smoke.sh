@@ -59,11 +59,13 @@ done
 
 TRACE_DIR=''
 TRACE_FILE=''
+STATUS_FILE=''
+notification_container=''
 cleanup_fcm_diagnostic() {
   local original_status=$?
   trap - EXIT
   if [[ -n "${TRACE_FILE}" ]]; then
-    if ! voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}"; then
+    if ! voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}" "${STATUS_FILE}"; then
       echo 'compose_fcm_cleanup=failed' >&2
       if ((original_status == 0)); then
         original_status=1
@@ -78,11 +80,10 @@ trap 'exit 143' TERM
 
 if TRACE_DIR="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/voice-fcm-diagnostic.XXXXXX" 2>/dev/null)"; then
   TRACE_FILE="${TRACE_DIR}/correlation.json"
-  if ! (umask 077 && : >"${TRACE_FILE}"); then
-    rm -f -- "${TRACE_FILE}"
-    rmdir -- "${TRACE_DIR}" 2>/dev/null || true
-    TRACE_DIR=''
-    TRACE_FILE=''
+  STATUS_FILE="${TRACE_DIR}/status.txt"
+  if ! (umask 077 && : >"${TRACE_FILE}" && printf 'pre=unknown\npost=unknown\n' >"${STATUS_FILE}"); then
+    echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+    exit 1
   fi
 fi
 
@@ -102,6 +103,7 @@ fi
 export VOICE_FCM_DIAG_UID VOICE_FCM_DIAG_GID VOICE_FCM_DIAGNOSTIC_DIR="${TRACE_DIR}"
 chmod 700 "${TRACE_DIR}"
 chmod 600 "${TRACE_FILE}"
+chmod 600 "${STATUS_FILE}"
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" build notification >/dev/null 2>&1; then
   echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
@@ -111,25 +113,75 @@ if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compo
   exit 1
 fi
 echo 'compose_fcm_preflight=pass'
+set +e
+previous_notification_containers="$(docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" ps -q notification 2>/dev/null)"
+previous_lookup_status=$?
+set -e
+if ((previous_lookup_status != 0)); then
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  exit 1
+fi
+while IFS= read -r previous_container; do
+  [[ -z "${previous_container}" ]] && continue
+  if [[ ! "${previous_container}" =~ ^[a-f0-9]{64}$ ]]; then
+    echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+    exit 1
+  fi
+done <<<"${previous_notification_containers}"
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" up -d --no-deps --force-recreate --wait --wait-timeout 60 notification >/dev/null 2>&1; then
   echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 
+# Bind this run to one freshly recreated disposable service instance. Keep the
+# opaque identity in memory only; never include it in diagnostics.
+set +e
+notification_container="$(docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" ps -q notification 2>/dev/null)"
+container_lookup_status=$?
+set -e
+if ((container_lookup_status != 0)) || [[ ! "${notification_container}" =~ ^[a-f0-9]{64}$ ]] || \
+    { [[ -n "${previous_notification_containers}" ]] && printf '%s\n' "${previous_notification_containers}" | grep -Fxq -- "${notification_container}"; }; then
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  exit 1
+fi
+
+set +e
+diagnostic_since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+date_status=$?
+set -e
+if ((date_status != 0)) || [[ ! "${diagnostic_since}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  exit 1
+fi
 set +e
 flutter test --concurrency=1 "${ARGS[@]}" \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
-  --dart-define=VOICE_FCM_DIAGNOSTIC_FILE="${TRACE_FILE}"
+  --dart-define=VOICE_FCM_DIAGNOSTIC_FILE="${TRACE_FILE}" \
+  --dart-define=VOICE_FCM_DIAGNOSTIC_STATUS_FILE="${STATUS_FILE}"
 flutter_status=$?
 set -e
 
-if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" && -s "${TRACE_FILE}" ]]; then
+if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
   set +e
-  diagnostic_logs="$(timeout 5s docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" logs --no-color --no-log-prefix --tail 100 notification 2>/dev/null | head -c 65537)"
+  set -o pipefail
+  diagnostic_logs="$(timeout 5s docker logs --since "${diagnostic_since}" "${notification_container}" 2>/dev/null | head -c 65537)"
   diagnostic_logs_status=$?
+  status_read_status=1
+  status_data=''
+  if [[ -f "${STATUS_FILE}" && ! -L "${STATUS_FILE}" ]] && [[ "$(stat -c '%a' -- "${STATUS_FILE}" 2>/dev/null)" == 600 ]]; then
+    status_data="$(head -c 65 -- "${STATUS_FILE}" 2>/dev/null)"
+    status_read_status=$?
+  fi
   set -e
-  voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
+  if ! voice_fcm_diag_status_valid "${status_read_status}" "${status_data}" || \
+      ((diagnostic_logs_status != 0)) || \
+      ! voice_fcm_diag_lifecycle_valid "${diagnostic_logs}"; then
+    VOICE_FCM_DIAG_PARSE_RESULT=unknown
+    voice_fcm_diag_emit "${VOICE_FCM_DIAG_UNKNOWN}" diagnostic_line
+  else
+    voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
+  fi
   port_mapping="$(docker compose -f "${ROOT}/docker-compose.yml" port nats 4222 2>/dev/null || true)"
   mapped_port=''
   if [[ "${port_mapping}" =~ :([0-9]+)$ ]]; then
@@ -163,9 +215,10 @@ fi
 
 cleanup_failed=false
 if [[ -n "${TRACE_FILE}" ]]; then
-  if voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}"; then
+  if voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}" "${STATUS_FILE}"; then
     TRACE_FILE=''
     TRACE_DIR=''
+    STATUS_FILE=''
   else
     cleanup_failed=true
     echo 'compose_fcm_cleanup=failed' >&2

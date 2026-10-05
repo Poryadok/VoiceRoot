@@ -62,22 +62,25 @@ type composeFcmPhaseSnapshot struct {
 }
 
 type composeFcmObserver struct {
-	path               string
-	mu                 sync.Mutex
-	candidates         map[string]*composeFcmTrace
-	control            composeFcmControl
-	controlState       composeFcmControlState
-	preControlStarted  time.Time
-	postControlStarted time.Time
-	emitted            bool
-	overflow           bool
-	ambiguous          bool
-	admissionCounts    [composeFcmAdmissionKindCount]uint8
-	admissionSeen      bool
-	admissionOverflow  bool
-	phases             composeFcmPhaseState
-	phaseBeforeExpiry  composeFcmPhaseSnapshot
-	phaseAtExpiry      composeFcmPhaseSnapshot
+	path                 string
+	mu                   sync.Mutex
+	candidates           map[string]*composeFcmTrace
+	control              composeFcmControl
+	controlState         composeFcmControlState
+	preControlStarted    time.Time
+	postControlStarted   time.Time
+	emitted              bool
+	overflow             bool
+	ambiguous            bool
+	admissionCounts      [composeFcmAdmissionKindCount]uint8
+	admissionSeen        bool
+	admissionOverflow    bool
+	phases               composeFcmPhaseState
+	phaseBeforeExpiry    composeFcmPhaseSnapshot
+	phaseAtExpiry        composeFcmPhaseSnapshot
+	invalidSampleEmitted bool
+	validSampleEmitted   bool
+	expiryMarkerEmitted  bool
 }
 
 type composeFcmTrace struct {
@@ -447,6 +450,10 @@ func (o *composeFcmObserver) sampleControlLocked(c composeFcmControl, ok bool, s
 		o.postControlStarted = time.Time{}
 		o.overflow = false
 		o.ambiguous = false
+		if !o.invalidSampleEmitted {
+			fmt.Println("compose_fcm_lifecycle control_sample=invalid")
+			o.invalidSampleEmitted = true
+		}
 		return true
 	}
 	if o.controlState == composeFcmControlUnread && !o.preControlStarted.IsZero() && sampledAt.Sub(o.preControlStarted) >= composeFcmWindow {
@@ -456,6 +463,10 @@ func (o *composeFcmObserver) sampleControlLocked(c composeFcmControl, ok bool, s
 	previousState := o.controlState
 	o.control, o.controlState = c, composeFcmControlValid
 	if previousState != composeFcmControlValid {
+		if !o.validSampleEmitted {
+			fmt.Println("compose_fcm_lifecycle control_sample=valid")
+			o.validSampleEmitted = true
+		}
 		o.preControlStarted = time.Time{}
 		if o.postControlStarted.IsZero() {
 			o.postControlStarted = sampledAt
@@ -475,6 +486,10 @@ func (o *composeFcmObserver) expireLocked(now time.Time) bool {
 	}
 	if o.controlState != composeFcmControlValid || o.postControlStarted.IsZero() || now.Sub(o.postControlStarted) < composeFcmWindow {
 		return false
+	}
+	if !o.expiryMarkerEmitted {
+		fmt.Println("compose_fcm_lifecycle window_expiry=completed")
+		o.expiryMarkerEmitted = true
 	}
 	o.phaseAtExpiry = o.phaseSnapshotLocked()
 	if len(o.candidates) == 0 {

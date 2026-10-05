@@ -386,6 +386,39 @@ func TestComposeFcmObserverZeroCandidateExpiryEmitsOnePhaseSnapshot(t *testing.T
 	}
 }
 
+func TestComposeFcmObserverLifecycleSamplesAreIndependentAndOnceOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	arm := time.Now()
+	output := captureComposeFcmOutput(t, func() {
+		if !sampleDiagnosticControlAt(t, o, arm) {
+			t.Fatal("initial invalid sample stopped collection")
+		}
+		if !sampleDiagnosticControlAt(t, o, arm.Add(500*time.Microsecond)) {
+			t.Fatal("repeated invalid sample stopped collection")
+		}
+		writeDiagnosticControl(t, path, "")
+		if !sampleDiagnosticControlAt(t, o, arm.Add(time.Millisecond)) {
+			t.Fatal("later valid sample did not arm collection")
+		}
+		if !sampleDiagnosticControlAt(t, o, arm.Add(2*time.Millisecond)) {
+			t.Fatal("repeat valid sample stopped collection")
+		}
+		if !expireDiagnosticAt(o, arm.Add(time.Millisecond+composeFcmWindow)) {
+			t.Fatal("existing post-control expiry was not observed")
+		}
+	})
+	for _, marker := range []string{
+		"compose_fcm_lifecycle control_sample=invalid",
+		"compose_fcm_lifecycle control_sample=valid",
+		"compose_fcm_lifecycle window_expiry=completed",
+	} {
+		if strings.Count(output, marker) != 1 {
+			t.Fatalf("lifecycle marker was not emitted exactly once: %q", output)
+		}
+	}
+}
+
 func TestComposeFcmObserverPartialPhaseSnapshotsFailClosed(t *testing.T) {
 	t.Run("missing arm snapshot", func(t *testing.T) {
 		o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace), controlState: composeFcmControlValid, postControlStarted: time.Now()}

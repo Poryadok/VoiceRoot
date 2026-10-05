@@ -17,6 +17,34 @@ String notificationDebugBase() {
 }
 
 const _diagnosticFile = String.fromEnvironment('VOICE_FCM_DIAGNOSTIC_FILE');
+const _diagnosticStatusFile = String.fromEnvironment(
+  'VOICE_FCM_DIAGNOSTIC_STATUS_FILE',
+);
+
+Future<void> _writeDiagnosticStatus(String field, String value) async {
+  if (_diagnosticStatusFile.isEmpty) return;
+  if ((field != 'pre' && field != 'post') ||
+      (value != 'ok' && value != 'failed')) {
+    fail('FCM diagnostic status write failed');
+  }
+  final file = File(_diagnosticStatusFile);
+  try {
+    final current = await file.readAsString();
+    final match = RegExp(
+      r'^pre=(unknown|ok|failed)\npost=(unknown|ok|failed)\n$',
+    ).firstMatch(current);
+    if (match == null) throw const FormatException();
+    if ((field == 'pre' && (match[1] != 'unknown' || match[2] != 'unknown')) ||
+        (field == 'post' && (match[1] != 'ok' || match[2] != 'unknown'))) {
+      throw const FormatException();
+    }
+    final pre = field == 'pre' ? value : match[1]!;
+    final post = field == 'post' ? value : match[2]!;
+    await file.writeAsString('pre=$pre\npost=$post\n', flush: true);
+  } on Object {
+    fail('FCM diagnostic status write failed');
+  }
+}
 
 Future<void> _writeFcmDiagnosticControl({
   required String chatId,
@@ -36,7 +64,16 @@ Future<void> _writeFcmDiagnosticControl({
       flush: true,
     );
   } on Object {
-    // The original FCM assertion remains authoritative.
+    if (_diagnosticStatusFile.isNotEmpty) {
+      await _writeDiagnosticStatus(
+        messageId.isEmpty ? 'pre' : 'post',
+        'failed',
+      );
+      fail('FCM diagnostic control write failed');
+    }
+  }
+  if (_diagnosticStatusFile.isNotEmpty) {
+    await _writeDiagnosticStatus(messageId.isEmpty ? 'pre' : 'post', 'ok');
   }
 }
 

@@ -9,6 +9,16 @@ unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 [[ "$(voice_fcm_diag_parse_log "${valid}")" == "${valid}" ]]
 parsed=''
+voice_fcm_diag_status_valid 0 $'pre=ok\npost=ok\n'
+! voice_fcm_diag_status_valid 1 $'pre=ok\npost=ok\n'
+! voice_fcm_diag_status_valid 0 $'pre=ok\npost=unknown\n'
+! voice_fcm_diag_status_valid 0 $'pre=ok\npost=ok\npost=ok\n'
+lifecycle=$'compose_fcm_lifecycle control_sample=invalid\ncompose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
+voice_fcm_diag_lifecycle_valid "${lifecycle}"
+voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
+! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
+! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed\ncompose_fcm_lifecycle private=unknown'
+! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid'
 voice_fcm_diag_parse_collected_log 0 "${valid}" parsed
 [[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == accepted && "${parsed}" == "${valid}" ]]
 [[ "$(voice_fcm_diag_parse_log "${unknownPhase}")" == "${unknownPhase}" ]]
@@ -74,9 +84,11 @@ voice_fcm_diag_identity_valid 1000 1000
 
 tmp="$(mktemp -d)"
 file="${tmp}/control"
+status="${tmp}/status"
 : >"${file}"
-voice_fcm_diag_cleanup "${file}" "${tmp}"
-[[ ! -e "${file}" && ! -e "${tmp}" ]]
+: >"${status}"
+voice_fcm_diag_cleanup "${file}" "${tmp}" "${status}"
+[[ ! -e "${file}" && ! -e "${status}" && ! -e "${tmp}" ]]
 
 tmp="$(mktemp -d)"
 file="${tmp}/control"
