@@ -16,7 +16,7 @@ import (
 
 func (s *MatchSquadMemberService) CheckSchema(ctx context.Context) error {
 	if s == nil || s.Pool == nil {
-		return errors.New("Voice MatchSquad member database unavailable")
+		return errors.New("voice MatchSquad member database unavailable")
 	}
 	queries := []string{
 		`SELECT operation_id,request_bytes,response_bytes,state,failure_code,match_id,room_id,profile_id,account_id,session_epoch,media_epoch,method FROM voice_match_squad_member_operations LIMIT 0`,
@@ -27,11 +27,11 @@ func (s *MatchSquadMemberService) CheckSchema(ctx context.Context) error {
 	for _, query := range queries {
 		rows, err := s.Pool.Query(ctx, query)
 		if err != nil {
-			return errors.New("Voice MatchSquad member schema unavailable")
+			return errors.New("voice MatchSquad member schema unavailable")
 		}
 		rows.Close()
 		if rows.Err() != nil {
-			return errors.New("Voice MatchSquad member schema unavailable")
+			return errors.New("voice MatchSquad member schema unavailable")
 		}
 	}
 	return nil

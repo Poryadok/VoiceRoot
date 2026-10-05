@@ -647,8 +647,8 @@ func TestPostgresMatchSquadMember_LateOldRemovalCannotAffectNewGeneration(t *tes
 	require.NoError(t, err)
 	var livekitRoom string
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT livekit_room_name FROM voice_room_instances WHERE room_id=$1`, f.roomID).Scan(&livekitRoom))
-	f.effects.seedParticipant(livekitRoom, oldIdentity)
 	f.effects.blockNextRemoval()
+	f.effects.seedParticipant(livekitRoom, oldIdentity)
 	defer f.effects.releaseRemoval()
 
 	leave := f.leaveRequest(joined.GetMediaEpoch())
@@ -932,10 +932,13 @@ func assertMatchSquadMemberState(t *testing.T, f *matchSquadPostgresFixture, pro
 	var state, effect string
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.membership_state,COALESCE((SELECT string_agg(e.state,',' ORDER BY e.effect_kind) FROM voice_match_squad_member_effects e WHERE e.profile_id=m.profile_id AND e.media_epoch=m.media_epoch),'') FROM voice_room_memberships m WHERE m.profile_id=$1 AND m.room_id=$2`, profile, f.roomID).Scan(&state, &effect))
 	require.Equal(t, wantState, state)
-	if wantEffect == "pending" {
+	switch wantEffect {
+	case "pending":
 		require.Contains(t, effect, "pending")
-	} else if wantEffect == "confirmed" {
+	case "confirmed":
 		require.NotContains(t, effect, "pending")
+	default:
+		t.Fatalf("unknown MatchSquad effect expectation %q", wantEffect)
 	}
 }
 
@@ -1192,6 +1195,9 @@ func (e *testMatchSquadEffects) blockNextRemoval() {
 func (e *testMatchSquadEffects) seedParticipant(room, identity string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.participants == nil {
+		e.participants = make(map[string]map[string]struct{})
+	}
 	if e.participants[room] == nil {
 		e.participants[room] = make(map[string]struct{})
 	}
