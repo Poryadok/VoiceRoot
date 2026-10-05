@@ -1182,7 +1182,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatCopyAsNewTitle => 'Копировать как новое в';
 
   @override
-  String get chatForwardSearchHint => 'Поиск чатов';
+  String get chatForwardSearchHint => 'Поиск чатов и контактов';
 
   @override
   String chatForwardFrom(String sender) {
