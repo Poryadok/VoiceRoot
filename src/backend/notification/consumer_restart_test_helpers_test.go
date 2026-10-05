@@ -145,8 +145,14 @@ func TestComposeFcmEventCorrelationProbe(t *testing.T) {
 	}
 	var matches uint64
 	var eventSequence uint64
+	scanCtx, cancelScan := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelScan()
 	for sequence := start; coverage != "unknown" && sequence <= last; sequence++ {
-		message, getErr := js.GetMsg(jsStreamMessageEvents, sequence)
+		if scanCtx.Err() != nil {
+			coverage = "unknown"
+			break
+		}
+		message, getErr := js.GetMsg(jsStreamMessageEvents, sequence, nats.Context(scanCtx))
 		if getErr != nil {
 			coverage = "unknown"
 			break
@@ -166,26 +172,39 @@ func TestComposeFcmEventCorrelationProbe(t *testing.T) {
 		}
 	}
 	if matches != 1 {
-		fmt.Printf("compose_fcm_probe available=true stage=scan event_match_count=%d event_scan=%s consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", matches, coverage)
+		fmt.Printf("compose_fcm_probe available=true stage=scan event_match_count=%d event_scan=%s consumer_info_available=unknown delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", matches, coverage)
 		return
 	}
-	consumerInfoAvailable := false
-	deliveredAtOrAfter := false
-	ackFloorAtOrAfter := false
+	consumerInfoAvailable := "unknown"
+	deliveredAtOrAfter := "unknown"
+	ackFloorAtOrAfter := "unknown"
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, consumer.SharedDurable("message"))
 		if infoErr == nil && info != nil {
-			consumerInfoAvailable = true
-			deliveredAtOrAfter = info.Delivered.Stream >= eventSequence
-			ackFloorAtOrAfter = info.AckFloor.Stream >= eventSequence
-			if ackFloorAtOrAfter {
+			consumerInfoAvailable = "true"
+			deliveredAtOrAfter = sequenceAtOrAfter(info.Delivered.Stream, eventSequence)
+			ackFloorAtOrAfter = sequenceAtOrAfter(info.AckFloor.Stream, eventSequence)
+			if ackFloorAtOrAfter == "true" {
 				break
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	fmt.Printf("compose_fcm_probe available=true stage=consumer_info event_match_count=1 event_scan=%s consumer_info_available=%t delivered_seq_ge_event=%t ack_floor_seq_ge_event=%t\n", coverage, consumerInfoAvailable, deliveredAtOrAfter, ackFloorAtOrAfter)
+	fmt.Printf("compose_fcm_probe available=true stage=consumer_info event_match_count=1 event_scan=%s consumer_info_available=%s delivered_seq_ge_event=%s ack_floor_seq_ge_event=%s\n", coverage, consumerInfoAvailable, deliveredAtOrAfter, ackFloorAtOrAfter)
+}
+
+func sequenceAtOrAfter(actual, target uint64) string {
+	if actual >= target {
+		return "true"
+	}
+	return "false"
+}
+
+func TestSequenceAtOrAfterDoesNotConflateUnavailableWithFalse(t *testing.T) {
+	require.Equal(t, "true", sequenceAtOrAfter(12, 12))
+	require.Equal(t, "true", sequenceAtOrAfter(13, 12))
+	require.Equal(t, "false", sequenceAtOrAfter(11, 12))
 }
 
 func composeFCMProbeUnavailable(stage string) {

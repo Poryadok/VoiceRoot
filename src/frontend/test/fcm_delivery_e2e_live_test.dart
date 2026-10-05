@@ -18,6 +18,28 @@ String notificationDebugBase() {
 
 const _diagnosticFile = String.fromEnvironment('VOICE_FCM_DIAGNOSTIC_FILE');
 
+Future<void> _writeFcmDiagnosticControl({
+  required String chatId,
+  required String senderProfileId,
+  required String recipientProfileId,
+  String messageId = '',
+}) async {
+  if (_diagnosticFile.isEmpty) return;
+  try {
+    await File(_diagnosticFile).writeAsString(
+      jsonEncode({
+        'message_id': messageId,
+        'chat_id': chatId,
+        'sender_profile_id': senderProfileId,
+        'recipient_profile_id': recipientProfileId,
+      }),
+      flush: true,
+    );
+  } on Object {
+    // The original FCM assertion remains authoritative.
+  }
+}
+
 Future<T?> _bestEffortDiagnosticRead<T>(Future<T> Function() read) async {
   try {
     return await read().timeout(const Duration(seconds: 2));
@@ -58,16 +80,29 @@ void main() {
     final dm = await ctx.chatsClient().createDm(
       authorization: a.authorizationHeader,
       otherProfileId: b.activeProfileId,
-    );
-    final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+      );
+      final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
 
-    final send = await ctx.messagesClient().sendMessage(
+      await _writeFcmDiagnosticControl(
+        chatId: chatId,
+        senderProfileId: a.activeProfileId,
+        recipientProfileId: b.activeProfileId,
+      );
+
+      final send = await ctx.messagesClient().sendMessage(
       authorization: a.authorizationHeader,
       chatId: chatId,
       content: 'fcm delivery probe ${DateTime.now().millisecondsSinceEpoch}',
       clientMessageId: qaClientMessageId(),
-    );
-    expect(send, isA<MessagesApiOk<VoiceMessage>>());
+      );
+      expect(send, isA<MessagesApiOk<VoiceMessage>>());
+      final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
+      await _writeFcmDiagnosticControl(
+        chatId: chatId,
+        senderProfileId: a.activeProfileId,
+        recipientProfileId: b.activeProfileId,
+        messageId: sentMessage.id,
+      );
 
     final uri = recorderEndpoint.replace(
       queryParameters: {'profile_id': b.activeProfileId},
@@ -86,20 +121,6 @@ void main() {
     }
     var failureDiagnostics = '';
     if (recorded == null && _diagnosticFile.isNotEmpty) {
-      try {
-        final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
-        await File(_diagnosticFile).writeAsString(
-          jsonEncode({
-            'message_id': sentMessage.id,
-            'chat_id': chatId,
-            'sender_profile_id': a.activeProfileId,
-          }),
-          flush: true,
-        );
-      } on Object {
-        // Correlation is best-effort; the original assertion remains authoritative.
-      }
-
       final reads = await Future.wait<Object?>([
         _bestEffortDiagnosticRead(
           () => ctx.chatsClient().listGroupMembers(
