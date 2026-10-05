@@ -19,6 +19,15 @@ import (
 const (
 	composeFcmCandidateLimit = 16
 	composeFcmWindow         = 5 * time.Second
+	composeFcmKeyByteLimit   = 128
+)
+
+type composeFcmControlState uint8
+
+const (
+	composeFcmControlUnread composeFcmControlState = iota
+	composeFcmControlInvalid
+	composeFcmControlValid
 )
 
 type composeFcmControl struct {
@@ -29,14 +38,14 @@ type composeFcmControl struct {
 }
 
 type composeFcmObserver struct {
-	path       string
-	mu         sync.Mutex
-	candidates map[string]*composeFcmTrace
-	control    composeFcmControl
-	controlOK  bool
-	started    time.Time
-	emitted    bool
-	overflow   bool
+	path         string
+	mu           sync.Mutex
+	candidates   map[string]*composeFcmTrace
+	control      composeFcmControl
+	controlState composeFcmControlState
+	started      time.Time
+	emitted      bool
+	overflow     bool
 }
 
 type composeFcmTrace struct {
@@ -73,25 +82,30 @@ func newComposeFcmObserver() *composeFcmObserver {
 }
 
 func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) *composeFcmTrace {
-	if o == nil || eventID == "" || messageID == "" || chatID == "" || senderID == "" {
+	if o == nil || eventID == "" || messageID == "" || chatID == "" || senderID == "" ||
+		len(eventID) > composeFcmKeyByteLimit || len(messageID) > composeFcmKeyByteLimit ||
+		len(chatID) > composeFcmKeyByteLimit || len(senderID) > composeFcmKeyByteLimit {
 		return nil
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	c := o.control
-	if !o.controlOK || c.ChatID != chatID || c.SenderProfileID != senderID {
+	if o.controlState == composeFcmControlInvalid ||
+		o.controlState == composeFcmControlValid && (c.ChatID != chatID || c.SenderProfileID != senderID || c.MessageID != "" && c.MessageID != messageID) {
 		return nil
 	}
 	now := time.Now()
 	if o.started.IsZero() {
 		o.started = now
 	}
-	if now.Sub(o.started) > composeFcmWindow {
+	if now.Sub(o.started) >= composeFcmWindow {
 		return nil
 	}
 	key := messageID + "\x00" + eventID
 	if existing := o.candidates[key]; existing != nil {
-		existing.attempts++
+		if existing.attempts < 9999 {
+			existing.attempts++
+		}
 		return existing
 	}
 	if len(o.candidates) >= composeFcmCandidateLimit {
@@ -242,7 +256,18 @@ func (o *composeFcmObserver) collect() {
 	for range ticker.C {
 		c, ok := o.readControl()
 		o.mu.Lock()
-		o.control, o.controlOK = c, ok
+		if !ok {
+			o.control = composeFcmControl{}
+			o.controlState = composeFcmControlInvalid
+			// Any candidates buffered before an invalid sample can no longer be
+			// uniquely attributed. A later valid sample may start a fresh window.
+			clear(o.candidates)
+			o.started = time.Time{}
+			o.overflow = false
+			o.mu.Unlock()
+			continue
+		}
+		o.control, o.controlState = c, composeFcmControlValid
 		if !o.started.IsZero() && time.Since(o.started) > composeFcmWindow {
 			if !ok || c.MessageID == "" {
 				o.emitUnknownLocked()
@@ -265,7 +290,7 @@ func (o *composeFcmObserver) collect() {
 			o.mu.Unlock()
 			return
 		}
-		if !ok || c.MessageID == "" || o.emitted {
+		if c.MessageID == "" || o.emitted {
 			o.mu.Unlock()
 			continue
 		}
@@ -285,6 +310,9 @@ func (o *composeFcmObserver) candidateForMessage(messageID string) (*composeFcmT
 			return nil, true
 		}
 		found = candidate
+	}
+	if found != nil && (found.chatID != o.control.ChatID || found.senderID != o.control.SenderProfileID) {
+		return nil, false
 	}
 	return found, false
 }

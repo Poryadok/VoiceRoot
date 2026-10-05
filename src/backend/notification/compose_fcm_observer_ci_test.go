@@ -54,7 +54,88 @@ func writeDiagnosticControlValues(t *testing.T, path, messageID, chatID, senderI
 func cacheDiagnosticControl(t *testing.T, o *composeFcmObserver) {
 	t.Helper()
 	c, ok := o.readControl()
-	o.control, o.controlOK = c, ok
+	o.control = c
+	if ok {
+		o.controlState = composeFcmControlValid
+	} else {
+		o.controlState = composeFcmControlInvalid
+	}
+}
+
+func TestComposeFcmObserverBuffersOnlyBeforeFirstControlSample(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	if trace := o.begin("event-before-sample", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender); trace == nil {
+		t.Fatal("event before the first control sample was not buffered")
+	}
+	if err := os.WriteFile(path, []byte("not-json"), 0o600); err != nil {
+		t.Fatal("invalid control fixture write failed")
+	}
+	cacheDiagnosticControl(t, o)
+	if o.controlState != composeFcmControlInvalid || len(o.candidates) != 0 {
+		t.Fatal("sampled-invalid control did not clear provisional candidates")
+	}
+	if trace := o.begin("event-while-invalid", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender); trace != nil {
+		t.Fatal("event was buffered while control was sampled-invalid")
+	}
+	writeDiagnosticControl(t, path, "")
+	cacheDiagnosticControl(t, o)
+	trace := o.begin("event-after-valid", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	if trace == nil {
+		t.Fatal("event after valid control sample was not captured")
+	}
+	writeDiagnosticControl(t, path, diagnosticTestMessage)
+	match, ambiguous := o.candidateForMessage(diagnosticTestMessage)
+	if ambiguous || match != trace || match.eventID != "event-after-valid" {
+		t.Fatal("only the post-valid unique candidate was not attributed")
+	}
+}
+
+func TestComposeFcmObserverBoundsUntrustedCorrelationKeys(t *testing.T) {
+	o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
+	if o.begin(strings.Repeat("e", composeFcmKeyByteLimit+1), diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender) != nil ||
+		o.begin("event-large-message", strings.Repeat("m", composeFcmKeyByteLimit+1), diagnosticTestChat, diagnosticTestSender) != nil ||
+		o.begin("event-large-chat", diagnosticTestMessage, strings.Repeat("c", composeFcmKeyByteLimit+1), diagnosticTestSender) != nil ||
+		len(o.candidates) != 0 {
+		t.Fatal("oversized correlation key was retained")
+	}
+}
+
+func TestComposeFcmObserverUnreadCandidatesRetainOutcomeAndExpireClosed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	trace := o.begin("event-unread", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	if trace == nil {
+		t.Fatal("initial-unread event was not buffered")
+	}
+	if o.begin("event-decoy", "55555555-5555-4555-8555-555555555555", "other-chat", "other-sender") == nil {
+		t.Fatal("bounded pre-control decoy was not retained for fail-closed disambiguation")
+	}
+	trace.memberOK, trace.memberRows, trace.present, trace.route = "ok", 2, "true", "ack"
+	writeDiagnosticControl(t, path, diagnosticTestMessage)
+	cacheDiagnosticControl(t, o)
+	match, ambiguous := o.candidateForMessage(diagnosticTestMessage)
+	if ambiguous || match != trace || match.memberOK != "ok" || match.memberRows != 2 || match.present != "true" || match.route != "ack" {
+		t.Fatal("buffered trace facts did not survive later control attribution")
+	}
+	o.started = time.Now().Add(-composeFcmWindow)
+	if o.begin("event-expired", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender) != nil {
+		t.Fatal("expired attribution window accepted another candidate")
+	}
+}
+
+func TestComposeFcmObserverRejectsUniqueCandidateForDifferentControlTuple(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	if o.begin("event-other-tuple", diagnosticTestMessage, "other-chat", "other-sender") == nil {
+		t.Fatal("initial-unread candidate was not buffered")
+	}
+	writeDiagnosticControl(t, path, diagnosticTestMessage)
+	cacheDiagnosticControl(t, o)
+	match, ambiguous := o.candidateForMessage(diagnosticTestMessage)
+	if match != nil || ambiguous {
+		t.Fatal("candidate with a different response chat/sender tuple was attributed")
+	}
 }
 
 func TestComposeFcmObserverCorrelatesBothResponseOrdersAndEventRetries(t *testing.T) {
