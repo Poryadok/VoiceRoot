@@ -2,6 +2,7 @@ package matchsquad
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -828,7 +829,7 @@ func TestCreateInsertErrorClassificationIsBoundToVerifiedConstraints(t *testing.
 	conflict.OperationId = uuid.NewString()
 	conflict.ChatCreationReceipt.OperationId = conflict.OperationId
 	conflictCtx := verifiedServiceContext(t, conflict, matchsquadprincipal.CreateMethod, conflict.GetOperationId())
-	_, err := f.service.Create(conflictCtx, conflict)
+	_, err = f.service.Create(conflictCtx, conflict)
 	require.Equal(t, codes.FailedPrecondition, status.Code(err), "the verified current owner index is a terminal binding conflict")
 	var conflicts int
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_operations WHERE operation_id=$1`, uuid.MustParse(conflict.GetOperationId())).Scan(&conflicts))

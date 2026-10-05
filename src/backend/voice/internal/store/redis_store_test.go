@@ -293,7 +293,7 @@ func TestRedisCallStore_DelayedOldEpochAddCannotResurrectAfterNewEpoch(t *testin
 	case <-time.After(5 * time.Second):
 		t.Fatal("delayed Eold add did not settle after Enew projection")
 	}
-	require.GreaterOrEqual(t, checks.Load(), int32(2))
+	require.Equal(t, int32(1), checks.Load(), "the watched current-epoch marker rejects Eold before a CAS retry is needed")
 	current, err := callStore.GetCall(ctx, room)
 	require.NoError(t, err)
 	require.Equal(t, "epoch-two", current.MatchSquadMemberEpochs[profile])
