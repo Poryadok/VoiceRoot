@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/pkg/integrationtest"
 )
 
 func TestMatchSquadCompactionIntentRequiresCompletedAggregateAndExactDueTime(t *testing.T) {
@@ -93,6 +94,43 @@ func TestMatchSquadLifecycleDownRefusesToDropProvisioningEvidence(t *testing.T) 
 	var operationCount int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operationCount))
 	require.Equal(t, 1, operationCount)
+}
+
+func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires isolated PostgreSQL and pinned golang-migrate container")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
+	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
+	fixture.Run(true, "up")
+	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
+	hash := make([]byte, 32)
+	_, err := fixture.Pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_operations
+		(match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes,
+		 state, chat_operation_id, chat_request_sha256, chat_request_bytes,
+		 voice_operation_id)
+		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8)
+	`, matchID, uuid.New(), hash, []byte("manifest"), uuid.New(), hash, []byte("request"), uuid.New())
+	require.NoError(t, err)
+
+	// Exercise the real pinned migration runner and let its normal failed-Down
+	// path record the dirty version. Do not force or clear the marker.
+	fixture.Run(false, "down", "1")
+	var version int64
+	var dirty bool
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
+	require.EqualValues(t, 16, version)
+	require.True(t, dirty, "failed runner Down must leave its version dirty for operator repair")
+
+	var operationCount int
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operationCount))
+	require.Equal(t, 1, operationCount, "runner refusal preserves provisioning evidence")
+	var tableExists bool
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT to_regclass('public.matchmaking_match_squad_operations') IS NOT NULL`).Scan(&tableExists))
+	require.True(t, tableExists, "runner refusal leaves lifecycle schema intact")
 }
 
 func TestMatchSquadLifecycleDownRefusesConcurrentWriterWithoutAbortingConnection(t *testing.T) {
