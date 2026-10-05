@@ -174,7 +174,7 @@ def _configuration(builder):
             _fail('canonical_minio_default_missing')
         p.setdefault(key, match.group(1))
     generation = p.get('generation', 'legacy')
-    if not re.fullmatch(r'legacy|g[0-9]{8}[a-z0-9]{0,8}', generation):
+    if not re.fullmatch(r'legacy|[gr][0-9]{8}[a-z0-9]{0,8}', generation):
         _fail('canonical_generation_invalid')
     r = {'__IMAGE_REGISTRY__': p['registry'], '__IMAGE_TAG__': p['tag'],
          'IMAGE_PLACEHOLDER': p['registry'] + '/gateway:' + p['tag'], '__K_NAMESPACE__': NS,

@@ -35,7 +35,7 @@ class CustodyTests(unittest.TestCase):
         self.path = Path(self.directory.name) / 'cipher.cms'
         self.path.write_bytes(b'private-ciphertext')
         self.path.chmod(0o600)
-        self.binding = {'operation': 'a' * 32, 'challenge': 'b' * 32, 'run_id': 123,
+        self.binding = {'operation': 'a' * 12, 'challenge': 'b' * 32, 'run_id': 123,
             'head_sha': 'c' * 40, 'cipher_sha256': hashlib.sha256(self.path.read_bytes()).hexdigest(),
             'cipher_bytes': self.path.stat().st_size, 'created_at': datetime.now(timezone.utc).isoformat()}
         self.zip = archive()

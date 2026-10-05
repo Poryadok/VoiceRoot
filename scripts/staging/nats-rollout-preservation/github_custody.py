@@ -132,8 +132,8 @@ def verify_artifact(token, binding, cipher_path, artifact_id):
         if (not isinstance(token, str) or not token or '\n' in token or '\r' in token
                 or type(artifact_id) is not int or artifact_id <= 0
                 or set(binding) != {'operation', 'challenge', 'run_id', 'head_sha', 'cipher_sha256', 'cipher_bytes', 'created_at'}): _fail()
-        for key in ('operation', 'challenge'):
-            if not isinstance(binding[key], str) or not re.fullmatch(r'[a-zA-Z0-9_-]{16,128}', binding[key]): _fail()
+        for key, pattern in (('operation', r'[a-f0-9]{12}'), ('challenge', r'[a-f0-9]{32}')):
+            if not isinstance(binding[key], str) or not re.fullmatch(pattern, binding[key]): _fail()
         if (type(binding['run_id']) is not int or binding['run_id'] <= 0
                 or type(binding['cipher_bytes']) is not int or not 0 < binding['cipher_bytes'] <= MAX_CIPHER_BYTES
                 or not re.fullmatch(r'[0-9a-f]{40}', binding['head_sha'])
