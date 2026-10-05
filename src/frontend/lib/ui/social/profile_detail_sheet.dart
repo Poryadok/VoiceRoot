@@ -110,148 +110,156 @@ class ProfileDetailSheet extends ConsumerWidget {
                 icon: Icons.person_off_outlined,
               );
             }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    StoryRingAvatar(
-                      displayName: profile.displayName,
-                      imageUrl: profile.avatarUrl,
-                      hasActiveStory: hasActiveStory,
-                      size: 56,
-                      onTap: hasActiveStory
-                          ? () {
-                              final stories = profileStoriesAsync.valueOrNull;
-                              if (stories == null || stories.isEmpty) return;
-                              Navigator.of(context).pop();
-                              StoriesRoutes.openViewer(
-                                context,
-                                storyIds: stories.map((s) => s.id).toList(),
-                                profileId: profileId,
-                              );
-                            }
-                          : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.displayName,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          Text(profile.handle),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              PresenceIndicator(
-                                key: onlineIndicatorKey,
-                                presence: presence,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(_presenceLabel(context, l10n, presence)),
-                            ],
-                          ),
-                          mmRatingAsync.when(
-                            loading: () => const SizedBox.shrink(),
-                            error: (error, stackTrace) =>
-                                const SizedBox.shrink(),
-                            data: (rating) {
-                              if (rating == null)
-                                return const SizedBox.shrink();
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  l10n.profileMmRating(
-                                    rating.ratingValue.toStringAsFixed(1),
-                                  ),
-                                  style: Theme.of(context).textTheme.bodySmall,
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      StoryRingAvatar(
+                        displayName: profile.displayName,
+                        imageUrl: profile.avatarUrl,
+                        hasActiveStory: hasActiveStory,
+                        size: 56,
+                        onTap: hasActiveStory
+                            ? () {
+                                final stories = profileStoriesAsync.valueOrNull;
+                                if (stories == null || stories.isEmpty) return;
+                                Navigator.of(context).pop();
+                                StoriesRoutes.openViewer(
+                                  context,
+                                  storyIds: stories.map((s) => s.id).toList(),
+                                  profileId: profileId,
+                                );
+                              }
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              profile.displayName,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            Text(profile.handle),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                PresenceIndicator(
+                                  key: onlineIndicatorKey,
+                                  presence: presence,
                                 ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!isGuest && profile.username.isNotEmpty && !isSelf)
-                      VoiceShareLinkButton(
-                        link: profileShareUrl(profile.username),
-                        tooltip: l10n.shareLinkAction,
-                      ),
-                  ],
-                ),
-                if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(profile.bio!),
-                ],
-                HighlightsSection(profileId: profileId),
-                mmProfileAsync.when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (error, stackTrace) => const SizedBox.shrink(),
-                  data: (mmProfile) {
-                    if (mmProfile.entries.isEmpty)
-                      return const SizedBox.shrink();
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 16),
-                        Text(
-                          l10n.playerProfileSection,
-                          style: Theme.of(context).textTheme.titleSmall,
+                                const SizedBox(width: 8),
+                                Text(_presenceLabel(context, l10n, presence)),
+                              ],
+                            ),
+                            mmRatingAsync.when(
+                              loading: () => const SizedBox.shrink(),
+                              error: (error, stackTrace) =>
+                                  const SizedBox.shrink(),
+                              data: (rating) {
+                                if (rating == null)
+                                  return const SizedBox.shrink();
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    l10n.profileMmRating(
+                                      rating.ratingValue.toStringAsFixed(1),
+                                    ),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        for (final entry in mmProfile.entries)
+                      ),
+                      if (!isGuest && profile.username.isNotEmpty && !isSelf)
+                        VoiceShareLinkButton(
+                          link: profileShareUrl(profile.username),
+                          tooltip: l10n.shareLinkAction,
+                        ),
+                    ],
+                  ),
+                  if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(profile.bio!),
+                  ],
+                  HighlightsSection(profileId: profileId),
+                  mmProfileAsync.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (error, stackTrace) => const SizedBox.shrink(),
+                    data: (mmProfile) {
+                      if (mmProfile.entries.isEmpty)
+                        return const SizedBox.shrink();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 16),
                           Text(
-                            _mmEntryLabel(catalogAsync, entry),
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            l10n.playerProfileSection,
+                            style: Theme.of(context).textTheme.titleSmall,
                           ),
-                      ],
-                    );
-                  },
-                ),
-                if (!isSelf) ...[
-                  const SizedBox(height: 20),
-                  OutlinedButton(
-                    key: ProfileDetailSheet.messageKey,
-                    onPressed: isGuest
-                        ? null
-                        : () => _openDm(context, ref, profileId),
-                    child: Text(l10n.profileMessage),
-                  ),
-                  const SizedBox(height: 8),
-                  _FriendActionButton(
-                    profileId: profileId,
-                    pendingOutgoing: pendingOutgoing,
-                    pendingIncoming: pendingIncoming,
-                    isFriend: isFriend,
-                    isGuest: isGuest,
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    key: ProfileDetailSheet.blockKey,
-                    onPressed: () => _confirmBlock(context, ref, profile),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                    child: Text(l10n.profileBlock),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    key: const Key('profile_report'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      ReportSheet.show(
-                        context,
-                        target: ReportUserTarget(profileId: profileId),
+                          const SizedBox(height: 8),
+                          for (final entry in mmProfile.entries)
+                            Text(
+                              _mmEntryLabel(catalogAsync, entry),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                        ],
                       );
                     },
-                    child: Text(l10n.reportAction),
                   ),
+                  if (!isSelf) ...[
+                    const SizedBox(height: 20),
+                    OutlinedButton(
+                      key: ProfileDetailSheet.messageKey,
+                      onPressed: isGuest
+                          ? null
+                          : () => _openDm(context, ref, profileId),
+                      child: Text(l10n.profileMessage),
+                    ),
+                    const SizedBox(height: 8),
+                    _FriendActionButton(
+                      profileId: profileId,
+                      pendingOutgoing: pendingOutgoing,
+                      pendingIncoming: pendingIncoming,
+                      isFriend: isFriend,
+                      isGuest: isGuest,
+                    ),
+                    if (isFriend) ...[
+                      const SizedBox(height: 8),
+                      _ProfileFavoriteAction(profileId: profileId),
+                    ],
+                    const SizedBox(height: 8),
+                    TextButton(
+                      key: ProfileDetailSheet.blockKey,
+                      onPressed: () => _confirmBlock(context, ref, profile),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                      child: Text(l10n.profileBlock),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      key: const Key('profile_report'),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        ReportSheet.show(
+                          context,
+                          target: ReportUserTarget(profileId: profileId),
+                        );
+                      },
+                      child: Text(l10n.reportAction),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             );
           },
         ),
@@ -343,6 +351,123 @@ class ProfileDetailSheet extends ConsumerWidget {
     final date = material.formatShortDate(local);
     final time = TimeOfDay.fromDateTime(local).format(context);
     return '$date $time';
+  }
+}
+
+class _ProfileFavoriteAction extends ConsumerStatefulWidget {
+  const _ProfileFavoriteAction({required this.profileId});
+
+  final String profileId;
+
+  @override
+  ConsumerState<_ProfileFavoriteAction> createState() =>
+      _ProfileFavoriteActionState();
+}
+
+class _ProfileFavoriteActionState
+    extends ConsumerState<_ProfileFavoriteAction> {
+  static const _buttonKey = Key('profile_favorite_toggle');
+
+  final FocusNode _focusNode = FocusNode(debugLabel: 'profile-favorite-action');
+  bool _busy = false;
+  int _contextGeneration = 0;
+  String? _authorization;
+  String? _activeProfileId;
+
+  @override
+  void didUpdateWidget(covariant _ProfileFavoriteAction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profileId != widget.profileId) {
+      _contextGeneration++;
+      _busy = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final auth = ref.watch(authControllerProvider);
+    final authorization = auth.session?.authorizationHeader;
+    if (_authorization != authorization ||
+        _activeProfileId != auth.activeProfileId) {
+      _authorization = authorization;
+      _activeProfileId = auth.activeProfileId;
+      _contextGeneration++;
+      _busy = false;
+    }
+
+    final favorites = ref.watch(favoritesListProvider);
+    if (favorites.isLoading) {
+      return const Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (favorites.hasError) {
+      return VoiceStatePanel(
+        title: socialListErrorMessage(l10n, favorites.error!),
+        icon: Icons.cloud_off_outlined,
+        actionLabel: l10n.commonRetry,
+        onAction: () => ref.invalidate(favoritesListProvider),
+      );
+    }
+
+    final isFavorite = favorites.requireValue.favorites.contains(
+      widget.profileId,
+    );
+    final label = isFavorite
+        ? l10n.socialRemoveFavorite
+        : l10n.socialAddFavorite;
+    return Tooltip(
+      message: label,
+      child: OutlinedButton.icon(
+        key: _buttonKey,
+        focusNode: _focusNode,
+        onPressed: _busy ? null : () => _toggle(isFavorite),
+        icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+        label: Text(label),
+      ),
+    );
+  }
+
+  Future<void> _toggle(bool isFavorite) async {
+    final l10n = AppLocalizations.of(context)!;
+    final generation = _contextGeneration;
+    final authorization = ref.read(authorizationHeaderProvider);
+    final activeProfileId = ref.read(authControllerProvider).activeProfileId;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+
+    String? error;
+    try {
+      error = await ref
+          .read(socialActionsProvider)
+          .setFavorite(widget.profileId, !isFavorite);
+    } catch (_) {
+      error = 'unknown';
+    }
+    if (!mounted || generation != _contextGeneration) return;
+    final currentAuth = ref.read(authControllerProvider);
+    if (authorization != ref.read(authorizationHeaderProvider) ||
+        activeProfileId != currentAuth.activeProfileId) {
+      return;
+    }
+
+    setState(() => _busy = false);
+    if (error != null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(socialActionErrorMessage(l10n, error))),
+      );
+    }
   }
 }
 
