@@ -720,6 +720,11 @@ public class AuthService {
         .orElseThrow(() -> new AuthException("not_found"));
   }
 
+  public void deleteE2EKeyBackup(String accessToken) {
+    TokenClaims claims = validate(accessToken);
+    e2eKeyBackups.delete(UUID.fromString(claims.userId()));
+  }
+
   public GuestReminderState getGuestReminder(String accessToken) {
     TokenClaims claims = validate(accessToken);
     Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));

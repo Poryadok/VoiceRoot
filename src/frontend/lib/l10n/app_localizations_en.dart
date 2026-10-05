@@ -3291,4 +3291,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deepLinkReturnHome => 'Go to Home';
+
+  @override
+  String get e2eBackupStatusChecking => 'Checking encrypted key backup…';
+
+  @override
+  String get e2eBackupStatusPresent =>
+      'Encrypted key backup is available for this account.';
+
+  @override
+  String get e2eBackupStatusAbsent =>
+      'No encrypted key backup is saved for this account.';
+
+  @override
+  String get e2eBackupActionFailed =>
+      'We couldn\'t update the encrypted key backup. Try again.';
+
+  @override
+  String get e2eBackupRestoreFailed =>
+      'We couldn\'t restore this backup. Check the password and try again.';
+
+  @override
+  String get e2eBackupChange => 'Change backup password';
+
+  @override
+  String get e2eBackupDeleteTitle => 'Delete encrypted backup?';
+
+  @override
+  String get e2eBackupDeleteConfirm =>
+      'This deletes the encrypted backup from this account. Your keys on this device will stay intact.';
+
+  @override
+  String get e2eBackupDelete => 'Delete backup';
+
+  @override
+  String get e2eBackupRestoreCta => 'Restore encrypted history';
+
+  @override
+  String get e2eKeyBackupManage => 'Manage encrypted key backup';
 }

@@ -40,6 +40,7 @@ service AuthService {
   // See docs/features/encryption.md — encrypted key backup (opaque blob).
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse);
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
+  rpc DeleteE2EKeyBackup(DeleteE2EKeyBackupRequest) returns (DeleteE2EKeyBackupResponse);
   // Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
   rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
   // Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
@@ -263,6 +264,10 @@ message GetE2EKeyBackupResponse {
   string encrypted_blob = 1;
   optional string password_hint = 2;
 }
+
+message DeleteE2EKeyBackupRequest {}
+
+message DeleteE2EKeyBackupResponse {}
 
 message ResolvePhoneHashesRequest {
   repeated string phone_hashes = 1;

@@ -58,6 +58,22 @@ func (t *transcoder) serveAuthREST(w http.ResponseWriter, r *http.Request, rest 
 		writeProtoJSON(w, http.StatusOK, resp)
 		return true
 
+	case r.Method == http.MethodDelete && rest == "e2e-key-backup":
+		if t.clients.auth == nil {
+			http.NotFound(w, r)
+			return true
+		}
+		callCtx := authGRPCContext(ctx, r)
+		_, err := t.clients.auth.DeleteE2EKeyBackup(
+			callCtx, &authv1.DeleteE2EKeyBackupRequest{},
+		)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return true
+
 	case r.Method == http.MethodPost && rest == "switch-profile":
 		// Auth REST issues sessions with normalized device_info; gRPC path is for internal callers only.
 		return false

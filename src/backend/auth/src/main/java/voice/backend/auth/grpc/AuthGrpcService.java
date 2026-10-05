@@ -288,6 +288,16 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   }
 
   @Override
+  public void deleteE2EKeyBackup(
+      app.voice.auth.v1.DeleteE2EKeyBackupRequest request,
+      StreamObserver<app.voice.auth.v1.DeleteE2EKeyBackupResponse> responseObserver) {
+    run(responseObserver, () -> {
+      authService.deleteE2EKeyBackup(resolveAccessToken());
+      return app.voice.auth.v1.DeleteE2EKeyBackupResponse.getDefaultInstance();
+    });
+  }
+
+  @Override
   public void setAccountStatus(SetAccountStatusRequest request, StreamObserver<SetAccountStatusResponse> responseObserver) {
     run(responseObserver, () -> {
       authService.setAccountStatus(request.getAccountId(), request.getStatus());
