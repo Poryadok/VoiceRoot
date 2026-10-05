@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/bot_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/slash_command_menu.dart';
+import 'package:voice_frontend/ui/chat/slash_command_options_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
@@ -103,9 +107,9 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => _commands,
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => _commands),
         ],
         onSelected: (command) => picked = command,
       ),
@@ -129,19 +133,162 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => _commands,
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => _commands),
         ],
         onSelected: (_) {},
-        filter: 'help',
       ),
     );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'help');
     await tester.pumpAndSettle();
 
     expect(find.text('/help'), findsOneWidget);
     expect(find.text('/ping'), findsNothing);
   });
+
+  testWidgets(
+    'keyboard menu search selects options and returns focus through Cancel',
+    (tester) async {
+      final triggerFocus = FocusNode(debugLabel: 'slash-menu-trigger');
+      addTearDown(triggerFocus.dispose);
+      var invocationCount = 0;
+      Map<String, dynamic>? invokedOptions;
+      const command = BotSlashCommand(
+        botId: 'bot-1',
+        botName: 'PingBot',
+        name: 'ping',
+        description: 'Replies with pong',
+        options: [
+          BotSlashCommandOption(name: 'reason', type: 'string', required: true),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authorizationHeaderProvider.overrideWith((ref) => 'Bearer test'),
+            slashCommandsForChatProvider(
+              'chat-1',
+            ).overrideWith((ref) async => [command]),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Consumer(
+              builder: (context, ref, _) => Scaffold(
+                body: ElevatedButton(
+                  focusNode: triggerFocus,
+                  onPressed: () async {
+                    await showSlashCommandMenu(
+                      context: context,
+                      ref: ref,
+                      chatId: 'chat-1',
+                      onSelected: (selected) async {
+                        final options = await showSlashCommandOptionsSheet(
+                          context: context,
+                          ref: ref,
+                          chatId: 'chat-1',
+                          command: selected,
+                        );
+                        if (options != null) {
+                          invocationCount++;
+                          invokedOptions = options;
+                        }
+                      },
+                    );
+                  },
+                  child: const Text('Open commands'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      triggerFocus.requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'ping');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      final reasonField = find.byType(TextField);
+      expect(reasonField, findsOneWidget);
+      await tester.enterText(reasonField, 'keyboard reason');
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        tester
+            .state<EditableTextState>(find.byType(EditableText))
+            .widget
+            .focusNode
+            .hasFocus,
+        isTrue,
+        reason: 'reverse traversal returns to the command parameter field',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(invocationCount, 1);
+      expect(invokedOptions, {'reason': 'keyboard reason'});
+      expect(triggerFocus.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'ping');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(find.text('Run command'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(invocationCount, 1, reason: 'Escape cancels without invoking');
+      expect(triggerFocus.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        invocationCount,
+        1,
+        reason: 'Escape from the menu does not invoke',
+      );
+      expect(
+        triggerFocus.hasFocus,
+        isTrue,
+        reason: 'menu Escape restores its live trigger',
+      );
+    },
+  );
 
   testWidgets('SlashCommandMenuSheet greys out offline bot commands', (
     tester,
@@ -149,9 +296,9 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => _commands,
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => _commands),
         ],
         onSelected: (_) {},
       ),
@@ -172,9 +319,9 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => _commands,
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => _commands),
         ],
         onSelected: (_) {},
       ),
@@ -190,31 +337,32 @@ void main() {
     );
   });
 
-  testWidgets('SlashCommandMenuSheet empty state explains next step in space chat', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      slashMenuApp(
-        overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => const [],
-          ),
-          spaceIdForChatProvider('chat-1').overrideWith((ref) => 'space-1'),
-        ],
-        onSelected: (_) {},
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'SlashCommandMenuSheet empty state explains next step in space chat',
+    (tester) async {
+      await tester.pumpWidget(
+        slashMenuApp(
+          overrides: [
+            slashCommandsForChatProvider(
+              'chat-1',
+            ).overrideWith((ref) async => const []),
+            spaceIdForChatProvider('chat-1').overrideWith((ref) => 'space-1'),
+          ],
+          onSelected: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(SlashCommandMenuSheet.emptyStateKey), findsOneWidget);
-    expect(find.text('No bot commands in this chat.'), findsOneWidget);
-    expect(
-      find.text(
-        'Install bots in Space settings, or enable them for this chat in Chat info.',
-      ),
-      findsOneWidget,
-    );
-  });
+      expect(find.byKey(SlashCommandMenuSheet.emptyStateKey), findsOneWidget);
+      expect(find.text('No bot commands in this chat.'), findsOneWidget);
+      expect(
+        find.text(
+          'Install bots in Space settings, or enable them for this chat in Chat info.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('SlashCommandMenuSheet empty state explains DM limitation', (
     tester,
@@ -222,9 +370,9 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => const [],
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => const []),
           spaceIdForChatProvider('chat-1').overrideWith((ref) => null),
         ],
         onSelected: (_) {},
@@ -245,9 +393,9 @@ void main() {
     await tester.pumpWidget(
       slashMenuApp(
         overrides: [
-          slashCommandsForChatProvider('chat-1').overrideWith(
-            (ref) async => _commands,
-          ),
+          slashCommandsForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) async => _commands),
         ],
         onSelected: (_) {},
         filter: 'missing',
@@ -258,9 +406,7 @@ void main() {
     expect(find.byKey(SlashCommandMenuSheet.noMatchStateKey), findsOneWidget);
     expect(find.text('No matching commands'), findsOneWidget);
     expect(
-      find.text(
-        'Keep typing after / or try another command or bot name.',
-      ),
+      find.text('Keep typing after / or try another command or bot name.'),
       findsOneWidget,
     );
     expect(find.byKey(SlashCommandMenuSheet.helpFooterKey), findsNothing);
