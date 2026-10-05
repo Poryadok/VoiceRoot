@@ -23,10 +23,12 @@ import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
+import 'channel_settings_panel.dart';
 import 'pinned_messages_panel.dart';
 import '../settings/notification_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
+import '../../state/channel_settings_provider.dart';
 
 /// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -64,6 +66,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   bool _standalonePinsLoading = false;
   bool _standalonePinsFailed = false;
   int? _standalonePinsStatusCode;
+  bool _showChannelSettings = false;
 
   @override
   void initState() {
@@ -81,6 +84,12 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    if (_showChannelSettings) {
+      return ChannelSettingsPanel(
+        chatId: widget.chatId,
+        onClose: () => setState(() => _showChannelSettings = false),
+      );
+    }
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
     final roomProvider = chatRoomControllerProvider(widget.chatId);
@@ -196,6 +205,18 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         StandaloneChatGuestSettingsSection(
           key: ValueKey(widget.chatId),
           chatId: widget.chatId,
+        ),
+        StandaloneChannelSettingsEntry(
+          chatId: widget.chatId,
+          onOpen: () {
+            if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+              unawaited(
+                ChannelSettingsPanel.show(context, chatId: widget.chatId),
+              );
+            } else {
+              setState(() => _showChannelSettings = true);
+            }
+          },
         ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
@@ -825,6 +846,49 @@ class _ChatOverrideBar extends ConsumerWidget {
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
         label: Text(l10n.spaceChatOverrideTitle),
       ),
+    );
+  }
+}
+
+/// Entry shown in Chat Info only when the current profile manages a standalone
+/// channel. Membership is resolved across every member page by the scoped
+/// channel settings authority provider.
+class StandaloneChannelSettingsEntry extends ConsumerWidget {
+  const StandaloneChannelSettingsEntry({
+    super.key,
+    required this.chatId,
+    required this.onOpen,
+  });
+
+  static const Key entryKey = Key('chat_info_channel_settings');
+
+  final String chatId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chat = chatMetadataForId(
+      ref.watch(chatListControllerProvider).items,
+      chatId,
+    );
+    if (chat == null || !chat.isChannel || chat.isSpaceChannel) {
+      return const SizedBox.shrink();
+    }
+    final authority = ref.watch(channelSettingsAuthorityProvider(chatId));
+    if (authority.valueOrNull != true) return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
+        Divider(height: 1, color: VoiceColors.of(context).borderDefault),
+        ListTile(
+          key: StandaloneChannelSettingsEntry.entryKey,
+          leading: const Icon(Icons.tune_outlined),
+          title: Text(l10n.channelSettingsTitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpen,
+        ),
+      ],
     );
   }
 }

@@ -1008,3 +1008,33 @@ See [the operator runbook](../scripts/staging/nats-rollout-preservation/README.m
 for the reviewed installer, authority, capacity and recovery boundaries.
 Source bootstrap43/deployed42durable compatibility remains an explicit
 pre-fence backend release prerequisite; the runtime inventory itself is dynamic.
+
+
+## Production host inotify prerequisite
+
+Before installing the rollout-preservation root bridge in **production**, ensure
+`fs.inotify.max_user_instances >= 512` persistently; retain any higher existing
+value. This is a per-user instance limit, separate from `max_user_watches` and
+`max_queued_events`. Verify actual host owners first rather than treating every
+shim with PPID 1 as stale or masking a suspected leak by raising the limit.
+
+The staging installer encountered `EMFILE` at the default instance limit 128.
+A complete, stable runtime check mapped all 52 k3s shim processes to 122 live
+RUNNING container tasks, with zero unresolved shims. Cleaning those shims would
+affect live containers, so a modest instance-capacity increase is justified for
+that host; this observation does not prove that every future host is leak-free.
+
+Record the value in a root-owned `sysctl.d` drop-in without replacing conflicting
+administrator settings. Preserve higher values, apply only
+`fs.inotify.max_user_instances`, and verify an empty inotify instance succeeds.
+After installation or partial-install recovery, require both
+`voice-nats-preservation.path` and `.timer` to be enabled and `active/waiting`;
+timer readiness alone does not prove the path watch works. Preserve the installed
+code, root policy and recovery key; restarting k3s, killing shims or rerunning the
+installer is not this host-capacity repair. Starting the path can process an
+already queued authenticated rollout request through the normal proof gates.
+
+This is a **production prerequisite to apply during production provisioning**,
+not evidence that the production host has already been changed. Host recovery
+and enablement precede the populated version-transition and fresh-rollback proof;
+automatic staging deployment remains disabled until that proof succeeds.
