@@ -281,6 +281,7 @@ class _SlashCommandOptionsSheetState
       case 'boolean':
         return SwitchListTile(
           title: Text(opt.name + (opt.required ? ' *' : '')),
+          autofocus: autofocus,
           value: _values[opt.name] == 'true',
           onChanged: (v) {
             setState(() {
@@ -294,6 +295,7 @@ class _SlashCommandOptionsSheetState
           chatId: widget.chatId,
           option: opt,
           value: _values[opt.name],
+          autofocus: autofocus,
           onChanged: (v) => setState(() => _values[opt.name] = v),
         );
       case 'channel':
@@ -302,6 +304,7 @@ class _SlashCommandOptionsSheetState
           chatId: widget.chatId,
           option: opt,
           value: _values[opt.name],
+          autofocus: autofocus,
           onChanged: (v) => setState(() => _values[opt.name] = v),
         );
       case 'role':
@@ -310,6 +313,7 @@ class _SlashCommandOptionsSheetState
           chatId: widget.chatId,
           option: opt,
           value: _values[opt.name],
+          autofocus: autofocus,
           onChanged: (v) => setState(() => _values[opt.name] = v),
         );
       case 'attachment':
@@ -318,6 +322,7 @@ class _SlashCommandOptionsSheetState
           option: opt,
           fileName: _attachmentNames[opt.name],
           errorMessage: _attachmentErrors[opt.name],
+          autofocus: autofocus,
           uploading: _uploadingAttachment,
           onPick: () => _pickAttachment(opt),
         );
@@ -432,12 +437,14 @@ class _UserOptionPicker extends ConsumerWidget {
     required this.chatId,
     required this.option,
     required this.value,
+    required this.autofocus,
     required this.onChanged,
   });
 
   final String chatId;
   final BotSlashCommandOption option;
   final String? value;
+  final bool autofocus;
   final ValueChanged<String> onChanged;
 
   @override
@@ -470,6 +477,7 @@ class _UserOptionPicker extends ConsumerWidget {
       data: (members) {
         return DropdownButtonFormField<String>(
           initialValue: value,
+          autofocus: autofocus,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickUser(option.name),
           ),
@@ -495,12 +503,14 @@ class _ChannelOptionPicker extends ConsumerWidget {
     required this.chatId,
     required this.option,
     required this.value,
+    required this.autofocus,
     required this.onChanged,
   });
 
   final String chatId;
   final BotSlashCommandOption option;
   final String? value;
+  final bool autofocus;
   final ValueChanged<String> onChanged;
 
   @override
@@ -536,6 +546,7 @@ class _ChannelOptionPicker extends ConsumerWidget {
             .toList();
         return DropdownButtonFormField<String>(
           initialValue: value,
+          autofocus: autofocus,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickChannel(option.name),
           ),
@@ -561,12 +572,14 @@ class _RoleOptionPicker extends ConsumerWidget {
     required this.chatId,
     required this.option,
     required this.value,
+    required this.autofocus,
     required this.onChanged,
   });
 
   final String chatId;
   final BotSlashCommandOption option;
   final String? value;
+  final bool autofocus;
   final ValueChanged<String> onChanged;
 
   @override
@@ -599,6 +612,7 @@ class _RoleOptionPicker extends ConsumerWidget {
       data: (roles) {
         return DropdownButtonFormField<String>(
           initialValue: value,
+          autofocus: autofocus,
           decoration: InputDecoration(
             labelText: l10n.slashOptionPickRole(option.name),
           ),
@@ -621,6 +635,7 @@ class _AttachmentOptionPicker extends StatelessWidget {
     required this.option,
     required this.fileName,
     required this.errorMessage,
+    required this.autofocus,
     required this.uploading,
     required this.onPick,
   });
@@ -628,6 +643,7 @@ class _AttachmentOptionPicker extends StatelessWidget {
   final BotSlashCommandOption option;
   final String? fileName;
   final String? errorMessage;
+  final bool autofocus;
   final bool uploading;
   final VoidCallback onPick;
 
@@ -639,6 +655,7 @@ class _AttachmentOptionPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         OutlinedButton.icon(
+          autofocus: autofocus,
           onPressed: uploading ? null : onPick,
           icon: uploading
               ? SizedBox(

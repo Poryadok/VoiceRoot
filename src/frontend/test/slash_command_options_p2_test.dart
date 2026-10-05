@@ -735,6 +735,128 @@ void main() {
   });
 
   testWidgets(
+    'options sheet gives the first control keyboard focus for every option type',
+    (tester) async {
+      var attachmentPickerCalls = 0;
+      _useFileSelector(() async {
+        attachmentPickerCalls++;
+        return null;
+      });
+
+      final types = [
+        ('string', 'reason'),
+        ('integer', 'count'),
+        ('boolean', 'enabled'),
+        ('user', 'member'),
+        ('channel', 'target'),
+        ('role', 'rank'),
+        ('attachment', 'file'),
+      ];
+      for (final (type, name) in types) {
+        final openerFocusNode = FocusNode(debugLabel: 'open-$type-options');
+        addTearDown(openerFocusNode.dispose);
+        final option = BotSlashCommandOption(
+          name: name,
+          type: type,
+          required: true,
+        );
+        await pumpOptionsSheet(
+          tester,
+          command: _commandWithOptions([option]),
+          openerFocusNode: openerFocusNode,
+          extraOverrides: [
+            spaceIdForChatProvider('chat-1').overrideWith((ref) => 'space-1'),
+            spaceMembersProvider('space-1').overrideWith(
+              (ref) async => [
+                SpaceMemberRosterEntry(
+                  profileId: 'profile-1',
+                  roleNames: const [],
+                  joinedAt: DateTime.utc(2026),
+                  nickname: 'Alice',
+                ),
+              ],
+            ),
+            spaceTreeProvider('space-1').overrideWith(
+              (ref) async => const SpaceTreeData(
+                categories: [],
+                voiceRooms: [],
+                nodes: [
+                  SpaceTreeNodeData(
+                    id: 'node-1',
+                    spaceId: 'space-1',
+                    kind: 'text_chat',
+                    linkedChatId: 'chat-2',
+                    sortOrder: 0,
+                    displayName: 'general',
+                  ),
+                ],
+              ),
+            ),
+            spaceRolesProvider('space-1').overrideWith(
+              (ref) async => [
+                const SpaceRole(
+                  id: 'role-1',
+                  spaceId: 'space-1',
+                  name: 'Admin',
+                ),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpAndSettle();
+
+        expect(openerFocusNode.hasFocus, isFalse, reason: type);
+        switch (type) {
+          case 'string':
+          case 'integer':
+            expect(
+              tester
+                  .state<EditableTextState>(find.byType(EditableText))
+                  .widget
+                  .focusNode
+                  .hasFocus,
+              isTrue,
+              reason: '$type field should receive initial focus',
+            );
+          case 'boolean':
+            await tester.sendKeyEvent(LogicalKeyboardKey.space);
+            await tester.pump();
+            expect(
+              tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+              isTrue,
+            );
+          case 'user':
+          case 'channel':
+          case 'role':
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            final expectedChoice = switch (type) {
+              'user' => 'Alice',
+              'channel' => 'general',
+              _ => 'Admin',
+            };
+            expect(
+              find.text(expectedChoice),
+              findsOneWidget,
+              reason: '$type dropdown should open from initial focus',
+            );
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+            await tester.pumpAndSettle();
+          case 'attachment':
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+            expect(attachmentPickerCalls, 1);
+        }
+
+        expect(find.text('Run command'), findsOneWidget, reason: type);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(openerFocusNode.hasFocus, isTrue, reason: '$type Escape return');
+      }
+    },
+  );
+
+  testWidgets(
     'options sheet supports keyboard focus, Escape restoration, and semantics',
     (tester) async {
       final openerFocusNode = FocusNode(debugLabel: 'slash-options-trigger');

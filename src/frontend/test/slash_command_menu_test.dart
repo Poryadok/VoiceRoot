@@ -271,6 +271,22 @@ void main() {
 
       expect(invocationCount, 1, reason: 'Escape cancels without invoking');
       expect(triggerFocus.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        invocationCount,
+        1,
+        reason: 'Escape from the menu does not invoke',
+      );
+      expect(
+        triggerFocus.hasFocus,
+        isTrue,
+        reason: 'menu Escape restores its live trigger',
+      );
     },
   );
 
