@@ -2138,6 +2138,90 @@ abstract class AppLocalizations {
   /// **'Pin message'**
   String get chatMessagePin;
 
+  /// No description provided for @chatPinnedMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned messages'**
+  String get chatPinnedMessagesTitle;
+
+  /// No description provided for @chatPinnedMessagesOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open all pinned messages'**
+  String get chatPinnedMessagesOpen;
+
+  /// No description provided for @chatPinnedMessagesHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide pinned messages'**
+  String get chatPinnedMessagesHide;
+
+  /// No description provided for @chatPinnedMessagesRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Show pinned messages'**
+  String get chatPinnedMessagesRestore;
+
+  /// No description provided for @chatPinnedTypePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo'**
+  String get chatPinnedTypePhoto;
+
+  /// No description provided for @chatPinnedTypeVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get chatPinnedTypeVideo;
+
+  /// No description provided for @chatPinnedTypeFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get chatPinnedTypeFile;
+
+  /// No description provided for @chatPinnedTypeVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get chatPinnedTypeVoice;
+
+  /// No description provided for @chatPinnedTypeSticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker'**
+  String get chatPinnedTypeSticker;
+
+  /// No description provided for @chatPinnedTypeGif.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF'**
+  String get chatPinnedTypeGif;
+
+  /// No description provided for @chatPinnedTypeArticle.
+  ///
+  /// In en, this message translates to:
+  /// **'Article'**
+  String get chatPinnedTypeArticle;
+
+  /// No description provided for @chatPinnedTypeLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get chatPinnedTypeLocation;
+
+  /// No description provided for @chatPinnedTypeMusic.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get chatPinnedTypeMusic;
+
+  /// No description provided for @chatPinnedTypeVideoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Video message'**
+  String get chatPinnedTypeVideoMessage;
+
   /// No description provided for @chatMessageUnpin.
   ///
   /// In en, this message translates to:
