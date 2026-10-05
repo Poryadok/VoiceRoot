@@ -8,8 +8,10 @@ import hashlib
 import http.client
 import io
 import json
+import os
 from pathlib import Path
 import re
+import shutil
 import ssl
 import stat
 import struct
@@ -63,6 +65,9 @@ def _request(url, headers, limit, deadline):
 
 
 def _copy(response, target, limit, deadline):
+    declared = response.headers.get('Content-Length')
+    if declared is not None and (not declared.isdecimal() or int(declared) > limit): _fail()
+    if response.headers.get('Content-Encoding', 'identity') != 'identity': _fail()
     count = 0
     while True:
         remaining = deadline - time.monotonic()
@@ -76,6 +81,22 @@ def _copy(response, target, limit, deadline):
         if count > limit: _fail()
         target.write(chunk)
     return count
+
+
+def _private_cipher(path):
+    path = Path(path)
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode): _fail()
+    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0))
+    try:
+        observed = os.fstat(fd)
+        if (not stat.S_ISREG(observed.st_mode) or (before.st_dev, before.st_ino) != (observed.st_dev, observed.st_ino)
+                or os.name == 'posix' and (observed.st_uid != os.geteuid() or observed.st_mode & 0o077)):
+            _fail()
+        return os.fdopen(fd, 'rb')
+    except Exception:
+        os.close(fd)
+        _fail()
 
 
 def _close(response):
@@ -122,8 +143,9 @@ def verify_artifact(token, binding, cipher_path, artifact_id):
         if start > now or (now - start).total_seconds() > TIME_LIMIT: _fail()
         deadline = time.monotonic() + TIME_LIMIT
         hasher, count = hashlib.sha256(), 0
-        with Path(cipher_path).open('rb') as local:
+        with _private_cipher(cipher_path) as local:
             while chunk := local.read(CHUNK):
+                if time.monotonic() > deadline: _fail()
                 count += len(chunk)
                 if count > binding['cipher_bytes']: _fail()
                 hasher.update(chunk)
@@ -142,6 +164,7 @@ def verify_artifact(token, binding, cipher_path, artifact_id):
                 or metadata['expired'] is not False or run['id'] != binding['run_id'] or run['head_sha'] != binding['head_sha']
                 or created < start or created > now or _timestamp(metadata['expires_at']) <= now or type(metadata['size_in_bytes']) is not int
                 or not 0 < metadata['size_in_bytes'] <= archive_limit): _fail()
+        if shutil.disk_usage(tempfile.gettempdir()).free < metadata['size_in_bytes'] + CHUNK: _fail()
         with tempfile.TemporaryFile() as remote:
             downloaded = _download(url + '/zip', headers, remote, archive_limit, deadline, redirects=True)
             if downloaded != metadata['size_in_bytes']: _fail()

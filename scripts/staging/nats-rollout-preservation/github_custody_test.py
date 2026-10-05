@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +34,7 @@ class CustodyTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / 'cipher.cms'
         self.path.write_bytes(b'private-ciphertext')
+        self.path.chmod(0o600)
         self.binding = {'operation': 'a' * 32, 'challenge': 'b' * 32, 'run_id': 123,
             'head_sha': 'c' * 40, 'cipher_sha256': hashlib.sha256(self.path.read_bytes()).hexdigest(),
             'cipher_bytes': self.path.stat().st_size, 'created_at': datetime.now(timezone.utc).isoformat()}
@@ -121,6 +123,26 @@ class CustodyTests(unittest.TestCase):
     def test_archive_expired_timestamp_even_false_flag(self):
         self.metadata['expires_at'] = '2000-01-01T00:00:00Z'
         with self.assertRaises(custody.CustodyError): self.verify()
+
+    def test_non_regular_cipher_path_rejected(self):
+        self.path = Path(self.directory.name)
+        with self.assertRaises(custody.CustodyError): self.verify()
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX fd and permission guard')
+    def test_cipher_symlink_and_public_permissions_rejected(self):
+        original = self.path
+        link = original.with_name('link.cms')
+        link.symlink_to(original)
+        self.path = link
+        with self.assertRaises(custody.CustodyError): self.verify()
+        self.path = original
+        original.chmod(0o644)
+        with self.assertRaises(custody.CustodyError): self.verify()
+
+    def test_excess_content_length_rejected_before_body_read(self):
+        response = Reply(200, b'x', headers={'Content-Length': '101'})
+        with self.assertRaises(custody.CustodyError): custody._copy(response, io.BytesIO(), 100, time.monotonic() + 5)
+        self.assertEqual(response.tell(), 0)
 
 
 if __name__ == '__main__': unittest.main()
