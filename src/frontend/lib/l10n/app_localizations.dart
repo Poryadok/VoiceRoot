@@ -5989,6 +5989,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start'**
   String get onboardingWrapUpStart;
+
+  /// No description provided for @deepLinkAccessDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access denied'**
+  String get deepLinkAccessDenied;
+
+  /// No description provided for @deepLinkResourceNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found'**
+  String get deepLinkResourceNotFound;
+
+  /// No description provided for @deepLinkReturnHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Home'**
+  String get deepLinkReturnHome;
 }
 
 class _AppLocalizationsDelegate
