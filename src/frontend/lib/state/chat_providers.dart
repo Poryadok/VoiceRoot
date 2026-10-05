@@ -3043,8 +3043,18 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
-    final auth = _ref.read(authorizationHeaderProvider);
+    final session = _ref.read(authControllerProvider).session;
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      if (session?.activeProfileId != expectedProfileId ||
+          session?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
+    final auth =
+        expectedAuthorization ?? _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     final trimmedCommentary = commentary?.trim();
     final result = await _ref
@@ -3058,6 +3068,13 @@ class ChatActions {
               : trimmedCommentary,
           withoutAttribution: withoutAttribution,
         );
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      final current = _ref.read(authControllerProvider).session;
+      if (current?.activeProfileId != expectedProfileId ||
+          current?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
     return switch (result) {
       MessagesApiOk(:final data) => () {
         _invalidateChatLists(_ref);
@@ -3079,6 +3096,8 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
     if (sourceMessageIds.isEmpty) return null;
     for (var i = 0; i < sourceMessageIds.length; i++) {
@@ -3087,6 +3106,8 @@ class ChatActions {
         targetChatId: targetChatId,
         commentary: i == 0 ? commentary : null,
         withoutAttribution: withoutAttribution,
+        expectedProfileId: expectedProfileId,
+        expectedAuthorization: expectedAuthorization,
       );
       if (err != null) return err;
     }

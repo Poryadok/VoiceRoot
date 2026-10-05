@@ -1175,7 +1175,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatCopyAsNewTitle => 'Copy as new to';
 
   @override
-  String get chatForwardSearchHint => 'Search chats';
+  String get chatForwardSearchHint => 'Search chats and contacts';
 
   @override
   String chatForwardFrom(String sender) {
