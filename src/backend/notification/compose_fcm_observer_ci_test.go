@@ -221,6 +221,39 @@ func TestComposeFcmObserverAdmissionClassificationIsBoundedAndAnonymous(t *testi
 	})
 }
 
+func TestComposeFcmObserverRejectedAdmissionFailsClosedForLaterTrace(t *testing.T) {
+	o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
+	o.control = composeFcmControl{
+		ChatID: diagnosticTestChat, SenderProfileID: diagnosticTestSender, RecipientID: diagnosticTestTarget,
+	}
+	o.controlState = composeFcmControlValid
+
+	if rejected := o.begin("rejected-event", diagnosticTestMessage, "other-chat", diagnosticTestSender); rejected != nil {
+		t.Fatal("wrong-tuple event was admitted")
+	}
+	trace := o.begin("matched-event", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	if trace == nil {
+		t.Fatal("matching event after the rejected event was not admitted")
+	}
+	targetID := uuid.MustParse(diagnosticTestTarget)
+	trace.members([]chatmembers.Member{{ProfileID: diagnosticTestTarget, InboxBucket: "main"}}, nil)
+	trace.Decision(targetID, true, true, "offline", "ok")
+	trace.Tokens(targetID, 1, 1, "ok")
+	trace.DispatcherReturned(targetID, "fcm")
+	o.finish(trace, "ack")
+
+	output := captureComposeFcmOutput(t, func() {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		o.printTraceLocked(trace)
+	})
+	unknownFacts := "member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown"
+	if !strings.Contains(output, "valid=false reason=unknown admission=tuple") || !strings.Contains(output, unknownFacts) ||
+		strings.Contains(output, diagnosticTestTarget) || strings.Contains(output, "valid=true") {
+		t.Fatalf("rejection followed by a matched trace did not fail closed: %q", output)
+	}
+}
+
 func TestComposeFcmObserverUnreadActualRouteRemainsUnchangedAndUnknown(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "control.json")
 	senderID, recipientID, chatID, messageID, eventID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()

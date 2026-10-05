@@ -7,7 +7,7 @@ unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 [[ "$(voice_fcm_diag_parse_log "${valid}")" == "${valid}" ]]
 for admission in invalid window tuple identity mixed overflow; do
   candidate="${valid/admission=none/admission=${admission}}"
-  [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${candidate}" ]]
+  [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${unknown}" ]]
 done
 [[ "$(voice_fcm_diag_parse_log '')" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid}"$'\n'"${valid}")" == "${unknown}" ]]

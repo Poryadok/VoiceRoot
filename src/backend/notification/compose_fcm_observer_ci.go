@@ -478,6 +478,10 @@ func (o *composeFcmObserver) printTraceLocked(t *composeFcmTrace) {
 		o.printUnknownLocked("incomplete")
 		return
 	}
+	if o.admissionClassLocked() != "none" {
+		o.printUnknownLocked("unknown")
+		return
+	}
 	o.emitted = true
 	fmt.Printf("compose_fcm_diag valid=true reason=matched admission=%s candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s\n",
 		o.admissionClassLocked(), boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"))
