@@ -151,7 +151,7 @@ def _validate(plan, mode):
         indexed[action['id']] = action
     descriptors, used, owner_rows = [], set(), set()
     for row in checks:
-        if set(row) - {'id', 'disposition', 'objects', 'reason', 'enabled'}:
+        if set(row) - {'id', 'disposition', 'objects', 'reason', 'enabled', 'sources', 'evidence'}:
             _fail('plan_row_invalid')
         disposition = row.get('disposition')
         objects = row.get('objects')
@@ -171,20 +171,23 @@ def _validate(plan, mode):
         if mode == 'app-only' and row['id'] in FULL_ONLY:
             _fail('plan_app_only_infra_invalid')
         for obj in objects:
-            allowed = {'kind', 'name', 'namespace', 'desired', 'action_id'}
+            allowed = {'kind', 'name', 'namespace', 'desired', 'action_id', 'disposition'}
             if (not isinstance(obj, dict) or set(obj) - allowed
                     or not {'kind', 'name', 'desired'} <= set(obj)
                     or not isinstance(obj['desired'], dict) or not obj['desired']
                     or any(not isinstance(obj.get(k), str) or not obj[k] for k in ('kind', 'name'))):
                 _fail('plan_object_invalid')
             obj = copy.deepcopy(obj)
+            effective = obj.pop('disposition', disposition)
+            if effective not in ('preserve', 'action'):
+                _fail('plan_object_disposition_invalid')
             obj.setdefault('namespace', 'voice-staging')
             if obj['namespace'] != 'voice-staging':
                 _fail('plan_namespace_invalid')
             if row['id'] == 'auth-mail' and (obj['kind'] != 'Secret' or obj['name'] != 'voice-app-secrets'
                     or obj['desired'].get('predicates', {}).get('auth_mail') is not True):
                 _fail('auth_mail_predicate_invalid')
-            if disposition == 'action':
+            if effective == 'action':
                 action = indexed.get(obj.get('action_id'))
                 if (not action or obj['kind'] != action['manifest']['kind']
                         or obj['name'] != action['manifest']['metadata']['name']
@@ -195,7 +198,7 @@ def _validate(plan, mode):
                     owner_rows.add(obj['action_id'])
             elif 'action_id' in obj:
                 _fail('preserve_action_invalid')
-            descriptors.append((disposition, obj))
+            descriptors.append((effective, obj))
     if used != set(indexed) or owner_rows != set(indexed):
         _fail('unconsumed_action')
     targets = {}
