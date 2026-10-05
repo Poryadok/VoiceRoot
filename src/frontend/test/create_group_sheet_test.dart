@@ -8,9 +8,11 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/create_group_friends_provider.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
@@ -25,6 +27,7 @@ void main() {
   Widget testApp({
     required Widget home,
     required http.Client client,
+    bool useApiFriendPages = false,
     List<Override> extraOverrides = const [],
   }) {
     return ProviderScope(
@@ -47,6 +50,13 @@ void main() {
             friends: ['friend-a', 'friend-b', 'friend-c'],
           ),
         ),
+        if (!useApiFriendPages)
+          createGroupFriendsProvider.overrideWith(
+            (ref) async => const ['friend-a', 'friend-b', 'friend-c'],
+          ),
+        profileProvider.overrideWith((ref, profileId) async {
+          return _testProfiles[profileId];
+        }),
         ...extraOverrides,
       ],
       child: MaterialApp(
@@ -58,6 +68,242 @@ void main() {
       ),
     );
   }
+
+  testWidgets('CreateGroupSheet exposes friend search', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((req) async => http.Response('{}', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(TextField, 'Search by name or @username'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'searching across names and handles preserves hidden selections on submit',
+    (tester) async {
+      final requests = <http.Request>[];
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            ),
+          ),
+          useApiFriendPages: true,
+          client: MockClient((request) async {
+            requests.add(request);
+            if (request.method == 'GET' &&
+                request.url.path == '/api/v1/friends') {
+              if (request.url.queryParameters['cursor'] == null) {
+                return http.Response(
+                  jsonEncode({
+                    'friends': [
+                      {'profile_id': 'friend-a'},
+                      {'profile_id': 'friend-b'},
+                    ],
+                    'next_cursor': 'page-2',
+                  }),
+                  200,
+                );
+              }
+              expect(request.url.queryParameters['cursor'], 'page-2');
+              return http.Response(
+                jsonEncode({
+                  'friends': [
+                    {'profile_id': 'friend-c'},
+                  ],
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'group-search',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Squad',
+                    'creator_profile_id': 'profile-me',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-search/members') {
+              return http.Response('', 204);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Squad',
+      );
+      await tester.pump();
+      final search = find.byKey(CreateGroupSheet.searchFieldKey);
+
+      await tester.enterText(search, '@charlie');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-c')));
+      await tester.pump();
+
+      await tester.enterText(search, 'alice');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+
+      await tester.enterText(search, 'no-such-friend');
+      await tester.pumpAndSettle();
+      expect(find.text('No profiles found'), findsOneWidget);
+      expect(
+        find.byKey(CreateGroupSheet.submitKey).hitTestable(),
+        findsOneWidget,
+      );
+
+      await tester.enterText(search, '');
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+            )
+            .value,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
+            )
+            .value,
+        isTrue,
+      );
+      expect(
+        find.text('Select at least 2 friends to create a group.'),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        find.byKey(CreateGroupSheet.submitKey).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        requests.map((request) => '${request.method} ${request.url.path}'),
+        contains('POST /api/v1/chats'),
+      );
+      final createRequest = requests.singleWhere(
+        (request) =>
+            request.method == 'POST' && request.url.path == '/api/v1/chats',
+      );
+      final inviteRequest = requests.singleWhere(
+        (request) =>
+            request.method == 'POST' &&
+            request.url.path == '/api/v1/chats/group-search/members',
+      );
+      expect(jsonDecode(createRequest.body), containsPair('name', 'Squad'));
+      expect(jsonDecode(inviteRequest.body), {
+        'profile_ids': ['friend-c', 'friend-a'],
+      });
+      expect(
+        requests
+            .where(
+              (request) =>
+                  request.method == 'GET' &&
+                  request.url.path == '/api/v1/friends',
+            )
+            .map((request) => request.url.queryParameters['cursor'])
+            .toList(),
+        [null, 'page-2'],
+      );
+    },
+  );
+
+  testWidgets(
+    'profile lookup failures block partial search results and retry',
+    (tester) async {
+      var failBob = true;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            ),
+          ),
+          client: MockClient((request) async => http.Response('{}', 404)),
+          extraOverrides: [
+            profileProvider.overrideWith((ref, profileId) async {
+              if (profileId == 'friend-b' && failBob) {
+                throw Exception('private profile upstream detail');
+              }
+              return _testProfiles[profileId];
+            }),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.searchFieldKey),
+        'bob',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No profiles found'), findsNothing);
+      expect(find.text('private profile upstream detail'), findsNothing);
+      expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+
+      failBob = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bob Example'), findsOneWidget);
+    },
+  );
 
   testWidgets('ChatListPanel opens create group sheet', (tester) async {
     await tester.pumpWidget(
@@ -234,6 +480,30 @@ void main() {
     expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
   });
 }
+
+final _testProfiles = <String, VoiceProfile>{
+  'friend-a': const VoiceProfile(
+    id: 'friend-a',
+    accountId: 'account-a',
+    username: 'alice',
+    discriminator: '0001',
+    displayName: 'Alice Example',
+  ),
+  'friend-b': const VoiceProfile(
+    id: 'friend-b',
+    accountId: 'account-b',
+    username: 'bob',
+    discriminator: '0002',
+    displayName: 'Bob Example',
+  ),
+  'friend-c': const VoiceProfile(
+    id: 'friend-c',
+    accountId: 'account-c',
+    username: 'charlie',
+    discriminator: '0003',
+    displayName: 'Charlie Example',
+  ),
+};
 
 class _NoopRealtimeHub extends RealtimeHub {
   _NoopRealtimeHub(super.ref);
