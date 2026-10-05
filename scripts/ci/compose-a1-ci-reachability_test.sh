@@ -167,7 +167,7 @@ grep -Eq '^  pull_request:[[:space:]]*$' "$WORKFLOW" || fail "workflow must pres
 gate_job_file="$(mktemp)"
 job_block ci-gate >"$gate_job_file"
 grep -Fq "github.event_name == 'pull_request'" "$gate_job_file" || fail "ci-gate must remain a pull_request job"
-grep -Fq 'verify-required-jobs.sh pull_request' "$gate_job_file" || fail "ci-gate must preserve verify-required-jobs.sh pull_request"
+grep -Fq 'verify-required-jobs.sh "${{ github.event_name }}"' "$gate_job_file" || fail "ci-gate must pass its actual PR/master event to verify-required-jobs.sh"
 
 # Compare normalized YAML list entries in the dedicated filter. This makes
 # omissions visible instead of allowing the broad global filter to mask them.

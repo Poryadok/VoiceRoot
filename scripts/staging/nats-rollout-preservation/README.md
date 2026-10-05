@@ -175,9 +175,12 @@ Exact existing semantics may be preserved. Missing resources, changed
 StatefulSets, enabled observability reconciliation and unsupported initialization
 changes are explicitly rejected before the fence; they are not silently omitted.
 
-Current source bootstrap has 43 durables while the deployed contract has 42;
-backend releases including Gateway remain blocked before fencing until the
-explicit NATS contract/ACL migration prerequisite is resolved. Frontend-only
+The last confirmed staging cut had 42 durables while the reviewed source
+bootstrap had 43. This is historical evidence, not a fresh live census. After
+installation, root must capture the actual current marker/store/account and
+compare the requested release contract before fencing. Any remaining mismatch
+blocks backend releases including Gateway until the explicit NATS contract/ACL
+migration prerequisite is resolved. Frontend-only
 images-only targets retain every backend template/configuration and NATS intent;
 root derives this scope from the actual target, not a caller's waiver flag.
 
@@ -215,3 +218,37 @@ fixed optional branch jobs may be skipped; missing, duplicate, cancelled,
 timed-out, spoofed deployment names or any failed build reject approval. This
 permits first installation recovery after a missing-helper deployment failure
 without accepting a failed build as an approved source.
+
+## Actual staging acceptance after the one-time installation
+
+The human operator first runs the captured-byte installation command above;
+agents do not authenticate as root. The installed bridge must be idle before
+installation, and an existing recovery key is retained. Subsequent release and
+rollback transactions use the normal workflow, without another root login.
+
+Acceptance requires populated staging data. A zero-message cut is insufficient.
+Use real records produced through the existing application flow, or a separately
+reviewed NATS-only fixture whose existing grant and side effects are established
+before publishing. Do not issue credentials, change ACLs, replay bootstrap,
+create database identities, reset consumers or replace the selected PVC to make
+the proof pass. A missing publish authority is a named prerequisite.
+
+Record the approved source CI and execution run identities, operation/challenge,
+selected PVC/PV UID, original running image digests, nonzero pre-release record
+count, complete native/census hashes and ACK/pending/redelivery state. The release
+must retain the same claim, prove isolated restore and encrypted off-node custody
+for that operation, apply while every enrolled workload is paused, verify the
+unchanged original store, then record the actual new running image digests and
+sole verified restart PASS. Do not publish payloads, keys or private snapshots.
+
+Before rollback, produce and confirm additional real records. Dispatch a new
+execution run with the latest successful operation as `rollback_operation`.
+Require a fresh cut containing those post-release records, a new encrypted
+off-node artifact, the same claim and complete before/after state, and the
+recorded original actual image digests after restart. The previous archive is
+never restored over the current claim. Both root-owned successful receipts and
+the active-release chain are required; a failed attempt is not a PASS receipt.
+
+A frontend-only proof establishes that concrete version transition. It does not
+close a remaining durable/ACL migration prerequisite or establish
+acceptance of backend releases that the pre-fence compatibility gate rejects.
