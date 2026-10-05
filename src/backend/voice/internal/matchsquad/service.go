@@ -350,7 +350,7 @@ func newMatchSquadProjection(room, chatID string, match uuid.UUID, initiator str
 
 func (s *Service) CheckSchema(ctx context.Context) error {
 	if s == nil || s.Pool == nil {
-		return errors.New("Voice MatchSquad database unavailable")
+		return errors.New("voice MatchSquad database unavailable")
 	}
 	for _, query := range []string{
 		`SELECT 1 FROM voice_room_instances LIMIT 0`,
@@ -358,11 +358,11 @@ func (s *Service) CheckSchema(ctx context.Context) error {
 	} {
 		rows, err := s.Pool.Query(ctx, query)
 		if err != nil {
-			return errors.New("Voice MatchSquad database schema unavailable")
+			return errors.New("voice MatchSquad database schema unavailable")
 		}
 		rows.Close()
 		if rows.Err() != nil {
-			return errors.New("Voice MatchSquad database schema unavailable")
+			return errors.New("voice MatchSquad database schema unavailable")
 		}
 	}
 	return nil
