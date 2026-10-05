@@ -242,6 +242,65 @@ func TestRedisCallStore_MatchSquadAddRechecksAuthorityAfterWatchConflict(t *test
 	require.Empty(t, current.MatchSquadMemberEpochs[profile])
 }
 
+func TestRedisCallStore_DelayedOldEpochAddCannotResurrectAfterNewEpoch(t *testing.T) {
+	ctx := context.Background()
+	callStore, _ := newRedisCallStoreForTest(t, "voice-match-squad-late-add:")
+	room, match, profile := "match-room", "match-id", "member"
+	_, err := callStore.CreateCall(ctx, Call{
+		RoomID: room, MatchSquadMatchID: match,
+		SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE,
+		Status:      callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = callStore.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	_, err = callStore.RemoveMatchSquadParticipantEpoch(ctx, room, match, profile, "epoch-one")
+	require.NoError(t, err)
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var checks atomic.Int32
+	var currentEpoch atomic.Value
+	currentEpoch.Store("epoch-one")
+	oldAuthority := func(context.Context) error {
+		if checks.Add(1) == 1 {
+			close(entered)
+			<-release
+			return nil // Eold was authorized when this downstream add was dispatched.
+		}
+		if currentEpoch.Load().(string) != "epoch-one" {
+			return ErrMatchSquadProjectionDiverged
+		}
+		return nil
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, addErr := callStore.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-one", MaxGroupVoiceParticipants, oldAuthority)
+		result <- addErr
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("delayed Eold add did not reach the downstream authority barrier")
+	}
+	currentEpoch.Store("epoch-two")
+	_, err = callStore.AddMatchSquadParticipant(ctx, room, match, profile, "epoch-two", MaxGroupVoiceParticipants, func(context.Context) error { return nil })
+	require.NoError(t, err, "the replacement epoch becomes the current Redis projection")
+	close(release)
+	select {
+	case err := <-result:
+		require.ErrorIs(t, err, ErrMatchSquadProjectionDiverged, "the stale WATCH transaction must retry against current authority")
+	case <-time.After(5 * time.Second):
+		t.Fatal("delayed Eold add did not settle after Enew projection")
+	}
+	require.GreaterOrEqual(t, checks.Load(), int32(2))
+	current, err := callStore.GetCall(ctx, room)
+	require.NoError(t, err)
+	require.Equal(t, "epoch-two", current.MatchSquadMemberEpochs[profile])
+	require.True(t, current.IsParticipant(profile), "the new projection survives a delayed old add")
+	require.Equal(t, "1", mustRedisValue(t, callStore, callStore.matchSquadTerminalEpochKey(room, profile, "epoch-one")))
+}
+
 func TestRedisCallStore_MatchSquadEpochRemovalRequiresEvidence(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-match-squad-epoch-missing:")
