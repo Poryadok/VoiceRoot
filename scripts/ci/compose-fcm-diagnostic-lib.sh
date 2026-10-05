@@ -145,7 +145,7 @@ voice_fcm_diag_timestamp_in_window() {
 
 voice_fcm_diag_normalize_collected() {
   local status_read="${1-}" status_data="${2-}" log_status="${3-}"
-  local log_data="${4-}" parse_result="${5-}" output_var="${6-}" normalized=''
+  local log_data="${4-}" parse_result="${5-}" output_var="${6-}" summary_text=''
   VOICE_FCM_DIAG_STATUS_SUMMARY=''
   VOICE_FCM_DIAG_LIFECYCLE_SUMMARY=''
   if ! voice_fcm_diag_status_valid "${status_read}" "${status_data}" || \
@@ -157,8 +157,8 @@ voice_fcm_diag_normalize_collected() {
     voice_fcm_diag_emit '' "${output_var}"
     return 1
   fi
-  normalized="${VOICE_FCM_DIAG_STATUS_SUMMARY}"$'\n'"${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}"
-  voice_fcm_diag_emit "${normalized}" "${output_var}"
+  summary_text="${VOICE_FCM_DIAG_STATUS_SUMMARY}"$'\n'"${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}"
+  voice_fcm_diag_emit "${summary_text}" "${output_var}"
 }
 
 voice_fcm_diag_cleanup() {
