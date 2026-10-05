@@ -1870,6 +1870,44 @@ class AppLocalizationsRu extends AppLocalizations {
       'Нужна помощь? Напишите в поддержку через настройки аккаунта.';
 
   @override
+  String get settingsHelpShortcutsTitle => 'Сочетания клавиш';
+
+  @override
+  String get settingsHelpCloseLabel => 'Закрыть справку';
+
+  @override
+  String get settingsHelpShortcutSearch => 'Открыть поиск';
+
+  @override
+  String get settingsHelpShortcutSettings => 'Открыть настройки';
+
+  @override
+  String get settingsHelpShortcutUnreadChats =>
+      'Переключаться между непрочитанными чатами';
+
+  @override
+  String get settingsHelpShortcutFocusComposer =>
+      'Перейти к полю ввода сообщения';
+
+  @override
+  String get settingsHelpShortcutSelectMessage => 'Выбрать сообщение';
+
+  @override
+  String get settingsHelpShortcutMessageActions =>
+      'Открыть действия для выбранного сообщения';
+
+  @override
+  String get settingsHelpShortcutReply => 'Ответить на выбранное сообщение';
+
+  @override
+  String get settingsHelpShortcutReact =>
+      'Поставить реакцию на выбранное сообщение';
+
+  @override
+  String get settingsHelpShortcutPushToTalk =>
+      'Удерживать клавишу для разговора в режиме push-to-talk';
+
+  @override
   String get settingsSubscription => 'Подписка';
 
   @override
