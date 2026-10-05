@@ -50,15 +50,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Voice MatchSquad member TLS identity unavailable")
+		return nil, errors.New("voice MatchSquad member TLS identity unavailable")
 	}
 	clientPEM, err := os.ReadFile(cfg.ClientCAFile)
 	if err != nil {
-		return nil, errors.New("Voice MatchSquad member client CA unavailable")
+		return nil, errors.New("voice MatchSquad member client CA unavailable")
 	}
 	clientRoots := x509.NewCertPool()
 	if !clientRoots.AppendCertsFromPEM(clientPEM) {
-		return nil, errors.New("Voice MatchSquad member client CA is invalid")
+		return nil, errors.New("voice MatchSquad member client CA is invalid")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil || roots == nil {
@@ -66,7 +66,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	caPEM, err := os.ReadFile(cfg.JWKSCAFile)
 	if err != nil || !roots.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("Voice MatchSquad member JWKS CA is invalid")
+		return nil, errors.New("voice MatchSquad member JWKS CA is invalid")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
@@ -116,11 +116,11 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	defer cancel()
 	if err := rdb.Ping(startup).Err(); err != nil {
 		_ = runtime.Close()
-		return nil, errors.New("Voice MatchSquad member Redis unavailable")
+		return nil, errors.New("voice MatchSquad member Redis unavailable")
 	}
 	if err := resolver.Refresh(startup, issuer); err != nil {
 		_ = runtime.Close()
-		return nil, errors.New("Voice delegated user JWKS unavailable")
+		return nil, errors.New("voice delegated user JWKS unavailable")
 	}
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.cancel = stop
