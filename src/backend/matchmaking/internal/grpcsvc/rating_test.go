@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,43 +21,6 @@ import (
 type recordingPlayerBannedPublisher struct {
 	mmevents.NoopPublisher
 	events []mmevents.PlayerBannedEvent
-}
-
-type recordingMatchCompletedPublisher struct {
-	mmevents.NoopPublisher
-	mu     sync.Mutex
-	events []mmevents.MatchCompletedEvent
-}
-
-type recordingSquadCleanup struct {
-	mu       sync.Mutex
-	matchIDs []uuid.UUID
-}
-
-func (c *recordingSquadCleanup) Cleanup(_ context.Context, matchID uuid.UUID) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.matchIDs = append(c.matchIDs, matchID)
-	return nil
-}
-
-func (c *recordingSquadCleanup) MatchIDs() []uuid.UUID {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]uuid.UUID(nil), c.matchIDs...)
-}
-
-func (p *recordingMatchCompletedPublisher) PublishMatchCompleted(_ context.Context, event mmevents.MatchCompletedEvent) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.events = append(p.events, event)
-	return nil
-}
-
-func (p *recordingMatchCompletedPublisher) Events() []mmevents.MatchCompletedEvent {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]mmevents.MatchCompletedEvent(nil), p.events...)
 }
 
 func (p *recordingPlayerBannedPublisher) PublishPlayerBanned(_ context.Context, event mmevents.PlayerBannedEvent) error {
@@ -112,6 +74,19 @@ func completeMatchRequest(matchID string) *matchmakingv1.CompleteMatchRequest {
 	return &matchmakingv1.CompleteMatchRequest{MatchId: matchID, OperationId: uuid.NewString()}
 }
 
+func requireOnePendingMatchSquadTeardown(t *testing.T, ctx context.Context, srv *MatchmakingGRPC, matchID uuid.UUID) store.MatchSquadTeardownAggregate {
+	t.Helper()
+	aggregates, err := srv.Matches.ListPendingMatchSquadTeardowns(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, aggregates, 1, "the final leave durably admits one provider teardown aggregate")
+	require.Equal(t, matchID, aggregates[0].MatchID)
+	require.Equal(t, "pending", aggregates[0].State)
+	participants, err := srv.Matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, participants, 2, "Chat and Voice recovery remain independently discoverable")
+	return aggregates[0]
+}
+
 func activateDuoMatchViaGRPC(t *testing.T, ctx context.Context, srv *MatchmakingGRPC) (matchID string, profileA, profileB uuid.UUID) {
 	t.Helper()
 	matchID, profileA, profileB = seedPendingDuoMatch(t, ctx, srv)
@@ -160,17 +135,13 @@ func TestCompleteMatch_AllLeftSetsCompleted(t *testing.T) {
 	require.Equal(t, "completed", resp.GetMatch().GetStatus())
 }
 
-func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
+func TestCompleteMatch_ConcurrentFinalRetryPersistsOneRecoveryAggregate(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := ratingTestServer(t, pool)
-	publisher := &recordingMatchCompletedPublisher{}
-	srv.Events = publisher
-	cleanup := &recordingSquadCleanup{}
-	srv.SquadCleanup = cleanup
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
 	_, err := srv.CompleteMatch(ctxWithProfile(profileA), completeMatchRequest(matchID))
@@ -219,33 +190,28 @@ func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
 
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
-	require.Len(t, publisher.Events(), 1, "duplicate final CompleteMatch retries must emit mm.match_completed once")
-	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "racing final retries must clean the fixture squad once")
+	requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
 }
 
-// TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce freezes the pre-A2
-// provider contract: the durable active-to-completed transition owns a single
-// cleanup call. The fixture is intentionally transport- and roster-event-free;
-// a later A3 acceptance slice wires the real temporary chat and voice context.
-func TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce(t *testing.T) {
+func TestCompleteMatch_FinalLeaveRetryKeepsOneDurableTeardown(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := ratingTestServer(t, pool)
-	cleanup := &recordingSquadCleanup{}
-	srv.SquadCleanup = cleanup
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
 	_, err := srv.CompleteMatch(ctxWithProfile(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
 	_, err = srv.CompleteMatch(ctxWithProfile(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
+
+	first := requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
 	_, err = srv.CompleteMatch(ctxWithProfile(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err, "a duplicate final leave is an idempotent retry")
-
-	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "only the transition that completes the match cleans the fixture squad")
+	replayed := requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
+	require.Equal(t, first.AggregateID, replayed.AggregateID, "a retry keeps the original provider operation identities and request bytes")
 }
 
 func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {

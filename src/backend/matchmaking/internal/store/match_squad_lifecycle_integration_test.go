@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -92,6 +93,135 @@ func TestMatchSquadLifecycleDownRefusesToDropProvisioningEvidence(t *testing.T) 
 	var operationCount int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_operations WHERE match_id=$1`, matchID).Scan(&operationCount))
 	require.Equal(t, 1, operationCount)
+}
+
+func TestMatchSquadLifecycleDownRefusesConcurrentWriterWithoutAbortingConnection(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	matchID, profileA, _ := seedActiveDuoMatch(t, ctx, pool)
+
+	writerConn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer writerConn.Release()
+	writerTx, err := writerConn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = writerTx.Rollback(ctx) }()
+	opID := uuid.New()
+	_, err = writerTx.Exec(ctx, `INSERT INTO matchmaking_match_leave_operations(actor_profile_id,operation_id,match_id) VALUES($1,$2,$3)`, profileA, opID, matchID)
+	require.NoError(t, err)
+
+	root := repoRoot(t)
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	require.NoError(t, err)
+	downConn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer downConn.Release()
+	_, err = downConn.Exec(ctx, string(down))
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "55P03", pgErr.Code, "DOWN must fail immediately at its NOWAIT evidence lock")
+	var one int
+	require.NoError(t, downConn.QueryRow(ctx, `SELECT 1`).Scan(&one), "a failed autocommit DO leaves the pooled connection usable")
+	require.Equal(t, 1, one)
+	require.NoError(t, writerTx.Commit(ctx))
+
+	var leaveCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_leave_operations WHERE actor_profile_id=$1 AND operation_id=$2 AND match_id=$3`, profileA, opID, matchID).Scan(&leaveCount))
+	require.Equal(t, 1, leaveCount, "refusal preserves the concurrent actor-scoped fence")
+	var tableExists bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('public.matchmaking_match_squad_operations') IS NOT NULL`).Scan(&tableExists))
+	require.True(t, tableExists, "refusal leaves the lifecycle schema intact")
+}
+
+func TestMatchSquadLifecycleDownLateLockRefusalReleasesEarlierLocks(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	root := repoRoot(t)
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	require.NoError(t, err)
+
+	writer, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer writer.Release()
+	writerTx, err := writer.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = writerTx.Rollback(ctx) }()
+	_, err = writerTx.Exec(ctx, `LOCK TABLE matchmaking_match_squad_completion_events IN ACCESS EXCLUSIVE MODE`)
+	require.NoError(t, err)
+
+	downConn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer downConn.Release()
+	_, err = downConn.Exec(ctx, string(down))
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "55P03", pgErr.Code, "a later-listed table also refuses without waiting")
+
+	var leakedLocks int
+	// The query runs on another backend; explicitly inspect the DOWN backend
+	// while it is idle to prove the failed statement released its earlier locks.
+	var downPID int32
+	require.NoError(t, downConn.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&downPID))
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT count(*) FROM pg_locks l
+		JOIN pg_class c ON c.oid=l.relation
+		WHERE l.pid=$1 AND c.relname IN (
+			'matches','matchmaking_match_leave_operations','matchmaking_match_squad_operations',
+			'matchmaking_match_squad_teardowns','matchmaking_match_squad_teardown_participants',
+			'matchmaking_match_squad_compaction_intents','matchmaking_match_squad_completion_events')
+	`, downPID).Scan(&leakedLocks))
+	require.Zero(t, leakedLocks, "NOWAIT failure releases every earlier table lock")
+	var one int
+	require.NoError(t, downConn.QueryRow(ctx, `SELECT 1`).Scan(&one))
+	require.Equal(t, 1, one)
+}
+
+func TestMatchSquadLifecycleDownAtomicRollbackAndEmptySuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	root := repoRoot(t)
+	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
+	require.NoError(t, err)
+
+	// A dependent view forces a late DDL failure after the DO has executed its
+	// drops. The statement must restore all prior objects atomically.
+	_, err = pool.Exec(ctx, `CREATE VIEW match_squad_down_failure_probe AS SELECT * FROM matchmaking_match_leave_operations`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(down))
+	require.Error(t, err)
+	var exists bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('public.matchmaking_match_leave_operations') IS NOT NULL`).Scan(&exists))
+	require.True(t, exists, "DDL failure rolls back all earlier drops")
+	_, err = pool.Exec(ctx, `DROP VIEW match_squad_down_failure_probe`)
+	require.NoError(t, err)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, string(down))
+	require.NoError(t, err, "empty lifecycle evidence permits DOWN")
+	require.NoError(t, tx.Rollback(ctx), "a caller-owned transaction may roll back the successful atomic block")
+	require.NoError(t, conn.QueryRow(ctx, `SELECT to_regclass('public.matchmaking_match_leave_operations') IS NOT NULL`).Scan(&exists))
+	require.True(t, exists, "outer rollback preserves the schema")
+
+	_, err = conn.Exec(ctx, string(down))
+	require.NoError(t, err, "empty DOWN succeeds in autocommit")
+	require.NoError(t, conn.QueryRow(ctx, `SELECT to_regclass('public.matchmaking_match_leave_operations') IS NULL`).Scan(&exists))
+	require.True(t, exists)
 }
 
 func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *testing.T) {
@@ -204,17 +334,37 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	require.NoError(t, err)
 	require.False(t, replayedTransition, "an actor-scoped operation replay cannot repeat the transition")
 	require.True(t, replayedLeave.HasLeft(profileA))
-	_, _, err = matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileAOperation)
-	require.ErrorIs(t, err, ErrMatchOperationConflict, "the same operation ID cannot be rebound to another actor")
+	completedMatch, completed, err := matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileAOperation)
+	require.NoError(t, err, "the same UUID is an independent operation in another actor's namespace")
+	require.True(t, completed, "the other participant's actor-scoped leave completes the match")
+	require.Equal(t, MatchStatusCompleted, completedMatch.Status)
+
+	// Once profile B has used this key on the first match, rebinding that same
+	// actor-scoped key to another authorized match must conflict. The second
+	// match is active but has no provider resources, so this negative only
+	// exercises the idempotency binding and cannot start a second teardown.
+	otherProfile := uuid.New()
+	secondSearchB, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileB, GameID: gamePage.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(30 * time.Minute)})
+	require.NoError(t, err)
+	secondSearchOther, err := sessions.Create(ctx, CreateSessionParams{ProfileID: otherProfile, GameID: gamePage.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(30 * time.Minute)})
+	require.NoError(t, err)
+	secondProposal, err := matches.CreateProposal(ctx, CreateProposalParams{GameID: gamePage.Games[0].ID, Mode: "Duo", Region: "eu", Sessions: []ProposalSession{{SessionID: secondSearchB.ID, ProfileID: profileB}, {SessionID: secondSearchOther.ID, ProfileID: otherProfile}}})
+	require.NoError(t, err)
+	_, err = matches.SetProposalResponse(ctx, secondProposal.Match.ID, profileB, ProposalResponseAccepted)
+	require.NoError(t, err)
+	_, err = matches.SetProposalResponse(ctx, secondProposal.Match.ID, otherProfile, ProposalResponseAccepted)
+	require.NoError(t, err)
+	_, err = matches.ActivateMatch(ctx, secondProposal.Match.ID, uuid.NewString(), uuid.NewString())
+	require.NoError(t, err)
+	_, _, err = matches.CompleteMatchLeaveWithOperation(ctx, secondProposal.Match.ID, profileB, profileAOperation)
+	require.ErrorIs(t, err, ErrMatchOperationConflict, "one actor's key cannot be rebound to another match")
+	secondMatchAfterConflict, err := matches.Get(ctx, secondProposal.Match.ID)
+	require.NoError(t, err)
+	require.False(t, secondMatchAfterConflict.HasLeft(profileB), "conflicting reuse cannot mutate the other match")
 	var teardownCount int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardowns WHERE match_id=$1`, intent.MatchID).Scan(&teardownCount))
-	require.Zero(t, teardownCount)
+	require.Equal(t, 1, teardownCount, "the other actor's final accepted leave creates the original match aggregate exactly once")
 
-	profileBOperation := uuid.New()
-	completedMatch, completed, err := matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileBOperation)
-	require.NoError(t, err)
-	require.True(t, completed, "the final confirmed Matchmaking leave may initiate aggregate teardown")
-	require.Equal(t, MatchStatusCompleted, completedMatch.Status)
 	var aggregateID uuid.UUID
 	var aggregateState string
 	var chatTeardownBytes, voiceTeardownBytes []byte
@@ -247,7 +397,7 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	retryable, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
 	require.NoError(t, err)
 	require.Len(t, retryable, 2, "a retryable provider request stays discoverable with the same request bytes")
-	completedReplay, replayTransition, err := matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileBOperation)
+	completedReplay, replayTransition, err := matches.CompleteMatchLeaveWithOperation(ctx, intent.MatchID, profileB, profileAOperation)
 	require.NoError(t, err)
 	require.False(t, replayTransition, "replaying the final actor operation must not start a second teardown")
 	require.Equal(t, completedMatch.CompletedAt, completedReplay.CompletedAt)

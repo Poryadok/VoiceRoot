@@ -63,6 +63,12 @@ func seedActiveDuoMatch(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (
 	return result.Match.ID, profileA, profileB
 }
 
+func makeLegacyMatchResourceFree(t *testing.T, ctx context.Context, pool *pgxpool.Pool, matchID uuid.UUID) {
+	t.Helper()
+	_, err := pool.Exec(ctx, `UPDATE matches SET chat_id=NULL, voice_room_id=NULL WHERE id=$1`, matchID)
+	require.NoError(t, err)
+}
+
 func TestMatchStore_CompleteMatchLeaveMarksParticipantLeft(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -89,6 +95,7 @@ func TestMatchStore_CompleteMatchLeaveAllLeftSetsCompleted(t *testing.T) {
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
 
 	matchID, profileA, profileB := seedActiveDuoMatch(t, ctx, pool)
+	makeLegacyMatchResourceFree(t, ctx, pool, matchID)
 	matches := &MatchStore{Pool: pool}
 
 	_, err := matches.CompleteMatchLeave(ctx, matchID, profileA)
