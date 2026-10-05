@@ -11,7 +11,19 @@ unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 [[ "$(voice_fcm_diag_parse_log "${unknownPhase}")" == "${unknownPhase}" ]]
 unknownTarget="compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown ${phase_known}"
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget}")" == "${unknownTarget}" ]]
+for reason in expired incomplete; do
+  emitted="${unknownTarget/reason=unknown/reason=${reason}}"
+  [[ "$(voice_fcm_diag_parse_log "${emitted}")" == "${emitted}" ]]
+done
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget/recipient_present=unknown/recipient_present=true}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${unknownTarget/attempts=0/attempts=1}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${unknownTarget/reason=unknown/reason=matched}")" == "${unknown}" ]]
+incompleteAttempts="${unknownTarget/reason=unknown/reason=incomplete}"
+incompleteAttempts="${incompleteAttempts/attempts=0/attempts=1}"
+[[ "$(voice_fcm_diag_parse_log "${incompleteAttempts}")" == "${unknown}" ]]
+expiredRoute="${unknownTarget/reason=unknown/reason=expired}"
+expiredRoute="${expiredRoute/route=unknown/route=ack}"
+[[ "$(voice_fcm_diag_parse_log "${expiredRoute}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid% phase_evidence=*}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid/callback_entered_before_expiry=false/callback_entered_before_expiry=unknown}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid/phase_evidence=known/phase_evidence=unknown}")" == "${unknown}" ]]

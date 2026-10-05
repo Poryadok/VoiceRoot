@@ -474,7 +474,8 @@ func TestComposeFcmObserverPhaseSnapshotsDecodeFailureAndRouteError(t *testing.T
 		o.callbackEntered()
 		o.decodeSucceeded()
 		o.routeStarted()
-		routeErr := routeMessageNotificationObserved(trace.context(context.Background()), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, &observerRetryMembers{sender: senderID.String(), target: recipientID.String()}, pusher, pushenrich.NoopResolver{}, event, trace)
+		members := stubChatMembers{rows: []chatmembers.Member{{ProfileID: senderID.String(), InboxBucket: "main"}, {ProfileID: recipientID.String(), InboxBucket: "main"}}}
+		routeErr := routeMessageNotificationObserved(trace.context(context.Background()), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, members, pusher, pushenrich.NoopResolver{}, event, trace)
 		o.routeReturned()
 		if routeErr == nil || recorder.calls != 1 {
 			t.Fatal("route error did not preserve the real sender attempt")
