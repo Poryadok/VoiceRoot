@@ -116,7 +116,15 @@ func TestPostgresMatchSquadMember_LeaveRepairWaitsForDatabaseGrantExpiry(t *test
 	requireDatabaseGrantExpiry(t, f, f.firstProfile, tokenRequestID)
 	require.NoError(t, member.RepairExpiredLeaves(f.ctx, 16))
 	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadTerminalGeneration(t, f, f.firstProfile, account, joined.GetMediaEpoch(), tokenRequestID, "LEFT")
 	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+	deniedTokenID := uuid.New()
+	deniedToken := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: joined.GetMediaEpoch()}
+	_, err = member.GetJoinToken(verifiedMemberContext(t, deniedToken, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, deniedTokenID.String(), account, f.firstProfile), deniedToken)
+	require.Error(t, err, "terminal LEFT membership must not receive another token")
+	var grants int
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE profile_id=$1 AND media_epoch=$2`, f.firstProfile, uuid.MustParse(joined.GetMediaEpoch())).Scan(&grants))
+	require.Equal(t, 1, grants, "a denied terminal token request does not persist a bearer grant")
 
 	// LEFT is an actor-level terminal state; it does not tear down the shared
 	// room or erase the other manifest participant's eligibility.
@@ -124,6 +132,12 @@ func TestPostgresMatchSquadMember_LeaveRepairWaitsForDatabaseGrantExpiry(t *test
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, call.Status)
 	require.Empty(t, call.States)
+	historicalJoin, err := member.Join(joinCtx, proto.Clone(join).(*callsv1.JoinMatchSquadRoomRequest))
+	require.NoError(t, err, "the original Join operation may replay its immutable receipt after LEFT")
+	require.True(t, proto.Equal(joined, historicalJoin))
+	call, err = f.calls.GetCall(f.ctx, f.roomID.String())
+	require.NoError(t, err)
+	require.Empty(t, call.States, "historical Join replay cannot re-add the terminal member projection")
 	leaveReceipt, err := member.Leave(leaveCtx, leave)
 	require.NoError(t, err)
 	require.Equal(t, callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING, leaveReceipt.GetMembershipState(), "lost reply replays the exact committed leave receipt")
@@ -166,7 +180,15 @@ func TestPostgresMatchSquadTeardown_WaitsForGrantAndOrdersProjectionBeforeClose(
 	require.Equal(t, "closed", resourceState)
 	require.Equal(t, "closed", operationState)
 	assertMatchSquadMemberState(t, f, f.firstProfile, "EJECTED", "confirmed")
+	assertMatchSquadTerminalGeneration(t, f, f.firstProfile, account, joined.GetMediaEpoch(), tokenRequestID, "EJECTED")
 	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+	deniedTokenID := uuid.New()
+	deniedToken := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: joined.GetMediaEpoch()}
+	_, err = member.GetJoinToken(verifiedMemberContext(t, deniedToken, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, deniedTokenID.String(), account, f.firstProfile), deniedToken)
+	require.Error(t, err, "terminal EJECTED membership must not receive another token")
+	var grants int
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE profile_id=$1 AND media_epoch=$2`, f.firstProfile, uuid.MustParse(joined.GetMediaEpoch())).Scan(&grants))
+	require.Equal(t, 1, grants, "a denied terminal token request does not persist a bearer grant")
 
 	replayed, err := f.service.Teardown(teardownCtx, proto.Clone(teardown).(*callsv1.TeardownMatchSquadRoomRequest))
 	require.NoError(t, err, "a lost teardown reply recovers the durable receipt")
@@ -336,6 +358,34 @@ func assertMatchSquadMemberState(t *testing.T, f *matchSquadPostgresFixture, pro
 	} else if wantEffect == "confirmed" {
 		require.NotContains(t, effect, "pending")
 	}
+}
+
+func assertMatchSquadTerminalGeneration(t *testing.T, f *matchSquadPostgresFixture, profile, account uuid.UUID, epoch string, grantRequest uuid.UUID, wantState string) {
+	t.Helper()
+	var state string
+	var storedAccount uuid.UUID
+	var sessionEpoch int64
+	var storedEpoch uuid.UUID
+	var canJoin, canPublishAudio, canPublishVideo, canPublishScreenShare, canSubscribe bool
+	var recordedExpiry, grantExpiry time.Time
+	err := f.pool.QueryRow(f.ctx, `SELECT m.membership_state,m.account_id,m.session_epoch,m.media_epoch,
+m.can_join,m.can_publish_audio,m.can_publish_video,m.can_publish_screen_share,m.can_subscribe,
+m.latest_grant_expires_at,g.expires_at
+FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
+ON g.profile_id=m.profile_id AND g.media_epoch=m.media_epoch
+WHERE m.profile_id=$1 AND m.room_id=$2 AND m.media_epoch=$3 AND g.request_id=$4`, profile, f.roomID, uuid.MustParse(epoch), grantRequest).Scan(
+		&state, &storedAccount, &sessionEpoch, &storedEpoch, &canJoin, &canPublishAudio, &canPublishVideo, &canPublishScreenShare, &canSubscribe, &recordedExpiry, &grantExpiry)
+	require.NoError(t, err)
+	require.Equal(t, wantState, state)
+	require.Equal(t, account, storedAccount)
+	require.EqualValues(t, 7, sessionEpoch)
+	require.Equal(t, uuid.MustParse(epoch), storedEpoch)
+	require.True(t, canJoin, "the immutable media-generation capability tuple is retained as historical data")
+	require.True(t, canPublishAudio)
+	require.False(t, canPublishVideo)
+	require.False(t, canPublishScreenShare)
+	require.True(t, canSubscribe)
+	require.True(t, recordedExpiry.Equal(grantExpiry), "terminal transitions preserve the monotonic grant-expiry fence")
 }
 
 func assertMatchSquadFence(t *testing.T, f *matchSquadPostgresFixture, account, profile uuid.UUID, active bool) {
