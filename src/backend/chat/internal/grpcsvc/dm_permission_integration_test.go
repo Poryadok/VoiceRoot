@@ -10,7 +10,30 @@ import (
 	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
+	"voice/backend/pkg/privacy"
 )
+
+type canCreateDMPrivacyAudience struct {
+	audience privacy.Audience
+}
+
+func (p canCreateDMPrivacyAudience) AllowDMAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return p.audience, nil
+}
+
+func (p canCreateDMPrivacyAudience) AllowChatSpaceInvitesAudience(context.Context, uuid.UUID) (privacy.Audience, error) {
+	return privacy.EveryoneWithGuests(), nil
+}
+
+type canCreateDMSpaceMembership struct {
+	allowed  bool
+	spaceIDs []string
+}
+
+func (s *canCreateDMSpaceMembership) AreCoMembers(_ context.Context, _, _ uuid.UUID, spaceIDs []string) (bool, error) {
+	s.spaceIDs = append([]string(nil), spaceIDs...)
+	return s.allowed, nil
+}
 
 func TestCanCreateDMIsReadOnlyAndReturnsOnlyEffectivePermission(t *testing.T) {
 	ctx := context.Background()
@@ -55,9 +78,9 @@ func TestCanCreateDMDeniesMissingDeletedOrPrivacyRestrictedPeers(t *testing.T) {
 	caller := withAccountProfileCtx(ctx, accountA, profileA)
 
 	tests := []struct {
-		name    string
-		client  func() (chatv1.ChatServiceClient, func())
-		target  string
+		name   string
+		client func() (chatv1.ChatServiceClient, func())
+		target string
 	}{
 		{
 			name: "missing_profile_is_not_disclosed",
@@ -97,6 +120,48 @@ func TestCanCreateDMDeniesMissingDeletedOrPrivacyRestrictedPeers(t *testing.T) {
 			require.False(t, response.GetAllowed())
 		})
 	}
+}
+
+func TestCanCreateDMAppliesFriendFoFAndSpaceAudienceChecks(t *testing.T) {
+	ctx := context.Background()
+	accountA, profileA := uuid.New(), uuid.New()
+	accountB, profileB := uuid.New(), uuid.New()
+	profiles := mapProfileAccounts{profileA: accountA, profileB: accountB}
+	caller := withAccountProfileCtx(ctx, accountA, profileA)
+	pair := pairKey(profileA, profileB)
+
+	friendClient, friendCleanup := startChatGRPCTestServer(t, nil, profiles, nil, nil,
+		WithDMStore(nil),
+		WithPrivacyChecker(canCreateDMPrivacyAudience{audience: privacy.FriendsOnly()}),
+		WithFriendChecker(fofFriendStub{friends: map[string]bool{pair: true}}),
+	)
+	t.Cleanup(friendCleanup)
+	friend, err := friendClient.CanCreateDM(caller, &chatv1.CanCreateDMRequest{OtherProfileId: profileB.String()})
+	require.NoError(t, err)
+	require.True(t, friend.GetAllowed())
+
+	fofClient, fofCleanup := startChatGRPCTestServer(t, nil, profiles, nil, nil,
+		WithDMStore(nil),
+		WithPrivacyChecker(canCreateDMPrivacyAudience{audience: privacy.FriendsAndFoF()}),
+		WithFriendChecker(fofFriendStub{fof: map[string]bool{pair: true}}),
+	)
+	t.Cleanup(fofCleanup)
+	fof, err := fofClient.CanCreateDM(caller, &chatv1.CanCreateDMRequest{OtherProfileId: profileB.String()})
+	require.NoError(t, err)
+	require.True(t, fof.GetAllowed())
+
+	spaceMembership := &canCreateDMSpaceMembership{allowed: true}
+	spaceAudience := privacy.Audience{SpaceMembers: true, SpaceIDs: []string{"space-1"}}
+	spaceClient, spaceCleanup := startChatGRPCTestServer(t, nil, profiles, nil, nil,
+		WithDMStore(nil),
+		WithPrivacyChecker(canCreateDMPrivacyAudience{audience: spaceAudience}),
+		func(service *ChatGRPC) { service.SpaceCoMembership = spaceMembership },
+	)
+	t.Cleanup(spaceCleanup)
+	space, err := spaceClient.CanCreateDM(caller, &chatv1.CanCreateDMRequest{OtherProfileId: profileB.String()})
+	require.NoError(t, err)
+	require.True(t, space.GetAllowed())
+	require.Equal(t, []string{"space-1"}, spaceMembership.spaceIDs)
 }
 
 func TestCanCreateDMKeepsAuthenticationValidationAndDependencyFailuresTyped(t *testing.T) {
