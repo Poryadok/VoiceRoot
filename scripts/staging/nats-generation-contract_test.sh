@@ -304,13 +304,15 @@ grep -Fq 'secretName: voice-nats-hub-tls,' "${NATS_TEST_CAPTURE_APPLY}" || fail 
 unset NATS_TEST_CAPTURE_APPLY
 unset NATS_TEST_EXPECT_GENERATION
 
-for mode in full app-only; do
+for mode in full app-only images-only; do
   : >"${NATS_TEST_CALLS}"
   NATS_TEST_MARKER="${tmp}/rotating.json" DEPLOY_MODE="$mode" VOICE_IMAGE_TAG=test "${BASH}" "${APPLY}" >"${tmp}/apply.out" 2>"${tmp}/apply.err" && fail "${mode} deploy accepted rotating marker"
-  grep -Fqx generation-check "${NATS_TEST_CALLS}" || fail "${mode} deploy omitted generation preflight"
+  grep -Fq 'version-bound NATS preservation receipt is required' "${tmp}/apply.err" || fail "${mode} deploy omitted fresh preservation authority before marker mutation"
   ! grep -Eq '^child-script |^kubectl( [^ ]+)*( apply| create| delete| patch| scale)( |$)' "${NATS_TEST_CALLS}" || fail "${mode} deploy mutated resources while rotating"
 done
 
+# Positive receipt/UID/RV binding and second-use CAS rejection run in required CI.
+grep -Fq 'nats-rollout-preservation-test' "${ROOT}/Makefile" || fail 'required CI must execute preservation receipt positives'
 ! grep -Rq 'nats-generation.sh\|voice-nats-generation' "${ROOT}/scripts/prod" "${ROOT}/deploy/prod" || fail 'staging generation selection leaked into production'
 python3 - "${ROOT}/.github/workflows/staging-deploy.yml" <<'PY' || fail 'main staging deploy job must use the trusted staging runner labels'
 from pathlib import Path

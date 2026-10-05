@@ -998,3 +998,13 @@ default, pinned image/mirror policy, k3s prerequisites, backup/restore, and the
 optional S3-provider migration procedure. Its browser-facing signed URL contract
 uses the existing Gateway HTTPS host and bucket-specific MinIO ingress routes;
 the full staging rollout applies both the ingress and Web-origin CORS setting.
+# Per-rollout NATS preservation gate
+
+The normal staging workflow now requires a fresh nonreset preservation
+transaction for every release and images-only rollback. Its once-installed
+root bridge owns cold backup, isolated complete-account proof, encrypted
+off-node artifact readback, same-PVC paused apply and verified-only restart.
+See [the operator runbook](../scripts/staging/nats-rollout-preservation/README.md)
+for the reviewed installer, authority, capacity and recovery boundaries.
+Source bootstrap43/deployed42durable compatibility remains an explicit
+pre-fence backend release prerequisite; the runtime inventory itself is dynamic.

@@ -56,10 +56,30 @@ class DockerRuntime:
             raise Blocked('operation_container_writer_present')
 
     @staticmethod
-    def _run(args, timeout=60):
+    def _run(args, timeout=60, limit=1<<20):
         output=capture(['/usr/bin/docker','--host=unix:///var/run/docker.sock',*args],
-            timeout=timeout,limit=1<<20,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'})
+            timeout=timeout,limit=limit,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'})
         return output.decode('utf-8',errors='strict').strip()
+
+    def account_id(self):
+        path=self.base/'inputs/account.public'
+        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        try:
+            row=os.fstat(fd)
+            if not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022 or row.st_nlink!=1 or row.st_size!=56:
+                raise Blocked('rollout_account_custody_invalid')
+            value=os.read(fd,57).decode('ascii')
+            if not re.fullmatch(r'A[A-Z2-7]{55}',value):raise Blocked('rollout_account_identity_invalid')
+            return value
+        finally:os.close(fd)
+
+    def monitor_jsz(self,broker):
+        if not self.inspect(broker)['State']['Running']:raise Blocked('rollout_monitor_broker_not_running')
+        raw=self._run(['exec',broker,'/bin/busybox','wget','-q','-O','-',
+            'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'],
+            timeout=30,limit=64<<20)
+        self.inspect(broker)
+        return json.loads(raw)
 
     def inspect(self, name):
         rows = json.loads(self.run(['inspect', name]))
@@ -166,7 +186,10 @@ class DockerRuntime:
         return archive_closed_store(store, archive)
 
     def restore(self, archive, target, manifest):
-        restore_closed_store(archive, target, manifest)
+        if manifest.get('mechanism')=='closed-jetstream-store-tar-v2':
+            from native_store import restore_closed_store as rollout_restore
+            rollout_restore(archive,target,manifest)
+        else:restore_closed_store(archive,target,manifest)
         for root, dirs, files in os.walk(target, followlinks=False):
             os.chown(root, 65532, 65532)
             for name in files:
