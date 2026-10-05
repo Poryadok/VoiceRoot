@@ -231,10 +231,12 @@ NATS_TEST_MARKER=rotating reject 'rotating marker'
 NATS_TEST_MARKER=absent run_restore || fail 'legacy marker must skip versioned restore'
 no_create 'legacy marker'
 
-fixed_line="$(grep -nF 'run: bash scripts/staging/restore-nats-secrets.sh' "${workflow}" | head -1 | cut -d: -f1)"
-versioned_line="$(grep -nF 'run: bash scripts/staging/restore-nats-generation.sh' "${workflow}" | head -1 | cut -d: -f1)"
-[[ -n "$fixed_line" && -n "$versioned_line" && "$fixed_line" -lt "$versioned_line" ]] || fail 'workflow must restore active generation after fixed Secrets'
-grep -Fq 'STAGING_NATS_ROTATION_SECRETS_B64: ${{ secrets.STAGING_NATS_ROTATION_SECRETS_B64 }}' "${workflow}" || fail 'workflow omits protected rotation bundle env'
+# Explicit restore helper positives above remain intact. Ordinary versions
+# retain captured Secret authority instead of replaying fixed/versioned restore.
+! grep -Eq 'run: bash scripts/staging/restore-nats-(secrets|generation).sh' "${workflow}" || fail 'ordinary workflow must not replace retained NATS Secret authority'
+grep -Fq -- 'ROLLOUT_ACTION: --bridge-prepare' "${workflow}" || fail 'ordinary workflow must capture current generation authority'
+grep -Eq 'state.*provenance.*capture_inputs' "${root}/scripts/staging/nats-rollout-preservation/transaction.py" || fail 'root prepare must capture current Secret/config authority'
+grep -Fq 'revalidate_inputs' "${root}/scripts/staging/nats-rollout-preservation/transaction.py" || fail 'root operation must revalidate captured Secret/config authority'
 
 if [[ -n "$real_jq" ]]; then
   # Linux CI also exercises the production jq filter itself; the portable

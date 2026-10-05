@@ -1230,7 +1230,7 @@ jobs:
       - admin
     if: >-
       always() &&
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) &&
       needs.changes.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -1238,7 +1238,7 @@ jobs:
       - name: Verify required jobs ran
         env:
           RUN_GO: ${{ needs.changes.outputs.run_go }}
-          RUN_GO_INTEGRATION: ${{ needs.changes.outputs.integration_go_services != '[]' }}
+          RUN_GO_INTEGRATION: ${{ github.event_name == 'pull_request' && needs.changes.outputs.integration_go_services != '[]' }}
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
@@ -1265,7 +1265,7 @@ jobs:
           JOB_BACKEND_AUTH: ${{ needs.backend-auth.result }}
           JOB_DEVELOPER_PORTAL: ${{ needs.developer-portal.result }}
           JOB_ADMIN: ${{ needs.admin.result }}
-        run: bash .github/ci/verify-required-jobs.sh pull_request "${{ needs.changes.outputs.code }}" auto
+        run: bash .github/ci/verify-required-jobs.sh "${{ github.event_name }}" "${{ needs.changes.outputs.code }}" auto
 
   compose-e2e:
     needs: changes
@@ -1692,6 +1692,7 @@ jobs:
   deploy-staging:
     needs:
       - changes
+      - ci-gate
       - staging-stack-lock
       - staging-images-push
       - staging-images-promote
@@ -1702,6 +1703,7 @@ jobs:
     if: >-
       always() &&
       needs.changes.result == 'success' &&
+      needs.ci-gate.result == 'success' &&
       needs.staging-images-push.result != 'failure' &&
       needs.staging-images-push.result != 'cancelled' &&
       needs.staging-images-promote.result != 'failure' &&
@@ -1720,6 +1722,7 @@ jobs:
       vars.STAGING_DEPLOY_ENABLED == 'true' &&
       needs.staging-stack-lock.result == 'success'
     permissions:
+      actions: read
       contents: read
       packages: read
     uses: ./.github/workflows/staging-deploy.yml
