@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"sort"
 	"strings"
@@ -146,10 +145,4 @@ func participantManifestHash(participants []uuid.UUID) []byte {
 		_, _ = hash.Write(participant[:])
 	}
 	return hash.Sum(nil)
-}
-
-func requestSHA256(raw []byte) []byte { sum := sha256.Sum256(raw); return sum[:] }
-func requestHashClaim(raw []byte) string {
-	sum := sha256.Sum256(raw)
-	return "sha256:" + hex.EncodeToString(sum[:])
 }
