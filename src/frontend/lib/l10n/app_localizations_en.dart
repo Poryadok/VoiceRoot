@@ -1062,6 +1062,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatInboxRequests => 'Requests';
 
   @override
+  String get chatMessageRequestsTitle => 'Message requests';
+
+  @override
   String get chatMessageRequestsEmpty => 'No message requests';
 
   @override

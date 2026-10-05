@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -15,7 +16,9 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/message_requests_providers.dart';
 import 'package:voice_frontend/state/presence_providers.dart';
+import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_list_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
@@ -27,7 +30,82 @@ import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
+final _chatRequestsCaptureBoundary = GlobalKey();
+
 void main() {
+  test('request auto-return ignores failed and stale summaries', () async {
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        authControllerProvider.overrideWith(authenticatedAuthController),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(chatInboxProvider.notifier).state = 'requests';
+    container.read(selectedChatFolderIdProvider.notifier).state =
+        kVirtualMessageRequestsFolderId;
+    container
+            .read(previousChatFolderBeforeMessageRequestsProvider.notifier)
+            .state =
+        'folder-prior';
+    container.read(messageRequestsNavigationGenerationProvider.notifier).state =
+        4;
+
+    await restorePreviousChatFolderAfterFinalRequest(
+      container,
+      summaryFuture: Future.error(StateError('summary unavailable')),
+      expectedGeneration: 4,
+      expectedAuthorization: 'unused',
+      expectedProfileId: null,
+    );
+    expect(container.read(chatInboxProvider), 'requests');
+
+    await restorePreviousChatFolderAfterFinalRequest(
+      container,
+      summaryFuture: Future.value(
+        const MessageRequestsSummary(pendingCount: 0, unreadCount: 0),
+      ),
+      expectedGeneration: 3,
+      expectedAuthorization: 'unused',
+      expectedProfileId: null,
+    );
+    expect(container.read(chatInboxProvider), 'requests');
+
+    final currentSession = container.read(authControllerProvider).session!;
+    await restorePreviousChatFolderAfterFinalRequest(
+      container,
+      summaryFuture: Future.value(
+        const MessageRequestsSummary(pendingCount: 0, unreadCount: 0),
+      ),
+      expectedGeneration: 4,
+      expectedAuthorization: 'stale-authorization',
+      expectedProfileId: currentSession.activeProfileId,
+    );
+    expect(container.read(chatInboxProvider), 'requests');
+
+    final delayedSummary = Completer<MessageRequestsSummary>();
+    final restore = restorePreviousChatFolderAfterFinalRequest(
+      container,
+      summaryFuture: delayedSummary.future,
+      expectedGeneration: 4,
+      expectedAuthorization: 'unused',
+      expectedProfileId: null,
+    );
+    container.read(chatInboxProvider.notifier).state = 'main';
+    container.read(selectedChatFolderIdProvider.notifier).state = 'folder-new';
+    container
+        .read(messageRequestsNavigationGenerationProvider.notifier)
+        .state++;
+    delayedSummary.complete(
+      const MessageRequestsSummary(pendingCount: 0, unreadCount: 0),
+    );
+    await restore;
+    expect(container.read(chatInboxProvider), 'main');
+    expect(container.read(selectedChatFolderIdProvider), 'folder-new');
+  });
+
   Widget chatTestApp({required Widget home, required http.Client client}) {
     return ProviderScope(
       overrides: [
@@ -108,7 +186,9 @@ void main() {
               }),
             ),
             realtimeAutoConnectProvider.overrideWithValue(false),
-            realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+            realtimeHubProvider.overrideWith(
+              (ref) => hub = _CapturingRealtimeHub(ref),
+            ),
             selectedChatIdProvider.overrideWith((ref) => 'chat-open'),
           ],
           child: MaterialApp(
@@ -963,7 +1043,12 @@ void main() {
         ),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/messages') {
-            return http.Response(jsonEncode({'message_list': {'messages': []}}), 200);
+            return http.Response(
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
+              200,
+            );
           }
           if (req.url.path == '/api/v1/files/upload') {
             return http.Response(
@@ -977,12 +1062,16 @@ void main() {
               200,
             );
           }
-          if (req.method == 'PUT' && req.url.toString() == 'https://r2.example/upload') {
+          if (req.method == 'PUT' &&
+              req.url.toString() == 'https://r2.example/upload') {
             return http.Response('', 200);
           }
           if (req.url.path == '/api/v1/files/file-unsafe/confirm') {
             return http.Response(
-              jsonEncode({'error_code': 'file_infected', 'message': 'file_infected'}),
+              jsonEncode({
+                'error_code': 'file_infected',
+                'message': 'file_infected',
+              }),
               412,
             );
           }
@@ -1021,7 +1110,12 @@ void main() {
         ),
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/messages') {
-            return http.Response(jsonEncode({'message_list': {'messages': []}}), 200);
+            return http.Response(
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
+              200,
+            );
           }
           if (req.url.path == '/api/v1/files/upload') {
             return http.Response(
@@ -1035,12 +1129,16 @@ void main() {
               200,
             );
           }
-          if (req.method == 'PUT' && req.url.toString() == 'https://r2.example/upload') {
+          if (req.method == 'PUT' &&
+              req.url.toString() == 'https://r2.example/upload') {
             return http.Response('', 200);
           }
           if (req.url.path == '/api/v1/files/file-scan/confirm') {
             return http.Response(
-              jsonEncode({'error_code': 'file_scan_failed', 'message': 'file_scan_failed'}),
+              jsonEncode({
+                'error_code': 'file_scan_failed',
+                'message': 'file_scan_failed',
+              }),
               412,
             );
           }
@@ -1305,7 +1403,9 @@ void main() {
                         },
                       ];
                 return http.Response(
-                  jsonEncode({'message_list': {'messages': messages}}),
+                  jsonEncode({
+                    'message_list': {'messages': messages},
+                  }),
                   200,
                 );
               }
@@ -1316,7 +1416,9 @@ void main() {
             }),
           ),
           realtimeAutoConnectProvider.overrideWithValue(false),
-          realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+          realtimeHubProvider.overrideWith(
+            (ref) => hub = _CapturingRealtimeHub(ref),
+          ),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -1370,7 +1472,9 @@ void main() {
             MockClient((req) async {
               if (req.url.path == '/api/v1/messages') {
                 return http.Response(
-                  jsonEncode({'message_list': {'messages': []}}),
+                  jsonEncode({
+                    'message_list': {'messages': []},
+                  }),
                   200,
                 );
               }
@@ -1378,7 +1482,9 @@ void main() {
             }),
           ),
           realtimeAutoConnectProvider.overrideWithValue(false),
-          realtimeHubProvider.overrideWith((ref) => hub = _CapturingRealtimeHub(ref)),
+          realtimeHubProvider.overrideWith(
+            (ref) => hub = _CapturingRealtimeHub(ref),
+          ),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -1410,6 +1516,12 @@ void main() {
   testWidgets('ChatListPanel shows accept and decline in requests inbox', (
     tester,
   ) async {
+    await _loadCaptureFonts();
+    var requestsEmpty = false;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -1429,6 +1541,14 @@ void main() {
               if (req.url.path == '/api/v1/chats') {
                 final inbox = req.url.queryParameters['inbox'] ?? 'main';
                 if (inbox == 'requests') {
+                  if (requestsEmpty) {
+                    return http.Response(
+                      jsonEncode({
+                        'chat_list': {'items': []},
+                      }),
+                      200,
+                    );
+                  }
                   return http.Response(
                     jsonEncode({
                       'chat_list': {
@@ -1449,7 +1569,9 @@ void main() {
                   );
                 }
                 return http.Response(
-                  jsonEncode({'chat_list': {'items': []}}),
+                  jsonEncode({
+                    'chat_list': {'items': []},
+                  }),
                   200,
                 );
               }
@@ -1460,18 +1582,203 @@ void main() {
           chatInboxProvider.overrideWith((ref) => 'requests'),
         ],
         child: MaterialApp(
-          theme: voiceTestTheme(),
+          theme: voiceTestTheme().copyWith(
+            textTheme: voiceTestTheme().textTheme.apply(
+              fontFamily: 'Noto Sans',
+            ),
+          ),
           locale: const Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ChatListPanel()),
+          home: RepaintBoundary(
+            key: _chatRequestsCaptureBoundary,
+            child: const Scaffold(body: ChatListPanel()),
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    await _captureChatRequests(tester, 'message-requests-H-1280x800');
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    await _captureChatRequests(tester, 'message-requests-V-390x844');
+
+    expect(find.text('Message requests'), findsOneWidget);
+    expect(find.byTooltip('Back to chats'), findsOneWidget);
+    expect(
+      find.text(
+        'When someone you do not know messages you, their chat appears here.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Accept'), findsOneWidget);
     expect(find.text('Decline'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to chats'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Back to chats'), findsNothing);
+    expect(find.text('Direct messages'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListPanel)),
+    );
+    requestsEmpty = true;
+    container.read(chatInboxProvider.notifier).state = 'requests';
+    await container.read(chatListControllerProvider.notifier).loadInitial();
+    await tester.pumpAndSettle();
+    expect(find.text('Message requests'), findsOneWidget);
+    expect(find.byTooltip('Back to chats'), findsOneWidget);
+    expect(
+      find.text(
+        'When someone you do not know messages you, their chat appears here.',
+      ),
+      findsOneWidget,
+    );
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    await _captureChatRequests(tester, 'message-requests-empty-H-1280x800');
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    await _captureChatRequests(tester, 'message-requests-empty-V-390x844');
+  });
+
+  testWidgets('final request action restores the previous folder', (
+    tester,
+  ) async {
+    final handledRequests = <String>{};
+    final mainFolderIds = <String?>[];
+    var rejectFirstAccept = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          profileAccentStorageProvider.overrideWithValue(
+            testProfileAccentStorage,
+          ),
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          selectedChatFolderIdProvider.overrideWith((ref) => 'folder-prior'),
+          httpClientProvider.overrideWithValue(
+            MockClient((req) async {
+              if (req.method == 'POST' &&
+                  req.url.path.endsWith('/accept-request')) {
+                final chatId = req.url.path.split('/')[4];
+                if (chatId == 'chat-req-a' && rejectFirstAccept) {
+                  rejectFirstAccept = false;
+                  return http.Response('{}', 500);
+                }
+                handledRequests.add(chatId);
+                return http.Response('{}', 200);
+              }
+              if (req.method == 'POST' &&
+                  req.url.path.endsWith('/decline-request')) {
+                handledRequests.add(req.url.path.split('/')[4]);
+                return http.Response('{}', 200);
+              }
+              if (req.url.path == '/api/v1/chats') {
+                final inbox = req.url.queryParameters['inbox'] ?? 'main';
+                if (inbox == 'requests') {
+                  final items = [
+                    for (final id in ['chat-req-a', 'chat-req-b'])
+                      if (!handledRequests.contains(id))
+                        {
+                          'chat': {
+                            'id': id,
+                            'type': 'CHAT_TYPE_DM',
+                            'creator_profile_id': 'profile-stranger',
+                          },
+                          'last_message_preview': 'Hi',
+                          'unread_count': 0,
+                        },
+                  ];
+                  return http.Response(
+                    jsonEncode({
+                      'chat_list': {'items': items},
+                    }),
+                    200,
+                  );
+                }
+                mainFolderIds.add(req.url.queryParameters['folder_id']);
+                return http.Response(
+                  jsonEncode({
+                    'chat_list': {'items': []},
+                  }),
+                  200,
+                );
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Consumer(
+            builder: (context, ref, child) {
+              ref.watch(messageRequestsSummaryProvider);
+              return Scaffold(
+                body: Column(
+                  children: [
+                    TextButton(
+                      key: const Key('test_open_message_requests'),
+                      onPressed: () => selectChatFolder(
+                        ref,
+                        kVirtualMessageRequestsFolderId,
+                      ),
+                      child: const Text('Open requests'),
+                    ),
+                    const Expanded(child: ChatListPanel()),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatListPanel)),
+    );
+
+    await tester.tap(find.byKey(const Key('test_open_message_requests')));
+    await tester.pumpAndSettle();
+    expect(find.text('Message requests'), findsOneWidget);
+    expect(find.text('Accept'), findsNWidgets(2));
+
+    await tester.tap(find.text('Accept').first);
+    await tester.pumpAndSettle();
+    expect(container.read(chatInboxProvider), 'requests');
+    expect(find.text('Accept'), findsNWidgets(2));
+
+    await tester.tap(find.text('Accept').first);
+    await tester.pumpAndSettle();
+    expect(container.read(chatInboxProvider), 'requests');
+    expect(
+      container.read(selectedChatFolderIdProvider),
+      kVirtualMessageRequestsFolderId,
+    );
+    expect(find.text('Accept'), findsOneWidget);
+
+    await tester.tap(find.text('Decline'));
+    await tester.pumpAndSettle();
+    expect(handledRequests, containsAll(['chat-req-a', 'chat-req-b']));
+    expect(container.read(chatInboxProvider), 'main');
+    expect(container.read(selectedChatFolderIdProvider), 'folder-prior');
+    expect(mainFolderIds, contains('folder-prior'));
   });
 
   testWidgets('ChatRoomPanel renders markdown message content', (tester) async {
@@ -1626,4 +1933,31 @@ class _CapturingRealtimeHub extends RealtimeHub {
   Future<void> dispose() async {
     await _events.close();
   }
+}
+
+Future<void> _captureChatRequests(WidgetTester tester, String filename) async {
+  final path = Platform.environment['CHAT_REQUEST_CAPTURE_DIR'];
+  if (path == null || path.isEmpty) return;
+  final golden = File('test/message_requests_capture/$filename.png');
+  await expectLater(
+    find.byKey(_chatRequestsCaptureBoundary),
+    matchesGoldenFile('message_requests_capture/$filename.png'),
+  );
+  if (!golden.existsSync()) {
+    throw StateError('Capture golden was not materialized: ${golden.path}');
+  }
+  final directory = Directory(path)..createSync(recursive: true);
+  golden.copySync('${directory.path}${Platform.pathSeparator}$filename.png');
+}
+
+Future<void> _loadCaptureFonts() async {
+  final materialIcons = FontLoader('MaterialIcons')
+    ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+  await materialIcons.load();
+  final notoSans = FontLoader('Noto Sans')
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+    ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+  await notoSans.load();
 }
