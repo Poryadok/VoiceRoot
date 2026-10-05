@@ -17,7 +17,7 @@ require_job() {
   if [[ "${result}" == "skipped" ]]; then
     fail "expected job ${name} to run (result=skipped)"
   fi
-  if [[ "${result}" == "failure" || "${result}" == "cancelled" ]]; then
+  if [[ "${result}" != "success" ]]; then
     fail "job ${name} result=${result}"
   fi
 }
