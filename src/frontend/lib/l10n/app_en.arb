@@ -556,7 +556,7 @@
   },
   "chatForwardTitle": "Forward to",
   "chatCopyAsNewTitle": "Copy as new to",
-  "chatForwardSearchHint": "Search chats",
+  "chatForwardSearchHint": "Search chats and contacts",
   "chatForwardFrom": "Forwarded from {sender}",
   "@chatForwardFrom": {
     "placeholders": {

@@ -519,7 +519,7 @@
   },
   "chatForwardTitle": "Переслать в",
   "chatCopyAsNewTitle": "Копировать как новое в",
-  "chatForwardSearchHint": "Поиск чатов",
+  "chatForwardSearchHint": "Поиск чатов и контактов",
   "chatForwardFrom": "Переслано от {sender}",
   "@chatForwardFrom": {
     "placeholders": {

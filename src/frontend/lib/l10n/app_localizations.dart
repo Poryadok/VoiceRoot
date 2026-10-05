@@ -2165,7 +2165,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatForwardSearchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search chats'**
+  /// **'Search chats and contacts'**
   String get chatForwardSearchHint;
 
   /// No description provided for @chatForwardFrom.

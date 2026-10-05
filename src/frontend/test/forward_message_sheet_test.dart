@@ -8,10 +8,12 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/forward_message_sheet.dart';
 
@@ -391,6 +393,77 @@ void main() {
       find.byKey(ForwardMessageSheet.chatTileKey('chat-b')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('ForwardMessageSheet searches accepted friends on later pages', (
+    tester,
+  ) async {
+    var friendPageReads = 0;
+    await tester.pumpWidget(
+      testApp(
+        home: ForwardMessageSheet(
+          sourceMessage: sourceMessage,
+          sourceChatId: 'chat-source',
+        ),
+        extraOverrides: [
+          profileProvider.overrideWith((ref, profileId) async {
+            expect(profileId, 'friend-late');
+            return const VoiceProfile(
+              id: 'friend-late',
+              accountId: 'acc-friend',
+              username: 'latefriend',
+              discriminator: '4242',
+              displayName: 'Late Friend',
+            );
+          }),
+        ],
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            return http.Response(jsonEncode({'chat_list': {'items': []}}), 200);
+          }
+          if (req.url.path == '/api/v1/friends') {
+            friendPageReads++;
+            final cursor = req.url.queryParameters['cursor'];
+            if (cursor == null) {
+              return http.Response(
+                jsonEncode({
+                  'friend_list': {
+                    'friends': [
+                      {'profile_id': 'friend-first'},
+                    ],
+                    'next_cursor': 'page-2',
+                  },
+                }),
+                200,
+              );
+            }
+            expect(cursor, 'page-2');
+            return http.Response(
+              jsonEncode({
+                'friend_list': {
+                  'friends': [
+                    {'profile_id': 'friend-late'},
+                  ],
+                  'next_cursor': '',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(friendPageReads, 2);
+    await tester.enterText(
+      find.byKey(ForwardMessageSheet.searchFieldKey),
+      'lAtE fRiEnD',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Late Friend'), findsOneWidget);
   });
 }
 
