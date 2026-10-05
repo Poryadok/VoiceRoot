@@ -38,6 +38,32 @@ type MessagePusher struct {
 	GameChatScope GamePushChatScopeResolver
 }
 
+// MessageDiagnosticObserver is carried only by the private Compose diagnostic
+// context. Implementations must not retain or expose profile/token/payload data.
+type MessageDiagnosticObserver interface {
+	Decision(profile uuid.UUID, basePush, finalPush bool, presence string, policy string)
+	FinalDecision(profile uuid.UUID, finalPush bool)
+	Tokens(profile uuid.UUID, rows, fcmEligible int, outcome string)
+	DispatcherReturned(profile uuid.UUID, service string)
+}
+
+type messageDiagnosticContextKey struct{}
+
+func WithMessageDiagnosticObserver(ctx context.Context, observer MessageDiagnosticObserver) context.Context {
+	if observer == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, messageDiagnosticContextKey{}, observer)
+}
+
+func messageDiagnosticObserverFromContext(ctx context.Context) MessageDiagnosticObserver {
+	if ctx == nil {
+		return nil
+	}
+	observer, _ := ctx.Value(messageDiagnosticContextKey{}).(MessageDiagnosticObserver)
+	return observer
+}
+
 // GamePushConsentChecker performs an execution-time GIS consent read for every device push.
 type GamePushConsentChecker interface {
 	AllowsGamePush(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) (bool, error)
@@ -103,6 +129,9 @@ func (p *MessagePusher) sendPush(
 		}
 		settings, quiet, err := p.policy().LoadPolicy(ctx, recipient, in.ChatID, in.Type, time.Now())
 		if err != nil {
+			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+				observer.Decision(recipient, decision.Push, false, "unknown", "error")
+			}
 			return err
 		}
 		perRecipient := delivery.FinalizeDecision(decision, delivery.DeliveryInput{
@@ -113,6 +142,9 @@ func (p *MessagePusher) sendPush(
 			IsOnline:           in.IsOnline,
 			At:                 in.At,
 		}, settings, quiet)
+		if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+			observer.FinalDecision(recipient, perRecipient.Push)
+		}
 		if !perRecipient.Push {
 			continue
 		}
@@ -131,7 +163,19 @@ func (p *MessagePusher) sendPush(
 		}
 		tokens, err := p.Tokens.ListByProfile(ctx, recipient)
 		if err != nil {
+			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+				observer.Tokens(recipient, 0, 0, "error")
+			}
 			return err
+		}
+		if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+			eligible := 0
+			for _, token := range tokens {
+				if ShouldDeliverPushToToken(notificationType, token.PushService) && token.PushService == "fcm" {
+					eligible++
+				}
+			}
+			observer.Tokens(recipient, len(tokens), eligible, "ok")
 		}
 		if len(tokens) == 0 {
 			continue
@@ -184,7 +228,11 @@ func (p *MessagePusher) sendPush(
 				devicePayload.Title = "Game update"
 				devicePayload.Body = "A game event is waiting in Voice."
 			}
-			if err := p.Pusher.Send(ctx, recipient, tok, devicePayload); err != nil {
+			err := p.Pusher.Send(ctx, recipient, tok, devicePayload)
+			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+				observer.DispatcherReturned(recipient, tok.PushService)
+			}
+			if err != nil {
 				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)
 					continue
@@ -224,10 +272,13 @@ func (p *MessagePusher) enrichDecision(
 		return delivery.DeliveryDecision{}, err
 	}
 	isOnline := false
+	presenceKnown := false
 	if p != nil && p.Presence != nil && !delivery.SkipsPresenceCheck(typ) {
 		isOnline, err = p.Presence.IsOnline(ctx, recipient)
 		if err != nil {
 			isOnline = false
+		} else {
+			presenceKnown = true
 		}
 	}
 	in := delivery.DeliveryInput{
@@ -243,7 +294,18 @@ func (p *MessagePusher) enrichDecision(
 	if err != nil {
 		return delivery.DeliveryDecision{}, err
 	}
-	return delivery.FinalizeDecision(decision, in, settings, quiet), nil
+	final := delivery.FinalizeDecision(decision, in, settings, quiet)
+	if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
+		presenceState := "unknown"
+		if presenceKnown {
+			presenceState = "offline"
+			if isOnline {
+				presenceState = "online"
+			}
+		}
+		observer.Decision(recipient, decision.Push, final.Push, presenceState, "ok")
+	}
+	return final, nil
 }
 
 func pushGroupingID(in delivery.DeliveryInput) string {

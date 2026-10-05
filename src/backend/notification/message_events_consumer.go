@@ -50,21 +50,41 @@ func runMessageEventsConsumer(
 
 	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
 	durable := consumer.SharedDurable("message")
+	diagnosticObserver := newComposeFcmObserver()
 
 	msgHandler := func(msg *nats.Msg) {
+		diagnosticObserver.callbackEntered()
 		var env eventsv1.MessageStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message event unmarshal failed")
 			consumer.JetStreamTermAck(msg)
 			return
 		}
-		err := routeMessageNotification(ctx, handler, members, pusher, enrich, &env)
+		diagnosticObserver.decodeSucceeded()
+		var trace *composeFcmTrace
+		if sent := env.GetMessageSent(); sent != nil && diagnosticObserver != nil {
+			trace = diagnosticObserver.begin(env.GetEventId(), sent.GetMessageId(), sent.GetChatId(), sent.GetSenderProfileId())
+		}
+		routeCtx := ctx
+		if trace != nil {
+			routeCtx = trace.context(routeCtx)
+		}
+		diagnosticObserver.routeStarted()
+		err := routeMessageNotificationObserved(routeCtx, handler, members, pusher, enrich, &env, trace)
+		diagnosticObserver.routeReturned()
 		if err != nil && logger != nil {
 			logger.Warn("message push failed", slog.Any("error", err))
 		} else if err == nil {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "message notification event consumed")
 		}
 		consumer.JetStreamConsumeAck(msg, err)
+		if diagnosticObserver != nil {
+			routeResult := "ack"
+			if err != nil {
+				routeResult = "nak"
+			}
+			diagnosticObserver.finish(trace, routeResult)
+		}
 	}
 
 	sub, err := bindPreprovisionedConsumer(js, jsStreamMessageEvents, durable, jsSubjectMessageEvents, "_INBOX.voice.notification.message", msgHandler, nats.ManualAck())
@@ -72,6 +92,7 @@ func runMessageEventsConsumer(
 		return fmt.Errorf("bind pre-provisioned message.events consumer %q: %w", durable, err)
 	}
 	markNotificationConsumerBound(ctx)
+	diagnosticObserver.consumerBound()
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("message.events unsubscribe failed", slog.String("error", err.Error()))
@@ -89,6 +110,18 @@ func routeMessageNotification(
 	enrich pushenrich.Resolver,
 	env *eventsv1.MessageStreamEvent,
 ) error {
+	return routeMessageNotificationObserved(ctx, handler, members, pusher, enrich, env, nil)
+}
+
+func routeMessageNotificationObserved(
+	ctx context.Context,
+	handler *consumer.MessageEventHandler,
+	members chatmembers.Lister,
+	pusher *dispatch.MessagePusher,
+	enrich pushenrich.Resolver,
+	env *eventsv1.MessageStreamEvent,
+	trace *composeFcmTrace,
+) error {
 	if handler == nil || pusher == nil || env == nil {
 		return nil
 	}
@@ -103,6 +136,9 @@ func routeMessageNotification(
 			return err
 		}
 		memberRows, err := listChatMembers(ctx, members, ev.GetChatId())
+		if trace != nil {
+			trace.members(memberRows, err)
+		}
 		if err != nil {
 			return err
 		}
@@ -120,6 +156,9 @@ func routeMessageNotification(
 			decisions, err = deliveryForMember(decisions, memberByProfileID(memberRows, parentAuthor))
 			if err != nil {
 				return err
+			}
+			if trace != nil {
+				trace.finalFor(decisions)
 			}
 			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
@@ -150,6 +189,9 @@ func routeMessageNotification(
 			return fmt.Errorf("message notification: recipient routing metadata unavailable")
 		}
 		raw := handler.HandleMessageSent(ctx, ev, memberRows)
+		if trace != nil {
+			trace.baseFor(raw)
+		}
 		preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 		deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 		for profileID, baseDecision := range raw {
@@ -161,6 +203,9 @@ func routeMessageNotification(
 			decisions, err = deliveryForMember(decisions, member)
 			if err != nil {
 				return err
+			}
+			if trace != nil {
+				trace.finalFor(decisions)
 			}
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {

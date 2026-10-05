@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -389,6 +391,27 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("first message consumer did not stop after cancellation")
 	}
+	var (
+		unbindAttempts   int
+		unbindErrorClass = "not observed"
+		lastPushBound    = true
+	)
+	unboundObserved := assert.Eventually(t, func() bool {
+		unbindAttempts++
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		if infoErr != nil {
+			unbindErrorClass = fmt.Sprintf("%T", infoErr)
+			lastPushBound = true
+			return false
+		}
+		unbindErrorClass = "none"
+		lastPushBound = info.PushBound
+		return !info.PushBound
+	}, 5*time.Second, 20*time.Millisecond, "stopped consumer is unbound from the durable before publishing")
+	if !unboundObserved {
+		t.Fatalf("stopped consumer unbind observation failed: query_attempts=%d query_error_class=%q push_bound=%t",
+			unbindAttempts, unbindErrorClass, lastPushBound)
+	}
 
 	messageID, chatID := uuid.NewString(), uuid.NewString()
 	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
@@ -396,12 +419,38 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	}}
 	encoded, err := proto.Marshal(event)
 	require.NoError(t, err)
-	_, err = js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
+	publishAck, err := js.Publish(jsSubjectMessageEvents[:len(jsSubjectMessageEvents)-1]+"sent", encoded)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	var (
+		queryAttempts    int
+		queryErrorClass        = "not observed"
+		lastPending      int64 = -1
+		lastAckPending   int64 = -1
+		lastRedelivered  int64 = -1
+		lastDeliveredSeq uint64
+		lastAckFloorSeq  uint64
+	)
+	pendingObserved := assert.Eventually(t, func() bool {
+		queryAttempts++
 		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		if infoErr != nil {
+			queryErrorClass = fmt.Sprintf("%T", infoErr)
+			lastPending, lastAckPending, lastRedelivered = -1, -1, -1
+			lastDeliveredSeq, lastAckFloorSeq = 0, 0
+			return false
+		}
+		queryErrorClass = "none"
+		lastPending = int64(info.NumPending)
+		lastAckPending = int64(info.NumAckPending)
+		lastRedelivered = int64(info.NumRedelivered)
+		lastDeliveredSeq = info.Delivered.Stream
+		lastAckFloorSeq = info.AckFloor.Stream
 		return infoErr == nil && info.NumPending == 1 && info.NumAckPending == 0
 	}, 5*time.Second, 20*time.Millisecond, "published event remains pending on the durable while the consumer is stopped")
+	if !pendingObserved {
+		t.Fatalf("published event pending observation failed: query_attempts=%d query_error_class=%q pending=%d ack_pending=%d redelivered=%d delivered_stream_seq=%d ack_floor_stream_seq=%d published_stream_seq=%d",
+			queryAttempts, queryErrorClass, lastPending, lastAckPending, lastRedelivered, lastDeliveredSeq, lastAckFloorSeq, publishAck.Sequence)
+	}
 
 	secondCtx, stopSecond := context.WithCancel(context.Background())
 	secondReadiness := newNotificationConsumerReadiness("message")

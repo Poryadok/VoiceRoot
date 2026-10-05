@@ -56,6 +56,7 @@ smoke_flutter:
   - test/ws_resume_e2e_live_test.dart
   - test/message_delivery_e2e_live_test.dart
   - test/in_app_notifications_e2e_live_test.dart
+  - test/fcm_delivery_e2e_live_test.dart
 
 full_gateway_run: 'TestCompose.*_live'
 

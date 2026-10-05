@@ -48,6 +48,11 @@ const serviceName = "notification"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
+	debugRecorderEnabled, err := parseDebugHTTPEnabled(os.LookupEnv, recordPushes)
+	if err != nil {
+		log.Fatalf("notification debug recorder configuration: %v", err)
+	}
 	gameConsentClient, gameConsentEnabled, err := gameconsent.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		log.Fatalf("game notification consent configuration: %v", err)
@@ -117,10 +122,10 @@ func main() {
 				logger.Info("FCM HTTP sender enabled", slog.String("project_id", cfg.ProjectID))
 			}
 		}
-		if strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true") {
-			fcmSender = &fcm.RecordSender{Inner: fcmSender}
-			logger.Info("FCM push recording enabled (NOTIFICATION_RECORD_PUSHES)")
+		if debugRecorderEnabled {
+			logger.Info("FCM push recording enabled (NOTIFICATION_DEBUG_HTTP_ENABLED)")
 		}
+		fcmSender = maybeRecordFCMSender(fcmSender, debugRecorderEnabled)
 		apnsSender := apns.Sender(&apns.NoopSender{Logger: logger})
 		voipSender := apns.VoIPSender(&apns.VoIPNoopSender{})
 		if cfg, ok := apns.ConfigFromEnv(); ok {
@@ -150,7 +155,6 @@ func main() {
 
 		presenceChecker := presence.Checker(presence.OfflineChecker{})
 		var accountProfiles s2s.AccountProfiles
-		recordPushes := strings.EqualFold(strings.TrimSpace(os.Getenv("NOTIFICATION_RECORD_PUSHES")), "true")
 		if recordPushes {
 			logger.Info("push recording mode: routing as offline (NOTIFICATION_RECORD_PUSHES)")
 		} else if userAddr := strings.TrimSpace(os.Getenv("USER_GRPC_ADDR")); userAddr != "" {
@@ -296,7 +300,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    httpAddr,
-		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(notificationHTTPHandlerWithReadiness(serviceName, consumerReadiness), metricsReg), logger),
+		Handler: httpserver.Wrap(voiceprom.MountMetricsOnHealth(notificationHTTPHandlerWithReadinessAndDebug(serviceName, consumerReadiness, debugRecorderEnabled), metricsReg), logger),
 	}
 	httpserver.ApplyHTTPServerTimeouts(server)
 	errCh := make(chan error, 1)
