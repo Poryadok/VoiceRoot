@@ -2,9 +2,20 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/compose-fcm-diagnostic-lib.sh"
 
-valid='compose_fcm_diag valid=true reason=matched admission=none candidates=1 attempts=2 member_result=ok member_count=2 recipient_present=true inbox=main base_push=true final_push=true presence=offline policy=ok token_rows=1 fcm_tokens=1 dispatcher_returns=1 route=ack'
+phase_known='phase_evidence=known consumer_bound_before_expiry=false callback_entered_before_expiry=false decode_succeeded_before_expiry=false route_started_before_expiry=false route_returned_before_expiry=false consumer_bound_at_expiry=true callback_entered_at_expiry=true decode_succeeded_at_expiry=true route_started_at_expiry=true route_returned_at_expiry=true'
+phase_unknown='phase_evidence=unknown consumer_bound_before_expiry=unknown callback_entered_before_expiry=unknown decode_succeeded_before_expiry=unknown route_started_before_expiry=unknown route_returned_before_expiry=unknown consumer_bound_at_expiry=unknown callback_entered_at_expiry=unknown decode_succeeded_at_expiry=unknown route_started_at_expiry=unknown route_returned_at_expiry=unknown'
+valid="compose_fcm_diag valid=true reason=matched admission=none candidates=1 attempts=2 member_result=ok member_count=2 recipient_present=true inbox=main base_push=true final_push=true presence=offline policy=ok token_rows=1 fcm_tokens=1 dispatcher_returns=1 route=ack ${phase_known}"
 unknown="${VOICE_FCM_DIAG_UNKNOWN}"
+unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 [[ "$(voice_fcm_diag_parse_log "${valid}")" == "${valid}" ]]
+[[ "$(voice_fcm_diag_parse_log "${unknownPhase}")" == "${unknownPhase}" ]]
+unknownTarget="compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown ${phase_known}"
+[[ "$(voice_fcm_diag_parse_log "${unknownTarget}")" == "${unknownTarget}" ]]
+[[ "$(voice_fcm_diag_parse_log "${unknownTarget/recipient_present=unknown/recipient_present=true}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid% phase_evidence=*}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/callback_entered_before_expiry=false/callback_entered_before_expiry=unknown}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/phase_evidence=known/phase_evidence=unknown}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid} callback_entered_at_expiry=true")" == "${unknown}" ]]
 for admission in invalid window tuple identity mixed overflow; do
   candidate="${valid/admission=none/admission=${admission}}"
   [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${unknown}" ]]

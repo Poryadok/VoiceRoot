@@ -53,12 +53,14 @@ func runMessageEventsConsumer(
 	diagnosticObserver := newComposeFcmObserver()
 
 	msgHandler := func(msg *nats.Msg) {
+		diagnosticObserver.callbackEntered()
 		var env eventsv1.MessageStreamEvent
 		if err := proto.Unmarshal(msg.Data, &env); err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "message event unmarshal failed")
 			consumer.JetStreamTermAck(msg)
 			return
 		}
+		diagnosticObserver.decodeSucceeded()
 		var trace *composeFcmTrace
 		if sent := env.GetMessageSent(); sent != nil && diagnosticObserver != nil {
 			trace = diagnosticObserver.begin(env.GetEventId(), sent.GetMessageId(), sent.GetChatId(), sent.GetSenderProfileId())
@@ -67,7 +69,9 @@ func runMessageEventsConsumer(
 		if trace != nil {
 			routeCtx = trace.context(routeCtx)
 		}
+		diagnosticObserver.routeStarted()
 		err := routeMessageNotificationObserved(routeCtx, handler, members, pusher, enrich, &env, trace)
+		diagnosticObserver.routeReturned()
 		if err != nil && logger != nil {
 			logger.Warn("message push failed", slog.Any("error", err))
 		} else if err == nil {
@@ -88,6 +92,7 @@ func runMessageEventsConsumer(
 		return fmt.Errorf("bind pre-provisioned message.events consumer %q: %w", durable, err)
 	}
 	markNotificationConsumerBound(ctx)
+	diagnosticObserver.consumerBound()
 	defer func() {
 		if err := sub.Unsubscribe(); err != nil && logger != nil {
 			logger.Warn("message.events unsubscribe failed", slog.String("error", err.Error()))

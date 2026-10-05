@@ -7,7 +7,7 @@ voice_fcm_diag_identity_valid() {
 }
 
 voice_fcm_diag_parse_log() {
-  local data="${1-}" line count=0 line_count=0 found=''
+  local data="${1-}" line count=0 line_count=0 found='' phase_index
   local LC_ALL=C
   if (( ${#data} > 65536 )); then
     printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
@@ -20,7 +20,7 @@ voice_fcm_diag_parse_log() {
       return 0
     fi
     if [[ "${line}" == *compose_fcm_diag* ]]; then
-      if [[ ! "${line}" =~ ^(compose_fcm_diag\ valid=(true|false)\ reason=(matched|unknown|ambiguous|overflow)\ admission=(none|invalid|window|tuple|identity|mixed|overflow)\ candidates=([0-9]{1,2})\ attempts=([0-9]{1,4})\ member_result=(ok|error|unknown)\ member_count=([0-9]{1,4})\ recipient_present=(true|false|unknown)\ inbox=(main|requests|unknown)\ base_push=(true|false|unknown)\ final_push=(true|false|unknown)\ presence=(online|offline|unknown)\ policy=(ok|error|unknown)\ token_rows=([0-9]{1,4})\ fcm_tokens=([0-9]{1,4})\ dispatcher_returns=([0-9]{1,4})\ route=(ack|nak|unknown))$ ]]; then
+      if [[ ! "${line}" =~ ^(compose_fcm_diag\ valid=(true|false)\ reason=(matched|unknown|ambiguous|overflow)\ admission=(none|invalid|window|tuple|identity|mixed|overflow)\ candidates=([0-9]{1,2})\ attempts=([0-9]{1,4})\ member_result=(ok|error|unknown)\ member_count=([0-9]{1,4})\ recipient_present=(true|false|unknown)\ inbox=(main|requests|unknown)\ base_push=(true|false|unknown)\ final_push=(true|false|unknown)\ presence=(online|offline|unknown)\ policy=(ok|error|unknown)\ token_rows=([0-9]{1,4})\ fcm_tokens=([0-9]{1,4})\ dispatcher_returns=([0-9]{1,4})\ route=(ack|nak|unknown)\ phase_evidence=(known|unknown)\ consumer_bound_before_expiry=(true|false|unknown)\ callback_entered_before_expiry=(true|false|unknown)\ decode_succeeded_before_expiry=(true|false|unknown)\ route_started_before_expiry=(true|false|unknown)\ route_returned_before_expiry=(true|false|unknown)\ consumer_bound_at_expiry=(true|false|unknown)\ callback_entered_at_expiry=(true|false|unknown)\ decode_succeeded_at_expiry=(true|false|unknown)\ route_started_at_expiry=(true|false|unknown)\ route_returned_at_expiry=(true|false|unknown))$ ]]; then
         printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
         return 0
       fi
@@ -29,6 +29,25 @@ voice_fcm_diag_parse_log() {
         return 0
       fi
       if ((10#${BASH_REMATCH[5]} > 16)); then
+        printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
+        return 0
+      fi
+      if [[ "${BASH_REMATCH[19]}" == "known" ]]; then
+        for phase_index in {20..29}; do
+          if [[ "${BASH_REMATCH[$phase_index]}" == "unknown" ]]; then
+            printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
+            return 0
+          fi
+        done
+      else
+        for phase_index in {20..29}; do
+          if [[ "${BASH_REMATCH[$phase_index]}" != "unknown" ]]; then
+            printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
+            return 0
+          fi
+        done
+      fi
+      if [[ "${BASH_REMATCH[2]}" == "false" && ( "${BASH_REMATCH[7]}" != "unknown" || "${BASH_REMATCH[8]}" != "0" || "${BASH_REMATCH[9]}" != "unknown" || "${BASH_REMATCH[10]}" != "unknown" || "${BASH_REMATCH[11]}" != "unknown" || "${BASH_REMATCH[12]}" != "unknown" || "${BASH_REMATCH[13]}" != "unknown" || "${BASH_REMATCH[14]}" != "unknown" || "${BASH_REMATCH[15]}" != "0" || "${BASH_REMATCH[16]}" != "0" || "${BASH_REMATCH[17]}" != "0" || "${BASH_REMATCH[18]}" != "unknown" ) ]]; then
         printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
         return 0
       fi

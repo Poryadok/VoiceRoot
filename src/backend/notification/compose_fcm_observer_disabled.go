@@ -16,6 +16,11 @@ type composeFcmObserver struct{}
 
 func (*composeFcmObserver) begin(string, string, string, string) *composeFcmTrace { return nil }
 func (*composeFcmObserver) finish(*composeFcmTrace, string)                       {}
+func (*composeFcmObserver) consumerBound()                                        {}
+func (*composeFcmObserver) callbackEntered()                                      {}
+func (*composeFcmObserver) decodeSucceeded()                                      {}
+func (*composeFcmObserver) routeStarted()                                         {}
+func (*composeFcmObserver) routeReturned()                                        {}
 func (*composeFcmTrace) members([]chatmembers.Member, error)                      {}
 func (*composeFcmTrace) baseFor(map[string]delivery.DeliveryDecision)             {}
 func (*composeFcmTrace) finalFor(map[string]delivery.DeliveryDecision)            {}

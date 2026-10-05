@@ -351,6 +351,145 @@ func TestComposeFcmObserverUsesSeparatePreAndPostControlDeadlines(t *testing.T) 
 	}
 }
 
+func TestComposeFcmObserverZeroCandidateExpiryEmitsOnePhaseSnapshot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.json")
+	writeDiagnosticControl(t, path, "")
+	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+	// A callback can enter after subscription bind succeeds but before the bound
+	// marker runs. Preserve that observed order rather than inferring the marker.
+	o.callbackEntered()
+	arm := time.Now()
+	if !sampleDiagnosticControlAt(t, o, arm) {
+		t.Fatal("valid control did not arm post-control window")
+	}
+	o.consumerBound()
+	o.decodeSucceeded()
+	o.routeStarted()
+	o.routeReturned()
+
+	output := captureComposeFcmOutput(t, func() {
+		if !expireDiagnosticAt(o, arm.Add(composeFcmWindow)) {
+			t.Fatal("post-control expiry was not observed")
+		}
+	})
+	if strings.Count(output, "compose_fcm_diag ") != 1 || !strings.Contains(output, "valid=false reason=unknown admission=none candidates=0") {
+		t.Fatalf("zero-candidate expiry did not emit exactly one unknown record: %q", output)
+	}
+	if !strings.Contains(output, "member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown") {
+		t.Fatalf("zero-candidate expiry exposed target facts: %q", output)
+	}
+	if !strings.Contains(output, "phase_evidence=known consumer_bound_before_expiry=false callback_entered_before_expiry=true decode_succeeded_before_expiry=false route_started_before_expiry=false route_returned_before_expiry=false consumer_bound_at_expiry=true callback_entered_at_expiry=true decode_succeeded_at_expiry=true route_started_at_expiry=true route_returned_at_expiry=true") {
+		t.Fatalf("phase snapshots did not preserve observed ordering: %q", output)
+	}
+	if strings.Contains(output, diagnosticTestChat) || strings.Contains(output, diagnosticTestSender) || strings.Contains(output, diagnosticTestTarget) {
+		t.Fatalf("phase record exposed identities: %q", output)
+	}
+}
+
+func TestComposeFcmObserverPartialPhaseSnapshotsFailClosed(t *testing.T) {
+	t.Run("missing arm snapshot", func(t *testing.T) {
+		o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace), controlState: composeFcmControlValid, postControlStarted: time.Now()}
+		o.callbackEntered()
+		output := captureComposeFcmOutput(t, func() {
+			expireDiagnosticAt(o, o.postControlStarted.Add(composeFcmWindow))
+		})
+		if !strings.Contains(output, "phase_evidence=unknown consumer_bound_before_expiry=unknown callback_entered_before_expiry=unknown decode_succeeded_before_expiry=unknown route_started_before_expiry=unknown route_returned_before_expiry=unknown consumer_bound_at_expiry=unknown callback_entered_at_expiry=unknown decode_succeeded_at_expiry=unknown route_started_at_expiry=unknown route_returned_at_expiry=unknown") {
+			t.Fatalf("partial phase snapshot fabricated a value: %q", output)
+		}
+	})
+
+	t.Run("no post-control window", func(t *testing.T) {
+		o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
+		o.callbackEntered()
+		output := captureComposeFcmOutput(t, func() {
+			o.mu.Lock()
+			o.printUnknownLocked("unknown")
+			o.mu.Unlock()
+		})
+		if !strings.Contains(output, "phase_evidence=unknown") || strings.Contains(output, "callback_entered_before_expiry=true") {
+			t.Fatalf("missing window did not leave phase facts unknown: %q", output)
+		}
+	})
+}
+
+func TestComposeFcmObserverPhaseMethodsAreNilSafeAndMonotonic(t *testing.T) {
+	var absent *composeFcmObserver
+	absent.consumerBound()
+	absent.callbackEntered()
+	absent.decodeSucceeded()
+	absent.routeStarted()
+	absent.routeReturned()
+
+	o := &composeFcmObserver{}
+	o.callbackEntered()
+	o.callbackEntered()
+	o.consumerBound()
+	o.decodeSucceeded()
+	o.routeStarted()
+	o.routeReturned()
+	if !o.phases.consumerBound || !o.phases.callbackEntered || !o.phases.decodeSucceeded || !o.phases.routeStarted || !o.phases.routeReturned {
+		t.Fatal("repeated phase observations were not retained monotonically")
+	}
+}
+
+func TestComposeFcmObserverPhaseSnapshotsDecodeFailureAndRouteError(t *testing.T) {
+	t.Run("decode failure stops before route", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "control.json")
+		writeDiagnosticControl(t, path, "")
+		o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+		o.callbackEntered()
+		arm := time.Now()
+		if !sampleDiagnosticControlAt(t, o, arm) {
+			t.Fatal("valid control did not arm post-control window")
+		}
+		output := captureComposeFcmOutput(t, func() {
+			expireDiagnosticAt(o, arm.Add(composeFcmWindow))
+		})
+		if !strings.Contains(output, "phase_evidence=known consumer_bound_before_expiry=false callback_entered_before_expiry=true decode_succeeded_before_expiry=false route_started_before_expiry=false route_returned_before_expiry=false consumer_bound_at_expiry=false callback_entered_at_expiry=true decode_succeeded_at_expiry=false route_started_at_expiry=false route_returned_at_expiry=false") {
+			t.Fatalf("decode failure crossed an unobserved route phase: %q", output)
+		}
+	})
+
+	t.Run("route error still records return without error detail", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "control.json")
+		messageID, chatID, senderID, recipientID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+		writeDiagnosticControlValues(t, path, messageID.String(), chatID.String(), senderID.String(), recipientID.String())
+		o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
+		if !sampleDiagnosticControlAt(t, o, time.Now()) {
+			t.Fatal("valid control did not arm post-control window")
+		}
+		trace := o.begin("event-route-error", messageID.String(), chatID.String(), senderID.String())
+		if trace == nil {
+			t.Fatal("correlated event was not recorded")
+		}
+		recorder := &observerCaptureFCM{err: errors.New("private route failure")}
+		pusher := &dispatch.MessagePusher{
+			Tokens:   messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{recipientID: {{Token: "private-test-token", PushService: "fcm"}}}},
+			Pusher:   &dispatch.PushDispatcher{FCM: recorder},
+			Grouping: grouping.NewMemoryStore(),
+		}
+		event := &eventsv1.MessageStreamEvent{EventId: "event-route-error", Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
+			MessageId: messageID.String(), ChatId: chatID.String(), SenderProfileId: senderID.String(),
+		}}}
+		o.callbackEntered()
+		o.decodeSucceeded()
+		o.routeStarted()
+		routeErr := routeMessageNotificationObserved(trace.context(context.Background()), &consumer.MessageEventHandler{Router: delivery.DecideRouting}, &observerRetryMembers{sender: senderID.String(), target: recipientID.String()}, pusher, pushenrich.NoopResolver{}, event, trace)
+		o.routeReturned()
+		if routeErr == nil || recorder.calls != 1 {
+			t.Fatal("route error did not preserve the real sender attempt")
+		}
+		o.finish(trace, "nak")
+		output := captureComposeFcmOutput(t, func() {
+			expireDiagnosticAt(o, o.postControlStarted.Add(composeFcmWindow))
+		})
+		if !strings.Contains(output, "valid=true reason=matched") || !strings.Contains(output, "route=nak phase_evidence=known") ||
+			!strings.Contains(output, "route_returned_at_expiry=true") || strings.Contains(output, "private route failure") {
+			t.Fatalf("route return phase leaked details or changed the result: %q", output)
+		}
+	})
+}
+
 func TestComposeFcmObserverRejectsConflictingExactPairAndCrossTupleCollision(t *testing.T) {
 	t.Run("same-pair-conflicting-tuple", func(t *testing.T) {
 		o := &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
@@ -528,6 +667,7 @@ type observerCaptureFCM struct {
 	token       store.DeviceToken
 	payload     fcm.PushPayload
 	contextMark any
+	err         error
 }
 
 type observerRetryMembers struct {
@@ -558,7 +698,7 @@ func (r *observerCaptureFCM) Send(ctx context.Context, profile uuid.UUID, token 
 	r.calls++
 	r.profile, r.token, r.payload = profile, token, payload
 	r.contextMark = ctx.Value(observerContextKey{})
-	return nil
+	return r.err
 }
 
 func TestComposeFcmObserverPreservesRouteSenderArgumentsAndArchivedSuppression(t *testing.T) {

@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	composeFcmCandidateLimit     = 16
-	composeFcmWindow             = 5 * time.Second
-	composeFcmKeyByteLimit       = 128
+	composeFcmCandidateLimit      = 16
+	composeFcmWindow              = 5 * time.Second
+	composeFcmKeyByteLimit        = 128
 	composeFcmAdmissionCountLimit = 255
 )
 
@@ -48,6 +48,19 @@ type composeFcmControl struct {
 	RecipientID     string `json:"recipient_profile_id"`
 }
 
+type composeFcmPhaseState struct {
+	consumerBound   bool
+	callbackEntered bool
+	decodeSucceeded bool
+	routeStarted    bool
+	routeReturned   bool
+}
+
+type composeFcmPhaseSnapshot struct {
+	captured bool
+	state    composeFcmPhaseState
+}
+
 type composeFcmObserver struct {
 	path               string
 	mu                 sync.Mutex
@@ -62,6 +75,9 @@ type composeFcmObserver struct {
 	admissionCounts    [composeFcmAdmissionKindCount]uint8
 	admissionSeen      bool
 	admissionOverflow  bool
+	phases             composeFcmPhaseState
+	phaseBeforeExpiry  composeFcmPhaseSnapshot
+	phaseAtExpiry      composeFcmPhaseSnapshot
 }
 
 type composeFcmTrace struct {
@@ -96,6 +112,55 @@ func newComposeFcmObserver() *composeFcmObserver {
 	o := &composeFcmObserver{path: path, candidates: make(map[string]*composeFcmTrace)}
 	go o.collect()
 	return o
+}
+
+func (o *composeFcmObserver) consumerBound() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.phases.consumerBound = true
+	o.mu.Unlock()
+}
+
+func (o *composeFcmObserver) callbackEntered() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.phases.callbackEntered = true
+	o.mu.Unlock()
+}
+
+func (o *composeFcmObserver) decodeSucceeded() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.phases.decodeSucceeded = true
+	o.mu.Unlock()
+}
+
+func (o *composeFcmObserver) routeStarted() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.phases.routeStarted = true
+	o.mu.Unlock()
+}
+
+func (o *composeFcmObserver) routeReturned() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.phases.routeReturned = true
+	o.mu.Unlock()
+}
+
+func (o *composeFcmObserver) phaseSnapshotLocked() composeFcmPhaseSnapshot {
+	return composeFcmPhaseSnapshot{captured: true, state: o.phases}
 }
 
 func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) *composeFcmTrace {
@@ -394,6 +459,8 @@ func (o *composeFcmObserver) sampleControlLocked(c composeFcmControl, ok bool, s
 		o.preControlStarted = time.Time{}
 		if o.postControlStarted.IsZero() {
 			o.postControlStarted = sampledAt
+			o.phaseBeforeExpiry = o.phaseSnapshotLocked()
+			o.phaseAtExpiry = composeFcmPhaseSnapshot{}
 		}
 	}
 	return !o.expireLocked(sampledAt)
@@ -409,7 +476,9 @@ func (o *composeFcmObserver) expireLocked(now time.Time) bool {
 	if o.controlState != composeFcmControlValid || o.postControlStarted.IsZero() || now.Sub(o.postControlStarted) < composeFcmWindow {
 		return false
 	}
+	o.phaseAtExpiry = o.phaseSnapshotLocked()
 	if len(o.candidates) == 0 {
+		o.printUnknownLocked("unknown")
 		return true
 	}
 	if o.overflow {
@@ -461,12 +530,22 @@ func (o *composeFcmObserver) candidateForMessage(messageID string) (*composeFcmT
 
 func (o *composeFcmObserver) emitUnknownLocked() { o.printUnknownLocked("unknown") }
 
+func (o *composeFcmObserver) phaseSuffixLocked() string {
+	if !o.phaseBeforeExpiry.captured || !o.phaseAtExpiry.captured {
+		return " phase_evidence=unknown consumer_bound_before_expiry=unknown callback_entered_before_expiry=unknown decode_succeeded_before_expiry=unknown route_started_before_expiry=unknown route_returned_before_expiry=unknown consumer_bound_at_expiry=unknown callback_entered_at_expiry=unknown decode_succeeded_at_expiry=unknown route_started_at_expiry=unknown route_returned_at_expiry=unknown"
+	}
+	before, after := o.phaseBeforeExpiry.state, o.phaseAtExpiry.state
+	return fmt.Sprintf(" phase_evidence=known consumer_bound_before_expiry=%s callback_entered_before_expiry=%s decode_succeeded_before_expiry=%s route_started_before_expiry=%s route_returned_before_expiry=%s consumer_bound_at_expiry=%s callback_entered_at_expiry=%s decode_succeeded_at_expiry=%s route_started_at_expiry=%s route_returned_at_expiry=%s",
+		boolWord(before.consumerBound), boolWord(before.callbackEntered), boolWord(before.decodeSucceeded), boolWord(before.routeStarted), boolWord(before.routeReturned),
+		boolWord(after.consumerBound), boolWord(after.callbackEntered), boolWord(after.decodeSucceeded), boolWord(after.routeStarted), boolWord(after.routeReturned))
+}
+
 func (o *composeFcmObserver) printUnknownLocked(reason string) {
 	if o.emitted {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=false reason=%s admission=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow", "expired", "incomplete"), o.admissionClassLocked(), boundedCount(len(o.candidates)))
+	fmt.Printf("compose_fcm_diag valid=false reason=%s admission=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown%s\n", safeWord(reason, "unknown", "ambiguous", "overflow", "expired", "incomplete"), o.admissionClassLocked(), boundedCount(len(o.candidates)), o.phaseSuffixLocked())
 	clear(o.candidates)
 }
 
@@ -483,8 +562,8 @@ func (o *composeFcmObserver) printTraceLocked(t *composeFcmTrace) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=true reason=matched admission=%s candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s\n",
-		o.admissionClassLocked(), boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"))
+	fmt.Printf("compose_fcm_diag valid=true reason=matched admission=%s candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s%s\n",
+		o.admissionClassLocked(), boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"), o.phaseSuffixLocked())
 	clear(o.candidates)
 }
 
