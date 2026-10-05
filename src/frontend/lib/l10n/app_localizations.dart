@@ -3374,6 +3374,72 @@ abstract class AppLocalizations {
   /// **'Need more? Contact support from your account settings.'**
   String get settingsHelpFooter;
 
+  /// No description provided for @settingsHelpShortcutsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get settingsHelpShortcutsTitle;
+
+  /// No description provided for @settingsHelpCloseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Close help'**
+  String get settingsHelpCloseLabel;
+
+  /// No description provided for @settingsHelpShortcutSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Open search'**
+  String get settingsHelpShortcutSearch;
+
+  /// No description provided for @settingsHelpShortcutSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get settingsHelpShortcutSettings;
+
+  /// No description provided for @settingsHelpShortcutUnreadChats.
+  ///
+  /// In en, this message translates to:
+  /// **'Move between unread chats'**
+  String get settingsHelpShortcutUnreadChats;
+
+  /// No description provided for @settingsHelpShortcutFocusComposer.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus the message composer'**
+  String get settingsHelpShortcutFocusComposer;
+
+  /// No description provided for @settingsHelpShortcutSelectMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a message'**
+  String get settingsHelpShortcutSelectMessage;
+
+  /// No description provided for @settingsHelpShortcutMessageActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open actions for the selected message'**
+  String get settingsHelpShortcutMessageActions;
+
+  /// No description provided for @settingsHelpShortcutReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply to the selected message'**
+  String get settingsHelpShortcutReply;
+
+  /// No description provided for @settingsHelpShortcutReact.
+  ///
+  /// In en, this message translates to:
+  /// **'React to the selected message'**
+  String get settingsHelpShortcutReact;
+
+  /// No description provided for @settingsHelpShortcutPushToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk when push-to-talk is enabled'**
+  String get settingsHelpShortcutPushToTalk;
+
   /// No description provided for @settingsSubscription.
   ///
   /// In en, this message translates to:
