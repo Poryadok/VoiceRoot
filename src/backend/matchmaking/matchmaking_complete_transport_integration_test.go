@@ -84,7 +84,9 @@ func (c *matchSquadGatewayTrace) Write(p []byte) (int, error) {
 		fields := strings.Split(line, "|")
 		if len(fields) == 4 && fields[0] == "VOICE_MATCHFOUND_TRACE" && fields[1] == c.revision && fields[2] == c.tree {
 			switch fields[3] {
-			case "gateway-fallback", "rest-namespace-not-public", "rest-upstream-missing", "matchmaking-client-missing", "complete-match-decode":
+			case "gateway-fallback", "rest-namespace-not-public", "rest-upstream-missing", "matchmaking-client-missing", "complete-match-decode",
+				"rest-transcoder-dispatch", "rest-transcoder-unhandled", "matchmaking-namespace-branch", "matchmaking-matches-branch",
+				"matchmaking-matches-empty", "matchmaking-match-id-empty", "matchmaking-matches-unmatched", "matchmaking-complete-post-route":
 				c.stages[fields[3]] = true
 			}
 		}
@@ -107,9 +109,11 @@ func (c *matchSquadGatewayTrace) reset() {
 func (c *matchSquadGatewayTrace) snapshot() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return fmt.Sprintf("gateway_fallback=%t namespace_not_public=%t upstream_missing=%t matchmaking_client_missing=%t complete_decode=%t",
+	return fmt.Sprintf("gateway_fallback=%t namespace_not_public=%t upstream_missing=%t matchmaking_client_missing=%t complete_decode=%t rest_transcoder_dispatch=%t rest_transcoder_unhandled=%t matchmaking_namespace_branch=%t matchmaking_matches_branch=%t matchmaking_matches_empty=%t matchmaking_match_id_empty=%t matchmaking_matches_unmatched=%t matchmaking_complete_post_route=%t",
 		c.stages["gateway-fallback"], c.stages["rest-namespace-not-public"], c.stages["rest-upstream-missing"],
-		c.stages["matchmaking-client-missing"], c.stages["complete-match-decode"])
+		c.stages["matchmaking-client-missing"], c.stages["complete-match-decode"], c.stages["rest-transcoder-dispatch"], c.stages["rest-transcoder-unhandled"],
+		c.stages["matchmaking-namespace-branch"], c.stages["matchmaking-matches-branch"], c.stages["matchmaking-matches-empty"], c.stages["matchmaking-match-id-empty"],
+		c.stages["matchmaking-matches-unmatched"], c.stages["matchmaking-complete-post-route"])
 }
 
 func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *testing.T) {

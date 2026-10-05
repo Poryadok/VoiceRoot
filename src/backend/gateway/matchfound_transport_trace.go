@@ -14,7 +14,9 @@ var matchFoundTransportTraceTree string
 
 func traceMatchFoundTransport(stage string) {
 	switch stage {
-	case "gateway-fallback", "rest-namespace-not-public", "rest-upstream-missing", "matchmaking-client-missing", "complete-match-decode":
+	case "gateway-fallback", "rest-namespace-not-public", "rest-upstream-missing", "matchmaking-client-missing", "complete-match-decode",
+		"rest-transcoder-dispatch", "rest-transcoder-unhandled", "matchmaking-namespace-branch", "matchmaking-matches-branch",
+		"matchmaking-matches-empty", "matchmaking-match-id-empty", "matchmaking-matches-unmatched", "matchmaking-complete-post-route":
 		fmt.Fprintf(os.Stderr, "VOICE_MATCHFOUND_TRACE|%s|%s|%s\n", matchFoundTransportTraceRevision, matchFoundTransportTraceTree, stage)
 	}
 }

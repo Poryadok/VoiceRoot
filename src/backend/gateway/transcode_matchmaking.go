@@ -47,6 +47,7 @@ func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, re
 		sub = strings.TrimPrefix(sub, "/")
 		return t.serveMatchmakingSearch(w, r, sub)
 	case strings.HasPrefix(rest, "matches"):
+		traceMatchFoundTransport("matchmaking-matches-branch")
 		sub := strings.TrimPrefix(rest, "matches")
 		sub = strings.TrimPrefix(sub, "/")
 		return t.serveMatchmakingMatches(w, r, sub)
@@ -64,11 +65,13 @@ func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, re
 func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Request, rest string) bool {
 	ctx := withGRPCMetadata(r.Context(), r)
 	if rest == "" {
+		traceMatchFoundTransport("matchmaking-matches-empty")
 		return false
 	}
 	parts := strings.Split(rest, "/")
 	matchID := parts[0]
 	if matchID == "" {
+		traceMatchFoundTransport("matchmaking-match-id-empty")
 		return false
 	}
 	if len(parts) == 3 && parts[1] == "voice" {
@@ -101,6 +104,7 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 		return true
 
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "complete":
+		traceMatchFoundTransport("matchmaking-complete-post-route")
 		req := &matchmakingv1.CompleteMatchRequest{}
 		traceMatchFoundTransport("complete-match-decode")
 		if err := readProtoJSON(r, req); err != nil {
@@ -137,6 +141,7 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 		return true
 
 	default:
+		traceMatchFoundTransport("matchmaking-matches-unmatched")
 		return false
 	}
 }

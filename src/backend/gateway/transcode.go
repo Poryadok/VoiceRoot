@@ -382,6 +382,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 			traceMatchFoundTransport("matchmaking-client-missing")
 			return false
 		}
+		traceMatchFoundTransport("matchmaking-namespace-branch")
 		return t.serveMatchmaking(w, r, rest)
 	case "search":
 		if t.clients.search == nil {
