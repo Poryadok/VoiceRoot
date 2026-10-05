@@ -382,7 +382,9 @@ void main() {
           matching: find.byType(TextButton),
         );
         expect(retry, findsOneWidget);
-        expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+        final retrySize = tester.getSize(retry);
+        expect(retrySize.height, greaterThanOrEqualTo(48));
+        expect(retrySize.width, greaterThanOrEqualTo(48));
         expect(tester.takeException(), isNull);
         if (captureDir != null && captureDir.isNotEmpty) {
           await _writeCapture(
