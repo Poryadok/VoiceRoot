@@ -15,59 +15,47 @@ for step in steps:
     if match:
         named_steps[match.group(1)] = step
 
-preflight = "Preflight staging Auth email credential"
-mutations = (
-    "Ensure MinIO credentials",
-    "Restore principal secrets",
-    "Restore NATS activation secrets",
-    "Ensure User search cursor key",
-    "Apply staging manifests",
-)
-assert preflight in named_steps, "staging mail credential preflight step missing"
-assert all(name in named_steps for name in mutations), "expected staging mutation step missing"
-assert all(
-    source.index(named_steps[preflight]) < source.index(named_steps[name])
-    for name in mutations
-), "staging mail credential preflight must precede every mutation step"
+# Normal release uses root-captured canonical authority, not runner-supplied
+# plaintext Secret replacement. Preserve mail validation before every mutation.
+prepare = "Prepare cold backup and isolated proof using installed root bridge"
+apply = "Apply exact frozen target while all consumers remain paused"
+assert prepare in named_steps and apply in named_steps
+assert source.index(named_steps[prepare]) < source.index(named_steps[apply])
+assert "set -x" not in named_steps[prepare]
 
-step = named_steps[preflight]
-assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in step
-assert "VOICE_K8S_NAMESPACE: ${{ vars.VOICE_K8S_NAMESPACE }}" in step
-assert "run: bash scripts/staging/preflight-resend-key.sh" in step
-assert "set -x" not in step
-assert "echo" not in step
-assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in named_steps[
-    "Apply staging manifests"
-], "preflight and apply must receive the same secure YAML artifact"
-def evaluate_observability_expression(expression: str, event_name: str, variable: str):
-    expression = expression.replace("github.event_name", "event_name")
-    expression = expression.replace("vars.VOICE_APPLY_OBSERVABILITY", "variable")
-    expression = expression.replace("vars.STAGING_OBSERVABILITY_SMOKE_ENABLED", "variable")
-    expression = expression.replace("&&", "and").replace("||", "or")
-    assert re.fullmatch(r"[\w\s'!=()]+", expression), "unexpected observability expression syntax"
-    result = eval(expression, {"__builtins__": {}}, {"event_name": event_name, "variable": variable})
-    return result is True or result == "true"
+import base64, copy, sys
+root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / "scripts/staging/nats-known-baseline"))
+sys.path.insert(0, str(root / "scripts/staging/nats-rollout-preservation"))
+import source_plan, source_plan_test, nonnats_plan
+transaction = (root / "scripts/staging/nats-rollout-preservation/transaction.py").read_text()
+assert transaction.index("nonnats_runtime.preflight(") < transaction.index("stage.fence()")
+for mode in ("full", "app-only", "images-only"):
+    kube, params = source_plan_test.fixture() if mode == "images-only" else source_plan_test.SourceTests().canonical_fixture(mode)
+    original = copy.deepcopy(kube.objects)
+    plan = source_plan.compile_plan(root, params, source_plan_test.decoder, kube)
+    mail = next(row for row in plan["checks"] if row["id"] == "auth-mail")
+    assert any(obj["name"] == "voice-app-secrets" and obj["desired"]["predicates"]["auth_mail"] for obj in mail["objects"])
+    assert kube.objects == original, "mail preflight must not mutate Secret authority"
+    kube.objects[("Secret", "voice-app-secrets")]["data"]["AUTH_RESEND_FROM"] = base64.b64encode(b"invalid-sender").decode()
+    try:
+        source_plan.compile_plan(root, params, source_plan_test.decoder, kube)
+    except nonnats_plan.PlanError:
+        pass
+    else:
+        raise AssertionError("invalid live mail authority passed canonical preflight")
 
-
-apply_step = named_steps["Apply staging manifests"]
-apply_expression = re.search(r"VOICE_APPLY_OBSERVABILITY: \${{ (.+?) }}", apply_step)
-assert apply_expression, "observability apply guard missing"
-smoke_step = named_steps["Observability smoke (optional)"]
-smoke_expression = re.search(r"if: (.+)\n", smoke_step)
-assert smoke_expression, "observability smoke guard missing"
-for expression in (apply_expression.group(1), smoke_expression.group(1)):
-    assert not evaluate_observability_expression(expression, "workflow_dispatch", "true"), (
-        "manual deploy must not touch the observability namespace"
-    )
-    assert evaluate_observability_expression(expression, "push", "true"), (
-        "reusable CI called from push must retain configured observability behavior"
-    )
-    assert evaluate_observability_expression(expression, "workflow_call", "true"), (
-        "direct reusable-call context must retain configured observability behavior"
-    )
-    assert not evaluate_observability_expression(expression, "push", "false"), (
-        "disabled observability variable must remain disabled"
-    )
+# Unsupported observability changes are rejected explicitly before the fence;
+# neither manual nor reusable deployment silently drops requested reconciliation.
+for mode in ("full", "app-only"):
+    kube, params = source_plan_test.SourceTests().canonical_fixture(mode)
+    params["apply_observability"] = True
+    try:
+        source_plan.compile_plan(root, params, source_plan_test.decoder, kube)
+    except nonnats_plan.PlanError as error:
+        assert "unsupported_enabled_observability" in str(error)
+    else:
+        raise AssertionError("requested unsupported observability was silently accepted")
 
 assert "validate_app_secret_only:" in source, "read-only dispatch input missing"
 assert "inputs.validate_app_secret_only != true" in source, "validation dispatch must skip deploy job"

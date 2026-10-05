@@ -359,16 +359,20 @@ class Staging:
             {'op':'test','path':annotation,'value':self.operation},
             {'op':'test','path':'/spec/template','value':self.snapshots['voice-user']['spec']['template']},
             {'op':'replace','path':'/spec/template','value':original}])
+        self.save({'kind':'user_cycle_restored','owner':self.operation})
         self.wait_ready('voice-user')
         for service in LEAVES: self.wait_ready('voice-'+service)
         self.scale('voice-gateway',1); self.wait_ready('voice-gateway')
+        self.release_marker()
+        return {'verified':True,'active_claim':self.final_claim['metadata']['name'],
+                'generation':self.expected['generation'],'user_cycle_restored':True}
+
+    def release_marker(self):
         marker=self.owned_marker()
         self.marker=self.kube.cas('configmap',marker,[
             {'op':'test','path':'/data/dataPVC','value':self.final_claim['metadata']['name']},
             {'op':'replace','path':'/data/phase','value':'active'},
             {'op':'remove','path':'/data/knownBaselineOperation'}])
-        return {'verified':True,'active_claim':self.final_claim['metadata']['name'],
-                'generation':self.expected['generation'],'user_cycle_restored':True}
 
     def refence(self):
         # Used only on an incomplete owned restart. No rollback, data replay,
