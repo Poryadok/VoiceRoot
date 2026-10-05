@@ -86,6 +86,99 @@ void main() {
     ),
   ];
 
+  testWidgets('shows list loading state until invites have loaded', (
+    tester,
+  ) async {
+    final invites = Completer<List<SpaceInvite>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: SpacePermissions.spaceManageInvites,
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => true),
+          spaceInvitesProvider('space-1').overrideWith((ref) => invites.future),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(SpaceInvitesSheet.sheetKey),
+        matching: find.byType(ListView),
+      ),
+      findsOneWidget,
+    );
+
+    invites.complete(<SpaceInvite>[]);
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(SpaceInvitesSheet.sheetKey)),
+    )!;
+    expect(find.text(l10n.spaceInvitesEmpty), findsOneWidget);
+  });
+
+  testWidgets('list error shows safe retry and recovers to the empty state', (
+    tester,
+  ) async {
+    var loadCount = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: SpacePermissions.spaceManageInvites,
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => true),
+          spaceInvitesProvider('space-1').overrideWith((ref) async {
+            loadCount++;
+            if (loadCount == 1) {
+              throw StateError('private invite transport diagnostic');
+            }
+            return <SpaceInvite>[];
+          }),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(SpaceInvitesSheet.sheetKey)),
+    )!;
+    expect(find.text(l10n.spaceInvitesLoadError), findsNWidgets(2));
+    expect(find.text(l10n.spaceInvitesRetry), findsOneWidget);
+    expect(
+      find.textContaining('private invite transport diagnostic'),
+      findsNothing,
+    );
+
+    await tester.tap(find.text(l10n.spaceInvitesRetry));
+    await tester.pumpAndSettle();
+
+    expect(loadCount, 2);
+    expect(find.text(l10n.spaceInvitesEmpty), findsOneWidget);
+  });
+
   testWidgets('SpaceInvitesSheet lists invites with copy and revoke actions', (
     tester,
   ) async {
