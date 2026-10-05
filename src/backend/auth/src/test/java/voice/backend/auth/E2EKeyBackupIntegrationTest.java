@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import app.voice.auth.v1.AuthServiceGrpc;
+import app.voice.auth.v1.DeleteE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.RegisterRequest;
@@ -66,6 +67,46 @@ class E2EKeyBackupIntegrationTest {
       var restored =
           authenticated.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance());
       assertThat(restored.getEncryptedBlob()).isEqualTo(encryptedBlob);
+    } finally {
+      channel.shutdownNow();
+      server.shutdownNow();
+    }
+  }
+
+  @Test
+  void deleteE2EKeyBackupIsAuthenticatedAccountOwnedAndIdempotent() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    Server server =
+        InProcessServerBuilder.forName(serverName)
+            .directExecutor()
+            .addService(ServerInterceptors.intercept(grpcService, new AuthorizationServerInterceptor()))
+            .build()
+            .start();
+    ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+    var client = AuthServiceGrpc.newBlockingStub(channel);
+    try {
+      var first = client.register(RegisterRequest.newBuilder()
+          .setEmail("e2e-backup-delete-first@example.com")
+          .setPassword("Correct horse battery staple").build()).getSession();
+      var second = client.register(RegisterRequest.newBuilder()
+          .setEmail("e2e-backup-delete-second@example.com")
+          .setPassword("Correct horse battery staple").build()).getSession();
+      var firstClient = withBearer(client, first.getAccessToken());
+      var secondClient = withBearer(client, second.getAccessToken());
+      firstClient.putE2EKeyBackup(PutE2EKeyBackupRequest.newBuilder()
+          .setEncryptedBlob("opaque-first-backup").build());
+      secondClient.putE2EKeyBackup(PutE2EKeyBackupRequest.newBuilder()
+          .setEncryptedBlob("opaque-second-backup").build());
+
+      firstClient.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance());
+      assertThatThrownBy(() -> firstClient.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance()))
+          .isInstanceOf(StatusRuntimeException.class);
+      assertThat(secondClient.getE2EKeyBackup(GetE2EKeyBackupRequest.getDefaultInstance())
+          .getEncryptedBlob()).isEqualTo("opaque-second-backup");
+      firstClient.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance());
+
+      assertThatThrownBy(() -> client.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance()))
+          .isInstanceOf(StatusRuntimeException.class);
     } finally {
       channel.shutdownNow();
       server.shutdownNow();

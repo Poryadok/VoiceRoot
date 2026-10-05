@@ -3216,4 +3216,42 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Начать';
+
+  @override
+  String get e2eBackupStatusChecking => 'Проверяем резервную копию ключей…';
+
+  @override
+  String get e2eBackupStatusPresent =>
+      'В этом аккаунте доступна зашифрованная резервная копия ключей.';
+
+  @override
+  String get e2eBackupStatusAbsent =>
+      'В этом аккаунте нет сохранённой зашифрованной копии ключей.';
+
+  @override
+  String get e2eBackupActionFailed =>
+      'Не удалось обновить зашифрованную копию ключей. Попробуйте ещё раз.';
+
+  @override
+  String get e2eBackupRestoreFailed =>
+      'Не удалось восстановить копию. Проверьте пароль и попробуйте ещё раз.';
+
+  @override
+  String get e2eBackupChange => 'Изменить пароль копии';
+
+  @override
+  String get e2eBackupDeleteTitle => 'Удалить зашифрованную копию?';
+
+  @override
+  String get e2eBackupDeleteConfirm =>
+      'Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.';
+
+  @override
+  String get e2eBackupDelete => 'Удалить копию';
+
+  @override
+  String get e2eBackupRestoreCta => 'Восстановить зашифрованную историю';
+
+  @override
+  String get e2eKeyBackupManage => 'Управление резервной копией ключей';
 }

@@ -1316,5 +1316,16 @@
   "onboardingMatchmakingTry": "Попробовать",
   "onboardingWrapUpTitle": "Готово!",
   "onboardingWrapUpBody": "Ты разобрался с основами! Если что-то непонятно — раздел помощи всегда в настройках.",
-  "onboardingWrapUpStart": "Начать"
+  "onboardingWrapUpStart": "Начать",
+  "e2eBackupStatusChecking": "Проверяем резервную копию ключей…",
+  "e2eBackupStatusPresent": "В этом аккаунте доступна зашифрованная резервная копия ключей.",
+  "e2eBackupStatusAbsent": "В этом аккаунте нет сохранённой зашифрованной копии ключей.",
+  "e2eBackupActionFailed": "Не удалось обновить зашифрованную копию ключей. Попробуйте ещё раз.",
+  "e2eBackupRestoreFailed": "Не удалось восстановить копию. Проверьте пароль и попробуйте ещё раз.",
+  "e2eBackupChange": "Изменить пароль копии",
+  "e2eBackupDeleteTitle": "Удалить зашифрованную копию?",
+  "e2eBackupDeleteConfirm": "Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.",
+  "e2eBackupDelete": "Удалить копию",
+  "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
+  "e2eKeyBackupManage": "Управление резервной копией ключей"
 }

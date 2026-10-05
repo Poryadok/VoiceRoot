@@ -1415,5 +1415,16 @@
   "onboardingMatchmakingTry": "Try it",
   "onboardingWrapUpTitle": "You are all set",
   "onboardingWrapUpBody": "You know the basics! If something is unclear — Help is always available in Settings.",
-  "onboardingWrapUpStart": "Start"
+  "onboardingWrapUpStart": "Start",
+  "e2eBackupStatusChecking": "Checking encrypted key backup…",
+  "e2eBackupStatusPresent": "Encrypted key backup is available for this account.",
+  "e2eBackupStatusAbsent": "No encrypted key backup is saved for this account.",
+  "e2eBackupActionFailed": "We couldn't update the encrypted key backup. Try again.",
+  "e2eBackupRestoreFailed": "We couldn't restore this backup. Check the password and try again.",
+  "e2eBackupChange": "Change backup password",
+  "e2eBackupDeleteTitle": "Delete encrypted backup?",
+  "e2eBackupDeleteConfirm": "This deletes the encrypted backup from this account. Your keys on this device will stay intact.",
+  "e2eBackupDelete": "Delete backup",
+  "e2eBackupRestoreCta": "Restore encrypted history",
+  "e2eKeyBackupManage": "Manage encrypted key backup"
 }

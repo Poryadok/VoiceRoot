@@ -40,6 +40,7 @@ const (
 	AuthService_SetAccountStatus_FullMethodName                     = "/voice.auth.v1.AuthService/SetAccountStatus"
 	AuthService_PutE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/PutE2EKeyBackup"
 	AuthService_GetE2EKeyBackup_FullMethodName                      = "/voice.auth.v1.AuthService/GetE2EKeyBackup"
+	AuthService_DeleteE2EKeyBackup_FullMethodName                   = "/voice.auth.v1.AuthService/DeleteE2EKeyBackup"
 	AuthService_ResolvePhoneHashes_FullMethodName                   = "/voice.auth.v1.AuthService/ResolvePhoneHashes"
 	AuthService_FilterDeletedAccountIDs_FullMethodName              = "/voice.auth.v1.AuthService/FilterDeletedAccountIDs"
 	AuthService_GetGuestReminder_FullMethodName                     = "/voice.auth.v1.AuthService/GetGuestReminder"
@@ -88,6 +89,7 @@ type AuthServiceClient interface {
 	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(ctx context.Context, in *PutE2EKeyBackupRequest, opts ...grpc.CallOption) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBackupRequest, opts ...grpc.CallOption) (*GetE2EKeyBackupResponse, error)
+	DeleteE2EKeyBackup(ctx context.Context, in *DeleteE2EKeyBackupRequest, opts ...grpc.CallOption) (*DeleteE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error)
 	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
@@ -326,6 +328,16 @@ func (c *authServiceClient) GetE2EKeyBackup(ctx context.Context, in *GetE2EKeyBa
 	return out, nil
 }
 
+func (c *authServiceClient) DeleteE2EKeyBackup(ctx context.Context, in *DeleteE2EKeyBackupRequest, opts ...grpc.CallOption) (*DeleteE2EKeyBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteE2EKeyBackupResponse)
+	err := c.cc.Invoke(ctx, AuthService_DeleteE2EKeyBackup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authServiceClient) ResolvePhoneHashes(ctx context.Context, in *ResolvePhoneHashesRequest, opts ...grpc.CallOption) (*ResolvePhoneHashesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolvePhoneHashesResponse)
@@ -462,6 +474,7 @@ type AuthServiceServer interface {
 	// See docs/features/encryption.md — encrypted key backup (opaque blob).
 	PutE2EKeyBackup(context.Context, *PutE2EKeyBackupRequest) (*PutE2EKeyBackupResponse, error)
 	GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error)
+	DeleteE2EKeyBackup(context.Context, *DeleteE2EKeyBackupRequest) (*DeleteE2EKeyBackupResponse, error)
 	// Internal — Social SyncPhoneContacts: hashed phone → primary profile_id (accounts.phone).
 	ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error)
 	// Internal — Chat ListChats hides DMs whose peer account is soft-deleted (auth-and-contacts.md).
@@ -552,6 +565,9 @@ func (UnimplementedAuthServiceServer) PutE2EKeyBackup(context.Context, *PutE2EKe
 }
 func (UnimplementedAuthServiceServer) GetE2EKeyBackup(context.Context, *GetE2EKeyBackupRequest) (*GetE2EKeyBackupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetE2EKeyBackup not implemented")
+}
+func (UnimplementedAuthServiceServer) DeleteE2EKeyBackup(context.Context, *DeleteE2EKeyBackupRequest) (*DeleteE2EKeyBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteE2EKeyBackup not implemented")
 }
 func (UnimplementedAuthServiceServer) ResolvePhoneHashes(context.Context, *ResolvePhoneHashesRequest) (*ResolvePhoneHashesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResolvePhoneHashes not implemented")
@@ -982,6 +998,24 @@ func _AuthService_GetE2EKeyBackup_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_DeleteE2EKeyBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteE2EKeyBackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).DeleteE2EKeyBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_DeleteE2EKeyBackup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).DeleteE2EKeyBackup(ctx, req.(*DeleteE2EKeyBackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthService_ResolvePhoneHashes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResolvePhoneHashesRequest)
 	if err := dec(in); err != nil {
@@ -1252,6 +1286,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetE2EKeyBackup",
 			Handler:    _AuthService_GetE2EKeyBackup_Handler,
+		},
+		{
+			MethodName: "DeleteE2EKeyBackup",
+			Handler:    _AuthService_DeleteE2EKeyBackup_Handler,
 		},
 		{
 			MethodName: "ResolvePhoneHashes",

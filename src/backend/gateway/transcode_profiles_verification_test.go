@@ -61,6 +61,14 @@ type recordingPhase13AuthGRPC struct {
 	lastSwitch  *authv1.SwitchActiveProfileRequest
 	lastConvert *authv1.ConvertGuestRequest
 	lastRevoke  *authv1.RevokeSessionRequest
+	deleteBackupCalls int
+}
+
+func (s *recordingPhase13AuthGRPC) DeleteE2EKeyBackup(
+	_ context.Context, _ *authv1.DeleteE2EKeyBackupRequest,
+) (*authv1.DeleteE2EKeyBackupResponse, error) {
+	s.deleteBackupCalls++
+	return &authv1.DeleteE2EKeyBackupResponse{}, nil
 }
 
 func (s *recordingPhase13AuthGRPC) ConvertGuest(_ context.Context, req *authv1.ConvertGuestRequest) (*authv1.ConvertGuestResponse, error) {
@@ -387,6 +395,26 @@ func TestTranscodePhase13_LinkedAccountsList(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.Contains(t, resp.Body.String(), "twitch")
+}
+
+func TestTranscodeE2EKeyBackupDelete(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingPhase13AuthGRPC{}
+	conn, cleanup := startBufconnAuthConn(t, rec)
+	t.Cleanup(cleanup)
+	h := newGatewayForContract(t, gatewayTestOptions{
+		tokenClaims: map[string]tokenClaims{
+			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+		},
+		transcoder: &transcoder{clients: grpcClients{auth: authv1.NewAuthServiceClient(conn)}},
+	})
+
+	resp := performRequest(h, http.MethodDelete, "/api/v1/auth/e2e-key-backup", "", map[string]string{
+		"Authorization": "Bearer valid-user-token",
+	})
+	require.Equal(t, http.StatusNoContent, resp.Code, "body=%s", resp.Body.String())
+	require.Equal(t, 1, rec.deleteBackupCalls)
 }
 
 // TestTranscodePhase13_LinkedAccountOAuthStart documents Twitch OAuth link initiation via Auth REST.

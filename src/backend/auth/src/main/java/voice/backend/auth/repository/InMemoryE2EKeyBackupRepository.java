@@ -17,4 +17,9 @@ public class InMemoryE2EKeyBackupRepository implements E2EKeyBackupRepository {
   public Optional<E2EKeyBackupRecord> get(UUID accountId) {
     return Optional.ofNullable(storage.get(accountId));
   }
+
+  @Override
+  public void delete(UUID accountId) {
+    storage.remove(accountId);
+  }
 }

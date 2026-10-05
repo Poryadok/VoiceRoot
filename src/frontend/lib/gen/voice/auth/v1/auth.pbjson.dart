@@ -792,6 +792,24 @@ final $typed_data.Uint8List getE2EKeyBackupResponseDescriptor = $convert.base64D
     'lwdGVkQmxvYhIoCg1wYXNzd29yZF9oaW50GAIgASgJSABSDHBhc3N3b3JkSGludIgBAUIQCg5f'
     'cGFzc3dvcmRfaGludA==');
 
+@$core.Deprecated('Use deleteE2EKeyBackupRequestDescriptor instead')
+const DeleteE2EKeyBackupRequest$json = {
+  '1': 'DeleteE2EKeyBackupRequest',
+};
+
+/// Descriptor for `DeleteE2EKeyBackupRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteE2EKeyBackupRequestDescriptor =
+    $convert.base64Decode('ChlEZWxldGVFMkVLZXlCYWNrdXBSZXF1ZXN0');
+
+@$core.Deprecated('Use deleteE2EKeyBackupResponseDescriptor instead')
+const DeleteE2EKeyBackupResponse$json = {
+  '1': 'DeleteE2EKeyBackupResponse',
+};
+
+/// Descriptor for `DeleteE2EKeyBackupResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deleteE2EKeyBackupResponseDescriptor =
+    $convert.base64Decode('ChpEZWxldGVFMkVLZXlCYWNrdXBSZXNwb25zZQ==');
+
 @$core.Deprecated('Use resolvePhoneHashesRequestDescriptor instead')
 const ResolvePhoneHashesRequest$json = {
   '1': 'ResolvePhoneHashesRequest',
