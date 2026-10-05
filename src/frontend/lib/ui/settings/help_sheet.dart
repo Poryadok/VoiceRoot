@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../settings/voice_input_settings.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_layout.dart';
 
 /// Static help / FAQ (docs/features/onboarding.md — no tutorial replay).
 class HelpSheet extends ConsumerWidget {
@@ -27,12 +29,15 @@ class HelpSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final inputSettings = ref.watch(voiceInputSettingsProvider);
+    final showShortcuts = !VoiceLayout.isNarrow(
+      MediaQuery.sizeOf(context).width,
+    );
     final shortcuts = <_ShortcutItem>[
       _ShortcutItem('Ctrl+K', l10n.settingsHelpShortcutSearch),
       _ShortcutItem('Ctrl+,', l10n.settingsHelpShortcutSettings),
-      _ShortcutItem('Alt+↑ / Alt+↓', l10n.settingsHelpShortcutUnreadChats),
+      _ShortcutItem('Alt+Up / Alt+Down', l10n.settingsHelpShortcutUnreadChats),
       _ShortcutItem('Escape', l10n.settingsHelpShortcutFocusComposer),
-      _ShortcutItem('↑ / ↓', l10n.settingsHelpShortcutSelectMessage),
+      _ShortcutItem('Up / Down', l10n.settingsHelpShortcutSelectMessage),
       _ShortcutItem('Enter', l10n.settingsHelpShortcutMessageActions),
       _ShortcutItem('R', l10n.settingsHelpShortcutReply),
       _ShortcutItem('E', l10n.settingsHelpShortcutReact),
@@ -47,68 +52,92 @@ class HelpSheet extends ConsumerWidget {
       );
     }
 
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * .9,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    return Shortcuts(
+      shortcuts: {
+        SingleActivator(LogicalKeyboardKey.escape): const _CloseHelpIntent(),
+      },
+      child: Actions(
+        actions: {
+          _CloseHelpIntent: CallbackAction<_CloseHelpIntent>(
+            onInvoke: (_) {
+              Navigator.of(context).maybePop();
+              return null;
+            },
+          ),
+        },
+        child: SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .9,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      l10n.settingsHelpTitle,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.settingsHelpTitle,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      Focus(
+                        autofocus: true,
+                        child: IconButton(
+                          tooltip: l10n.settingsHelpCloseLabel,
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    tooltip: l10n.settingsHelpCloseLabel,
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.close),
+                  const SizedBox(height: 16),
+                  _HelpItem(
+                    title: l10n.settingsHelpChatsTitle,
+                    body: l10n.settingsHelpChatsBody,
+                  ),
+                  _HelpItem(
+                    title: l10n.settingsHelpSpacesTitle,
+                    body: l10n.settingsHelpSpacesBody,
+                  ),
+                  _HelpItem(
+                    title: l10n.settingsHelpMatchmakingTitle,
+                    body: l10n.settingsHelpMatchmakingBody,
+                  ),
+                  _HelpItem(
+                    title: l10n.settingsHelpVoiceTitle,
+                    body: l10n.settingsHelpVoiceBody,
+                  ),
+                  if (showShortcuts) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.settingsHelpShortcutsTitle,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    for (final shortcut in shortcuts)
+                      _ShortcutRow(shortcut: shortcut),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.settingsHelpFooter,
+                    style: TextStyle(color: voice.textSecondary, fontSize: 13),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              _HelpItem(
-                title: l10n.settingsHelpChatsTitle,
-                body: l10n.settingsHelpChatsBody,
-              ),
-              _HelpItem(
-                title: l10n.settingsHelpSpacesTitle,
-                body: l10n.settingsHelpSpacesBody,
-              ),
-              _HelpItem(
-                title: l10n.settingsHelpMatchmakingTitle,
-                body: l10n.settingsHelpMatchmakingBody,
-              ),
-              _HelpItem(
-                title: l10n.settingsHelpVoiceTitle,
-                body: l10n.settingsHelpVoiceBody,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.settingsHelpShortcutsTitle,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              for (final shortcut in shortcuts)
-                _ShortcutRow(shortcut: shortcut),
-              const SizedBox(height: 8),
-              Text(
-                l10n.settingsHelpFooter,
-                style: TextStyle(color: voice.textSecondary, fontSize: 13),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _CloseHelpIntent extends Intent {
+  const _CloseHelpIntent();
 }
 
 class _ShortcutItem {
