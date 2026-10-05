@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -73,9 +74,9 @@ void main() {
           ),
           authorizationHeaderProvider.overrideWithValue(auth),
           voiceBotsClientProvider.overrideWithValue(botsClient),
-          chatTypeForChatProvider('chat-1').overrideWith(
-            (ref) => 'CHAT_TYPE_CHANNEL',
-          ),
+          chatTypeForChatProvider(
+            'chat-1',
+          ).overrideWith((ref) => 'CHAT_TYPE_CHANNEL'),
         ],
         child: MaterialApp(
           theme: voiceTestTheme(),
@@ -111,4 +112,91 @@ void main() {
     expect(calls, greaterThanOrEqualTo(2));
     expect(find.text('CS2'), findsOneWidget);
   });
+
+  testWidgets(
+    'stale autocomplete does not retry or update after session switch',
+    (tester) async {
+      final sessionAuthorization = StateProvider<String?>((ref) => auth);
+      final response = Completer<http.Response>();
+      final requestStarted = Completer<void>();
+      var calls = 0;
+      final mock = MockClient((req) {
+        expect(req.url.path, '/api/v1/bots/autocomplete');
+        calls++;
+        requestStarted.complete();
+        return response.future;
+      });
+      final botsClient = VoiceBotsClient(
+        gateway: gatewayHttpForTest(mock, config: config),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authorizationHeaderProvider.overrideWith(
+              (ref) => ref.watch(sessionAuthorization),
+            ),
+            voiceBotsClientProvider.overrideWithValue(botsClient),
+            chatTypeForChatProvider(
+              'chat-1',
+            ).overrideWith((ref) => 'CHAT_TYPE_CHANNEL'),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Consumer(
+              builder: (context, ref, _) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => showSlashCommandOptionsSheet(
+                      context: context,
+                      ref: ref,
+                      chatId: 'chat-1',
+                      command: command,
+                    ),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'cs');
+      await tester.pump(const Duration(milliseconds: 300));
+      await requestStarted.future;
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.text('open')),
+      );
+      container.read(sessionAuthorization.notifier).state =
+          'Bearer switched-session';
+      response.complete(
+        http.Response(
+          jsonEncode({
+            'choices': [
+              {'name': 'CS2', 'value': 'cs2'},
+            ],
+            'pending': true,
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(calls, 1, reason: 'the previous session must not issue retries');
+      expect(find.text('CS2'), findsNothing);
+    },
+  );
 }

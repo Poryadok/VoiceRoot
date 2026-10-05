@@ -14,6 +14,7 @@ import '../../state/bot_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../a11y/voice_focus_return.dart';
 
 /// Collects slash command option values; supports autocomplete for string options.
 Future<Map<String, dynamic>?> showSlashCommandOptionsSheet({
@@ -22,14 +23,13 @@ Future<Map<String, dynamic>?> showSlashCommandOptionsSheet({
   required String chatId,
   required BotSlashCommand command,
 }) {
+  final focusReturn = VoiceFocusReturn.capture();
   return showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     isScrollControlled: true,
-    builder: (ctx) => _SlashCommandOptionsSheet(
-      chatId: chatId,
-      command: command,
-    ),
-  );
+    builder: (ctx) =>
+        _SlashCommandOptionsSheet(chatId: chatId, command: command),
+  ).whenComplete(focusReturn.restore);
 }
 
 class _SlashCommandOptionsSheet extends ConsumerStatefulWidget {
@@ -54,7 +54,14 @@ class _SlashCommandOptionsSheetState
   final _attachmentNames = <String, String>{};
   Timer? _debounce;
   String? _autocompleteError;
+  String? _openedAuthorization;
   var _uploadingAttachment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _openedAuthorization = ref.read(authorizationHeaderProvider);
+  }
 
   @override
   void dispose() {
@@ -71,7 +78,7 @@ class _SlashCommandOptionsSheetState
 
   Future<void> _fetchAutocomplete(String optionName, String focused) async {
     final auth = ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    if (auth == null || auth != _openedAuthorization) return;
     final chatType =
         ref.read(chatTypeForChatProvider(widget.chatId)) ?? 'CHAT_TYPE_CHANNEL';
     final selected = Map<String, dynamic>.from(_values);
@@ -81,17 +88,20 @@ class _SlashCommandOptionsSheetState
     String? lastError;
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      final result = await ref.read(voiceBotsClientProvider).autocompleteOption(
-        authorization: auth,
-        chatId: widget.chatId,
-        chatType: chatType,
-        botId: widget.command.botId,
-        commandName: widget.command.fullCommandName,
-        optionName: optionName,
-        focusedValue: focused,
-        optionsJson: jsonEncode(selected),
-      );
-      if (!mounted) return;
+      if (!_isCurrentAuthorization(auth)) return;
+      final result = await ref
+          .read(voiceBotsClientProvider)
+          .autocompleteOption(
+            authorization: auth,
+            chatId: widget.chatId,
+            chatType: chatType,
+            botId: widget.command.botId,
+            commandName: widget.command.fullCommandName,
+            optionName: optionName,
+            focusedValue: focused,
+            optionsJson: jsonEncode(selected),
+          );
+      if (!_isCurrentAuthorization(auth)) return;
       switch (result) {
         case BotsApiOk(:final data):
           lastResult = data;
@@ -108,10 +118,11 @@ class _SlashCommandOptionsSheetState
       }
       if (attempt < maxAttempts - 1) {
         await Future<void>.delayed(retryDelay);
+        if (!_isCurrentAuthorization(auth)) return;
       }
     }
 
-    if (!mounted) return;
+    if (!_isCurrentAuthorization(auth)) return;
     setState(() {
       _suggestions[optionName] = lastResult?.choices ?? const [];
       _autocompleteError = lastError;
@@ -119,7 +130,7 @@ class _SlashCommandOptionsSheetState
   }
 
   void _onOptionChanged(BotSlashCommandOption option, String value) {
-    _values[option.name] = value;
+    setState(() => _values[option.name] = value);
     if (!option.autocomplete) return;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
@@ -130,14 +141,15 @@ class _SlashCommandOptionsSheetState
   Future<void> _pickAttachment(BotSlashCommandOption option) async {
     if (_uploadingAttachment) return;
     final auth = ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    if (auth == null || auth != _openedAuthorization) return;
 
     final picked = await openFile();
-    if (picked == null || !mounted) return;
+    if (picked == null || !_isCurrentAuthorization(auth)) return;
 
     setState(() => _uploadingAttachment = true);
     try {
       final bytes = await picked.readAsBytes();
+      if (!_isCurrentAuthorization(auth)) return;
       final chatType = ref.read(chatTypeForChatProvider(widget.chatId));
       final files = ref.read(voiceFilesClientProvider);
       final ticketResult = await files.requestUpload(
@@ -148,20 +160,26 @@ class _SlashCommandOptionsSheetState
         chatId: widget.chatId,
         chatType: chatType,
       );
-      if (ticketResult is! FilesApiOk<FileUploadTicket> || !mounted) return;
+      if (ticketResult is! FilesApiOk<FileUploadTicket> ||
+          !_isCurrentAuthorization(auth)) {
+        return;
+      }
       final ticket = ticketResult.data;
       final put = await files.putBytes(
         uploadUrl: ticket.presignedPutUrl,
         bytes: Uint8List.fromList(bytes),
         mimeType: picked.mimeType ?? 'application/octet-stream',
       );
-      if (put is! FilesApiOk<void> || !mounted) return;
+      if (put is! FilesApiOk<void> || !_isCurrentAuthorization(auth)) return;
       final confirmed = await files.confirmUpload(
         authorization: auth,
         fileId: ticket.fileId,
         bytes: Uint8List.fromList(bytes),
       );
-      if (confirmed is! FilesApiOk<FileMetadataData> || !mounted) return;
+      if (confirmed is! FilesApiOk<FileMetadataData> ||
+          !_isCurrentAuthorization(auth)) {
+        return;
+      }
       setState(() {
         _values[option.name] = ticket.fileId;
         _attachmentNames[option.name] = picked.name;
@@ -176,14 +194,46 @@ class _SlashCommandOptionsSheetState
   bool get _canSubmit {
     if (_uploadingAttachment) return false;
     for (final opt in widget.command.options) {
-      if (opt.required && (_values[opt.name]?.trim().isEmpty ?? true)) {
+      final value = _values[opt.name];
+      if (opt.required && (value == null || value.trim().isEmpty)) {
+        return false;
+      }
+      if (opt.type == 'integer' &&
+          value != null &&
+          value.trim().isNotEmpty &&
+          int.tryParse(value.trim()) == null) {
         return false;
       }
     }
     return true;
   }
 
-  Widget _buildOptionField(BotSlashCommandOption opt, AppLocalizations l10n) {
+  bool _isCurrentAuthorization(String authorization) =>
+      mounted && ref.read(authorizationHeaderProvider) == authorization;
+
+  Map<String, dynamic> _typedValues() {
+    final result = <String, dynamic>{};
+    for (final option in widget.command.options) {
+      final value = _values[option.name];
+      if (value == null) continue;
+      if (option.type == 'integer') {
+        if (value.trim().isNotEmpty) {
+          result[option.name] = int.parse(value.trim());
+        }
+      } else {
+        result[option.name] = option.type == 'boolean'
+            ? value == 'true'
+            : value;
+      }
+    }
+    return result;
+  }
+
+  Widget _buildOptionField(
+    BotSlashCommandOption opt,
+    AppLocalizations l10n, {
+    required bool autofocus,
+  }) {
     switch (opt.type) {
       case 'boolean':
         return SwitchListTile(
@@ -233,6 +283,7 @@ class _SlashCommandOptionsSheetState
           children: [
             TextField(
               controller: _controllerFor(opt.name),
+              autofocus: autofocus,
               keyboardType: opt.type == 'integer'
                   ? TextInputType.number
                   : TextInputType.text,
@@ -251,8 +302,10 @@ class _SlashCommandOptionsSheetState
                       label: Text(choice.name),
                       onPressed: () {
                         _controllerFor(opt.name).text = choice.value;
-                        _values[opt.name] = choice.value;
-                        setState(() => _suggestions[opt.name] = const []);
+                        setState(() {
+                          _values[opt.name] = choice.value;
+                          _suggestions[opt.name] = const [];
+                        });
                       },
                     ),
                 ],
@@ -266,6 +319,9 @@ class _SlashCommandOptionsSheetState
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
     final l10n = AppLocalizations.of(context)!;
+    final sessionMatches =
+        _openedAuthorization != null &&
+        ref.watch(authorizationHeaderProvider) == _openedAuthorization;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -290,18 +346,30 @@ class _SlashCommandOptionsSheetState
               ),
             ],
             const SizedBox(height: 12),
-            for (final opt in widget.command.options) ...[
-              _buildOptionField(opt, l10n),
+            for (
+              var index = 0;
+              index < widget.command.options.length;
+              index++
+            ) ...[
+              _buildOptionField(
+                widget.command.options[index],
+                l10n,
+                autofocus: index == 0,
+              ),
               const SizedBox(height: 8),
             ],
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: voice.profileAccent,
               ),
-              onPressed: _canSubmit
-                  ? () => Navigator.pop(context, Map<String, dynamic>.from(_values))
+              onPressed: _canSubmit && sessionMatches
+                  ? () => Navigator.pop(context, _typedValues())
                   : null,
               child: Text(l10n.slashCommandRun),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.commonCancel),
             ),
           ],
         ),
@@ -488,10 +556,7 @@ class _RoleOptionPicker extends ConsumerWidget {
           ),
           items: [
             for (final role in roles)
-              DropdownMenuItem(
-                value: role.id,
-                child: Text(role.name),
-              ),
+              DropdownMenuItem(value: role.id, child: Text(role.name)),
           ],
           onChanged: (v) {
             if (v != null) onChanged(v);
