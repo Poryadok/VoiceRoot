@@ -1155,6 +1155,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessagePin => 'Pin message';
 
   @override
+  String get chatPinnedMessagesTitle => 'Pinned messages';
+
+  @override
+  String get chatPinnedMessagesOpen => 'Open all pinned messages';
+
+  @override
+  String get chatPinnedMessagesHide => 'Hide pinned messages';
+
+  @override
+  String get chatPinnedMessagesRestore => 'Show pinned messages';
+
+  @override
+  String get chatPinnedTypePhoto => 'Photo';
+
+  @override
+  String get chatPinnedTypeVideo => 'Video';
+
+  @override
+  String get chatPinnedTypeFile => 'File';
+
+  @override
+  String get chatPinnedTypeVoice => 'Voice';
+
+  @override
+  String get chatPinnedTypeSticker => 'Sticker';
+
+  @override
+  String get chatPinnedTypeGif => 'GIF';
+
+  @override
+  String get chatPinnedTypeArticle => 'Article';
+
+  @override
+  String get chatPinnedTypeLocation => 'Location';
+
+  @override
+  String get chatPinnedTypeMusic => 'Music';
+
+  @override
+  String get chatPinnedTypeVideoMessage => 'Video message';
+
+  @override
   String get chatMessageUnpin => 'Unpin message';
 
   @override
