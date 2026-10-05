@@ -246,15 +246,15 @@ jobs:
 
       - name: Prepare cold backup and isolated proof using installed root bridge
         id: preservation
-        env: &rollout_env
-          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+        env:
+          VOICE_NATS_ROLLOUT_OPERATION: ""
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
           VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
-          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
-          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_MODE: ${{ inputs.deploy_mode }}
           ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
           ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
-          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ""
           VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
           VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
           STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
@@ -264,8 +264,8 @@ jobs:
           STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
           STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
-          ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
+          ROLLOUT_ARTIFACT_ID: ""
+          ROLLOUT_CLAIM_RV: ""
           ROLLOUT_ACTION: --bridge-prepare
         run: &protected_rollout_runner |
           set +x
@@ -331,39 +331,147 @@ jobs:
 
       - name: Verify complete off-node ciphertext readback and authorize paused apply
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
           ROLLOUT_ACTION: --bridge-authorize
         run: *protected_rollout_runner
 
       - name: Configure kubectl using protected captured code
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
           ROLLOUT_ACTION: --configure
         run: *protected_rollout_runner
 
       - name: Verify root-established preservation authorization
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
           ROLLOUT_ACTION: --preflight
         run: *protected_rollout_runner
 
       - name: Apply exact frozen target while all consumers remain paused
         id: paused_apply
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ""
           ROLLOUT_ACTION: --apply
         run: *protected_rollout_runner
 
       - name: Prove unchanged store and resume through installed root bridge
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
           ROLLOUT_ACTION: --bridge-finish
         run: *protected_rollout_runner
 
       - name: Record exact operation status after failure
         if: failure() && steps.preservation.outputs.operation != ''
         env:
-          <<: *rollout_env
+          VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
+          ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
+          VOICE_IMAGE_TAG: ${{ steps.preservation.outputs.source_sha || inputs.image_tag }}
+          DEPLOY_MODE: ${{ steps.preservation.outputs.deploy_mode || inputs.deploy_mode }}
+          ROLLOUT_CHANGED_JSON: ${{ inputs.changed_services }}
+          ROLLOUT_NEEDS_FULL_ROLLOUT: ${{ inputs.needs_full_rollout }}
+          ROLLOUT_BOUND_CHANGED_SERVICES: ${{ steps.preservation.outputs.changed_services }}
+          VOICE_NATS_ACL_PROOF_SHA: ${{ vars.VOICE_NATS_ACL_PROOF_SHA }}
+          VOICE_NATS_ACL_PROOF_GENERATION: ${{ vars.VOICE_NATS_ACL_PROOF_GENERATION }}
+          STAGING_KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ vars.STAGING_SSH_HOST }}
+          STAGING_SSH_USER: ${{ vars.STAGING_SSH_USER }}
+          STAGING_SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+          STAGING_DEPLOY_VIA_SSH: ${{ vars.STAGING_DEPLOY_VIA_SSH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROLLOUT_ARTIFACT_ID: ${{ steps.encrypted_backup.outputs.artifact-id }}
+          ROLLOUT_CLAIM_RV: ${{ steps.paused_apply.outputs.claim_rv }}
           ROLLOUT_ACTION: --bridge-status
         run: *protected_rollout_runner
 

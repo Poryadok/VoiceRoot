@@ -13,6 +13,31 @@ import root_cli
 import bridge_root
 
 class IntegrationTests(unittest.TestCase):
+    def test_workflows_use_supported_yaml_aliases_without_merge_keys(self):
+        import yaml
+        root = Path(__file__).resolve().parents[3]
+        def validate(node):
+            self.assertNotEqual(node.tag, 'tag:yaml.org,2002:merge')
+            if isinstance(node, yaml.MappingNode):
+                for key, value in node.value:
+                    self.assertNotEqual(key.value, '<<')
+                    validate(key); validate(value)
+            elif isinstance(node, yaml.SequenceNode):
+                for value in node.value: validate(value)
+        for name in ('ci.yml', 'staging-deploy.yml'):
+            validate(yaml.compose((root / '.github/workflows' / name).read_text()))
+        workflow = yaml.safe_load((root / '.github/workflows/staging-deploy.yml').read_text())
+        steps = workflow['jobs']['deploy']['steps']
+        prepare = next(s for s in steps if s.get('id') == 'preservation')
+        self.assertEqual(prepare['env']['VOICE_NATS_ROLLOUT_OPERATION'], '')
+        self.assertEqual(prepare['env']['VOICE_IMAGE_TAG'], '${{ inputs.image_tag }}')
+        self.assertEqual(prepare['env']['ROLLOUT_ARTIFACT_ID'], '')
+        apply = next(s for s in steps if s.get('id') == 'paused_apply')
+        self.assertEqual(apply['env']['ROLLOUT_CLAIM_RV'], '')
+        finish = next(s for s in steps if s.get('env', {}).get('ROLLOUT_ACTION') == '--bridge-finish')
+        self.assertEqual(finish['env']['ROLLOUT_CLAIM_RV'], '${{ steps.paused_apply.outputs.claim_rv }}')
+        self.assertEqual(finish['env']['ROLLOUT_ARTIFACT_ID'], '${{ steps.encrypted_backup.outputs.artifact-id }}')
+
     def test_idle_distinguishes_verified_launcher_capture_from_operation(self):
         import hashlib,guard
         with tempfile.TemporaryDirectory() as directory:

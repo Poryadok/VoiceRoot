@@ -32,7 +32,7 @@ These are existing endpoint/infra intentions, not application or NATS secrets.
 Use the configured values; placeholder domains are not a valid deployment plan.
 
 For the reviewed bundle SHA256
-`3186fad5d736be6e22086bb07f0ea112f8a6d1d39f884b48e5f2cc18f61152bd`
+`88436b838ebec0f28f9e54dcba6726d1fd4b847ef24d5cef059c39f1a1eb223b`
 (9871360 bytes), run this exact command in the human root shell. It captures and
 checks the launcher bytes before executing that captured content; it does not
 execute the mutable pmd-owned launcher path.
@@ -53,7 +53,7 @@ try:
         raise SystemExit('LAUNCHER_CUSTODY=BLOCKED')
     raw=os.read(fd,4350);after=os.fstat(fd)
     fields=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
-    if fields(before)!=fields(after) or len(raw)!=4349 or hashlib.sha256(raw).hexdigest()!='e976ed8e0ec0f201e8520212fb2129819bc789b829c91a26ca388b5266e442c4':
+    if fields(before)!=fields(after) or len(raw)!=4349 or hashlib.sha256(raw).hexdigest()!='275b7f98e320e4903e999bfb649d31eb34d77c06dd3c1bc7d0816dae518b8a36':
         raise SystemExit('LAUNCHER_SHA256=BLOCKED')
 finally:
     os.close(fd)
@@ -207,3 +207,11 @@ redelivery/pending ACK and an ephemeral, complete native/census equality and
 restored known payloads. This does not prove an actual staging Kubernetes
 release. Actual rollout activation and before/after receipt are still required
 after installation and review.
+
+A completed CI failure is eligible only when the exact `deploy-staging / deploy`
+job is the sole failed job, every current-attempt job is terminal and bound to
+the same run/head/attempt, and both required authority jobs succeeded. Only
+fixed optional branch jobs may be skipped; missing, duplicate, cancelled,
+timed-out, spoofed deployment names or any failed build reject approval. This
+permits first installation recovery after a missing-helper deployment failure
+without accepting a failed build as an approved source.

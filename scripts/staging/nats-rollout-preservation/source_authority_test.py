@@ -27,7 +27,7 @@ class SourceTests(unittest.TestCase):
             'repository': self.repo, 'head_repository': self.repo, 'status': 'completed', 'conclusion': 'success',
             'event': 'push', 'path': '.github/workflows/ci.yml', 'run_attempt': 1}
         now = datetime.now(timezone.utc)
-        self.jobs = [{'id': i, 'run_id': 123, 'head_sha': SHA, 'name': name, 'status': 'completed', 'conclusion': 'success',
+        self.jobs = [{'id': i, 'run_id': 123, 'head_sha': SHA, 'run_attempt': 1, 'name': name, 'status': 'completed', 'conclusion': 'success',
             'started_at': (now-timedelta(seconds=30)).isoformat(), 'completed_at': now.isoformat()}
             for i, name in enumerate(('ci-gate','staging-stack-lock'), 1)]
         self.artifact = {'id': 99, 'name': 'staging-stack-lock', 'expired': False,
@@ -68,7 +68,7 @@ class SourceTests(unittest.TestCase):
             self.master_calls+=1
             data={'ref':'refs/heads/master','object':{'type':'commit','sha':'d'*40 if self.master_moved and self.master_calls>1 else SHA}}
         elif url.endswith('/actions/runs/123'): data=self.run
-        elif '/jobs?' in url: data={'total_count':2,'jobs':self.jobs}
+        elif '/jobs?' in url: data={'total_count':len(self.jobs),'jobs':self.jobs}
         elif url.endswith('/actions/runs/123/artifacts?per_page=100&page=1'): data={'total_count':1,'artifacts':[self.artifact]}
         elif url.endswith('/actions/artifacts/99'):
             data=copy.deepcopy(self.artifact)
@@ -102,6 +102,51 @@ class SourceTests(unittest.TestCase):
         self.assertTrue(receipt['images'])
         self.assertEqual((self.destination/'deploy/staging/services.yaml').read_bytes(),self.files['deploy/staging/services.yaml'])
         self.assertNotIn('private-token',json.dumps(receipt))
+
+    def failed_deploy_jobs(self):
+        self.run['conclusion'] = 'failure'
+        self.jobs.append(dict(self.jobs[0], id=3, name='deploy-staging / deploy', conclusion='failure'))
+
+    def test_completed_failure_only_exact_deployment_can_capture(self):
+        self.failed_deploy_jobs()
+        self.jobs.append(dict(self.jobs[0], id=4, name='backend-go-integration-pr', conclusion='skipped'))
+        self.assertTrue(self.capture()['verified'])
+
+    def test_completed_failure_incomplete_job_pagination_is_rejected(self):
+        self.failed_deploy_jobs()
+        original = self.fetch
+        def fetch(url, headers, limit, deadline, target=None):
+            raw, metadata = original(url, headers, limit, deadline, target)
+            if '/jobs?' in url:
+                value = json.loads(raw); value['total_count'] += 1
+                return json.dumps(value).encode(), metadata
+            return raw, metadata
+        with patch.object(module, '_fetch', fetch), self.assertRaises(module.SourceError):
+            module.capture_source('private-token', 123, SHA, self.destination)
+
+    def test_completed_failure_requires_complete_owned_terminal_jobs(self):
+        self.failed_deploy_jobs()
+        baseline = copy.deepcopy(self.jobs)
+        changes = [(2, 'name', 'deploy-staging / deployment-spoof'),
+                   (2, 'conclusion', 'cancelled'), (2, 'status', 'in_progress'),
+                   (2, 'run_attempt', 2), (2, 'run_id', 124), (2, 'head_sha', 'f'*40),
+                   (0, 'conclusion', 'failure')]
+        for index, key, value in changes:
+            self.jobs = copy.deepcopy(baseline); self.jobs[index][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(module.SourceError): self.capture()
+        for conclusion in ('failure', 'cancelled', 'timed_out', 'neutral', 'action_required', None):
+            self.jobs = copy.deepcopy(baseline)
+            self.jobs.append(dict(self.jobs[0], id=4, name='backend-auth', conclusion=conclusion))
+            with self.subTest(other=conclusion), self.assertRaises(module.SourceError): self.capture()
+        self.jobs = copy.deepcopy(baseline)
+        self.jobs.append(dict(self.jobs[0], id=4, name='backend-auth', conclusion='skipped'))
+        with self.assertRaises(module.SourceError): self.capture()
+        self.jobs = copy.deepcopy(baseline); self.jobs.pop(0)
+        with self.assertRaises(module.SourceError): self.capture()
+        self.jobs = copy.deepcopy(baseline); self.jobs.append(dict(self.jobs[0], id=4))
+        with self.assertRaises(module.SourceError): self.capture()
+        self.jobs = baseline; self.run['conclusion'] = 'cancelled'
+        with self.assertRaises(module.SourceError): self.capture()
 
     def test_wrong_ci_authority_job_states(self):
         for key,value in [('workflow_id',1),('head_sha','f'*40),('head_branch','feature'),('event','pull_request')]:

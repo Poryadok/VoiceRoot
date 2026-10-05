@@ -113,7 +113,7 @@ def _ci(headers, run_id, sha, repo, deadline):
             or run['repository']['id'] != repo['id'] or run['event'] != 'push'
             or run['path'].split('@', 1)[0] != '.github/workflows/ci.yml'
             or run['status'] not in ('in_progress', 'completed')
-            or run['status'] == 'completed' and run['conclusion'] != 'success'): _fail()
+            or run['status'] == 'completed' and run['conclusion'] not in ('success', 'failure')): _fail()
     attempt = run['run_attempt']
     if type(attempt) is not int or attempt <= 0: _fail()
     jobs = _pages(API + '/actions/runs/' + str(run_id) + '/attempts/' + str(attempt) + '/jobs', 'jobs', headers, deadline)
@@ -122,8 +122,29 @@ def _ci(headers, run_id, sha, repo, deadline):
         matches = [job for job in jobs if job['name'] == name]
         if len(matches) != 1: _fail()
         job = matches[0]
-        if job['run_id'] != run_id or job['head_sha'] != sha or job['status'] != 'completed' or job['conclusion'] != 'success': _fail()
+        if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
+                or job['status'] != 'completed' or job['conclusion'] != 'success'): _fail()
         required[name] = job
+    if run['status'] == 'completed' and run['conclusion'] == 'failure':
+        # Exact caller/callee IDs in ci.yml and staging-deploy.yml; no prefix aliases.
+        deployment = 'deploy-staging / deploy'
+        skipped_branches = {'backend-go-integration', 'local-ci-parity', 'backend-go-integration-pr',
+            'grafana-analytics-smoke', 'analytics-clickhouse-integration', 'ci-skip-gate',
+            'staging-images-promote'}
+        failed = []
+        names = set()
+        for job in jobs:
+            if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
+                    or job['status'] != 'completed' or job['name'] in names): _fail()
+            names.add(job['name'])
+            if job['conclusion'] == 'failure' and job['name'] == deployment:
+                failed.append(job)
+            elif job['conclusion'] == 'success':
+                continue
+            elif job['conclusion'] == 'skipped' and job['name'] in skipped_branches:
+                continue
+            else: _fail()
+        if len(failed) != 1: _fail()
     return run, required
 
 
