@@ -330,6 +330,7 @@ service AuthService {
   rpc ResolvePhoneHashes(ResolvePhoneHashesRequest) returns (ResolvePhoneHashesResponse);
   rpc PutE2EKeyBackup(PutE2EKeyBackupRequest) returns (PutE2EKeyBackupResponse); // encryption.md
   rpc GetE2EKeyBackup(GetE2EKeyBackupRequest) returns (GetE2EKeyBackupResponse);
+  rpc DeleteE2EKeyBackup(DeleteE2EKeyBackupRequest) returns (DeleteE2EKeyBackupResponse);
 }
 ```
 
@@ -551,10 +552,11 @@ promotion completes.
 |------|----------------------------|------------|
 | `PutE2EKeyBackup` | `PUT /api/v1/auth/e2e-key-backup` | Сохранить/обновить blob (`encrypted_blob`, опционально `password_hint`); `204 No Content` |
 | `GetE2EKeyBackup` | `GET /api/v1/auth/e2e-key-backup` | Получить blob для восстановления на новом устройстве; `404` до первого PUT |
+| `DeleteE2EKeyBackup` | `DELETE /api/v1/auth/e2e-key-backup` | Удалить blob текущего authenticated account; `204 No Content`, повторный DELETE безопасен, последующий GET возвращает `404` |
 
-- **Владение данными:** пароль и ключ расшифровки — только на клиенте; Auth хранит `encrypted_blob` как есть.
-- **Лимиты Gateway:** `E2EKeyBackupPut` 5/min, `E2EKeyBackupGet` 30/min (`ratelimit.go`).
-- **Клиент:** `VoiceE2eClient` + UI в `e2e_chat_settings.dart`; см. также [messaging-service.md](messaging-service.md) (key backup не в Messaging).
+- **Владение данными:** пароль и ключ расшифровки — только на клиенте; Auth хранит `encrypted_blob` как есть. Delete выводит account только из проверенных Auth claims, не принимает caller ID, и удаляет только серверную строку этого account; локальные Signal keys остаются на устройстве.
+- **Лимиты Gateway:** `E2EKeyBackupPut` и DELETE используют общий лимит изменяющих состояние запросов — 5/min; `E2EKeyBackupGet` — 30/min (`ratelimit.go`).
+- **Клиент:** `VoiceE2eClient`; управление доступно через Settings → Security, а плейсхолдер недоступной E2E-истории ведёт к тому же экрану восстановления. Перед локальным импортом клиент проверяет версию backup, совпадение profile ID и актуальность сессии; после асинхронного импорта повторно проверяет сессию перед загрузкой pre-key bundle. См. также [messaging-service.md](messaging-service.md) (key backup не в Messaging).
 
 ## Модель данных
 
