@@ -4,16 +4,38 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 source "${ROOT}/scripts/ci/compose-fcm-diagnostic-lib.sh"
-bash "${ROOT}/scripts/ci/compose-fcm-diagnostic-lib-test.sh"
+if bash "${ROOT}/scripts/ci/compose-fcm-diagnostic-lib-test.sh"; then
+  printf 'compose_e2e_pre_echo_stage=diagnostic_contract status=passed exit=0\n'
+else
+  contract_exit=$?
+  printf 'compose_e2e_pre_echo_stage=diagnostic_contract status=failed exit=%d\n' "${contract_exit}"
+  exit "${contract_exit}"
+fi
 MANIFEST="${ROOT}/.github/ci/e2e-features.yml"
 export VOICE_RUN_LIVE_COMPOSE="${VOICE_RUN_LIVE_COMPOSE:-true}"
 export VOICE_API_BASE_URL="${VOICE_API_BASE_URL:-http://127.0.0.1:18080}"
 export VOICE_REPO_ROOT="${ROOT}"
 
 mapfile -t GATEWAY_TESTS < <(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_gateway)
+gateway_manifest_pid=$!
+if wait "${gateway_manifest_pid}"; then
+  printf 'compose_e2e_pre_echo_stage=gateway_manifest status=completed exit=0\n'
+else
+  gateway_manifest_exit=$?
+  printf 'compose_e2e_pre_echo_stage=gateway_manifest status=failed exit=%d\n' "${gateway_manifest_exit}"
+fi
+
 mapfile -t FLUTTER_TESTS < <(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" smoke_flutter)
+flutter_manifest_pid=$!
+if wait "${flutter_manifest_pid}"; then
+  printf 'compose_e2e_pre_echo_stage=flutter_manifest status=completed exit=0\n'
+else
+  flutter_manifest_exit=$?
+  printf 'compose_e2e_pre_echo_stage=flutter_manifest status=failed exit=%d\n' "${flutter_manifest_exit}"
+fi
 
 if ((${#GATEWAY_TESTS[@]} == 0)); then
+  printf 'compose_e2e_pre_echo_stage=gateway_empty_list status=failed exit=1\n'
   echo "no smoke gateway tests in ${MANIFEST}" >&2
   exit 1
 fi
