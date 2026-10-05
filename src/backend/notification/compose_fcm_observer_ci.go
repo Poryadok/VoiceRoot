@@ -38,14 +38,16 @@ type composeFcmControl struct {
 }
 
 type composeFcmObserver struct {
-	path         string
-	mu           sync.Mutex
-	candidates   map[string]*composeFcmTrace
-	control      composeFcmControl
-	controlState composeFcmControlState
-	started      time.Time
-	emitted      bool
-	overflow     bool
+	path               string
+	mu                 sync.Mutex
+	candidates         map[string]*composeFcmTrace
+	control            composeFcmControl
+	controlState       composeFcmControlState
+	preControlStarted  time.Time
+	postControlStarted time.Time
+	emitted            bool
+	overflow           bool
+	ambiguous          bool
 }
 
 type composeFcmTrace struct {
@@ -69,6 +71,7 @@ type composeFcmTrace struct {
 	dispatcherReturns int
 	route             string
 	finished          bool
+	provisional       bool
 }
 
 func newComposeFcmObserver() *composeFcmObserver {
@@ -89,20 +92,37 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	c := o.control
-	if o.controlState == composeFcmControlInvalid ||
-		o.controlState == composeFcmControlValid && (c.ChatID != chatID || c.SenderProfileID != senderID || c.MessageID != "" && c.MessageID != messageID) {
-		return nil
-	}
-	now := time.Now()
-	if o.started.IsZero() {
-		o.started = now
-	}
-	if now.Sub(o.started) >= composeFcmWindow {
+	if o.controlState == composeFcmControlInvalid {
 		return nil
 	}
 	key := messageID + "\x00" + eventID
-	if existing := o.candidates[key]; existing != nil {
+	existing := o.candidates[key]
+	if existing != nil && (existing.chatID != chatID || existing.senderID != senderID) {
+		o.ambiguous = true
+		return nil
+	}
+	c := o.control
+	if o.controlState == composeFcmControlValid && (c.ChatID != chatID || c.SenderProfileID != senderID || c.MessageID != "" && c.MessageID != messageID) {
+		return nil
+	}
+	now := time.Now()
+	provisional := o.controlState == composeFcmControlUnread
+	if provisional {
+		if o.preControlStarted.IsZero() {
+			o.preControlStarted = now
+		}
+		if now.Sub(o.preControlStarted) >= composeFcmWindow {
+			return nil
+		}
+	} else {
+		if o.postControlStarted.IsZero() {
+			o.postControlStarted = now
+		}
+		if now.Sub(o.postControlStarted) >= composeFcmWindow {
+			return nil
+		}
+	}
+	if existing != nil {
 		if existing.attempts < 9999 {
 			existing.attempts++
 		}
@@ -112,7 +132,11 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 		o.overflow = true
 		return nil
 	}
-	trace := &composeFcmTrace{owner: o, messageID: messageID, eventID: eventID, chatID: chatID, senderID: senderID, target: c.RecipientID, attempts: 1,
+	target := ""
+	if !provisional {
+		target = c.RecipientID
+	}
+	trace := &composeFcmTrace{owner: o, messageID: messageID, eventID: eventID, chatID: chatID, senderID: senderID, target: target, attempts: 1, provisional: provisional,
 		memberOK: "unknown", present: "unknown", inbox: "unknown", basePush: "unknown", finalPush: "unknown", presence: "unknown", policy: "unknown", route: "unknown"}
 	o.candidates[key] = trace
 	return trace
@@ -129,7 +153,7 @@ func (o *composeFcmObserver) finish(trace *composeFcmTrace, routeResult string) 
 }
 
 func (t *composeFcmTrace) members(rows []chatmembers.Member, err error) {
-	if t == nil {
+	if t == nil || t.provisional {
 		return
 	}
 	t.owner.mu.Lock()
@@ -153,7 +177,7 @@ func (t *composeFcmTrace) members(rows []chatmembers.Member, err error) {
 }
 
 func (t *composeFcmTrace) base(decision delivery.DeliveryDecision) {
-	if t == nil {
+	if t == nil || t.provisional {
 		return
 	}
 	t.owner.mu.Lock()
@@ -162,7 +186,7 @@ func (t *composeFcmTrace) base(decision delivery.DeliveryDecision) {
 }
 
 func (t *composeFcmTrace) baseFor(decisions map[string]delivery.DeliveryDecision) {
-	if t == nil {
+	if t == nil || t.provisional {
 		return
 	}
 	decision, ok := decisions[t.target]
@@ -172,7 +196,7 @@ func (t *composeFcmTrace) baseFor(decisions map[string]delivery.DeliveryDecision
 }
 
 func (t *composeFcmTrace) finalFor(decisions map[string]delivery.DeliveryDecision) {
-	if t == nil {
+	if t == nil || t.provisional {
 		return
 	}
 	decision, ok := decisions[t.target]
@@ -192,7 +216,7 @@ func (t *composeFcmTrace) context(ctx context.Context) context.Context {
 }
 
 func (t *composeFcmTrace) Decision(profile uuid.UUID, basePush, finalPush bool, presence, policy string) {
-	if t == nil || profile.String() != t.recipientID() {
+	if t == nil || t.provisional || profile.String() != t.recipientID() {
 		return
 	}
 	t.owner.mu.Lock()
@@ -202,7 +226,7 @@ func (t *composeFcmTrace) Decision(profile uuid.UUID, basePush, finalPush bool, 
 }
 
 func (t *composeFcmTrace) FinalDecision(profile uuid.UUID, finalPush bool) {
-	if t == nil || profile.String() != t.recipientID() {
+	if t == nil || t.provisional || profile.String() != t.recipientID() {
 		return
 	}
 	t.owner.mu.Lock()
@@ -211,7 +235,7 @@ func (t *composeFcmTrace) FinalDecision(profile uuid.UUID, finalPush bool) {
 }
 
 func (t *composeFcmTrace) Tokens(profile uuid.UUID, rows, fcmEligible int, outcome string) {
-	if t == nil || profile.String() != t.recipientID() {
+	if t == nil || t.provisional || profile.String() != t.recipientID() {
 		return
 	}
 	t.owner.mu.Lock()
@@ -223,7 +247,7 @@ func (t *composeFcmTrace) Tokens(profile uuid.UUID, rows, fcmEligible int, outco
 }
 
 func (t *composeFcmTrace) DispatcherReturned(profile uuid.UUID, service string) {
-	if t == nil || profile.String() != t.recipientID() || service != "fcm" {
+	if t == nil || t.provisional || profile.String() != t.recipientID() || service != "fcm" {
 		return
 	}
 	t.owner.mu.Lock()
@@ -254,53 +278,98 @@ func (o *composeFcmObserver) collect() {
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
-		c, ok := o.readControl()
+		now := time.Now()
 		o.mu.Lock()
-		if !ok {
-			o.control = composeFcmControl{}
-			o.controlState = composeFcmControlInvalid
-			// Any candidates buffered before an invalid sample can no longer be
-			// uniquely attributed. A later valid sample may start a fresh window.
-			clear(o.candidates)
-			o.started = time.Time{}
-			o.overflow = false
-			o.mu.Unlock()
-			continue
-		}
-		o.control, o.controlState = c, composeFcmControlValid
-		if !o.started.IsZero() && time.Since(o.started) > composeFcmWindow {
-			if !ok || c.MessageID == "" {
-				o.emitUnknownLocked()
-				o.mu.Unlock()
-				return
-			}
-			if o.overflow {
-				o.printUnknownLocked("overflow")
-				o.mu.Unlock()
-				return
-			}
-			found, ambiguous := o.candidateForMessage(c.MessageID)
-			if ambiguous {
-				o.printUnknownLocked("ambiguous")
-			} else if found != nil && found.finished {
-				o.printTraceLocked(found)
-			} else {
-				o.emitUnknownLocked()
-			}
+		if o.expireLocked(now) {
 			o.mu.Unlock()
 			return
 		}
-		if c.MessageID == "" || o.emitted {
-			o.mu.Unlock()
-			continue
-		}
 		o.mu.Unlock()
+
+		c, ok := o.readControl()
+		sampledAt := time.Now()
+		o.mu.Lock()
+		continueCollecting := o.sampleControlLocked(c, ok, sampledAt)
+		o.mu.Unlock()
+		if !continueCollecting {
+			return
+		}
 	}
+}
+
+// sampleControlLocked applies one collector read; callers hold o.mu.
+func (o *composeFcmObserver) sampleControlLocked(c composeFcmControl, ok bool, sampledAt time.Time) bool {
+	if !ok {
+		o.control = composeFcmControl{}
+		o.controlState = composeFcmControlInvalid
+		// Any candidates observed across a sampled-invalid control cannot be
+		// uniquely attributed. A later valid sample starts a fresh window.
+		clear(o.candidates)
+		o.preControlStarted = time.Time{}
+		o.postControlStarted = time.Time{}
+		o.overflow = false
+		o.ambiguous = false
+		return true
+	}
+	if o.controlState == composeFcmControlUnread && !o.preControlStarted.IsZero() && sampledAt.Sub(o.preControlStarted) >= composeFcmWindow {
+		o.printUnknownLocked("expired")
+		return false
+	}
+	previousState := o.controlState
+	o.control, o.controlState = c, composeFcmControlValid
+	if previousState != composeFcmControlValid {
+		o.preControlStarted = time.Time{}
+		if o.postControlStarted.IsZero() {
+			o.postControlStarted = sampledAt
+		}
+	}
+	return !o.expireLocked(sampledAt)
+}
+
+// expireLocked enforces independent bounded windows for initial-unread
+// buffering and correlation after the first valid control sample.
+func (o *composeFcmObserver) expireLocked(now time.Time) bool {
+	if o.controlState == composeFcmControlUnread && !o.preControlStarted.IsZero() && now.Sub(o.preControlStarted) >= composeFcmWindow {
+		o.printUnknownLocked("expired")
+		return true
+	}
+	if o.controlState != composeFcmControlValid || o.postControlStarted.IsZero() || now.Sub(o.postControlStarted) < composeFcmWindow {
+		return false
+	}
+	if len(o.candidates) == 0 {
+		return true
+	}
+	if o.overflow {
+		o.printUnknownLocked("overflow")
+		return true
+	}
+	if o.ambiguous {
+		o.printUnknownLocked("ambiguous")
+		return true
+	}
+	if o.control.MessageID == "" {
+		o.emitUnknownLocked()
+		return true
+	}
+	found, ambiguous := o.candidateForMessage(o.control.MessageID)
+	if ambiguous {
+		o.printUnknownLocked("ambiguous")
+	} else if found != nil && found.finished && !found.provisional {
+		o.printTraceLocked(found)
+	} else if found != nil && found.provisional {
+		o.printUnknownLocked("incomplete")
+	} else {
+		o.emitUnknownLocked()
+	}
+	return true
 }
 
 // candidateForMessage runs with o.mu held and attributes only one distinct EventId.
 // Repeated delivery of the same (message_id, EventId) pair shares one trace.
 func (o *composeFcmObserver) candidateForMessage(messageID string) (*composeFcmTrace, bool) {
+	if o.ambiguous {
+		return nil, true
+	}
 	var found *composeFcmTrace
 	for _, candidate := range o.candidates {
 		if candidate.messageID != messageID {
@@ -324,12 +393,16 @@ func (o *composeFcmObserver) printUnknownLocked(reason string) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=false reason=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow"), boundedCount(len(o.candidates)))
+	fmt.Printf("compose_fcm_diag valid=false reason=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow", "expired", "incomplete"), boundedCount(len(o.candidates)))
 	clear(o.candidates)
 }
 
 func (o *composeFcmObserver) printTraceLocked(t *composeFcmTrace) {
 	if o.emitted {
+		return
+	}
+	if t.provisional {
+		o.printUnknownLocked("incomplete")
 		return
 	}
 	o.emitted = true
