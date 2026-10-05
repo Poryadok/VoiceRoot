@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -11,6 +12,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
+import 'package:voice_frontend/backend/auth_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/space_permissions.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -28,6 +33,34 @@ import 'support/voice_test_theme.dart';
 
 const _spaceInviteCaptureRootKey = Key('space_invite_capture_root');
 var _spaceInviteCaptureFontsLoaded = false;
+
+class _MutableAuthController extends AuthController {
+  _MutableAuthController()
+    : super(
+        authClient: VoiceAuthClient(
+          gateway: GatewayHttpClient(
+            httpClient: MockClient((_) async => http.Response('{}', 200)),
+            config: const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+        ),
+        storage: InMemoryAuthSessionStorage(),
+        guestCredentialsStorage: InMemoryGuestCredentialsStorage(),
+      );
+
+  void setSession(AuthSession? session) => state = AuthState(session: session);
+}
+
+AuthSession _inviteTestSession({
+  String token = 'invite-test-token',
+  String accountId = 'account-1',
+  String profileId = 'profile-1',
+}) => AuthSession(
+  accessToken: token,
+  refreshToken: 'refresh-$token',
+  accountId: accountId,
+  activeProfileId: profileId,
+  expiresInSeconds: 3600,
+);
 
 void main() {
   final sampleInvites = [
@@ -87,6 +120,86 @@ void main() {
     expect(find.byKey(SpaceInvitesSheet.createButtonKey), findsOneWidget);
   });
 
+  testWidgets('only active invites expose share and revoke actions', (
+    tester,
+  ) async {
+    final mixedInvites = [
+      SpaceInvite(
+        id: 'active',
+        spaceId: 'space-1',
+        code: 'active-code',
+        creatorProfileId: 'owner',
+        maxUses: 5,
+        useCount: 4,
+        expiresAt: DateTime.utc(2099),
+        createdAt: DateTime.utc(2026),
+      ),
+      SpaceInvite(
+        id: 'revoked',
+        spaceId: 'space-1',
+        code: 'revoked-code',
+        creatorProfileId: 'owner',
+        useCount: 0,
+        revokedAt: DateTime.utc(2026),
+        createdAt: DateTime.utc(2025),
+      ),
+      SpaceInvite(
+        id: 'expired',
+        spaceId: 'space-1',
+        code: 'expired-code',
+        creatorProfileId: 'owner',
+        useCount: 0,
+        expiresAt: DateTime.utc(2020),
+        createdAt: DateTime.utc(2019),
+      ),
+      SpaceInvite(
+        id: 'exhausted',
+        spaceId: 'space-1',
+        code: 'exhausted-code',
+        creatorProfileId: 'owner',
+        maxUses: 1,
+        useCount: 1,
+        createdAt: DateTime.utc(2025),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: SpacePermissions.spaceManageInvites,
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => true),
+          spaceInvitesProvider(
+            'space-1',
+          ).overrideWith((ref) async => mixedInvites),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('active-code'), findsOneWidget);
+    for (final inactiveId in ['revoked', 'expired', 'exhausted']) {
+      expect(find.byKey(Key('space_invite_$inactiveId')), findsNothing);
+      expect(find.byKey(Key('qr_invite_$inactiveId')), findsNothing);
+      expect(find.byKey(Key('copy_invite_$inactiveId')), findsNothing);
+      expect(find.byKey(Key('revoke_invite_$inactiveId')), findsNothing);
+    }
+    expect(find.byKey(const Key('qr_invite_active')), findsOneWidget);
+    expect(find.byKey(const Key('copy_invite_active')), findsOneWidget);
+    expect(find.byKey(const Key('revoke_invite_active')), findsOneWidget);
+  });
+
   testWidgets('direct invite sheet access hides controls without permission', (
     tester,
   ) async {
@@ -124,9 +237,10 @@ void main() {
   });
 
   testWidgets(
-    'expiry picker exposes the documented options and sends UTC expiry',
+    'expiry and max-use pickers expose documented options and send chosen values',
     (tester) async {
       String? requestBody;
+      final auth = _MutableAuthController()..setSession(_inviteTestSession());
       final gateway = GatewayHttpClient(
         httpClient: MockClient((request) async {
           if (request.method == 'POST') requestBody = request.body;
@@ -138,6 +252,7 @@ void main() {
         ProviderScope(
           overrides: [
             ...voiceThemeTestOverrides(),
+            authControllerProvider.overrideWith((ref) => auth),
             authorizationHeaderProvider.overrideWithValue('Bearer test'),
             gatewayHttpClientProvider.overrideWithValue(gateway),
             spacePermissionProvider((
@@ -173,6 +288,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('6 hours'), findsOneWidget);
 
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(SpaceInvitesSheet.maxUsesFieldKey));
+      await tester.pumpAndSettle();
+      for (final choice in ['1', '5', '10', '25', '50', '100', 'unlimited']) {
+        expect(
+          find.byKey(Key('space_invite_max_uses_choice_$choice')),
+          findsAtLeastNWidgets(1),
+        );
+      }
+      await tester.tap(find.text('25').last);
+      await tester.pumpAndSettle();
+      expect(find.text('25'), findsOneWidget);
+
       final beforeSubmit = DateTime.now().toUtc();
       await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
       await tester.pumpAndSettle();
@@ -180,6 +309,7 @@ void main() {
 
       expect(requestBody, isNotNull);
       final body = jsonDecode(requestBody!) as Map<String, dynamic>;
+      expect(body['max_uses'], 25);
       final timestamp = body['expires_at'] as Map<String, dynamic>;
       final seconds = int.parse(timestamp['seconds'] as String);
       final nanos = timestamp['nanos'] as int;
@@ -318,6 +448,7 @@ void main() {
     tester,
   ) async {
     var deletes = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         if (request.method == 'DELETE') deletes++;
@@ -329,6 +460,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
           authorizationHeaderProvider.overrideWithValue('Bearer test'),
           gatewayHttpClientProvider.overrideWithValue(gateway),
           spacePermissionProvider((
@@ -376,6 +508,7 @@ void main() {
       tester,
     ) async {
       var mutation = 0;
+      final auth = _MutableAuthController()..setSession(_inviteTestSession());
       final gateway = GatewayHttpClient(
         httpClient: MockClient((request) async {
           if (request.method == 'POST' || request.method == 'DELETE') {
@@ -393,6 +526,7 @@ void main() {
         ProviderScope(
           overrides: [
             ...voiceThemeTestOverrides(),
+            authControllerProvider.overrideWith((ref) => auth),
             spacePermissionProvider((
               spaceId: 'space-1',
               permission: SpacePermissions.spaceManageInvites,
@@ -436,6 +570,7 @@ void main() {
     tester,
   ) async {
     var requestCount = 0;
+    final auth = _MutableAuthController();
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         requestCount++;
@@ -447,6 +582,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
           spacePermissionProvider((
             spaceId: 'space-1',
             permission: SpacePermissions.spaceManageInvites,
@@ -481,10 +617,86 @@ void main() {
     expect(requestCount, 0);
   });
 
-  testWidgets('invalid max uses stays local and sends no request', (
+  for (final change in [
+    (
+      label: 'account',
+      session: _inviteTestSession(token: 'new-account', accountId: 'account-2'),
+    ),
+    (label: 'profile', session: _inviteTestSession(profileId: 'profile-2')),
+  ]) {
+    testWidgets(
+      'create stops if the ${change.label} changes during permission refresh',
+      (tester) async {
+        const query = (
+          spaceId: 'space-1',
+          permission: SpacePermissions.spaceManageInvites,
+          chatId: null,
+          voiceRoomId: null,
+        );
+        final permissionGate = Completer<bool>();
+        var permissionCalls = 0;
+        var mutationCount = 0;
+        final auth = _MutableAuthController()..setSession(_inviteTestSession());
+        final gateway = GatewayHttpClient(
+          httpClient: MockClient((request) async {
+            if (request.method == 'POST' || request.method == 'DELETE') {
+              mutationCount++;
+            }
+            return http.Response('{}', 200);
+          }),
+          config: const GatewayConfig(baseUrl: 'http://api.test'),
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              ...voiceThemeTestOverrides(),
+              authControllerProvider.overrideWith((ref) => auth),
+              gatewayHttpClientProvider.overrideWithValue(gateway),
+              spacePermissionProvider(query).overrideWith((ref) {
+                if (++permissionCalls == 1) return Future.value(true);
+                return permissionGate.future;
+              }),
+              spaceInvitesProvider(
+                'space-1',
+              ).overrideWith((ref) async => sampleInvites),
+            ],
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: const Locale('en'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+        await tester.pump();
+        expect(permissionCalls, 2);
+
+        auth.setSession(change.session);
+        permissionGate.complete(true);
+        await tester.pumpAndSettle();
+
+        expect(mutationCount, 0);
+        expect(find.byType(SnackBar), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('revoke stops if the profile changes during permission refresh', (
     tester,
   ) async {
+    const query = (
+      spaceId: 'space-1',
+      permission: SpacePermissions.spaceManageInvites,
+      chatId: null,
+      voiceRoomId: null,
+    );
+    final permissionGate = Completer<bool>();
+    var permissionCalls = 0;
     var mutationCount = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         if (request.method == 'POST' || request.method == 'DELETE') {
@@ -498,14 +710,12 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
-          spacePermissionProvider((
-            spaceId: 'space-1',
-            permission: SpacePermissions.spaceManageInvites,
-            chatId: null,
-            voiceRoomId: null,
-          )).overrideWith((ref) async => true),
+          authControllerProvider.overrideWith((ref) => auth),
           gatewayHttpClientProvider.overrideWithValue(gateway),
-          authorizationHeaderProvider.overrideWithValue('Bearer test'),
+          spacePermissionProvider(query).overrideWith((ref) {
+            if (++permissionCalls == 1) return Future.value(true);
+            return permissionGate.future;
+          }),
           spaceInvitesProvider(
             'space-1',
           ).overrideWith((ref) async => sampleInvites),
@@ -520,23 +730,102 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(SpaceInvitesSheet)),
-    )!;
-    await tester.tap(find.text(l10n.spaceInviteAdvancedToggle));
+    await tester.tap(find.byKey(const Key('revoke_invite_inv-1')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(SpaceInvitesSheet.maxUsesFieldKey), '0');
-    await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+    await tester.tap(find.byKey(const Key('space_invite_revoke_confirm')));
+    await tester.pump();
+    expect(permissionCalls, 2);
+
+    auth.setSession(_inviteTestSession(profileId: 'profile-2'));
+    permissionGate.complete(true);
     await tester.pumpAndSettle();
+
     expect(mutationCount, 0);
-    expect(find.text(l10n.spaceInviteMaxUsesInvalid), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
   });
 
-  testWidgets('create rechecks invite permission before sending the request', (
+  testWidgets(
+    'create stops if its Space scope changes during permission refresh',
+    (tester) async {
+      const query1 = (
+        spaceId: 'space-1',
+        permission: SpacePermissions.spaceManageInvites,
+        chatId: null,
+        voiceRoomId: null,
+      );
+      const query2 = (
+        spaceId: 'space-2',
+        permission: SpacePermissions.spaceManageInvites,
+        chatId: null,
+        voiceRoomId: null,
+      );
+      final permissionGate = Completer<bool>();
+      var space1PermissionCalls = 0;
+      var mutationCount = 0;
+      final auth = _MutableAuthController()..setSession(_inviteTestSession());
+      final gateway = GatewayHttpClient(
+        httpClient: MockClient((request) async {
+          if (request.method == 'POST' || request.method == 'DELETE') {
+            mutationCount++;
+          }
+          return http.Response('{}', 200);
+        }),
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      );
+
+      Widget app(String spaceId) => ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          spacePermissionProvider(query1).overrideWith((ref) {
+            if (++space1PermissionCalls == 1) return Future.value(true);
+            return permissionGate.future;
+          }),
+          spacePermissionProvider(query2).overrideWith((ref) async => true),
+          spaceInvitesProvider(
+            'space-1',
+          ).overrideWith((ref) async => sampleInvites),
+          spaceInvitesProvider(
+            'space-2',
+          ).overrideWith((ref) async => sampleInvites),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: SpaceInvitesSheet(spaceId: spaceId)),
+        ),
+      );
+
+      await tester.pumpWidget(app('space-1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+      await tester.pump();
+      expect(space1PermissionCalls, 2);
+      await tester.pumpWidget(app('space-2'));
+      await tester.pump();
+      permissionGate.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(mutationCount, 0);
+    },
+  );
+
+  testWidgets('disposed sheet does not continue after permission refresh', (
     tester,
   ) async {
-    var permissionChecks = 0;
+    const query = (
+      spaceId: 'space-1',
+      permission: SpacePermissions.spaceManageInvites,
+      chatId: null,
+      voiceRoomId: null,
+    );
+    final permissionGate = Completer<bool>();
+    var permissionCalls = 0;
     var mutationCount = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         if (request.method == 'POST' || request.method == 'DELETE') {
@@ -550,6 +839,56 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          spacePermissionProvider(query).overrideWith((ref) {
+            if (++permissionCalls == 1) return Future.value(true);
+            return permissionGate.future;
+          }),
+          spaceInvitesProvider(
+            'space-1',
+          ).overrideWith((ref) async => sampleInvites),
+        ],
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: SpaceInvitesSheet(spaceId: 'space-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(SpaceInvitesSheet.createButtonKey));
+    await tester.pump();
+    expect(permissionCalls, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    permissionGate.complete(true);
+    await tester.pumpAndSettle();
+
+    expect(mutationCount, 0);
+  });
+
+  testWidgets('create rechecks invite permission before sending the request', (
+    tester,
+  ) async {
+    var permissionChecks = 0;
+    var mutationCount = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
+    final gateway = GatewayHttpClient(
+      httpClient: MockClient((request) async {
+        if (request.method == 'POST' || request.method == 'DELETE') {
+          mutationCount++;
+        }
+        return http.Response('{}', 200);
+      }),
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
           authorizationHeaderProvider.overrideWithValue('Bearer test'),
           gatewayHttpClientProvider.overrideWithValue(gateway),
           spacePermissionProvider((
@@ -586,6 +925,7 @@ void main() {
   ) async {
     var permissionChecks = 0;
     var mutationCount = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         if (request.method == 'POST' || request.method == 'DELETE') {
@@ -599,6 +939,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
           authorizationHeaderProvider.overrideWithValue('Bearer test'),
           gatewayHttpClientProvider.overrideWithValue(gateway),
           spacePermissionProvider((
@@ -745,6 +1086,7 @@ void main() {
     tester,
   ) async {
     var deletes = 0;
+    final auth = _MutableAuthController()..setSession(_inviteTestSession());
     final gateway = GatewayHttpClient(
       httpClient: MockClient((request) async {
         if (request.method == 'DELETE') deletes++;
@@ -756,6 +1098,7 @@ void main() {
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
+          authControllerProvider.overrideWith((ref) => auth),
           authorizationHeaderProvider.overrideWithValue('Bearer test'),
           gatewayHttpClientProvider.overrideWithValue(gateway),
           spacePermissionProvider((

@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../backend/space_permissions.dart';
 import '../../backend/spaces_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/space_providers.dart';
 import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
@@ -43,10 +44,10 @@ class SpaceInvitesSheet extends ConsumerStatefulWidget {
 class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
   static const _expiryFieldKey = Key('space_invite_expiry_field');
 
-  final _maxUsesController = TextEditingController();
   var _showAdvanced = false;
   var _creating = false;
   var _expiry = _InviteExpiry.never;
+  int? _maxUses;
 
   DateTime? get _expiresAt {
     final duration = _expiry.duration;
@@ -71,14 +72,58 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     voiceRoomId: null,
   );
 
-  Future<bool?> _refreshInvitePermission() async {
+  _InviteActionScope _captureActionScope() {
+    final authorization = ref.read(authorizationHeaderProvider);
+    final auth = ref.read(authControllerProvider);
+    return (
+      session: auth.session,
+      authorization: authorization,
+      accountId: auth.session?.accountId,
+      profileId: auth.activeProfileId,
+      spaceId: widget.spaceId,
+    );
+  }
+
+  bool _isCurrentActionScope(_InviteActionScope expected) {
+    if (!mounted || widget.spaceId != expected.spaceId) return false;
+    if (ref.read(authorizationHeaderProvider) != expected.authorization) {
+      return false;
+    }
+    final auth = ref.read(authControllerProvider);
+    return identical(auth.session, expected.session) &&
+        auth.session?.accountId == expected.accountId &&
+        auth.activeProfileId == expected.profileId;
+  }
+
+  Future<bool?> _refreshInvitePermission(_InviteActionScope expected) async {
     try {
       return await ref.refresh(
-        spacePermissionProvider(_invitePermissionQuery).future,
+        spacePermissionProvider((
+          spaceId: expected.spaceId,
+          permission: SpacePermissions.spaceManageInvites,
+          chatId: null,
+          voiceRoomId: null,
+        )).future,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  List<SpaceInvite> _activeInvites(List<SpaceInvite> invites) {
+    final now = DateTime.now().toUtc();
+    return invites
+        .where((invite) {
+          final expiry = invite.expiresAt?.toUtc();
+          final expired = expiry != null && !now.isBefore(expiry);
+          final exhausted =
+              invite.maxUses != null && invite.useCount >= invite.maxUses!;
+          return invite.spaceId == widget.spaceId &&
+              invite.revokedAt == null &&
+              !expired &&
+              !exhausted;
+        })
+        .toList(growable: false);
   }
 
   void _showPermissionDenied() {
@@ -104,33 +149,18 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     ).showSnackBar(SnackBar(content: Text(commonActionErrorMessage(l10n))));
   }
 
-  @override
-  void dispose() {
-    _maxUsesController.dispose();
-    super.dispose();
-  }
-
   Future<void> _createInvite() async {
+    final actionScope = _captureActionScope();
     setState(() => _creating = true);
     final l10n = AppLocalizations.of(context)!;
-    int? maxUses;
-    final maxUsesText = _maxUsesController.text.trim();
-    if (maxUsesText.isNotEmpty) {
-      maxUses = int.tryParse(maxUsesText);
-      if (maxUses == null || maxUses < 1) {
-        if (mounted) {
-          setState(() => _creating = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.spaceInviteMaxUsesInvalid)),
-          );
-        }
-        return;
-      }
+    final canCreate = await _refreshInvitePermission(actionScope);
+    if (!mounted) return;
+    if (!_isCurrentActionScope(actionScope)) {
+      setState(() => _creating = false);
+      return;
     }
-
-    final canCreate = await _refreshInvitePermission();
     if (canCreate != true) {
-      if (mounted) setState(() => _creating = false);
+      setState(() => _creating = false);
       if (canCreate == false) {
         _showPermissionDenied();
       } else {
@@ -142,11 +172,15 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     final err = await ref
         .read(spaceInviteActionsProvider)
         .createInvite(
-          spaceId: widget.spaceId,
-          maxUses: maxUses,
+          spaceId: actionScope.spaceId,
+          maxUses: _maxUses,
           expiresAt: _expiresAt,
         );
     if (!mounted) return;
+    if (!_isCurrentActionScope(actionScope)) {
+      setState(() => _creating = false);
+      return;
+    }
     setState(() => _creating = false);
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -169,9 +203,11 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     );
   }
 
-  Future<void> _revoke(String inviteId) async {
+  Future<void> _revoke(String inviteId, _InviteActionScope actionScope) async {
+    if (!_isCurrentActionScope(actionScope)) return;
     final l10n = AppLocalizations.of(context)!;
-    final canRevoke = await _refreshInvitePermission();
+    final canRevoke = await _refreshInvitePermission(actionScope);
+    if (!mounted || !_isCurrentActionScope(actionScope)) return;
     if (canRevoke != true) {
       if (canRevoke == false) {
         _showPermissionDenied();
@@ -182,8 +218,8 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
     }
     final err = await ref
         .read(spaceInviteActionsProvider)
-        .revokeInvite(spaceId: widget.spaceId, inviteId: inviteId);
-    if (!mounted) return;
+        .revokeInvite(spaceId: actionScope.spaceId, inviteId: inviteId);
+    if (!mounted || !_isCurrentActionScope(actionScope)) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -198,6 +234,7 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
   }
 
   Future<void> _confirmRevoke(String inviteId) async {
+    final actionScope = _captureActionScope();
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -218,7 +255,9 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
         ],
       ),
     );
-    if (confirmed == true && mounted) await _revoke(inviteId);
+    if (confirmed == true && _isCurrentActionScope(actionScope)) {
+      await _revoke(inviteId, actionScope);
+    }
   }
 
   Future<void> _showQr(String link) => showDialog<void>(
@@ -342,14 +381,23 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
             ),
             const SizedBox(height: 8),
             if (_showAdvanced)
-              TextField(
+              DropdownButtonFormField<int?>(
                 key: SpaceInvitesSheet.maxUsesFieldKey,
-                controller: _maxUsesController,
-                keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: l10n.spaceInviteMaxUsesLabel,
-                  hintText: l10n.spaceInviteMaxUsesHint,
                 ),
+                initialValue: _maxUses,
+                items: [
+                  for (final option in _InviteMaxUses.values)
+                    DropdownMenuItem<int?>(
+                      key: Key('space_invite_max_uses_choice_${option.key}'),
+                      value: option.value,
+                      child: Text(
+                        option.value?.toString() ?? l10n.spaceInviteMaxUsesHint,
+                      ),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _maxUses = value),
               ),
             if (_showAdvanced) const SizedBox(height: 8),
             Row(
@@ -384,12 +432,13 @@ class _SpaceInvitesSheetState extends ConsumerState<SpaceInvitesSheet> {
                     ref.invalidate(spaceInvitesProvider(widget.spaceId)),
               ),
               data: (invites) {
-                if (invites.isEmpty) {
+                final activeInvites = _activeInvites(invites);
+                if (activeInvites.isEmpty) {
                   return VoiceStatePanel(title: l10n.spaceInvitesEmpty);
                 }
                 return Column(
                   children: [
-                    for (final invite in invites)
+                    for (final invite in activeInvites)
                       VoiceListRow(
                         key: Key('space_invite_${invite.id}'),
                         title: invite.code,
@@ -457,3 +506,27 @@ enum _InviteExpiry {
   final String key;
   final Duration? duration;
 }
+
+enum _InviteMaxUses {
+  one(1),
+  five(5),
+  ten(10),
+  twentyFive(25),
+  fifty(50),
+  hundred(100),
+  unlimited(null);
+
+  const _InviteMaxUses(this.value);
+
+  final int? value;
+
+  String get key => value?.toString() ?? 'unlimited';
+}
+
+typedef _InviteActionScope = ({
+  Object? session,
+  String? authorization,
+  String? accountId,
+  String? profileId,
+  String spaceId,
+});
