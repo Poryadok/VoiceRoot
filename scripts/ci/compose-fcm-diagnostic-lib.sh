@@ -20,6 +20,10 @@ voice_fcm_diag_parse_log() {
       return 0
     fi
     if [[ "${line}" =~ (compose_fcm_diag\ valid=(true|false)\ reason=(matched|unknown|ambiguous|overflow)\ candidates=([0-9]{1,2})\ attempts=([0-9]{1,4})\ member_result=(ok|error|unknown)\ member_count=([0-9]{1,4})\ recipient_present=(true|false|unknown)\ inbox=(main|requests|unknown)\ base_push=(true|false|unknown)\ final_push=(true|false|unknown)\ presence=(online|offline|unknown)\ policy=(ok|error|unknown)\ token_rows=([0-9]{1,4})\ fcm_tokens=([0-9]{1,4})\ send_attempts=([0-9]{1,4})\ route=(ack|nak|unknown))$ ]]; then
+      if ((10#${BASH_REMATCH[4]} > 16)); then
+        printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
+        return 0
+      fi
       found="${BASH_REMATCH[1]}"
       ((count+=1))
     fi

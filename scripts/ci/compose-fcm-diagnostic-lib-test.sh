@@ -8,6 +8,8 @@ unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 [[ "$(voice_fcm_diag_parse_log '')" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid}"$'\n'"${valid}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "prefix password=private-sentinel ${valid}")" == "${valid}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/ candidates=1 / candidates=17 }")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/ member_count=2 / member_count=10000 }")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid%route=ack}route=unk")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "$(printf '%65537s' x)")" == "${unknown}" ]]
 many_lines=''
