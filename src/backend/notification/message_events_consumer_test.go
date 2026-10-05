@@ -389,6 +389,10 @@ func TestMessageEventsJetStreamRestartDrainsBacklogFromSameDurable(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("first message consumer did not stop after cancellation")
 	}
+	require.Eventually(t, func() bool {
+		info, infoErr := js.ConsumerInfo(jsStreamMessageEvents, durable)
+		return infoErr == nil && !info.PushBound
+	}, 5*time.Second, 20*time.Millisecond, "message durable is unbound before publishing the offline event")
 
 	messageID, chatID := uuid.NewString(), uuid.NewString()
 	event := &eventsv1.MessageStreamEvent{EventId: uuid.NewString(), Payload: &eventsv1.MessageStreamEvent_MessageSent{
