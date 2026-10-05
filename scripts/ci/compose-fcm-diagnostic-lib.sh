@@ -183,7 +183,15 @@ voice_fcm_diag_collection_stage() {
   else
     case "${parse_result}" in
       unknown) bounded_fault=true ;;
-      missing|malformed|duplicate) record_fault=true ;;
+      missing)
+        record_fault=true
+        if voice_fcm_diag_lifecycle_valid "${log_data}"; then
+          lifecycle_is_valid=true
+        else
+          normalize_fault=true
+        fi
+        ;;
+      malformed|duplicate) record_fault=true ;;
       accepted)
         if voice_fcm_diag_lifecycle_valid "${log_data}"; then
           lifecycle_is_valid=true

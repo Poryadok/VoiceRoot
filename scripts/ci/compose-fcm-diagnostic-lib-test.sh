@@ -161,12 +161,14 @@ assert_collection_stage docker_logs 0 "${complete_status}" 124 "${valid}" unknow
 assert_collection_stage bounded_parse 0 "${complete_status}" 0 '' unknown 1
 assert_collection_stage record_contract 0 "${complete_status}" 0 "${valid}" malformed 1
 invalid_lifecycle_log="${valid}"$'\ncompose_fcm_lifecycle private=unknown'
+missing_invalid_lifecycle=$'compose_fcm_lifecycle private=unknown'
 assert_collection_stage normalization 0 "${complete_status}" 0 "${invalid_lifecycle_log}" accepted 1
 assert_collection_stage mixed 1 '' 124 "${valid}" unknown 1
 assert_collection_stage docker_logs 0 "${complete_status}" 124 "${valid}" unknown 1
 assert_collection_stage status_file 1 '' 0 "${valid}" accepted 1
 assert_collection_stage none 0 "${complete_status}" 0 "${valid}" accepted 0
 assert_collection_stage record_contract 0 "${complete_status}" 0 '' missing 0
+assert_collection_stage mixed 0 "${complete_status}" 0 "${missing_invalid_lifecycle}" missing 1
 unknown_target_log="${unknownTarget}"$'\n'"${lifecycle}"
 assert_collection_stage none 0 "${complete_status}" 0 "${unknown_target_log}" accepted 0
 unmapped_stage="$(voice_fcm_diag_collection_stage 0 "${complete_status}" 0 "${valid}" untrusted 0 || true)"
