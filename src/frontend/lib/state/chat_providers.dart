@@ -752,8 +752,34 @@ class ChatListController extends StateNotifier<ChatListState> {
     state = state.copyWith(
       items: state.items.where((item) => item.chatId != chatId).toList(),
     );
-    _ref.invalidate(messageRequestsSummaryProvider);
+    final isRequestsSelection =
+        _ref.read(chatInboxProvider) == 'requests' &&
+        isMessageRequestsFolderSelected(
+          _ref.read(selectedChatFolderIdProvider),
+        );
+    final navigationGeneration = _ref.read(
+      messageRequestsNavigationGenerationProvider,
+    );
+    final container = _ref.container;
+    final Future<MessageRequestsSummary>? summaryFuture;
+    if (isRequestsSelection) {
+      summaryFuture = container.refresh(messageRequestsSummaryProvider.future);
+    } else {
+      summaryFuture = null;
+      container.invalidate(messageRequestsSummaryProvider);
+    }
     _invalidateChatLists(_ref);
+    if (summaryFuture != null) {
+      unawaited(
+        restorePreviousChatFolderAfterFinalRequest(
+          container,
+          summaryFuture: summaryFuture,
+          expectedGeneration: navigationGeneration,
+          expectedAuthorization: expectedAuthorization,
+          expectedProfileId: expectedProfileId,
+        ),
+      );
+    }
     return null;
   }
 
