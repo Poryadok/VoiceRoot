@@ -234,8 +234,8 @@ VoiceChat voiceChatFromProto(chat_pb.Chat chat) {
     avatarUrl: chat.hasAvatarUrl() ? emptyToNull(chat.avatarUrl) : null,
     spaceId: chat.hasSpaceId() ? emptyToNull(chat.spaceId) : null,
     slowModeSeconds: chat.slowModeSeconds,
-    threadsEnabled: chat.hasThreadsEnabled() && chat.threadsEnabled,
-    allowUserMainFeed: !chat.hasAllowUserMainFeed() || chat.allowUserMainFeed,
+    threadsEnabled: chat.threadsEnabled,
+    allowUserMainFeed: chat.allowUserMainFeed,
     e2eEnabled: _protoChatE2eEnabled(chat),
     allowGuests: chat.allowGuests,
   );
@@ -340,6 +340,8 @@ chat_pb.UpdateChatRequest updateChatRequestToProto({
   String? avatarUrl,
   int? slowModeSeconds,
   bool? allowGuests,
+  bool? threadsEnabled,
+  bool? allowUserMainFeed,
 }) {
   final req = chat_pb.UpdateChatRequest();
   if (name != null) {
@@ -353,6 +355,12 @@ chat_pb.UpdateChatRequest updateChatRequestToProto({
   }
   if (allowGuests != null) {
     req.allowGuests = allowGuests;
+  }
+  if (threadsEnabled != null) {
+    req.threadsEnabled = threadsEnabled;
+  }
+  if (allowUserMainFeed != null) {
+    req.allowUserMainFeed = allowUserMainFeed;
   }
   return req;
 }
