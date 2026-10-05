@@ -39,7 +39,28 @@ const _match = MatchData(
 const _captureBoundaryKey = ValueKey('matchmaking_player_profile_capture');
 var _captureFontsLoaded = false;
 
-Widget _app(http.Client client, {ThemeData? theme}) => RepaintBoundary(
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  final popped = <Route<dynamic>>[];
+  final removed = <Route<dynamic>>[];
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    popped.add(route);
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    removed.add(route);
+    super.didRemove(route, previousRoute);
+  }
+}
+
+Widget _app(
+  http.Client client, {
+  ThemeData? theme,
+  NavigatorObserver? navigatorObserver,
+}) => RepaintBoundary(
   key: _captureBoundaryKey,
   child: ProviderScope(
     overrides: [
@@ -61,6 +82,7 @@ Widget _app(http.Client client, {ThemeData? theme}) => RepaintBoundary(
       locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      navigatorObservers: [?navigatorObserver],
       home: const MatchSquadScreen(match: _match),
     ),
   ),
@@ -274,6 +296,74 @@ void main() {
     );
     expect(ban.method, 'POST');
     expect(jsonDecode(ban.body), {'targetProfileId': 'profile-2'});
+  });
+
+  testWidgets('profile switch closes owned ban dialog and profile sheet', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    final navigatorObserver = _RecordingNavigatorObserver();
+    await tester.pumpWidget(
+      _app(
+        MockClient((request) async {
+          requests.add(request);
+          switch (request.url.path) {
+            case '/api/v1/users/profiles/profile-2':
+              return _profileResponse();
+            case '/api/v1/matchmaking/players/profile-2/rating':
+              return _ratingResponse(4.8);
+            case '/api/v1/friends':
+              return _friendsResponse();
+            case '/api/v1/friends/requests':
+              return _friendRequestsResponse();
+            default:
+              return http.Response('{}', 200);
+          }
+        }),
+        navigatorObserver: navigatorObserver,
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pumpAndSettle();
+    final sheetRoute = ModalRoute.of(
+      tester.element(find.byKey(MatchmakingPlayerProfileSheet.sheetKey)),
+    )!;
+    await tester.tap(find.byKey(MatchmakingPlayerProfileSheet.banKey));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    final dialogRoute = ModalRoute.of(
+      tester.element(find.byType(AlertDialog)),
+    )!;
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MatchSquadScreen)),
+      listen: false,
+    );
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'test-access',
+        refreshToken: 'test-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'secondary-profile',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(MatchmakingPlayerProfileSheet.sheetKey), findsNothing);
+    expect([
+      ...navigatorObserver.popped,
+      ...navigatorObserver.removed,
+    ], contains(same(dialogRoute)));
+    expect([
+      ...navigatorObserver.popped,
+      ...navigatorObserver.removed,
+    ], contains(same(sheetRoute)));
+    expect(requests.where((r) => r.url.path.endsWith('/bans')), isEmpty);
   });
 
   testWidgets('friend and message actions use the selected profile ID', (

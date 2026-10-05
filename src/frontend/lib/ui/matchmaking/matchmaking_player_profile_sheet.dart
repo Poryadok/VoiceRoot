@@ -44,6 +44,8 @@ class _MatchmakingPlayerProfileSheetState
   String? _initialAuthorization;
   String? _initialViewerId;
   bool _closingForContextChange = false;
+  Route<dynamic>? _ownedSheetRoute;
+  DialogRoute<bool>? _ownedBanConfirmationRoute;
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _MatchmakingPlayerProfileSheetState
 
   @override
   Widget build(BuildContext context) {
+    _ownedSheetRoute ??= ModalRoute.of(context);
     final auth = ref.watch(authControllerProvider);
     final authorization = auth.session?.authorizationHeader;
     final viewerId = auth.activeProfileId;
@@ -68,7 +71,7 @@ class _MatchmakingPlayerProfileSheetState
       }
       _closingForContextChange = true;
       ref.invalidate(playerRatingProvider(args));
-      if (context.mounted) Navigator.of(context).maybePop();
+      if (context.mounted) _closeOwnedRoutesForContextChange();
     });
 
     final contextChanged =
@@ -123,6 +126,19 @@ class _MatchmakingPlayerProfileSheetState
         ),
       ),
     );
+  }
+
+  void _closeOwnedRoutesForContextChange() {
+    final dialogRoute = _ownedBanConfirmationRoute;
+    _ownedBanConfirmationRoute = null;
+    if (dialogRoute?.isActive ?? false) {
+      dialogRoute!.navigator?.removeRoute(dialogRoute);
+    }
+
+    final sheetRoute = _ownedSheetRoute;
+    if (sheetRoute?.isActive ?? false) {
+      sheetRoute!.navigator?.removeRoute(sheetRoute);
+    }
   }
 
   Widget _loadError(AppLocalizations l10n) => VoiceStatePanel(
@@ -327,8 +343,17 @@ class _MatchmakingPlayerProfileSheetState
     AppLocalizations l10n,
     VoiceProfile profile,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final navigator = Navigator.of(context);
+    final dialogRoute = DialogRoute<bool>(
       context: context,
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+      barrierColor:
+          DialogTheme.of(context).barrierColor ??
+          Theme.of(context).dialogTheme.barrierColor ??
+          Colors.black54,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      useSafeArea: true,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.matchRatingBanTitle),
         content: Text(
@@ -348,6 +373,11 @@ class _MatchmakingPlayerProfileSheetState
         ],
       ),
     );
+    _ownedBanConfirmationRoute = dialogRoute;
+    final confirmed = await navigator.push(dialogRoute);
+    if (identical(_ownedBanConfirmationRoute, dialogRoute)) {
+      _ownedBanConfirmationRoute = null;
+    }
     if (confirmed != true || !context.mounted) return;
     final auth = ref.read(authControllerProvider);
     final session = auth.session;
