@@ -298,8 +298,11 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
-      - name: Capture NetworkOffline banner reference (manual full profile only)
-        if: github.event_name == 'workflow_dispatch' && inputs.profile == 'full'
+      - name: Capture NetworkOffline banner reference (PR or manual full profile)
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
+        timeout-minutes: 5
         working-directory: src/frontend
         env:
           VOICE_NETWORK_OFFLINE_CAPTURE_DIR: ${{ runner.temp }}/network-offline-captures
@@ -309,7 +312,10 @@ jobs:
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-v.png"
       - name: Upload NetworkOffline banner reference captures
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.profile == 'full'
+        if: >-
+          success() &&
+          (github.event_name == 'pull_request' ||
+           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
         uses: actions/upload-artifact@v6
         with:
           name: network-offline-banner-reference-${{ github.run_id }}
