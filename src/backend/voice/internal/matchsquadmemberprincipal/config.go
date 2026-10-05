@@ -43,14 +43,14 @@ func LoadFromEnv(lookup func(string) (string, bool)) (Config, bool, error) {
 
 func (c Config) Validate() error {
 	if c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.JWKSCAFile == "" || c.RedisAddr == "" {
-		return errors.New("Voice MatchSquad member principal listener requires TLS, JWKS CA, and Redis configuration")
+		return errors.New("voice MatchSquad member principal listener requires TLS, JWKS CA, and Redis configuration")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenerAddr); err != nil {
 		return errors.New("invalid Voice MatchSquad member listener address")
 	}
 	u, err := url.Parse(c.JWKSURL)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" || strings.ContainsAny(c.JWKSURL, "\r\n") {
-		return errors.New("Voice MatchSquad member principal requires an exact HTTPS JWKS URL")
+		return errors.New("voice MatchSquad member principal requires an exact HTTPS JWKS URL")
 	}
 	return nil
 }
