@@ -36,39 +36,43 @@ import (
 )
 
 type grpcClients struct {
-	connections          []*grpc.ClientConn
-	userConn             *grpc.ClientConn
-	userRequired         bool
-	userConnectErr       error
-	user                 userv1.UserServiceClient
-	social               socialv1.SocialServiceClient
-	chat                 chatv1.ChatServiceClient
-	messaging            messagingv1.MessagingServiceClient
-	voice                callsv1.VoiceServiceClient
-	file                 filev1.FileServiceClient
-	space                spacev1.SpaceServiceClient
-	spaceLifecycle       spacev1.SpaceServiceClient
-	spaceLifecycleConn   *grpc.ClientConn
-	spaceLifecycleErr    error
-	matchSquadMember     callsv1.MatchSquadMemberServiceClient
-	matchSquadMemberConn *grpc.ClientConn
-	matchSquadMemberErr  error
-	role                 rolev1.RoleServiceClient
-	notification         notificationv1.NotificationServiceClient
-	matchmaking          matchmakingv1.MatchmakingServiceClient
-	moderation           moderationv1.ModerationServiceClient
-	subscription         subscriptionv1.SubscriptionServiceClient
-	bot                  botv1.BotServiceClient
-	story                storyv1.StoryServiceClient
-	search               searchv1.SearchServiceClient
-	auth                 authv1.AuthServiceClient
-	analytics            analyticsv1.AnalyticsQueryServiceClient
+	connections             []*grpc.ClientConn
+	userConn                *grpc.ClientConn
+	userRequired            bool
+	userConnectErr          error
+	user                    userv1.UserServiceClient
+	social                  socialv1.SocialServiceClient
+	chat                    chatv1.ChatServiceClient
+	messaging               messagingv1.MessagingServiceClient
+	voice                   callsv1.VoiceServiceClient
+	file                    filev1.FileServiceClient
+	space                   spacev1.SpaceServiceClient
+	spaceLifecycle          spacev1.SpaceServiceClient
+	spaceLifecycleConn      *grpc.ClientConn
+	spaceLifecycleErr       error
+	matchSquadMember        callsv1.MatchSquadMemberServiceClient
+	matchSquadMemberConn    *grpc.ClientConn
+	matchSquadMemberErr     error
+	role                    rolev1.RoleServiceClient
+	notification            notificationv1.NotificationServiceClient
+	matchmaking             matchmakingv1.MatchmakingServiceClient
+	matchmakingComplete     matchmakingv1.MatchmakingServiceClient
+	matchmakingCompleteConn *grpc.ClientConn
+	matchmakingCompleteErr  error
+	moderation              moderationv1.ModerationServiceClient
+	subscription            subscriptionv1.SubscriptionServiceClient
+	bot                     botv1.BotServiceClient
+	story                   storyv1.StoryServiceClient
+	search                  searchv1.SearchServiceClient
+	auth                    authv1.AuthServiceClient
+	analytics               analyticsv1.AnalyticsQueryServiceClient
 }
 
 type transcoder struct {
-	clients                grpcClients
-	lifecycleIssuer        *principal.Issuer
-	matchSquadMemberIssuer *principal.Issuer
+	clients                   grpcClients
+	lifecycleIssuer           *principal.Issuer
+	matchSquadMemberIssuer    *principal.Issuer
+	matchmakingCompleteIssuer *principal.Issuer
 }
 
 func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
@@ -103,6 +107,17 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 			clients.connections = append(clients.connections, conn)
 			clients.matchSquadMemberConn = conn
 			clients.matchSquadMember = callsv1.NewMatchSquadMemberServiceClient(conn)
+		}
+	}
+	if cfg, enabled, err := matchmakingCompleteClientConfigFromEnv(); err != nil {
+		clients.matchmakingCompleteErr = err
+	} else if enabled {
+		conn, err := cfg.dial()
+		clients.matchmakingCompleteErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.matchmakingCompleteConn = conn
+			clients.matchmakingComplete = matchmakingv1.NewMatchmakingServiceClient(conn)
 		}
 	}
 	dial := func(addr string) (*grpc.ClientConn, error) {
@@ -363,7 +378,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		}
 		return t.serveNotifications(w, r, rest)
 	case "matchmaking":
-		if t.clients.matchmaking == nil {
+		if t.clients.matchmaking == nil && !isProtectedMatchmakingRoute(r) {
 			return false
 		}
 		return t.serveMatchmaking(w, r, rest)

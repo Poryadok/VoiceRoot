@@ -80,9 +80,11 @@ func (s *MatchStore) ListPendingMatchSquadCompletionEvents(ctx context.Context, 
 		limit = 100
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT aggregate_id,event_id,occurred_at,duration_seconds,profile_ids
-		FROM matchmaking_match_squad_completion_events WHERE published_at IS NULL
-		ORDER BY created_at,aggregate_id LIMIT $1
+		SELECT e.aggregate_id,e.event_id,t.match_id,e.occurred_at,e.duration_seconds,e.profile_ids
+		FROM matchmaking_match_squad_completion_events e
+		JOIN matchmaking_match_squad_teardowns t USING (aggregate_id)
+		WHERE e.published_at IS NULL
+		ORDER BY e.created_at,e.aggregate_id LIMIT $1
 	`, limit)
 	if err != nil {
 		return nil, err
@@ -92,7 +94,7 @@ func (s *MatchStore) ListPendingMatchSquadCompletionEvents(ctx context.Context, 
 	for rows.Next() {
 		var item MatchSquadCompletionEvent
 		var profiles []byte
-		if err := rows.Scan(&item.AggregateID, &item.EventID, &item.OccurredAt, &item.DurationSeconds, &profiles); err != nil {
+		if err := rows.Scan(&item.AggregateID, &item.EventID, &item.MatchID, &item.OccurredAt, &item.DurationSeconds, &profiles); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(profiles, &item.ProfileIDs); err != nil {

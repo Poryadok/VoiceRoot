@@ -12,6 +12,19 @@ import (
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
+func isProtectedMatchmakingRoute(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost {
+		return false
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/matchmaking/")
+	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[0] == "matches" && parts[1] != "" && parts[2] == "complete" {
+		return true
+	}
+	return len(parts) == 4 && parts[0] == "matches" && parts[1] != "" && parts[2] == "voice" &&
+		(parts[3] == "join" || parts[3] == "token" || parts[3] == "leave")
+}
+
 func (t *transcoder) serveMatchmaking(w http.ResponseWriter, r *http.Request, rest string) bool {
 	rest = strings.TrimPrefix(rest, "/")
 	switch {
@@ -94,7 +107,12 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 			return true
 		}
 		req.MatchId = matchID
-		resp, err := t.clients.matchmaking.CompleteMatch(ctx, req)
+		protectedCtx, err := t.matchmakingCompleteContext(r, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.matchmakingComplete.CompleteMatch(protectedCtx, req)
 		if err != nil {
 			writeGRPCError(w, err)
 			return true

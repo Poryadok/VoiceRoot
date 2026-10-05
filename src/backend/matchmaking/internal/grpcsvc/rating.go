@@ -12,15 +12,20 @@ import (
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/principal"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
 // CompleteMatch records squad leave for the authenticated participant.
 func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.CompleteMatchRequest) (*matchmakingv1.CompleteMatchResponse, error) {
-	profileID, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	actor, ok := principal.FromContext(ctx)
+	if !ok || actor.Kind != "delegated_user" || actor.Issuer != "gateway" || actor.Audience != "matchmaking" || actor.Subject != actor.AccountID || actor.AccountID == "" || actor.ProfileID == "" || actor.SessionEpoch <= 0 {
+		return nil, status.Error(codes.Unauthenticated, "verified Matchmaking user required")
+	}
+	profileID, err := uuid.Parse(actor.ProfileID)
+	if err != nil || profileID == uuid.Nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid Matchmaking user")
 	}
 	if s.Matches == nil {
 		return nil, status.Error(codes.Unavailable, "match unavailable")
