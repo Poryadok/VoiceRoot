@@ -1,0 +1,77 @@
+# Opt-in strategic merge patches for Matchmaking CompleteMatch. This file is
+# intentionally not included by the staging or production apply profiles.
+# Replace every operator-owned Secret name and HTTPS host before rendering.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: voice-staging
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - {name: GATEWAY_SESSION_EPOCH_STRICT, value: "true"}
+            - {name: GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR, value: /run/matchmaking-principal/keys}
+            - {name: GATEWAY_PRINCIPAL_ACTIVE_KID, valueFrom: {secretKeyRef: {name: REPLACE_WITH_GATEWAY_SIGNING_SECRET, key: active-kid}}}
+            - {name: GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR, value: voice-matchmaking.voice-staging.svc:9092}
+            - {name: GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE, value: /run/matchmaking-client/ca.crt}
+            - {name: GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME, value: matchmaking.voice-staging.svc}
+            - {name: GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE, value: /run/matchmaking-client/tls.crt}
+            - {name: GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE, value: /run/matchmaking-client/tls.key}
+          volumeMounts:
+            - {name: matchmaking-principal-signing, mountPath: /run/matchmaking-principal/keys, readOnly: true}
+            - {name: matchmaking-client, mountPath: /run/matchmaking-client, readOnly: true}
+      volumes:
+        - name: matchmaking-principal-signing
+          secret: {secretName: REPLACE_WITH_GATEWAY_SIGNING_SECRET}
+        - name: matchmaking-client
+          secret: {secretName: REPLACE_WITH_GATEWAY_MATCHMAKING_CLIENT_TLS_SECRET}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-matchmaking
+  namespace: voice-staging
+spec:
+  template:
+    spec:
+      containers:
+        - name: matchmaking
+          ports:
+            - {name: principal, containerPort: 9092}
+          env:
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_GRPC_LISTEN, value: ":9092"}
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_TLS_CERT_FILE, value: /run/matchmaking-server/tls.crt}
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_TLS_KEY_FILE, value: /run/matchmaking-server/tls.key}
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE, value: /run/matchmaking-client-ca/ca.crt}
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR, valueFrom: {configMapKeyRef: {name: voice-app-config, key: REDIS_ADDR}}}
+            - {name: MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD, valueFrom: {secretKeyRef: {name: REPLACE_WITH_MATCHMAKING_REPLAY_SECRET, key: password}}}
+            - {name: S2S_JWKS_URLS_JSON, value: '{"gateway":"https://REPLACE_WITH_GATEWAY_HTTPS_HOST/.well-known/voice-principal-jwks.json"}'}
+            - {name: S2S_JWKS_CA_FILE, value: /run/gateway-jwks-ca/ca.crt}
+            - {name: S2S_JWKS_REFRESH_AFTER, value: 30s}
+            - {name: S2S_JWKS_HARD_EXPIRY, value: 2m}
+            - {name: S2S_UNKNOWN_KID_COOLDOWN, value: 5s}
+          volumeMounts:
+            - {name: matchmaking-server, mountPath: /run/matchmaking-server, readOnly: true}
+            - {name: matchmaking-client-ca, mountPath: /run/matchmaking-client-ca, readOnly: true}
+            - {name: gateway-jwks-ca, mountPath: /run/gateway-jwks-ca, readOnly: true}
+      volumes:
+        - name: matchmaking-server
+          secret: {secretName: REPLACE_WITH_MATCHMAKING_SERVER_TLS_SECRET}
+        - name: matchmaking-client-ca
+          secret: {secretName: REPLACE_WITH_GATEWAY_CLIENT_CA_SECRET}
+        - name: gateway-jwks-ca
+          secret: {secretName: REPLACE_WITH_GATEWAY_HTTPS_CA_SECRET}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-matchmaking
+  namespace: voice-staging
+spec:
+  ports:
+    - {name: principal, port: 9092, targetPort: principal}

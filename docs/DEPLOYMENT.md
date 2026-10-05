@@ -489,6 +489,27 @@ but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
 
+## Matchmaking CompleteMatch principal (opt-in template)
+
+`deploy/templates/matchmaking-complete-principal-patch.yaml` is an operator-
+rendered strategic-merge overlay for the Gateway and Matchmaking Deployments.
+It is deliberately excluded from staging and production apply profiles. The
+Gateway uses its own two-key signing Secret and a distinct client TLS
+certificate; Matchmaking uses a separate server certificate, trusts only the
+Gateway client CA, and fetches only the Gateway public keys over the fixed
+HTTPS JWKS route `/.well-known/voice-principal-jwks.json`. Configure the JWKS
+HTTPS host and CA to match the existing Gateway ingress certificate. Redis
+replay storage uses the existing app Redis address and an operator-provisioned
+password Secret.
+
+Before rendering, replace every `REPLACE_WITH_*` and `REPLACE_WITH_GATEWAY_HTTPS_HOST`
+placeholder with operator-owned references and confirm certificate SANs,
+issuer key overlap, Redis ACL, and ingress routing. Do not put key material in
+the overlay or enable it by adding it to an active base. The overlay enables
+only Gateway-originated Matchmaking CompleteMatch; it does not configure Space
+principals or alter ordinary listeners. This source template is not a
+deployment or runtime acceptance claim.
+
 ## Auth-to-User SDK profile principal
 
 Auth's T14 RS256 signer and request-bound `GetSdkProfileEligibility` client are

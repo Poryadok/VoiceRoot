@@ -291,6 +291,19 @@ identity headers. Join/leave сохраняют переданный operation I
 проверки владения match/room, актуальной сессии и членства. Обычные маршруты
 `/api/v1/voice/**` и обычный `VoiceService` для этого пути не используются.
 
+### Matchmaking completion route
+
+`POST /api/v1/matchmaking/matches/{match_id}/complete` requires the user's
+verified account, profile and current session epoch from the JWT. The request
+contains a stable `operationId`; Gateway binds it to the exact Matchmaking
+`CompleteMatch` RPC and protobuf request before signing a short-lived delegated
+principal. It sends the request over the dedicated mTLS listener, never the
+ordinary Matchmaking connection, and does not forward the client bearer or
+identity headers. Matchmaking authorizes the current participant and owns the
+actor-scoped replay result. Replaying the same actor and operation with the same
+binding returns its saved result; rebinding that actor's operation to another
+request is rejected.
+
 ## Зависимости
 
 - **Redis** — rate limiting (sliding window), чтение JWT blacklist и T056-P1 minimum-epoch floor. В strict-режиме ошибки/отсутствие floor fail-closed; зона ответственности с **Auth Service**: [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) (раздел «Redis: API Gateway и Auth Service»).
