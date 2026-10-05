@@ -24,7 +24,7 @@ voice_fcm_diag_parse_log() {
         printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
         return 0
       fi
-      if [[ "${BASH_REMATCH[2]}" == "true" && "${BASH_REMATCH[4]}" != "none" ]]; then
+      if [[ "${BASH_REMATCH[2]}" == "true" && ( "${BASH_REMATCH[3]}" != "matched" || "${BASH_REMATCH[4]}" != "none" ) ]]; then
         printf '%s\n' "${VOICE_FCM_DIAG_UNKNOWN}"
         return 0
       fi

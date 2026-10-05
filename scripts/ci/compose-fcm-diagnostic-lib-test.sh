@@ -18,6 +18,10 @@ done
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget/recipient_present=unknown/recipient_present=true}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget/attempts=0/attempts=1}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget/reason=unknown/reason=matched}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${unknownTarget/valid=false/valid=true}")" == "${unknown}" ]]
+incompleteValid="${unknownTarget/valid=false/valid=true}"
+incompleteValid="${incompleteValid/reason=unknown/reason=incomplete}"
+[[ "$(voice_fcm_diag_parse_log "${incompleteValid}")" == "${unknown}" ]]
 incompleteAttempts="${unknownTarget/reason=unknown/reason=incomplete}"
 incompleteAttempts="${incompleteAttempts/attempts=0/attempts=1}"
 [[ "$(voice_fcm_diag_parse_log "${incompleteAttempts}")" == "${unknown}" ]]
