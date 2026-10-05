@@ -27,7 +27,7 @@ spec:
             - {name: matchmaking-client, mountPath: /run/matchmaking-client, readOnly: true}
       volumes:
         - name: matchmaking-principal-signing
-          secret: {secretName: REPLACE_WITH_GATEWAY_SIGNING_SECRET}
+          secret: {secretName: REPLACE_WITH_GATEWAY_SIGNING_SECRET, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}
         - name: matchmaking-client
           secret: {secretName: REPLACE_WITH_GATEWAY_MATCHMAKING_CLIENT_TLS_SECRET}
 ---

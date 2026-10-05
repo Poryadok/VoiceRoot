@@ -46,6 +46,7 @@ import (
 	"voice/backend/matchmaking/internal/grpcsvc"
 	"voice/backend/matchmaking/internal/spaceprincipal"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/principal"
 )
 
 const gatewayCompleteJWKSPath = "/.well-known/voice-principal-jwks.json"
@@ -54,6 +55,14 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	if testing.Short() {
 		t.Skip("requires private PostgreSQL and Redis fixtures")
 	}
+	projectRoot, err := matchmakingRepoRoot()
+	require.NoError(t, err)
+	template, err := os.ReadFile(filepath.Join(projectRoot, "deploy", "templates", "matchmaking-complete-principal-patch.yaml"))
+	require.NoError(t, err)
+	templateText := string(template)
+	require.Contains(t, templateText, "secret: {secretName: REPLACE_WITH_GATEWAY_SIGNING_SECRET, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}")
+	require.Contains(t, templateText, "key: active-kid}}}")
+	require.NotContains(t, templateText, "secret: {secretName: REPLACE_WITH_GATEWAY_SIGNING_SECRET}\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -137,6 +146,23 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 		case <-mmServeErr:
 		case <-time.After(2 * time.Second):
 			t.Error("protected Matchmaking listener did not stop")
+		}
+	})
+	mmListener2, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	mmPrincipalRuntime2, err := spaceprincipal.New(ctx, principalConfig)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mmPrincipalRuntime2.Close() })
+	mmGRPC2 := grpc.NewServer(mmPrincipalRuntime2.ServerOptions()...)
+	matchmakingv1.RegisterMatchmakingServiceServer(mmGRPC2, matchmakingService)
+	mmServeErr2 := make(chan error, 1)
+	go func() { mmServeErr2 <- mmGRPC2.Serve(mmListener2) }()
+	t.Cleanup(func() {
+		mmGRPC2.Stop()
+		select {
+		case <-mmServeErr2:
+		case <-time.After(2 * time.Second):
+			t.Error("second protected Matchmaking listener did not stop")
 		}
 	})
 	ordinaryListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -264,6 +290,55 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = protectedConn.Close() })
 	grpcClient := matchmakingv1.NewMatchmakingServiceClient(protectedConn)
+	protectedConn2, err := grpc.DialContext(ctx, mmListener2.Addr().String(),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: roots, ServerName: "matchmaking.fixture", Certificates: []tls.Certificate{clientPair}})),
+		grpc.WithBlock())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = protectedConn2.Close() })
+	grpcClient2 := matchmakingv1.NewMatchmakingServiceClient(protectedConn2)
+
+	// The exact same signed delegated request/JTI is rejected by a second
+	// production verifier runtime sharing the first runtime's replay Redis.
+	sharedProfileA, sharedProfileB := uuid.New(), uuid.New()
+	sharedMatchID := seedCompleteMatchFixture(t, ctx, pool, sharedProfileA, sharedProfileB)
+	sharedRequest := &matchmakingv1.CompleteMatchRequest{MatchId: sharedMatchID.String(), OperationId: uuid.NewString()}
+	sharedHash, err := principal.RequestHash(sharedRequest)
+	require.NoError(t, err)
+	sharedJTI := uuid.NewString()
+	sharedToken := signMatchSquadDelegatedJWT(t, keyA, "gateway-current", "gateway", "matchmaking", matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName, sharedRequest.GetOperationId(), sharedHash, accountID, sharedProfileA, 2, sharedJTI)
+	sharedCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+sharedToken, "x-request-id", sharedRequest.GetOperationId())
+	_, err = grpcClient.CompleteMatch(sharedCtx, sharedRequest)
+	require.NoError(t, err)
+	_, err = grpcClient2.CompleteMatch(sharedCtx, sharedRequest)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	assertCompleteMatchParticipantState(t, ctx, pool, sharedMatchID, sharedProfileA, true)
+	assertCompleteMatchParticipantState(t, ctx, pool, sharedMatchID, sharedProfileB, false)
+
+	// Correctly signed but wrongly bound delegated claims fail before the
+	// operation handler and leave the participant row unchanged.
+	negativeProfileA, negativeProfileB := uuid.New(), uuid.New()
+	negativeMatchID := seedCompleteMatchFixture(t, ctx, pool, negativeProfileA, negativeProfileB)
+	negativeRequest := &matchmakingv1.CompleteMatchRequest{MatchId: negativeMatchID.String(), OperationId: uuid.NewString()}
+	negativeHash, err := principal.RequestHash(negativeRequest)
+	require.NoError(t, err)
+	wrongBindings := []struct {
+		name, issuer, audience, hash string
+	}{
+		{name: "issuer", issuer: "untrusted-gateway", audience: "matchmaking", hash: negativeHash},
+		{name: "audience", issuer: "gateway", audience: "wrong-audience", hash: negativeHash},
+		{name: "request hash", issuer: "gateway", audience: "matchmaking", hash: "sha256:" + strings.Repeat("0", 64)},
+	}
+	for _, binding := range wrongBindings {
+		t.Run(binding.name, func(t *testing.T) {
+			token := signMatchSquadDelegatedJWT(t, keyA, "gateway-current", binding.issuer, binding.audience, matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName, negativeRequest.GetOperationId(), binding.hash, accountID, negativeProfileA, 2, uuid.NewString())
+			callCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token, "x-request-id", negativeRequest.GetOperationId())
+			_, callErr := grpcClient.CompleteMatch(callCtx, negativeRequest)
+			require.Equal(t, codes.Unauthenticated, status.Code(callErr))
+			assertCompleteMatchParticipantState(t, ctx, pool, negativeMatchID, negativeProfileA, false)
+		})
+	}
+	assertCompleteMatchParticipantState(t, ctx, pool, negativeMatchID, negativeProfileB, false)
+
 	wrongKindCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+signMatchSquadUserJWT(t, authKey, accountID, profileB.String(), 1), "x-request-id", uuid.NewString())
 	_, err = grpcClient.CompleteMatch(wrongKindCtx, &matchmakingv1.CompleteMatchRequest{MatchId: matchID.String(), OperationId: uuid.NewString()})
 	require.Error(t, err)
@@ -578,6 +653,25 @@ func signMatchSquadUserJWTUntil(t *testing.T, key *rsa.PrivateKey, accountID uui
 	payload, err := json.Marshal(claims)
 	require.NoError(t, err)
 	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
+	digest := sha256.Sum256([]byte(unsigned))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func signMatchSquadDelegatedJWT(t *testing.T, key *rsa.PrivateKey, kid, issuer, audience, rpc, requestID, requestHash string, accountID, profileID uuid.UUID, epoch int64, jti string) string {
+	t.Helper()
+	now := time.Now().UTC()
+	header, err := json.Marshal(map[string]string{"alg": "RS256", "kid": kid, "typ": "JWT"})
+	require.NoError(t, err)
+	claims, err := json.Marshal(map[string]any{
+		"principal_type": "delegated_user", "iss": issuer, "sub": accountID.String(), "aud": audience,
+		"rpc": rpc, "request_id": requestID, "request_hash": requestHash,
+		"account_id": accountID.String(), "profile_id": profileID.String(), "session_epoch": epoch,
+		"iat": now.Unix(), "nbf": now.Unix(), "exp": now.Add(20 * time.Second).Unix(), "jti": jti,
+	})
+	require.NoError(t, err)
+	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
 	digest := sha256.Sum256([]byte(unsigned))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	require.NoError(t, err)
