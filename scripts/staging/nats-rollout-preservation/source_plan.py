@@ -221,10 +221,7 @@ def _application(builder):
                 pull = p.get('image_pull_secret', '')
                 if pull:
                     spec['imagePullSecrets'] = [{'name': pull}]
-                for container in spec.get('containers', []):
-                    service = obj['metadata']['name'].removeprefix('voice-')
-                    if container['name'] == service and service in p.get('images', {}):
-                        container['image'] = p['images'][service]
+                _pin_images(obj, p)
                 apps.append(obj)
             builder.add('app-restart', obj, action=True)
     for obj in apps:
@@ -315,8 +312,7 @@ def compile_plan(source, parameters, decoder, kube):
                 if not (b.root / path).exists(): continue
                 for obj in b.documents(path, 'frontends'):
                     if obj['kind'] == 'Deployment':
-                        container = obj['spec']['template']['spec']['containers'][0]
-                        container['image'] = b.p.get('images', {}).get(frontend, b.p['registry'] + '/' + frontend + ':' + b.p['tag'])
+                        _pin_images(obj, b.p)
                         if b.p.get('image_pull_secret'):
                             obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': b.p['image_pull_secret']}]
                     b.add('frontends', obj, action=True)
@@ -403,6 +399,17 @@ def compile_plan(source, parameters, decoder, kube):
         raise
     except Exception:
         _fail('canonical_plan_invalid')
+
+
+def _pin_images(obj, parameters):
+    spec = obj['spec']['template']['spec']
+    for container in spec.get('containers', []) + spec.get('initContainers', []):
+        key = obj['metadata']['name'] + '/' + container['name']
+        if key in parameters.get('images', {}):
+            image = parameters['images'][key]
+            if not isinstance(image, str) or not re.fullmatch(r'[^\s@]+@sha256:[a-f0-9]{64}', image):
+                _fail('canonical_image_not_immutable')
+            container['image'] = image
 
 
 def _preserve_claims(builder, statefulset):

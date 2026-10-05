@@ -154,10 +154,22 @@ class SourceTests(unittest.TestCase):
 
     def test_present_frontend_change_is_planned_with_requested_image(self):
         kube, params = self.canonical_fixture()
-        params['images']['web'] = 'registry/web:' + 'd' * 40
+        params['images']['voice-web/web'] = 'registry/web@sha256:' + 'd' * 64
         plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
         action = next(a for a in plan['actions'] if a['manifest']['metadata']['name'] == 'voice-web' and a['manifest']['kind'] == 'Deployment')
-        self.assertEqual(action['manifest']['spec']['template']['spec']['containers'][0]['image'], params['images']['web'])
+        self.assertEqual(action['manifest']['spec']['template']['spec']['containers'][0]['image'], params['images']['voice-web/web'])
+
+    def test_canonical_app_every_container_identity_pinned_before_action(self):
+        kube, params = self.canonical_fixture()
+        name = 'voice-user'
+        template = kube.objects[('Deployment', name)]['spec']['template']['spec']
+        for container in template.get('containers', []) + template.get('initContainers', []):
+            params['images'][name + '/' + container['name']] = 'registry/' + container['name'] + '@sha256:' + 'e' * 64
+        plan = source_plan.compile_plan(SOURCE, params, decoder, kube)
+        action = next(a for a in plan['actions'] if a['manifest']['kind'] == 'Deployment' and a['manifest']['metadata']['name'] == name)
+        actual = action['manifest']['spec']['template']['spec']
+        for container in actual.get('containers', []) + actual.get('initContainers', []):
+            self.assertEqual(container['image'], params['images'][name + '/' + container['name']])
 
     def test_missing_present_frontend_veto_before_fence(self):
         kube, params = self.canonical_fixture()
