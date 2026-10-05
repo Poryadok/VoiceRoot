@@ -1,7 +1,6 @@
-import 'dart:collection';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/api_errors.dart';
 import '../../backend/friends_client.dart';
 import '../../backend/users_client.dart';
 import '../../state/auth_providers.dart';
@@ -12,52 +11,55 @@ import '../../state/social_providers.dart';
 /// This sheet-specific provider reads every page so local search covers the
 /// complete accepted-friends list without changing the global friends-list
 /// provider's single-page behavior.
-final forwardMessageAcceptedFriendIdsProvider = FutureProvider<List<String>>((
-  ref,
-) async {
-  final session = ref.watch(
-    authControllerProvider.select((state) => state.session),
-  );
-  if (session == null) throw StateError('not_authenticated');
+final forwardMessageAcceptedFriendIdsProvider =
+    FutureProvider.autoDispose<List<String>>((ref) async {
+      var disposed = false;
+      ref.onDispose(() => disposed = true);
+      final session = ref.watch(
+        authControllerProvider.select((state) => state.session),
+      );
+      if (session == null) throw StateError('not_authenticated');
 
-  final client = ref.watch(voiceFriendsClientProvider);
-  final profileIds = LinkedHashSet<String>();
-  final visitedCursors = <String>{};
-  String? cursor;
+      final client = ref.watch(voiceFriendsClientProvider);
+      final profileIds = <String>{};
+      final visitedCursors = <String>{};
+      String? cursor;
 
-  do {
-    final page = await client.listFriends(
-      authorization: session.authorizationHeader,
-      cursor: cursor,
-    );
+      do {
+        final page = await client.listFriends(
+          authorization: session.authorizationHeader,
+          cursor: cursor,
+        );
 
-    final currentSession = ref.read(authControllerProvider).session;
-    if (currentSession?.activeProfileId != session.activeProfileId ||
-        currentSession?.authorizationHeader != session.authorizationHeader) {
-      throw const ForwardContactsStaleSessionException();
-    }
-
-    switch (page) {
-      case FriendsApiOk(:final data):
-        profileIds.addAll(data.friends.where((id) => id.isNotEmpty));
-        final nextCursor = data.nextCursor;
-        if (nextCursor == null || nextCursor.isEmpty) {
-          cursor = null;
-        } else {
-          if (!visitedCursors.add(nextCursor)) {
-            throw StateError('friends_cursor_did_not_advance');
-          }
-          cursor = nextCursor;
+        if (disposed) return const [];
+        final currentSession = ref.read(authControllerProvider).session;
+        if (currentSession?.activeProfileId != session.activeProfileId ||
+            currentSession?.authorizationHeader !=
+                session.authorizationHeader) {
+          throw const ForwardContactsStaleSessionException();
         }
-      case FriendsApiFailure(:final message):
-        throw StateError(message);
-      case FriendsApiEmpty():
-        throw StateError('unexpected_empty_friends_response');
-    }
-  } while (cursor != null);
 
-  return profileIds.toList(growable: false);
-});
+        switch (page) {
+          case FriendsApiOk(:final data):
+            profileIds.addAll(data.friends.where((id) => id.isNotEmpty));
+            final nextCursor = data.nextCursor;
+            if (nextCursor == null || nextCursor.isEmpty) {
+              cursor = null;
+            } else {
+              if (!visitedCursors.add(nextCursor)) {
+                throw StateError('friends_cursor_did_not_advance');
+              }
+              cursor = nextCursor;
+            }
+          case FriendsApiFailure(:final message):
+            throw StateError(message);
+          case FriendsApiEmpty():
+            throw StateError('unexpected_empty_friends_response');
+        }
+      } while (cursor != null);
+
+      return profileIds.toList(growable: false);
+    });
 
 class ForwardContactsStaleSessionException implements Exception {
   const ForwardContactsStaleSessionException();
@@ -94,43 +96,63 @@ class ForwardMessageContacts {
 
 /// Resolves accepted friend names for complete local search, with bounded
 /// concurrency over the existing single-profile User API.
-final forwardMessageContactsProvider = FutureProvider<ForwardMessageContacts>((
-  ref,
-) async {
-  final session = ref.watch(
-    authControllerProvider.select((state) => state.session),
-  );
-  if (session == null) throw StateError('not_authenticated');
-
-  final profileIds = await ref.watch(
-    forwardMessageAcceptedFriendIdsProvider.future,
-  );
-  final contacts = <ForwardMessageContact>[];
-  const requestBatchSize = 8;
-  for (var start = 0; start < profileIds.length; start += requestBatchSize) {
-    final end = (start + requestBatchSize).clamp(0, profileIds.length);
-    final batchIds = profileIds.sublist(start, end);
-    final profiles = await Future.wait(
-      batchIds.map((id) => ref.watch(profileProvider(id).future)),
-    );
-
-    final currentSession = ref.read(authControllerProvider).session;
-    if (currentSession?.activeProfileId != session.activeProfileId ||
-        currentSession?.authorizationHeader != session.authorizationHeader) {
-      throw const ForwardContactsStaleSessionException();
-    }
-    for (var index = 0; index < batchIds.length; index++) {
-      contacts.add(
-        ForwardMessageContact(
-          profileId: batchIds[index],
-          profile: profiles[index],
-        ),
+final forwardMessageContactsProvider =
+    FutureProvider.autoDispose<ForwardMessageContacts>((ref) async {
+      var disposed = false;
+      ref.onDispose(() => disposed = true);
+      final session = ref.watch(
+        authControllerProvider.select((state) => state.session),
       );
-    }
-  }
+      if (session == null) throw StateError('not_authenticated');
 
-  return ForwardMessageContacts(
-    ownerProfileId: session.activeProfileId,
-    contacts: contacts,
-  );
-});
+      final profileIds = await ref.watch(
+        forwardMessageAcceptedFriendIdsProvider.future,
+      );
+      if (disposed) {
+        return ForwardMessageContacts(
+          ownerProfileId: session.activeProfileId,
+          contacts: const [],
+        );
+      }
+      final contacts = <ForwardMessageContact>[];
+      const requestBatchSize = 8;
+      for (
+        var start = 0;
+        start < profileIds.length;
+        start += requestBatchSize
+      ) {
+        if (disposed) break;
+        final end = (start + requestBatchSize).clamp(0, profileIds.length);
+        final batchIds = profileIds.sublist(start, end);
+        final profiles = await Future.wait(
+          batchIds.map((id) async {
+            try {
+              return await ref.read(profileProvider(id).future);
+            } on ProfileUnavailableException {
+              return null;
+            }
+          }),
+        );
+
+        if (disposed) break;
+        final currentSession = ref.read(authControllerProvider).session;
+        if (currentSession?.activeProfileId != session.activeProfileId ||
+            currentSession?.authorizationHeader !=
+                session.authorizationHeader) {
+          throw const ForwardContactsStaleSessionException();
+        }
+        for (var index = 0; index < batchIds.length; index++) {
+          contacts.add(
+            ForwardMessageContact(
+              profileId: batchIds[index],
+              profile: profiles[index],
+            ),
+          );
+        }
+      }
+
+      return ForwardMessageContacts(
+        ownerProfileId: session.activeProfileId,
+        contacts: contacts,
+      );
+    });
