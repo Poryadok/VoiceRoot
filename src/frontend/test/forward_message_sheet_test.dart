@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -1065,6 +1068,157 @@ void main() {
     );
   });
 
+  testWidgets(
+    'selected forward controls are accessible and keyboard traversal returns focus on Escape',
+    (tester) async {
+      final triggerFocus = FocusNode(debugLabel: 'open-forward-trigger');
+      addTearDown(triggerFocus.dispose);
+      final semantics = tester.ensureSemantics();
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          return http.Response(
+            jsonEncode({
+              'chat_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/friends') {
+          return http.Response(
+            jsonEncode({
+              'friend_list': {
+                'friends': [
+                  {'profile_id': 'friend-target'},
+                ],
+                'next_cursor': '',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => Focus(
+              focusNode: triggerFocus,
+              child: FilledButton(
+                onPressed: () => ForwardMessageSheet.show(
+                  context,
+                  sourceMessage: sourceMessage,
+                  sourceChatId: 'chat-source',
+                ),
+                child: const Text('Open forward'),
+              ),
+            ),
+          ),
+          extraOverrides: [
+            profileProvider.overrideWith((ref, profileId) async {
+              return VoiceProfile(
+                id: profileId,
+                accountId: 'acc-friend',
+                username: 'targetfriend',
+                discriminator: '0242',
+                displayName: 'Target Friend',
+              );
+            }),
+          ],
+          client: client,
+        ),
+      );
+      triggerFocus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(triggerFocus.hasPrimaryFocus, isTrue);
+
+      await tester.tap(find.text('Open forward'));
+      await tester.pumpAndSettle();
+      final contactFinder = find.byKey(
+        ForwardMessageSheet.contactTileKey('friend-target'),
+      );
+      expect(contactFinder, findsOneWidget);
+      await tester.tap(contactFinder);
+      await tester.pumpAndSettle();
+
+      final contactSemantics = tester
+          .getSemantics(contactFinder)
+          .getSemanticsData();
+      expect(contactSemantics.label, contains('Target Friend'));
+      expect(contactSemantics.flagsCollection.isSelected, Tristate.isTrue);
+      expect(contactSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      final searchSemantics = tester
+          .getSemantics(
+            find.descendant(
+              of: find.byKey(ForwardMessageSheet.searchFieldKey),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .getSemanticsData();
+      expect(searchSemantics.flagsCollection.isTextField, isTrue);
+      final commentFinder = find.byKey(ForwardMessageSheet.commentFieldKey);
+      final commentSemantics = tester
+          .getSemantics(
+            find.descendant(
+              of: commentFinder,
+              matching: find.byType(EditableText),
+            ),
+          )
+          .getSemanticsData();
+      expect(commentSemantics.flagsCollection.isTextField, isTrue);
+      expect(find.byTooltip('Cancel'), findsOneWidget);
+      expect(find.bySemanticsLabel('Cancel'), findsWidgets);
+      expect(
+        tester
+            .getSemantics(find.byKey(ForwardMessageSheet.cancelButtonKey))
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue,
+      );
+      final submitSemantics = tester
+          .getSemantics(find.byKey(ForwardMessageSheet.submitButtonKey))
+          .getSemanticsData();
+      expect(submitSemantics.label, contains('Forward'));
+      expect(submitSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      bool primaryFocusWithin(Finder finder) {
+        final target = tester.element(finder);
+        final primary = tester.binding.focusManager.primaryFocus?.context;
+        if (primary is! Element) return false;
+        var found = identical(primary, target);
+        primary.visitAncestorElements((ancestor) {
+          if (identical(ancestor, target)) {
+            found = true;
+            return false;
+          }
+          return true;
+        });
+        return found;
+      }
+
+      await tester.tap(commentFinder);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        primaryFocusWithin(find.byKey(ForwardMessageSheet.cancelButtonKey)),
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        primaryFocusWithin(find.byKey(ForwardMessageSheet.submitButtonKey)),
+        isTrue,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ForwardMessageSheet.sheetKey), findsNothing);
+      expect(triggerFocus.hasPrimaryFocus, isTrue);
+      semantics.dispose();
+    },
+  );
+
   testWidgets('captures H and V recipient-list layouts without overflow', (
     tester,
   ) async {
@@ -1151,6 +1305,159 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   });
+  testWidgets(
+    'forward sheet supports keyboard opening selection focus trap and return',
+    (tester) async {
+      final triggerFocus = FocusNode(debugLabel: 'keyboard-forward-trigger');
+      addTearDown(triggerFocus.dispose);
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          return http.Response(
+            jsonEncode({
+              'chat_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/friends') {
+          return http.Response(
+            jsonEncode({
+              'friend_list': {
+                'friends': [
+                  {'profile_id': 'friend-target'},
+                ],
+                'next_cursor': '',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => FilledButton(
+              focusNode: triggerFocus,
+              onPressed: () => ForwardMessageSheet.show(
+                context,
+                sourceMessage: sourceMessage,
+                sourceChatId: 'chat-source',
+              ),
+              child: const Text('Open forward'),
+            ),
+          ),
+          extraOverrides: [
+            profileProvider.overrideWith((ref, profileId) async {
+              return VoiceProfile(
+                id: profileId,
+                accountId: 'acc-friend',
+                username: 'targetfriend',
+                discriminator: '0242',
+                displayName: 'Target Friend',
+              );
+            }),
+          ],
+          client: client,
+        ),
+      );
+
+      bool primaryFocusWithin(Finder finder) {
+        final target = tester.element(finder);
+        final primary = tester.binding.focusManager.primaryFocus?.context;
+        if (primary is! Element) return false;
+        var found = identical(primary, target);
+        primary.visitAncestorElements((ancestor) {
+          if (identical(ancestor, target)) {
+            found = true;
+            return false;
+          }
+          return true;
+        });
+        return found;
+      }
+
+      final sheetFinder = find.byKey(ForwardMessageSheet.sheetKey);
+      final closeFinder = find.byKey(ForwardMessageSheet.closeButtonKey);
+      final searchFinder = find.byKey(ForwardMessageSheet.searchFieldKey);
+      final contactFinder = find.byKey(
+        ForwardMessageSheet.contactTileKey('friend-target'),
+      );
+      final commentFinder = find.byKey(ForwardMessageSheet.commentFieldKey);
+      final cancelFinder = find.byKey(ForwardMessageSheet.cancelButtonKey);
+      final submitFinder = find.byKey(ForwardMessageSheet.submitButtonKey);
+
+      triggerFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(sheetFinder, findsOneWidget);
+      expect(
+        FocusScope.of(tester.element(sheetFinder)).hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(sheetFinder, findsNothing);
+      expect(triggerFocus.hasPrimaryFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(sheetFinder, findsOneWidget);
+      expect(
+        FocusScope.of(tester.element(sheetFinder)).hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        primaryFocusWithin(closeFinder) || primaryFocusWithin(searchFinder),
+        isTrue,
+      );
+      if (primaryFocusWithin(closeFinder)) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(primaryFocusWithin(searchFinder), isTrue);
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(primaryFocusWithin(contactFinder), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSemantics(contactFinder)
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(primaryFocusWithin(commentFinder), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(primaryFocusWithin(cancelFinder), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(primaryFocusWithin(submitFinder), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(primaryFocusWithin(closeFinder), isTrue);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(primaryFocusWithin(submitFinder), isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(sheetFinder, findsNothing);
+      expect(triggerFocus.hasPrimaryFocus, isTrue);
+    },
+  );
 }
 
 class _NoopRealtimeHub extends RealtimeHub {
