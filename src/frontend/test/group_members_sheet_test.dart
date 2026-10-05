@@ -238,11 +238,15 @@ void main() {
   ) async {
     const chatId = 'group-at-limit';
     var addRequests = 0;
+    var transferRequests = 0;
     await tester.pumpWidget(
       testApp(
         home: const GroupMembersSheet(chatId: chatId),
         client: MockClient((request) async {
           if (request.method == 'POST') addRequests++;
+          if (request.url.path == '/api/v1/chats/$chatId/transfer-ownership') {
+            transferRequests++;
+          }
           return http.Response('{}', 404);
         }),
         extraOverrides: [
@@ -253,7 +257,7 @@ void main() {
               members: List<ChatMember>.generate(
                 500,
                 (index) => ChatMember(
-                  profileId: 'profile-$index',
+                  profileId: index == 0 ? 'prof-test' : 'profile-$index',
                   role: index == 0 ? kChatRoleOwner : kChatRoleMember,
                 ),
               ),
@@ -263,6 +267,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'the maximum owner roster must remain bounded and scrollable',
+    );
+    expect(
+      find.byKey(GroupMembersSheet.transferOwnerKey('profile-1')),
+      findsOneWidget,
+    );
+    expect(find.byKey(GroupMembersSheet.addMembersKey), findsOneWidget);
+    expect(find.byKey(GroupMembersSheet.leaveKey), findsOneWidget);
 
     final addButton = tester.widget<IconButton>(
       find.byKey(GroupMembersSheet.addMembersKey),
@@ -275,6 +291,29 @@ void main() {
     await tester.tap(find.byKey(GroupMembersSheet.addMembersKey));
     await tester.pump();
     expect(addRequests, 0);
+
+    final lastTransfer = find.byKey(
+      GroupMembersSheet.transferOwnerKey('profile-499'),
+    );
+    final roster = find.byType(ListView).first;
+    for (
+      var attempt = 0;
+      attempt < 80 && lastTransfer.evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.drag(roster, const Offset(0, -1000));
+      await tester.pumpAndSettle();
+    }
+    expect(lastTransfer, findsOneWidget);
+    await tester.tap(lastTransfer);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(transferRequests, 0);
+    expect(find.byKey(GroupMembersSheet.addMembersKey), findsOneWidget);
+    expect(find.byKey(GroupMembersSheet.leaveKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('picker submit is discarded after the active profile changes', (
@@ -388,7 +427,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(GroupMembersSheet.memberTileKey('candidate-profile')),
+      find.descendant(
+        of: find.byKey(GroupMembersSheet.memberTileKey('candidate-profile')),
+        matching: find.byType(ListTile),
+      ),
     );
     await tester.pumpAndSettle();
 

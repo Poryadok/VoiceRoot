@@ -94,6 +94,10 @@ class GroupMembersContent extends ConsumerWidget {
                               (role == kChatRoleOwner ||
                                   (role == kChatRoleAdmin &&
                                       member.role == kChatRoleMember));
+                          final canTransferOwnership =
+                              role == kChatRoleOwner &&
+                              !member.isOwner &&
+                              !isSelf;
                           return _MemberTile(
                             key: GroupMembersSheet.memberTileKey(
                               member.profileId,
@@ -101,6 +105,15 @@ class GroupMembersContent extends ConsumerWidget {
                             member: member,
                             isSelf: isSelf,
                             canKick: canKick,
+                            transferButton: canTransferOwnership
+                                ? _TransferOwnershipButton(
+                                    key: GroupMembersSheet.transferOwnerKey(
+                                      member.profileId,
+                                    ),
+                                    chatId: chatId,
+                                    profileId: member.profileId,
+                                  )
+                                : null,
                             kickKey: GroupMembersSheet.kickMemberKey(
                               member.profileId,
                             ),
@@ -116,16 +129,6 @@ class GroupMembersContent extends ConsumerWidget {
                         },
                       ),
                     ),
-                    if (role == kChatRoleOwner)
-                      for (final member in management.members)
-                        if (!member.isOwner && member.profileId != activeId)
-                          _TransferOwnershipButton(
-                            key: GroupMembersSheet.transferOwnerKey(
-                              member.profileId,
-                            ),
-                            chatId: chatId,
-                            profileId: member.profileId,
-                          ),
                     Row(
                       children: [
                         if (management.members.isNotEmpty)
@@ -429,6 +432,7 @@ class _MemberTile extends ConsumerWidget {
     required this.member,
     required this.isSelf,
     required this.canKick,
+    required this.transferButton,
     required this.kickKey,
     required this.onTap,
     required this.onKick,
@@ -437,6 +441,7 @@ class _MemberTile extends ConsumerWidget {
   final ChatMember member;
   final bool isSelf;
   final bool canKick;
+  final Widget? transferButton;
   final Key kickKey;
   final VoidCallback onTap;
   final VoidCallback onKick;
@@ -452,23 +457,37 @@ class _MemberTile extends ConsumerWidget {
       _ => null,
     };
 
-    return ListTile(
-      onTap: onTap,
-      leading: VoiceAvatar(
-        imageUrl: profile?.avatarUrl,
-        label: label,
-        radius: 20,
-      ),
-      title: Text(isSelf ? l10n.chatGroupMemberYou(label) : label),
-      subtitle: roleLabel == null ? null : Text(roleLabel),
-      trailing: canKick
-          ? IconButton(
-              key: kickKey,
-              tooltip: l10n.chatGroupKick,
-              icon: const Icon(Icons.person_remove_outlined),
-              onPressed: onKick,
-            )
-          : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          onTap: onTap,
+          leading: VoiceAvatar(
+            imageUrl: profile?.avatarUrl,
+            label: label,
+            radius: 20,
+          ),
+          title: Text(isSelf ? l10n.chatGroupMemberYou(label) : label),
+          subtitle: roleLabel == null ? null : Text(roleLabel),
+          trailing: canKick
+              ? IconButton(
+                  key: kickKey,
+                  tooltip: l10n.chatGroupKick,
+                  icon: const Icon(Icons.person_remove_outlined),
+                  onPressed: onKick,
+                )
+              : null,
+        ),
+        if (transferButton != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 72, right: 16, bottom: 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: transferButton,
+            ),
+          ),
+      ],
     );
   }
 }
