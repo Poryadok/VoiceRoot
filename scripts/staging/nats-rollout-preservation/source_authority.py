@@ -125,6 +125,20 @@ def _ci(headers, run_id, sha, repo, deadline):
         if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
                 or job['status'] != 'completed' or job['conclusion'] != 'success'): _fail()
         required[name] = job
+    # An in-progress parent can already have a failed optional job after ci-gate.
+    # Bind the whole observed attempt, and never approve a known unrelated failure.
+    names = set()
+    for job in jobs:
+        name = job['name']
+        if (job['run_id'] != run_id or job['head_sha'] != sha or job.get('run_attempt') != attempt
+                or not isinstance(name, str) or not name or name in names
+                or job['status'] not in ('queued', 'in_progress', 'completed')): _fail()
+        names.add(name)
+        if job['status'] != 'completed':
+            if job['conclusion'] is not None: _fail()
+        elif job['conclusion'] not in ('success', 'skipped'):
+            if not (name == 'deploy-staging / deploy' and job['conclusion'] == 'failure'
+                    and (run['status'] == 'in_progress' or run['conclusion'] == 'failure')): _fail()
     if run['status'] == 'completed' and run['conclusion'] == 'failure':
         # Exact caller/callee IDs in ci.yml and staging-deploy.yml; no prefix aliases.
         deployment = 'deploy-staging / deploy'
