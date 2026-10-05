@@ -518,6 +518,30 @@ func TestPostgresMatchSquadMember_TokenIssuanceDeniedWhenLeaveWinsFinalGate(t *t
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*),count(*) FILTER (WHERE state='confirmed'),max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectCount, &confirmedEffects, &effectConfirmedAt))
 	require.Equal(t, 2, effectCount)
 	require.Equal(t, effectCount, confirmedEffects, "both exact old-generation leave effects are confirmed")
+	type leaveEffectSnapshot struct {
+		operationID, effectKind, state         string
+		matchID, roomID, profileID, mediaEpoch uuid.UUID
+		attemptCount                           int64
+		lastErrorNull                          bool
+		lastErrorCode                          string
+		createdAt, updatedAt, confirmedAt      time.Time
+	}
+	snapshotLeaveEffects := func() []leaveEffectSnapshot {
+		rows, queryErr := f.pool.Query(f.ctx, `SELECT operation_id,effect_kind,match_id,room_id,profile_id,media_epoch,state,attempt_count,last_error_code IS NULL,COALESCE(last_error_code,''),created_at,updated_at,confirmed_at
+FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit') ORDER BY effect_kind`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch()))
+		require.NoError(t, queryErr)
+		defer rows.Close()
+		var effects []leaveEffectSnapshot
+		for rows.Next() {
+			var effect leaveEffectSnapshot
+			require.NoError(t, rows.Scan(&effect.operationID, &effect.effectKind, &effect.matchID, &effect.roomID, &effect.profileID, &effect.mediaEpoch, &effect.state, &effect.attemptCount, &effect.lastErrorNull, &effect.lastErrorCode, &effect.createdAt, &effect.updatedAt, &effect.confirmedAt))
+			effects = append(effects, effect)
+		}
+		require.NoError(t, rows.Err())
+		require.Len(t, effects, 2)
+		return effects
+	}
+	oldEffectsBeforeReplay := snapshotLeaveEffects()
 	var latestExpiry, grantExpiry, databaseNow time.Time
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.latest_grant_expires_at,g.expires_at,clock_timestamp()
 FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
@@ -536,9 +560,7 @@ WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan
 	require.NoError(t, err)
 	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "same-operation replay returns the immutable LEAVING receipt")
 	require.Equal(t, removalsBeforeReplay, f.effects.removalCount(), "receipt replay does not repeat external effects")
-	var effectConfirmedAtAfterReplay time.Time
-	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
-	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "receipt replay leaves durable effect receipts unchanged")
+	require.Equal(t, oldEffectsBeforeReplay, snapshotLeaveEffects(), "pre-expiry replay preserves every old-generation effect field")
 
 	issuer.unblock()
 	var token tokenResult
@@ -562,8 +584,7 @@ WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan
 	require.NoError(t, err)
 	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "post-drain replay retains the original LEAVING receipt")
 	require.Equal(t, removalsBeforeExpiredReplay, f.effects.removalCount(), "post-drain replay does not repeat external effects")
-	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
-	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "post-drain receipt replay leaves old effect receipts unchanged")
+	require.Equal(t, oldEffectsBeforeReplay, snapshotLeaveEffects(), "post-drain replay preserves every old-generation effect field")
 
 	newJoin := f.joinRequest()
 	newJoined, err := member.Join(verifiedMemberContext(t, newJoin, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoin.GetOperationId(), account, f.firstProfile), newJoin)
@@ -571,6 +592,18 @@ WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan
 	require.NotEqual(t, joined.GetMediaEpoch(), newJoined.GetMediaEpoch())
 	assertMatchSquadMemberState(t, f, f.firstProfile, "JOINED", "confirmed")
 	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+	newProjectionBeforeReplay, err := f.calls.GetCall(f.ctx, f.roomID.String())
+	require.NoError(t, err)
+	newProjectionEpochs := make(map[string]string, len(newProjectionBeforeReplay.MatchSquadMemberEpochs))
+	for profile, epoch := range newProjectionBeforeReplay.MatchSquadMemberEpochs {
+		newProjectionEpochs[profile] = epoch
+	}
+	newProjectionStates := make(map[string]store.ParticipantState, len(newProjectionBeforeReplay.States))
+	for profile, state := range newProjectionBeforeReplay.States {
+		newProjectionStates[profile] = state
+	}
+	require.Equal(t, newJoined.GetMediaEpoch(), newProjectionEpochs[f.firstProfile])
+	require.Contains(t, newProjectionStates, f.firstProfile)
 	newEpochBeforeOldReplay := f.memberEpoch(t, f.firstProfile)
 	removalsBeforeOldReplay := f.effects.removalCount()
 	replayedLeave, err = member.Leave(leaveCtx, leave)
@@ -578,8 +611,13 @@ WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan
 	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "historical Leave replay remains bound to Eold after Enew")
 	require.Equal(t, removalsBeforeOldReplay, f.effects.removalCount(), "historical Leave replay leaves Enew effects untouched")
 	require.Equal(t, newEpochBeforeOldReplay, f.memberEpoch(t, f.firstProfile), "historical Leave replay cannot modify current Enew")
-	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
-	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "historical receipt replay leaves Eold effect receipts unchanged")
+	require.Equal(t, oldEffectsBeforeReplay, snapshotLeaveEffects(), "historical replay after Enew preserves every old-generation effect field")
+	newProjectionAfterReplay, err := f.calls.GetCall(f.ctx, f.roomID.String())
+	require.NoError(t, err)
+	require.Equal(t, newProjectionBeforeReplay.MatchSquadMatchID, newProjectionAfterReplay.MatchSquadMatchID)
+	require.Equal(t, newProjectionEpochs, newProjectionAfterReplay.MatchSquadMemberEpochs, "historical replay leaves the complete Enew epoch projection unchanged")
+	require.Equal(t, newProjectionStates, newProjectionAfterReplay.States, "historical replay leaves the complete Enew participant projection unchanged")
+	require.Equal(t, newProjectionBeforeReplay.Status, newProjectionAfterReplay.Status)
 	var oldGrantCount int
 	var oldGrantExpiryAfterReplay time.Time
 	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*),max(expires_at) FROM voice_match_squad_member_grants WHERE request_id=$1 AND media_epoch=$2`, tokenRequestID, uuid.MustParse(joined.GetMediaEpoch())).Scan(&oldGrantCount, &oldGrantExpiryAfterReplay))
