@@ -79,7 +79,7 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 	}
 	certificate, err := tls.LoadX509KeyPair(config.ClientCert, config.ClientKey)
 	if err != nil {
-		return nil, nil, true, errors.New("MatchSquad provider client TLS identity is invalid")
+		return nil, nil, true, errors.New("matchsquad provider client TLS identity is invalid")
 	}
 	chatCredentials, err := providerTLSCredentials(config.ChatCA, config.ChatServerName, certificate)
 	if err != nil {
@@ -129,15 +129,15 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 	}
 	canonicalDir, err := filepath.EvalSymlinks(directory)
 	if err != nil {
-		return nil, errors.New("Matchmaking principal signing directory is unavailable")
+		return nil, errors.New("matchmaking principal signing directory is unavailable")
 	}
 	info, err := os.Stat(canonicalDir)
 	if err != nil || !info.IsDir() {
-		return nil, errors.New("Matchmaking principal signing path is not a directory")
+		return nil, errors.New("matchmaking principal signing path is not a directory")
 	}
 	entries, err := os.ReadDir(canonicalDir)
 	if err != nil {
-		return nil, errors.New("Matchmaking principal signing directory is unreadable")
+		return nil, errors.New("matchmaking principal signing directory is unreadable")
 	}
 	keys := make(map[string]*rsa.PrivateKey, 2)
 	for _, entry := range entries {
@@ -146,7 +146,7 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 		}
 		kid := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		if !principalKIDPattern.MatchString(kid) {
-			return nil, errors.New("Matchmaking principal key ID is invalid")
+			return nil, errors.New("matchmaking principal key ID is invalid")
 		}
 		path, err := filepath.EvalSymlinks(filepath.Join(canonicalDir, entry.Name()))
 		if err != nil {
