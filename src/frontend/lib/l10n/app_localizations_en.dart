@@ -1862,6 +1862,41 @@ class AppLocalizationsEn extends AppLocalizations {
       'Need more? Contact support from your account settings.';
 
   @override
+  String get settingsHelpShortcutsTitle => 'Keyboard shortcuts';
+
+  @override
+  String get settingsHelpCloseLabel => 'Close help';
+
+  @override
+  String get settingsHelpShortcutSearch => 'Open search';
+
+  @override
+  String get settingsHelpShortcutSettings => 'Open settings';
+
+  @override
+  String get settingsHelpShortcutUnreadChats => 'Move between unread chats';
+
+  @override
+  String get settingsHelpShortcutFocusComposer => 'Focus the message composer';
+
+  @override
+  String get settingsHelpShortcutSelectMessage => 'Select a message';
+
+  @override
+  String get settingsHelpShortcutMessageActions =>
+      'Open actions for the selected message';
+
+  @override
+  String get settingsHelpShortcutReply => 'Reply to the selected message';
+
+  @override
+  String get settingsHelpShortcutReact => 'React to the selected message';
+
+  @override
+  String get settingsHelpShortcutPushToTalk =>
+      'Hold to talk when push-to-talk is enabled';
+
+  @override
   String get settingsSubscription => 'Subscription';
 
   @override
