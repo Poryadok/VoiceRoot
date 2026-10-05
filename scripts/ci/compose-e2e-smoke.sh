@@ -125,8 +125,11 @@ flutter_status=$?
 set -e
 
 if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" && -s "${TRACE_FILE}" ]]; then
-  diagnostic_logs="$(timeout 5s docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" logs --no-color --no-log-prefix --tail 100 notification 2>/dev/null | head -c 65537 || true)"
-  diagnostic_line="$(voice_fcm_diag_parse_log "${diagnostic_logs}")"
+  set +e
+  diagnostic_logs="$(timeout 5s docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" logs --no-color --no-log-prefix --tail 100 notification 2>/dev/null | head -c 65537)"
+  diagnostic_logs_status=$?
+  set -e
+  voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
   port_mapping="$(docker compose -f "${ROOT}/docker-compose.yml" port nats 4222 2>/dev/null || true)"
   mapped_port=''
   if [[ "${port_mapping}" =~ :([0-9]+)$ ]]; then
@@ -170,6 +173,7 @@ if [[ -n "${TRACE_FILE}" ]]; then
 fi
 trap - EXIT
 if [[ -n "${diagnostic_line:-}" ]]; then
+  echo "compose_fcm_parse_result=${VOICE_FCM_DIAG_PARSE_RESULT}"
   if [[ "${cleanup_failed}" == true ]]; then
     echo "${VOICE_FCM_DIAG_UNKNOWN}"
   else

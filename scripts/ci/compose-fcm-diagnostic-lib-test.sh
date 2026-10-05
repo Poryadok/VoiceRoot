@@ -8,6 +8,9 @@ valid="compose_fcm_diag valid=true reason=matched admission=none candidates=1 at
 unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 [[ "$(voice_fcm_diag_parse_log "${valid}")" == "${valid}" ]]
+parsed=''
+voice_fcm_diag_parse_collected_log 0 "${valid}" parsed
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == accepted && "${parsed}" == "${valid}" ]]
 [[ "$(voice_fcm_diag_parse_log "${unknownPhase}")" == "${unknownPhase}" ]]
 unknownTarget="compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown ${phase_known}"
 [[ "$(voice_fcm_diag_parse_log "${unknownTarget}")" == "${unknownTarget}" ]]
@@ -37,6 +40,14 @@ for admission in invalid window tuple identity mixed overflow; do
   [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${unknown}" ]]
 done
 [[ "$(voice_fcm_diag_parse_log '')" == "${unknown}" ]]
+voice_fcm_diag_parse_collected_log 0 '' parsed
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == missing && "${parsed}" == "${unknown}" ]]
+voice_fcm_diag_parse_collected_log 0 "${valid/admission=none/admission=untrusted}" parsed
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == malformed && "${parsed}" == "${unknown}" ]]
+voice_fcm_diag_parse_collected_log 0 "${valid}"$'\n'"${valid}" parsed
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == duplicate && "${parsed}" == "${unknown}" ]]
+voice_fcm_diag_parse_collected_log 124 "${valid}" parsed
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == unknown && "${parsed}" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid}"$'\n'"${valid}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log 'password=private-sentinel')" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "untrusted-prefix ${valid}")" == "${unknown}" ]]
@@ -46,10 +57,15 @@ done
 [[ "$(voice_fcm_diag_parse_log "${valid/admission=none/admission=private}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid/ member_count=2 / member_count=10000 }")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid%route=ack}route=unk")" == "${unknown}" ]]
-[[ "$(voice_fcm_diag_parse_log "$(printf '%65537s' x)")" == "${unknown}" ]]
+oversized="$(printf '%65537s' x)"
+voice_fcm_diag_parse_log "${oversized}" parsed
+[[ "${parsed}" == "${unknown}" ]]
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == unknown ]]
 many_lines=''
 for _ in {1..101}; do many_lines+=$'\n'; done
-[[ "$(voice_fcm_diag_parse_log "${many_lines}")" == "${unknown}" ]]
+voice_fcm_diag_parse_log "${many_lines}" parsed
+[[ "${parsed}" == "${unknown}" ]]
+[[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == unknown ]]
 ! voice_fcm_diag_identity_valid '' 4
 ! voice_fcm_diag_identity_valid 0 4
 ! voice_fcm_diag_identity_valid 4 0
