@@ -132,7 +132,7 @@ func TestPostgresMatchSquadMember_LeaveRepairWaitsForDatabaseGrantExpiry(t *test
 	require.NoError(t, err)
 	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, call.Status)
 	require.Empty(t, call.States)
-	historicalJoin, err := member.Join(joinCtx, proto.Clone(join).(*callsv1.JoinMatchSquadRoomRequest))
+	historicalJoin, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), proto.Clone(join).(*callsv1.JoinMatchSquadRoomRequest))
 	require.NoError(t, err, "the original Join operation may replay its immutable receipt after LEFT")
 	require.True(t, proto.Equal(joined, historicalJoin))
 	call, err = f.calls.GetCall(f.ctx, f.roomID.String())
@@ -141,6 +141,90 @@ func TestPostgresMatchSquadMember_LeaveRepairWaitsForDatabaseGrantExpiry(t *test
 	leaveReceipt, err := member.Leave(leaveCtx, leave)
 	require.NoError(t, err)
 	require.Equal(t, callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING, leaveReceipt.GetMembershipState(), "lost reply replays the exact committed leave receipt")
+}
+
+func TestPostgresMatchSquadMember_ImmediateLeaveWithoutGrantPreservesGeneration(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	account := uuid.New()
+	member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+	join := f.joinRequest()
+	joined, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+	require.NoError(t, err)
+
+	leave := f.leaveRequest(joined.GetMediaEpoch())
+	left, err := member.Leave(verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile), leave)
+	require.NoError(t, err)
+	require.Equal(t, callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEFT, left.GetMembershipState())
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadUnissuedTerminalGeneration(t, f, f.firstProfile, account, joined.GetMediaEpoch(), "LEFT")
+	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+	oldTokenID := uuid.New()
+	oldToken := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: joined.GetMediaEpoch()}
+	_, err = member.GetJoinToken(verifiedMemberContext(t, oldToken, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, oldTokenID.String(), account, f.firstProfile), oldToken)
+	require.Error(t, err, "the LEFT media epoch cannot issue a token")
+
+	newJoin := f.joinRequest()
+	rejoined, err := member.Join(verifiedMemberContext(t, newJoin, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoin.GetOperationId(), account, f.firstProfile), newJoin)
+	require.NoError(t, err, "a drained LEFT generation may rejoin the still-active owned resource")
+	require.NotEqual(t, joined.GetMediaEpoch(), rejoined.GetMediaEpoch())
+	require.Equal(t, callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_JOINED, rejoined.GetMembershipState())
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+	staleEpochTokenID := uuid.New()
+	_, err = member.GetJoinToken(verifiedMemberContext(t, oldToken, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, staleEpochTokenID.String(), account, f.firstProfile), oldToken)
+	require.Error(t, err, "the prior media epoch cannot receive a token after a new epoch joins")
+	var staleGrants int
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE profile_id=$1 AND media_epoch=$2`, f.firstProfile, uuid.MustParse(joined.GetMediaEpoch())).Scan(&staleGrants))
+	require.Zero(t, staleGrants)
+}
+
+func TestPostgresMatchSquadMember_PendingLeaveRepairWithoutGrantPreservesGeneration(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	account := uuid.New()
+	member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+	join := f.joinRequest()
+	joined, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+	require.NoError(t, err)
+	leave := f.leaveRequest(joined.GetMediaEpoch())
+	leaveCtx := verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile)
+	f.effects.failNextRemoval()
+	_, err = member.Leave(leaveCtx, leave)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "pending")
+	require.NoError(t, member.RepairPendingLeaves(f.ctx, 16))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadUnissuedTerminalGeneration(t, f, f.firstProfile, account, joined.GetMediaEpoch(), "LEFT")
+	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+}
+
+func TestPostgresMatchSquadMember_JoinRollbackAndRepairPreserveGeneration(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		failRemoval  bool
+		wantJoinCode codes.Code
+	}{
+		{name: "abort join", wantJoinCode: codes.Unauthenticated},
+		{name: "repair pending join", failRemoval: true, wantJoinCode: codes.Unavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMatchSquadPostgresFixture(t)
+			account := uuid.New()
+			member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+			member.Principal = &failCurrentMemberCheck{failAt: 5}
+			if tc.failRemoval {
+				f.effects.failNextRemoval()
+			}
+			join := f.joinRequest()
+			_, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+			require.Equal(t, tc.wantJoinCode, status.Code(err))
+			if tc.failRemoval {
+				assertMatchSquadMemberState(t, f, f.firstProfile, "JOINING", "pending")
+				require.NoError(t, member.RepairPendingJoins(f.ctx, 16))
+			}
+			assertMatchSquadMemberState(t, f, f.firstProfile, "EJECTED", "confirmed")
+			assertMatchSquadUnissuedTerminalGeneration(t, f, f.firstProfile, account, f.memberEpoch(t, f.firstProfile), "EJECTED")
+			assertMatchSquadFence(t, f, account, f.firstProfile, false)
+		})
+	}
 }
 
 func TestPostgresMatchSquadTeardown_WaitsForGrantAndOrdersProjectionBeforeClose(t *testing.T) {
@@ -194,6 +278,140 @@ func TestPostgresMatchSquadTeardown_WaitsForGrantAndOrdersProjectionBeforeClose(
 	require.NoError(t, err, "a lost teardown reply recovers the durable receipt")
 	require.Equal(t, receipt, replayed)
 	require.Equal(t, 1, f.effects.closeCalls(), "receipt replay does not re-run external close")
+}
+
+func TestPostgresMatchSquadMember_TokenIssuanceRacesTeardownClosing(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	account := uuid.New()
+	member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+	f.service.Members = member
+	join := f.joinRequest()
+	joined, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+	require.NoError(t, err)
+
+	issuer := &blockingMemberTokens{entered: make(chan struct{}), release: make(chan struct{})}
+	defer issuer.unblock()
+	member.Tokens = issuer
+	tokenRequestID := uuid.New()
+	tokenRequest := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: joined.GetMediaEpoch()}
+	tokenCtx := verifiedMemberContext(t, tokenRequest, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, tokenRequestID.String(), account, f.firstProfile)
+	type tokenResult struct {
+		response *callsv1.GetMatchSquadJoinTokenResponse
+		err      error
+	}
+	tokenDone := make(chan tokenResult, 1)
+	go func() {
+		response, tokenErr := member.GetJoinToken(tokenCtx, tokenRequest)
+		tokenDone <- tokenResult{response: response, err: tokenErr}
+	}()
+	select {
+	case <-issuer.entered: // the SQL-backed token path holds its membership row lock here
+	case <-time.After(5 * time.Second):
+		t.Fatal("token issuer was not reached")
+	}
+
+	teardown := f.teardownRequest()
+	teardownCtx := verifiedServiceContext(t, teardown, matchsquadprincipal.TeardownMethod, teardown.GetTeardownOperationId())
+	teardownDone := make(chan error, 1)
+	go func() {
+		_, teardownErr := f.service.Teardown(teardownCtx, teardown)
+		teardownDone <- teardownErr
+	}()
+	requireMatchSquadResourceState(t, f, "closing")
+	issuer.unblock()
+
+	var token tokenResult
+	select {
+	case token = <-tokenDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("token issuance did not settle")
+	}
+	var teardownErr error
+	select {
+	case teardownErr = <-teardownDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("teardown did not settle")
+	}
+	if token.err == nil {
+		require.NotNil(t, token.response)
+		require.NotEmpty(t, token.response.GetToken().GetJwt())
+		require.Equal(t, codes.Unavailable, status.Code(teardownErr), "teardown must remain pending while the newly recorded bearer is live")
+		require.Equal(t, 0, f.effects.closeCalls(), "LiveKit must remain open while a grant is outstanding")
+		var persistedExpiry, grantExpiry time.Time
+		require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.latest_grant_expires_at,g.expires_at
+FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
+ON g.profile_id=m.profile_id AND g.media_epoch=m.media_epoch
+WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan(&persistedExpiry, &grantExpiry))
+		require.True(t, persistedExpiry.Equal(grantExpiry))
+		require.True(t, persistedExpiry.After(time.Now().UTC()))
+	} else {
+		// If teardown won the race, the request must fail closed and must not
+		// create a durable grant for the closing resource.
+		var grants int
+		require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE request_id=$1`, tokenRequestID).Scan(&grants))
+		require.Zero(t, grants)
+	}
+}
+
+func TestPostgresMatchSquadMember_TokenIssuanceSerializesWithLeave(t *testing.T) {
+	f := newMatchSquadPostgresFixture(t)
+	account := uuid.New()
+	member := f.memberService(map[uuid.UUID]uuid.UUID{f.firstProfile: account})
+	join := f.joinRequest()
+	joined, err := member.Join(verifiedMemberContext(t, join, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, join.GetOperationId(), account, f.firstProfile), join)
+	require.NoError(t, err)
+
+	issuer := &blockingMemberTokens{entered: make(chan struct{}), release: make(chan struct{})}
+	defer issuer.unblock()
+	member.Tokens = issuer
+	tokenRequestID := uuid.New()
+	tokenRequest := &callsv1.GetMatchSquadJoinTokenRequest{ProtocolVersion: 1, MatchId: f.matchID.String(), RoomId: f.roomID.String(), MediaEpoch: joined.GetMediaEpoch()}
+	tokenCtx := verifiedMemberContext(t, tokenRequest, callsv1.MatchSquadMemberService_GetMatchSquadJoinToken_FullMethodName, tokenRequestID.String(), account, f.firstProfile)
+	type tokenResult struct {
+		response *callsv1.GetMatchSquadJoinTokenResponse
+		err      error
+	}
+	tokenDone := make(chan tokenResult, 1)
+	go func() {
+		response, tokenErr := member.GetJoinToken(tokenCtx, tokenRequest)
+		tokenDone <- tokenResult{response: response, err: tokenErr}
+	}()
+	select {
+	case <-issuer.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("token issuer was not reached")
+	}
+	leave := f.leaveRequest(joined.GetMediaEpoch())
+	leaveCtx := verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile)
+	leaveDone := make(chan error, 1)
+	go func() {
+		_, leaveErr := member.Leave(leaveCtx, leave)
+		leaveDone <- leaveErr
+	}()
+	issuer.unblock()
+
+	var token tokenResult
+	select {
+	case token = <-tokenDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("token issuance did not settle")
+	}
+	require.NoError(t, token.err)
+	require.NotNil(t, token.response)
+	select {
+	case err = <-leaveDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("leave did not settle")
+	}
+	require.NoError(t, err)
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "confirmed")
+	var latestExpiry, grantExpiry time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.latest_grant_expires_at,g.expires_at
+FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
+ON g.profile_id=m.profile_id AND g.media_epoch=m.media_epoch
+WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan(&latestExpiry, &grantExpiry))
+	require.True(t, latestExpiry.Equal(grantExpiry))
+	require.True(t, latestExpiry.After(time.Now().UTC()), "Leave remains pending until the serialized token expires")
 }
 
 func TestPostgresMatchSquadMember_ConcurrentProfilesCannotShareAccountFence(t *testing.T) {
@@ -388,6 +606,60 @@ WHERE m.profile_id=$1 AND m.room_id=$2 AND m.media_epoch=$3 AND g.request_id=$4`
 	require.True(t, recordedExpiry.Equal(grantExpiry), "terminal transitions preserve the monotonic grant-expiry fence")
 }
 
+func assertMatchSquadUnissuedTerminalGeneration(t *testing.T, f *matchSquadPostgresFixture, profile, account uuid.UUID, epoch, wantState string) {
+	t.Helper()
+	var state string
+	var storedAccount, storedEpoch uuid.UUID
+	var sessionEpoch int64
+	var canJoin, canPublishAudio, canPublishVideo, canPublishScreenShare, canSubscribe, expiryIsNull bool
+	err := f.pool.QueryRow(f.ctx, `SELECT membership_state,account_id,session_epoch,media_epoch,
+can_join,can_publish_audio,can_publish_video,can_publish_screen_share,can_subscribe,latest_grant_expires_at IS NULL
+FROM voice_room_memberships WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3`, profile, f.roomID, uuid.MustParse(epoch)).Scan(
+		&state, &storedAccount, &sessionEpoch, &storedEpoch, &canJoin, &canPublishAudio, &canPublishVideo, &canPublishScreenShare, &canSubscribe, &expiryIsNull)
+	require.NoError(t, err)
+	require.Equal(t, wantState, state)
+	require.Equal(t, account, storedAccount)
+	require.EqualValues(t, 7, sessionEpoch)
+	require.Equal(t, uuid.MustParse(epoch), storedEpoch)
+	require.True(t, canJoin)
+	require.True(t, canPublishAudio)
+	require.False(t, canPublishVideo)
+	require.False(t, canPublishScreenShare)
+	require.True(t, canSubscribe)
+	require.True(t, expiryIsNull, "a generation with no issued bearer keeps a null expiry")
+	var grants int
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*) FROM voice_match_squad_member_grants WHERE profile_id=$1 AND media_epoch=$2`, profile, uuid.MustParse(epoch)).Scan(&grants))
+	require.Zero(t, grants)
+}
+
+func requireMatchSquadResourceState(t *testing.T, f *matchSquadPostgresFixture, want string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(f.ctx, 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var state string
+		err := f.pool.QueryRow(ctx, `SELECT state FROM voice_room_instances WHERE room_id=$1`, f.roomID).Scan(&state)
+		require.NoError(t, err)
+		if state == want {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("MatchSquad resource did not reach %q: %v", want, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func (f *matchSquadPostgresFixture) memberEpoch(t *testing.T, profile uuid.UUID) string {
+	t.Helper()
+	var epoch uuid.UUID
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT media_epoch FROM voice_room_memberships WHERE profile_id=$1 AND room_id=$2`, profile, f.roomID).Scan(&epoch))
+	return epoch.String()
+}
+
 func assertMatchSquadFence(t *testing.T, f *matchSquadPostgresFixture, account, profile uuid.UUID, active bool) {
 	t.Helper()
 	var count int
@@ -407,6 +679,19 @@ func (r testProfileAccounts) AccountIDByProfileID(_ context.Context, profile uui
 
 type testCurrentMember struct{}
 
+type failCurrentMemberCheck struct {
+	calls  int
+	failAt int
+}
+
+func (p *failCurrentMemberCheck) CheckCurrent(ctx context.Context, actor principal.Principal, now time.Time) error {
+	p.calls++
+	if p.calls == p.failAt {
+		return status.Error(codes.Unauthenticated, "injected hosted principal expiry at join commit")
+	}
+	return testCurrentMember{}.CheckCurrent(ctx, actor, now)
+}
+
 func (testCurrentMember) CheckCurrent(_ context.Context, actor principal.Principal, now time.Time) error {
 	if !actor.ExpiresAt.After(now) {
 		return errors.New("hosted test actor expired")
@@ -415,6 +700,23 @@ func (testCurrentMember) CheckCurrent(_ context.Context, actor principal.Princip
 }
 
 type testMemberTokens struct{}
+
+type blockingMemberTokens struct {
+	entered     chan struct{}
+	release     chan struct{}
+	once        sync.Once
+	releaseOnce sync.Once
+}
+
+func (b *blockingMemberTokens) MatchSquadJoinToken(identity, room string, canPublish *bool, now, actorExpiry time.Time) (string, time.Time, error) {
+	b.once.Do(func() { close(b.entered) })
+	<-b.release
+	return (&testMemberTokens{}).MatchSquadJoinToken(identity, room, canPublish, now, actorExpiry)
+}
+
+func (*blockingMemberTokens) LivekitURL() string { return "wss://hosted-test.invalid" }
+
+func (b *blockingMemberTokens) unblock() { b.releaseOnce.Do(func() { close(b.release) }) }
 
 func (*testMemberTokens) MatchSquadJoinToken(_ string, _ string, _ *bool, now, actorExpiry time.Time) (string, time.Time, error) {
 	expires := now.Add(45 * time.Second).Truncate(time.Second)
