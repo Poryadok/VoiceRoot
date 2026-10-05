@@ -146,6 +146,50 @@ func TestComposeFcmObserverRejectsMalformedAndSymlinkControl(t *testing.T) {
 	}
 }
 
+func TestComposeFcmObserverReadControlFailsClosedForUnavailableInputs(t *testing.T) {
+	dir := t.TempDir()
+	t.Run("absent", func(t *testing.T) {
+		o := &composeFcmObserver{path: filepath.Join(dir, "absent.json")}
+		if _, ok := o.readControl(); ok {
+			t.Fatal("absent control was accepted")
+		}
+	})
+	t.Run("oversized", func(t *testing.T) {
+		path := filepath.Join(dir, "oversized.json")
+		if err := os.WriteFile(path, make([]byte, 4097), 0o600); err != nil {
+			t.Fatal("oversized control setup failed")
+		}
+		o := &composeFcmObserver{path: path}
+		if _, ok := o.readControl(); ok {
+			t.Fatal("oversized control was accepted")
+		}
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		path := filepath.Join(dir, "unreadable.json")
+		if err := os.WriteFile(path, []byte(`{"message_id":""}`), 0o600); err != nil {
+			t.Fatal("unreadable control setup failed")
+		}
+		if err := os.Chmod(path, 0o000); err != nil {
+			t.Fatal("unreadable control permission setup failed")
+		}
+		if _, ok := (&composeFcmObserver{path: path}).readControl(); ok {
+			t.Fatal("unreadable control was accepted")
+		}
+		// Root can bypass file mode bits, so use Linux's regular, owner-only
+		// proc mem file to exercise the ReadFile error path in that case.
+		if os.Geteuid() == 0 {
+			procMem := "/proc/self/mem"
+			info, err := os.Lstat(procMem)
+			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+				t.Fatal("unreadable control fixture unavailable")
+			}
+			if _, ok := (&composeFcmObserver{path: procMem}).readControl(); ok {
+				t.Fatal("unreadable proc control was accepted")
+			}
+		}
+	})
+}
+
 type observerContextKey struct{}
 
 type observerCaptureFCM struct {
