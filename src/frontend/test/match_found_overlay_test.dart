@@ -11,6 +11,7 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/matchmaking_match_controller.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
 import 'package:voice_frontend/state/matchmaking_search_controller.dart';
@@ -498,6 +499,92 @@ void main() {
         container.read(matchmakingMatchControllerProvider).match?.id,
         'new-match',
       );
+    },
+  );
+
+  test(
+    'late accepted response is ignored after the auth session changes',
+    () async {
+      final respondStarted = Completer<void>();
+      final respondResponse = Completer<http.Response>();
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/respond')) {
+          respondStarted.complete();
+          return respondResponse.future;
+        }
+        return http.Response(
+          jsonEncode({
+            'match': {
+              'id': 'match-1',
+              'gameId': 'g-val',
+              'mode': 'Duo',
+              'region': 'eu',
+              'status': 'pending_accept',
+              'profileIds': ['p1', 'p2'],
+            },
+            'serverNow': '2026-10-05T12:00:00Z',
+            'acceptanceDeadlineAt': '2026-10-05T12:00:30Z',
+            'ownProposalResponse': 'pending',
+          }),
+          200,
+        );
+      });
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: client),
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        matchmakingMatchControllerProvider.notifier,
+      );
+      controller.onPushNotificationData({
+        'type': 'match_found',
+        'match_id': 'match-1',
+      });
+      await _waitForMatch(container, 'match-1');
+
+      final response = controller.respond(true);
+      await respondStarted.future;
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'changed-access',
+          refreshToken: 'changed-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-test',
+          expiresInSeconds: 900,
+        ),
+      );
+      respondResponse.complete(
+        http.Response(
+          jsonEncode({
+            'match': {
+              'id': 'match-1',
+              'gameId': 'g-val',
+              'mode': 'Duo',
+              'region': 'eu',
+              'status': 'active',
+              'profileIds': ['p1', 'p2'],
+              'chatId': 'chat-1',
+              'voiceRoomId': 'room-1',
+            },
+            'searchSession': {
+              'id': 'session-1',
+              'profileId': 'p1',
+              'gameId': 'g-val',
+              'mode': 'Duo',
+              'criteriaJson': '{}',
+              'status': 'matched',
+            },
+          }),
+          200,
+        ),
+      );
+
+      expect(await response, isNull);
+      expect(
+        container.read(matchmakingMatchControllerProvider).match?.status,
+        'pending_accept',
+      );
+      expect(container.read(activeSquadMatchProvider), isNull);
     },
   );
 
