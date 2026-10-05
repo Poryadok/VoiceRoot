@@ -142,7 +142,7 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 	keys := make(map[string]*rsa.PrivateKey, 2)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".pem") {
-			return nil, errors.New("Matchmaking principal key directory must contain only PEM rotation keys")
+			return nil, errors.New("matchmaking principal key directory must contain only PEM rotation keys")
 		}
 		kid := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		if !principalKIDPattern.MatchString(kid) {
@@ -150,38 +150,38 @@ func loadMatchmakingIssuer(directory, activeKID string) (*principal.Issuer, erro
 		}
 		path, err := filepath.EvalSymlinks(filepath.Join(canonicalDir, entry.Name()))
 		if err != nil {
-			return nil, errors.New("Matchmaking principal key file is unavailable")
+			return nil, errors.New("matchmaking principal key file is unavailable")
 		}
 		rel, err := filepath.Rel(canonicalDir, path)
 		if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil, errors.New("Matchmaking principal key resolves outside its directory")
+			return nil, errors.New("matchmaking principal key resolves outside its directory")
 		}
 		fileInfo, err := os.Stat(path)
 		if err != nil || !fileInfo.Mode().IsRegular() {
-			return nil, errors.New("Matchmaking principal key is not a regular file")
+			return nil, errors.New("matchmaking principal key is not a regular file")
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, errors.New("Matchmaking principal key is unreadable")
+			return nil, errors.New("matchmaking principal key is unreadable")
 		}
 		block, rest := pem.Decode(data)
 		if block == nil || block.Type != "PRIVATE KEY" || strings.TrimSpace(string(rest)) != "" {
-			return nil, errors.New("Matchmaking principal key must be one PKCS#8 PEM block")
+			return nil, errors.New("matchmaking principal key must be one PKCS#8 PEM block")
 		}
 		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		key, ok := parsed.(*rsa.PrivateKey)
 		if err != nil || !ok || key.Validate() != nil || key.N.BitLen() < 2048 {
-			return nil, errors.New("Matchmaking principal key must be valid RSA of at least 2048 bits")
+			return nil, errors.New("matchmaking principal key must be valid RSA of at least 2048 bits")
 		}
 		keys[kid] = key
 	}
 	if len(keys) != 2 || keys[activeKID] == nil {
-		return nil, errors.New("Matchmaking principal key directory must contain current and next keys")
+		return nil, errors.New("matchmaking principal key directory must contain current and next keys")
 	}
 	active := keys[activeKID]
 	for kid, key := range keys {
 		if kid != activeKID && key.N.Cmp(active.N) == 0 {
-			return nil, errors.New("Matchmaking principal rotation keys must have distinct public keys")
+			return nil, errors.New("matchmaking principal rotation keys must have distinct public keys")
 		}
 	}
 	return principal.NewIssuer(principal.IssuerConfig{Issuer: "matchmaking", KeyID: activeKID, PrivateKey: active})
