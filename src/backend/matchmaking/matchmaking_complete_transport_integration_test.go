@@ -231,8 +231,12 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	badBodyReq.Header.Set("Content-Type", "application/json")
 	badBody, err := client.Do(badBodyReq)
 	require.NoError(t, err)
+	badBodyText, err := io.ReadAll(badBody.Body)
+	require.NoError(t, err)
 	badBody.Body.Close()
-	require.Equal(t, http.StatusBadRequest, badBody.StatusCode)
+	require.Equalf(t, http.StatusBadRequest, badBody.StatusCode,
+		"malformed CompleteMatch response metadata: status=%d content_type=%q body_bytes=%d",
+		badBody.StatusCode, badBody.Header.Get("Content-Type"), len(badBodyText))
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileA, false)
 
 	// The MM commit succeeds, but its first RPC reply is intentionally lost.
