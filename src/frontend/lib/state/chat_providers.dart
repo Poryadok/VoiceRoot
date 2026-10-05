@@ -1021,6 +1021,8 @@ class ChatRoomState {
     this.deliveredMessageIds = const {},
     this.readMessageIds = const {},
     this.pinnedMessages = const [],
+    this.pinnedMessagesStatus = PinnedMessagesLoadStatus.idle,
+    this.pinnedMessagesErrorStatusCode,
     this.isOfflineCache = false,
     this.isDmPeerDeleted = false,
     this.historyProfileId,
@@ -1038,6 +1040,8 @@ class ChatRoomState {
   final Set<String> deliveredMessageIds;
   final Set<String> readMessageIds;
   final List<VoiceMessage> pinnedMessages;
+  final PinnedMessagesLoadStatus pinnedMessagesStatus;
+  final int? pinnedMessagesErrorStatusCode;
   final bool isOfflineCache;
   final bool isDmPeerDeleted;
 
@@ -1063,6 +1067,9 @@ class ChatRoomState {
     Set<String>? deliveredMessageIds,
     Set<String>? readMessageIds,
     List<VoiceMessage>? pinnedMessages,
+    PinnedMessagesLoadStatus? pinnedMessagesStatus,
+    int? pinnedMessagesErrorStatusCode,
+    bool clearPinnedMessagesErrorStatusCode = false,
     bool? isOfflineCache,
     bool? isDmPeerDeleted,
     String? historyProfileId,
@@ -1080,12 +1087,36 @@ class ChatRoomState {
       deliveredMessageIds: deliveredMessageIds ?? this.deliveredMessageIds,
       readMessageIds: readMessageIds ?? this.readMessageIds,
       pinnedMessages: pinnedMessages ?? this.pinnedMessages,
+      pinnedMessagesStatus: pinnedMessagesStatus ?? this.pinnedMessagesStatus,
+      pinnedMessagesErrorStatusCode: clearPinnedMessagesErrorStatusCode
+          ? null
+          : (pinnedMessagesErrorStatusCode ??
+                this.pinnedMessagesErrorStatusCode),
       isOfflineCache: isOfflineCache ?? this.isOfflineCache,
       isDmPeerDeleted: isDmPeerDeleted ?? this.isDmPeerDeleted,
       historyProfileId: historyProfileId ?? this.historyProfileId,
     );
   }
 }
+
+enum PinnedMessagesLoadStatus { idle, loading, loaded, failed }
+
+class PendingPinnedMessageJump {
+  PendingPinnedMessageJump(this.messageId);
+
+  final String messageId;
+  final Completer<bool> _completion = Completer<bool>();
+  bool cancelled = false;
+
+  Future<bool> get result => _completion.future;
+
+  void complete(bool opened) {
+    if (!_completion.isCompleted) _completion.complete(opened);
+  }
+}
+
+final pendingPinnedMessageJumpProvider = StateProvider.autoDispose
+    .family<PendingPinnedMessageJump?, String>((ref, chatId) => null);
 
 enum RealtimeLinkStatus { disconnected, connecting, connected, reconnecting }
 
@@ -1103,10 +1134,21 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       }
       _loadGeneration++;
       if (!profileChanged && nextProfileId != null) {
+        _pinnedMessagesGeneration++;
+        if (mounted) {
+          state = state.copyWith(
+            isLoadingOlder: false,
+            pinnedMessagesStatus: state.pinnedMessages.isEmpty
+                ? PinnedMessagesLoadStatus.idle
+                : PinnedMessagesLoadStatus.loaded,
+            clearPinnedMessagesErrorStatusCode: true,
+          );
+        }
         return;
       }
       _historyGeneration++;
       _loadedHistoryProfileId = null;
+      _pinnedMessagesGeneration++;
       if (mounted) {
         // Keep the snapshot/cursor for lifecycle fencing while panel
         // presentation waits for the new profile's bound history.
@@ -1115,6 +1157,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           isOfflineCache: false,
           clearError: true,
           isDmPeerDeleted: false,
+          pinnedMessages: const [],
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.idle,
+          clearPinnedMessagesErrorStatusCode: true,
         );
       }
     });
@@ -1423,6 +1468,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   String? _loadedHistoryProfileId;
   var _historyGeneration = 0;
   var _loadGeneration = 0;
+  var _pinnedMessagesGeneration = 0;
+  var _olderPageGeneration = 0;
 
   bool _isE2eChat() => _ref.read(chatE2eEnabledProvider(chatId));
 
@@ -1569,21 +1616,46 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required String profileId,
     required int generation,
   }) async {
+    final requestGeneration = ++_pinnedMessagesGeneration;
+    state = state.copyWith(
+      pinnedMessagesStatus: PinnedMessagesLoadStatus.loading,
+      clearPinnedMessagesErrorStatusCode: true,
+    );
     final pinned = await _ref
         .read(voiceMessagesClientProvider)
         .getPinnedMessages(authorization: auth, chatId: chatId);
     if (!_isCurrentMutation(
-      profileId: profileId,
-      authorization: auth,
-      generation: generation,
-    )) {
+          profileId: profileId,
+          authorization: auth,
+          generation: generation,
+        ) ||
+        requestGeneration != _pinnedMessagesGeneration) {
       return;
     }
-    if (pinned case MessagesApiOk(:final data)) {
-      state = state.copyWith(
-        pinnedMessages: _visibleForCurrentBlockPolicy(data.messages),
-      );
+    switch (pinned) {
+      case MessagesApiOk(:final data):
+        state = state.copyWith(
+          pinnedMessages: _visibleForCurrentBlockPolicy(data.messages),
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.loaded,
+          clearPinnedMessagesErrorStatusCode: true,
+        );
+      case MessagesApiFailure(:final statusCode):
+        state = state.copyWith(
+          pinnedMessagesStatus: PinnedMessagesLoadStatus.failed,
+          pinnedMessagesErrorStatusCode: statusCode,
+        );
     }
+  }
+
+  Future<void> retryPinnedMessages() async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    if (auth == null || profileId == null) return;
+    await _refreshPinnedMessages(
+      auth,
+      profileId: profileId,
+      generation: _loadGeneration,
+    );
   }
 
   Future<void> _catchUpAfterReconnect() async {
@@ -1660,14 +1732,15 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     }
   }
 
-  Future<void> loadOlderMessages() async {
-    if (_isDeviceOffline()) return;
+  Future<bool> loadOlderMessages() async {
+    if (_isDeviceOffline()) return false;
     final cursor = state.nextCursor;
-    if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return;
+    if (cursor == null || cursor.isEmpty || state.isLoadingOlder) return false;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final historyGeneration = _historyGeneration;
-    if (auth == null || profileId == null) return;
+    final pageGeneration = ++_olderPageGeneration;
+    if (auth == null || profileId == null) return false;
     state = state.copyWith(isLoadingOlder: true, clearError: true);
     final result = await _ref
         .read(voiceMessagesClientProvider)
@@ -1677,7 +1750,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: historyGeneration,
     )) {
-      return;
+      if (mounted &&
+          pageGeneration == _olderPageGeneration &&
+          state.isLoadingOlder) {
+        state = state.copyWith(isLoadingOlder: false);
+      }
+      return false;
     }
     switch (result) {
       case MessagesApiOk(:final data):
@@ -1685,7 +1763,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         if (data.dmPeerState ==
             messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
           state = state.copyWith(isLoadingOlder: false);
-          return;
+          return false;
         }
         final merged = [...state.messages];
         for (final m in data.messages) {
@@ -1701,7 +1779,12 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           authorization: auth,
           generation: historyGeneration,
         )) {
-          return;
+          if (mounted &&
+              pageGeneration == _olderPageGeneration &&
+              state.isLoadingOlder) {
+            state = state.copyWith(isLoadingOlder: false);
+          }
+          return false;
         }
         state = state.copyWith(
           messages: sorted,
@@ -1713,8 +1796,51 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           clearError: true,
         );
         unawaited(_writeCache(sorted, profileId: profileId));
+        return true;
       case MessagesApiFailure(:final message):
         state = state.copyWith(isLoadingOlder: false, errorMessage: message);
+        return false;
+    }
+  }
+
+  /// Loads existing cursor pages until [messageId] is present or the current
+  /// history reaches an explicit end/failure. It never repeats a cursor.
+  Future<bool> loadHistoryUntilMessage(
+    String messageId, {
+    required bool Function() isCancelled,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    final profileId = _activeProfileId();
+    final historyGeneration = _historyGeneration;
+    if (auth == null || profileId == null) return false;
+    final visitedCursors = <String>{};
+    while (true) {
+      if (isCancelled() ||
+          !_isSelectedForAutomaticHistory() ||
+          !_isCurrentHistory(
+            profileId: profileId,
+            authorization: auth,
+            generation: historyGeneration,
+          )) {
+        return false;
+      }
+      if (state.messages.any((message) => message.id == messageId)) return true;
+      final cursor = state.nextCursor;
+      if (!state.hasMore || cursor == null || cursor.isEmpty) return false;
+      if (!visitedCursors.add(cursor) || state.isLoadingOlder) return false;
+      final loaded = await loadOlderMessages();
+      if (!loaded || isCancelled() || !_isSelectedForAutomaticHistory()) {
+        return false;
+      }
+      if (!_isCurrentHistory(
+        profileId: profileId,
+        authorization: auth,
+        generation: historyGeneration,
+      )) {
+        return false;
+      }
+      if (state.messages.any((message) => message.id == messageId)) return true;
+      if (state.nextCursor == cursor) return false;
     }
   }
 
@@ -3043,8 +3169,18 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
-    final auth = _ref.read(authorizationHeaderProvider);
+    final session = _ref.read(authControllerProvider).session;
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      if (session?.activeProfileId != expectedProfileId ||
+          session?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
+    final auth =
+        expectedAuthorization ?? _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     final trimmedCommentary = commentary?.trim();
     final result = await _ref
@@ -3058,6 +3194,13 @@ class ChatActions {
               : trimmedCommentary,
           withoutAttribution: withoutAttribution,
         );
+    if (expectedProfileId != null || expectedAuthorization != null) {
+      final current = _ref.read(authControllerProvider).session;
+      if (current?.activeProfileId != expectedProfileId ||
+          current?.authorizationHeader != expectedAuthorization) {
+        return kChatActionStaleContext;
+      }
+    }
     return switch (result) {
       MessagesApiOk(:final data) => () {
         _invalidateChatLists(_ref);
@@ -3079,6 +3222,8 @@ class ChatActions {
     required String targetChatId,
     String? commentary,
     bool withoutAttribution = false,
+    String? expectedProfileId,
+    String? expectedAuthorization,
   }) async {
     if (sourceMessageIds.isEmpty) return null;
     for (var i = 0; i < sourceMessageIds.length; i++) {
@@ -3087,6 +3232,8 @@ class ChatActions {
         targetChatId: targetChatId,
         commentary: i == 0 ? commentary : null,
         withoutAttribution: withoutAttribution,
+        expectedProfileId: expectedProfileId,
+        expectedAuthorization: expectedAuthorization,
       );
       if (err != null) return err;
     }

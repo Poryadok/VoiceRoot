@@ -1158,7 +1158,13 @@ void main() {
 
     expect(sentAttachment, isFalse);
     expect(find.text('File scan failed. Try again.'), findsOneWidget);
-    expect(find.text('Try again'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.attachmentUploadRetryKey),
+        matching: find.text('Try again'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ChatRoomPanel shows call actions from chat list peer metadata', (

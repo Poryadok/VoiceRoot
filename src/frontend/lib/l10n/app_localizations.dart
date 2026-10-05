@@ -1802,6 +1802,24 @@ abstract class AppLocalizations {
   /// **'Add profile'**
   String get createProfileTitle;
 
+  /// No description provided for @profileCreateUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile tag'**
+  String get profileCreateUsernameLabel;
+
+  /// No description provided for @profileCreateSessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed-in account or active profile changed. Reopen profile creation to continue.'**
+  String get profileCreateSessionChanged;
+
+  /// No description provided for @profileCreateRecoveryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile created, but setup is incomplete. Try again to finish.'**
+  String get profileCreateRecoveryFailed;
+
   /// No description provided for @createProfileSubmit.
   ///
   /// In en, this message translates to:
@@ -2138,6 +2156,90 @@ abstract class AppLocalizations {
   /// **'Pin message'**
   String get chatMessagePin;
 
+  /// No description provided for @chatPinnedMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned messages'**
+  String get chatPinnedMessagesTitle;
+
+  /// No description provided for @chatPinnedMessagesOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open all pinned messages'**
+  String get chatPinnedMessagesOpen;
+
+  /// No description provided for @chatPinnedMessagesHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide pinned messages'**
+  String get chatPinnedMessagesHide;
+
+  /// No description provided for @chatPinnedMessagesRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Show pinned messages'**
+  String get chatPinnedMessagesRestore;
+
+  /// No description provided for @chatPinnedTypePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo'**
+  String get chatPinnedTypePhoto;
+
+  /// No description provided for @chatPinnedTypeVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get chatPinnedTypeVideo;
+
+  /// No description provided for @chatPinnedTypeFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get chatPinnedTypeFile;
+
+  /// No description provided for @chatPinnedTypeVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get chatPinnedTypeVoice;
+
+  /// No description provided for @chatPinnedTypeSticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker'**
+  String get chatPinnedTypeSticker;
+
+  /// No description provided for @chatPinnedTypeGif.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF'**
+  String get chatPinnedTypeGif;
+
+  /// No description provided for @chatPinnedTypeArticle.
+  ///
+  /// In en, this message translates to:
+  /// **'Article'**
+  String get chatPinnedTypeArticle;
+
+  /// No description provided for @chatPinnedTypeLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get chatPinnedTypeLocation;
+
+  /// No description provided for @chatPinnedTypeMusic.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get chatPinnedTypeMusic;
+
+  /// No description provided for @chatPinnedTypeVideoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Video message'**
+  String get chatPinnedTypeVideoMessage;
+
   /// No description provided for @chatMessageUnpin.
   ///
   /// In en, this message translates to:
@@ -2165,7 +2267,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatForwardSearchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search chats'**
+  /// **'Search chats and contacts'**
   String get chatForwardSearchHint;
 
   /// No description provided for @chatForwardFrom.
@@ -5905,6 +6007,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start'**
   String get onboardingWrapUpStart;
+
+  /// No description provided for @deepLinkAccessDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Access denied'**
+  String get deepLinkAccessDenied;
+
+  /// No description provided for @deepLinkResourceNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found'**
+  String get deepLinkResourceNotFound;
+
+  /// No description provided for @deepLinkReturnHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Home'**
+  String get deepLinkReturnHome;
 
   /// No description provided for @e2eBackupStatusChecking.
   ///

@@ -973,6 +973,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createProfileTitle => 'Add profile';
 
   @override
+  String get profileCreateUsernameLabel => 'Profile tag';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'The signed-in account or active profile changed. Reopen profile creation to continue.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Profile created, but setup is incomplete. Try again to finish.';
+
+  @override
   String get createProfileSubmit => 'Create profile';
 
   @override
@@ -1155,6 +1166,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessagePin => 'Pin message';
 
   @override
+  String get chatPinnedMessagesTitle => 'Pinned messages';
+
+  @override
+  String get chatPinnedMessagesOpen => 'Open all pinned messages';
+
+  @override
+  String get chatPinnedMessagesHide => 'Hide pinned messages';
+
+  @override
+  String get chatPinnedMessagesRestore => 'Show pinned messages';
+
+  @override
+  String get chatPinnedTypePhoto => 'Photo';
+
+  @override
+  String get chatPinnedTypeVideo => 'Video';
+
+  @override
+  String get chatPinnedTypeFile => 'File';
+
+  @override
+  String get chatPinnedTypeVoice => 'Voice';
+
+  @override
+  String get chatPinnedTypeSticker => 'Sticker';
+
+  @override
+  String get chatPinnedTypeGif => 'GIF';
+
+  @override
+  String get chatPinnedTypeArticle => 'Article';
+
+  @override
+  String get chatPinnedTypeLocation => 'Location';
+
+  @override
+  String get chatPinnedTypeMusic => 'Music';
+
+  @override
+  String get chatPinnedTypeVideoMessage => 'Video message';
+
+  @override
   String get chatMessageUnpin => 'Unpin message';
 
   @override
@@ -1175,7 +1228,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatCopyAsNewTitle => 'Copy as new to';
 
   @override
-  String get chatForwardSearchHint => 'Search chats';
+  String get chatForwardSearchHint => 'Search chats and contacts';
 
   @override
   String chatForwardFrom(String sender) {
@@ -3229,6 +3282,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Start';
+
+  @override
+  String get deepLinkAccessDenied => 'Access denied';
+
+  @override
+  String get deepLinkResourceNotFound => 'Not found';
+
+  @override
+  String get deepLinkReturnHome => 'Go to Home';
 
   @override
   String get e2eBackupStatusChecking => 'Checking encrypted key backup…';

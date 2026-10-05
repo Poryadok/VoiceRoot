@@ -975,6 +975,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createProfileTitle => 'Добавить профиль';
 
   @override
+  String get profileCreateUsernameLabel => 'Тег профиля';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'Аккаунт или активный профиль изменился. Откройте создание профиля снова.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Профиль создан, но настройка не завершена. Попробуйте снова, чтобы закончить.';
+
+  @override
   String get createProfileSubmit => 'Создать профиль';
 
   @override
@@ -1160,6 +1171,48 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessagePin => 'Закрепить сообщение';
 
   @override
+  String get chatPinnedMessagesTitle => 'Закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesOpen => 'Открыть все закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesHide => 'Скрыть закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesRestore => 'Показать закреплённые сообщения';
+
+  @override
+  String get chatPinnedTypePhoto => 'Фото';
+
+  @override
+  String get chatPinnedTypeVideo => 'Видео';
+
+  @override
+  String get chatPinnedTypeFile => 'Файл';
+
+  @override
+  String get chatPinnedTypeVoice => 'Голосовое';
+
+  @override
+  String get chatPinnedTypeSticker => 'Стикер';
+
+  @override
+  String get chatPinnedTypeGif => 'GIF';
+
+  @override
+  String get chatPinnedTypeArticle => 'Статья';
+
+  @override
+  String get chatPinnedTypeLocation => 'Геопозиция';
+
+  @override
+  String get chatPinnedTypeMusic => 'Музыка';
+
+  @override
+  String get chatPinnedTypeVideoMessage => 'Видеосообщение';
+
+  @override
   String get chatMessageUnpin => 'Открепить сообщение';
 
   @override
@@ -1182,7 +1235,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatCopyAsNewTitle => 'Копировать как новое в';
 
   @override
-  String get chatForwardSearchHint => 'Поиск чатов';
+  String get chatForwardSearchHint => 'Поиск чатов и контактов';
 
   @override
   String chatForwardFrom(String sender) {
@@ -3254,6 +3307,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingWrapUpStart => 'Начать';
+
+  @override
+  String get deepLinkAccessDenied => 'Нет доступа';
+
+  @override
+  String get deepLinkResourceNotFound => 'Не найдено';
+
+  @override
+  String get deepLinkReturnHome => 'На главную';
 
   @override
   String get e2eBackupStatusChecking => 'Проверяем резервную копию ключей…';

@@ -79,11 +79,12 @@ def observe_refence(state,staging):
         state['stage_fenced']=True;state['fence_status']='VERIFIED'
 
 
-def private_json(path):
+def private_json(path,*,limit=2<<20):
+    if type(limit) is not int or not 0<limit<=128<<20:raise Blocked('checkpoint_limit_invalid')
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     try:
         s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o077 or not 1<=s.st_size<=2<<20:
+        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o077 or not 1<=s.st_size<=limit:
             raise Blocked('checkpoint_custody_invalid')
         raw=os.read(fd,s.st_size+1)
         if len(raw)!=s.st_size: raise Blocked('checkpoint_size_changed')
@@ -91,9 +92,10 @@ def private_json(path):
     finally: os.close(fd)
 
 
-def save(path, row):
+def save(path, row,*,limit=2<<20):
+    if type(limit) is not int or not 0<limit<=128<<20:raise Blocked('journal_limit_invalid')
     raw=json.dumps(row,sort_keys=True,indent=2).encode()+b'\n'
-    if len(raw)>2<<20: raise Blocked('journal_size_limit')
+    if len(raw)>limit: raise Blocked('journal_size_limit')
     temporary=path.with_name(path.name+'.next')
     fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     with os.fdopen(fd,'wb') as f:
@@ -115,8 +117,10 @@ def public_read(path,limit=256<<10):
     finally: os.close(fd)
 
 
-def capture_inputs(kube, base, contract):
-    generation=CURRENT['generation']
+def capture_inputs(kube, base, contract, generation=None):
+    generation=CURRENT['generation'] if generation is None else generation
+    if not re.fullmatch(r'r[0-9]{8}[a-z0-9]{0,8}',generation):
+        raise Blocked('captured_generation_invalid')
     selected={'operator':'voice-nats-operator-'+generation,
               'bootstrap':'voice-nats-bootstrap-credentials-'+generation,
               'services':'voice-nats-service-credentials-'+generation}
@@ -140,6 +144,7 @@ def capture_inputs(kube, base, contract):
     tokens={key:secret('operator',key).decode().strip() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
     for key in ('account.public','system-account.public'):
         if not re.fullmatch(r'A[A-Z2-7]{55}',tokens[key]): raise Blocked('account_identity_invalid')
+    path=inputs/'account.public';path.write_text(tokens['account.public']);path.chmod(0o440);os.chown(path,0,65532)
     for key in ('operator.jwt','account.jwt','system-account.jwt'):
         if not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',tokens[key]): raise Blocked('public_jwt_invalid')
     q=json.dumps
