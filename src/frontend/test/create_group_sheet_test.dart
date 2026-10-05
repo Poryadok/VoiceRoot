@@ -305,6 +305,100 @@ void main() {
     },
   );
 
+  testWidgets(
+    'later friend page failure hides partial results and retry restarts paging',
+    (tester) async {
+      final requests = <http.Request>[];
+      var pageTwoAvailable = false;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            ),
+          ),
+          useApiFriendPages: true,
+          client: MockClient((request) async {
+            requests.add(request);
+            if (request.method == 'GET' &&
+                request.url.path == '/api/v1/friends') {
+              if (request.url.queryParameters['cursor'] == null) {
+                return http.Response(
+                  jsonEncode({
+                    'friends': [
+                      {'profile_id': 'friend-a'},
+                      {'profile_id': 'friend-b'},
+                    ],
+                    'next_cursor': 'page-2',
+                  }),
+                  200,
+                );
+              }
+              expect(request.url.queryParameters['cursor'], 'page-2');
+              if (!pageTwoAvailable) {
+                return http.Response('{}', 503);
+              }
+              return http.Response(
+                jsonEncode({
+                  'friends': [
+                    {'profile_id': 'friend-c'},
+                  ],
+                }),
+                200,
+              );
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-b')),
+        findsNothing,
+      );
+      expect(find.text('Try again'), findsOneWidget);
+      expect(
+        requests
+            .where((request) => request.url.path == '/api/v1/friends')
+            .map((request) => request.url.queryParameters['cursor'])
+            .toList(),
+        [null, 'page-2'],
+      );
+
+      pageTwoAvailable = true;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-b')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        findsOneWidget,
+      );
+      expect(
+        requests
+            .where((request) => request.url.path == '/api/v1/friends')
+            .map((request) => request.url.queryParameters['cursor'])
+            .toList(),
+        [null, 'page-2', null, 'page-2'],
+      );
+    },
+  );
+
   testWidgets('ChatListPanel opens create group sheet', (tester) async {
     await tester.pumpWidget(
       testApp(
