@@ -83,11 +83,11 @@ func LoadProtectedProviderWorker(matchStore *store.MatchStore, getenv func(strin
 	}
 	chatCredentials, err := providerTLSCredentials(config.ChatCA, config.ChatServerName, certificate)
 	if err != nil {
-		return nil, nil, true, fmt.Errorf("Chat MatchSquad mTLS configuration: %w", err)
+		return nil, nil, true, fmt.Errorf("chat MatchSquad mTLS configuration: %w", err)
 	}
 	voiceCredentials, err := providerTLSCredentials(config.VoiceCA, config.VoiceServerName, certificate)
 	if err != nil {
-		return nil, nil, true, fmt.Errorf("Voice MatchSquad mTLS configuration: %w", err)
+		return nil, nil, true, fmt.Errorf("voice MatchSquad mTLS configuration: %w", err)
 	}
 	chatConn, err := grpc.NewClient(grpcclient.DialTarget(config.ChatAddr), grpc.WithTransportCredentials(chatCredentials))
 	if err != nil {

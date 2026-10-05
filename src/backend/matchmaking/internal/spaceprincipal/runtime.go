@@ -207,7 +207,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("Matchmaking principal JWKS requires current and next keys")
+			return nil, errors.New("matchmaking principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for kid, key := range keys {

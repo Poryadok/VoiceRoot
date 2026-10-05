@@ -53,9 +53,10 @@ import (
 const gatewayCompleteJWKSPath = "/.well-known/voice-principal-jwks.json"
 
 type matchSquadGatewayBinary struct {
-	path     string
-	revision string
-	tree     string
+	path       string
+	sourceRoot string
+	revision   string
+	tree       string
 }
 
 type matchSquadGatewayTrace struct {
@@ -541,20 +542,34 @@ func buildMatchSquadGateway(t *testing.T, ctx context.Context, fixtureDir string
 	t.Helper()
 	projectRoot, err := matchmakingRepoRoot()
 	require.NoError(t, err)
-	clean, err := exec.Command("git", "-C", projectRoot, "status", "--porcelain=v1", "--untracked-files=normal").Output()
-	require.NoError(t, err, "inspect the immutable fixture source status")
-	require.Empty(t, clean, "the transport fixture must build only from a clean immutable checkout")
 	revision := matchSquadGitValue(t, projectRoot, "rev-parse", "HEAD")
 	tree := matchSquadGitValue(t, projectRoot, "rev-parse", "HEAD^{tree}")
+	sourceRoot := filepath.Join(fixtureDir, "gateway-source")
+	worktree := exec.Command("git", "-C", projectRoot, "worktree", "add", "--detach", "--quiet", sourceRoot, revision)
+	worktree.Stdout, worktree.Stderr = io.Discard, io.Discard
+	require.NoError(t, worktree.Run(), "create the exact immutable Gateway source tree")
+	t.Cleanup(func() {
+		remove := exec.Command("git", "-C", projectRoot, "worktree", "remove", sourceRoot)
+		remove.Stdout, remove.Stderr = io.Discard, io.Discard
+		_ = remove.Run()
+	})
+	clean, err := exec.Command("git", "-C", sourceRoot, "status", "--porcelain=v1", "--untracked-files=normal").Output()
+	require.NoError(t, err, "inspect the immutable fixture source status")
+	require.Empty(t, clean, "the Gateway fixture build worktree must be clean")
+	require.Equal(t, revision, matchSquadGitValue(t, sourceRoot, "rev-parse", "HEAD"))
+	require.Equal(t, tree, matchSquadGitValue(t, sourceRoot, "rev-parse", "HEAD^{tree}"))
 	binary := filepath.Join(fixtureDir, "gateway-fixture")
 	buildCtx, cancelBuild := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelBuild()
 	ldflags := "-X=main.matchFoundTransportTraceRevision=" + revision + " -X=main.matchFoundTransportTraceTree=" + tree
-	build := exec.CommandContext(buildCtx, "go", "build", "-tags=matchfoundtransportdiag", "-ldflags", ldflags, "-o", binary, ".")
-	build.Dir = filepath.Join(projectRoot, "src", "backend", "gateway")
+	build := exec.CommandContext(buildCtx, "go", "build", "-mod=readonly", "-tags=matchfoundtransportdiag", "-ldflags", ldflags, "-o", binary, ".")
+	build.Dir = filepath.Join(sourceRoot, "src", "backend", "gateway")
 	build.Stdout, build.Stderr = io.Discard, io.Discard
 	require.NoError(t, build.Run(), "build the actual Gateway module for the private transport fixture")
-	return matchSquadGatewayBinary{path: binary, revision: revision, tree: tree}
+	clean, err = exec.Command("git", "-C", sourceRoot, "status", "--porcelain=v1", "--untracked-files=normal").Output()
+	require.NoError(t, err, "verify immutable Gateway build inputs after compilation")
+	require.Empty(t, clean, "the Gateway fixture build worktree changed during compilation")
+	return matchSquadGatewayBinary{path: binary, sourceRoot: sourceRoot, revision: revision, tree: tree}
 }
 
 func matchSquadGitValue(t *testing.T, projectRoot string, args ...string) string {
@@ -567,12 +582,9 @@ func matchSquadGitValue(t *testing.T, projectRoot string, args ...string) string
 
 func startMatchSquadGateway(t *testing.T, ctx context.Context, binary matchSquadGatewayBinary, trace *matchSquadGatewayTrace, gatewayPort int, mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKSURL, activeKID string) string {
 	t.Helper()
-	projectRoot, err := matchmakingRepoRoot()
-	require.NoError(t, err)
-
 	listenAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(gatewayPort))
 	cmd := exec.CommandContext(ctx, binary.path)
-	cmd.Dir = filepath.Join(projectRoot, "src", "backend", "gateway")
+	cmd.Dir = filepath.Join(binary.sourceRoot, "src", "backend", "gateway")
 	cmd.Env = matchSquadGatewayEnvironment(os.Environ(), map[string]string{
 		"LISTEN_ADDR":                                   listenAddr,
 		"GATEWAY_JWKS_URL":                              authJWKSURL,
