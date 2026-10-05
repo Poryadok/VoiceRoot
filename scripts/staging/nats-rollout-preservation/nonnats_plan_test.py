@@ -59,15 +59,31 @@ class PlanTests(unittest.TestCase):
     def test_bounded_action_binds_baseline_and_rejects_nats_action(self):
         kube, plan = self.full_fixture()
         row = next(row for row in plan['checks'] if row['id'] == 'domains')
+        baseline = copy.deepcopy(kube.objects[('configmap', 'voice-app-config')])
+        baseline['metadata']['name'] = 'voice-domain-config'
+        kube.objects[('configmap', 'voice-domain-config')] = baseline
+        row['objects'][0]['name'] = 'voice-domain-config'
         row['disposition'] = 'action'
         row['objects'][0]['action_id'] = 'config'
         row['objects'][0]['desired']['data'] = {'S3_SIGNING_ENDPOINT': 'https://changed.example.invalid'}
-        manifest = {'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'voice-app-config', 'namespace': NS}, 'data': row['objects'][0]['desired']['data']}
+        manifest = {'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'voice-domain-config', 'namespace': NS}, 'data': row['objects'][0]['desired']['data']}
         plan['actions'] = [{'id': 'config', 'row': 'domains', 'manifest': manifest}]
         binding = subject.preflight(kube, plan, 'full')
         self.assertTrue(subject.revalidate(kube, binding))
         manifest['metadata']['name'] = 'voice-nats-config'
         kube.calls.clear()
+        with self.assertRaises(subject.PlanError): subject.preflight(kube, plan, 'full')
+        self.assertEqual(kube.calls, [])
+
+    def test_conflicting_row_targets_veto_before_read(self):
+        kube, plan = self.full_fixture()
+        row = next(row for row in plan['checks'] if row['id'] == 'domains')
+        row['disposition'] = 'action'
+        row['objects'][0]['action_id'] = 'config'
+        row['objects'][0]['desired']['data'] = {'S3_SIGNING_ENDPOINT': 'https://changed.example.invalid'}
+        plan['actions'] = [{'id': 'config', 'row': 'domains', 'manifest': {
+            'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'voice-app-config', 'namespace': NS},
+            'data': row['objects'][0]['desired']['data']}}]
         with self.assertRaises(subject.PlanError): subject.preflight(kube, plan, 'full')
         self.assertEqual(kube.calls, [])
 

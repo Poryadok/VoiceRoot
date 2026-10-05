@@ -190,6 +190,15 @@ def _validate(plan, mode):
             descriptors.append((disposition, obj))
     if used != set(indexed):
         _fail('unconsumed_action')
+    targets = {}
+    for disposition, obj in descriptors:
+        if obj['kind'] == 'Secret':
+            continue  # Independent key predicates compose on the same authority.
+        key = (obj['kind'], obj['namespace'], obj['name'])
+        target = (disposition, obj['desired'])
+        if key in targets and targets[key] != target:
+            _fail('conflicting_row_targets')
+        targets[key] = target
     return descriptors
 
 
