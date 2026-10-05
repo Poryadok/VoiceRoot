@@ -395,6 +395,27 @@ func runNotificationConsumerRestartProof(t *testing.T, fixture *notificationCons
 	firstErr, firstJoined := first.stop()
 	require.True(t, firstJoined, "%s first consumer is joined before publishing", spec.service)
 	require.ErrorIs(t, firstErr, context.Canceled, "%s consumer exits normally on cancellation", spec.service)
+	var (
+		unbindAttempts   int
+		unbindErrorClass = "not observed"
+		lastPushBound    = true
+	)
+	unboundObserved := assert.Eventually(t, func() bool {
+		unbindAttempts++
+		info, infoErr := fixture.js.ConsumerInfo(spec.stream, durable)
+		if infoErr != nil {
+			unbindErrorClass = fmt.Sprintf("%T", infoErr)
+			lastPushBound = true
+			return false
+		}
+		unbindErrorClass = "none"
+		lastPushBound = info.PushBound
+		return !info.PushBound
+	}, 5*time.Second, 20*time.Millisecond)
+	if !unboundObserved {
+		t.Fatalf("%s stopped consumer unbind observation failed before backlog publish: query_attempts=%d query_error_class=%q push_bound=%t",
+			spec.service, unbindAttempts, unbindErrorClass, lastPushBound)
+	}
 
 	encoded, err := proto.Marshal(spec.event)
 	require.NoError(t, err)
