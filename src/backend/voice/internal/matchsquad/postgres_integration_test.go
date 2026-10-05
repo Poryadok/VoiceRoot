@@ -478,18 +478,67 @@ func TestPostgresMatchSquadMember_TokenIssuanceDeniedWhenLeaveWinsFinalGate(t *t
 
 	leave := f.leaveRequest(joined.GetMediaEpoch())
 	leaveCtx := verifiedMemberContext(t, leave, callsv1.MatchSquadMemberService_LeaveMatchSquadRoom_FullMethodName, leave.GetOperationId(), account, f.firstProfile)
-	leaveDone := make(chan error, 1)
+	type leaveResult struct {
+		response *callsv1.LeaveMatchSquadRoomResponse
+		err      error
+	}
+	leaveDone := make(chan leaveResult, 1)
 	go func() {
-		_, leaveErr := member.Leave(leaveCtx, leave)
-		leaveDone <- leaveErr
+		response, leaveErr := member.Leave(leaveCtx, leave)
+		leaveDone <- leaveResult{response: response, err: leaveErr}
 	}()
+	var leaveReceipt *callsv1.LeaveMatchSquadRoomResponse
 	select {
-	case err = <-leaveDone:
+	case result := <-leaveDone:
+		err = result.err
+		leaveReceipt = result.response
 	case <-time.After(10 * time.Second):
 		t.Fatal("leave did not reach its durable pending state")
 	}
-	require.Equal(t, codes.Unavailable, status.Code(err), "Leave must remain pending while the reservation is live")
+	require.NoError(t, err, "the exact Leave command is durably acknowledged while its membership remains LEAVING")
+	require.NotNil(t, leaveReceipt)
+	require.Equal(t, f.roomID.String(), leaveReceipt.GetCallSession().GetRoomId())
+	require.Equal(t, joined.GetMediaEpoch(), leaveReceipt.GetMediaEpoch())
+	require.Equal(t, callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEAVING, leaveReceipt.GetMembershipState())
 	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+
+	var operationState string
+	var requestBytes, responseBytes []byte
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT state,request_bytes,response_bytes FROM voice_match_squad_member_operations WHERE operation_id=$1`, uuid.MustParse(leave.GetOperationId())).Scan(&operationState, &requestBytes, &responseBytes))
+	require.Equal(t, "complete", operationState)
+	storedRequest := new(callsv1.LeaveMatchSquadRoomRequest)
+	require.NoError(t, proto.Unmarshal(requestBytes, storedRequest))
+	require.True(t, proto.Equal(leave, storedRequest), "the acknowledged operation retains its exact request")
+	storedReceipt := new(callsv1.LeaveMatchSquadRoomResponse)
+	require.NoError(t, proto.Unmarshal(responseBytes, storedReceipt))
+	require.True(t, proto.Equal(leaveReceipt, storedReceipt), "the completed operation retains its immutable receipt")
+	var effectCount, confirmedEffects int
+	var effectConfirmedAt time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*),count(*) FILTER (WHERE state='confirmed'),max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectCount, &confirmedEffects, &effectConfirmedAt))
+	require.Equal(t, 2, effectCount)
+	require.Equal(t, effectCount, confirmedEffects, "both exact old-generation leave effects are confirmed")
+	var latestExpiry, grantExpiry, databaseNow time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.latest_grant_expires_at,g.expires_at,clock_timestamp()
+FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
+ON g.profile_id=m.profile_id AND g.media_epoch=m.media_epoch
+WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan(&latestExpiry, &grantExpiry, &databaseNow))
+	require.True(t, latestExpiry.Equal(grantExpiry))
+	require.True(t, latestExpiry.After(databaseNow), "the DB clock still considers the reserved bearer live")
+	require.NoError(t, member.RepairExpiredLeaves(f.ctx, 16))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEAVING", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+	newJoinBeforeExpiry := f.joinRequest()
+	_, err = member.Join(verifiedMemberContext(t, newJoinBeforeExpiry, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoinBeforeExpiry.GetOperationId(), account, f.firstProfile), newJoinBeforeExpiry)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "a live grant and held account fence prevent Enew")
+	removalsBeforeReplay := f.effects.removalCount()
+	replayedLeave, err := member.Leave(leaveCtx, leave)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "same-operation replay returns the immutable LEAVING receipt")
+	require.Equal(t, removalsBeforeReplay, f.effects.removalCount(), "receipt replay does not repeat external effects")
+	var effectConfirmedAtAfterReplay time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
+	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "receipt replay leaves durable effect receipts unchanged")
 
 	issuer.unblock()
 	var token tokenResult
@@ -500,13 +549,44 @@ func TestPostgresMatchSquadMember_TokenIssuanceDeniedWhenLeaveWinsFinalGate(t *t
 	}
 	require.Equal(t, codes.FailedPrecondition, status.Code(token.err), "Leave before the final gate must discard the signed JWT")
 	require.Nil(t, token.response)
-	var latestExpiry, grantExpiry time.Time
-	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT m.latest_grant_expires_at,g.expires_at
-FROM voice_room_memberships m JOIN voice_match_squad_member_grants g
-ON g.profile_id=m.profile_id AND g.media_epoch=m.media_epoch
-WHERE m.profile_id=$1 AND g.request_id=$2`, f.firstProfile, tokenRequestID).Scan(&latestExpiry, &grantExpiry))
-	require.True(t, latestExpiry.Equal(grantExpiry))
-	require.True(t, latestExpiry.After(time.Now().UTC()), "denied issuance does not shorten the pending leave fence")
+	requireDatabaseGrantExpiry(t, f, f.firstProfile, tokenRequestID)
+	require.NoError(t, member.RepairExpiredLeaves(f.ctx, 16))
+	assertMatchSquadMemberState(t, f, f.firstProfile, "LEFT", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, false)
+	assertMatchSquadTerminalGeneration(t, f, f.firstProfile, account, joined.GetMediaEpoch(), tokenRequestID, "LEFT")
+	var storedGrantExpiry time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT expires_at FROM voice_match_squad_member_grants WHERE request_id=$1`, tokenRequestID).Scan(&storedGrantExpiry))
+	require.True(t, storedGrantExpiry.Equal(grantExpiry), "expiry repair does not rewrite the historical grant")
+	removalsBeforeExpiredReplay := f.effects.removalCount()
+	replayedLeave, err = member.Leave(leaveCtx, leave)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "post-drain replay retains the original LEAVING receipt")
+	require.Equal(t, removalsBeforeExpiredReplay, f.effects.removalCount(), "post-drain replay does not repeat external effects")
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
+	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "post-drain receipt replay leaves old effect receipts unchanged")
+
+	newJoin := f.joinRequest()
+	newJoined, err := member.Join(verifiedMemberContext(t, newJoin, callsv1.MatchSquadMemberService_JoinMatchSquadRoom_FullMethodName, newJoin.GetOperationId(), account, f.firstProfile), newJoin)
+	require.NoError(t, err, "a fresh generation is admitted only after DB grant expiry and confirmed effects")
+	require.NotEqual(t, joined.GetMediaEpoch(), newJoined.GetMediaEpoch())
+	assertMatchSquadMemberState(t, f, f.firstProfile, "JOINED", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
+	newEpochBeforeOldReplay := f.memberEpoch(t, f.firstProfile)
+	removalsBeforeOldReplay := f.effects.removalCount()
+	replayedLeave, err = member.Leave(leaveCtx, leave)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(leaveReceipt, replayedLeave), "historical Leave replay remains bound to Eold after Enew")
+	require.Equal(t, removalsBeforeOldReplay, f.effects.removalCount(), "historical Leave replay leaves Enew effects untouched")
+	require.Equal(t, newEpochBeforeOldReplay, f.memberEpoch(t, f.firstProfile), "historical Leave replay cannot modify current Enew")
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT max(confirmed_at) FROM voice_match_squad_member_effects WHERE operation_id=$1 AND media_epoch=$2 AND effect_kind IN ('leave_projection','leave_livekit')`, uuid.MustParse(leave.GetOperationId()), uuid.MustParse(joined.GetMediaEpoch())).Scan(&effectConfirmedAtAfterReplay))
+	require.True(t, effectConfirmedAt.Equal(effectConfirmedAtAfterReplay), "historical receipt replay leaves Eold effect receipts unchanged")
+	var oldGrantCount int
+	var oldGrantExpiryAfterReplay time.Time
+	require.NoError(t, f.pool.QueryRow(f.ctx, `SELECT count(*),max(expires_at) FROM voice_match_squad_member_grants WHERE request_id=$1 AND media_epoch=$2`, tokenRequestID, uuid.MustParse(joined.GetMediaEpoch())).Scan(&oldGrantCount, &oldGrantExpiryAfterReplay))
+	require.Equal(t, 1, oldGrantCount)
+	require.True(t, oldGrantExpiryAfterReplay.Equal(grantExpiry), "historical replay after Enew leaves Eold's grant expiry unchanged")
+	assertMatchSquadMemberState(t, f, f.firstProfile, "JOINED", "confirmed")
+	assertMatchSquadFence(t, f, account, f.firstProfile, true)
 }
 func TestPostgresMatchSquadMember_SignerFailureRetainsReservation(t *testing.T) {
 	f := newMatchSquadPostgresFixture(t)
@@ -1225,6 +1305,12 @@ func (e *testMatchSquadEffects) closeCalls() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.closeCount
+}
+
+func (e *testMatchSquadEffects) removalCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.removalTargets)
 }
 
 func requireDatabaseGrantExpiry(t *testing.T, f *matchSquadPostgresFixture, profileID, requestID uuid.UUID) {
