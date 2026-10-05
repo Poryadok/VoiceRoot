@@ -268,7 +268,9 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_REDIS_ADDR`, `GATEWAY_REDIS_PASSWORD` | Redis для rate limit и JWT blacklist |
 | `GATEWAY_SESSION_EPOCH_STRICT` | Только точное `true` включает strict; unset/точное `false` — compatibility; прочее не даёт Gateway стартовать |
 | `GATEWAY_JWT_BLACKLIST_PREFIX` | Prefix blacklist ключей; default `jwt:blacklist:` |
-| `GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR`, `GATEWAY_PRINCIPAL_ACTIVE_KID` | Phase-0 Gateway issuer: secret-mounted каталог с ровно двумя unencrypted PKCS#8 RSA private keys `<kid>.pem` (active + peer). `ACTIVE_KID` выбирает signing key; JWKS публикует оба sorted public keys. Неполная/некорректная конфигурация или legacy aliases `S2S_SIGNING_KEY_PEM` / `S2S_SIGNING_KID` не дают Gateway стартовать. Выпуск delegated credentials в downstream routes пока **not wired**. |
+| `GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR`, `GATEWAY_PRINCIPAL_ACTIVE_KID` | Phase-0 Gateway issuer: secret-mounted каталог с ровно двумя unencrypted PKCS#8 RSA private keys `<kid>.pem` (active + peer). `ACTIVE_KID` выбирает signing key; JWKS публикует оба sorted public keys. Неполная/некорректная конфигурация или legacy aliases `S2S_SIGNING_KEY_PEM` / `S2S_SIGNING_KID` не дают Gateway стартовать. Issuer используется только явно wired lifecycle/member routes. |
+| `GATEWAY_MATCH_SQUAD_MEMBER_GRPC_ADDR` | Адрес выделенного Voice `MatchSquadMemberService` listener; маршрут не использует обычный `GATEWAY_VOICE_GRPC_ADDR`. |
+| `GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE`, `GATEWAY_MATCH_SQUAD_MEMBER_TLS_SERVER_NAME`, `GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_CERT_FILE`, `GATEWAY_MATCH_SQUAD_MEMBER_CLIENT_KEY_FILE` | Обязательная mTLS-конфигурация выделенного Gateway → Voice member соединения. Частичная конфигурация — startup error. Настройка требует Gateway signing keys и `GATEWAY_SESSION_EPOCH_STRICT=true`; иначе startup error. |
 | `S2S_JWKS_URLS_JSON`, `S2S_JWKS_REFRESH_AFTER`, `S2S_JWKS_HARD_EXPIRY`, `S2S_UNKNOWN_KID_COOLDOWN` | **Target, not wired:** будущие Phase-0 issuer JWKS endpoints и bounded verifier cache; общий contract с downstream services. Текущий Gateway эти vars не читает, до wiring они unused. |
 | `GATEWAY_TRUSTED_PROXY_CIDRS` | CIDR/IP список proxy, от которых принимается `X-Forwarded-For` |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | CSV allowlist browser origins; default deny |
@@ -276,6 +278,31 @@ blacklist-механизмом и не заменяется epoch.
 | `GATEWAY_GRPC_UPSTREAMS_JSON` / `GATEWAY_<NAMESPACE>_GRPC_ADDR` | JSON-объект непустых gRPC-адресов по namespace; значение per-namespace перекрывает карту. Непустая malformed-карта, `null`, нестроковое или пустое/whitespace значение — startup error до создания HTTP listener. |
 | `GATEWAY_REALTIME_UPSTREAM_URL` | `/ws` upstream Realtime Service |
 | `GATEWAY_VERSION_CONFIGS_JSON`, `GATEWAY_FORCE_UPDATE_JSON` | Version policy |
+
+### MatchSquad delegated member routes
+
+`POST /api/v1/matchmaking/matches/{match_id}/voice/join`, `/token` и `/leave`
+используют выделенный mTLS listener и `MatchSquadMemberService`. Gateway берёт
+account, profile, session epoch и client expiry только из проверенных JWT claims,
+строит короткоживущую delegated-user credential с точной RPC, request ID и
+хэшем полного protobuf request. В upstream не пересылаются клиентский bearer и
+identity headers. Join/leave сохраняют переданный operation ID; token получает
+новый request ID и требует текущий `media_epoch`. Voice остаётся источником
+проверки владения match/room, актуальной сессии и членства. Обычные маршруты
+`/api/v1/voice/**` и обычный `VoiceService` для этого пути не используются.
+
+### Matchmaking completion route
+
+`POST /api/v1/matchmaking/matches/{match_id}/complete` requires the user's
+verified account, profile and current session epoch from the JWT. The request
+contains a stable `operationId`; Gateway binds it to the exact Matchmaking
+`CompleteMatch` RPC and protobuf request before signing a short-lived delegated
+principal. It sends the request over the dedicated mTLS listener, never the
+ordinary Matchmaking connection, and does not forward the client bearer or
+identity headers. Matchmaking authorizes the current participant and owns the
+actor-scoped replay result. Replaying the same actor and operation with the same
+binding returns its saved result; rebinding that actor's operation to another
+request is rejected.
 
 ## Зависимости
 

@@ -14,12 +14,12 @@
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
-| Chat Service         | `chat_db`         | —                         | —                                |
+| Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | — |
 | Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror | LiveKit |
+| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
 | File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
@@ -121,6 +121,9 @@ proof receipts. Runtime configuration is documented in
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
 | `stickers` | Rows per asset; `file_id` → File `intent=sticker` |
 | `profile_installed_packs` | Per-profile install + composer rail `sort_order` |
+| `chat_match_squad_operations` | One permanent match-owned row binds creation and teardown operation/receipt IDs and request/manifest hashes. Full request/receipt protobuf bytes remain retained while the aggregate teardown-completion trigger is unresolved; permanent operation digests/fences must remain. Migration DOWN refuses while pending, replay-required, or fence evidence exists. |
+
+The Chat MatchSquad replay guard uses `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` with Redis `SET NX` and expiry bounded by token expiry. Its create/teardown request and receipt bytes currently remain durable; the provider has no aggregate teardown-completion signal, so no local compaction clock is applied. The compact terminal fence remains permanent.
 
 Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
 
@@ -159,6 +162,19 @@ there is no cross-service foreign key. A `GAME_SESSION` room cannot have an
 owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
+
+### MatchSquad provider state
+
+`voice_match_squad_operations` stores the exact create/teardown operation bytes,
+receipts and bindings, with pending/active/closing/closed state and permanent
+operation/match/resource/receipt fences. `voice_room_instances` remains the
+canonical current room resource row. The Redis `call:<room UUID>` and
+`session:<profile UUID>` keys are disposable room and participant projections;
+LiveKit names the room `match-squad-<room UUID>`. Teardown records DB `closing`,
+projects terminal Redis state and closes LiveKit, then commits DB `closed` and
+its receipt. Full request/receipt bytes remain retained while the aggregate
+teardown-completion signal is unresolved; the provider applies no local purge
+clock. Pending evidence and permanent fences are not aged out.
 
 The source-disabled A3 schema extension adds immutable room kind/purpose and
 match creation bindings to `voice_room_instances`, plus verified account/session

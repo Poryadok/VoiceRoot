@@ -12,15 +12,20 @@ import (
 	"voice/backend/matchmaking/internal/authctx"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/principal"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
 
 // CompleteMatch records squad leave for the authenticated participant.
 func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.CompleteMatchRequest) (*matchmakingv1.CompleteMatchResponse, error) {
-	profileID, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
+	actor, ok := principal.FromContext(ctx)
+	if !ok || actor.Kind != "delegated_user" || actor.Issuer != "gateway" || actor.Audience != "matchmaking" || actor.Subject != actor.AccountID || actor.AccountID == "" || actor.ProfileID == "" || actor.SessionEpoch <= 0 {
+		return nil, status.Error(codes.Unauthenticated, "verified Matchmaking user required")
+	}
+	profileID, err := uuid.Parse(actor.ProfileID)
+	if err != nil || profileID == uuid.Nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid Matchmaking user")
 	}
 	if s.Matches == nil {
 		return nil, status.Error(codes.Unavailable, "match unavailable")
@@ -28,6 +33,10 @@ func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.
 	matchID, err := uuid.Parse(strings.TrimSpace(req.GetMatchId()))
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid match_id")
+	}
+	operationID, err := uuid.Parse(strings.TrimSpace(req.GetOperationId()))
+	if err != nil || operationID == uuid.Nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid operation_id")
 	}
 	before, err := s.Matches.Get(ctx, matchID)
 	if errors.Is(err, store.ErrMatchNotFound) {
@@ -40,36 +49,18 @@ func (s *MatchmakingGRPC) CompleteMatch(ctx context.Context, req *matchmakingv1.
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
 
-	updated, completedNow, err := s.Matches.CompleteMatchLeaveWithTransition(ctx, matchID, profileID)
+	updated, _, err := s.Matches.CompleteMatchLeaveWithOperation(ctx, matchID, profileID, operationID)
 	if errors.Is(err, store.ErrNotMatchParticipant) {
 		return nil, status.Error(codes.PermissionDenied, "not a match participant")
 	}
 	if errors.Is(err, store.ErrMatchNotFound) {
 		return nil, status.Error(codes.NotFound, "match not found")
 	}
+	if errors.Is(err, store.ErrMatchOperationConflict) {
+		return nil, status.Error(codes.FailedPrecondition, "operation_id is already bound to another match")
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "complete match: %v", err)
-	}
-
-	if completedNow && s.Events != nil {
-		duration := int64(0)
-		if updated.CompletedAt != nil {
-			duration = int64(updated.CompletedAt.Sub(updated.CreatedAt).Seconds())
-		}
-		profileIDs := make([]string, 0, len(updated.Participants))
-		for _, p := range updated.Participants {
-			profileIDs = append(profileIDs, p.ProfileID)
-		}
-		_ = s.Events.PublishMatchCompleted(ctx, mmevents.MatchCompletedEvent{
-			MatchID:         updated.ID.String(),
-			DurationSeconds: duration,
-			ProfileIDs:      profileIDs,
-		})
-	}
-	if completedNow && s.SquadCleanup != nil {
-		if err := s.SquadCleanup.Cleanup(ctx, updated.ID); err != nil && s.Logger != nil {
-			s.Logger.Warn("match squad cleanup failed", "match_id", updated.ID, "error", err)
-		}
 	}
 
 	return &matchmakingv1.CompleteMatchResponse{Match: toProtoMatch(updated)}, nil

@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/store"
+	"voice/backend/pkg/principal"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 )
@@ -22,43 +22,6 @@ import (
 type recordingPlayerBannedPublisher struct {
 	mmevents.NoopPublisher
 	events []mmevents.PlayerBannedEvent
-}
-
-type recordingMatchCompletedPublisher struct {
-	mmevents.NoopPublisher
-	mu     sync.Mutex
-	events []mmevents.MatchCompletedEvent
-}
-
-type recordingSquadCleanup struct {
-	mu       sync.Mutex
-	matchIDs []uuid.UUID
-}
-
-func (c *recordingSquadCleanup) Cleanup(_ context.Context, matchID uuid.UUID) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.matchIDs = append(c.matchIDs, matchID)
-	return nil
-}
-
-func (c *recordingSquadCleanup) MatchIDs() []uuid.UUID {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]uuid.UUID(nil), c.matchIDs...)
-}
-
-func (p *recordingMatchCompletedPublisher) PublishMatchCompleted(_ context.Context, event mmevents.MatchCompletedEvent) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.events = append(p.events, event)
-	return nil
-}
-
-func (p *recordingMatchCompletedPublisher) Events() []mmevents.MatchCompletedEvent {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]mmevents.MatchCompletedEvent(nil), p.events...)
 }
 
 func (p *recordingPlayerBannedPublisher) PublishPlayerBanned(_ context.Context, event mmevents.PlayerBannedEvent) error {
@@ -108,6 +71,39 @@ func ratingTestServer(t *testing.T, pool *pgxpool.Pool) *MatchmakingGRPC {
 	return srv
 }
 
+func completeMatchRequest(matchID string) *matchmakingv1.CompleteMatchRequest {
+	return &matchmakingv1.CompleteMatchRequest{MatchId: matchID, OperationId: uuid.NewString()}
+}
+
+func completeMatchContext(profileID uuid.UUID) context.Context {
+	profile := profileID.String()
+	account := uuid.NewString()
+	return principal.WithVerified(context.Background(), principal.Principal{
+		Kind: "delegated_user", Issuer: "gateway", Subject: account, Audience: "matchmaking",
+		AccountID: account, ProfileID: profile, SessionEpoch: 1,
+	})
+}
+
+func TestCompleteMatchRejectsUnverifiedIdentityContexts(t *testing.T) {
+	for _, ctx := range []context.Context{context.Background(), ctxWithProfile(uuid.New())} {
+		_, err := (&MatchmakingGRPC{}).CompleteMatch(ctx, completeMatchRequest(uuid.NewString()))
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+	}
+}
+
+func requireOnePendingMatchSquadTeardown(t *testing.T, ctx context.Context, srv *MatchmakingGRPC, matchID uuid.UUID) store.MatchSquadTeardownAggregate {
+	t.Helper()
+	aggregates, err := srv.Matches.ListPendingMatchSquadTeardowns(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, aggregates, 1, "the final leave durably admits one provider teardown aggregate")
+	require.Equal(t, matchID, aggregates[0].MatchID)
+	require.Equal(t, "pending", aggregates[0].State)
+	participants, err := srv.Matches.ListPendingMatchSquadTeardownParticipants(ctx, 100)
+	require.NoError(t, err)
+	require.Len(t, participants, 2, "Chat and Voice recovery remain independently discoverable")
+	return aggregates[0]
+}
+
 func activateDuoMatchViaGRPC(t *testing.T, ctx context.Context, srv *MatchmakingGRPC) (matchID string, profileA, profileB uuid.UUID) {
 	t.Helper()
 	matchID, profileA, profileB = seedPendingDuoMatch(t, ctx, srv)
@@ -134,9 +130,7 @@ func TestCompleteMatch_FirstLeaveKeepsActive(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, _ := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	resp, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{
-		MatchId: matchID,
-	})
+	resp, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
 	require.Equal(t, "active", resp.GetMatch().GetStatus())
 }
@@ -150,28 +144,24 @@ func TestCompleteMatch_AllLeftSetsCompleted(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
-	resp, err := srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	resp, err := srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 	require.Equal(t, "completed", resp.GetMatch().GetStatus())
 }
 
-func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
+func TestCompleteMatch_ConcurrentFinalRetryPersistsOneRecoveryAggregate(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := ratingTestServer(t, pool)
-	publisher := &recordingMatchCompletedPublisher{}
-	srv.Events = publisher
-	cleanup := &recordingSquadCleanup{}
-	srv.SquadCleanup = cleanup
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	conn, err := pool.Acquire(ctx)
@@ -184,11 +174,11 @@ func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
 
 	start := make(chan struct{})
 	errs := make(chan error, 2)
-	request := &matchmakingv1.CompleteMatchRequest{MatchId: matchID}
+	request := completeMatchRequest(matchID)
 	for range 2 {
 		go func() {
 			<-start
-			_, callErr := srv.CompleteMatch(ctxWithProfile(profileB), request)
+			_, callErr := srv.CompleteMatch(completeMatchContext(profileB), request)
 			errs <- callErr
 		}()
 	}
@@ -217,33 +207,28 @@ func TestCompleteMatch_ConcurrentFinalRetryPublishesOnce(t *testing.T) {
 
 	require.NoError(t, <-errs)
 	require.NoError(t, <-errs)
-	require.Len(t, publisher.Events(), 1, "duplicate final CompleteMatch retries must emit mm.match_completed once")
-	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "racing final retries must clean the fixture squad once")
+	requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
 }
 
-// TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce freezes the pre-A2
-// provider contract: the durable active-to-completed transition owns a single
-// cleanup call. The fixture is intentionally transport- and roster-event-free;
-// a later A3 acceptance slice wires the real temporary chat and voice context.
-func TestCompleteMatch_FinalLeaveCleansFixtureSquadOnce(t *testing.T) {
+func TestCompleteMatch_FinalLeaveRetryKeepsOneDurableTeardown(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
 	ctx := context.Background()
 	pool := startDB(t, ctx)
 	srv := ratingTestServer(t, pool)
-	cleanup := &recordingSquadCleanup{}
-	srv.SquadCleanup = cleanup
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
-	require.NoError(t, err, "a duplicate final leave is an idempotent retry")
 
-	require.Equal(t, []uuid.UUID{uuid.MustParse(matchID)}, cleanup.MatchIDs(), "only the transition that completes the match cleans the fixture squad")
+	first := requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
+	require.NoError(t, err, "a duplicate final leave is an idempotent retry")
+	replayed := requireOnePendingMatchSquadTeardown(t, ctx, srv, uuid.MustParse(matchID))
+	require.Equal(t, first.AggregateID, replayed.AggregateID, "a retry keeps the original provider operation identities and request bytes")
 }
 
 func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
@@ -255,9 +240,9 @@ func TestRateMatch_PersistsStarsForTeammate(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
@@ -277,9 +262,7 @@ func TestRateMatch_AllowsParticipantToRateAfterTheirOwnLeave(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	left, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{
-		MatchId: matchID,
-	})
+	left, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
 	require.Equal(t, store.MatchStatusActive, left.GetMatch().GetStatus())
 
@@ -311,9 +294,9 @@ func TestRateMatch_DuplicateRejected(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	req := &matchmakingv1.RateMatchRequest{
@@ -337,9 +320,9 @@ func TestRateMatch_ExplicitSkipDoesNotPersistOrBlockScore(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	skip := &matchmakingv1.RateMatchRequest{
@@ -382,9 +365,9 @@ func TestRateMatch_ZeroStarsWithoutSkipRejected(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
@@ -403,9 +386,9 @@ func TestRateMatch_SkipWithScoreRejected(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
@@ -426,9 +409,9 @@ func TestGetPlayerRating_ReturnsAggregate(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, profileA, profileB := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(profileA), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err := srv.CompleteMatch(completeMatchContext(profileA), completeMatchRequest(matchID))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: matchID})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(matchID))
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA), &matchmakingv1.RateMatchRequest{
@@ -469,9 +452,9 @@ func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.
 	require.NoError(t, err)
 	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: match1, Accept: true})
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileA1), &matchmakingv1.CompleteMatchRequest{MatchId: match1})
+	_, err = srv.CompleteMatch(completeMatchContext(profileA1), completeMatchRequest(match1))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match1})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(match1))
 	require.NoError(t, err)
 
 	_, err = srv.RateMatch(ctxWithProfile(profileA1), &matchmakingv1.RateMatchRequest{
@@ -484,12 +467,12 @@ func TestGetPlayerRating_GamesPlayedCountsCompletedMatchesNotRatings(t *testing.
 	require.NoError(t, err)
 	_, err = srv.RespondToMatch(ctxWithProfile(profileB), &matchmakingv1.RespondToMatchRequest{MatchId: match2, Accept: true})
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileA2), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
+	_, err = srv.CompleteMatch(completeMatchContext(profileA2), completeMatchRequest(match2))
 	require.NoError(t, err)
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(match2))
 	require.NoError(t, err)
 	// A repeated leave after completion must not create another completed match.
-	_, err = srv.CompleteMatch(ctxWithProfile(profileB), &matchmakingv1.CompleteMatchRequest{MatchId: match2})
+	_, err = srv.CompleteMatch(completeMatchContext(profileB), completeMatchRequest(match2))
 	require.NoError(t, err)
 
 	resp, err := srv.GetPlayerRating(ctx, &matchmakingv1.GetPlayerRatingRequest{
@@ -648,8 +631,6 @@ func TestCompleteMatch_NotParticipantDenied(t *testing.T) {
 	srv := ratingTestServer(t, pool)
 	matchID, _, _ := activateDuoMatchViaGRPC(t, ctx, srv)
 
-	_, err := srv.CompleteMatch(ctxWithProfile(uuid.New()), &matchmakingv1.CompleteMatchRequest{
-		MatchId: matchID,
-	})
+	_, err := srv.CompleteMatch(completeMatchContext(uuid.New()), completeMatchRequest(matchID))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }

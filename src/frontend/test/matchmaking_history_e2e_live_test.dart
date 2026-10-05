@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
 /// Live compose e2e: completed match appears in match history for participants.
 ///
@@ -118,7 +119,11 @@ Future<void> _complete(
 ) async {
   final resp = await client.post(
     Uri.parse('$base/api/v1/matchmaking/matches/$matchId/complete'),
-    headers: {'Authorization': 'Bearer $token'},
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({'operationId': const Uuid().v4()}),
   );
   expect(resp.statusCode, 200);
 }

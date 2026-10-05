@@ -31,6 +31,37 @@ final $typed_data.Uint8List chatTypeDescriptor = $convert.base64Decode(
     'CghDaGF0VHlwZRIZChVDSEFUX1RZUEVfVU5TUEVDSUZJRUQQABIQCgxDSEFUX1RZUEVfRE0QAR'
     'ITCg9DSEFUX1RZUEVfR1JPVVAQAhIVChFDSEFUX1RZUEVfQ0hBTk5FTBAD');
 
+@$core.Deprecated('Use matchSquadTeardownStatusDescriptor instead')
+const MatchSquadTeardownStatus$json = {
+  '1': 'MatchSquadTeardownStatus',
+  '2': [
+    {'1': 'MATCH_SQUAD_TEARDOWN_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'MATCH_SQUAD_TEARDOWN_STATUS_COMPLETED', '2': 1},
+  ],
+};
+
+/// Descriptor for `MatchSquadTeardownStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchSquadTeardownStatusDescriptor = $convert.base64Decode(
+    'ChhNYXRjaFNxdWFkVGVhcmRvd25TdGF0dXMSKwonTUFUQ0hfU1FVQURfVEVBUkRPV05fU1RBVF'
+    'VTX1VOU1BFQ0lGSUVEEAASKQolTUFUQ0hfU1FVQURfVEVBUkRPV05fU1RBVFVTX0NPTVBMRVRF'
+    'RBAB');
+
+@$core.Deprecated('Use matchSquadChatCompactionStatusDescriptor instead')
+const MatchSquadChatCompactionStatus$json = {
+  '1': 'MatchSquadChatCompactionStatus',
+  '2': [
+    {'1': 'MATCH_SQUAD_CHAT_COMPACTION_STATUS_UNSPECIFIED', '2': 0},
+    {'1': 'MATCH_SQUAD_CHAT_COMPACTION_STATUS_COMPACTED', '2': 1},
+  ],
+};
+
+/// Descriptor for `MatchSquadChatCompactionStatus`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List matchSquadChatCompactionStatusDescriptor =
+    $convert.base64Decode(
+        'Ch5NYXRjaFNxdWFkQ2hhdENvbXBhY3Rpb25TdGF0dXMSMgouTUFUQ0hfU1FVQURfQ0hBVF9DT0'
+        '1QQUNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEjAKLE1BVENIX1NRVUFEX0NIQVRfQ09NUEFD'
+        'VElPTl9TVEFUVVNfQ09NUEFDVEVEEAE=');
+
 @$core.Deprecated('Use chatDescriptor instead')
 const Chat$json = {
   '1': 'Chat',
@@ -133,6 +164,416 @@ final $typed_data.Uint8List chatDescriptor = $convert.base64Decode(
     'ZWVkEh8KC2UyZV9lbmFibGVkGA4gASgIUgplMmVFbmFibGVkEiEKDGFsbG93X2d1ZXN0cxgPIA'
     'EoCFILYWxsb3dHdWVzdHNCCwoJX3NwYWNlX2lkQgcKBV9uYW1lQg0KC19hdmF0YXJfdXJsQggK'
     'Bl90b3BpY0ISChBfbGFzdF9tZXNzYWdlX2F0');
+
+@$core.Deprecated('Use matchSquadParticipantDescriptor instead')
+const MatchSquadParticipant$json = {
+  '1': 'MatchSquadParticipant',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+  ],
+};
+
+/// Descriptor for `MatchSquadParticipant`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadParticipantDescriptor = $convert.base64Decode(
+    'ChVNYXRjaFNxdWFkUGFydGljaXBhbnQSHQoKcHJvZmlsZV9pZBgBIAEoCVIJcHJvZmlsZUlk');
+
+@$core.Deprecated('Use createMatchSquadChatRequestDescriptor instead')
+const CreateMatchSquadChatRequest$json = {
+  '1': 'CreateMatchSquadChatRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {
+      '1': 'participants',
+      '3': 4,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadParticipant',
+      '10': 'participants'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 5,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `CreateMatchSquadChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createMatchSquadChatRequestDescriptor = $convert.base64Decode(
+    'ChtDcmVhdGVNYXRjaFNxdWFkQ2hhdFJlcXVlc3QSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDV'
+    'IPcHJvdG9jb2xWZXJzaW9uEiEKDG9wZXJhdGlvbl9pZBgCIAEoCVILb3BlcmF0aW9uSWQSGQoI'
+    'bWF0Y2hfaWQYAyABKAlSB21hdGNoSWQSSAoMcGFydGljaXBhbnRzGAQgAygLMiQudm9pY2UuY2'
+    'hhdC52MS5NYXRjaFNxdWFkUGFydGljaXBhbnRSDHBhcnRpY2lwYW50cxI+ChtwYXJ0aWNpcGFu'
+    'dF9tYW5pZmVzdF9zaGEyNTYYBSABKAxSGXBhcnRpY2lwYW50TWFuaWZlc3RTaGEyNTY=');
+
+@$core.Deprecated('Use matchSquadChatReceiptDescriptor instead')
+const MatchSquadChatReceipt$json = {
+  '1': 'MatchSquadChatReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 3, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {'1': 'request_sha256', '3': 7, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'created_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'createdAt'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadChatReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadChatReceiptDescriptor = $convert.base64Decode(
+    'ChVNYXRjaFNxdWFkQ2hhdFJlY2VpcHQSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG'
+    '9jb2xWZXJzaW9uEh0KCnJlY2VpcHRfaWQYAiABKAlSCXJlY2VpcHRJZBIhCgxvcGVyYXRpb25f'
+    'aWQYAyABKAlSC29wZXJhdGlvbklkEhkKCG1hdGNoX2lkGAQgASgJUgdtYXRjaElkEhcKB2NoYX'
+    'RfaWQYBSABKAlSBmNoYXRJZBI+ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaGEyNTYYBiABKAxS'
+    'GXBhcnRpY2lwYW50TWFuaWZlc3RTaGEyNTYSJQoOcmVxdWVzdF9zaGEyNTYYByABKAxSDXJlcX'
+    'Vlc3RTaGEyNTYSOQoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3Rh'
+    'bXBSCWNyZWF0ZWRBdA==');
+
+@$core.Deprecated('Use createMatchSquadChatResponseDescriptor instead')
+const CreateMatchSquadChatResponse$json = {
+  '1': 'CreateMatchSquadChatResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadChatReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `CreateMatchSquadChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List createMatchSquadChatResponseDescriptor =
+    $convert.base64Decode(
+        'ChxDcmVhdGVNYXRjaFNxdWFkQ2hhdFJlc3BvbnNlEj4KB3JlY2VpcHQYASABKAsyJC52b2ljZS'
+        '5jaGF0LnYxLk1hdGNoU3F1YWRDaGF0UmVjZWlwdFIHcmVjZWlwdA==');
+
+@$core.Deprecated('Use teardownMatchSquadChatRequestDescriptor instead')
+const TeardownMatchSquadChatRequest$json = {
+  '1': 'TeardownMatchSquadChatRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {
+      '1': 'teardown_operation_id',
+      '3': 2,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {'1': 'match_id', '3': 3, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'chat_id', '3': 4, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 6,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {
+      '1': 'creation_request_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'creationRequestSha256'
+    },
+  ],
+};
+
+/// Descriptor for `TeardownMatchSquadChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List teardownMatchSquadChatRequestDescriptor = $convert.base64Decode(
+    'Ch1UZWFyZG93bk1hdGNoU3F1YWRDaGF0UmVxdWVzdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SMgoVdGVhcmRvd25fb3BlcmF0aW9uX2lkGAIgASgJUhN0ZWFy'
+    'ZG93bk9wZXJhdGlvbklkEhkKCG1hdGNoX2lkGAMgASgJUgdtYXRjaElkEhcKB2NoYXRfaWQYBC'
+    'ABKAlSBmNoYXRJZBIuChNjcmVhdGlvbl9yZWNlaXB0X2lkGAUgASgJUhFjcmVhdGlvblJlY2Vp'
+    'cHRJZBI+ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaGEyNTYYBiABKAxSGXBhcnRpY2lwYW50TW'
+    'FuaWZlc3RTaGEyNTYSNgoXY3JlYXRpb25fcmVxdWVzdF9zaGEyNTYYByABKAxSFWNyZWF0aW9u'
+    'UmVxdWVzdFNoYTI1Ng==');
+
+@$core.Deprecated('Use matchSquadChatTeardownReceiptDescriptor instead')
+const MatchSquadChatTeardownReceipt$json = {
+  '1': 'MatchSquadChatTeardownReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'teardown_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {'1': 'request_sha256', '3': 8, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'status',
+      '3': 9,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.MatchSquadTeardownStatus',
+      '10': 'status'
+    },
+    {
+      '1': 'completed_at',
+      '3': 10,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'completedAt'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadChatTeardownReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadChatTeardownReceiptDescriptor = $convert.base64Decode(
+    'Ch1NYXRjaFNxdWFkQ2hhdFRlYXJkb3duUmVjZWlwdBIpChBwcm90b2NvbF92ZXJzaW9uGAEgAS'
+    'gNUg9wcm90b2NvbFZlcnNpb24SHQoKcmVjZWlwdF9pZBgCIAEoCVIJcmVjZWlwdElkEjIKFXRl'
+    'YXJkb3duX29wZXJhdGlvbl9pZBgDIAEoCVITdGVhcmRvd25PcGVyYXRpb25JZBIZCghtYXRjaF'
+    '9pZBgEIAEoCVIHbWF0Y2hJZBIXCgdjaGF0X2lkGAUgASgJUgZjaGF0SWQSLgoTY3JlYXRpb25f'
+    'cmVjZWlwdF9pZBgGIAEoCVIRY3JlYXRpb25SZWNlaXB0SWQSPgobcGFydGljaXBhbnRfbWFuaW'
+    'Zlc3Rfc2hhMjU2GAcgASgMUhlwYXJ0aWNpcGFudE1hbmlmZXN0U2hhMjU2EiUKDnJlcXVlc3Rf'
+    'c2hhMjU2GAggASgMUg1yZXF1ZXN0U2hhMjU2Ej8KBnN0YXR1cxgJIAEoDjInLnZvaWNlLmNoYX'
+    'QudjEuTWF0Y2hTcXVhZFRlYXJkb3duU3RhdHVzUgZzdGF0dXMSPQoMY29tcGxldGVkX2F0GAog'
+    'ASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcFILY29tcGxldGVkQXQ=');
+
+@$core.Deprecated('Use teardownMatchSquadChatResponseDescriptor instead')
+const TeardownMatchSquadChatResponse$json = {
+  '1': 'TeardownMatchSquadChatResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadChatTeardownReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `TeardownMatchSquadChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List teardownMatchSquadChatResponseDescriptor =
+    $convert.base64Decode(
+        'Ch5UZWFyZG93bk1hdGNoU3F1YWRDaGF0UmVzcG9uc2USRgoHcmVjZWlwdBgBIAEoCzIsLnZvaW'
+        'NlLmNoYXQudjEuTWF0Y2hTcXVhZENoYXRUZWFyZG93blJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use compactMatchSquadChatRequestDescriptor instead')
+const CompactMatchSquadChatRequest$json = {
+  '1': 'CompactMatchSquadChatRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'teardown_aggregate_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownAggregateId'
+    },
+    {'1': 'match_id', '3': 4, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'chat_id', '3': 5, '4': 1, '5': 9, '10': 'chatId'},
+    {
+      '1': 'creation_receipt_id',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'creationReceiptId'
+    },
+    {
+      '1': 'creation_request_sha256',
+      '3': 7,
+      '4': 1,
+      '5': 12,
+      '10': 'creationRequestSha256'
+    },
+    {
+      '1': 'teardown_operation_id',
+      '3': 8,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownOperationId'
+    },
+    {
+      '1': 'teardown_receipt_id',
+      '3': 9,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownReceiptId'
+    },
+    {
+      '1': 'teardown_receipt_sha256',
+      '3': 10,
+      '4': 1,
+      '5': 12,
+      '10': 'teardownReceiptSha256'
+    },
+    {
+      '1': 'participant_manifest_sha256',
+      '3': 11,
+      '4': 1,
+      '5': 12,
+      '10': 'participantManifestSha256'
+    },
+    {
+      '1': 'aggregate_completed_at',
+      '3': 12,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'aggregateCompletedAt'
+    },
+    {
+      '1': 'compaction_authorized_at',
+      '3': 13,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'compactionAuthorizedAt'
+    },
+  ],
+};
+
+/// Descriptor for `CompactMatchSquadChatRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List compactMatchSquadChatRequestDescriptor = $convert.base64Decode(
+    'ChxDb21wYWN0TWF0Y2hTcXVhZENoYXRSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEjIK'
+    'FXRlYXJkb3duX2FnZ3JlZ2F0ZV9pZBgDIAEoCVITdGVhcmRvd25BZ2dyZWdhdGVJZBIZCghtYX'
+    'RjaF9pZBgEIAEoCVIHbWF0Y2hJZBIXCgdjaGF0X2lkGAUgASgJUgZjaGF0SWQSLgoTY3JlYXRp'
+    'b25fcmVjZWlwdF9pZBgGIAEoCVIRY3JlYXRpb25SZWNlaXB0SWQSNgoXY3JlYXRpb25fcmVxdW'
+    'VzdF9zaGEyNTYYByABKAxSFWNyZWF0aW9uUmVxdWVzdFNoYTI1NhIyChV0ZWFyZG93bl9vcGVy'
+    'YXRpb25faWQYCCABKAlSE3RlYXJkb3duT3BlcmF0aW9uSWQSLgoTdGVhcmRvd25fcmVjZWlwdF'
+    '9pZBgJIAEoCVIRdGVhcmRvd25SZWNlaXB0SWQSNgoXdGVhcmRvd25fcmVjZWlwdF9zaGEyNTYY'
+    'CiABKAxSFXRlYXJkb3duUmVjZWlwdFNoYTI1NhI+ChtwYXJ0aWNpcGFudF9tYW5pZmVzdF9zaG'
+    'EyNTYYCyABKAxSGXBhcnRpY2lwYW50TWFuaWZlc3RTaGEyNTYSUAoWYWdncmVnYXRlX2NvbXBs'
+    'ZXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBSFGFnZ3JlZ2F0ZUNvbX'
+    'BsZXRlZEF0ElQKGGNvbXBhY3Rpb25fYXV0aG9yaXplZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90'
+    'b2J1Zi5UaW1lc3RhbXBSFmNvbXBhY3Rpb25BdXRob3JpemVkQXQ=');
+
+@$core.Deprecated('Use matchSquadChatCompactionReceiptDescriptor instead')
+const MatchSquadChatCompactionReceipt$json = {
+  '1': 'MatchSquadChatCompactionReceipt',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'receipt_id', '3': 2, '4': 1, '5': 9, '10': 'receiptId'},
+    {
+      '1': 'compaction_operation_id',
+      '3': 3,
+      '4': 1,
+      '5': 9,
+      '10': 'compactionOperationId'
+    },
+    {
+      '1': 'teardown_aggregate_id',
+      '3': 4,
+      '4': 1,
+      '5': 9,
+      '10': 'teardownAggregateId'
+    },
+    {'1': 'match_id', '3': 5, '4': 1, '5': 9, '10': 'matchId'},
+    {'1': 'chat_id', '3': 6, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'request_sha256', '3': 7, '4': 1, '5': 12, '10': 'requestSha256'},
+    {
+      '1': 'aggregate_completed_at',
+      '3': 8,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'aggregateCompletedAt'
+    },
+    {
+      '1': 'compaction_authorized_at',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'compactionAuthorizedAt'
+    },
+    {
+      '1': 'status',
+      '3': 10,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.MatchSquadChatCompactionStatus',
+      '10': 'status'
+    },
+  ],
+};
+
+/// Descriptor for `MatchSquadChatCompactionReceipt`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List matchSquadChatCompactionReceiptDescriptor = $convert.base64Decode(
+    'Ch9NYXRjaFNxdWFkQ2hhdENvbXBhY3Rpb25SZWNlaXB0EikKEHByb3RvY29sX3ZlcnNpb24YAS'
+    'ABKA1SD3Byb3RvY29sVmVyc2lvbhIdCgpyZWNlaXB0X2lkGAIgASgJUglyZWNlaXB0SWQSNgoX'
+    'Y29tcGFjdGlvbl9vcGVyYXRpb25faWQYAyABKAlSFWNvbXBhY3Rpb25PcGVyYXRpb25JZBIyCh'
+    'V0ZWFyZG93bl9hZ2dyZWdhdGVfaWQYBCABKAlSE3RlYXJkb3duQWdncmVnYXRlSWQSGQoIbWF0'
+    'Y2hfaWQYBSABKAlSB21hdGNoSWQSFwoHY2hhdF9pZBgGIAEoCVIGY2hhdElkEiUKDnJlcXVlc3'
+    'Rfc2hhMjU2GAcgASgMUg1yZXF1ZXN0U2hhMjU2ElAKFmFnZ3JlZ2F0ZV9jb21wbGV0ZWRfYXQY'
+    'CCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wUhRhZ2dyZWdhdGVDb21wbGV0ZWRBdB'
+    'JUChhjb21wYWN0aW9uX2F1dGhvcml6ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGlt'
+    'ZXN0YW1wUhZjb21wYWN0aW9uQXV0aG9yaXplZEF0EkUKBnN0YXR1cxgKIAEoDjItLnZvaWNlLm'
+    'NoYXQudjEuTWF0Y2hTcXVhZENoYXRDb21wYWN0aW9uU3RhdHVzUgZzdGF0dXM=');
+
+@$core.Deprecated('Use compactMatchSquadChatResponseDescriptor instead')
+const CompactMatchSquadChatResponse$json = {
+  '1': 'CompactMatchSquadChatResponse',
+  '2': [
+    {
+      '1': 'receipt',
+      '3': 1,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.MatchSquadChatCompactionReceipt',
+      '10': 'receipt'
+    },
+  ],
+};
+
+/// Descriptor for `CompactMatchSquadChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List compactMatchSquadChatResponseDescriptor =
+    $convert.base64Decode(
+        'Ch1Db21wYWN0TWF0Y2hTcXVhZENoYXRSZXNwb25zZRJICgdyZWNlaXB0GAEgASgLMi4udm9pY2'
+        'UuY2hhdC52MS5NYXRjaFNxdWFkQ2hhdENvbXBhY3Rpb25SZWNlaXB0UgdyZWNlaXB0');
 
 @$core.Deprecated('Use provisionManagedChatRequestDescriptor instead')
 const ProvisionManagedChatRequest$json = {

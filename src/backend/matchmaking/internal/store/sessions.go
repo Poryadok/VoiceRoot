@@ -26,24 +26,25 @@ var (
 )
 
 const sessionSelectCols = `id, profile_id, party_id, game_id, mode, criteria::text, status,
-		          timeout_at, nudged_at, matched_at, match_id, space_id, created_at, updated_at`
+		          timeout_at, nudged_at, matched_at, match_id, space_id, created_at, updated_at, recovery_generation`
 
 // SearchSession is a row in search_sessions.
 type SearchSession struct {
-	ID        uuid.UUID
-	ProfileID uuid.UUID
-	PartyID   *uuid.UUID
-	GameID    uuid.UUID
-	Mode      string
-	Criteria  string
-	Status    string
-	TimeoutAt *time.Time
-	NudgedAt  *time.Time
-	MatchedAt *time.Time
-	MatchID   *uuid.UUID
-	SpaceID   *uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                 uuid.UUID
+	ProfileID          uuid.UUID
+	PartyID            *uuid.UUID
+	GameID             uuid.UUID
+	Mode               string
+	Criteria           string
+	Status             string
+	TimeoutAt          *time.Time
+	NudgedAt           *time.Time
+	MatchedAt          *time.Time
+	MatchID            *uuid.UUID
+	SpaceID            *uuid.UUID
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	RecoveryGeneration int64
 }
 
 // SessionStore persists search sessions.
@@ -127,7 +128,7 @@ func (s *SessionStore) Cancel(ctx context.Context, id uuid.UUID) (SearchSession,
 	now := time.Now().UTC()
 	row := s.Pool.QueryRow(ctx, `
 		UPDATE search_sessions
-		SET status = $2, updated_at = $3
+		SET status = $2, updated_at = $3, recovery_generation = recovery_generation + 1
 		WHERE id = $1 AND status = $4
 		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusCancelled, now, SessionStatusSearching)
@@ -146,7 +147,8 @@ func (s *SessionStore) ResetToSearching(ctx context.Context, id uuid.UUID) (Sear
 	now := time.Now().UTC()
 	row := s.Pool.QueryRow(ctx, `
 		UPDATE search_sessions
-		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3
+		SET status = $2, match_id = NULL, matched_at = NULL, updated_at = $3,
+		    recovery_generation = recovery_generation + 1
 		WHERE id = $1 AND status IN ($4, $5)
 		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusSearching, now, SessionStatusPendingAccept, SessionStatusMatched)
@@ -303,7 +305,7 @@ func (s *SessionStore) ExpirePendingAccept(ctx context.Context, id uuid.UUID) (S
 	now := time.Now().UTC()
 	row := s.Pool.QueryRow(ctx, `
 		UPDATE search_sessions
-		SET status = $2, updated_at = $3
+		SET status = $2, updated_at = $3, recovery_generation = recovery_generation + 1
 		WHERE id = $1 AND status = $4
 		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusCancelled, now, SessionStatusPendingAccept)
@@ -322,7 +324,7 @@ func (s *SessionStore) ExpireSearching(ctx context.Context, id uuid.UUID) (Searc
 	now := time.Now().UTC()
 	row := s.Pool.QueryRow(ctx, `
 		UPDATE search_sessions
-		SET status = $2, updated_at = $3
+		SET status = $2, updated_at = $3, recovery_generation = recovery_generation + 1
 		WHERE id = $1 AND status = $4
 		RETURNING `+sessionSelectCols+`
 	`, id, SessionStatusTimeout, now, SessionStatusSearching)
@@ -350,7 +352,7 @@ func scanSession(row pgx.Row) (SearchSession, error) {
 	err := row.Scan(
 		&sess.ID, &sess.ProfileID, &sess.PartyID, &sess.GameID, &sess.Mode, &sess.Criteria,
 		&sess.Status, &sess.TimeoutAt, &sess.NudgedAt, &sess.MatchedAt, &sess.MatchID, &sess.SpaceID,
-		&sess.CreatedAt, &sess.UpdatedAt,
+		&sess.CreatedAt, &sess.UpdatedAt, &sess.RecoveryGeneration,
 	)
 	return sess, err
 }

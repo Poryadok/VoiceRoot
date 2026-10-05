@@ -354,6 +354,33 @@ func startBufconnUserConn(t *testing.T, impl userv1.UserServiceServer) (grpc.Cli
 	}
 }
 
+func TestGRPCClientsFromEnvPreservesNilAndFailsClosedOnIncompleteCompleteMatchConfig(t *testing.T) {
+	for _, namespace := range []string{
+		"USERS", "FRIENDS", "CHATS", "MESSAGES", "VOICE", "FILES", "SPACES",
+		"ROLES", "NOTIFICATIONS", "MATCHMAKING", "SEARCH", "MODERATION",
+		"SUBSCRIPTION", "BOTS", "STORIES", "AUTH", "ANALYTICS",
+	} {
+		t.Setenv("GATEWAY_"+namespace+"_GRPC_ADDR", "")
+	}
+	t.Setenv("GATEWAY_GRPC_UPSTREAMS_JSON", "{}")
+	for _, prefix := range []string{"SPACE_LIFECYCLE", "MATCH_SQUAD_MEMBER", "MATCHMAKING_COMPLETE"} {
+		for _, suffix := range []string{
+			"GRPC_ADDR", "TLS_CA_FILE", "TLS_SERVER_NAME", "CLIENT_CERT_FILE", "CLIENT_KEY_FILE",
+		} {
+			t.Setenv("GATEWAY_"+prefix+"_"+suffix, "")
+		}
+	}
+	require.Nil(t, grpcClientsFromEnv(nil))
+
+	t.Setenv("GATEWAY_USERS_GRPC_ADDR", "127.0.0.1:50051")
+	t.Setenv("GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR", "127.0.0.1:50052")
+	clients := grpcClientsFromEnv(nil)
+	require.NotNil(t, clients)
+	defer clients.close()
+	require.Error(t, clients.matchmakingCompleteErr)
+	require.Nil(t, clients.matchmakingComplete)
+}
+
 func TestGRPCClientsWaitForRequiredUserReadyBeforeServing(t *testing.T) {
 	connInterface, cleanup := startBufconnUserConn(t, &recordingUserGRPC{})
 	defer cleanup()

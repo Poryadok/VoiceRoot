@@ -193,7 +193,7 @@ func (s *MatchmakingGRPC) startSearch(ctx context.Context, req startSearchParams
 		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
 	}
 
-	if err := deps.Queue.EnqueueScoped(ctx, req.SpaceID, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt); err != nil {
+	if err := deps.Queue.EnqueueScopedGeneration(ctx, req.SpaceID, gameID, modeName, crit.Region, sess.ID, sess.CreatedAt, sess.RecoveryGeneration); err != nil {
 		_ = deps.Queue.ReleaseLock(ctx, profileID, sess.ID)
 		_, _ = deps.Sessions.Cancel(ctx, sess.ID)
 		return store.SearchSession{}, status.Error(codes.Unavailable, "queue unavailable")
@@ -250,7 +250,7 @@ func (s *MatchmakingGRPC) CancelSearch(ctx context.Context, req *matchmakingv1.C
 	}
 
 	if deps.Queue != nil {
-		_ = deps.Queue.DequeueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID)
+		_ = deps.Queue.DequeueScopedGeneration(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.RecoveryGeneration)
 		_ = deps.Queue.ReleaseLock(ctx, profileID, sess.ID)
 	}
 

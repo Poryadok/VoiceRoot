@@ -38,8 +38,6 @@ import (
 	voiceprom "voice/backend/pkg/promhttp"
 	pkgruntimeconfig "voice/backend/pkg/runtimeconfig"
 
-	callsv1 "voice.app/voice/calls/v1"
-	chatv1 "voice.app/voice/chat/v1"
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
 	userv1 "voice.app/voice/user/v1"
 )
@@ -99,6 +97,7 @@ func main() {
 		banStore := &store.BanStore{Pool: pool}
 
 		var events mmevents.Publisher = mmevents.NoopPublisher{}
+		eventsEnabled := false
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := mmevents.NewJetStreamPublisher(natsURL)
 			if err != nil {
@@ -106,6 +105,7 @@ func main() {
 			} else {
 				pub.Logger = logger
 				events = pub
+				eventsEnabled = true
 				defer func() { _ = pub.Close() }()
 			}
 		}
@@ -139,37 +139,36 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		var squadProvisioner grpcsvc.SquadProvisioner
-		chatAddr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR"))
-		voiceAddr := strings.TrimSpace(os.Getenv("VOICE_GRPC_ADDR"))
-		if chatAddr != "" && voiceAddr != "" {
-			cconn, err := grpc.NewClient(grpcclient.DialTarget(chatAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("chat grpc: %v", err)
-			}
-			defer func() { _ = cconn.Close() }()
-			vconn, err := grpc.NewClient(grpcclient.DialTarget(voiceAddr), grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				log.Fatalf("voice grpc: %v", err)
-			}
-			defer func() { _ = vconn.Close() }()
-			chatWaitCtx, chatWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(chatWaitCtx, cconn); err != nil {
-				chatWaitCancel()
-				log.Fatalf("chat grpc dial: %v", err)
-			}
-			chatWaitCancel()
-			voiceWaitCtx, voiceWaitCancel := context.WithTimeout(context.Background(), grpcclient.DialTimeoutFromEnv())
-			if err := waitForGRPCReady(voiceWaitCtx, vconn); err != nil {
-				voiceWaitCancel()
-				log.Fatalf("voice grpc dial: %v", err)
-			}
-			voiceWaitCancel()
-			squadProvisioner = &squad.Provisioner{
-				Chat:  &squad.GRPCChatClient{Client: chatv1.NewChatServiceClient(cconn)},
-				Voice: &squad.GRPCVoiceClient{Client: callsv1.NewVoiceServiceClient(vconn)},
-			}
-		} else if chatAddr != "" || voiceAddr != "" {
-			logger.Warn("squad provisioning disabled: set both CHAT_GRPC_ADDR and VOICE_GRPC_ADDR")
+		providerWorker, closeProviderConnections, providerConfigured, providerErr := squad.LoadProtectedProviderWorker(matchStore, os.Getenv)
+		if providerErr != nil {
+			log.Fatalf("MatchSquad protected provider configuration: %v", providerErr)
+		}
+		if providerConfigured {
+			squadProvisioner = providerWorker
+			defer func() {
+				if err := closeProviderConnections(); err != nil {
+					logger.Warn("MatchSquad provider connections did not close cleanly", slog.Any("error", err))
+				}
+			}()
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if _, err := providerWorker.RunProvisioningOnce(ctx, 100); err != nil {
+						logger.Warn("MatchSquad provisioning recovery failed", slog.Any("error", err))
+					}
+					if _, err := providerWorker.RunTeardownOnce(ctx, 100); err != nil {
+						logger.Warn("MatchSquad teardown dispatch failed", slog.Any("error", err))
+					}
+					if _, err := providerWorker.RunCompactionOnce(ctx, 100); err != nil {
+						logger.Warn("MatchSquad compaction dispatch failed", slog.Any("error", err))
+					}
+					cancel()
+				}
+			}()
+		} else {
+			logger.Warn("MatchSquad provisioning unavailable: protected provider configuration is absent")
 		}
 
 		var ratingPrivacy grpcsvc.MmRatingPrivacyChecker
@@ -248,6 +247,32 @@ func main() {
 			matchmakingv1.RegisterMatchmakingServiceServer(lifecycleSrv, mmSvc)
 		}
 		matchmakingv1.RegisterMatchmakingServiceServer(grpcSrv, mmSvc)
+		if eventsEnabled {
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					pending, err := matchStore.ListPendingMatchSquadCompletionEvents(context.Background(), 100)
+					if err != nil {
+						logger.Warn("MatchSquad completion event scan failed", slog.Any("error", err))
+						continue
+					}
+					for _, event := range pending {
+						if err := events.PublishMatchCompleted(context.Background(), mmevents.MatchCompletedEvent{
+							EventID: event.EventID.String(), OccurredAt: event.OccurredAt,
+							MatchID: event.MatchID.String(), DurationSeconds: event.DurationSeconds,
+							ProfileIDs: event.ProfileIDs,
+						}); err != nil {
+							logger.Warn("MatchSquad completion event publish failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+							continue
+						}
+						if err := matchStore.MarkMatchSquadCompletionEventPublished(context.Background(), event.AggregateID, event.EventID); err != nil {
+							logger.Warn("MatchSquad completion event acknowledgement failed", slog.String("match_id", event.MatchID.String()), slog.Any("error", err))
+						}
+					}
+				}
+			}()
+		}
 
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			lfpCtx, lfpCancel := context.WithCancel(context.Background())

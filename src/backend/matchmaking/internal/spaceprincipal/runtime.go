@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,9 +36,9 @@ const dependencyTimeout = 2 * time.Second
 var kidPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type Config struct {
-	ListenAddr, TLSCertFile, TLSKeyFile, ClientCAFile string
-	JWKSCAFile, JWKSURL, ReplayAddr, ReplayPassword   string
-	RefreshAfter, HardExpiry, UnknownKIDCooldown      time.Duration
+	ListenAddr, TLSCertFile, TLSKeyFile, ClientCAFile               string
+	JWKSCAFile, JWKSURL, GatewayJWKSURL, ReplayAddr, ReplayPassword string
+	RefreshAfter, HardExpiry, UnknownKIDCooldown                    time.Duration
 }
 
 func LoadFromEnv() (Config, bool, error) {
@@ -67,6 +68,7 @@ func LoadFromEnv() (Config, bool, error) {
 		ClientCAFile:   strings.TrimSpace(os.Getenv("MATCHMAKING_SPACE_PRINCIPAL_CLIENT_CA_FILE")),
 		JWKSCAFile:     strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")),
 		JWKSURL:        strings.TrimSpace(jwks["space"]),
+		GatewayJWKSURL: strings.TrimSpace(jwks["gateway"]),
 		ReplayAddr:     strings.TrimSpace(os.Getenv("MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_ADDR")),
 		ReplayPassword: os.Getenv("MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD"),
 	}
@@ -106,8 +108,8 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 }
 
 func (c Config) validate() error {
-	if c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" || c.JWKSURL == "" {
-		return errors.New("matchmaking Space principal listener, trust, TLS identity, and replay Redis are required")
+	if c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" || (c.JWKSURL == "" && c.GatewayJWKSURL == "") {
+		return errors.New("matchmaking principal listener, configured issuer trust, TLS identity, and replay Redis are required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid Matchmaking Space principal listener")
@@ -115,9 +117,17 @@ func (c Config) validate() error {
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid principal JWKS cache policy")
 	}
-	endpoint, err := http.NewRequest(http.MethodGet, c.JWKSURL, nil)
-	if err != nil || endpoint.URL.Scheme != "https" || endpoint.URL.Hostname() == "" || endpoint.URL.User != nil || endpoint.URL.Fragment != "" {
-		return errors.New("space principal JWKS URL must use HTTPS")
+	if c.JWKSURL != "" {
+		endpoint, err := http.NewRequest(http.MethodGet, c.JWKSURL, nil)
+		if err != nil || endpoint.URL.Scheme != "https" || endpoint.URL.Hostname() == "" || endpoint.URL.User != nil || endpoint.URL.Fragment != "" {
+			return errors.New("space principal JWKS URL must use HTTPS")
+		}
+	}
+	if c.GatewayJWKSURL != "" {
+		gatewayEndpoint, err := http.NewRequest(http.MethodGet, c.GatewayJWKSURL, nil)
+		if err != nil || gatewayEndpoint.URL.Scheme != "https" || gatewayEndpoint.URL.Hostname() == "" || gatewayEndpoint.URL.User != nil || gatewayEndpoint.URL.Fragment != "" {
+			return errors.New("delegated user JWKS URL must use HTTPS")
+		}
 	}
 	return nil
 }
@@ -169,10 +179,17 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return errors.New("principal JWKS redirects are forbidden")
 	}}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
-		if issuer != "space" {
-			return nil, errors.New("untrusted lifecycle principal issuer")
+		jwksURL := ""
+		switch issuer {
+		case "space":
+			jwksURL = cfg.JWKSURL
+		case "gateway":
+			jwksURL = cfg.GatewayJWKSURL
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.JWKSURL, nil)
+		if jwksURL == "" {
+			return nil, errors.New("untrusted Matchmaking principal issuer")
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -182,20 +199,20 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, errors.New("space principal JWKS unavailable")
+			return nil, errors.New("matchmaking principal JWKS unavailable")
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 		if err != nil || len(body) > 65536 {
-			return nil, errors.New("invalid Space principal JWKS response")
+			return nil, errors.New("invalid Matchmaking principal JWKS response")
 		}
 		keys, err := principal.ParseJWKS(body)
 		if err != nil || len(keys) != 2 {
-			return nil, errors.New("space principal JWKS requires current and next keys")
+			return nil, errors.New("matchmaking principal JWKS requires current and next keys")
 		}
 		var first *rsa.PublicKey
 		for kid, key := range keys {
 			if !kidPattern.MatchString(kid) || key.N.BitLen() < 2048 || first != nil && first.N.Cmp(key.N) == 0 {
-				return nil, errors.New("invalid Space principal rotation keys")
+				return nil, errors.New("invalid Matchmaking principal rotation keys")
 			}
 			first = key
 		}
@@ -215,9 +232,17 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		_ = runtime.Close()
 		return nil, errors.New("matchmaking principal replay Redis unavailable")
 	}
-	if err := resolver.Refresh(startup, "space"); err != nil {
-		_ = runtime.Close()
-		return nil, fmt.Errorf("load Space principal JWKS: %w", err)
+	if cfg.JWKSURL != "" {
+		if err := resolver.Refresh(startup, "space"); err != nil {
+			_ = runtime.Close()
+			return nil, fmt.Errorf("load Space principal JWKS: %w", err)
+		}
+	}
+	if cfg.GatewayJWKSURL != "" {
+		if err := resolver.Refresh(startup, "gateway"); err != nil {
+			_ = runtime.Close()
+			return nil, errors.New("delegated user JWKS unavailable")
+		}
 	}
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.cancel, runtime.done = stop, make(chan struct{})
@@ -243,14 +268,52 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestH
 	return verified, nil
 }
 
+// VerifyCompleteMatch binds the one delegated-user operation to the exact
+// request and checks the current Auth session epoch before the handler runs.
+func (r *Runtime) VerifyCompleteMatch(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
+	if r == nil || r.resolver == nil || r.replay == nil || method != matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName || r.config.GatewayJWKSURL == "" {
+		return principal.Principal{}, errors.New("matchmaking delegated-user principal unavailable")
+	}
+	verified, err := principal.VerifyDelegatedUser(ctx, token, principal.VerifyConfig{
+		ExpectedIssuer: "gateway", ExpectedAudience: "matchmaking", ExpectedRPC: method,
+		ExpectedRequestID: requestID, ExpectedRequestHash: requestHash,
+		KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay,
+		SessionEpochChecker: r.checkSessionEpoch,
+	})
+	if err != nil {
+		return principal.Principal{}, err
+	}
+	return verified, nil
+}
+
+func (r *Runtime) checkSessionEpoch(ctx context.Context, accountID string, claimed int64) error {
+	if r == nil || r.replay == nil || strings.TrimSpace(accountID) == "" || claimed <= 0 {
+		return errors.New("invalid delegated-user session epoch")
+	}
+	callCtx, cancel := context.WithTimeout(ctx, dependencyTimeout)
+	defer cancel()
+	value, err := r.replay.Get(callCtx, "auth:session:min_epoch:"+accountID).Result()
+	if err != nil {
+		return errors.New("delegated-user session epoch unavailable")
+	}
+	minimum, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || minimum <= 0 || strconv.FormatInt(minimum, 10) != value {
+		return errors.New("invalid delegated-user session epoch floor")
+	}
+	if claimed < minimum {
+		return errors.New("delegated-user session epoch revoked")
+	}
+	return nil
+}
+
 func (r *Runtime) recordReplay(ctx context.Context, issuer, jwtID string, expiresAt time.Time) error {
 	ttl := time.Until(expiresAt)
-	if issuer != "space" || jwtID == "" || ttl <= 0 || ttl > 35*time.Second {
+	if (issuer != "space" && issuer != "gateway") || jwtID == "" || ttl <= 0 || ttl > 35*time.Second {
 		return errors.New("invalid principal replay lifetime")
 	}
 	ttl = ((ttl + time.Millisecond - 1) / time.Millisecond) * time.Millisecond
 	digest := sha256.Sum256([]byte(issuer + "\x00" + jwtID))
-	result, err := r.replay.SetArgs(ctx, fmt.Sprintf("matchmaking:space-principal:replay:%x", digest), "1", redis.SetArgs{Mode: "NX", TTL: ttl}).Result()
+	result, err := r.replay.SetArgs(ctx, fmt.Sprintf("matchmaking:%s-principal:replay:%x", issuer, digest), "1", redis.SetArgs{Mode: "NX", TTL: ttl}).Result()
 	if errors.Is(err, redis.Nil) {
 		return errors.New("principal replay detected")
 	}
@@ -272,7 +335,12 @@ func (r *Runtime) refreshLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = r.resolver.Refresh(ctx, "space")
+			if r.config.JWKSURL != "" {
+				_ = r.resolver.Refresh(ctx, "space")
+			}
+			if r.config.GatewayJWKSURL != "" {
+				_ = r.resolver.Refresh(ctx, "gateway")
+			}
 		}
 	}
 }
@@ -307,22 +375,30 @@ type verifier interface {
 	Verify(context.Context, string, string, string, string) (principal.Principal, error)
 }
 
+type delegatedUserVerifier interface {
+	VerifyCompleteMatch(context.Context, string, string, string, string) (principal.Principal, error)
+}
+
 func isLifecycleMethod(method string) bool {
 	return method == matchmakingv1.MatchmakingService_ApplySpaceLifecycleFence_FullMethodName || method == matchmakingv1.MatchmakingService_PurgeSpace_FullMethodName
 }
 
 func OrdinaryUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if isLifecycleMethod(info.FullMethod) {
+		if isLifecycleMethod(info.FullMethod) || isCompleteMatchMethod(info.FullMethod) {
 			return nil, status.Error(codes.Unavailable, "protected lifecycle RPC is unavailable on this listener")
 		}
 		return handler(ctx, request)
 	}
 }
 
+func isCompleteMatchMethod(method string) bool {
+	return method == matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName
+}
+
 func StrictUnaryInterceptor(v verifier) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if !isLifecycleMethod(info.FullMethod) {
+		if !isLifecycleMethod(info.FullMethod) && !isCompleteMatchMethod(info.FullMethod) {
 			return nil, status.Error(codes.PermissionDenied, "ordinary RPC is unavailable on lifecycle listener")
 		}
 		if v == nil {
@@ -340,9 +416,30 @@ func StrictUnaryInterceptor(v verifier) grpc.UnaryServerInterceptor {
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
 		}
-		verified, err := v.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		if isCompleteMatchMethod(info.FullMethod) {
+			completeRequest, ok := request.(*matchmakingv1.CompleteMatchRequest)
+			if !ok || completeRequest.GetOperationId() == "" || completeRequest.GetOperationId() != transport.RequestID {
+				return nil, status.Error(codes.Unauthenticated, "invalid CompleteMatch operation binding")
+			}
+		}
+		var verified principal.Principal
+		if isCompleteMatchMethod(info.FullMethod) {
+			userVerifier, ok := v.(delegatedUserVerifier)
+			if !ok {
+				return nil, status.Error(codes.Unavailable, "delegated-user principal verifier unavailable")
+			}
+			verified, err = userVerifier.VerifyCompleteMatch(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		} else {
+			verified, err = v.Verify(ctx, transport.BearerToken, info.FullMethod, transport.RequestID, requestHash)
+		}
 		if err != nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
+		}
+		if isCompleteMatchMethod(info.FullMethod) {
+			if verified.Kind != "delegated_user" || verified.Issuer != "gateway" || verified.Subject != verified.AccountID || verified.Audience != "matchmaking" || verified.RPC != info.FullMethod || verified.RequestID != transport.RequestID || verified.RequestHash != requestHash || verified.AccountID == "" || verified.ProfileID == "" || verified.SessionEpoch <= 0 {
+				return nil, status.Error(codes.PermissionDenied, "Matchmaking delegated-user principal required")
+			}
+			return handler(principal.WithVerified(ctx, verified), request)
 		}
 		if verified.Kind != "service" || verified.Issuer != "space" || verified.Subject != "service:space" || verified.Audience != "matchmaking" || verified.RPC != info.FullMethod || verified.RequestID != transport.RequestID || verified.RequestHash != requestHash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
 			return nil, status.Error(codes.PermissionDenied, "Space lifecycle principal required")

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/screen_share_capabilities.dart';
+import '../../backend/livekit_room.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
@@ -36,19 +37,39 @@ class ScreenSharePanel extends ConsumerWidget {
     final _ = call.mediaTracksVersion;
 
     livekit.VideoTrack? track;
-    final isLocalSelf = share.isSharing &&
+    final isLocalSelf =
+        share.isSharing &&
         selected != null &&
         (selected.streamId == share.localStreamId ||
             (selfId != null && selected.profileId == selfId));
 
     if (room != null && selected != null) {
       if (isLocalSelf) {
-        track = room.localScreenShareTrack();
+        final isMatchSquad =
+            session.matchId != null && session.mediaEpoch != null;
+        if (!isMatchSquad ||
+            (selfId != null &&
+                room is MatchSquadVoiceLiveKitRoom &&
+                room.matchesLocalParticipantIdentity(
+                  selfId,
+                  session.mediaEpoch,
+                ))) {
+          track = room.localScreenShareTrack();
+        }
       } else {
-        final tracks = room.remoteScreenShareTracks(
-          participantIdentity: selected.profileId,
-        );
-        track = tracks.isNotEmpty ? tracks.first : null;
+        final isMatchSquad =
+            session.matchId != null && session.mediaEpoch != null;
+        final identity = isMatchSquad
+            ? room is MatchSquadVoiceLiveKitRoom
+                  ? room.resolveRemoteParticipantIdentity(selected.profileId)
+                  : null
+            : selected.profileId;
+        if (identity != null) {
+          final tracks = room.remoteScreenShareTracks(
+            participantIdentity: identity,
+          );
+          track = tracks.isNotEmpty ? tracks.first : null;
+        }
       }
     }
 
@@ -122,9 +143,12 @@ class ScreenSharePanel extends ConsumerWidget {
                     l10n.screenShareWaitingForVideo,
                     style: TextStyle(color: voice.textSecondary),
                   ),
-                if (share.isPaused &&
-                    share.localStreamId == selected?.streamId)
-                  Icon(Icons.pause_circle, size: 48, color: voice.textSecondary),
+                if (share.isPaused && share.localStreamId == selected?.streamId)
+                  Icon(
+                    Icons.pause_circle,
+                    size: 48,
+                    color: voice.textSecondary,
+                  ),
               ],
             ),
           ),
@@ -165,10 +189,7 @@ Future<double?> showScreenShareQualityDialog(BuildContext context) {
           ),
           if (webHint != null) ...[
             const SizedBox(height: 8),
-            Text(
-              webHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(webHint, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),
@@ -218,9 +239,7 @@ class ScreenSharePauseButton extends ConsumerWidget {
     if (!share.isSharing) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
     return IconButton.filledTonal(
-      tooltip: share.isPaused
-          ? l10n.screenShareResume
-          : l10n.screenSharePause,
+      tooltip: share.isPaused ? l10n.screenShareResume : l10n.screenSharePause,
       onPressed: () => ref
           .read(callControllerProvider.notifier)
           .pauseScreenShare(!share.isPaused),

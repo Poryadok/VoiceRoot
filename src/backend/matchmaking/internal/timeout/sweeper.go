@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
-
 	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/mmevents"
 	"voice/backend/matchmaking/internal/queue"
@@ -91,48 +89,54 @@ func (s *Sweeper) RunOnce(ctx context.Context) error {
 			}
 		}
 	}
-	if err := s.expirePendingAccept(ctx, now, timing); err != nil {
+	if err := s.expirePendingAccept(ctx); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Sweeper) expirePendingAccept(ctx context.Context, now time.Time, timing runtimeconfig.SearchTiming) error {
-	if s.Sessions == nil {
+func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
+	if s.Matches == nil {
 		return nil
 	}
-	acceptTimeout := timing.AcceptTimeout
-	if acceptTimeout <= 0 {
-		acceptTimeout = runtimeconfig.LoadSearchTiming().AcceptTimeout
-	}
-	cutoff := now.Add(-acceptTimeout)
-	expired, err := s.Sessions.ListPendingAcceptExpired(ctx, cutoff, 100)
+	matchIDs, err := s.Matches.ListPendingDeadlineMatchIDs(ctx, 100)
 	if err != nil {
 		return err
 	}
-	abandoned := make(map[uuid.UUID]bool)
-	for _, sess := range expired {
-		if sess.MatchID != nil && !abandoned[*sess.MatchID] && s.Matches != nil {
-			_ = s.Matches.AbandonMatch(ctx, *sess.MatchID)
-			abandoned[*sess.MatchID] = true
-		}
-		if _, err := s.Sessions.ExpirePendingAccept(ctx, sess.ID); err != nil {
-			if s.Logger != nil {
-				s.Logger.Warn("expire pending_accept failed",
-					slog.String("session_id", sess.ID.String()),
-					slog.Any("error", err))
-			}
-			continue
-		}
-		if s.Queue != nil {
-			if err := s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID); err != nil && s.Logger != nil {
-				s.Logger.Warn("pending_accept lock release failed",
-					slog.String("session_id", sess.ID.String()),
-					slog.Any("error", err))
-			}
+	for _, matchID := range matchIDs {
+		_, _, err := s.Matches.ExpirePendingMatchAtDeadline(ctx, matchID)
+		if err != nil {
+			return err
 		}
 	}
-	return nil
+	if s.Queue == nil {
+		return nil
+	}
+	return s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
+		if action == "enqueue" {
+			crit, err := criteria.Parse(sess.Criteria)
+			if err != nil {
+				return err
+			}
+			if err := s.Queue.RecoverSearch(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+				Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+				return err
+			}
+			return nil
+		}
+		crit, err := criteria.Parse(sess.Criteria)
+		if err != nil {
+			return err
+		}
+		if err := s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode,
+			Region: crit.Region, SessionID: sess.ID, ProfileID: sess.ProfileID, CreatedAt: sess.CreatedAt, Generation: sess.RecoveryGeneration}); err != nil {
+			if s.Logger != nil {
+				s.Logger.Warn("pending match recovery release failed", "session_id", sess.ID, "error", err)
+			}
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) error {
@@ -143,7 +147,7 @@ func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) er
 	if err != nil {
 		return err
 	}
-	if err := s.Queue.DequeueScoped(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID); err != nil {
+	if err := s.Queue.DequeueScopedGeneration(ctx, sess.SpaceID, sess.GameID, sess.Mode, crit.Region, sess.ID, sess.RecoveryGeneration); err != nil {
 		return err
 	}
 	return s.Queue.ReleaseLock(ctx, sess.ProfileID, sess.ID)

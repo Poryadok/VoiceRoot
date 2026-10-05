@@ -75,6 +75,17 @@ func TestConfigRequiresCompleteTLSReplayAndSpaceJWKS(t *testing.T) {
 	}
 }
 
+func TestConfigAllowsGatewayOnlyTrustForTheCompleteMatchMethod(t *testing.T) {
+	cfg := Config{
+		ListenAddr: ":9092", TLSCertFile: "server.crt", TLSKeyFile: "server.key", ClientCAFile: "client-ca.crt",
+		GatewayJWKSURL: "https://gateway/.well-known/voice-principal-jwks.json", ReplayAddr: "redis:6379",
+		RefreshAfter: timeSecond, HardExpiry: 2 * timeSecond, UnknownKIDCooldown: timeSecond,
+	}
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("valid Gateway-only CompleteMatch trust rejected: %v", err)
+	}
+}
+
 func TestLoadFromEnvIsDisabledOnlyWhenNoPrincipalSettingExists(t *testing.T) {
 	var previous = map[string]string{}
 	var present = map[string]bool{}
@@ -144,6 +155,53 @@ func TestLifecycleInterceptorsIsolateProtectedRPCsAndBindRequest(t *testing.T) {
 	}
 }
 
+func TestCompleteMatchInterceptorRequiresBoundDelegatedUserAndRejectsRawIdentity(t *testing.T) {
+	const method = matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName
+	operationID := "10000000-0000-4000-8000-000000000001"
+	request := &matchmakingv1.CompleteMatchRequest{MatchId: "10000000-0000-4000-8000-000000000002", OperationId: operationID}
+	hash, err := principal.RequestHash(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := principal.Principal{
+		Kind: "delegated_user", Issuer: "gateway", Subject: "10000000-0000-4000-8000-000000000004", Audience: "matchmaking",
+		RPC: method, RequestID: operationID, RequestHash: hash,
+		AccountID: "10000000-0000-4000-8000-000000000004", ProfileID: "10000000-0000-4000-8000-000000000003", SessionEpoch: 4,
+	}
+	verifier := &recordingUserVerifier{recordingVerifier: &recordingVerifier{principal: actor}}
+	strict := StrictUnaryInterceptor(verifier)
+	ordinary := OrdinaryUnaryInterceptor()
+	called := false
+	handler := func(ctx context.Context, req any) (any, error) {
+		called = true
+		verified, ok := principal.FromContext(ctx)
+		if !ok || verified.ProfileID != actor.ProfileID {
+			t.Fatal("handler did not receive the verified actor")
+		}
+		return "ok", nil
+	}
+	if _, err := ordinary(context.Background(), request, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unavailable || called {
+		t.Fatalf("ordinary listener accepted CompleteMatch: err=%v called=%v", err, called)
+	}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", operationID))
+	response, err := strict(ctx, request, &grpc.UnaryServerInfo{FullMethod: method}, handler)
+	if err != nil || response != "ok" || !called {
+		t.Fatalf("valid CompleteMatch principal: response=%v err=%v called=%v", response, err, called)
+	}
+	if verifier.method != method || verifier.requestID != operationID || verifier.requestHash != hash {
+		t.Fatalf("CompleteMatch verification binding = %q %q %q", verifier.method, verifier.requestID, verifier.requestHash)
+	}
+	called = false
+	foreignIdentity := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", operationID, "x-profile-id", actor.ProfileID))
+	if _, err := strict(foreignIdentity, request, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("raw identity metadata was accepted: err=%v called=%v", err, called)
+	}
+	called = false
+	if _, err := strict(ctx, &matchmakingv1.CompleteMatchRequest{MatchId: request.MatchId, OperationId: "10000000-0000-4000-8000-000000000005"}, &grpc.UnaryServerInfo{FullMethod: method}, handler); status.Code(err) != codes.Unauthenticated || called {
+		t.Fatalf("request ID detached from operation ID: err=%v called=%v", err, called)
+	}
+}
+
 func TestStrictInterceptorRejectsMalformedAndUntrustedPrincipalsBeforeHandler(t *testing.T) {
 	const method = matchmakingv1.MatchmakingService_PurgeSpace_FullMethodName
 	verifier := &recordingVerifier{err: errors.New("bad signature")}
@@ -182,6 +240,13 @@ type recordingVerifier struct {
 }
 
 func (v *recordingVerifier) Verify(_ context.Context, _, method, requestID, requestHash string) (principal.Principal, error) {
+	v.method, v.requestID, v.requestHash = method, requestID, requestHash
+	return v.principal, v.err
+}
+
+type recordingUserVerifier struct{ *recordingVerifier }
+
+func (v *recordingUserVerifier) VerifyCompleteMatch(_ context.Context, _, method, requestID, requestHash string) (principal.Principal, error) {
 	v.method, v.requestID, v.requestHash = method, requestID, requestHash
 	return v.principal, v.err
 }

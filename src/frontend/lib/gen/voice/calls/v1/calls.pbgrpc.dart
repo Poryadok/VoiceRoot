@@ -212,6 +212,128 @@ abstract class GameSessionProvisioningServiceBase extends $grpc.Service {
           $0.CompleteSdkConversionActivationRequest request);
 }
 
+/// Match-squad operations are served only by the dedicated protected
+/// MatchSquadVoiceService listener, never by the ordinary VoiceService listener.
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadVoiceService')
+class MatchSquadVoiceServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  MatchSquadVoiceServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom(
+    $0.CreateMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createMatchSquadRoom, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.TeardownMatchSquadRoomResponse>
+      teardownMatchSquadRoom(
+    $0.TeardownMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$teardownMatchSquadRoom, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CompactMatchSquadRoomResponse> compactMatchSquadRoom(
+    $0.CompactMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$compactMatchSquadRoom, request, options: options);
+  }
+
+  // method descriptors
+
+  static final _$createMatchSquadRoom = $grpc.ClientMethod<
+          $0.CreateMatchSquadRoomRequest, $0.CreateMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadVoiceService/CreateMatchSquadRoom',
+      ($0.CreateMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.CreateMatchSquadRoomResponse.fromBuffer);
+  static final _$teardownMatchSquadRoom = $grpc.ClientMethod<
+          $0.TeardownMatchSquadRoomRequest, $0.TeardownMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadVoiceService/TeardownMatchSquadRoom',
+      ($0.TeardownMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.TeardownMatchSquadRoomResponse.fromBuffer);
+  static final _$compactMatchSquadRoom = $grpc.ClientMethod<
+          $0.CompactMatchSquadRoomRequest, $0.CompactMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadVoiceService/CompactMatchSquadRoom',
+      ($0.CompactMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.CompactMatchSquadRoomResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadVoiceService')
+abstract class MatchSquadVoiceServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.calls.v1.MatchSquadVoiceService';
+
+  MatchSquadVoiceServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.CreateMatchSquadRoomRequest,
+            $0.CreateMatchSquadRoomResponse>(
+        'CreateMatchSquadRoom',
+        createMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CreateMatchSquadRoomRequest.fromBuffer(value),
+        ($0.CreateMatchSquadRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.TeardownMatchSquadRoomRequest,
+            $0.TeardownMatchSquadRoomResponse>(
+        'TeardownMatchSquadRoom',
+        teardownMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.TeardownMatchSquadRoomRequest.fromBuffer(value),
+        ($0.TeardownMatchSquadRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompactMatchSquadRoomRequest,
+            $0.CompactMatchSquadRoomResponse>(
+        'CompactMatchSquadRoom',
+        compactMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompactMatchSquadRoomRequest.fromBuffer(value),
+        ($0.CompactMatchSquadRoomResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CreateMatchSquadRoomRequest> $request) async {
+    return createMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.CreateMatchSquadRoomResponse> createMatchSquadRoom(
+      $grpc.ServiceCall call, $0.CreateMatchSquadRoomRequest request);
+
+  $async.Future<$0.TeardownMatchSquadRoomResponse> teardownMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.TeardownMatchSquadRoomRequest> $request) async {
+    return teardownMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.TeardownMatchSquadRoomResponse> teardownMatchSquadRoom(
+      $grpc.ServiceCall call, $0.TeardownMatchSquadRoomRequest request);
+
+  $async.Future<$0.CompactMatchSquadRoomResponse> compactMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CompactMatchSquadRoomRequest> $request) async {
+    return compactMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.CompactMatchSquadRoomResponse> compactMatchSquadRoom(
+      $grpc.ServiceCall call, $0.CompactMatchSquadRoomRequest request);
+}
+
 /// Voice / LiveKit orchestration. HTTP: /api/v1/voice/**.
 /// Package voice.calls.v1 avoids path stutter voice/voice/v1; service name matches docs.
 @$pb.GrpcServiceName('voice.calls.v1.VoiceService')
@@ -935,4 +1057,127 @@ abstract class VoiceServiceBase extends $grpc.Service {
 
   $async.Future<$0.PurgeSpaceResponse> purgeSpace(
       $grpc.ServiceCall call, $0.PurgeSpaceRequest request);
+}
+
+/// Player self-membership for active MatchSquad rooms. This service is
+/// registered only on Voice's dedicated delegated-user listener; ordinary
+/// VoiceService methods do not grant MatchSquad access.
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadMemberService')
+class MatchSquadMemberServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  MatchSquadMemberServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  /// @voice.security=protected;callers=delegated_user:gateway
+  $grpc.ResponseFuture<$0.JoinMatchSquadRoomResponse> joinMatchSquadRoom(
+    $0.JoinMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$joinMatchSquadRoom, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=delegated_user:gateway
+  $grpc.ResponseFuture<$0.GetMatchSquadJoinTokenResponse>
+      getMatchSquadJoinToken(
+    $0.GetMatchSquadJoinTokenRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getMatchSquadJoinToken, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=delegated_user:gateway
+  $grpc.ResponseFuture<$0.LeaveMatchSquadRoomResponse> leaveMatchSquadRoom(
+    $0.LeaveMatchSquadRoomRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$leaveMatchSquadRoom, request, options: options);
+  }
+
+  // method descriptors
+
+  static final _$joinMatchSquadRoom = $grpc.ClientMethod<
+          $0.JoinMatchSquadRoomRequest, $0.JoinMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadMemberService/JoinMatchSquadRoom',
+      ($0.JoinMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.JoinMatchSquadRoomResponse.fromBuffer);
+  static final _$getMatchSquadJoinToken = $grpc.ClientMethod<
+          $0.GetMatchSquadJoinTokenRequest, $0.GetMatchSquadJoinTokenResponse>(
+      '/voice.calls.v1.MatchSquadMemberService/GetMatchSquadJoinToken',
+      ($0.GetMatchSquadJoinTokenRequest value) => value.writeToBuffer(),
+      $0.GetMatchSquadJoinTokenResponse.fromBuffer);
+  static final _$leaveMatchSquadRoom = $grpc.ClientMethod<
+          $0.LeaveMatchSquadRoomRequest, $0.LeaveMatchSquadRoomResponse>(
+      '/voice.calls.v1.MatchSquadMemberService/LeaveMatchSquadRoom',
+      ($0.LeaveMatchSquadRoomRequest value) => value.writeToBuffer(),
+      $0.LeaveMatchSquadRoomResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.calls.v1.MatchSquadMemberService')
+abstract class MatchSquadMemberServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.calls.v1.MatchSquadMemberService';
+
+  MatchSquadMemberServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.JoinMatchSquadRoomRequest,
+            $0.JoinMatchSquadRoomResponse>(
+        'JoinMatchSquadRoom',
+        joinMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.JoinMatchSquadRoomRequest.fromBuffer(value),
+        ($0.JoinMatchSquadRoomResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetMatchSquadJoinTokenRequest,
+            $0.GetMatchSquadJoinTokenResponse>(
+        'GetMatchSquadJoinToken',
+        getMatchSquadJoinToken_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetMatchSquadJoinTokenRequest.fromBuffer(value),
+        ($0.GetMatchSquadJoinTokenResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.LeaveMatchSquadRoomRequest,
+            $0.LeaveMatchSquadRoomResponse>(
+        'LeaveMatchSquadRoom',
+        leaveMatchSquadRoom_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.LeaveMatchSquadRoomRequest.fromBuffer(value),
+        ($0.LeaveMatchSquadRoomResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.JoinMatchSquadRoomResponse> joinMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.JoinMatchSquadRoomRequest> $request) async {
+    return joinMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.JoinMatchSquadRoomResponse> joinMatchSquadRoom(
+      $grpc.ServiceCall call, $0.JoinMatchSquadRoomRequest request);
+
+  $async.Future<$0.GetMatchSquadJoinTokenResponse> getMatchSquadJoinToken_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetMatchSquadJoinTokenRequest> $request) async {
+    return getMatchSquadJoinToken($call, await $request);
+  }
+
+  $async.Future<$0.GetMatchSquadJoinTokenResponse> getMatchSquadJoinToken(
+      $grpc.ServiceCall call, $0.GetMatchSquadJoinTokenRequest request);
+
+  $async.Future<$0.LeaveMatchSquadRoomResponse> leaveMatchSquadRoom_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.LeaveMatchSquadRoomRequest> $request) async {
+    return leaveMatchSquadRoom($call, await $request);
+  }
+
+  $async.Future<$0.LeaveMatchSquadRoomResponse> leaveMatchSquadRoom(
+      $grpc.ServiceCall call, $0.LeaveMatchSquadRoomRequest request);
 }

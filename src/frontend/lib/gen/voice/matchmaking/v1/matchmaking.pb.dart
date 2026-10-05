@@ -2024,9 +2024,11 @@ class MatchList extends $pb.GeneratedMessage {
 class CompleteMatchRequest extends $pb.GeneratedMessage {
   factory CompleteMatchRequest({
     $core.String? matchId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (matchId != null) result.matchId = matchId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2045,6 +2047,7 @@ class CompleteMatchRequest extends $pb.GeneratedMessage {
           _omitMessageNames ? '' : 'voice.matchmaking.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'matchId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2074,6 +2077,15 @@ class CompleteMatchRequest extends $pb.GeneratedMessage {
   $core.bool hasMatchId() => $_has(0);
   @$pb.TagNumber(1)
   void clearMatchId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class CompleteMatchResponse extends $pb.GeneratedMessage {
@@ -3139,9 +3151,19 @@ class GetSearchStatusResponse extends $pb.GeneratedMessage {
 class GetMatchResponse extends $pb.GeneratedMessage {
   factory GetMatchResponse({
     Match? match,
+    $1.Timestamp? acceptanceDeadlineAt,
+    $1.Timestamp? serverNow,
+    $core.String? ownProposalResponse,
+    SearchSession? ownSearchSession,
   }) {
     final result = create();
     if (match != null) result.match = match;
+    if (acceptanceDeadlineAt != null)
+      result.acceptanceDeadlineAt = acceptanceDeadlineAt;
+    if (serverNow != null) result.serverNow = serverNow;
+    if (ownProposalResponse != null)
+      result.ownProposalResponse = ownProposalResponse;
+    if (ownSearchSession != null) result.ownSearchSession = ownSearchSession;
     return result;
   }
 
@@ -3160,6 +3182,13 @@ class GetMatchResponse extends $pb.GeneratedMessage {
           _omitMessageNames ? '' : 'voice.matchmaking.v1'),
       createEmptyInstance: create)
     ..aOM<Match>(1, _omitFieldNames ? '' : 'match', subBuilder: Match.create)
+    ..aOM<$1.Timestamp>(2, _omitFieldNames ? '' : 'acceptanceDeadlineAt',
+        subBuilder: $1.Timestamp.create)
+    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'serverNow',
+        subBuilder: $1.Timestamp.create)
+    ..aOS(4, _omitFieldNames ? '' : 'ownProposalResponse')
+    ..aOM<SearchSession>(5, _omitFieldNames ? '' : 'ownSearchSession',
+        subBuilder: SearchSession.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3191,6 +3220,48 @@ class GetMatchResponse extends $pb.GeneratedMessage {
   void clearMatch() => $_clearField(1);
   @$pb.TagNumber(1)
   Match ensureMatch() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $1.Timestamp get acceptanceDeadlineAt => $_getN(1);
+  @$pb.TagNumber(2)
+  set acceptanceDeadlineAt($1.Timestamp value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAcceptanceDeadlineAt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAcceptanceDeadlineAt() => $_clearField(2);
+  @$pb.TagNumber(2)
+  $1.Timestamp ensureAcceptanceDeadlineAt() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  $1.Timestamp get serverNow => $_getN(2);
+  @$pb.TagNumber(3)
+  set serverNow($1.Timestamp value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasServerNow() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearServerNow() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.Timestamp ensureServerNow() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $core.String get ownProposalResponse => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set ownProposalResponse($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOwnProposalResponse() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOwnProposalResponse() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  SearchSession get ownSearchSession => $_getN(4);
+  @$pb.TagNumber(5)
+  set ownSearchSession(SearchSession value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOwnSearchSession() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOwnSearchSession() => $_clearField(5);
+  @$pb.TagNumber(5)
+  SearchSession ensureOwnSearchSession() => $_ensure(4);
 }
 
 class GetMatchHistoryResponse extends $pb.GeneratedMessage {

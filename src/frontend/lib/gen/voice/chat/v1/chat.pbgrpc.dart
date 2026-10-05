@@ -1431,3 +1431,125 @@ abstract class GameIntegrationChatServiceBase extends $grpc.Service {
   $async.Future<$0.SetManagedChatRetentionResponse> setManagedChatRetention(
       $grpc.ServiceCall call, $0.SetManagedChatRetentionRequest request);
 }
+
+/// Match-squad operations are served only by the dedicated protected
+/// MatchSquadChatService listener, never by the player-facing ChatService.
+@$pb.GrpcServiceName('voice.chat.v1.MatchSquadChatService')
+class MatchSquadChatServiceClient extends $grpc.Client {
+  /// The hostname for this service.
+  static const $core.String defaultHost = '';
+
+  /// OAuth scopes needed for the client.
+  static const $core.List<$core.String> oauthScopes = [
+    '',
+  ];
+
+  MatchSquadChatServiceClient(super.channel,
+      {super.options, super.interceptors});
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CreateMatchSquadChatResponse> createMatchSquadChat(
+    $0.CreateMatchSquadChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$createMatchSquadChat, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.TeardownMatchSquadChatResponse>
+      teardownMatchSquadChat(
+    $0.TeardownMatchSquadChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$teardownMatchSquadChat, request,
+        options: options);
+  }
+
+  /// @voice.security=protected;callers=service:matchmaking
+  $grpc.ResponseFuture<$0.CompactMatchSquadChatResponse> compactMatchSquadChat(
+    $0.CompactMatchSquadChatRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$compactMatchSquadChat, request, options: options);
+  }
+
+  // method descriptors
+
+  static final _$createMatchSquadChat = $grpc.ClientMethod<
+          $0.CreateMatchSquadChatRequest, $0.CreateMatchSquadChatResponse>(
+      '/voice.chat.v1.MatchSquadChatService/CreateMatchSquadChat',
+      ($0.CreateMatchSquadChatRequest value) => value.writeToBuffer(),
+      $0.CreateMatchSquadChatResponse.fromBuffer);
+  static final _$teardownMatchSquadChat = $grpc.ClientMethod<
+          $0.TeardownMatchSquadChatRequest, $0.TeardownMatchSquadChatResponse>(
+      '/voice.chat.v1.MatchSquadChatService/TeardownMatchSquadChat',
+      ($0.TeardownMatchSquadChatRequest value) => value.writeToBuffer(),
+      $0.TeardownMatchSquadChatResponse.fromBuffer);
+  static final _$compactMatchSquadChat = $grpc.ClientMethod<
+          $0.CompactMatchSquadChatRequest, $0.CompactMatchSquadChatResponse>(
+      '/voice.chat.v1.MatchSquadChatService/CompactMatchSquadChat',
+      ($0.CompactMatchSquadChatRequest value) => value.writeToBuffer(),
+      $0.CompactMatchSquadChatResponse.fromBuffer);
+}
+
+@$pb.GrpcServiceName('voice.chat.v1.MatchSquadChatService')
+abstract class MatchSquadChatServiceBase extends $grpc.Service {
+  $core.String get $name => 'voice.chat.v1.MatchSquadChatService';
+
+  MatchSquadChatServiceBase() {
+    $addMethod($grpc.ServiceMethod<$0.CreateMatchSquadChatRequest,
+            $0.CreateMatchSquadChatResponse>(
+        'CreateMatchSquadChat',
+        createMatchSquadChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CreateMatchSquadChatRequest.fromBuffer(value),
+        ($0.CreateMatchSquadChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.TeardownMatchSquadChatRequest,
+            $0.TeardownMatchSquadChatResponse>(
+        'TeardownMatchSquadChat',
+        teardownMatchSquadChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.TeardownMatchSquadChatRequest.fromBuffer(value),
+        ($0.TeardownMatchSquadChatResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.CompactMatchSquadChatRequest,
+            $0.CompactMatchSquadChatResponse>(
+        'CompactMatchSquadChat',
+        compactMatchSquadChat_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CompactMatchSquadChatRequest.fromBuffer(value),
+        ($0.CompactMatchSquadChatResponse value) => value.writeToBuffer()));
+  }
+
+  $async.Future<$0.CreateMatchSquadChatResponse> createMatchSquadChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CreateMatchSquadChatRequest> $request) async {
+    return createMatchSquadChat($call, await $request);
+  }
+
+  $async.Future<$0.CreateMatchSquadChatResponse> createMatchSquadChat(
+      $grpc.ServiceCall call, $0.CreateMatchSquadChatRequest request);
+
+  $async.Future<$0.TeardownMatchSquadChatResponse> teardownMatchSquadChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.TeardownMatchSquadChatRequest> $request) async {
+    return teardownMatchSquadChat($call, await $request);
+  }
+
+  $async.Future<$0.TeardownMatchSquadChatResponse> teardownMatchSquadChat(
+      $grpc.ServiceCall call, $0.TeardownMatchSquadChatRequest request);
+
+  $async.Future<$0.CompactMatchSquadChatResponse> compactMatchSquadChat_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.CompactMatchSquadChatRequest> $request) async {
+    return compactMatchSquadChat($call, await $request);
+  }
+
+  $async.Future<$0.CompactMatchSquadChatResponse> compactMatchSquadChat(
+      $grpc.ServiceCall call, $0.CompactMatchSquadChatRequest request);
+}

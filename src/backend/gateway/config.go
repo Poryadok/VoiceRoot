@@ -42,6 +42,12 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	if _, _, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		return gatewayConfig{}, err
 	}
+	if _, _, err := matchSquadMemberClientConfigFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
+	if _, _, err := matchmakingCompleteClientConfigFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
 	if strict {
 		if strings.TrimSpace(os.Getenv("GATEWAY_REDIS_ADDR")) == "" {
 			return gatewayConfig{}, errors.New("GATEWAY_REDIS_ADDR is required when GATEWAY_SESSION_EPOCH_STRICT=true")
@@ -59,6 +65,18 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 			return gatewayConfig{}, errors.New("space lifecycle transport requires Gateway signing keys and strict session epochs")
 		}
 		config.transcoder.lifecycleIssuer = issuer
+	}
+	if config.transcoder != nil && config.transcoder.clients.matchSquadMember != nil {
+		if issuer == nil || !strict {
+			return gatewayConfig{}, errors.New("MatchSquad member transport requires Gateway signing keys and strict session epochs")
+		}
+		config.transcoder.matchSquadMemberIssuer = issuer
+	}
+	if config.transcoder != nil && config.transcoder.clients.matchmakingComplete != nil {
+		if issuer == nil || !strict {
+			return gatewayConfig{}, errors.New("CompleteMatch transport requires Gateway signing keys and strict session epochs")
+		}
+		config.transcoder.matchmakingCompleteIssuer = issuer
 	}
 	return config, nil
 }

@@ -214,6 +214,7 @@ message MatchList {
 
 message CompleteMatchRequest {
   string match_id = 1;
+  string operation_id = 2;
 }
 
 message CompleteMatchResponse {
@@ -286,6 +287,10 @@ message GetSearchStatusResponse {
 }
 message GetMatchResponse {
   Match match = 1;
+  google.protobuf.Timestamp acceptance_deadline_at = 2;
+  google.protobuf.Timestamp server_now = 3;
+  string own_proposal_response = 4;
+  SearchSession own_search_session = 5;
 }
 message GetMatchHistoryResponse {
   MatchList match_list = 1;

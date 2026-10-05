@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../backend/livekit_room.dart';
 import '../backend/screen_share_capabilities.dart';
@@ -192,6 +193,9 @@ class CallController extends StateNotifier<CallState> {
   bool _groupVoiceInFlight = false;
   bool _voiceRoomInFlight = false;
   int _connectGeneration = 0;
+  final Uuid _operationIds = const Uuid();
+  final Map<String, String> _matchSquadJoinOperationIds = {};
+  final Map<String, String> _matchSquadLeaveOperationIds = {};
 
   void _refreshGroupActiveCalls() {
     _ref.read(groupActiveCallRefreshTickProvider.notifier).state++;
@@ -410,7 +414,7 @@ class CallController extends StateNotifier<CallState> {
     }
   }
 
-  Future<void> joinGroupVoice({required String roomId}) async {
+  Future<void> joinGroupVoice({required String roomId, String? matchId}) async {
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     if (state.blocksAnotherVoiceEntry(roomId: roomId)) {
@@ -421,9 +425,40 @@ class CallController extends StateNotifier<CallState> {
     _groupVoiceInFlight = true;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
     try {
-      final result = await _ref
-          .read(voiceCallsClientProvider)
-          .joinCall(authorization: auth, roomId: roomId);
+      final client = _ref.read(voiceCallsClientProvider);
+      if (matchId != null && matchId.isNotEmpty) {
+        final operationId = _matchSquadJoinOperationIds.putIfAbsent(
+          matchId,
+          _operationIds.v4,
+        );
+        final result = await client.joinMatchSquadRoom(
+          authorization: auth,
+          matchId: matchId,
+          roomId: roomId,
+          operationId: operationId,
+        );
+        if (!mounted) return;
+        switch (result) {
+          case VoiceApiOk(:final data):
+            _matchSquadJoinOperationIds.remove(matchId);
+            state = state.copyWith(
+              session: data.session,
+              clearOutgoingTarget: true,
+            );
+            await _connectLiveKit(data.session);
+          case VoiceApiFailure(:final message, :final statusCode):
+            if (statusCode == 412 && await _tryRecoverActiveCall(auth)) {
+              return;
+            }
+            state = state.copyWith(
+              phase: CallPhase.failed,
+              errorMessage: message,
+              clearOutgoingTarget: true,
+            );
+        }
+        return;
+      }
+      final result = await client.joinCall(authorization: auth, roomId: roomId);
       if (!mounted) return;
       switch (result) {
         case VoiceApiOk(:final data):
@@ -480,6 +515,10 @@ class CallController extends StateNotifier<CallState> {
     _pendingVoiceRetry = null;
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
+    if (current?.matchId != null && current?.mediaEpoch != null) {
+      await leaveMatchSquad();
+      return;
+    }
     await _room?.disconnect();
     _room = null;
     if (auth != null && current != null) {
@@ -492,6 +531,47 @@ class CallController extends StateNotifier<CallState> {
       _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
       _refreshGroupActiveCalls();
     }
+  }
+
+  Future<VoiceApiResult<void>> leaveMatchSquad({String? matchId}) async {
+    final current = state.session;
+    if (current == null ||
+        current.matchId == null ||
+        current.mediaEpoch == null ||
+        (matchId != null && current.matchId != matchId)) {
+      return const VoiceApiOk(null);
+    }
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) {
+      return const VoiceApiFailure(message: 'not_authenticated');
+    }
+    final currentMatchId = current.matchId!;
+    final operationId = _matchSquadLeaveOperationIds.putIfAbsent(
+      currentMatchId,
+      _operationIds.v4,
+    );
+    final result = await _ref
+        .read(voiceCallsClientProvider)
+        .leaveMatchSquadRoom(
+          authorization: auth,
+          matchId: currentMatchId,
+          roomId: current.roomId,
+          mediaEpoch: current.mediaEpoch!,
+          operationId: operationId,
+        );
+    if (!mounted) return result;
+    switch (result) {
+      case VoiceApiOk():
+        _matchSquadLeaveOperationIds.remove(currentMatchId);
+        ++_connectGeneration;
+        await _room?.disconnect();
+        _room = null;
+        state = const CallState();
+        _ref.read(screenShareControllerProvider.notifier).clearForRoomEnd();
+      case VoiceApiFailure():
+        break;
+    }
+    return result;
   }
 
   String? _resolveVoiceBindingProfileId(VoiceCallSession session) {
@@ -518,7 +598,7 @@ class CallController extends StateNotifier<CallState> {
     try {
       await _room?.ensureAudioPlayback();
       await _applyEffectiveMicMute();
-      if (auth != null && current != null) {
+      if (auth != null && current != null && current.matchId == null) {
         await _ref
             .read(voiceCallsClientProvider)
             .updateVoiceState(
@@ -571,7 +651,7 @@ class CallController extends StateNotifier<CallState> {
     final current = state.session;
     state = state.copyWith(isVideoEnabled: enabled);
     await _room?.setVideoEnabled(enabled);
-    if (auth != null && current != null) {
+    if (auth != null && current != null && current.matchId == null) {
       await _ref
           .read(voiceCallsClientProvider)
           .updateVoiceState(
@@ -669,9 +749,15 @@ class CallController extends StateNotifier<CallState> {
     final connectGeneration = ++_connectGeneration;
     await _room?.disconnect();
     _room = null;
-    final token = await _ref
-        .read(voiceCallsClientProvider)
-        .getJoinToken(authorization: auth, roomId: connectRoomId);
+    final client = _ref.read(voiceCallsClientProvider);
+    final token = session.matchId != null && session.mediaEpoch != null
+        ? await client.getMatchSquadJoinToken(
+            authorization: auth,
+            matchId: session.matchId!,
+            roomId: connectRoomId,
+            mediaEpoch: session.mediaEpoch!,
+          )
+        : await client.getJoinToken(authorization: auth, roomId: connectRoomId);
     if (!mounted || !_isConnectCurrent(connectGeneration, connectRoomId)) {
       return;
     }
@@ -698,7 +784,13 @@ class CallController extends StateNotifier<CallState> {
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
         };
         room.onTracksChanged = () {
-          if (!mounted) return;
+          if (!mounted ||
+              !_isConnectCurrent(connectGeneration, connectRoomId) ||
+              _ref.read(authorizationHeaderProvider) != auth ||
+              state.session?.matchId != session.matchId ||
+              state.session?.mediaEpoch != session.mediaEpoch) {
+            return;
+          }
           state = state.copyWith(
             mediaTracksVersion: state.mediaTracksVersion + 1,
           );
@@ -762,9 +854,13 @@ class CallController extends StateNotifier<CallState> {
       // Room may be half-connected; ignore disconnect errors.
     }
     _room = null;
-    await _ref
-        .read(voiceCallsClientProvider)
-        .endCall(authorization: auth, roomId: session.roomId);
+    if (session.matchId != null && session.mediaEpoch != null) {
+      await leaveMatchSquad(matchId: session.matchId);
+    } else {
+      await _ref
+          .read(voiceCallsClientProvider)
+          .endCall(authorization: auth, roomId: session.roomId);
+    }
     if (mounted && _isConnectCurrent(generation, session.roomId)) {
       state = state.copyWith(
         phase: CallPhase.failed,
@@ -1044,21 +1140,41 @@ class CallController extends StateNotifier<CallState> {
   }
 
   void _reconcileScreenShareProjection(VoiceCallSession session) {
-    if (!mounted || state.session?.roomId != session.roomId) return;
+    if (!mounted ||
+        state.session?.roomId != session.roomId ||
+        state.session?.matchId != session.matchId ||
+        state.session?.mediaEpoch != session.mediaEpoch) {
+      return;
+    }
     final selfID = _ref.read(authControllerProvider).activeProfileId;
     final room = _room;
+    final matchRoom = room is MatchSquadVoiceLiveKitRoom ? room : null;
+    final isMatchSquad = session.matchId != null && session.mediaEpoch != null;
     _ref
         .read(screenShareControllerProvider.notifier)
         .reconcileSnapshot(
           roomId: session.roomId,
           sharingProfileIds: _authoritativeScreenSharers,
           localProfileId: selfID,
-          hasLocalTrack: room?.localScreenShareTrack() != null,
-          hasRemoteTrack: (profileID) =>
-              room
-                  ?.remoteScreenShareTracks(participantIdentity: profileID)
-                  .isNotEmpty ??
-              false,
+          hasLocalTrack:
+              room?.localScreenShareTrack() != null &&
+              (!isMatchSquad ||
+                  (selfID != null &&
+                      matchRoom?.matchesLocalParticipantIdentity(
+                            selfID,
+                            session.mediaEpoch,
+                          ) ==
+                          true)),
+          hasRemoteTrack: (profileID) {
+            final identity = isMatchSquad
+                ? matchRoom?.resolveRemoteParticipantIdentity(profileID)
+                : profileID;
+            if (identity == null) return false;
+            return room
+                    ?.remoteScreenShareTracks(participantIdentity: identity)
+                    .isNotEmpty ??
+                false;
+          },
         );
   }
 

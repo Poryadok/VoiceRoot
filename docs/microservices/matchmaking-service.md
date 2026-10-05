@@ -209,3 +209,22 @@ delayed work and removes Space queues, sessions, candidates, projections and
 Redis state. The receipt binds the root manifest but owns no Chat page set. Full
 request/receipt bytes retain 30 days from this participant's completion;
 compact `PURGED` fence is permanent.
+
+## Protected Match completion
+
+`CompleteMatch` is exposed through Gateway at
+`POST /api/v1/matchmaking/matches/{match_id}/complete`. Gateway calls the
+dedicated Matchmaking principal listener on `:9092` with a short-lived,
+request-bound `gateway` principal over mTLS. The verifier accepts only the
+configured issuer set and exact Matchmaking method; Space methods remain denied
+when no Space issuer is configured. The protected runtime also requires the
+current Auth session-epoch floor and consumes replay IDs in the configured
+Redis store. The ordinary `:9090` listener does not authorize this RPC.
+
+The principal binds the verified account, profile, session epoch, exact RPC,
+request hash and operation ID. Matchmaking checks participant membership and
+stores completion idempotency by `(actor_profile_id, operation_id)`: an exact
+same-actor replay returns the durable outcome, while a changed request under
+that key conflicts. Provider teardown and aggregate completion remain durable
+separate lifecycle steps; a successful HTTP response is not evidence that
+external Chat or Voice cleanup has completed.
