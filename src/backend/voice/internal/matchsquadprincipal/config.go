@@ -62,17 +62,17 @@ func LoadFromEnv(lookupEnv func(string) (string, bool)) (Config, bool, error) {
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" ||
 		strings.TrimSpace(c.ClientCAFile) == "" || strings.TrimSpace(c.ReplayRedisAddr) == "" {
-		return errors.New("Voice MatchSquad principal listener requires TLS identity, client CA, and replay Redis")
+		return errors.New("voice MatchSquad principal listener requires TLS identity, client CA, and replay Redis")
 	}
 	if _, _, err := net.SplitHostPort(strings.TrimSpace(c.ListenerAddr)); err != nil {
-		return errors.New("invalid Voice MatchSquad principal listener address")
+		return errors.New("invalid voice MatchSquad principal listener address")
 	}
 	parsed, err := url.Parse(strings.TrimSpace(c.JWKSURL))
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return errors.New("Voice MatchSquad principal requires an exact HTTPS JWKS URL without query credentials")
+		return errors.New("voice MatchSquad principal requires an exact HTTPS JWKS URL without query credentials")
 	}
 	if strings.ContainsAny(c.JWKSURL, "\r\n") {
-		return fmt.Errorf("invalid Voice MatchSquad principal JWKS URL")
+		return fmt.Errorf("invalid voice MatchSquad principal JWKS URL")
 	}
 	return nil
 }
