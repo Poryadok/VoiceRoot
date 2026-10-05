@@ -431,6 +431,9 @@
     }
   },
   "createProfileTitle": "Добавить профиль",
+  "profileCreateUsernameLabel": "Тег профиля",
+  "profileCreateSessionChanged": "Аккаунт или активный профиль изменился. Откройте создание профиля снова.",
+  "profileCreateRecoveryFailed": "Профиль создан, но настройка не завершена. Попробуйте снова, чтобы закончить.",
   "createProfileSubmit": "Создать профиль",
   "createProfilePresetHint": "Пресет приватности",
   "createProfileLimitReached": "Лимит профилей исчерпан. Premium — до 5 профилей.",
