@@ -228,7 +228,7 @@ func (s *RedisCallStore) AddMatchSquadParticipant(ctx context.Context, roomID, m
 					return nil
 				}
 			}
-			if tombstone, tombstoneErr := tx.Get(ctx, s.matchSquadTerminalEpochKey(roomID, profileID, epoch)).Result(); tombstoneErr == nil {
+			if _, tombstoneErr := tx.Get(ctx, s.matchSquadTerminalEpochKey(roomID, profileID, epoch)).Result(); tombstoneErr == nil {
 				return ErrMatchSquadProjectionDiverged
 			} else if !errors.Is(tombstoneErr, redis.Nil) {
 				return tombstoneErr
