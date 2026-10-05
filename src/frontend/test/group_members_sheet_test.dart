@@ -6,18 +6,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/l10n/app_localizations_en.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/create_group_friends_provider.dart';
+import 'package:voice_frontend/state/group_members_management_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/group_members_sheet.dart';
+import 'package:voice_frontend/ui/chat/group_member_picker_sheet.dart';
+import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 
@@ -69,7 +76,17 @@ void main() {
           home: const GroupMembersSheet(chatId: chatId),
           client: MockClient((_) async => http.Response('{}', 404)),
           extraOverrides: [
-            groupMembersProvider(chatId).overrideWith((_) => members.future),
+            groupMembersManagementProvider(chatId).overrideWith((ref) {
+              final controller = _TestGroupMembersController(
+                ref,
+                chatId,
+                loading: true,
+              );
+              members.future.then(
+                (data) => controller.setMembers(data.members),
+              );
+              return controller;
+            }),
           ],
         ),
       );
@@ -83,6 +100,363 @@ void main() {
     },
   );
 
+  testWidgets('admin can kick an ordinary member but not owner or admin', (
+    tester,
+  ) async {
+    const chatId = 'group-members-admin-kick';
+    const adminId = 'profile-admin';
+    const ordinaryId = 'profile-ordinary';
+    const otherAdminId = 'profile-other-admin';
+    const ownerId = 'profile-owner';
+
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          authControllerProvider.overrideWith((ref) {
+            final controller = authenticatedAuthController(ref);
+            controller.state = controller.state.copyWith(
+              session: const AuthSession(
+                accessToken: 'test-access',
+                refreshToken: 'test-refresh',
+                accountId: 'acc-test',
+                activeProfileId: adminId,
+                expiresInSeconds: 900,
+              ),
+            );
+            return controller;
+          }),
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: adminId, role: 'admin'),
+                ChatMember(profileId: ordinaryId, role: 'member'),
+                ChatMember(profileId: otherAdminId, role: 'admin'),
+                ChatMember(profileId: ownerId, role: 'owner'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(GroupMembersSheet.kickMemberKey(ordinaryId)),
+      findsOneWidget,
+    );
+    expect(find.byKey(GroupMembersSheet.kickMemberKey(adminId)), findsNothing);
+    expect(
+      find.byKey(GroupMembersSheet.kickMemberKey(otherAdminId)),
+      findsNothing,
+    );
+    expect(find.byKey(GroupMembersSheet.kickMemberKey(ownerId)), findsNothing);
+  });
+
+  testWidgets('member selection stays local until explicit add', (
+    tester,
+  ) async {
+    const chatId = 'group-add-members';
+    final addBodies = <Map<String, dynamic>>[];
+    final requestPaths = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((request) async {
+          requestPaths.add('${request.method} ${request.url.path}');
+          if (request.method == 'POST' &&
+              request.url.path == '/api/v1/chats/$chatId/members') {
+            addBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'prof-test', role: 'member'),
+                ChatMember(profileId: 'already-added', role: 'member'),
+              ],
+            ),
+          ),
+          createGroupFriendsProvider.overrideWith(
+            (_) async => const ['already-added', 'candidate-profile'],
+          ),
+          profileProvider('candidate-profile').overrideWith(
+            (_) async => const VoiceProfile(
+              id: 'candidate-profile',
+              accountId: 'candidate-account',
+              username: 'candidate',
+              discriminator: '0001',
+              displayName: 'Candidate',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(GroupMembersSheet.addMembersKey));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(GroupMemberPickerSheet.memberKey('already-added')),
+      findsNothing,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(addBodies, isEmpty);
+
+    await tester.tap(find.byKey(GroupMembersSheet.addMembersKey));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(GroupMemberPickerSheet.memberKey('candidate-profile')),
+    );
+    await tester.pump();
+    expect(addBodies, isEmpty);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(GroupMemberPickerSheet.submitKey))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(GroupMemberPickerSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(requestPaths, contains('POST /api/v1/chats/$chatId/members'));
+    expect(addBodies, hasLength(1), reason: 'Recorded requests: $requestPaths');
+    expect(addBodies.single['profile_ids'], ['candidate-profile']);
+  });
+
+  testWidgets('500 members disables Add with the documented tooltip', (
+    tester,
+  ) async {
+    const chatId = 'group-at-limit';
+    var addRequests = 0;
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'POST') addRequests++;
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: List<ChatMember>.generate(
+                500,
+                (index) => ChatMember(
+                  profileId: 'profile-$index',
+                  role: index == 0 ? kChatRoleOwner : kChatRoleMember,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final addButton = tester.widget<IconButton>(
+      find.byKey(GroupMembersSheet.addMembersKey),
+    );
+    expect(addButton.onPressed, isNull);
+    expect(
+      addButton.tooltip,
+      'This group has reached its 500-member limit. Create a Space for a larger community.',
+    );
+    await tester.tap(find.byKey(GroupMembersSheet.addMembersKey));
+    await tester.pump();
+    expect(addRequests, 0);
+  });
+
+  testWidgets('picker submit is discarded after the active profile changes', (
+    tester,
+  ) async {
+    const chatId = 'group-add-stale-profile';
+    var addRequests = 0;
+    late AuthController authController;
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'POST' &&
+              request.url.path == '/api/v1/chats/$chatId/members') {
+            addRequests++;
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          authControllerProvider.overrideWith((ref) {
+            authController = authenticatedAuthController(ref);
+            authController.state = authController.state.copyWith(
+              session: const AuthSession(
+                accessToken: 'profile-a-access',
+                refreshToken: 'profile-a-refresh',
+                accountId: 'acc-test',
+                activeProfileId: 'profile-a',
+                expiresInSeconds: 900,
+              ),
+            );
+            return authController;
+          }),
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'profile-a', role: 'owner'),
+              ],
+            ),
+          ),
+          createGroupFriendsProvider.overrideWith(
+            (_) async => const ['candidate-profile'],
+          ),
+          profileProvider('candidate-profile').overrideWith(
+            (_) async => const VoiceProfile(
+              id: 'candidate-profile',
+              accountId: 'candidate-account',
+              username: 'candidate',
+              discriminator: '0001',
+              displayName: 'Candidate',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(GroupMembersSheet.addMembersKey));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(GroupMemberPickerSheet.memberKey('candidate-profile')),
+    );
+    await tester.pump();
+    authController.state = authController.state.copyWith(
+      session: const AuthSession(
+        accessToken: 'profile-b-access',
+        refreshToken: 'profile-b-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(GroupMemberPickerSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(addRequests, 0);
+    expect(find.byType(GroupMemberPickerSheet), findsNothing);
+  });
+
+  testWidgets('member row opens that profile detail', (tester) async {
+    const chatId = 'group-member-profile';
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'prof-test', role: 'owner'),
+                ChatMember(profileId: 'candidate-profile', role: 'member'),
+              ],
+            ),
+          ),
+          profileProvider('candidate-profile').overrideWith(
+            (_) async => const VoiceProfile(
+              id: 'candidate-profile',
+              accountId: 'candidate-account',
+              username: 'candidate',
+              discriminator: '0001',
+              displayName: 'Candidate',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(GroupMembersSheet.memberTileKey('candidate-profile')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ProfileDetailSheet), findsOneWidget);
+  });
+
+  testWidgets('ownership transfer asks for confirmation and sends one action', (
+    tester,
+  ) async {
+    const chatId = 'group-transfer-owner';
+    final transferBodies = <Map<String, dynamic>>[];
+    await tester.pumpWidget(
+      testApp(
+        home: const GroupMembersSheet(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'POST' &&
+              request.url.path == '/api/v1/chats/$chatId/transfer-ownership') {
+            transferBodies.add(
+              jsonDecode(request.body) as Map<String, dynamic>,
+            );
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'prof-test', role: 'owner'),
+                ChatMember(profileId: 'candidate-profile', role: 'member'),
+              ],
+            ),
+          ),
+          profileProvider('candidate-profile').overrideWith(
+            (_) async => const VoiceProfile(
+              id: 'candidate-profile',
+              accountId: 'candidate-account',
+              username: 'candidate',
+              discriminator: '0001',
+              displayName: 'Candidate',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final transferButton = find.byKey(
+      GroupMembersSheet.transferOwnerKey('candidate-profile'),
+    );
+    expect(transferButton, findsOneWidget);
+    await tester.tap(transferButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(transferBodies, isEmpty);
+
+    await tester.tap(transferButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Transfer'));
+    await tester.pumpAndSettle();
+
+    expect(transferBodies, hasLength(1));
+    expect(transferBodies.single['new_owner_profile_id'], 'candidate-profile');
+  });
+
   testWidgets('group leave failure hides upstream details', (tester) async {
     const chatId = 'group-leave-error';
     await tester.pumpWidget(
@@ -90,9 +464,13 @@ void main() {
         home: const GroupMembersSheet(chatId: chatId),
         client: MockClient((_) async => http.Response('{}', 404)),
         extraOverrides: [
-          groupMembersProvider(chatId).overrideWith(
-            (_) async => const MemberListData(
-              members: [ChatMember(profileId: 'prof-test', role: 'owner')],
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              members: const [
+                ChatMember(profileId: 'prof-test', role: 'owner'),
+              ],
             ),
           ),
           chatActionsProvider.overrideWith(_FailingLeaveChatActions.new),
@@ -156,9 +534,13 @@ void main() {
           return http.Response('{}', 404);
         }),
         extraOverrides: [
-          groupMembersProvider(
-            chatId,
-          ).overrideWith((_) async => throw StateError('raw upstream failure')),
+          groupMembersManagementProvider(chatId).overrideWith(
+            (ref) => _TestGroupMembersController(
+              ref,
+              chatId,
+              error: 'raw upstream failure',
+            ),
+          ),
         ],
       ),
     );
@@ -337,6 +719,29 @@ void main() {
       reason: 'the narrow group info modal must not report a layout exception',
     );
   });
+}
+
+class _TestGroupMembersController extends GroupMembersManagementController {
+  _TestGroupMembersController(
+    super.ref,
+    super.chatId, {
+    List<ChatMember> members = const <ChatMember>[],
+    bool loading = false,
+    Object? error,
+  }) : super() {
+    state = GroupMembersManagementState(
+      members: members,
+      isLoading: loading,
+      error: error,
+    );
+  }
+
+  void setMembers(List<ChatMember> members) {
+    state = GroupMembersManagementState(members: members);
+  }
+
+  @override
+  Future<void> load({GroupMembersAuthContext? expectedContext}) async {}
 }
 
 class _NoopRealtimeHub extends RealtimeHub {

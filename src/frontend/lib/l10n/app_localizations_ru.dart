@@ -1752,7 +1752,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatGroupMembersSubtitle =>
-      'Владелец может удалять участников. Участники могут выйти из группы.';
+      'Владелец и администраторы могут удалять участников. Участники могут выйти из группы.';
 
   @override
   String get chatGroupMembersLoadError => 'Не удалось загрузить участников';
@@ -1786,6 +1786,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatGroupRoleOwner => 'Владелец';
+
+  @override
+  String get chatGroupRoleAdmin => 'Администратор';
+
+  @override
+  String get chatGroupAddMembers => 'Добавить участников';
+
+  @override
+  String get chatGroupMembersLimitReached =>
+      'Группа заполнена (500/500). Для больших сообществ создайте спейс.';
 
   @override
   String chatGroupMemberYou(String name) {

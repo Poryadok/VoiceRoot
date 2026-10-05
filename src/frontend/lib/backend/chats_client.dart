@@ -132,8 +132,9 @@ class ChatListData {
   final String? nextCursor;
 }
 
-/// Simple group roles (groups (docs/features/text-chat.md)): creator is [kChatRoleOwner], invitees [kChatRoleMember].
+/// Standalone group roles from ListMembers (`owner`, `admin`, `member`).
 const String kChatRoleOwner = 'owner';
+const String kChatRoleAdmin = 'admin';
 const String kChatRoleMember = 'member';
 
 class ChatMember {

@@ -857,7 +857,7 @@
   },
   "chatGroupMembersTooltip": "Group members",
   "chatGroupMembersTitle": "Members",
-  "chatGroupMembersSubtitle": "Owner can remove members. Members can leave the group.",
+  "chatGroupMembersSubtitle": "Owners and admins can remove members. Members can leave the group.",
   "chatGroupMembersLoadError": "Could not load members",
   "chatInfoTitle": "Chat info",
   "chatInfoOpen": "Chat info",
@@ -869,6 +869,9 @@
   "chatSharedMediaEmpty": "Nothing here yet",
   "chatSharedMediaLoadError": "Could not load shared media",
   "chatGroupRoleOwner": "Owner",
+  "chatGroupRoleAdmin": "Admin",
+  "chatGroupAddMembers": "Add members",
+  "chatGroupMembersLimitReached": "This group has reached its 500-member limit. Create a Space for a larger community.",
   "chatGroupMemberYou": "{name} (you)",
   "@chatGroupMemberYou": {
     "placeholders": {

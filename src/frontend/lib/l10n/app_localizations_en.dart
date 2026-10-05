@@ -1744,7 +1744,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatGroupMembersSubtitle =>
-      'Owner can remove members. Members can leave the group.';
+      'Owners and admins can remove members. Members can leave the group.';
 
   @override
   String get chatGroupMembersLoadError => 'Could not load members';
@@ -1778,6 +1778,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatGroupRoleOwner => 'Owner';
+
+  @override
+  String get chatGroupRoleAdmin => 'Admin';
+
+  @override
+  String get chatGroupAddMembers => 'Add members';
+
+  @override
+  String get chatGroupMembersLimitReached =>
+      'This group has reached its 500-member limit. Create a Space for a larger community.';
 
   @override
   String chatGroupMemberYou(String name) {
