@@ -2664,6 +2664,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Let invited guest accounts enter this chat.';
 
   @override
+  String get channelSettingsTitle => 'Channel settings';
+
+  @override
+  String get channelSettingsThreads => 'Enable threads';
+
+  @override
+  String get channelSettingsMemberPosts => 'Allow member posts';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Guest accounts can see my online status';
 
