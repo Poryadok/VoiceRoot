@@ -11,6 +11,7 @@ import 'package:voice_frontend/backend/e2e_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/e2e/e2e_key_backup_v2.dart';
+import 'package:voice_frontend/e2e/secure_signal_store.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/e2e_providers.dart';
@@ -19,6 +20,7 @@ import 'package:voice_frontend/ui/chat/e2e_chat_settings.dart';
 import 'package:voice_frontend/ui/settings/e2e_key_backup_screen.dart';
 
 import 'support/test_voice_token_catalog.dart';
+import 'support/in_memory_secure_signal_storage.dart';
 
 class _SettingsClient extends VoiceE2eClient {
   _SettingsClient()
@@ -119,8 +121,9 @@ String _authorization(String profileId) {
 Future<VoiceE2eClient> _client({
   required String encryptedBlob,
   Future<http.Response> Function(http.Request request)? handler,
-  required Future<void> Function(String profileId, Map<String, dynamic> state)
+  Future<void> Function(String profileId, Map<String, dynamic> state)?
   importBackup,
+  SecureSignalStorage? backupStorage,
 }) async {
   final httpClient = MockClient(
     handler ??
@@ -132,8 +135,17 @@ Future<VoiceE2eClient> _client({
       httpClient: httpClient,
       config: const GatewayConfig(baseUrl: 'https://voice.test'),
     ),
+    backupStorage: backupStorage,
     backupImporter: importBackup,
   );
+}
+
+Future<Map<String, dynamic>> _validPayload(String profileId) async {
+  final state = await SecureSignalStore.exportForBackup(
+    profileId,
+    storage: InMemorySecureSignalStorage(),
+  );
+  return {'profile_id': profileId, 'version': 2, 'signal_state': state};
 }
 
 void main() {
@@ -335,11 +347,7 @@ void main() {
       () async {
         final encryptedBlob = await codec.encryptPayload(
           password: password,
-          payload: const {
-            'profile_id': 'other-profile',
-            'version': 2,
-            'signal_state': {'sessions': <String, dynamic>{}},
-          },
+          payload: await _validPayload('other-profile'),
         );
         var imports = 0;
         final requests = <String>[];
@@ -372,11 +380,7 @@ void main() {
       () async {
         final encryptedBlob = await codec.encryptPayload(
           password: password,
-          payload: const {
-            'profile_id': 'current-profile',
-            'version': 2,
-            'signal_state': {'sessions': <String, dynamic>{}},
-          },
+          payload: await _validPayload('current-profile'),
         );
         final requestStarted = Completer<void>();
         final response = Completer<http.Response>();
@@ -413,11 +417,7 @@ void main() {
       () async {
         final encryptedBlob = await codec.encryptPayload(
           password: password,
-          payload: const {
-            'profile_id': 'profile-before-switch',
-            'version': 2,
-            'signal_state': {'sessions': <String, dynamic>{}},
-          },
+          payload: await _validPayload('profile-before-switch'),
         );
         final importing = Completer<void>();
         final finishImport = Completer<void>();
@@ -459,11 +459,7 @@ void main() {
     test('wrong password leaves the profile importer untouched', () async {
       final encryptedBlob = await codec.encryptPayload(
         password: password,
-        payload: const {
-          'profile_id': 'current-profile',
-          'version': 2,
-          'signal_state': {'sessions': <String, dynamic>{}},
-        },
+        payload: await _validPayload('current-profile'),
       );
       var imports = 0;
       final client = await _client(
@@ -507,6 +503,58 @@ void main() {
         expect(result, isA<E2eApiFailure>());
         expect(imports, 0);
         expect(requests, ['GET /api/v1/auth/e2e-key-backup']);
+      },
+    );
+
+    test(
+      'decryptable invalid Signal state cannot replace local keys or upload',
+      () async {
+        final encryptedBlob = await codec.encryptPayload(
+          password: password,
+          payload: const {
+            'profile_id': 'current-profile',
+            'version': 2,
+            'signal_state': <String, dynamic>{},
+          },
+        );
+        final storage = InMemorySecureSignalStorage();
+        final existingStore = await SecureSignalStore.open(
+          profileId: 'current-profile',
+          storage: storage,
+        );
+        await existingStore.close();
+        final before = await storage.read(key: 'state_v1');
+        final requests = <String>[];
+        final client = await _client(
+          encryptedBlob: encryptedBlob,
+          backupStorage: storage,
+          handler: (request) async {
+            requests.add('${request.method} ${request.url.path}');
+            return http.Response(
+              jsonEncode({'encrypted_blob': encryptedBlob}),
+              200,
+            );
+          },
+        );
+
+        final result = await client.restoreKeyBackup(
+          authorization: _authorization('current-profile'),
+          password: password,
+          isAuthorizationCurrent: () => true,
+        );
+
+        expect(result, isA<E2eApiFailure>());
+        expect(requests, ['GET /api/v1/auth/e2e-key-backup']);
+        expect(await storage.read(key: 'state_v1'), before);
+        await expectLater(
+          SecureSignalStore.importFromBackup(
+            'current-profile',
+            const <String, dynamic>{},
+            storage: storage,
+          ),
+          throwsA(isA<Exception>()),
+        );
+        expect(await storage.read(key: 'state_v1'), before);
       },
     );
 

@@ -47,7 +47,13 @@ class VoiceE2eClient {
   }) : _gateway = gateway,
        _adapter = adapter ?? E2eCryptoAdapter(),
        _backupStorage = backupStorage,
-       _backupImporter = backupImporter ?? SecureSignalStore.importFromBackup {
+       _backupImporter =
+           backupImporter ??
+           ((profileId, state) => SecureSignalStore.importFromBackup(
+             profileId,
+             state,
+             storage: backupStorage,
+           )) {
     _preKeys = E2ePreKeySync(sessionManager: _adapter.sessionManager);
   }
 

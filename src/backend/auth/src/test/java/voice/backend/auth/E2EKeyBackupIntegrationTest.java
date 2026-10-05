@@ -6,12 +6,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import app.voice.auth.v1.AuthServiceGrpc;
 import app.voice.auth.v1.DeleteE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupRequest;
+import app.voice.auth.v1.LogoutRequest;
 import app.voice.auth.v1.PutE2EKeyBackupRequest;
 import app.voice.auth.v1.RegisterRequest;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerInterceptors;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -107,6 +109,14 @@ class E2EKeyBackupIntegrationTest {
 
       assertThatThrownBy(() -> client.deleteE2EKeyBackup(DeleteE2EKeyBackupRequest.getDefaultInstance()))
           .isInstanceOf(StatusRuntimeException.class);
+      client.logout(LogoutRequest.newBuilder()
+          .setRefreshToken(first.getRefreshToken())
+          .build());
+      assertThatThrownBy(() -> firstClient.deleteE2EKeyBackup(
+          DeleteE2EKeyBackupRequest.getDefaultInstance()))
+          .isInstanceOf(StatusRuntimeException.class)
+          .satisfies(error -> assertThat(((StatusRuntimeException) error).getStatus().getCode())
+              .isEqualTo(Status.Code.UNAUTHENTICATED));
     } finally {
       channel.shutdownNow();
       server.shutdownNow();
