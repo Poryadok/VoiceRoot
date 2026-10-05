@@ -41,7 +41,7 @@ func matchSquadMemberClientConfigFromEnv() (matchSquadMemberClientConfig, bool, 
 	}
 	for _, value := range []string{c.address, c.ca, c.serverName, c.cert, c.key} {
 		if value == "" || value != strings.TrimSpace(value) {
-			return c, true, errors.New("Gateway MatchSquad member TLS configuration is incomplete")
+			return c, true, errors.New("gateway MatchSquad member TLS configuration is incomplete")
 		}
 	}
 	if _, err := c.tlsConfig(); err != nil {

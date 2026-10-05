@@ -42,7 +42,7 @@ func matchmakingCompleteClientConfigFromEnv() (matchmakingCompleteClientConfig, 
 	}
 	for _, value := range []string{c.address, c.ca, c.serverName, c.cert, c.key} {
 		if value == "" || value != strings.TrimSpace(value) {
-			return c, true, errors.New("Gateway CompleteMatch TLS configuration is incomplete")
+			return c, true, errors.New("gateway CompleteMatch TLS configuration is incomplete")
 		}
 	}
 	if _, err := c.tlsConfig(); err != nil {
