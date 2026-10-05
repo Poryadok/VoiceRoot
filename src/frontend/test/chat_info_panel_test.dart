@@ -16,6 +16,7 @@ import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
+import 'package:voice_frontend/ui/chat/channel_settings_panel.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -80,6 +81,136 @@ void main() {
         home: Scaffold(body: home),
       ),
     );
+  }
+
+  Future<void> verifyWideSettingsCanReturn(
+    WidgetTester tester,
+    String scenario,
+  ) async {
+    final pendingReload = Completer<http.Response>();
+    var chatReads = 0;
+    var patchCalls = 0;
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/chats') {
+        chatReads++;
+        if (chatReads > 1 && scenario == 'loading') {
+          return pendingReload.future;
+        }
+        if (chatReads > 1 && scenario == 'load error') {
+          return http.Response('{}', 503);
+        }
+        final type = chatReads > 1 && scenario == 'invalid chat'
+            ? 'CHAT_TYPE_GROUP'
+            : 'CHAT_TYPE_CHANNEL';
+        return http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                {
+                  'chat': {
+                    'id': 'channel-settings',
+                    'type': type,
+                    'creator_profile_id': 'prof-test',
+                    'threads_enabled': false,
+                    'allow_user_main_feed': false,
+                  },
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/chats/channel-settings/members') {
+        final role = scenario == 'authorization loss' && chatReads > 1
+            ? 'member'
+            : 'owner';
+        return http.Response(
+          jsonEncode({
+            'member_list': {
+              'members': [
+                {'profile_id': 'prof-test', 'role': role},
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (req.method == 'PATCH') patchCalls++;
+      if (req.url.path.contains('/shared-media')) {
+        return http.Response(
+          jsonEncode({
+            'shared_media_list': {'items': []},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 404);
+    });
+
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      testApp(
+        home: const SizedBox(
+          height: 800,
+          width: 300,
+          child: ChatInfoPanel(chatId: 'channel-settings'),
+        ),
+        client: client,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(StandaloneChannelSettingsEntry.entryKey), findsOneWidget);
+    await tester.tap(find.byKey(StandaloneChannelSettingsEntry.entryKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChannelSettingsPanel.closeKey), findsOneWidget);
+    await tester.tap(find.byKey(ChannelSettingsPanel.closeKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatInfoPanel), findsOneWidget);
+    expect(find.byKey(ChannelSettingsPanel.panelKey), findsNothing);
+    expect(patchCalls, 0);
+    if (scenario == 'loading') {
+      pendingReload.complete(
+        http.Response(
+          jsonEncode({
+            'chat_list': {
+              'items': [
+                {
+                  'chat': {
+                    'id': 'channel-settings',
+                    'type': 'CHAT_TYPE_CHANNEL',
+                    'creator_profile_id': 'prof-test',
+                    'threads_enabled': false,
+                    'allow_user_main_feed': false,
+                  },
+                },
+              ],
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  }
+
+  for (final scenario in [
+    'loading',
+    'load error',
+    'authorization loss',
+    'invalid chat',
+  ]) {
+    testWidgets('wide channel settings can return during $scenario', (
+      tester,
+    ) async {
+      await verifyWideSettingsCanReturn(tester, scenario);
+    });
   }
 
   testWidgets('chat info panel shows shared media tabs and empty state', (
@@ -254,6 +385,123 @@ void main() {
             .value,
         isFalse,
       );
+    },
+  );
+
+  testWidgets(
+    'standalone channel owner opens channel settings from Chat Info',
+    (tester) async {
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/chats') {
+          return http.Response(
+            jsonEncode({
+              'chat_list': {
+                'items': [
+                  {
+                    'chat': {
+                      'id': 'channel-settings',
+                      'type': 'CHAT_TYPE_CHANNEL',
+                      'creator_profile_id': 'prof-test',
+                      'threads_enabled': false,
+                      'allow_user_main_feed': false,
+                    },
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/chats/channel-settings/members') {
+          return http.Response(
+            jsonEncode({
+              'member_list': {
+                'members': [
+                  {'profile_id': 'prof-test', 'role': 'owner'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path.contains('/shared-media')) {
+          return http.Response(
+            jsonEncode({
+              'shared_media_list': {'items': []},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      final semantics = tester.ensureSemantics();
+      for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.pumpWidget(
+          testApp(
+            home: SizedBox(
+              height: size.width < 600 ? size.height * 0.75 : size.height,
+              width: size.width < 600 ? size.width : 300,
+              child: ChatInfoPanel(chatId: 'channel-settings'),
+            ),
+            client: client,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(StandaloneChannelSettingsEntry.entryKey),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(
+          find.byKey(StandaloneChannelSettingsEntry.entryKey),
+        );
+        await tester.tap(find.byKey(StandaloneChannelSettingsEntry.entryKey));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(ChannelSettingsPanel.panelKey), findsOneWidget);
+        expect(
+          find.byKey(ChannelSettingsPanel.threadsToggleKey),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ChannelSettingsPanel.memberPostsToggleKey),
+          findsOneWidget,
+        );
+        expect(
+          find.byType(BottomSheet),
+          size.width < 600 ? findsOneWidget : findsNothing,
+        );
+        final threadsSemantics = tester.getSemantics(
+          find.descendant(
+            of: find.byKey(ChannelSettingsPanel.threadsToggleKey),
+            matching: find.byType(Switch),
+          ),
+        );
+        expect(threadsSemantics.label, 'Enable threads');
+        expect(
+          tester
+              .widget<SwitchListTile>(
+                find.byKey(ChannelSettingsPanel.threadsToggleKey),
+              )
+              .value,
+          isFalse,
+        );
+        expect(
+          tester
+              .widget<SwitchListTile>(
+                find.byKey(ChannelSettingsPanel.memberPostsToggleKey),
+              )
+              .value,
+          isFalse,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+      semantics.dispose();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
     },
   );
 
