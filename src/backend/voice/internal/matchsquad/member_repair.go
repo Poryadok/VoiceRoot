@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/voice/internal/livekit"
 	"voice/backend/voice/internal/store"
 )
 
@@ -108,11 +109,12 @@ AND ((m.membership_state='LEAVING' AND (m.latest_grant_expires_at IS NULL OR m.l
 				return status.Error(codes.Unavailable, "Voice MatchSquad leave repair unavailable")
 			}
 		}
+		if err := releaseTerminalFenceInTx(ctx, tx, c.match, c.room, c.account, c.profile, c.epoch); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return status.Error(codes.Unavailable, "Voice MatchSquad leave repair unavailable")
-		}
-		if err := s.Fences.Release(ctx, c.account, c.profile, c.room.String()); err != nil {
-			return status.Error(codes.Unavailable, "MatchSquad account fence release pending")
 		}
 	}
 	return nil
@@ -190,10 +192,14 @@ AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operatio
 		if err := tx.Commit(ctx); err != nil {
 			return status.Error(codes.Unavailable, "Voice MatchSquad join repair unavailable")
 		}
-		if err := s.removeProjectionMember(ctx, item.room, item.match, item.profile); err != nil {
+		if err := s.removeProjectionMember(ctx, item.room, item.match, item.profile, item.epoch); err != nil {
 			return err
 		}
-		if err := s.RoomEffect.RemoveParticipant(ctx, item.livekitRoom, item.profile.String()); err != nil {
+		identity, err := livekit.MatchSquadIdentity(item.profile.String(), item.epoch.String())
+		if err != nil {
+			return status.Error(codes.FailedPrecondition, "MatchSquad media generation is invalid")
+		}
+		if err := s.RoomEffect.RemoveParticipant(ctx, item.livekitRoom, identity); err != nil {
 			return status.Error(codes.Unavailable, "MatchSquad join cleanup is not confirmed")
 		}
 		tx, err = s.Pool.BeginTx(ctx, pgx.TxOptions{})
@@ -204,11 +210,12 @@ AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operatio
 			_ = tx.Rollback(ctx)
 			return status.Error(codes.Unavailable, "could not persist repaired MatchSquad join effect")
 		}
+		if err := releaseTerminalFenceInTx(ctx, tx, item.match, item.room, item.account, item.profile, item.epoch); err != nil {
+			_ = tx.Rollback(ctx)
+			return err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return status.Error(codes.Unavailable, "could not persist repaired MatchSquad join effect")
-		}
-		if err := s.Fences.Release(ctx, item.account, item.profile, item.room.String()); err != nil {
-			return status.Error(codes.Unavailable, "MatchSquad account fence release pending")
 		}
 	}
 	return nil
@@ -256,10 +263,14 @@ ORDER BY o.updated_at,o.operation_id LIMIT $1`, limit)
 		return status.Error(codes.Unavailable, "Voice MatchSquad member effect repair unavailable")
 	}
 	for _, item := range pending {
-		if err := s.removeProjectionMember(ctx, item.room, item.match, item.profile); err != nil {
+		if err := s.removeProjectionMember(ctx, item.room, item.match, item.profile, item.epoch); err != nil {
 			return err
 		}
-		if err := s.RoomEffect.RemoveParticipant(ctx, item.livekitRoom, item.profile.String()); err != nil {
+		identity, err := livekit.MatchSquadIdentity(item.profile.String(), item.epoch.String())
+		if err != nil {
+			return status.Error(codes.FailedPrecondition, "MatchSquad media generation is invalid")
+		}
+		if err := s.RoomEffect.RemoveParticipant(ctx, item.livekitRoom, identity); err != nil {
 			return status.Error(codes.Unavailable, "MatchSquad media leave is not confirmed")
 		}
 		tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
@@ -304,13 +315,14 @@ WHERE m.profile_id=$3 AND m.account_id=$4 AND m.session_epoch=$5 AND m.media_epo
 			_ = tx.Rollback(ctx)
 			return status.Error(codes.Unavailable, "could not persist repaired MatchSquad leave receipt")
 		}
+		if left {
+			if err := releaseTerminalFenceInTx(ctx, tx, item.match, item.room, item.account, item.profile, item.epoch); err != nil {
+				_ = tx.Rollback(ctx)
+				return err
+			}
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return status.Error(codes.Unavailable, "could not persist repaired MatchSquad leave receipt")
-		}
-		if left {
-			if err := s.Fences.Release(ctx, item.account, item.profile, item.room.String()); err != nil {
-				return status.Error(codes.Unavailable, "MatchSquad account fence release pending")
-			}
 		}
 	}
 	return nil
@@ -362,7 +374,12 @@ func (s *MatchSquadMemberService) PrepareForTeardown(ctx context.Context, matchI
 		if parseErr != nil || profileID == uuid.Nil || profileID.String() != profile {
 			return status.Error(codes.FailedPrecondition, "current MatchSquad Redis roster contains an invalid profile id")
 		}
-		if err := s.removeProjectionMember(ctx, roomID, matchID, profileID); err != nil {
+		epoch, ok := call.MatchSquadMemberEpochs[profile]
+		parsedEpoch, epochErr := uuid.Parse(epoch)
+		if !ok || epochErr != nil || parsedEpoch == uuid.Nil || parsedEpoch.String() != epoch {
+			return status.Error(codes.FailedPrecondition, "current MatchSquad roster lacks an exact media generation")
+		}
+		if err := s.removeProjectionMember(ctx, roomID, matchID, profileID, parsedEpoch); err != nil {
 			return err
 		}
 	}
@@ -420,13 +437,13 @@ WHERE m.room_id=$1 AND m.membership_state IN ('JOINING','JOINED','LEAVING')
 AND EXISTS (SELECT 1 FROM voice_room_instances r JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id WHERE r.room_id=m.room_id AND r.owner_id=$2 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice')`, roomID, matchID); err != nil {
 		return status.Error(codes.Unavailable, "could not persist MatchSquad terminal member state")
 	}
+	for _, m := range members {
+		if err := releaseTerminalFenceInTx(ctx, tx, matchID, roomID, m.account, m.profile, m.epoch); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return status.Error(codes.Unavailable, "could not persist MatchSquad terminal member state")
-	}
-	for _, m := range members {
-		if err := s.Fences.Release(ctx, m.account, m.profile, roomID.String()); err != nil {
-			return status.Error(codes.Unavailable, "MatchSquad account fence release pending")
-		}
 	}
 	return nil
 }

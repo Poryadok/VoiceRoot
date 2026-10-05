@@ -20,6 +20,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/gameprovision"
+	"voice/backend/voice/internal/livekit"
 	"voice/backend/voice/internal/store"
 )
 
@@ -32,7 +33,8 @@ type MemberPrincipalCurrent interface {
 }
 
 type MatchSquadTokenIssuer interface {
-	MatchSquadJoinToken(string, string, *bool, time.Time, time.Time) (string, time.Time, error)
+	MatchSquadTokenWindow(time.Time, time.Time) (time.Time, time.Time, error)
+	MatchSquadJoinTokenUntil(string, string, *bool, time.Time, time.Time) (string, error)
 	LivekitURL() string
 }
 
@@ -139,7 +141,7 @@ func (s *MatchSquadMemberService) Join(ctx context.Context, req *callsv1.JoinMat
 		return nil, err
 	}
 
-	mediaEpoch, _, err := s.reserveGeneration(ctx, tx, actor, matchID, roomID, profileID, accountID, operation, requestHash, encoded)
+	mediaEpoch, _, err := s.reserveGeneration(ctx, tx, actor, matchID, roomID, profileID, accountID, operation, requestHash, encoded, newFence)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +155,7 @@ func (s *MatchSquadMemberService) Join(ctx context.Context, req *callsv1.JoinMat
 	if err := s.Principal.CheckCurrent(ctx, actor, s.now()); err != nil {
 		return nil, err
 	}
-	call, err := s.ensureProjectionMember(ctx, roomID, matchID, profileID)
+	call, err := s.ensureProjectionMember(ctx, roomID, matchID, profileID, accountID, actor.SessionEpoch, mediaEpoch)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +183,9 @@ func (s *MatchSquadMemberService) GetJoinToken(ctx context.Context, req *callsv1
 	if err := s.Principal.CheckCurrent(ctx, actor, s.now()); err != nil {
 		return nil, err
 	}
+
+	// Persist a fixed, DB-clock-derived grant before signing so teardown can
+	// enter closing while a signer is slow, yet still wait for this bearer.
 	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
@@ -209,38 +214,121 @@ func (s *MatchSquadMemberService) GetJoinToken(ctx context.Context, req *callsv1
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_profile_account_mappings WHERE profile_id=$1 AND account_id=$2) AND EXISTS(SELECT 1 FROM voice_account_voice_fences WHERE account_id=$2 AND profile_id=$1 AND room_id=$3 AND state='active')`, profileID, accountID, roomID.String()).Scan(&fenceReady); err != nil || !fenceReady {
 		return nil, status.Error(codes.FailedPrecondition, "MatchSquad account and profile fence is not current")
 	}
-	if err := s.Principal.CheckCurrent(ctx, actor, s.now()); err != nil {
-		return nil, err
+	var databaseNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&databaseNow); err != nil {
+		return nil, status.Error(codes.Unavailable, "Voice MatchSquad database clock unavailable")
 	}
-	now := s.now()
-	canPublish := true
-	jwt, expiresAt, err := s.Tokens.MatchSquadJoinToken(actor.ProfileID, room.livekitRoom, &canPublish, now, actor.ExpiresAt)
+	issuedAt, expiresAt, err := s.Tokens.MatchSquadTokenWindow(databaseNow, actor.ExpiresAt)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "delegated user credential expires too soon")
+	}
+	grantExpiry := expiresAt
+	if latest.Valid && latest.Time.After(grantExpiry) {
+		grantExpiry = latest.Time
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO voice_match_squad_member_grants(request_id,match_id,room_id,profile_id,account_id,session_epoch,media_epoch,issued_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, requestID, matchID, roomID, profileID, accountID, actor.SessionEpoch, mediaEpoch, issuedAt, expiresAt); err != nil {
+		return nil, status.Error(codes.AlreadyExists, "MatchSquad token request was already used")
+	}
+	command, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET latest_grant_expires_at=$2,updated_at=$3 WHERE profile_id=$1 AND room_id=$4 AND media_epoch=$5 AND membership_state='JOINED'`, profileID, grantExpiry, databaseNow, roomID, mediaEpoch)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "could not record MatchSquad bearer expiry")
+	}
+	if command.RowsAffected() != 1 {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad membership changed before grant reservation")
+	}
+	var precommitNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&precommitNow); err != nil {
+		return nil, status.Error(codes.Unavailable, "Voice MatchSquad database clock unavailable")
+	}
+	if !actor.ExpiresAt.After(precommitNow) {
+		return nil, status.Error(codes.Unauthenticated, "delegated user credential expired before grant reservation")
+	}
+	if err := s.Principal.CheckCurrent(ctx, actor, precommitNow); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, status.Error(codes.Unavailable, "MatchSquad token request was canceled")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		// Commit outcome may be ambiguous. Never sign from an uncertain reservation;
+		// the fixed request ID prevents a retry from creating a second grant.
+		return nil, status.Error(codes.Unavailable, "could not persist MatchSquad bearer expiry")
+	}
+
+	canPublish := true
+	identity, err := livekit.MatchSquadIdentity(actor.ProfileID, mediaEpoch.String())
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad media generation is invalid")
+	}
+	jwt, err := s.Tokens.MatchSquadJoinTokenUntil(identity, room.livekitRoom, &canPublish, issuedAt, expiresAt)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "could not sign reserved MatchSquad bearer")
+	}
+	if err := s.authorizeReservedToken(ctx, actor, requestID, matchID, roomID, profileID, accountID, mediaEpoch, issuedAt, expiresAt); err != nil {
+		return nil, err
 	}
 	response := &callsv1.GetMatchSquadJoinTokenResponse{
 		Token:      &callsv1.GetJoinTokenResponse{Jwt: jwt, ExpiresAt: timestamppb.New(expiresAt), LivekitUrl: s.Tokens.LivekitURL(), MediaEpoch: mediaEpoch.String()},
 		MediaEpoch: mediaEpoch.String(),
 	}
-	grantExpiry := time.Unix(expiresAt.Unix(), 0).UTC()
-	if latest.Valid && latest.Time.After(grantExpiry) {
-		grantExpiry = latest.Time
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO voice_match_squad_member_grants(request_id,match_id,room_id,profile_id,account_id,session_epoch,media_epoch,issued_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, requestID, matchID, roomID, profileID, accountID, actor.SessionEpoch, mediaEpoch, now, expiresAt); err != nil {
-		return nil, status.Error(codes.AlreadyExists, "MatchSquad token request was already used")
-	}
-	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET latest_grant_expires_at=$2,updated_at=$3 WHERE profile_id=$1 AND room_id=$4 AND media_epoch=$5 AND membership_state='JOINED'`, profileID, grantExpiry, now, roomID, mediaEpoch); err != nil {
-		return nil, status.Error(codes.Unavailable, "could not record MatchSquad bearer expiry")
-	}
-	if err := s.Principal.CheckCurrent(ctx, actor, s.now()); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, status.Error(codes.Unavailable, "could not persist MatchSquad bearer expiry")
+	if err := ctx.Err(); err != nil {
+		return nil, status.Error(codes.Unavailable, "MatchSquad token request was canceled")
 	}
 	return response, nil
 }
 
+func (s *MatchSquadMemberService) authorizeReservedToken(ctx context.Context, actor principal.Principal, requestID, matchID, roomID, profileID, accountID, mediaEpoch uuid.UUID, issuedAt, expiresAt time.Time) error {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	room, err := lockMemberRoom(ctx, tx, matchID, roomID)
+	if err != nil {
+		return err
+	}
+	if room.owner != matchID || room.rowOwner != matchID || room.roomType != "group_voice" || room.purpose != "MATCH_SQUAD" || room.resourceState != "active" || room.operationState != "active" || !manifestContains(room.createRequest, matchID, room.manifest, profileID) {
+		return status.Error(codes.FailedPrecondition, "MatchSquad room is no longer current and active")
+	}
+	var storedRoom, storedAccount, storedEpoch uuid.UUID
+	var storedSession int64
+	var state string
+	var latest pgtype.Timestamptz
+	err = tx.QueryRow(ctx, `SELECT room_id,account_id,session_epoch,media_epoch,membership_state,latest_grant_expires_at FROM voice_room_memberships WHERE profile_id=$1 FOR UPDATE`, profileID).Scan(&storedRoom, &storedAccount, &storedSession, &storedEpoch, &state, &latest)
+	if err != nil || storedRoom != roomID || storedAccount != accountID || storedSession != actor.SessionEpoch || storedEpoch != mediaEpoch || state != "JOINED" {
+		return status.Error(codes.FailedPrecondition, "MatchSquad membership changed before token release")
+	}
+	var mappedAndFenced bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_profile_account_mappings WHERE profile_id=$1 AND account_id=$2) AND EXISTS(SELECT 1 FROM voice_account_voice_fences WHERE account_id=$2 AND profile_id=$1 AND room_id=$3 AND state='active')`, profileID, accountID, roomID.String()).Scan(&mappedAndFenced); err != nil {
+		return status.Error(codes.Unavailable, "MatchSquad account fence unavailable")
+	}
+	if !mappedAndFenced || !latest.Valid || latest.Time.Before(expiresAt) {
+		return status.Error(codes.FailedPrecondition, "MatchSquad account fence or bearer reservation is no longer current")
+	}
+	var storedIssuedAt, storedExpiry, databaseNow time.Time
+	if err := tx.QueryRow(ctx, `SELECT issued_at,expires_at FROM voice_match_squad_member_grants WHERE request_id=$1 AND match_id=$2 AND room_id=$3 AND profile_id=$4 AND account_id=$5 AND session_epoch=$6 AND media_epoch=$7`, requestID, matchID, roomID, profileID, accountID, actor.SessionEpoch, mediaEpoch).Scan(&storedIssuedAt, &storedExpiry); err != nil {
+		return status.Error(codes.FailedPrecondition, "MatchSquad bearer reservation is unavailable")
+	}
+	if !storedIssuedAt.Equal(issuedAt) || !storedExpiry.Equal(expiresAt) {
+		return status.Error(codes.FailedPrecondition, "MatchSquad bearer reservation changed")
+	}
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&databaseNow); err != nil {
+		return status.Error(codes.Unavailable, "Voice MatchSquad database clock unavailable")
+	}
+	if !expiresAt.After(databaseNow) || !actor.ExpiresAt.After(databaseNow) {
+		return status.Error(codes.FailedPrecondition, "MatchSquad bearer expired before token release")
+	}
+	if err := s.Principal.CheckCurrent(ctx, actor, databaseNow); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return status.Error(codes.Unavailable, "MatchSquad token request was canceled")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return status.Error(codes.Unavailable, "could not confirm MatchSquad token authority")
+	}
+	return nil
+}
 func (s *MatchSquadMemberService) Leave(ctx context.Context, req *callsv1.LeaveMatchSquadRoomRequest) (*callsv1.LeaveMatchSquadRoomResponse, error) {
 	if s == nil || s.Pool == nil || s.Calls == nil || s.Fences == nil || s.Profiles == nil || s.Principal == nil || s.RoomEffect == nil {
 		return nil, status.Error(codes.Unavailable, "Voice MatchSquad member authority unavailable")
@@ -324,10 +412,14 @@ func (s *MatchSquadMemberService) Leave(ctx context.Context, req *callsv1.LeaveM
 	if err := tx.Commit(ctx); err != nil {
 		return nil, status.Error(codes.Unavailable, "Voice MatchSquad database unavailable")
 	}
-	if err := s.removeProjectionMember(ctx, roomID, matchID, profileID); err != nil {
+	if err := s.removeProjectionMember(ctx, roomID, matchID, profileID, mediaEpoch); err != nil {
 		return nil, err
 	}
-	if err := s.RoomEffect.RemoveParticipant(ctx, room.livekitRoom, profileID.String()); err != nil {
+	identity, err := livekit.MatchSquadIdentity(profileID.String(), mediaEpoch.String())
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, "MatchSquad media generation is invalid")
+	}
+	if err := s.RoomEffect.RemoveParticipant(ctx, room.livekitRoom, identity); err != nil {
 		return nil, status.Error(codes.Unavailable, "MatchSquad media leave is not confirmed")
 	}
 	if err := s.finishLeave(ctx, actor, operation, matchID, roomID, profileID, accountID, mediaEpoch, requestHash, room); err != nil {
@@ -487,7 +579,32 @@ func insertMemberEffects(ctx context.Context, tx pgx.Tx, operation, match, room,
 	return nil
 }
 
-func (s *MatchSquadMemberService) reserveGeneration(ctx context.Context, tx pgx.Tx, actor principal.Principal, match, room, profile, account, operation uuid.UUID, requestHash [32]byte, request []byte) (uuid.UUID, string, error) {
+// releaseTerminalFenceInTx couples account-fence deletion to the exact
+// terminal media generation and its fully confirmed effects.
+func releaseTerminalFenceInTx(ctx context.Context, tx pgx.Tx, match, room, account, profile, epoch uuid.UUID) error {
+	var state string
+	var expired bool
+	err := tx.QueryRow(ctx, `SELECT m.membership_state,
+ (m.latest_grant_expires_at IS NULL OR m.latest_grant_expires_at<=clock_timestamp())
+FROM voice_room_memberships m
+JOIN voice_room_instances r ON r.room_id=m.room_id AND r.owner_id=$1 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice'
+JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id
+WHERE m.room_id=$2 AND m.account_id=$3 AND m.profile_id=$4 AND m.media_epoch=$5
+FOR UPDATE OF m,r,o`, match, room, account, profile, epoch).Scan(&state, &expired)
+	if err != nil || (state != "LEFT" && state != "EJECTED") || !expired {
+		return status.Error(codes.Unavailable, "MatchSquad account fence release is not yet safe")
+	}
+	var pending bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_match_squad_member_effects WHERE match_id=$1 AND room_id=$2 AND profile_id=$3 AND media_epoch=$4 AND state<>'confirmed')`, match, room, profile, epoch).Scan(&pending); err != nil || pending {
+		return status.Error(codes.Unavailable, "MatchSquad account fence release is not yet safe")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM voice_account_voice_fences WHERE account_id=$1 AND profile_id=$2 AND room_id=$3::text`, account, profile, room); err != nil {
+		return status.Error(codes.Unavailable, "MatchSquad account fence release is not yet safe")
+	}
+	return nil
+}
+
+func (s *MatchSquadMemberService) reserveGeneration(ctx context.Context, tx pgx.Tx, actor principal.Principal, match, room, profile, account, operation uuid.UUID, requestHash [32]byte, request []byte, newFence bool) (uuid.UUID, string, error) {
 	var storedRoom, mediaEpoch uuid.UUID
 	var storedAccount pgtype.UUID
 	var session pgtype.Int8
@@ -517,6 +634,9 @@ func (s *MatchSquadMemberService) reserveGeneration(ctx context.Context, tx pgx.
 			if state.String != "LEFT" && state.String != "EJECTED" {
 				return uuid.Nil, "", status.Error(codes.FailedPrecondition, "profile already has a current Voice membership")
 			}
+			if !newFence {
+				return uuid.Nil, "", status.Error(codes.FailedPrecondition, "previous MatchSquad account fence has not been released")
+			}
 			var pendingEffects bool
 			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voice_match_squad_member_effects WHERE profile_id=$1 AND media_epoch=$2 AND state='pending')`, profile, mediaEpoch).Scan(&pendingEffects); err != nil {
 				return uuid.Nil, "", status.Error(codes.Unavailable, "MatchSquad member effects unavailable")
@@ -543,16 +663,42 @@ func (s *MatchSquadMemberService) reserveGeneration(ctx context.Context, tx pgx.
 	return mediaEpoch, state.String, nil
 }
 
-func (s *MatchSquadMemberService) ensureProjectionMember(ctx context.Context, room, match, profile uuid.UUID) (store.Call, error) {
+func (s *MatchSquadMemberService) ensureProjectionMember(ctx context.Context, room, match, profile, account uuid.UUID, session int64, epoch uuid.UUID) (store.Call, error) {
 	call, err := s.Calls.GetCall(ctx, room.String())
 	if err != nil || call.MatchSquadMatchID != match.String() || call.RoomID != room.String() || call.LivekitRoomName != "match-squad-"+room.String() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		return store.Call{}, status.Error(codes.Unavailable, "current MatchSquad Redis projection unavailable")
 	}
-	if _, err := s.Calls.AddParticipant(ctx, room.String(), profile.String(), matchSquadMaxParticipants); err != nil {
+	owned, ok := s.Calls.(interface {
+		AddMatchSquadParticipant(context.Context, string, string, string, string, int, store.MatchSquadProjectionAuthority) (store.Call, error)
+	})
+	if !ok {
+		return store.Call{}, status.Error(codes.Unavailable, "epoch-fenced MatchSquad projection admission unavailable")
+	}
+	authority := func(authorityCtx context.Context) error {
+		var current bool
+		err := s.Pool.QueryRow(authorityCtx, `SELECT EXISTS (
+ SELECT 1 FROM voice_room_instances r
+ JOIN voice_match_squad_operations o ON o.room_id=r.room_id AND o.match_id=r.owner_id
+ JOIN voice_match_squad_member_operations mo ON mo.match_id=o.match_id AND mo.room_id=o.room_id
+ JOIN voice_room_memberships m ON m.room_id=r.room_id AND m.profile_id=mo.profile_id AND m.account_id=mo.account_id AND m.session_epoch=mo.session_epoch AND m.media_epoch=mo.media_epoch
+ WHERE r.room_id=$1 AND r.owner_id=$2 AND r.purpose='MATCH_SQUAD' AND r.room_type='group_voice' AND r.state='active' AND o.state='active'
+   AND mo.profile_id=$3 AND mo.account_id=$4 AND mo.session_epoch=$5 AND mo.media_epoch=$6 AND mo.method='join' AND mo.state='pending'
+   AND m.membership_state IN ('JOINING','JOINED'))`, room, match, profile, account, session, epoch).Scan(&current)
+		if err != nil {
+			return store.ErrMatchSquadProjectionUnavailable
+		}
+		if !current {
+			return store.ErrMatchSquadProjectionDiverged
+		}
+		return nil
+	}
+	if _, err := owned.AddMatchSquadParticipant(ctx, room.String(), match.String(), profile.String(), epoch.String(), matchSquadMaxParticipants, authority); errors.Is(err, store.ErrMatchSquadProjectionDiverged) {
 		return store.Call{}, status.Error(codes.FailedPrecondition, "Voice participant projection could not be admitted")
+	} else if err != nil {
+		return store.Call{}, status.Error(codes.Unavailable, "Voice participant projection could not be confirmed")
 	}
 	call, err = s.Calls.GetCall(ctx, room.String())
-	if err != nil || call.MatchSquadMatchID != match.String() || !call.IsParticipant(profile.String()) {
+	if err != nil || call.MatchSquadMatchID != match.String() || !call.IsParticipant(profile.String()) || call.MatchSquadMemberEpochs[profile.String()] != epoch.String() {
 		return store.Call{}, status.Error(codes.Unavailable, "MatchSquad participant projection was not confirmed")
 	}
 	return call, nil
@@ -606,15 +752,18 @@ func (s *MatchSquadMemberService) finishJoin(ctx context.Context, actor principa
 }
 
 func (s *MatchSquadMemberService) abortJoin(ctx context.Context, operation, room, match, profile, epoch uuid.UUID) error {
-	if err := s.removeProjectionMember(ctx, room, match, profile); err != nil {
+	if err := s.removeProjectionMember(ctx, room, match, profile, epoch); err != nil {
 		return err
 	}
-	call, err := s.Calls.GetCall(ctx, room.String())
-	if err == nil && s.RoomEffect != nil {
-		if err := s.RoomEffect.RemoveParticipant(ctx, call.LivekitRoomName, profile.String()); err != nil {
-			return err
-		}
-	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
+	var livekitRoom string
+	if err := s.Pool.QueryRow(ctx, `SELECT livekit_room_name FROM voice_room_instances WHERE room_id=$1 AND owner_id=$2 AND purpose='MATCH_SQUAD' AND room_type='group_voice'`, room, match).Scan(&livekitRoom); err != nil {
+		return status.Error(codes.Unavailable, "MatchSquad join cleanup room binding unavailable")
+	}
+	identity, err := livekit.MatchSquadIdentity(profile.String(), epoch.String())
+	if err != nil {
+		return err
+	}
+	if err := s.RoomEffect.RemoveParticipant(ctx, livekitRoom, identity); err != nil {
 		return err
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -623,6 +772,10 @@ func (s *MatchSquadMemberService) abortJoin(ctx context.Context, operation, room
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	now := s.now()
+	var account uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT account_id FROM voice_room_memberships WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='JOINING' FOR UPDATE`, profile, room, epoch).Scan(&account); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `UPDATE voice_room_memberships SET membership_state='EJECTED',updated_at=$3 WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$4 AND membership_state='JOINING'`, profile, room, now, epoch); err != nil {
 		return err
 	}
@@ -632,14 +785,13 @@ func (s *MatchSquadMemberService) abortJoin(ctx context.Context, operation, room
 	if _, err := tx.Exec(ctx, `UPDATE voice_match_squad_member_operations SET state='rejected',failure_code='join_no_longer_current',updated_at=$2 WHERE operation_id=$1 AND state='pending'`, operation, now); err != nil {
 		return err
 	}
+	if err := releaseTerminalFenceInTx(ctx, tx, match, room, account, profile, epoch); err != nil {
+		return err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	var account uuid.UUID
-	if err := s.Pool.QueryRow(ctx, `SELECT account_id FROM voice_room_memberships WHERE profile_id=$1 AND room_id=$2 AND media_epoch=$3 AND membership_state='EJECTED'`, profile, room, epoch).Scan(&account); err != nil {
-		return err
-	}
-	return s.Fences.Release(ctx, account, profile, room.String())
+	return nil
 }
 
 func (s *MatchSquadMemberService) loadJoinResponse(ctx context.Context, operation uuid.UUID) (*callsv1.JoinMatchSquadRoomResponse, error) {
@@ -654,7 +806,7 @@ func (s *MatchSquadMemberService) loadJoinResponse(ctx context.Context, operatio
 	return response, nil
 }
 
-func (s *MatchSquadMemberService) removeProjectionMember(ctx context.Context, room, match, profile uuid.UUID) error {
+func (s *MatchSquadMemberService) removeProjectionMember(ctx context.Context, room, match, profile, epoch uuid.UUID) error {
 	call, err := s.Calls.GetCall(ctx, room.String())
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
@@ -663,12 +815,12 @@ func (s *MatchSquadMemberService) removeProjectionMember(ctx context.Context, ro
 		return status.Error(codes.Unavailable, "current MatchSquad Redis projection unavailable")
 	}
 	owned, ok := s.Calls.(interface {
-		RemoveMatchSquadParticipant(context.Context, string, string, string) (store.Call, error)
+		RemoveMatchSquadParticipantEpoch(context.Context, string, string, string, string) (store.Call, error)
 	})
 	if !ok {
 		return status.Error(codes.Unavailable, "owner-scoped MatchSquad projection removal unavailable")
 	}
-	_, err = owned.RemoveMatchSquadParticipant(ctx, room.String(), match.String(), profile.String())
+	_, err = owned.RemoveMatchSquadParticipantEpoch(ctx, room.String(), match.String(), profile.String(), epoch.String())
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrNotParticipant) {
 		return nil
 	}
@@ -711,13 +863,13 @@ func (s *MatchSquadMemberService) finishLeave(ctx context.Context, actor princip
 	if _, err := tx.Exec(ctx, `UPDATE voice_match_squad_member_operations SET state='complete',response_bytes=$2,updated_at=$3 WHERE operation_id=$1 AND request_sha256=$4 AND state='pending'`, operation, responseBytes, s.now(), requestHash[:]); err != nil {
 		return status.Error(codes.Unavailable, "could not complete MatchSquad leave operation")
 	}
+	if response.MembershipState == callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEFT {
+		if err := releaseTerminalFenceInTx(ctx, tx, match, room, account, profile, epoch); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return status.Error(codes.Unavailable, "could not persist MatchSquad leave receipt")
-	}
-	if response.MembershipState == callsv1.MatchSquadMembershipState_MATCH_SQUAD_MEMBERSHIP_STATE_LEFT {
-		if err := s.Fences.Release(ctx, account, profile, room.String()); err != nil {
-			return status.Error(codes.Unavailable, "MatchSquad account fence release pending")
-		}
 	}
 	return nil
 }
