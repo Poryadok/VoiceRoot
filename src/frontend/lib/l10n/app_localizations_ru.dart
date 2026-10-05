@@ -2686,6 +2686,15 @@ class AppLocalizationsRu extends AppLocalizations {
       'Разрешить приглашённым гостевым аккаунтам входить в этот чат.';
 
   @override
+  String get channelSettingsTitle => 'Настройки канала';
+
+  @override
+  String get channelSettingsThreads => 'Включить треды';
+
+  @override
+  String get channelSettingsMemberPosts => 'Разрешить публикации участников';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Гостевые аккаунты видят мой онлайн-статус';
 
