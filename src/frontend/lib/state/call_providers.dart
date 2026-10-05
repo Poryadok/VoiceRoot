@@ -784,7 +784,13 @@ class CallController extends StateNotifier<CallState> {
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
         };
         room.onTracksChanged = () {
-          if (!mounted) return;
+          if (!mounted ||
+              !_isConnectCurrent(connectGeneration, connectRoomId) ||
+              _ref.read(authorizationHeaderProvider) != auth ||
+              state.session?.matchId != session.matchId ||
+              state.session?.mediaEpoch != session.mediaEpoch) {
+            return;
+          }
           state = state.copyWith(
             mediaTracksVersion: state.mediaTracksVersion + 1,
           );
@@ -1134,21 +1140,41 @@ class CallController extends StateNotifier<CallState> {
   }
 
   void _reconcileScreenShareProjection(VoiceCallSession session) {
-    if (!mounted || state.session?.roomId != session.roomId) return;
+    if (!mounted ||
+        state.session?.roomId != session.roomId ||
+        state.session?.matchId != session.matchId ||
+        state.session?.mediaEpoch != session.mediaEpoch) {
+      return;
+    }
     final selfID = _ref.read(authControllerProvider).activeProfileId;
     final room = _room;
+    final matchRoom = room is MatchSquadVoiceLiveKitRoom ? room : null;
+    final isMatchSquad = session.matchId != null && session.mediaEpoch != null;
     _ref
         .read(screenShareControllerProvider.notifier)
         .reconcileSnapshot(
           roomId: session.roomId,
           sharingProfileIds: _authoritativeScreenSharers,
           localProfileId: selfID,
-          hasLocalTrack: room?.localScreenShareTrack() != null,
-          hasRemoteTrack: (profileID) =>
-              room
-                  ?.remoteScreenShareTracks(participantIdentity: profileID)
-                  .isNotEmpty ??
-              false,
+          hasLocalTrack:
+              room?.localScreenShareTrack() != null &&
+              (!isMatchSquad ||
+                  (selfID != null &&
+                      matchRoom?.matchesLocalParticipantIdentity(
+                            selfID,
+                            session.mediaEpoch,
+                          ) ==
+                          true)),
+          hasRemoteTrack: (profileID) {
+            final identity = isMatchSquad
+                ? matchRoom?.resolveRemoteParticipantIdentity(profileID)
+                : profileID;
+            if (identity == null) return false;
+            return room
+                    ?.remoteScreenShareTracks(participantIdentity: identity)
+                    .isNotEmpty ??
+                false;
+          },
         );
   }
 

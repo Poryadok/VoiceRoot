@@ -2,6 +2,58 @@ import 'dart:async';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
+abstract interface class MatchSquadVoiceLiveKitRoom
+    implements VoiceLiveKitRoom {
+  String? resolveRemoteParticipantIdentity(String profileId);
+  bool matchesLocalParticipantIdentity(String profileId, String? mediaEpoch);
+}
+
+/// Returns the one current-room MatchSquad identity belonging to [profileId].
+/// Multiple epochs or malformed identities are intentionally unresolved.
+String? resolveMatchSquadRemoteIdentity(
+  String profileId,
+  Iterable<String> participantIdentities,
+) {
+  if (!_isCanonicalNonzeroUuid(profileId)) return null;
+  final matches = participantIdentities
+      .where((identity) => _matchSquadIdentityProfile(identity) == profileId)
+      .toList(growable: false);
+  return matches.length == 1 ? matches.single : null;
+}
+
+String? _matchSquadIdentityProfile(String identity) {
+  final parts = identity.split(':');
+  if (parts.length != 3 ||
+      parts[0] != 'ms' ||
+      !_isCanonicalNonzeroUuid(parts[1]) ||
+      !_isCanonicalNonzeroUuid(parts[2])) {
+    return null;
+  }
+  return parts[1];
+}
+
+String? _matchSquadIdentity(String profileId, String? mediaEpoch) {
+  if (!_isCanonicalNonzeroUuid(profileId) ||
+      mediaEpoch == null ||
+      !_isCanonicalNonzeroUuid(mediaEpoch)) {
+    return null;
+  }
+  return 'ms:$profileId:$mediaEpoch';
+}
+
+bool _isCanonicalNonzeroUuid(String value) =>
+    RegExp(r'^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$').hasMatch(value) &&
+    value != '00000000-0000-0000-0000-000000000000';
+
+bool matchesMatchSquadLocalIdentity(
+  String profileId,
+  String? mediaEpoch,
+  String? sdkIdentity,
+) {
+  final expected = _matchSquadIdentity(profileId, mediaEpoch);
+  return expected != null && sdkIdentity == expected;
+}
+
 abstract interface class VoiceLiveKitRoom {
   /// Called when the browser blocks remote audio playback (web autoplay policy).
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
@@ -18,6 +70,7 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> ensureAudioPlayback();
   Future<void> setMuted(bool muted);
   Future<void> setSpeakerMuted(bool muted);
+
   /// Client-side commander ducking (voice-chat.md): lower non-commander remote audio.
   Future<void> setCommanderDucking({
     required bool enabled,
@@ -25,10 +78,7 @@ abstract interface class VoiceLiveKitRoom {
     double duckedVolume,
   });
   Future<void> setVideoEnabled(bool enabled);
-  Future<void> startScreenShare({
-    double maxFrameRate,
-    bool captureSystemAudio,
-  });
+  Future<void> startScreenShare({double maxFrameRate, bool captureSystemAudio});
   Future<void> pauseScreenShare(bool paused);
   Future<void> stopScreenShare();
   bool get isScreenSharing;
@@ -42,7 +92,7 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> disconnect();
 }
 
-class LiveKitVoiceRoom implements VoiceLiveKitRoom {
+class LiveKitVoiceRoom implements MatchSquadVoiceLiveKitRoom {
   LiveKitVoiceRoom({livekit.Room? room}) : _room = room ?? livekit.Room();
 
   static const Duration _connectTimeout = Duration(seconds: 20);
@@ -114,6 +164,12 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
   void _setupListener() {
     _listener?.dispose();
     _listener = _room.createListener()
+      ..on<livekit.ParticipantConnectedEvent>((event) {
+        _notifyTracksChanged();
+      })
+      ..on<livekit.ParticipantDisconnectedEvent>((event) {
+        _notifyTracksChanged();
+      })
       ..on<livekit.AudioPlaybackStatusChanged>((event) {
         if (!_room.canPlaybackAudio) {
           onAudioPlaybackUnlockNeeded?.call(true);
@@ -198,7 +254,8 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
     // by muting non-commander remotes while broadcast is active (spec: client ducking).
     final muteOthers = enabled && duckedVolume < 1.0;
     for (final participant in _room.remoteParticipants.values) {
-      final isCommander = commanderIdentity != null &&
+      final isCommander =
+          commanderIdentity != null &&
           participant.identity == commanderIdentity;
       final audible = !(muteOthers && !isCommander);
       for (final publication in participant.audioTrackPublications) {
@@ -207,6 +264,24 @@ class LiveKitVoiceRoom implements VoiceLiveKitRoom {
         await _setRemoteAudioTrackAudible(track, audible: audible);
       }
     }
+  }
+
+  @override
+  String? resolveRemoteParticipantIdentity(String profileId) =>
+      resolveMatchSquadRemoteIdentity(
+        profileId,
+        _room.remoteParticipants.values.map(
+          (participant) => participant.identity,
+        ),
+      );
+
+  @override
+  bool matchesLocalParticipantIdentity(String profileId, String? mediaEpoch) {
+    return matchesMatchSquadLocalIdentity(
+      profileId,
+      mediaEpoch,
+      _room.localParticipant?.identity,
+    );
   }
 
   Future<void> _applyRemoteSpeakerMuted(bool muted) async {
