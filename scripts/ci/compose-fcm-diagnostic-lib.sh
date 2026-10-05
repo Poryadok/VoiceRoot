@@ -161,6 +161,74 @@ voice_fcm_diag_normalize_collected() {
   voice_fcm_diag_emit "${summary_text}" "${output_var}"
 }
 
+voice_fcm_diag_collection_stage() {
+  local status_read="${1-}" status_data="${2-}" log_status="${3-}"
+  local log_data="${4-}" parse_result="${5-}" normalize_status="${6-}"
+  local saved_status="${VOICE_FCM_DIAG_STATUS_SUMMARY-}" saved_lifecycle="${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY-}"
+  local status_fault=false log_fault=false bounded_fault=false record_fault=false normalize_fault=false
+  local status_is_valid=false lifecycle_is_valid=false stage='' root_faults=0 fault
+
+  [[ "${status_read}" =~ ^(0|[1-9][0-9]{0,2})$ ]] && ((10#${status_read} <= 255)) || return 1
+  [[ "${log_status}" =~ ^(0|[1-9][0-9]{0,2})$ ]] && ((10#${log_status} <= 255)) || return 1
+  [[ "${normalize_status}" == 0 || "${normalize_status}" == 1 ]] || return 1
+  case "${parse_result}" in accepted|missing|malformed|duplicate|unknown) ;; *) return 1 ;; esac
+
+  if voice_fcm_diag_status_valid "${status_read}" "${status_data}"; then
+    status_is_valid=true
+  else
+    status_fault=true
+  fi
+  if [[ "${log_status}" != 0 ]]; then
+    log_fault=true
+  else
+    case "${parse_result}" in
+      unknown) bounded_fault=true ;;
+      missing|malformed|duplicate) record_fault=true ;;
+      accepted)
+        if voice_fcm_diag_lifecycle_valid "${log_data}"; then
+          lifecycle_is_valid=true
+        else
+          normalize_fault=true
+        fi
+        ;;
+    esac
+  fi
+  if [[ "${normalize_status}" == 1 && "${status_fault}" == false && "${log_fault}" == false && \
+        "${bounded_fault}" == false && "${record_fault}" == false && "${normalize_fault}" == false ]]; then
+    normalize_fault=true
+  fi
+
+  for fault in "${status_fault}" "${log_fault}" "${bounded_fault}" "${record_fault}" "${normalize_fault}"; do
+    if [[ "${fault}" == true ]]; then
+      ((root_faults+=1))
+    fi
+  done
+  if ((root_faults > 1)); then
+    stage=mixed
+  elif [[ "${status_fault}" == true ]]; then
+    stage=status_file
+  elif [[ "${log_fault}" == true ]]; then
+    stage=docker_logs
+  elif [[ "${bounded_fault}" == true ]]; then
+    stage=bounded_parse
+  elif [[ "${record_fault}" == true ]]; then
+    stage=record_contract
+  elif [[ "${normalize_fault}" == true ]]; then
+    stage=normalization
+  elif [[ "${status_is_valid}" == true && "${lifecycle_is_valid}" == true && \
+          "${log_status}" == 0 && "${parse_result}" == accepted && "${normalize_status}" == 0 ]]; then
+    stage=none
+  else
+    VOICE_FCM_DIAG_STATUS_SUMMARY="${saved_status}"
+    VOICE_FCM_DIAG_LIFECYCLE_SUMMARY="${saved_lifecycle}"
+    return 1
+  fi
+
+  VOICE_FCM_DIAG_STATUS_SUMMARY="${saved_status}"
+  VOICE_FCM_DIAG_LIFECYCLE_SUMMARY="${saved_lifecycle}"
+  printf '%s' "${stage}"
+}
+
 voice_fcm_diag_cleanup() {
   local file="${1-}" dir="${2-}" status="${3-}" failed=false
   if [[ -n "${status}" ]] && ! rm -f -- "${status}"; then failed=true; fi

@@ -192,6 +192,9 @@ if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
   status_read_status=1
   status_data=''
   diagnostic_summary=''
+  diagnostic_parse_result=''
+  diagnostic_normalize_status=1
+  diagnostic_collection_stage=''
   if [[ -f "${STATUS_FILE}" && ! -L "${STATUS_FILE}" ]] && [[ "$(stat -c '%a' -- "${STATUS_FILE}" 2>/dev/null)" == 600 ]]; then
     status_data="$(head -c 66 -- "${STATUS_FILE}" 2>/dev/null | { cat; printf '\001'; })"
     status_read_status=$?
@@ -199,15 +202,22 @@ if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
   fi
   set -e
   voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
-  if ! voice_fcm_diag_normalize_collected \
+  diagnostic_parse_result="${VOICE_FCM_DIAG_PARSE_RESULT}"
+  if voice_fcm_diag_normalize_collected \
       "${status_read_status}" "${status_data}" \
       "${diagnostic_logs_status}" "${diagnostic_logs}" \
-      "${VOICE_FCM_DIAG_PARSE_RESULT}" diagnostic_summary; then
+      "${diagnostic_parse_result}" diagnostic_summary; then
+    diagnostic_normalize_status=0
+  else
     if [[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == accepted || "${VOICE_FCM_DIAG_PARSE_RESULT}" == missing ]]; then
       VOICE_FCM_DIAG_PARSE_RESULT=unknown
     fi
     voice_fcm_diag_emit "${VOICE_FCM_DIAG_UNKNOWN}" diagnostic_line
   fi
+  diagnostic_collection_stage="$(voice_fcm_diag_collection_stage \
+    "${status_read_status}" "${status_data}" \
+    "${diagnostic_logs_status}" "${diagnostic_logs}" \
+    "${diagnostic_parse_result}" "${diagnostic_normalize_status}" || true)"
   port_mapping="$(docker compose -f "${ROOT}/docker-compose.yml" port nats 4222 2>/dev/null || true)"
   mapped_port=''
   if [[ "${port_mapping}" =~ :([0-9]+)$ ]]; then
@@ -258,6 +268,13 @@ if [[ -n "${diagnostic_line:-}" ]]; then
     diagnostic_line="${VOICE_FCM_DIAG_UNKNOWN}"
   fi
   echo "compose_fcm_parse_result=${VOICE_FCM_DIAG_PARSE_RESULT}"
+  if [[ "${cleanup_failed}" == false ]]; then
+    case "${diagnostic_collection_stage:-}" in
+      status_file|docker_logs|bounded_parse|record_contract|normalization|mixed|none)
+        echo "compose_fcm_collection_stage=${diagnostic_collection_stage}"
+        ;;
+    esac
+  fi
   if [[ "${cleanup_failed}" == true ]]; then
     echo "${VOICE_FCM_DIAG_UNKNOWN}"
   else

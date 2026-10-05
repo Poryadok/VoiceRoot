@@ -147,6 +147,33 @@ for admission in invalid window tuple identity mixed overflow; do
   [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${unknown}" ]]
 done
 printf '%s\n' 'compose_fcm_contract_case=phase_admission_fallback state=completed'
+
+printf '%s\n' 'compose_fcm_contract_case=collection_stage_classification state=started'
+assert_collection_stage() {
+  local expected="${1-}" actual
+  shift
+  actual="$(voice_fcm_diag_collection_stage "$@")"
+  [[ "${actual}" == "${expected}" ]]
+}
+complete_status=$'pre=ok\npost=ok\n'
+assert_collection_stage status_file 1 '' 0 "${valid}" accepted 1
+assert_collection_stage docker_logs 0 "${complete_status}" 124 "${valid}" unknown 1
+assert_collection_stage bounded_parse 0 "${complete_status}" 0 '' unknown 1
+assert_collection_stage record_contract 0 "${complete_status}" 0 "${valid}" malformed 1
+invalid_lifecycle_log="${valid}"$'\ncompose_fcm_lifecycle private=unknown'
+assert_collection_stage normalization 0 "${complete_status}" 0 "${invalid_lifecycle_log}" accepted 1
+assert_collection_stage mixed 1 '' 124 "${valid}" unknown 1
+assert_collection_stage docker_logs 0 "${complete_status}" 124 "${valid}" unknown 1
+assert_collection_stage status_file 1 '' 0 "${valid}" accepted 1
+assert_collection_stage none 0 "${complete_status}" 0 "${valid}" accepted 0
+assert_collection_stage record_contract 0 "${complete_status}" 0 '' missing 0
+unknown_target_log="${unknownTarget}"$'\n'"${lifecycle}"
+assert_collection_stage none 0 "${complete_status}" 0 "${unknown_target_log}" accepted 0
+unmapped_stage="$(voice_fcm_diag_collection_stage 0 "${complete_status}" 0 "${valid}" untrusted 0 || true)"
+out_of_range_stage="$(voice_fcm_diag_collection_stage 0 "${complete_status}" 256 "${valid}" unknown 1 || true)"
+[[ -z "${unmapped_stage}" && -z "${out_of_range_stage}" ]]
+printf '%s\n' 'compose_fcm_contract_case=collection_stage_classification state=completed'
+
 printf '%s\n' 'compose_fcm_contract_case=parse_result_classes state=started'
 [[ "$(voice_fcm_diag_parse_log '')" == "${unknown}" ]]
 voice_fcm_diag_parse_collected_log 0 '' parsed
