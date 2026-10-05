@@ -28,6 +28,9 @@ done
 
 echo "Smoke gateway tests (${#GATEWAY_TESTS[@]}): ${GATEWAY_RUN}"
 
+(cd "${ROOT}/src/backend/notification" && go test -count=1 -run '^TestComposeFcmObserverIsAbsentWithoutPrivateBuildTag$' .)
+(cd "${ROOT}/src/backend/notification" && go test -tags voice_compose_fcm_diagnostic -count=1 -run '^TestComposeFcmObserver' .)
+
 cd "${ROOT}/src/backend/gateway"
 go test -count=1 -parallel 1 -timeout 20m -run "${GATEWAY_RUN}" ./...
 
