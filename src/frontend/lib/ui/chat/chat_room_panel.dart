@@ -29,6 +29,7 @@ import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
+import '../../theme/voice_layout.dart';
 import '../api_error_messages.dart';
 import '../core/voice_disabled_action.dart';
 import '../core/chat_author_label.dart';
@@ -66,6 +67,7 @@ import '../../backend/e2e_client.dart';
 import 'slash_command_menu.dart';
 import 'slash_command_options_sheet.dart';
 import 'thread_side_panel.dart';
+import 'pinned_messages_panel.dart';
 
 /// Main column: message history (REST) + composer; live updates via Realtime WS.
 class ChatRoomPanel extends ConsumerStatefulWidget {
@@ -96,6 +98,9 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key videoCallKey = Key('chat_room_video_call');
   static const Key newMessagesChipKey = Key('chat_room_new_messages');
   static const Key pinnedBarKey = Key('chat_room_pinned_bar');
+  static const Key pinnedMessagesHeaderKey = Key(
+    'chat_room_pinned_messages_header',
+  );
   static const Key groupMembersKey = Key('chat_room_group_members');
   static const Key slashCommandsKey = Key('chat_room_slash_commands');
   static const Key emojiPickerKey = Key('chat_room_emoji_picker');
@@ -185,6 +190,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
+  var _pinnedBarHidden = false;
+  String? _shownPinnedMessageId;
   var _highlightedMessageId = null as String?;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
@@ -214,6 +221,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _pinnedBarHidden = false;
+      _shownPinnedMessageId = null;
       _attachmentOperation++;
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
@@ -308,6 +317,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             errorMessage: controllerRoom.errorMessage,
             realtimeStatus: controllerRoom.realtimeStatus,
           );
+    final pinnedMessages = room.pinnedMessages;
+    final shownPinIndex = pinnedMessages.indexWhere(
+      (message) => message.id == _shownPinnedMessageId,
+    );
+    final currentPinnedIndex = shownPinIndex < 0 ? 0 : shownPinIndex;
+    final currentPinnedMessage = pinnedMessages.isEmpty
+        ? null
+        : pinnedMessages[currentPinnedIndex];
     final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final isGuest = ref.watch(authControllerProvider).isGuest;
@@ -632,6 +649,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                         icon: const Icon(Icons.info_outline),
                       ),
+                      if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
+                        IconButton(
+                          key: ChatRoomPanel.pinnedMessagesHeaderKey,
+                          tooltip: l10n.chatPinnedMessagesRestore,
+                          onPressed: () =>
+                              setState(() => _pinnedBarHidden = false),
+                          icon: const Icon(Icons.push_pin_outlined),
+                        ),
                       if (shareUrlForChat(
                             chatId: widget.chatId,
                             spaceId: spaceId,
@@ -781,12 +806,32 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     _scrollToBottom();
                   },
                 ),
-              if (room.pinnedMessages.isNotEmpty)
+              if (currentPinnedMessage != null && !_pinnedBarHidden)
                 _PinnedMessagesBar(
                   key: ChatRoomPanel.pinnedBarKey,
-                  pinned: room.pinnedMessages,
-                  label: l10n.chatPinnedBar(room.pinnedMessages.length),
-                  onTap: (messageId) => _scrollToMessage(messageId),
+                  message: currentPinnedMessage,
+                  label: l10n.chatPinnedBar(pinnedMessages.length),
+                  contentTypeLabel: pinnedMessageContentTypeLabel(
+                    l10n,
+                    currentPinnedMessage.contentType,
+                  ),
+                  onTap: () {
+                    _scrollToMessage(currentPinnedMessage.id);
+                    if (pinnedMessages.length > 1) {
+                      setState(() {
+                        _shownPinnedMessageId =
+                            pinnedMessages[(currentPinnedIndex + 1) %
+                                    pinnedMessages.length]
+                                .id;
+                      });
+                    }
+                  },
+                  onOpenAll: () => PinnedMessagesPanel.show(
+                    context,
+                    messages: pinnedMessages,
+                    onOpenMessage: _scrollToMessage,
+                  ),
+                  onHide: () => setState(() => _pinnedBarHidden = true),
                 ),
               if (room.isDmPeerDeleted && room.messages.isNotEmpty)
                 Padding(
@@ -2431,59 +2476,91 @@ String _presenceLabel(AppLocalizations l10n, String status) {
 class _PinnedMessagesBar extends StatelessWidget {
   const _PinnedMessagesBar({
     super.key,
-    required this.pinned,
+    required this.message,
     required this.label,
+    required this.contentTypeLabel,
     required this.onTap,
+    required this.onOpenAll,
+    required this.onHide,
   });
 
-  final List<VoiceMessage> pinned;
+  final VoiceMessage message;
   final String label;
-  final void Function(String messageId) onTap;
+  final String? contentTypeLabel;
+  final VoidCallback onTap;
+  final VoidCallback onOpenAll;
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
-    final preview = pinned.first;
-    final collapsed = pinned.length > 1;
+    final l10n = AppLocalizations.of(context)!;
     final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
       color: voice.profileAccent,
       fontWeight: FontWeight.w600,
     );
-    return Material(
+    final bar = Material(
       color: voice.surface,
-      child: InkWell(
-        onTap: () => onTap(preview.id),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
-              const SizedBox(width: 8),
-              Expanded(
-                child: collapsed
-                    ? Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: labelStyle,
-                      )
-                    : Column(
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.push_pin, size: 18, color: voice.profileAccent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(label, style: labelStyle),
                           Text(
-                            preview.content,
+                            message.content.trim().isNotEmpty
+                                ? message.content.trim()
+                                : (contentTypeLabel ??
+                                      l10n.chatPinnedMessagesTitle),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: voice.textSecondary),
                           ),
+                          if (contentTypeLabel != null)
+                            Text(
+                              contentTypeLabel!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: voice.textSecondary),
+                            ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+          IconButton(
+            tooltip: l10n.chatPinnedMessagesOpen,
+            onPressed: onOpenAll,
+            icon: const Icon(Icons.keyboard_arrow_down),
+          ),
+          IconButton(
+            tooltip: l10n.chatPinnedMessagesHide,
+            onPressed: onHide,
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
+    );
+    if (!VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) return bar;
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if ((details.primaryVelocity ?? 0) < -100) onHide();
+      },
+      child: bar,
     );
   }
 }

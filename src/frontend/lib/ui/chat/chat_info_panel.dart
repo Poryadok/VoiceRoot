@@ -23,6 +23,7 @@ import '../../state/bot_providers.dart';
 import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
+import 'pinned_messages_panel.dart';
 import '../settings/notification_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
@@ -44,6 +45,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key linksTabKey = Key('chat_info_tab_links');
   static const Key voiceTabKey = Key('chat_info_tab_voice');
   static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
+  static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
 
   final String chatId;
   final String? groupName;
@@ -56,6 +58,12 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
 class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  (String, String?, String?)? _standalonePinsKey;
+  int _standalonePinsGeneration = 0;
+  List<VoiceMessage> _standalonePinnedMessages = const [];
+  bool _standalonePinsLoading = false;
+  bool _standalonePinsFailed = false;
+  int? _standalonePinsStatusCode;
 
   @override
   void initState() {
@@ -65,6 +73,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
 
   @override
   void dispose() {
+    _standalonePinsGeneration++;
     _tabs.dispose();
     super.dispose();
   }
@@ -74,6 +83,20 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
+    final roomProvider = chatRoomControllerProvider(widget.chatId);
+    final roomExists = ref.exists(roomProvider);
+    final auth = ref.watch(authControllerProvider);
+    final authorization = ref.watch(authorizationHeaderProvider);
+    final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
+    final pinnedMessages = roomExists
+        ? ref.watch(roomProvider).pinnedMessages
+        : _standaloneMessagesFor(pinsKey);
+    if (!roomExists) {
+      _ensureStandalonePinnedMessagesLoaded(
+        pinsKey,
+        authorization: authorization,
+      );
+    }
 
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,6 +112,54 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           ),
           Divider(height: 1, color: voice.borderDefault),
         ],
+        if (pinnedMessages.isNotEmpty)
+          ListTile(
+            key: ChatInfoPanel.pinnedMessagesKey,
+            leading: const Icon(Icons.push_pin_outlined),
+            title: Text(l10n.chatPinnedMessagesTitle),
+            subtitle: Text(l10n.chatPinnedBar(pinnedMessages.length)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => PinnedMessagesPanel.show(
+              context,
+              messages: pinnedMessages,
+              onOpenMessage: (messageId) {
+                // A standalone Chat Info panel can be opened without mounting
+                // the room. Initialize it only when the user explicitly jumps
+                // to a pinned message.
+                if (!ref.exists(roomProvider)) ref.read(roomProvider);
+                _openMessage(context, ref, widget.chatId, messageId);
+              },
+            ),
+          ),
+        if (!roomExists &&
+            _standalonePinsLoading &&
+            _standalonePinsKey == pinsKey)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: VoiceListSkeleton(rowCount: 1),
+          ),
+        if (!roomExists &&
+            _standalonePinsFailed &&
+            _standalonePinsKey == pinsKey)
+          ListTile(
+            key: const Key('chat_info_pins_error'),
+            leading: const Icon(Icons.cloud_off_outlined),
+            title: Text(l10n.chatPinnedMessagesTitle),
+            subtitle: Text(
+              commonActionErrorMessage(
+                l10n,
+                statusCode: _standalonePinsStatusCode,
+              ),
+            ),
+            trailing: IconButton(
+              tooltip: l10n.commonRetry,
+              onPressed: () => _loadStandalonePinnedMessages(
+                pinsKey,
+                authorization: authorization,
+              ),
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
         StandaloneChatGuestSettingsSection(
           key: ValueKey(widget.chatId),
           chatId: widget.chatId,
@@ -164,6 +235,93 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         );
       },
     );
+  }
+
+  List<VoiceMessage> _standaloneMessagesFor((String, String?, String?) key) =>
+      _standalonePinsKey == key && !_standalonePinsFailed
+      ? _standalonePinnedMessages
+      : const <VoiceMessage>[];
+
+  void _ensureStandalonePinnedMessagesLoaded(
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) {
+    if (authorization == null || _standalonePinsKey == key) return;
+    _loadStandalonePinnedMessages(key, authorization: authorization);
+  }
+
+  void _loadStandalonePinnedMessages(
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) {
+    if (authorization == null) return;
+    final generation = ++_standalonePinsGeneration;
+    _standalonePinsKey = key;
+    _standalonePinsLoading = true;
+    _standalonePinsFailed = false;
+    _standalonePinsStatusCode = null;
+    _standalonePinnedMessages = const [];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _standalonePinsGeneration) return;
+      setState(() {});
+      unawaited(
+        _fetchStandalonePinnedMessages(
+          key,
+          generation: generation,
+          authorization: authorization,
+        ),
+      );
+    });
+  }
+
+  Future<void> _fetchStandalonePinnedMessages(
+    (String, String?, String?) key, {
+    required int generation,
+    required String authorization,
+  }) async {
+    MessagesApiResult<MessageListData> result;
+    try {
+      result = await ref
+          .read(voiceMessagesClientProvider)
+          .getPinnedMessages(authorization: authorization, chatId: key.$1);
+    } catch (_) {
+      if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+        return;
+      }
+      setState(() {
+        _standalonePinsLoading = false;
+        _standalonePinsFailed = true;
+      });
+      return;
+    }
+    if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+      return;
+    }
+    setState(() {
+      _standalonePinsLoading = false;
+      switch (result) {
+        case MessagesApiOk(:final data):
+          _standalonePinnedMessages = data.messages;
+        case MessagesApiFailure(:final statusCode):
+          // Error copy stays generic for this load path; never show the
+          // server-provided message in Chat Info.
+          _standalonePinsFailed = true;
+          _standalonePinsStatusCode = statusCode;
+      }
+    });
+  }
+
+  bool _isCurrentStandalonePinsRequest(
+    (String, String?, String?) key,
+    int generation,
+    String authorization,
+  ) {
+    final currentAuth = ref.read(authControllerProvider);
+    return mounted &&
+        generation == _standalonePinsGeneration &&
+        widget.chatId == key.$1 &&
+        currentAuth.activeProfileId == key.$2 &&
+        currentAuth.session?.authorizationHeader == authorization;
   }
 }
 

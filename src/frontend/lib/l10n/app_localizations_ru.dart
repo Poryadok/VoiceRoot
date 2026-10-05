@@ -1160,6 +1160,48 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessagePin => 'Закрепить сообщение';
 
   @override
+  String get chatPinnedMessagesTitle => 'Закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesOpen => 'Открыть все закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesHide => 'Скрыть закреплённые сообщения';
+
+  @override
+  String get chatPinnedMessagesRestore => 'Показать закреплённые сообщения';
+
+  @override
+  String get chatPinnedTypePhoto => 'Фото';
+
+  @override
+  String get chatPinnedTypeVideo => 'Видео';
+
+  @override
+  String get chatPinnedTypeFile => 'Файл';
+
+  @override
+  String get chatPinnedTypeVoice => 'Голосовое';
+
+  @override
+  String get chatPinnedTypeSticker => 'Стикер';
+
+  @override
+  String get chatPinnedTypeGif => 'GIF';
+
+  @override
+  String get chatPinnedTypeArticle => 'Статья';
+
+  @override
+  String get chatPinnedTypeLocation => 'Геопозиция';
+
+  @override
+  String get chatPinnedTypeMusic => 'Музыка';
+
+  @override
+  String get chatPinnedTypeVideoMessage => 'Видеосообщение';
+
+  @override
   String get chatMessageUnpin => 'Открепить сообщение';
 
   @override
