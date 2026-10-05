@@ -979,6 +979,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get createProfileTitle => 'Добавить профиль';
 
   @override
+  String get profileCreateUsernameLabel => 'Тег профиля';
+
+  @override
+  String get profileCreateSessionChanged =>
+      'Аккаунт или активный профиль изменился. Откройте создание профиля снова.';
+
+  @override
+  String get profileCreateRecoveryFailed =>
+      'Профиль создан, но настройка не завершена. Попробуйте снова, чтобы закончить.';
+
+  @override
   String get createProfileSubmit => 'Создать профиль';
 
   @override

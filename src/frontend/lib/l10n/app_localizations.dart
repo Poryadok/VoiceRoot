@@ -1808,6 +1808,24 @@ abstract class AppLocalizations {
   /// **'Add profile'**
   String get createProfileTitle;
 
+  /// No description provided for @profileCreateUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile tag'**
+  String get profileCreateUsernameLabel;
+
+  /// No description provided for @profileCreateSessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed-in account or active profile changed. Reopen profile creation to continue.'**
+  String get profileCreateSessionChanged;
+
+  /// No description provided for @profileCreateRecoveryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile created, but setup is incomplete. Try again to finish.'**
+  String get profileCreateRecoveryFailed;
+
   /// No description provided for @createProfileSubmit.
   ///
   /// In en, this message translates to:

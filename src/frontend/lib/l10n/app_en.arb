@@ -469,6 +469,9 @@
     }
   },
   "createProfileTitle": "Add profile",
+  "profileCreateUsernameLabel": "Profile tag",
+  "profileCreateSessionChanged": "The signed-in account or active profile changed. Reopen profile creation to continue.",
+  "profileCreateRecoveryFailed": "Profile created, but setup is incomplete. Try again to finish.",
   "createProfileSubmit": "Create profile",
   "createProfilePresetHint": "Privacy preset",
   "createProfileLimitReached": "Profile limit reached. Premium allows up to 5 profiles.",
