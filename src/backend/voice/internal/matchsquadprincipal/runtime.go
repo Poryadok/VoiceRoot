@@ -32,8 +32,8 @@ const (
 )
 
 var (
-	errVerifierUnavailable = errors.New("Voice MatchSquad principal verifier unavailable")
-	errReplayDetected      = errors.New("Voice MatchSquad principal replay detected")
+	errVerifierUnavailable = errors.New("voice MatchSquad principal verifier unavailable")
+	errReplayDetected      = errors.New("voice MatchSquad principal replay detected")
 )
 
 type Runtime struct {
@@ -62,10 +62,10 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	if cfg.JWKSCAFile != "" {
 		pem, readErr := os.ReadFile(cfg.JWKSCAFile)
 		if readErr != nil {
-			return nil, errors.New("Voice MatchSquad JWKS CA unavailable")
+			return nil, errors.New("voice MatchSquad JWKS CA unavailable")
 		}
 		if !roots.AppendCertsFromPEM(pem) {
-			return nil, errors.New("Voice MatchSquad JWKS CA contains no certificates")
+			return nil, errors.New("voice MatchSquad JWKS CA contains no certificates")
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -73,7 +73,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	client := &http.Client{
 		Transport: transport, Timeout: dependencyTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return errors.New("Voice MatchSquad JWKS redirects are forbidden")
+			return errors.New("voice MatchSquad JWKS redirects are forbidden")
 		},
 	}
 	fetch := func(ctx context.Context, issuer string) ([]byte, error) {
@@ -98,11 +98,11 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		keys, err := principal.ParseJWKS(document)
 		if err != nil || len(keys) == 0 {
-			return nil, errors.New("Voice MatchSquad JWKS has no usable key")
+			return nil, errors.New("voice MatchSquad JWKS has no usable key")
 		}
 		for _, key := range keys {
 			if key.N.BitLen() < 2048 {
-				return nil, errors.New("Voice MatchSquad JWKS key is too small")
+				return nil, errors.New("voice MatchSquad JWKS key is too small")
 			}
 		}
 		return document, nil
@@ -124,11 +124,11 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	defer cancel()
 	if err := replay.Ping(startup).Err(); err != nil {
 		_ = runtime.Close()
-		return nil, errors.New("Voice MatchSquad replay Redis unavailable")
+		return nil, errors.New("voice MatchSquad replay Redis unavailable")
 	}
 	if err := resolver.Refresh(startup, trustedIssuer); err != nil {
 		_ = runtime.Close()
-		return nil, errors.New("Voice MatchSquad JWKS unavailable")
+		return nil, errors.New("voice MatchSquad JWKS unavailable")
 	}
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.cancel = stop
@@ -139,15 +139,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 func loadServerTLS(cfg Config) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 	if err != nil {
-		return nil, errors.New("Voice MatchSquad TLS certificate/key unavailable")
+		return nil, errors.New("voice MatchSquad TLS certificate/key unavailable")
 	}
 	pem, err := os.ReadFile(cfg.ClientCAFile)
 	if err != nil {
-		return nil, errors.New("Voice MatchSquad client CA unavailable")
+		return nil, errors.New("voice MatchSquad client CA unavailable")
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(pem) {
-		return nil, errors.New("Voice MatchSquad client CA is invalid")
+		return nil, errors.New("voice MatchSquad client CA is invalid")
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}, nil
 }
