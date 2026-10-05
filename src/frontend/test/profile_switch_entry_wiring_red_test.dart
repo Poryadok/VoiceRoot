@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,8 +22,12 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/onboarding_controller.dart';
 import 'package:voice_frontend/state/profile_switch_coordinator.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_theme.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/profile/create_profile_sheet.dart';
+import 'package:voice_frontend/ui/core/voice_bottom_sheet.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_menu.dart';
 import 'package:voice_frontend/ui/profile/profile_avatar_switcher.dart';
 import 'package:voice_frontend/ui/profile/profile_edit_sheet.dart';
@@ -133,6 +140,10 @@ void main() {
           find.byKey(CreateProfileSheet.displayNameFieldKey),
           'Created profile',
         );
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.usernameFieldKey),
+          'creator_tag',
+        );
         await tester.tap(find.byKey(CreateProfileSheet.submitKey));
 
         await _expectOnePausedCoordinatorTransition(
@@ -141,6 +152,7 @@ void main() {
           expectedProfileId: 'profile-created',
         );
         expect(harness.createRequests, 1);
+        expect(harness.createBodies.single['username'], 'creator_tag');
         expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
 
         await _completeCoordinatorTransition(tester, harness);
@@ -152,6 +164,414 @@ void main() {
         await _disposeMountedHarness(tester, harness);
       },
     );
+
+    testWidgets(
+      'retry after acknowledged create and switch failure reuses profile receipt',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          switchFailuresRemaining: 1,
+          tier: 'premium',
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: harness.container,
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              locale: const Locale('en'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: CreateProfileSheet()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.authSwitchRequests, 1);
+        expect(harness.profileCreated, isTrue);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await _expectOnePausedCoordinatorTransition(
+          tester,
+          harness,
+          expectedProfileId: 'profile-created',
+          expectedAuthSwitchRequests: 2,
+        );
+
+        expect(harness.createRequests, 1);
+        await _completeCoordinatorTransition(tester, harness);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsNothing);
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    testWidgets(
+      'free-tier limit preserves recovery after the second profile was created',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          switchFailuresRemaining: 1,
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await _pumpCreateProfileSheet(tester, harness);
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.profileCreated, isTrue);
+        expect(find.byKey(CreateProfileSheet.submitKey), findsOneWidget);
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    testWidgets('acknowledged create receipt is not reused by another account', (
+      tester,
+    ) async {
+      final harness = _EntryHarness(
+        profiles: const [_primaryProfile],
+        switchFailuresRemaining: 1,
+        tier: 'premium',
+      );
+      _disposeHarnessAfterWidget(tester, harness);
+      await _pumpCreateProfileSheet(tester, harness);
+      await tester.enterText(
+        find.byKey(CreateProfileSheet.displayNameFieldKey),
+        'Created profile',
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 1);
+
+      harness.container.read(authControllerProvider.notifier).state = AuthState(
+        session: _sessionFor('profile-primary', accountId: 'account-2'),
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 1);
+      expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+      expect(
+        find.text(
+          'The signed-in account or active profile changed. Reopen profile creation to continue.',
+        ),
+        findsOneWidget,
+      );
+      await _disposeMountedHarness(tester, harness);
+    });
+
+    testWidgets('acknowledged create receipt is not reused by another profile', (
+      tester,
+    ) async {
+      final harness = _EntryHarness(
+        profiles: const [_primaryProfile],
+        switchFailuresRemaining: 1,
+        tier: 'premium',
+      );
+      _disposeHarnessAfterWidget(tester, harness);
+      await _pumpCreateProfileSheet(tester, harness);
+      await tester.enterText(
+        find.byKey(CreateProfileSheet.displayNameFieldKey),
+        'Created profile',
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 1);
+
+      harness.container.read(authControllerProvider.notifier).state = AuthState(
+        session: _sessionFor('profile-alt'),
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 1);
+      expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+      expect(
+        find.text(
+          'The signed-in account or active profile changed. Reopen profile creation to continue.',
+        ),
+        findsOneWidget,
+      );
+      await _disposeMountedHarness(tester, harness);
+    });
+
+    testWidgets('create receipt from another account is never switched to', (
+      tester,
+    ) async {
+      final harness = _EntryHarness(
+        profiles: const [_primaryProfile],
+        createResponseAccountId: 'account-foreign',
+        tier: 'premium',
+      );
+      _disposeHarnessAfterWidget(tester, harness);
+      await _pumpCreateProfileSheet(tester, harness);
+      await tester.enterText(
+        find.byKey(CreateProfileSheet.displayNameFieldKey),
+        'Created profile',
+      );
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 0);
+      expect(harness.avatarRequests, 0);
+      expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+      await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+      await tester.pumpAndSettle();
+      expect(harness.createRequests, 1);
+      expect(harness.authSwitchRequests, 0);
+      await _disposeMountedHarness(tester, harness);
+    });
+
+    testWidgets(
+      'delayed create response cannot continue in a changed account',
+      (tester) async {
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          pauseCreate: true,
+          tier: 'premium',
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        await _pumpCreateProfileSheet(tester, harness);
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await harness.createRequestEntered!.future;
+
+        harness.container
+            .read(authControllerProvider.notifier)
+            .state = AuthState(
+          session: _sessionFor('profile-primary', accountId: 'account-2'),
+        );
+        harness.releaseCreateRequest!.complete();
+        await tester.pumpAndSettle();
+
+        expect(harness.createRequests, 1);
+        expect(harness.authSwitchRequests, 0);
+        expect(harness.avatarRequests, 0);
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    testWidgets(
+      'receipt recovery supports keyboard focus, semantics, and H/V capture',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 844);
+        final captureTheme = await _captureProfileCreateTheme(tester);
+        final harness = _EntryHarness(
+          profiles: const [_primaryProfile],
+          switchFailuresRemaining: 1,
+          tier: 'premium',
+          useRealTheme: true,
+          tokenCatalog: _profileCreateCaptureCatalog,
+        );
+        _disposeHarnessAfterWidget(tester, harness);
+        final triggerFocus = FocusNode();
+        addTearDown(triggerFocus.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: harness.container,
+            child: MaterialApp(
+              theme: captureTheme ?? voiceTestTheme(),
+              locale: const Locale('en'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: Builder(
+                  builder: (context) => FilledButton(
+                    key: const Key('open_create_profile_sheet'),
+                    focusNode: triggerFocus,
+                    onPressed: () => showVoiceBottomSheet<bool>(
+                      context: context,
+                      child: RepaintBoundary(
+                        key: _profileCreateCaptureBoundaryKey,
+                        child: const CreateProfileSheet(),
+                      ),
+                    ),
+                    child: const Text('Open create profile'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        triggerFocus.requestFocus();
+        await tester.pump();
+        expect(triggerFocus.hasPrimaryFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+        expect(tester.view.physicalSize, const Size(390, 844));
+        expect(tester.view.devicePixelRatio, 1);
+
+        final semantics = tester.ensureSemantics();
+        expect(find.bySemanticsLabel('Profile tag'), findsOneWidget);
+        await tester.tap(find.byKey(CreateProfileSheet.displayNameFieldKey));
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byKey(CreateProfileSheet.usernameFieldKey),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.displayNameFieldKey),
+          'Created profile',
+        );
+        await tester.enterText(
+          find.byKey(CreateProfileSheet.usernameFieldKey),
+          'created_tag',
+        );
+        await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+        await tester.pumpAndSettle();
+        expect(harness.createRequests, 1);
+        expect(
+          tester
+              .widget<TextField>(
+                find.byKey(CreateProfileSheet.usernameFieldKey),
+              )
+              .enabled,
+          isFalse,
+        );
+        await _captureProfileCreate(tester, 'profile-create-v.png');
+
+        tester.view.physicalSize = const Size(844, 390);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byKey(CreateProfileSheet.submitKey));
+        expect(tester.view.physicalSize, const Size(844, 390));
+        expect(tester.view.devicePixelRatio, 1);
+        await _captureProfileCreate(tester, 'profile-create-h.png');
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byKey(CreateProfileSheet.sheetKey), findsNothing);
+        expect(triggerFocus.hasPrimaryFocus, isTrue);
+        semantics.dispose();
+        await _disposeMountedHarness(tester, harness);
+      },
+    );
+
+    for (final stage in ['presign', 'put', 'update']) {
+      testWidgets(
+        'retry after avatar $stage failure reuses the acknowledged profile',
+        (tester) async {
+          final harness = _EntryHarness(
+            profiles: const [_primaryProfile],
+            failAvatarStage: stage,
+            tier: 'premium',
+          );
+          _disposeHarnessAfterWidget(tester, harness);
+          await _pumpCreateProfileSheet(tester, harness, avatar: _testAvatar());
+          await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+          await tester.pump();
+          await tester.enterText(
+            find.byKey(CreateProfileSheet.displayNameFieldKey),
+            'Created profile',
+          );
+          await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+          await _expectOnePausedCoordinatorTransition(
+            tester,
+            harness,
+            expectedProfileId: 'profile-created',
+          );
+          await _completeCoordinatorTransition(tester, harness);
+
+          expect(harness.createRequests, 1);
+          expect(harness.avatarPresignRequests, 1);
+          expect(harness.avatarPutRequests, stage == 'presign' ? 0 : 1);
+          expect(harness.profileUpdateRequests, stage == 'update' ? 1 : 0);
+          expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+
+          await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+          await tester.pumpAndSettle();
+
+          expect(harness.createRequests, 1);
+          expect(harness.authSwitchRequests, 1);
+          expect(harness.avatarPresignRequests, stage == 'presign' ? 2 : 2);
+          expect(harness.avatarPutRequests, stage == 'presign' ? 1 : 2);
+          expect(harness.profileUpdateRequests, stage == 'update' ? 2 : 1);
+          expect(find.byKey(CreateProfileSheet.sheetKey), findsNothing);
+          await _disposeMountedHarness(tester, harness);
+        },
+      );
+    }
+
+    for (final stage in ['presign', 'put', 'update']) {
+      testWidgets(
+        'avatar $stage completion after account change has no later side effects',
+        (tester) async {
+          final harness = _EntryHarness(
+            profiles: const [_primaryProfile],
+            pauseAvatarStage: stage,
+            tier: 'premium',
+          );
+          _disposeHarnessAfterWidget(tester, harness);
+          await _pumpCreateProfileSheet(tester, harness, avatar: _testAvatar());
+          await tester.tap(find.byKey(CreateProfileSheet.avatarButtonKey));
+          await tester.pump();
+          await tester.enterText(
+            find.byKey(CreateProfileSheet.displayNameFieldKey),
+            'Created profile',
+          );
+          await tester.tap(find.byKey(CreateProfileSheet.submitKey));
+          await _expectOnePausedCoordinatorTransition(
+            tester,
+            harness,
+            expectedProfileId: 'profile-created',
+          );
+          harness.realtime.complete();
+          await tester.pump();
+          await harness.avatarStageEntered!.future;
+
+          harness.container
+              .read(authControllerProvider.notifier)
+              .state = AuthState(
+            session: _sessionFor('profile-created', accountId: 'account-2'),
+          );
+          harness.releaseAvatarStage!.complete();
+          await tester.pumpAndSettle();
+
+          expect(harness.createRequests, 1);
+          expect(harness.avatarPresignRequests, 1);
+          expect(harness.avatarPutRequests, stage == 'presign' ? 0 : 1);
+          expect(harness.profileUpdateRequests, stage == 'update' ? 1 : 0);
+          expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
+          await _disposeMountedHarness(tester, harness);
+        },
+      );
+    }
 
     testWidgets(
       'creating a second profile keeps the routed shell mounted while switching',
@@ -250,7 +670,7 @@ void main() {
           isFalse,
         );
         expect(find.byKey(CreateProfileSheet.sheetKey), findsOneWidget);
-        expect(find.text('create denied'), findsOneWidget);
+        expect(find.text('Could not save profile: Try again'), findsOneWidget);
         expect(
           tester
               .widget<CircleAvatar>(
@@ -305,14 +725,127 @@ Future<void> _disposeMountedHarness(
   await tester.pump();
 }
 
+Future<void> _pumpCreateProfileSheet(
+  WidgetTester tester,
+  _EntryHarness harness, {
+  ProfileAvatarFile? avatar,
+}) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: harness.container,
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: CreateProfileSheet(
+            avatarPicker: avatar == null ? null : () async => avatar,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+const _profileCreateCaptureEnvironmentKey = 'VOICE_PROFILE_CREATE_CAPTURE_DIR';
+const _profileCreateCaptureBoundaryKey = Key('profile_create_capture_boundary');
+var _profileCreateCaptureFontsLoaded = false;
+VoiceTokenCatalog? _profileCreateCaptureCatalog;
+
+Future<ThemeData?> _captureProfileCreateTheme(WidgetTester tester) async {
+  final directory = Platform.environment[_profileCreateCaptureEnvironmentKey];
+  if (directory == null || directory.isEmpty) return null;
+  if (!_profileCreateCaptureFontsLoaded) {
+    final loaded = await tester.runAsync(() async {
+      final noto = FontLoader(VoiceTheme.fontFamily)
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+      await noto.load();
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+      if (flutterRoot == null || flutterRoot.isEmpty) {
+        throw StateError('FLUTTER_ROOT is required to load Material Icons');
+      }
+      final iconFile = File(
+        [
+          flutterRoot,
+          'bin',
+          'cache',
+          'artifacts',
+          'material_fonts',
+          'MaterialIcons-Regular.otf',
+        ].join(Platform.pathSeparator),
+      );
+      final bytes = await iconFile.readAsBytes();
+      await (FontLoader('MaterialIcons')..addFont(
+            Future<ByteData>.value(
+              ByteData.sublistView(Uint8List.fromList(bytes)),
+            ),
+          ))
+          .load();
+      return true;
+    });
+    if (loaded != true) {
+      throw StateError('Production font loading failed');
+    }
+    _profileCreateCaptureFontsLoaded = true;
+  }
+  final catalog = await tester.runAsync(VoiceTokenCatalog.load);
+  if (catalog == null) {
+    throw StateError('Production design tokens did not load');
+  }
+  _profileCreateCaptureCatalog = catalog;
+  return VoiceTheme.build(
+    catalog: catalog,
+    mode: VoiceThemeMode.dark,
+    profileAccent: catalog.profileAccentAt(0),
+  );
+}
+
+Future<void> _captureProfileCreate(WidgetTester tester, String filename) async {
+  final directory = Platform.environment[_profileCreateCaptureEnvironmentKey];
+  if (directory == null || directory.isEmpty) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(_profileCreateCaptureBoundaryKey),
+  );
+  final captured = await tester.runAsync(() async {
+    final image = await boundary.toImage(
+      pixelRatio: tester.view.devicePixelRatio,
+    );
+    try {
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) throw StateError('PNG encoding returned null');
+      final output = File('$directory${Platform.pathSeparator}$filename');
+      await output.parent.create(recursive: true);
+      await output.writeAsBytes(png.buffer.asUint8List(), flush: true);
+      return true;
+    } finally {
+      image.dispose();
+    }
+  });
+  if (captured != true) throw StateError('Profile create capture failed');
+}
+
+ProfileAvatarFile _testAvatar() => ProfileAvatarFile(
+  bytes: base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8+wAAAABJRU5ErkJggg==',
+  ),
+  contentType: 'image/png',
+  name: 'avatar.png',
+);
+
 Future<void> _expectOnePausedCoordinatorTransition(
   WidgetTester tester,
   _EntryHarness harness, {
   String expectedProfileId = 'profile-alt',
+  int expectedAuthSwitchRequests = 1,
 }) async {
   await tester.pump();
 
-  expect(harness.authSwitchRequests, 1);
+  expect(harness.authSwitchRequests, expectedAuthSwitchRequests);
   expect(harness.realtime.handoffs, hasLength(1));
   expect(
     harness.realtime.handoffs.single.nextSession.activeProfileId,
@@ -367,16 +900,23 @@ class _EntryHarness {
   _EntryHarness({
     this.profiles = const [_primaryProfile, _altProfile],
     this.rejectCreate = false,
+    this.switchFailuresRemaining = 0,
+    this.failAvatarStage,
+    this.pauseAvatarStage,
+    this.pauseCreate = false,
+    this.tier = 'free',
     this.useRealTheme = false,
+    this.tokenCatalog,
+    this.createResponseAccountId,
   }) {
     final client = MockClient(_respond);
     storage = _MemoryAuthStorage(_primarySession);
     realtime = _PausedProfileSwitchRealtimeBoundary();
     container = ProviderContainer(
       overrides: [
-        if (useRealTheme)
+        if (useRealTheme || tokenCatalog != null)
           voiceTokenCatalogProvider.overrideWith(
-            (ref) async => testVoiceTokenCatalog,
+            (ref) async => tokenCatalog ?? testVoiceTokenCatalog,
           )
         else
           ...voiceThemeTestOverrides(),
@@ -405,19 +945,36 @@ class _EntryHarness {
           return controller;
         }),
         profileSwitchRealtimeBoundaryProvider.overrideWithValue(realtime),
+        subscriptionTierProvider.overrideWith((_) => tier),
       ],
     );
   }
 
   final List<VoiceProfile> profiles;
   final bool rejectCreate;
+  int switchFailuresRemaining;
+  final String tier;
   final bool useRealTheme;
+  final VoiceTokenCatalog? tokenCatalog;
+  final String? createResponseAccountId;
   late final ProviderContainer container;
   late final _MemoryAuthStorage storage;
   late final _PausedProfileSwitchRealtimeBoundary realtime;
   var authSwitchRequests = 0;
   var createRequests = 0;
+  final List<Map<String, dynamic>> createBodies = [];
+  final bool pauseCreate;
+  Completer<void>? createRequestEntered;
+  Completer<void>? releaseCreateRequest;
   var avatarRequests = 0;
+  var avatarPresignRequests = 0;
+  var avatarPutRequests = 0;
+  var profileUpdateRequests = 0;
+  String? failAvatarStage;
+  final String? pauseAvatarStage;
+  Completer<void>? avatarStageEntered;
+  Completer<void>? releaseAvatarStage;
+  var avatarStageFailureRemaining = 1;
   var profileCreated = false;
   var _disposed = false;
 
@@ -425,6 +982,10 @@ class _EntryHarness {
     if (request.url.path == '/health') return http.Response('OK', 200);
     if (request.url.path == '/api/v1/auth/switch-profile') {
       authSwitchRequests++;
+      if (switchFailuresRemaining > 0) {
+        switchFailuresRemaining--;
+        return http.Response('switch unavailable', 503);
+      }
       final profileId =
           (jsonDecode(request.body) as Map<String, dynamic>)['profile_id']
               as String?;
@@ -439,6 +1000,13 @@ class _EntryHarness {
     if (request.url.path == '/api/v1/users/profiles' &&
         request.method == 'POST') {
       createRequests++;
+      createBodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+      if (pauseCreate) {
+        createRequestEntered ??= Completer<void>();
+        releaseCreateRequest ??= Completer<void>();
+        createRequestEntered!.complete();
+        await releaseCreateRequest!.future;
+      }
       if (rejectCreate) {
         return http.Response(
           jsonEncode({'error': 'create_denied', 'message': 'create denied'}),
@@ -446,10 +1014,11 @@ class _EntryHarness {
         );
       }
       profileCreated = true;
-      return http.Response(
-        jsonEncode({'profile': _profileJson(_createdProfile)}),
-        200,
-      );
+      final responseProfile = _profileJson(_createdProfile);
+      if (createResponseAccountId != null) {
+        responseProfile['account_id'] = createResponseAccountId;
+      }
+      return http.Response(jsonEncode({'profile': responseProfile}), 200);
     }
     if (request.url.path == '/api/v1/users/profiles') {
       return http.Response(
@@ -476,9 +1045,71 @@ class _EntryHarness {
         200,
       );
     }
+    if (request.url.path == '/api/v1/users/me/avatar/presigned-upload' &&
+        request.method == 'POST') {
+      avatarRequests++;
+      avatarPresignRequests++;
+      await _pauseAvatarStage('presign');
+      if (_failAvatarStage('presign')) {
+        return http.Response(
+          jsonEncode({'error': 'presign_failed', 'message': 'stage failed'}),
+          503,
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'http_method': 'PUT',
+          'upload_url': 'http://upload.test/avatar',
+          'required_headers': {'Content-Type': 'image/png'},
+          'max_bytes': '5242880',
+          'public_url': 'https://cdn.test/avatar.png',
+          'object_key': 'avatars/profile-created/avatar.png',
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/users/me' && request.method == 'PATCH') {
+      profileUpdateRequests++;
+      avatarRequests++;
+      await _pauseAvatarStage('update');
+      if (_failAvatarStage('update')) {
+        return http.Response(
+          jsonEncode({'error': 'update_failed', 'message': 'stage failed'}),
+          503,
+        );
+      }
+      return http.Response(
+        jsonEncode({'profile': _profileJson(_createdProfile)}),
+        200,
+      );
+    }
+    if (request.url.host == 'upload.test' && request.method == 'PUT') {
+      avatarRequests++;
+      avatarPutRequests++;
+      await _pauseAvatarStage('put');
+      if (_failAvatarStage('put')) {
+        return http.Response('upload failed', 503);
+      }
+      return http.Response('', 200);
+    }
     if (request.url.path.contains('avatar')) avatarRequests++;
-    if (request.url.host == 'upload.test') avatarRequests++;
     return http.Response('not found', 404);
+  }
+
+  bool _failAvatarStage(String stage) {
+    if (failAvatarStage != stage || avatarStageFailureRemaining == 0) {
+      return false;
+    }
+    avatarStageFailureRemaining--;
+    return true;
+  }
+
+  Future<void> _pauseAvatarStage(String stage) async {
+    if (pauseAvatarStage != stage) return;
+    avatarStageEntered ??= Completer<void>();
+    releaseAvatarStage ??= Completer<void>();
+    if (!avatarStageEntered!.isCompleted) avatarStageEntered!.complete();
+    await releaseAvatarStage!.future;
   }
 
   void dispose() {
@@ -493,13 +1124,14 @@ class _CompletedOnboardingController extends OnboardingController {
   OnboardingUiState build() => const OnboardingUiState(completed: true);
 }
 
-AuthSession _sessionFor(String profileId) => AuthSession(
-  accessToken: 'access-$profileId',
-  refreshToken: 'refresh-$profileId',
-  expiresInSeconds: 900,
-  accountId: 'account-1',
-  activeProfileId: profileId,
-);
+AuthSession _sessionFor(String profileId, {String accountId = 'account-1'}) =>
+    AuthSession(
+      accessToken: 'access-$profileId',
+      refreshToken: 'refresh-$profileId',
+      expiresInSeconds: 900,
+      accountId: accountId,
+      activeProfileId: profileId,
+    );
 
 Map<String, Object?> _profileJson(VoiceProfile profile) => {
   'id': profile.id,

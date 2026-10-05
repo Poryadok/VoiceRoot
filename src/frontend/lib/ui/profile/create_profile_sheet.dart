@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/users_client.dart';
+import '../../backend/auth_session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/profile_switch_coordinator.dart';
@@ -21,6 +22,7 @@ class CreateProfileSheet extends ConsumerStatefulWidget {
 
   static const Key sheetKey = Key('create_profile_sheet');
   static const Key displayNameFieldKey = Key('create_profile_display_name');
+  static const Key usernameFieldKey = Key('create_profile_username');
   static const Key presetKey = Key('create_profile_preset');
   static const Key accentPickerKey = Key('create_profile_accent_picker');
   static const Key avatarButtonKey = Key('create_profile_avatar');
@@ -34,20 +36,29 @@ class CreateProfileSheet extends ConsumerStatefulWidget {
 
 class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
   final _displayNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   String _preset = PrivacyPresetDefaults.presets.first;
   int _selectedAccentIndex = 0;
   ProfileAvatarFile? _avatar;
   var _submitting = false;
   String? _error;
+  _CreatedProfileReceipt? _receipt;
+  var _switchApplied = false;
 
   @override
   void dispose() {
     _displayNameController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final l10n = AppLocalizations.of(context)!;
+    final receipt = _receipt;
+    if (receipt != null) {
+      await _recover(receipt, l10n);
+      return;
+    }
     final name = _displayNameController.text.trim();
     if (name.isEmpty) {
       setState(() => _error = l10n.profileErrorDisplayNameRequired);
@@ -58,8 +69,11 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
       return;
     }
 
-    final auth = ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+    final auth = session.authorizationHeader;
+    final username = _usernameController.text.trim();
+    final accentColor = _accentHexForSubmit(context);
 
     setState(() {
       _submitting = true;
@@ -71,52 +85,32 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
         .createProfile(
           authorization: auth,
           displayName: name,
+          username: username.isEmpty ? null : username,
           preset: _preset,
-          accentColor: _accentHexForSubmit(context),
+          accentColor: accentColor,
         );
 
     if (!mounted) return;
     switch (result) {
       case UsersApiOk(:final data):
+        _receipt = _CreatedProfileReceipt(
+          profile: data,
+          sourceSession: session,
+          displayName: name,
+          username: username,
+          preset: _preset,
+          accentColor: accentColor,
+        );
+        if (!_isCurrentSource(_receipt!)) {
+          _showRecoveryError(l10n.profileCreateSessionChanged);
+          return;
+        }
+        if (data.accountId != session.accountId) {
+          _showRecoveryError(l10n.profileCreateRecoveryFailed);
+          return;
+        }
         ref.invalidate(myProfilesProvider);
-        ProfileSwitchResult switchResult;
-        ref.read(profileSwitchInProgressProvider.notifier).state = true;
-        try {
-          switchResult = await ref
-              .read(profileSwitchCoordinatorProvider)
-              .switchTo(data.id);
-        } on Object catch (error) {
-          if (!mounted) return;
-          setState(() {
-            _submitting = false;
-            _error = error.toString();
-          });
-          return;
-        } finally {
-          ref.read(profileSwitchInProgressProvider.notifier).state = false;
-        }
-        if (!mounted) return;
-        if (switchResult is! ProfileSwitchApplied) {
-          setState(() {
-            _submitting = false;
-            _error = switchResult is ProfileSwitchRejected
-                ? switchResult.errorCode
-                : null;
-          });
-          return;
-        }
-        if (_avatar != null) {
-          final avatarErr = await _uploadAvatarForActiveProfile(l10n, _avatar!);
-          if (!mounted) return;
-          if (avatarErr != null) {
-            setState(() {
-              _submitting = false;
-              _error = avatarErr;
-            });
-            return;
-          }
-        }
-        if (mounted) Navigator.of(context).pop(true);
+        await _recover(_receipt!, l10n);
       case UsersApiFailure(:final message, :final statusCode, :final errorCode):
         if (statusCode == 429 || errorCode == 'resource_exhausted') {
           if (!mounted) return;
@@ -130,9 +124,127 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
         }
         setState(() {
           _submitting = false;
-          _error = message;
+          _error = _safeCreateError(l10n, message);
         });
     }
+  }
+
+  String _safeCreateError(AppLocalizations l10n, String message) {
+    if (message == 'display_name_required') {
+      return l10n.profileErrorDisplayNameRequired;
+    }
+    if (message == 'display_name_too_long') {
+      return l10n.profileErrorDisplayNameTooLong;
+    }
+    return l10n.profileEditSaveError(l10n.commonRetry);
+  }
+
+  Future<void> _recover(
+    _CreatedProfileReceipt receipt,
+    AppLocalizations l10n,
+  ) async {
+    if (receipt.profile.accountId != receipt.accountId) {
+      _showRecoveryError(l10n.profileCreateRecoveryFailed);
+      return;
+    }
+    final current = ref.read(authControllerProvider).session;
+    if (current == null || current.accountId != receipt.accountId) {
+      _showRecoveryError(l10n.profileCreateSessionChanged);
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    if (!_switchApplied) {
+      if (current.activeProfileId != receipt.sourceProfileId) {
+        _showRecoveryError(l10n.profileCreateSessionChanged);
+        return;
+      }
+      ref.read(profileSwitchInProgressProvider.notifier).state = true;
+      ProfileSwitchResult result;
+      try {
+        result = await ref
+            .read(profileSwitchCoordinatorProvider)
+            .switchTo(receipt.profile.id);
+      } on Object {
+        if (mounted) _showRecoveryError(l10n.profileCreateRecoveryFailed);
+        return;
+      } finally {
+        if (mounted) {
+          ref.read(profileSwitchInProgressProvider.notifier).state = false;
+        }
+      }
+      if (!mounted) return;
+      if (result is! ProfileSwitchApplied) {
+        _showRecoveryError(
+          _isCurrentSource(receipt)
+              ? l10n.profileCreateRecoveryFailed
+              : l10n.profileCreateSessionChanged,
+        );
+        return;
+      }
+      if (result.handoff.nextSession.accountId != receipt.accountId ||
+          result.handoff.nextSession.activeProfileId != receipt.profile.id ||
+          ref.read(authControllerProvider).session !=
+              result.handoff.nextSession) {
+        _showRecoveryError(l10n.profileCreateSessionChanged);
+        return;
+      }
+      receipt.targetSession = result.handoff.nextSession;
+      if (!_isCurrentTarget(receipt)) {
+        _showRecoveryError(l10n.profileCreateSessionChanged);
+        return;
+      }
+      _switchApplied = true;
+    } else if (!_isCurrentTarget(receipt)) {
+      _showRecoveryError(l10n.profileCreateSessionChanged);
+      return;
+    }
+
+    final targetSession = ref.read(authControllerProvider).session;
+    if (targetSession == null || !_isCurrentTarget(receipt)) {
+      _showRecoveryError(l10n.profileCreateSessionChanged);
+      return;
+    }
+    if (_avatar != null) {
+      final avatarErr = await _uploadAvatarForActiveProfile(
+        l10n,
+        receipt,
+        targetSession.authorizationHeader,
+        _avatar!,
+      );
+      if (!mounted) return;
+      if (avatarErr != null) {
+        _showRecoveryError(avatarErr);
+        return;
+      }
+    }
+    if (!_isCurrentTarget(receipt)) {
+      _showRecoveryError(l10n.profileCreateSessionChanged);
+      return;
+    }
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  bool _isCurrentTarget(_CreatedProfileReceipt receipt) {
+    final session = ref.read(authControllerProvider).session;
+    final targetSession = receipt.targetSession;
+    return session != null && targetSession != null && session == targetSession;
+  }
+
+  bool _isCurrentSource(_CreatedProfileReceipt receipt) {
+    final session = ref.read(authControllerProvider).session;
+    return session != null && session == receipt.sourceSession;
+  }
+
+  void _showRecoveryError(String error) {
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _error = error;
+    });
   }
 
   String? _accentHexForSubmit(BuildContext context) {
@@ -155,42 +267,59 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
 
   Future<String?> _uploadAvatarForActiveProfile(
     AppLocalizations l10n,
+    _CreatedProfileReceipt receipt,
+    String authorization,
     ProfileAvatarFile avatar,
   ) async {
-    final auth = ref.read(authorizationHeaderProvider);
-    if (auth == null) return l10n.profileEditSaveError('not_authenticated');
+    if (!_isCurrentTarget(receipt)) return l10n.profileCreateSessionChanged;
     final client = ref.read(voiceUsersClientProvider);
     final presignResult = await client.createAvatarPresignedUpload(
-      authorization: auth,
+      authorization: authorization,
       contentType: avatar.contentType,
       contentLength: avatar.bytes.length,
     );
     switch (presignResult) {
-      case UsersApiFailure(:final message):
-        return l10n.profileEditSaveError(message);
+      case UsersApiFailure():
+        if (!_isCurrentTarget(receipt)) {
+          return l10n.profileCreateSessionChanged;
+        }
+        return _avatarRecoveryError(l10n);
       case UsersApiOk(:final data):
+        if (!_isCurrentTarget(receipt)) {
+          return l10n.profileCreateSessionChanged;
+        }
         final uploadResult = await client.uploadAvatarBytes(
           uploadUrl: Uri.parse(data.uploadUrl),
           requiredHeaders: data.requiredHeaders,
           bytes: avatar.bytes,
         );
         switch (uploadResult) {
-          case UsersApiFailure(:final message):
-            return l10n.profileEditSaveError(message);
+          case UsersApiFailure():
+            if (!_isCurrentTarget(receipt)) {
+              return l10n.profileCreateSessionChanged;
+            }
+            return _avatarRecoveryError(l10n);
           case UsersApiOk():
+            if (!_isCurrentTarget(receipt)) {
+              return l10n.profileCreateSessionChanged;
+            }
             final updateResult = await client.updateProfile(
-              authorization: auth,
+              authorization: authorization,
               avatarUrl: data.publicUrl,
             );
+            if (!_isCurrentTarget(receipt)) {
+              return l10n.profileCreateSessionChanged;
+            }
             return switch (updateResult) {
               UsersApiOk() => null,
-              UsersApiFailure(:final message) => l10n.profileEditSaveError(
-                message,
-              ),
+              UsersApiFailure() => _avatarRecoveryError(l10n),
             };
         }
     }
   }
+
+  String _avatarRecoveryError(AppLocalizations l10n) =>
+      l10n.profileCreateRecoveryFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +341,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
             icon: Icons.cloud_off_outlined,
           ),
           data: (profiles) {
-            if (profiles.length >= maxProfiles) {
+            if (_receipt == null && profiles.length >= maxProfiles) {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -282,7 +411,17 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                     labelText: l10n.profileDisplayNameLabel,
                   ),
                   textInputAction: TextInputAction.done,
-                  enabled: !_submitting,
+                  enabled: !_submitting && _receipt == null,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: CreateProfileSheet.usernameFieldKey,
+                  controller: _usernameController,
+                  decoration: InputDecoration(
+                    labelText: l10n.profileCreateUsernameLabel,
+                  ),
+                  textInputAction: TextInputAction.done,
+                  enabled: !_submitting && _receipt == null,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -307,7 +446,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                     ),
                   ],
                   selected: {_preset},
-                  onSelectionChanged: _submitting
+                  onSelectionChanged: _submitting || _receipt != null
                       ? null
                       : (next) => setState(() => _preset = next.first),
                 ),
@@ -329,7 +468,7 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                         i++
                       )
                         GestureDetector(
-                          onTap: _submitting
+                          onTap: _submitting || _receipt != null
                               ? null
                               : () => setState(() => _selectedAccentIndex = i),
                           child: Container(
@@ -366,7 +505,11 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(l10n.createProfileSubmit),
+                      : Text(
+                          _receipt == null
+                              ? l10n.createProfileSubmit
+                              : l10n.commonRetry,
+                        ),
                 ),
               ],
             );
@@ -375,6 +518,28 @@ class _CreateProfileSheetState extends ConsumerState<CreateProfileSheet> {
       ),
     );
   }
+}
+
+class _CreatedProfileReceipt {
+  _CreatedProfileReceipt({
+    required this.profile,
+    required this.sourceSession,
+    required this.displayName,
+    required this.username,
+    required this.preset,
+    required this.accentColor,
+  });
+
+  final VoiceProfile profile;
+  final AuthSession sourceSession;
+  AuthSession? targetSession;
+  final String displayName;
+  final String username;
+  final String preset;
+  final String? accentColor;
+
+  String get accountId => sourceSession.accountId;
+  String get sourceProfileId => sourceSession.activeProfileId;
 }
 
 Future<bool?> showCreateProfileSheet(BuildContext context) {
