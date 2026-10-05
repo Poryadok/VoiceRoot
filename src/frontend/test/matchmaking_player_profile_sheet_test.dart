@@ -131,6 +131,50 @@ http.Response _ratingResponse(double value) => http.Response(
 );
 
 void main() {
+  testWidgets('profile load error retries and shows the selected profile', (
+    tester,
+  ) async {
+    var profileRequests = 0;
+    await tester.pumpWidget(
+      _app(
+        MockClient((request) async {
+          switch (request.url.path) {
+            case '/api/v1/users/profiles/profile-2':
+              profileRequests++;
+              return profileRequests == 1
+                  ? http.Response('{}', 503)
+                  : _profileResponse();
+            case '/api/v1/matchmaking/players/profile-2/rating':
+              return http.Response('{}', 404);
+            case '/api/v1/friends':
+              return _friendsResponse();
+            case '/api/v1/friends/requests':
+              return _friendRequestsResponse();
+            default:
+              return http.Response('{}', 200);
+          }
+        }),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(MatchSquadScreen.playerProfileKey('profile-2')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load profile'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(profileRequests, 1);
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(profileRequests, 2);
+    expect(find.text('Could not load profile'), findsNothing);
+    expect(find.text('Teammate'), findsNWidgets(2));
+    expect(find.byKey(MatchmakingPlayerProfileSheet.sheetKey), findsOneWidget);
+  });
+
   testWidgets('participant opens selected profile with current match rating', (
     tester,
   ) async {
