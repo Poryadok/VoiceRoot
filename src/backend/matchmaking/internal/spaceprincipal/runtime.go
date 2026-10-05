@@ -109,7 +109,7 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 
 func (c Config) validate() error {
 	if c.ListenAddr == "" || c.TLSCertFile == "" || c.TLSKeyFile == "" || c.ClientCAFile == "" || c.ReplayAddr == "" || (c.JWKSURL == "" && c.GatewayJWKSURL == "") {
-		return errors.New("Matchmaking principal listener, configured issuer trust, TLS identity, and replay Redis are required")
+		return errors.New("matchmaking principal listener, configured issuer trust, TLS identity, and replay Redis are required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid Matchmaking Space principal listener")
@@ -199,7 +199,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		}
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
-			return nil, errors.New("Matchmaking principal JWKS unavailable")
+			return nil, errors.New("matchmaking principal JWKS unavailable")
 		}
 		body, err := io.ReadAll(io.LimitReader(response.Body, 65537))
 		if err != nil || len(body) > 65536 {
@@ -272,7 +272,7 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestH
 // request and checks the current Auth session epoch before the handler runs.
 func (r *Runtime) VerifyCompleteMatch(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
 	if r == nil || r.resolver == nil || r.replay == nil || method != matchmakingv1.MatchmakingService_CompleteMatch_FullMethodName || r.config.GatewayJWKSURL == "" {
-		return principal.Principal{}, errors.New("Matchmaking delegated-user principal unavailable")
+		return principal.Principal{}, errors.New("matchmaking delegated-user principal unavailable")
 	}
 	verified, err := principal.VerifyDelegatedUser(ctx, token, principal.VerifyConfig{
 		ExpectedIssuer: "gateway", ExpectedAudience: "matchmaking", ExpectedRPC: method,

@@ -324,6 +324,126 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 	return operation, nil
 }
 
+// BeginMatchSquadProvisionCompensation freezes Chat-only teardown after the
+// protected Voice provider has durably rejected the exact create request.
+// Callers must classify that provider result before entering this transition.
+func (s *MatchStore) BeginMatchSquadProvisionCompensation(ctx context.Context, matchID uuid.UUID) (MatchSquadTeardownAggregate, error) {
+	if s == nil || s.Pool == nil {
+		return MatchSquadTeardownAggregate{}, errors.New("match store unavailable")
+	}
+	if matchID == uuid.Nil {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
+		SELECT match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
+		       chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
+		       voice_operation_id, voice_request_sha256, voice_request_bytes, voice_receipt_id, voice_receipt_bytes, voice_room_id
+		FROM matchmaking_match_squad_operations WHERE match_id=$1 FOR UPDATE
+	`, matchID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadPending
+	}
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	if operation.State == "compensating" {
+		item, err := scanMatchSquadTeardownAggregate(tx.QueryRow(ctx, `
+			SELECT aggregate_id, match_id, state,
+			       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
+			       chat_teardown_receipt_id, chat_teardown_receipt_bytes,
+			       voice_teardown_operation_id, voice_teardown_request_sha256, voice_teardown_request_bytes,
+			       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at, purpose, required_providers
+			FROM matchmaking_match_squad_teardowns WHERE match_id=$1 FOR UPDATE
+		`, matchID))
+		if err != nil || item.Purpose != "PROVISION_COMPENSATION" || len(item.RequiredProviders) != 1 || item.RequiredProviders[0] != "chat" {
+			if err != nil {
+				return MatchSquadTeardownAggregate{}, err
+			}
+			return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return MatchSquadTeardownAggregate{}, err
+		}
+		return item, nil
+	}
+	if operation.State != "provisioning" || operation.ChatReceiptID == nil || operation.ChatID == nil || operation.VoiceReceiptID != nil ||
+		len(operation.VoiceRequestBytes) == 0 || len(operation.VoiceRequestHash) != 32 ||
+		!bytes.Equal(sumSHA256(operation.VoiceRequestBytes), operation.VoiceRequestHash) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadPending
+	}
+	chatCreation := new(chatv1.MatchSquadChatReceipt)
+	if len(operation.ChatRequestHash) != 32 || len(operation.ChatReceiptBytes) == 0 ||
+		!bytes.Equal(sumSHA256(operation.ChatRequestBytes), operation.ChatRequestHash) ||
+		proto.Unmarshal(operation.ChatReceiptBytes, chatCreation) != nil || len(chatCreation.ProtoReflect().GetUnknown()) != 0 ||
+		chatCreation.GetProtocolVersion() != 1 || chatCreation.GetReceiptId() != operation.ChatReceiptID.String() ||
+		chatCreation.GetOperationId() != operation.ChatOperationID.String() || chatCreation.GetMatchId() != matchID.String() ||
+		chatCreation.GetChatId() != operation.ChatID.String() || !bytes.Equal(chatCreation.GetRequestSha256(), operation.ChatRequestHash) ||
+		!bytes.Equal(chatCreation.GetParticipantManifestSha256(), operation.ParticipantManifestHash) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+	}
+	voiceCreate := new(callsv1.CreateMatchSquadRoomRequest)
+	if proto.Unmarshal(operation.VoiceRequestBytes, voiceCreate) != nil || len(voiceCreate.ProtoReflect().GetUnknown()) != 0 ||
+		voiceCreate.GetProtocolVersion() != 1 || voiceCreate.GetOperationId() != operation.VoiceOperationID.String() ||
+		voiceCreate.GetMatchId() != matchID.String() || !bytes.Equal(voiceCreate.GetParticipantManifestSha256(), operation.ParticipantManifestHash) ||
+		voiceCreate.GetChatCreationReceipt() == nil || !proto.Equal(voiceCreate.GetChatCreationReceipt(), chatCreation) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+	}
+	canonicalChatReceipt, err := (proto.MarshalOptions{Deterministic: true}).Marshal(chatCreation)
+	if err != nil || !bytes.Equal(canonicalChatReceipt, operation.ChatReceiptBytes) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+	}
+
+	chatOperationID, aggregateID := uuid.New(), uuid.New()
+	request := &chatv1.TeardownMatchSquadChatRequest{
+		ProtocolVersion: 1, TeardownOperationId: chatOperationID.String(), MatchId: matchID.String(),
+		ChatId: operation.ChatID.String(), CreationReceiptId: operation.ChatReceiptID.String(),
+		ParticipantManifestSha256: append([]byte(nil), operation.ParticipantManifestHash...),
+		CreationRequestSha256:     append([]byte(nil), operation.ChatRequestHash...),
+	}
+	requestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(request)
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardowns
+		(aggregate_id,match_id,state,chat_teardown_operation_id,chat_teardown_request_sha256,chat_teardown_request_bytes,
+		 purpose,required_providers)
+		VALUES ($1,$2,'pending',$3,$4,$5,'PROVISION_COMPENSATION',ARRAY['chat']::TEXT[])
+	`, aggregateID, matchID, chatOperationID, sumSHA256(requestBytes), requestBytes)
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET state='compensating',updated_at=clock_timestamp() WHERE match_id=$1 AND state='provisioning' AND chat_receipt_id IS NOT NULL AND voice_receipt_id IS NULL`, matchID)
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardown_participants
+		(aggregate_id,provider,operation_id,state,request_sha256,request_bytes)
+		VALUES ($1,'chat',$2,'NOT_STARTED',$3,$4)
+	`, aggregateID, chatOperationID, sumSHA256(requestBytes), requestBytes)
+	if err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	item := MatchSquadTeardownAggregate{
+		AggregateID: aggregateID, MatchID: matchID, State: "pending", Purpose: "PROVISION_COMPENSATION",
+		RequiredProviders: []string{"chat"}, ChatOperationID: chatOperationID,
+		ChatRequestHash: sumSHA256(requestBytes), ChatRequestBytes: requestBytes,
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return MatchSquadTeardownAggregate{}, err
+	}
+	return item, nil
+}
+
 // ActivateProvisionedMatch is the only new path that transitions a match to
 // active: both locally validated, persisted provider receipts must exist first.
 func (s *MatchStore) ActivateProvisionedMatch(ctx context.Context, matchID uuid.UUID) (Match, error) {

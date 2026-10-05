@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -37,6 +39,22 @@ func TestUnmarshalFrozenRequestRequiresCanonicalBytesAndDigest(t *testing.T) {
 	unknownDigest := sha256.Sum256(unknown)
 	if err := unmarshalFrozenRequest(unknown, unknownDigest[:], new(chatv1.TeardownMatchSquadChatRequest)); err == nil {
 		t.Fatal("request with unknown protobuf field accepted")
+	}
+}
+
+func TestProviderTeardownClassificationKeepsUncertainFailuresRetryable(t *testing.T) {
+	for _, code := range []codes.Code{codes.NotFound, codes.FailedPrecondition, codes.InvalidArgument} {
+		if !isTerminalProviderTeardownError(status.Error(code, "fixed fixture error")) {
+			t.Errorf("known terminal provider code %s was not classified as contract mismatch", code)
+		}
+	}
+	for _, code := range []codes.Code{codes.Unavailable, codes.Unauthenticated, codes.PermissionDenied, codes.Unimplemented, codes.DeadlineExceeded, codes.Internal} {
+		if isTerminalProviderTeardownError(status.Error(code, "fixed fixture error")) {
+			t.Errorf("uncertain provider code %s was incorrectly made terminal", code)
+		}
+	}
+	if !isTerminalProviderTeardownError(errProviderContract) {
+		t.Fatal("locally detected immutable binding mismatch was not terminal")
 	}
 }
 

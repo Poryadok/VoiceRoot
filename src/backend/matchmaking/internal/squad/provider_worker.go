@@ -9,7 +9,9 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -209,6 +211,15 @@ func (w *MatchSquadProviderWorker) provisionOperation(ctx context.Context, opera
 		}
 		response, err := w.Voice.CreateMatchSquadRoom(callCtx, voiceRequest)
 		if err != nil {
+			if status.Code(err) == codes.FailedPrecondition {
+				// The protected Voice provider uses FailedPrecondition only for a
+				// terminal binding/ownership rejection before resource creation.
+				// Seal exact Chat-only compensation; never delete an unknown Voice
+				// resource or turn this into a completed match.
+				if _, compensationErr := w.Store.BeginMatchSquadProvisionCompensation(ctx, operation.MatchID); compensationErr != nil {
+					return operation, errors.Join(err, fmt.Errorf("persist MatchSquad provisioning compensation: %w", compensationErr))
+				}
+			}
 			return operation, err
 		}
 		if response == nil || response.GetReceipt() == nil {
@@ -276,7 +287,7 @@ func (w *MatchSquadProviderWorker) RunTeardownOnce(ctx context.Context, limit in
 		receiptID, receiptBytes, err := w.teardown(ctx, item)
 		if err != nil {
 			nextState := "RETRYABLE_FAILURE"
-			if errors.Is(err, errProviderContract) {
+			if isTerminalProviderTeardownError(err) {
 				nextState = "CONTRACT_MISMATCH"
 			}
 			if stateErr := w.Store.SetMatchSquadTeardownParticipantState(ctx, item.AggregateID, item.Provider, nextState); stateErr != nil {
@@ -299,6 +310,18 @@ func (w *MatchSquadProviderWorker) RunTeardownOnce(ctx context.Context, limit in
 		completed++
 	}
 	return completed, errors.Join(failures...)
+}
+
+func isTerminalProviderTeardownError(err error) bool {
+	if errors.Is(err, errProviderContract) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.NotFound, codes.FailedPrecondition, codes.InvalidArgument:
+		return true
+	default:
+		return false
+	}
 }
 
 func (w *MatchSquadProviderWorker) teardown(ctx context.Context, item store.MatchSquadTeardownParticipant) (uuid.UUID, []byte, error) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -50,6 +51,65 @@ import (
 )
 
 const gatewayCompleteJWKSPath = "/.well-known/voice-principal-jwks.json"
+
+type matchSquadGatewayBinary struct {
+	path     string
+	revision string
+	tree     string
+}
+
+type matchSquadGatewayTrace struct {
+	mu       sync.Mutex
+	revision string
+	tree     string
+	stages   map[string]bool
+	pending  []byte
+}
+
+func (c *matchSquadGatewayTrace) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pending = append(c.pending, p...)
+	for {
+		i := bytes.IndexByte(c.pending, '\n')
+		if i < 0 {
+			if len(c.pending) > 4096 {
+				c.pending = nil
+			}
+			break
+		}
+		line := string(c.pending[:i])
+		c.pending = c.pending[i+1:]
+		fields := strings.Split(line, "|")
+		if len(fields) == 4 && fields[0] == "VOICE_MATCHFOUND_TRACE" && fields[1] == c.revision && fields[2] == c.tree {
+			switch fields[3] {
+			case "gateway-fallback", "rest-namespace-not-public", "rest-upstream-missing", "matchmaking-client-missing", "complete-match-decode":
+				c.stages[fields[3]] = true
+			}
+		}
+	}
+	return len(p), nil
+}
+
+func (c *matchSquadGatewayTrace) saw(stage string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stages[stage]
+}
+
+func (c *matchSquadGatewayTrace) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stages = map[string]bool{}
+}
+
+func (c *matchSquadGatewayTrace) snapshot() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return fmt.Sprintf("gateway_fallback=%t namespace_not_public=%t upstream_missing=%t matchmaking_client_missing=%t complete_decode=%t",
+		c.stages["gateway-fallback"], c.stages["rest-namespace-not-public"], c.stages["rest-upstream-missing"],
+		c.stages["matchmaking-client-missing"], c.stages["complete-match-decode"])
+}
 
 func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *testing.T) {
 	if testing.Short() {
@@ -104,8 +164,9 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.NoError(t, err)
 	mmAddress := mmListener.Addr().String()
 	gatewayBinary := buildMatchSquadGateway(t, ctx, fixtureDir)
-	gatewayCurrentAddress := startMatchSquadGateway(t, ctx, gatewayBinary, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-current")
-	gatewayNextAddress := startMatchSquadGateway(t, ctx, gatewayBinary, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
+	trace := &matchSquadGatewayTrace{revision: gatewayBinary.revision, tree: gatewayBinary.tree, stages: map[string]bool{}}
+	gatewayCurrentAddress := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-current")
+	gatewayNextAddress := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
 	proxy := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != gatewayCompleteJWKSPath || r.Method != http.MethodGet {
 			http.NotFound(w, r)
@@ -225,6 +286,7 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.NotEqual(t, http.StatusOK, expired.StatusCode)
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileA, false)
 
+	trace.reset()
 	badBodyReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+gatewayCurrentAddress+"/api/v1/matchmaking/matches/"+matchID.String()+"/complete", strings.NewReader(`{"operation_id":`))
 	require.NoError(t, err)
 	badBodyReq.Header.Set("Authorization", "Bearer "+signMatchSquadUserJWT(t, authKey, accountID, profileA.String(), 1))
@@ -234,9 +296,17 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	badBodyText, err := io.ReadAll(badBody.Body)
 	require.NoError(t, err)
 	badBody.Body.Close()
+	responseClass := "other"
+	contentType := badBody.Header.Get("Content-Type")
+	if badBody.StatusCode == http.StatusNotFound && strings.HasPrefix(contentType, "text/plain") {
+		responseClass = "standard_plain_http_not_found"
+	} else if strings.HasPrefix(contentType, "application/json") {
+		responseClass = "gateway_json_error"
+	}
 	require.Equalf(t, http.StatusBadRequest, badBody.StatusCode,
-		"malformed CompleteMatch response metadata: status=%d content_type=%q body_bytes=%d",
-		badBody.StatusCode, badBody.Header.Get("Content-Type"), len(badBodyText))
+		"malformed CompleteMatch response metadata: status=%d content_type=%q body_bytes=%d response_class=%s trace_stages={%s}",
+		badBody.StatusCode, contentType, len(badBodyText), responseClass, trace.snapshot())
+	require.True(t, trace.saw("complete-match-decode"), "the exact clean Gateway build did not report the fixed CompleteMatch decode stage")
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileA, false)
 
 	// The MM commit succeeds, but its first RPC reply is intentionally lost.
@@ -288,17 +358,11 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.NoError(t, err)
 	roots := x509.NewCertPool()
 	require.True(t, roots.AppendCertsFromPEM(caPEM))
-	protectedConn, err := grpc.DialContext(ctx, mmAddress,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: roots, ServerName: "matchmaking.fixture", Certificates: []tls.Certificate{clientPair}})),
-		grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = protectedConn.Close() })
+	protectedConn := newReadyMatchSquadTestConn(t, ctx, mmAddress,
+		credentials.NewTLS(&tls.Config{RootCAs: roots, ServerName: "matchmaking.fixture", Certificates: []tls.Certificate{clientPair}}))
 	grpcClient := matchmakingv1.NewMatchmakingServiceClient(protectedConn)
-	protectedConn2, err := grpc.DialContext(ctx, mmListener2.Addr().String(),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: roots, ServerName: "matchmaking.fixture", Certificates: []tls.Certificate{clientPair}})),
-		grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = protectedConn2.Close() })
+	protectedConn2 := newReadyMatchSquadTestConn(t, ctx, mmListener2.Addr().String(),
+		credentials.NewTLS(&tls.Config{RootCAs: roots, ServerName: "matchmaking.fixture", Certificates: []tls.Certificate{clientPair}}))
 	grpcClient2 := matchmakingv1.NewMatchmakingServiceClient(protectedConn2)
 
 	// The exact same signed delegated request/JTI is rejected by a second
@@ -351,9 +415,7 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.Error(t, err)
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileB, false)
 
-	ordinaryConn, err := grpc.DialContext(ctx, ordinaryListener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ordinaryConn.Close() })
+	ordinaryConn := newReadyMatchSquadTestConn(t, ctx, ordinaryListener.Addr().String(), insecure.NewCredentials())
 	_, err = matchmakingv1.NewMatchmakingServiceClient(ordinaryConn).CompleteMatch(ctx, &matchmakingv1.CompleteMatchRequest{MatchId: matchID.String(), OperationId: uuid.NewString()})
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileB, false)
@@ -361,7 +423,7 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	// A stalled Redis floor read times out before the protected service is
 	// reached. Use a separate Gateway with an accept-and-stall Redis endpoint.
 	stalledRedisAddr := startStalledMatchSquadRedis(t)
-	stalledGateway := startMatchSquadGateway(t, ctx, gatewayBinary, reserveMatchSquadTCPPort(t), mmAddress, stalledRedisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
+	stalledGateway := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, stalledRedisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
 	shortClient := &http.Client{Timeout: 2 * time.Second}
 	stalledReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+stalledGateway+"/api/v1/matchmaking/matches/"+matchID.String()+"/complete", strings.NewReader(`{"operation_id":"`+uuid.NewString()+`"}`))
 	require.NoError(t, err)
@@ -475,27 +537,41 @@ func (s *dropFirstCompleteMatchReply) CompleteMatch(ctx context.Context, req *ma
 	return response, nil
 }
 
-func buildMatchSquadGateway(t *testing.T, ctx context.Context, fixtureDir string) string {
+func buildMatchSquadGateway(t *testing.T, ctx context.Context, fixtureDir string) matchSquadGatewayBinary {
 	t.Helper()
 	projectRoot, err := matchmakingRepoRoot()
 	require.NoError(t, err)
+	clean, err := exec.Command("git", "-C", projectRoot, "status", "--porcelain=v1", "--untracked-files=normal").Output()
+	require.NoError(t, err, "inspect the immutable fixture source status")
+	require.Empty(t, clean, "the transport fixture must build only from a clean immutable checkout")
+	revision := matchSquadGitValue(t, projectRoot, "rev-parse", "HEAD")
+	tree := matchSquadGitValue(t, projectRoot, "rev-parse", "HEAD^{tree}")
 	binary := filepath.Join(fixtureDir, "gateway-fixture")
 	buildCtx, cancelBuild := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelBuild()
-	build := exec.CommandContext(buildCtx, "go", "build", "-o", binary, ".")
+	ldflags := "-X=main.matchFoundTransportTraceRevision=" + revision + " -X=main.matchFoundTransportTraceTree=" + tree
+	build := exec.CommandContext(buildCtx, "go", "build", "-tags=matchfoundtransportdiag", "-ldflags", ldflags, "-o", binary, ".")
 	build.Dir = filepath.Join(projectRoot, "src", "backend", "gateway")
 	build.Stdout, build.Stderr = io.Discard, io.Discard
 	require.NoError(t, build.Run(), "build the actual Gateway module for the private transport fixture")
-	return binary
+	return matchSquadGatewayBinary{path: binary, revision: revision, tree: tree}
 }
 
-func startMatchSquadGateway(t *testing.T, ctx context.Context, binary string, gatewayPort int, mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKSURL, activeKID string) string {
+func matchSquadGitValue(t *testing.T, projectRoot string, args ...string) string {
+	t.Helper()
+	command := append([]string{"-C", projectRoot}, args...)
+	output, err := exec.Command("git", command...).Output()
+	require.NoError(t, err, "read immutable fixture source identity")
+	return strings.TrimSpace(string(output))
+}
+
+func startMatchSquadGateway(t *testing.T, ctx context.Context, binary matchSquadGatewayBinary, trace *matchSquadGatewayTrace, gatewayPort int, mmAddress, redisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKSURL, activeKID string) string {
 	t.Helper()
 	projectRoot, err := matchmakingRepoRoot()
 	require.NoError(t, err)
 
 	listenAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(gatewayPort))
-	cmd := exec.CommandContext(ctx, binary)
+	cmd := exec.CommandContext(ctx, binary.path)
 	cmd.Dir = filepath.Join(projectRoot, "src", "backend", "gateway")
 	cmd.Env = matchSquadGatewayEnvironment(os.Environ(), map[string]string{
 		"LISTEN_ADDR":                                   listenAddr,
@@ -512,6 +588,7 @@ func startMatchSquadGateway(t *testing.T, ctx context.Context, binary string, ga
 		"GATEWAY_MATCHMAKING_COMPLETE_CLIENT_CERT_FILE": clientCertFile,
 		"GATEWAY_MATCHMAKING_COMPLETE_CLIENT_KEY_FILE":  clientKeyFile,
 	})
+	cmd.Stderr = trace
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start actual Gateway process: %v", err)
 	}
@@ -680,4 +757,15 @@ func signMatchSquadDelegatedJWT(t *testing.T, key *rsa.PrivateKey, kid, issuer, 
 	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	require.NoError(t, err)
 	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func newReadyMatchSquadTestConn(t *testing.T, ctx context.Context, target string, transport credentials.TransportCredentials) *grpc.ClientConn {
+	t.Helper()
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(transport))
+	require.NoError(t, err)
+	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	require.NoError(t, waitForGRPCReady(readyCtx, conn))
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
 }

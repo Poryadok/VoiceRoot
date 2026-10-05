@@ -67,6 +67,217 @@ func TestMatchSquadCompactionIntentRequiresCompletedAggregateAndExactDueTime(t *
 	require.NoError(t, err)
 }
 
+func TestMatchSquadProvisionCompensationSealsChatOnlyWorkAndNeverCompletesMatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	matchID, _, _ := seedActiveDuoMatch(t, ctx, pool)
+
+	hash := make([]byte, 32)
+	chatID, chatOperationID, voiceOperationID := uuid.New(), uuid.New(), uuid.New()
+	chatReceiptID := uuid.New()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_operations
+		(match_id, operation_id, participant_manifest_sha256, participant_manifest_bytes, state,
+		 chat_operation_id, chat_request_sha256, chat_request_bytes, chat_receipt_id, chat_receipt_bytes, chat_id,
+		 voice_operation_id)
+		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8,$9,$10,$11)
+	`, matchID, uuid.New(), hash, []byte("manifest"), chatOperationID, hash, []byte("chat create"), chatReceiptID, []byte("chat receipt"), chatID, voiceOperationID)
+	require.NoError(t, err)
+
+	aggregateID, teardownOperationID := uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardowns
+		(aggregate_id, match_id, state, chat_teardown_operation_id, chat_teardown_request_sha256,
+		 chat_teardown_request_bytes, purpose, required_providers)
+		VALUES ($1,$2,'pending',$3,$4,$5,'PROVISION_COMPENSATION',ARRAY['chat']::TEXT[])
+	`, aggregateID, matchID, teardownOperationID, hash, []byte("chat teardown"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardown_participants
+		(aggregate_id,provider,operation_id,state,request_sha256,request_bytes)
+		VALUES ($1,'chat',$2,'NOT_STARTED',$3,$4)
+	`, aggregateID, teardownOperationID, hash, []byte("chat teardown"))
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardown_participants
+		(aggregate_id,provider,operation_id,state,request_sha256,request_bytes)
+		VALUES ($1,'voice',$2,'NOT_STARTED',$3,$4)
+	`, aggregateID, uuid.New(), hash, []byte("must not be sent to Voice"))
+	require.Error(t, err, "a compensation aggregate must not invent a Voice teardown")
+	_, err = pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_completion_events
+		(aggregate_id,event_id,occurred_at,duration_seconds,profile_ids)
+		VALUES ($1,$2,clock_timestamp(),0,'[]'::JSONB)
+	`, aggregateID, uuid.New())
+	require.Error(t, err, "provisioning compensation cannot publish a match-completed event")
+
+	downRecovery, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_durable_recovery.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(downRecovery))
+	require.Error(t, err, "rollback must retain a sealed compensation provider set")
+	var retained int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1 AND purpose='PROVISION_COMPENSATION'`, aggregateID).Scan(&retained))
+	require.Equal(t, 1, retained)
+}
+
+func TestMatchSquadChatCompensationCompletesWithoutVoiceOrHistoryEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	games := &GameStore{Pool: pool}
+	gamePage, err := games.List(ctx, ListGamesParams{PageSize: 1, Status: StatusActive})
+	require.NoError(t, err)
+	require.NotEmpty(t, gamePage.Games)
+	sessions := &SessionStore{Pool: pool}
+	profileA, profileB := uuid.New(), uuid.New()
+	searchA, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileA, GameID: gamePage.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(30 * time.Minute)})
+	require.NoError(t, err)
+	searchB, err := sessions.Create(ctx, CreateSessionParams{ProfileID: profileB, GameID: gamePage.Games[0].ID, Mode: "Duo", Criteria: `{"region":"eu"}`, TimeoutAt: time.Now().Add(30 * time.Minute)})
+	require.NoError(t, err)
+	matches := &MatchStore{Pool: pool}
+	proposal, err := matches.CreateProposal(ctx, CreateProposalParams{GameID: gamePage.Games[0].ID, Mode: "Duo", Region: "eu", Sessions: []ProposalSession{{SessionID: searchA.ID, ProfileID: profileA}, {SessionID: searchB.ID, ProfileID: profileB}}})
+	require.NoError(t, err)
+	_, err = matches.SetProposalResponse(ctx, proposal.Match.ID, profileA, ProposalResponseAccepted)
+	require.NoError(t, err)
+	_, err = matches.SetProposalResponse(ctx, proposal.Match.ID, profileB, ProposalResponseAccepted)
+	require.NoError(t, err)
+	profileIDs := []uuid.UUID{profileA, profileB}
+	sort.Slice(profileIDs, func(i, j int) bool { return bytes.Compare(profileIDs[i][:], profileIDs[j][:]) < 0 })
+	manifest := make([]byte, 0, len(profileIDs)*16)
+	participants := make([]*chatv1.MatchSquadParticipant, 0, len(profileIDs))
+	for _, profileID := range profileIDs {
+		manifest = append(manifest, profileID[:]...)
+		participants = append(participants, &chatv1.MatchSquadParticipant{ProfileId: profileID.String()})
+	}
+	manifestHash := sumSHA256(manifest)
+	chatOperationID, voiceOperationID := uuid.New(), uuid.New()
+	chatRequestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&chatv1.CreateMatchSquadChatRequest{
+		ProtocolVersion: 1, OperationId: chatOperationID.String(), MatchId: proposal.Match.ID.String(),
+		Participants: participants, ParticipantManifestSha256: manifestHash,
+	})
+	require.NoError(t, err)
+	intent := MatchSquadProvisioningIntent{
+		MatchID: proposal.Match.ID, OperationID: uuid.New(), ParticipantManifestBytes: manifest,
+		ParticipantManifestHash: manifestHash, ChatOperationID: chatOperationID,
+		ChatRequestBytes: chatRequestBytes, ChatRequestHash: sumSHA256(chatRequestBytes), VoiceOperationID: voiceOperationID,
+	}
+	_, err = matches.SaveMatchSquadProvisioningIntent(ctx, intent)
+	require.NoError(t, err)
+	chatReceiptID, chatID := uuid.New(), uuid.New()
+	chatReceiptBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&chatv1.MatchSquadChatReceipt{
+		ProtocolVersion: 1, ReceiptId: chatReceiptID.String(), OperationId: chatOperationID.String(),
+		MatchId: proposal.Match.ID.String(), ChatId: chatID.String(), ParticipantManifestSha256: manifestHash,
+		RequestSha256: sumSHA256(chatRequestBytes), CreatedAt: timestamppb.Now(),
+	})
+	require.NoError(t, err)
+	chatReceipt := new(chatv1.MatchSquadChatReceipt)
+	require.NoError(t, proto.Unmarshal(chatReceiptBytes, chatReceipt))
+	voiceRequestBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&callsv1.CreateMatchSquadRoomRequest{
+		ProtocolVersion: 1, OperationId: voiceOperationID.String(), MatchId: proposal.Match.ID.String(),
+		Participants: participants, ParticipantManifestSha256: manifestHash,
+		ChatCreationReceipt: chatReceipt,
+	})
+	require.NoError(t, err)
+	_, err = matches.RecordMatchSquadChatReceipt(ctx, proposal.Match.ID, chatReceiptID, chatID, chatReceiptBytes, sumSHA256(voiceRequestBytes), voiceRequestBytes)
+	require.NoError(t, err)
+	aggregate, err := matches.BeginMatchSquadProvisionCompensation(ctx, proposal.Match.ID)
+	require.NoError(t, err)
+	require.Equal(t, "PROVISION_COMPENSATION", aggregate.Purpose)
+	require.Equal(t, []string{"chat"}, aggregate.RequiredProviders)
+	operation, err := matches.GetMatchSquadProvisioningOperation(ctx, proposal.Match.ID)
+	require.NoError(t, err)
+	require.Equal(t, "compensating", operation.State)
+	_, err = matches.ActivateProvisionedMatch(ctx, proposal.Match.ID)
+	require.Error(t, err, "a compensating operation cannot activate the match")
+	pending, err := matches.ListPendingMatchSquadTeardownParticipants(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.Equal(t, "chat", pending[0].Provider)
+
+	teardownRequest := new(chatv1.TeardownMatchSquadChatRequest)
+	require.NoError(t, proto.Unmarshal(aggregate.ChatRequestBytes, teardownRequest))
+	completedAt := timestamppb.Now()
+	teardownReceiptID := uuid.New()
+	teardownReceiptBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&chatv1.MatchSquadChatTeardownReceipt{
+		ProtocolVersion: 1, ReceiptId: teardownReceiptID.String(), TeardownOperationId: teardownRequest.GetTeardownOperationId(),
+		MatchId: teardownRequest.GetMatchId(), ChatId: teardownRequest.GetChatId(), CreationReceiptId: teardownRequest.GetCreationReceiptId(),
+		ParticipantManifestSha256: append([]byte(nil), teardownRequest.GetParticipantManifestSha256()...),
+		RequestSha256:             sumSHA256(aggregate.ChatRequestBytes),
+		Status:                    chatv1.MatchSquadTeardownStatus_MATCH_SQUAD_TEARDOWN_STATUS_COMPLETED, CompletedAt: completedAt,
+	})
+	require.NoError(t, err)
+	completed, err := matches.RecordMatchSquadTeardownReceipt(ctx, aggregate.AggregateID, "chat", teardownReceiptID, teardownReceiptBytes)
+	require.NoError(t, err)
+	require.Equal(t, "complete", completed.State)
+	require.Equal(t, "PROVISION_COMPENSATION", completed.Purpose)
+	var operationState string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM matchmaking_match_squad_operations WHERE match_id=$1`, proposal.Match.ID).Scan(&operationState))
+	require.Equal(t, "closed", operationState)
+	var completionEvents, chatCompactions, voiceCompactions int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_completion_events WHERE aggregate_id=$1`, aggregate.AggregateID).Scan(&completionEvents))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE provider='chat'),count(*) FILTER (WHERE provider='voice') FROM matchmaking_match_squad_compaction_intents WHERE aggregate_id=$1`, aggregate.AggregateID).Scan(&chatCompactions, &voiceCompactions))
+	require.Zero(t, completionEvents, "compensation does not emit match completion")
+	require.Equal(t, 1, chatCompactions)
+	require.Zero(t, voiceCompactions, "compensation never calls or compacts Voice")
+}
+
+func TestMatchSquadRecoveryDownRunnerPreservesCompensationAndDirtyMarker(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires isolated PostgreSQL and pinned golang-migrate container")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
+	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
+	fixture.Run(true, "up")
+	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
+	hash := make([]byte, 32)
+	chatOperationID := uuid.New()
+	_, err := fixture.Pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_operations
+		(match_id,operation_id,participant_manifest_sha256,participant_manifest_bytes,state,
+		 chat_operation_id,chat_request_sha256,chat_request_bytes,chat_receipt_id,chat_receipt_bytes,chat_id,voice_operation_id)
+		VALUES ($1,$2,$3,$4,'compensating',$5,$6,$7,$8,$9,$10,$11)
+	`, matchID, uuid.New(), hash, []byte("manifest"), chatOperationID, hash, []byte("chat request"), uuid.New(), []byte("chat receipt"), uuid.New(), uuid.New())
+	require.NoError(t, err)
+	aggregateID := uuid.New()
+	_, err = fixture.Pool.Exec(ctx, `
+		INSERT INTO matchmaking_match_squad_teardowns
+		(aggregate_id,match_id,state,chat_teardown_operation_id,chat_teardown_request_sha256,
+		 chat_teardown_request_bytes,purpose,required_providers)
+		VALUES ($1,$2,'pending',$3,$4,$5,'PROVISION_COMPENSATION',ARRAY['chat']::TEXT[])
+	`, aggregateID, matchID, uuid.New(), hash, []byte("chat teardown"))
+	require.NoError(t, err)
+
+	fixture.Run(false, "down", "1")
+	var version int64
+	var dirty bool
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
+	require.EqualValues(t, 16, version)
+	require.True(t, dirty, "failed recovery Down must leave its target version dirty for operator repair")
+	var retained int
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1 AND purpose='PROVISION_COMPENSATION'`, aggregateID).Scan(&retained))
+	require.Equal(t, 1, retained, "runner refusal preserves compensation evidence")
+}
+
+func rollbackMatchSquadDurableRecoveryForStoreTest(t *testing.T, ctx context.Context, pool interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}) {
+	t.Helper()
+	down, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db", "000017_match_squad_durable_recovery.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(down))
+	require.NoError(t, err, "the empty 000017 recovery extension rolls back before testing 000016")
+}
+
 func TestMatchSquadLifecycleDownRefusesToDropProvisioningEvidence(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -85,6 +296,7 @@ func TestMatchSquadLifecycleDownRefusesToDropProvisioningEvidence(t *testing.T) 
 		VALUES ($1,$2,$3,$4,'provisioning',$5,$6,$7,$8)
 	`, matchID, uuid.New(), hash, []byte("manifest"), uuid.New(), hash, []byte("request"), uuid.New())
 	require.NoError(t, err)
+	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 
 	root := repoRoot(t)
 	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
@@ -118,7 +330,8 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 
 	// Exercise the real pinned migration runner and let its normal failed-Down
 	// path record the dirty version. Do not force or clear the marker.
-	fixture.Run(false, "down", "1")
+	fixture.Run(false, "down", "1") // Remove compatible empty 000017 recovery extension.
+	fixture.Run(false, "down", "1") // 000016 then refuses the live provisioning evidence.
 	var version int64
 	var dirty bool
 	require.NoError(t, fixture.Pool.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty))
@@ -140,6 +353,7 @@ func TestMatchSquadLifecycleDownRefusesConcurrentWriterWithoutAbortingConnection
 	ctx := context.Background()
 	pool := StartMatchmakingDBForStoreTest(t, ctx)
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 	matchID, profileA, _ := seedActiveDuoMatch(t, ctx, pool)
 
 	writerConn, err := pool.Acquire(ctx)
@@ -182,6 +396,7 @@ func TestMatchSquadLifecycleDownLateLockRefusalReleasesEarlierLocks(t *testing.T
 	ctx := context.Background()
 	pool := StartMatchmakingDBForStoreTest(t, ctx)
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 	root := repoRoot(t)
 	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)
@@ -229,6 +444,7 @@ func TestMatchSquadLifecycleDownAtomicRollbackAndEmptySuccess(t *testing.T) {
 	ctx := context.Background()
 	pool := StartMatchmakingDBForStoreTest(t, ctx)
 	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	rollbackMatchSquadDurableRecoveryForStoreTest(t, ctx, pool)
 	root := repoRoot(t)
 	down, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", "000016_match_squad_lifecycle.down.sql"))
 	require.NoError(t, err)

@@ -102,6 +102,7 @@ func (t *transcoder) serveMatchmakingMatches(w http.ResponseWriter, r *http.Requ
 
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "complete":
 		req := &matchmakingv1.CompleteMatchRequest{}
+		traceMatchFoundTransport("complete-match-decode")
 		if err := readProtoJSON(r, req); err != nil {
 			writeGRPCError(w, err)
 			return true

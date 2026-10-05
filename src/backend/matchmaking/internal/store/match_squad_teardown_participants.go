@@ -98,11 +98,12 @@ func recordMatchSquadTeardownParticipantReceiptTx(ctx context.Context, tx pgx.Tx
 	}
 	var expectedOperation uuid.UUID
 	var expectedHash, expectedRequest []byte
-	if provider == "chat" {
+	switch provider {
+	case "chat":
 		expectedOperation, expectedHash, expectedRequest = item.ChatOperationID, item.ChatRequestHash, item.ChatRequestBytes
-	} else if provider == "voice" {
+	case "voice":
 		expectedOperation, expectedHash, expectedRequest = item.VoiceOperationID, item.VoiceRequestHash, item.VoiceRequestBytes
-	} else {
+	default:
 		return ErrMatchSquadConflict
 	}
 	if operationID != expectedOperation || !bytes.Equal(requestHash, expectedHash) || !bytes.Equal(request, expectedRequest) {

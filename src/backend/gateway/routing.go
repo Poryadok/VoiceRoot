@@ -23,6 +23,7 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 
 	namespace := restNamespace(r.URL.Path)
 	if !isPublicRESTNamespace(namespace) {
+		traceMatchFoundTransport("rest-namespace-not-public")
 		http.NotFound(w, r)
 		return
 	}
@@ -115,6 +116,7 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 
 	upstream, ok := g.config.restUpstreams[namespace]
 	if !ok {
+		traceMatchFoundTransport("rest-upstream-missing")
 		http.NotFound(w, r)
 		return
 	}

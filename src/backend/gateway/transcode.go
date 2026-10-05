@@ -379,6 +379,7 @@ func (t *transcoder) serveNamespace(w http.ResponseWriter, r *http.Request, name
 		return t.serveNotifications(w, r, rest)
 	case "matchmaking":
 		if t.clients.matchmaking == nil && !isProtectedMatchmakingRoute(r) {
+			traceMatchFoundTransport("matchmaking-client-missing")
 			return false
 		}
 		return t.serveMatchmaking(w, r, rest)

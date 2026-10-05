@@ -20,6 +20,8 @@ type MatchSquadTeardownAggregate struct {
 	AggregateID          uuid.UUID
 	MatchID              uuid.UUID
 	State                string
+	Purpose              string
+	RequiredProviders    []string
 	ChatOperationID      uuid.UUID
 	ChatRequestHash      []byte
 	ChatRequestBytes     []byte
@@ -57,7 +59,7 @@ func (s *MatchStore) ListPendingMatchSquadTeardowns(ctx context.Context, limit i
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
 		       chat_teardown_receipt_id, chat_teardown_receipt_bytes,
 		       voice_teardown_operation_id, voice_teardown_request_sha256, voice_teardown_request_bytes,
-		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at
+		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at, purpose, required_providers
 		FROM matchmaking_match_squad_teardowns
 		WHERE state='pending'
 		ORDER BY created_at, aggregate_id
@@ -87,7 +89,7 @@ func (s *MatchStore) GetMatchSquadTeardown(ctx context.Context, aggregateID uuid
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
 		       chat_teardown_receipt_id, chat_teardown_receipt_bytes,
 		       voice_teardown_operation_id, voice_teardown_request_sha256, voice_teardown_request_bytes,
-		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at
+		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at, purpose, required_providers
 		FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1
 	`, aggregateID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -179,13 +181,14 @@ func (s *MatchStore) PrepareMatchSquadCompaction(ctx context.Context, aggregateI
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
 		       chat_teardown_receipt_id, chat_teardown_receipt_bytes,
 		       voice_teardown_operation_id, voice_teardown_request_sha256, voice_teardown_request_bytes,
-		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at
+		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at, purpose, required_providers
 		FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1 FOR UPDATE
 	`, aggregateID))
 	if err != nil {
 		return MatchSquadCompactionIntent{}, err
 	}
-	if aggregate.State != "complete" || aggregate.AggregateCompletedAt == nil || aggregate.ChatReceiptID == nil || aggregate.VoiceReceiptID == nil {
+	if aggregate.State != "complete" || aggregate.AggregateCompletedAt == nil || !aggregate.requiresProvider(provider) ||
+		(provider == "chat" && aggregate.ChatReceiptID == nil) || (provider == "voice" && aggregate.VoiceReceiptID == nil) {
 		return MatchSquadCompactionIntent{}, ErrMatchSquadPending
 	}
 	operation, err := scanMatchSquadProvisioningOperation(tx.QueryRow(ctx, `
@@ -197,8 +200,8 @@ func (s *MatchStore) PrepareMatchSquadCompaction(ctx context.Context, aggregateI
 	if err != nil {
 		return MatchSquadCompactionIntent{}, err
 	}
-	if operation.ChatID == nil || operation.ChatReceiptID == nil || operation.VoiceRoomID == nil || operation.VoiceReceiptID == nil ||
-		len(operation.ChatRequestHash) != 32 || len(operation.VoiceRequestHash) != 32 || len(aggregate.ChatReceiptBytes) == 0 || len(aggregate.VoiceReceiptBytes) == 0 {
+	if operation.ChatID == nil || operation.ChatReceiptID == nil || len(operation.ChatRequestHash) != 32 || len(aggregate.ChatReceiptBytes) == 0 ||
+		(provider == "voice" && (operation.VoiceRoomID == nil || operation.VoiceReceiptID == nil || len(operation.VoiceRequestHash) != 32 || len(aggregate.VoiceReceiptBytes) == 0)) {
 		return MatchSquadCompactionIntent{}, ErrMatchSquadConflict
 	}
 	var request proto.Message
@@ -346,7 +349,7 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 		       chat_teardown_operation_id, chat_teardown_request_sha256, chat_teardown_request_bytes,
 		       chat_teardown_receipt_id, chat_teardown_receipt_bytes,
 		       voice_teardown_operation_id, voice_teardown_request_sha256, voice_teardown_request_bytes,
-		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at
+		       voice_teardown_receipt_id, voice_teardown_receipt_bytes, aggregate_completed_at, purpose, required_providers
 		FROM matchmaking_match_squad_teardowns WHERE aggregate_id=$1 FOR UPDATE
 	`, aggregateID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -354,6 +357,9 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 	}
 	if err != nil {
 		return MatchSquadTeardownAggregate{}, err
+	}
+	if !item.requiresProvider(provider) {
+		return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
 	}
 	if item.State == "complete" {
 		if provider == "chat" {
@@ -408,26 +414,33 @@ func (s *MatchStore) RecordMatchSquadTeardownReceipt(ctx context.Context, aggreg
 	if err := recordMatchSquadTeardownParticipantReceiptTx(ctx, tx, item, provider, receiptID, receiptBytes); err != nil {
 		return MatchSquadTeardownAggregate{}, err
 	}
-	if item.ChatReceiptID != nil && item.VoiceReceiptID != nil {
+	complete := (!item.requiresProvider("chat") || item.ChatReceiptID != nil) && (!item.requiresProvider("voice") || item.VoiceReceiptID != nil)
+	if complete {
 		var completedAt time.Time
 		if err := tx.QueryRow(ctx, `UPDATE matchmaking_match_squad_teardowns SET state='complete', aggregate_completed_at=clock_timestamp(), updated_at=clock_timestamp() WHERE aggregate_id=$1 AND state='pending' RETURNING aggregate_completed_at`, aggregateID).Scan(&completedAt); err != nil {
 			return MatchSquadTeardownAggregate{}, err
 		}
-		for _, provider := range []string{"chat", "voice"} {
+		for _, provider := range item.RequiredProviders {
 			_, err := tx.Exec(ctx, `INSERT INTO matchmaking_match_squad_compaction_intents (aggregate_id, provider, operation_id, not_before) VALUES ($1,$2,$3,$4)`, aggregateID, provider, uuid.New(), completedAt.Add(30*24*time.Hour))
 			if err != nil {
 				return MatchSquadTeardownAggregate{}, err
 			}
 		}
-		closed, err := tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET state='closed', updated_at=clock_timestamp() WHERE match_id=$1 AND state='active'`, item.MatchID)
+		fromState := "active"
+		if item.Purpose == "PROVISION_COMPENSATION" {
+			fromState = "compensating"
+		}
+		closed, err := tx.Exec(ctx, `UPDATE matchmaking_match_squad_operations SET state='closed', updated_at=clock_timestamp() WHERE match_id=$1 AND state=$2`, item.MatchID, fromState)
 		if err != nil {
 			return MatchSquadTeardownAggregate{}, err
 		}
 		if closed.RowsAffected() != 1 {
 			return MatchSquadTeardownAggregate{}, ErrMatchSquadConflict
 		}
-		if err := ensureMatchSquadCompletionEventTx(ctx, tx, aggregateID, item.MatchID); err != nil {
-			return MatchSquadTeardownAggregate{}, err
+		if item.Purpose == "FINAL_LEAVE" {
+			if err := ensureMatchSquadCompletionEventTx(ctx, tx, aggregateID, item.MatchID); err != nil {
+				return MatchSquadTeardownAggregate{}, err
+			}
 		}
 		item.State, item.AggregateCompletedAt = "complete", &completedAt
 	}
@@ -478,16 +491,33 @@ func validCompletedAt(value *timestamppb.Timestamp) bool {
 func scanMatchSquadTeardownAggregate(row pgx.Row) (MatchSquadTeardownAggregate, error) {
 	var item MatchSquadTeardownAggregate
 	var chatReceiptID, voiceReceiptID *uuid.UUID
+	var chatOperationID, voiceOperationID *uuid.UUID
 	var completedAt *time.Time
 	err := row.Scan(
 		&item.AggregateID, &item.MatchID, &item.State,
-		&item.ChatOperationID, &item.ChatRequestHash, &item.ChatRequestBytes,
+		&chatOperationID, &item.ChatRequestHash, &item.ChatRequestBytes,
 		&chatReceiptID, &item.ChatReceiptBytes,
-		&item.VoiceOperationID, &item.VoiceRequestHash, &item.VoiceRequestBytes,
+		&voiceOperationID, &item.VoiceRequestHash, &item.VoiceRequestBytes,
 		&voiceReceiptID, &item.VoiceReceiptBytes, &completedAt,
+		&item.Purpose, &item.RequiredProviders,
 	)
+	if chatOperationID != nil {
+		item.ChatOperationID = *chatOperationID
+	}
+	if voiceOperationID != nil {
+		item.VoiceOperationID = *voiceOperationID
+	}
 	item.ChatReceiptID, item.VoiceReceiptID, item.AggregateCompletedAt = chatReceiptID, voiceReceiptID, completedAt
 	return item, err
+}
+
+func (item MatchSquadTeardownAggregate) requiresProvider(provider string) bool {
+	for _, required := range item.RequiredProviders {
+		if required == provider {
+			return true
+		}
+	}
+	return false
 }
 
 func scanMatchSquadCompactionIntent(row pgx.Row) (MatchSquadCompactionIntent, error) {
