@@ -117,9 +117,11 @@ func (c Config) validate() error {
 	if c.RefreshAfter <= 0 || c.HardExpiry < c.RefreshAfter || c.UnknownKIDCooldown <= 0 {
 		return errors.New("invalid principal JWKS cache policy")
 	}
-	endpoint, err := http.NewRequest(http.MethodGet, c.JWKSURL, nil)
-	if err != nil || endpoint.URL.Scheme != "https" || endpoint.URL.Hostname() == "" || endpoint.URL.User != nil || endpoint.URL.Fragment != "" {
-		return errors.New("space principal JWKS URL must use HTTPS")
+	if c.JWKSURL != "" {
+		endpoint, err := http.NewRequest(http.MethodGet, c.JWKSURL, nil)
+		if err != nil || endpoint.URL.Scheme != "https" || endpoint.URL.Hostname() == "" || endpoint.URL.User != nil || endpoint.URL.Fragment != "" {
+			return errors.New("space principal JWKS URL must use HTTPS")
+		}
 	}
 	if c.GatewayJWKSURL != "" {
 		gatewayEndpoint, err := http.NewRequest(http.MethodGet, c.GatewayJWKSURL, nil)
