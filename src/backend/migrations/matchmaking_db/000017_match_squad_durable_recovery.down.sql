@@ -75,6 +75,12 @@ BEGIN
         ALTER COLUMN voice_teardown_request_sha256 SET NOT NULL,
         ALTER COLUMN voice_teardown_request_bytes SET NOT NULL;
 
+    ALTER TABLE matchmaking_match_squad_teardowns
+        ADD CONSTRAINT matchmaking_match_squad_teardowns_check3 CHECK (
+            state <> 'complete' OR
+            (chat_teardown_receipt_id IS NOT NULL AND voice_teardown_receipt_id IS NOT NULL)
+        );
+
     ALTER TABLE matchmaking_match_squad_compaction_intents
         DROP COLUMN last_error_class,
         DROP COLUMN claim_until,

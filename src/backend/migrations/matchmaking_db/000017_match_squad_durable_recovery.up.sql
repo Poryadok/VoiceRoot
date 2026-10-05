@@ -24,6 +24,12 @@ ALTER TABLE matchmaking_match_squad_teardowns
     ALTER COLUMN voice_teardown_request_sha256 DROP NOT NULL,
     ALTER COLUMN voice_teardown_request_bytes DROP NOT NULL;
 
+-- 000016 required both receipts before a teardown could become complete. The
+-- recovery purpose introduced here permits Chat-only compensation, so replace
+-- that legacy check with the purpose-aware completion constraint below.
+ALTER TABLE matchmaking_match_squad_teardowns
+    DROP CONSTRAINT matchmaking_match_squad_teardowns_check3;
+
 ALTER TABLE matchmaking_match_squad_teardowns
     ADD CONSTRAINT matchmaking_match_squad_teardown_required_set_check CHECK (
         (purpose = 'FINAL_LEAVE' AND required_providers = ARRAY['chat', 'voice']::TEXT[]) OR
