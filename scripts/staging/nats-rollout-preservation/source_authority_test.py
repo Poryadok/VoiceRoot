@@ -244,11 +244,23 @@ class SourceTests(unittest.TestCase):
         self.run = dict(actual, id=123, status='in_progress', conclusion=None)
         self.jobs = [dict(job, run_id=123) for job in fixture['jobs']]
         self.repo = actual['repository'] | {'private': False, 'default_branch': 'master'}
+        self.artifact['workflow_run'].update(head_sha=actual['head_sha'],
+            repository_id=self.repo['id'], head_repository_id=self.repo['id'])
         self.assertTrue(any(job['name'] == 'grafana-analytics-smoke' and job['conclusion'] == 'failure'
                             for job in self.jobs))
         self.assertTrue(all(any(job['name'] == name and job['conclusion'] == 'success' for job in self.jobs)
                             for name in ('ci-gate', 'staging-stack-lock')))
-        with patch(__name__ + '.SHA', actual['head_sha']), self.assertRaises(module.SourceError): self.capture()
+        lock_job = next(job for job in self.jobs if job['name'] == 'staging-stack-lock')
+        self.artifact['created_at'] = lock_job['started_at']
+        with patch(__name__ + '.SHA', actual['head_sha']):
+            with patch.object(module, '_capture_tar', wraps=module._capture_tar) as capture_tar:
+                with self.assertRaises(module.SourceError): self.capture()
+                capture_tar.assert_not_called()
+            # All fake source/artifact identities are coherent: changing only the
+            # known failed job outcome must permit the complete passive capture.
+            failed = next(job for job in self.jobs if job['name'] == 'grafana-analytics-smoke')
+            failed['conclusion'] = 'success'
+            self.assertTrue(self.capture()['verified'])
 
     def test_in_progress_known_nondeployment_failures_reject_capture(self):
         self.run.update(status='in_progress', conclusion=None)

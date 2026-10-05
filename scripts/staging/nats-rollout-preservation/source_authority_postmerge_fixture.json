@@ -649,21 +649,25 @@
       "status": "completed"
     },
     {
+      "completed_at": "2026-10-05T16:21:42Z",
       "conclusion": "success",
       "head_sha": "6dd96f5a2758bdd7ada06c30107f4f20bba8a7e6",
       "id": 111864487221,
       "name": "staging-stack-lock",
       "run_attempt": 1,
       "run_id": 37339422566,
+      "started_at": "2026-10-05T16:21:35Z",
       "status": "completed"
     },
     {
+      "completed_at": "2026-10-05T16:29:29Z",
       "conclusion": "success",
       "head_sha": "6dd96f5a2758bdd7ada06c30107f4f20bba8a7e6",
       "id": 111868344174,
       "name": "ci-gate",
       "run_attempt": 1,
       "run_id": 37339422566,
+      "started_at": "2026-10-05T16:29:23Z",
       "status": "completed"
     },
     {
