@@ -146,10 +146,10 @@ if ((container_lookup_status != 0)) || [[ ! "${notification_container}" =~ ^[a-f
 fi
 
 set +e
-diagnostic_since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+diagnostic_since="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
 date_status=$?
 set -e
-if ((date_status != 0)) || [[ ! "${diagnostic_since}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+if ((date_status != 0)) || ! voice_fcm_diag_since_valid "${diagnostic_since}"; then
   echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
@@ -169,18 +169,22 @@ if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
   diagnostic_logs_status=$?
   status_read_status=1
   status_data=''
+  diagnostic_summary=''
   if [[ -f "${STATUS_FILE}" && ! -L "${STATUS_FILE}" ]] && [[ "$(stat -c '%a' -- "${STATUS_FILE}" 2>/dev/null)" == 600 ]]; then
-    status_data="$(head -c 65 -- "${STATUS_FILE}" 2>/dev/null)"
+    status_data="$(head -c 66 -- "${STATUS_FILE}" 2>/dev/null | { cat; printf '\001'; })"
     status_read_status=$?
+    status_data="${status_data%$'\001'}"
   fi
   set -e
-  if ! voice_fcm_diag_status_valid "${status_read_status}" "${status_data}" || \
-      ((diagnostic_logs_status != 0)) || \
-      ! voice_fcm_diag_lifecycle_valid "${diagnostic_logs}"; then
-    VOICE_FCM_DIAG_PARSE_RESULT=unknown
+  voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
+  if ! voice_fcm_diag_normalize_collected \
+      "${status_read_status}" "${status_data}" \
+      "${diagnostic_logs_status}" "${diagnostic_logs}" \
+      "${VOICE_FCM_DIAG_PARSE_RESULT}" diagnostic_summary; then
+    if [[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == accepted || "${VOICE_FCM_DIAG_PARSE_RESULT}" == missing ]]; then
+      VOICE_FCM_DIAG_PARSE_RESULT=unknown
+    fi
     voice_fcm_diag_emit "${VOICE_FCM_DIAG_UNKNOWN}" diagnostic_line
-  else
-    voice_fcm_diag_parse_collected_log "${diagnostic_logs_status}" "${diagnostic_logs}" diagnostic_line
   fi
   port_mapping="$(docker compose -f "${ROOT}/docker-compose.yml" port nats 4222 2>/dev/null || true)"
   mapped_port=''
@@ -226,10 +230,18 @@ if [[ -n "${TRACE_FILE}" ]]; then
 fi
 trap - EXIT
 if [[ -n "${diagnostic_line:-}" ]]; then
+  if [[ "${cleanup_failed}" == true ]]; then
+    VOICE_FCM_DIAG_PARSE_RESULT=unknown
+    diagnostic_summary=''
+    diagnostic_line="${VOICE_FCM_DIAG_UNKNOWN}"
+  fi
   echo "compose_fcm_parse_result=${VOICE_FCM_DIAG_PARSE_RESULT}"
   if [[ "${cleanup_failed}" == true ]]; then
     echo "${VOICE_FCM_DIAG_UNKNOWN}"
   else
+    if [[ -n "${diagnostic_summary:-}" ]]; then
+      printf '%s\n' "${diagnostic_summary}"
+    fi
     printf '%s\n' "${diagnostic_line}"
   fi
 fi

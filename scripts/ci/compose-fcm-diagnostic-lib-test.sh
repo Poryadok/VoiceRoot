@@ -11,14 +11,58 @@ unknownPhase="${valid% phase_evidence=*} ${phase_unknown}"
 parsed=''
 voice_fcm_diag_status_valid 0 $'pre=ok\npost=ok\n'
 ! voice_fcm_diag_status_valid 1 $'pre=ok\npost=ok\n'
-! voice_fcm_diag_status_valid 0 $'pre=ok\npost=unknown\n'
+voice_fcm_diag_status_valid 0 $'pre=failed\npost=unknown\n'
+[[ "${VOICE_FCM_DIAG_STATUS_SUMMARY}" == 'compose_fcm_status pre=failed post=unknown' ]]
+voice_fcm_diag_status_valid 0 $'pre=unknown\npost=failed\n'
+[[ "${VOICE_FCM_DIAG_STATUS_SUMMARY}" == 'compose_fcm_status pre=unknown post=failed' ]]
+! voice_fcm_diag_status_valid 0 $'pre=ok\npost=unknown\npost=ok\n'
+[[ -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" ]]
+! voice_fcm_diag_status_valid 0 $'pre=ok\npost=ok\n\n'
 ! voice_fcm_diag_status_valid 0 $'pre=ok\npost=ok\npost=ok\n'
 lifecycle=$'compose_fcm_lifecycle control_sample=invalid\ncompose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
 voice_fcm_diag_lifecycle_valid "${lifecycle}"
+[[ "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" == 'compose_fcm_lifecycle_status sample_invalid=observed sample_valid=observed window_expiry=observed' ]]
 voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
+[[ "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" == 'compose_fcm_lifecycle_status sample_invalid=missing sample_valid=observed window_expiry=observed' ]]
+voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=invalid'
+[[ "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" == 'compose_fcm_lifecycle_status sample_invalid=observed sample_valid=missing window_expiry=missing' ]]
+voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid'
+[[ "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" == 'compose_fcm_lifecycle_status sample_invalid=missing sample_valid=observed window_expiry=missing' ]]
+voice_fcm_diag_lifecycle_valid ''
+[[ "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" == 'compose_fcm_lifecycle_status sample_invalid=missing sample_valid=missing window_expiry=missing' ]]
 ! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed'
 ! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid\ncompose_fcm_lifecycle window_expiry=completed\ncompose_fcm_lifecycle private=unknown'
-! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycle control_sample=valid'
+! voice_fcm_diag_lifecycle_valid $'compose_fcm_lifecycl'
+[[ -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
+! voice_fcm_diag_since_valid '2026-10-05T14:00:00Z'
+since='2026-10-05T14:00:00.123456789Z'
+before='2026-10-05T14:00:00.123456788Z'
+after='2026-10-05T14:00:00.123456790Z'
+voice_fcm_diag_since_valid "${since}"
+! voice_fcm_diag_timestamp_in_window "${before}" "${since}"
+voice_fcm_diag_timestamp_in_window "${since}" "${since}"
+voice_fcm_diag_timestamp_in_window "${after}" "${since}"
+! voice_fcm_diag_timestamp_in_window '2026-10-05T13:59:59.999999999Z' "${since}"
+voice_fcm_diag_timestamp_in_window '2026-10-05T14:00:00.223456789Z' "${since}"
+old_tail_before='2026-10-05T13:59:59.999999999Z'
+old_tail_after='2026-10-05T14:00:00.000000001Z'
+! voice_fcm_diag_timestamp_in_window "${old_tail_before}" "${since}"
+voice_fcm_diag_timestamp_in_window "${old_tail_after}" "2026-10-05T14:00:00.000000000Z"
+
+normalized=''
+complete_status=$'pre=unknown\npost=failed\n'
+voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 '' missing normalized
+[[ "${normalized}" == $'compose_fcm_status pre=unknown post=failed\ncompose_fcm_lifecycle_status sample_invalid=missing sample_valid=missing window_expiry=missing' ]]
+voice_fcm_diag_normalize_collected 0 $'pre=ok\npost=ok\n' 0 "${lifecycle}" accepted normalized
+[[ "${normalized}" == $'compose_fcm_status pre=ok post=ok\ncompose_fcm_lifecycle_status sample_invalid=observed sample_valid=observed window_expiry=observed' ]]
+! voice_fcm_diag_normalize_collected 1 "${complete_status}" 0 '' missing normalized
+[[ -z "${normalized}" && -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" && -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
+! voice_fcm_diag_normalize_collected 0 "${complete_status}" 124 '' missing normalized
+[[ -z "${normalized}" ]]
+! voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 $'compose_fcm_lifecycle unknown=invalid' missing normalized
+[[ -z "${normalized}" ]]
+! voice_fcm_diag_normalize_collected 0 "${complete_status}" 0 "${lifecycle}" duplicate normalized
+[[ -z "${normalized}" && -z "${VOICE_FCM_DIAG_STATUS_SUMMARY}" && -z "${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}" ]]
 voice_fcm_diag_parse_collected_log 0 "${valid}" parsed
 [[ "${VOICE_FCM_DIAG_PARSE_RESULT}" == accepted && "${parsed}" == "${valid}" ]]
 [[ "$(voice_fcm_diag_parse_log "${unknownPhase}")" == "${unknownPhase}" ]]
@@ -94,10 +138,13 @@ tmp="$(mktemp -d)"
 file="${tmp}/control"
 : >"${file}"
 mkdir "${tmp}/not-empty"
-if voice_fcm_diag_cleanup "${file}" "${tmp}"; then
+status="${tmp}/status-dir"
+mkdir "${status}"
+if voice_fcm_diag_cleanup "${file}" "${tmp}" "${status}"; then
   exit 1
 fi
-[[ ! -e "${file}" && -d "${tmp}" ]]
+[[ ! -e "${file}" && -d "${tmp}" && -d "${status}" ]]
+rmdir "${status}"
 rmdir "${tmp}/not-empty"
 rmdir "${tmp}"
 

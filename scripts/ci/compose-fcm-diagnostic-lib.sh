@@ -104,27 +104,65 @@ voice_fcm_diag_parse_collected_log() {
 }
 
 voice_fcm_diag_status_valid() {
-  [[ "${1-}" == 0 && "${2-}" == "pre=ok"$'\n'"post=ok" ]]
+  local data="${2-}" pre post
+  local status_re=$'^pre=(ok|failed|unknown)\npost=(ok|failed|unknown)\n$'
+  VOICE_FCM_DIAG_STATUS_SUMMARY=''
+  [[ "${1-}" == 0 && "${data}" =~ ${status_re} ]] || return 1
+  pre="${BASH_REMATCH[1]}"
+  post="${BASH_REMATCH[2]}"
+  VOICE_FCM_DIAG_STATUS_SUMMARY="compose_fcm_status pre=${pre} post=${post}"
 }
 
 voice_fcm_diag_lifecycle_valid() {
   local data="${1-}" line invalid=0 valid=0 expired=0
+  VOICE_FCM_DIAG_LIFECYCLE_SUMMARY=''
   while IFS= read -r line; do
     case "${line}" in
       'compose_fcm_lifecycle control_sample=invalid') ((invalid+=1)) ;;
       'compose_fcm_lifecycle control_sample=valid') ((valid+=1)) ;;
       'compose_fcm_lifecycle window_expiry=completed') ((expired+=1)) ;;
-      *compose_fcm_lifecycle*) return 1 ;;
+      *compose_fcm_lifecycle*|*compose_fcm_lifecycl*) return 1 ;;
     esac
   done <<<"${data}"
-  ((invalid <= 1 && valid == 1 && expired == 1))
+  ((invalid <= 1 && valid <= 1 && expired <= 1)) || return 1
+  VOICE_FCM_DIAG_LIFECYCLE_SUMMARY="compose_fcm_lifecycle_status sample_invalid=$([[ ${invalid} == 1 ]] && printf observed || printf missing) sample_valid=$([[ ${valid} == 1 ]] && printf observed || printf missing) window_expiry=$([[ ${expired} == 1 ]] && printf observed || printf missing)"
+}
+
+voice_fcm_diag_since_valid() {
+  [[ "${1-}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]]
+}
+
+voice_fcm_diag_timestamp_in_window() {
+  local event_time="${1-}" since="${2-}"
+  local LC_ALL=C
+  voice_fcm_diag_since_valid "${event_time}" && \
+    voice_fcm_diag_since_valid "${since}" && [[ "${event_time}" > "${since}" || "${event_time}" == "${since}" ]]
+}
+
+voice_fcm_diag_normalize_collected() {
+  local status_read="${1-}" status_data="${2-}" log_status="${3-}"
+  local log_data="${4-}" parse_result="${5-}" output_var="${6-}" normalized=''
+  VOICE_FCM_DIAG_STATUS_SUMMARY=''
+  VOICE_FCM_DIAG_LIFECYCLE_SUMMARY=''
+  if ! voice_fcm_diag_status_valid "${status_read}" "${status_data}" || \
+      [[ "${log_status}" != 0 ]] || \
+      ! voice_fcm_diag_lifecycle_valid "${log_data}" || \
+      [[ "${parse_result}" != accepted && "${parse_result}" != missing ]]; then
+    VOICE_FCM_DIAG_STATUS_SUMMARY=''
+    VOICE_FCM_DIAG_LIFECYCLE_SUMMARY=''
+    voice_fcm_diag_emit '' "${output_var}"
+    return 1
+  fi
+  normalized="${VOICE_FCM_DIAG_STATUS_SUMMARY}"$'\n'"${VOICE_FCM_DIAG_LIFECYCLE_SUMMARY}"
+  voice_fcm_diag_emit "${normalized}" "${output_var}"
 }
 
 voice_fcm_diag_cleanup() {
-  local file="${1-}" dir="${2-}" status="${3-}"
-  [[ -z "${status}" ]] || rm -f -- "${status}" || return 1
-  [[ -n "${file}" ]] && rm -f -- "${file}" || return 1
-  [[ -n "${dir}" ]] && rmdir -- "${dir}" 2>/dev/null || return 1
+  local file="${1-}" dir="${2-}" status="${3-}" failed=false
+  if [[ -n "${status}" ]] && ! rm -f -- "${status}"; then failed=true; fi
+  if [[ -n "${file}" ]] && ! rm -f -- "${file}"; then failed=true; fi
+  if [[ -n "${dir}" ]] && ! rmdir -- "${dir}" 2>/dev/null; then failed=true; fi
+  [[ "${failed}" == false ]]
 }
 
 voice_fcm_diag_preserve_status() {

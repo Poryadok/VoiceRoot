@@ -21,13 +21,17 @@ const _diagnosticStatusFile = String.fromEnvironment(
   'VOICE_FCM_DIAGNOSTIC_STATUS_FILE',
 );
 
-Future<void> _writeDiagnosticStatus(String field, String value) async {
-  if (_diagnosticStatusFile.isEmpty) return;
+Future<void> _writeDiagnosticStatusAt(
+  String statusPath,
+  String field,
+  String value,
+) async {
+  if (statusPath.isEmpty) return;
   if ((field != 'pre' && field != 'post') ||
       (value != 'ok' && value != 'failed')) {
     fail('FCM diagnostic status write failed');
   }
-  final file = File(_diagnosticStatusFile);
+  final file = File(statusPath);
   try {
     final current = await file.readAsString();
     final match = RegExp(
@@ -51,10 +55,14 @@ Future<void> _writeFcmDiagnosticControl({
   required String senderProfileId,
   required String recipientProfileId,
   String messageId = '',
+  String? diagnosticPath,
+  String? statusPath,
 }) async {
-  if (_diagnosticFile.isEmpty) return;
+  final controlPath = diagnosticPath ?? _diagnosticFile;
+  final privateStatusPath = statusPath ?? _diagnosticStatusFile;
+  if (controlPath.isEmpty) return;
   try {
-    await File(_diagnosticFile).writeAsString(
+    await File(controlPath).writeAsString(
       jsonEncode({
         'message_id': messageId,
         'chat_id': chatId,
@@ -64,17 +72,30 @@ Future<void> _writeFcmDiagnosticControl({
       flush: true,
     );
   } on Object {
-    if (_diagnosticStatusFile.isNotEmpty) {
-      await _writeDiagnosticStatus(
+    if (privateStatusPath.isNotEmpty) {
+      await _writeDiagnosticStatusAt(
+        privateStatusPath,
         messageId.isEmpty ? 'pre' : 'post',
         'failed',
       );
       fail('FCM diagnostic control write failed');
     }
   }
-  if (_diagnosticStatusFile.isNotEmpty) {
-    await _writeDiagnosticStatus(messageId.isEmpty ? 'pre' : 'post', 'ok');
+  if (privateStatusPath.isNotEmpty) {
+    await _writeDiagnosticStatusAt(
+      privateStatusPath,
+      messageId.isEmpty ? 'pre' : 'post',
+      'ok',
+    );
   }
+}
+
+Future<T> _sendAfterFcmDiagnosticPreControl<T>({
+  required Future<void> Function() writeControl,
+  required Future<T> Function() send,
+}) async {
+  await writeControl();
+  return send();
 }
 
 Future<T?> _bestEffortDiagnosticRead<T>(Future<T> Function() read) async {
@@ -89,6 +110,80 @@ String _diagnosticHttpStatus(int? statusCode) =>
     statusCode == null ? 'unavailable' : 'http_$statusCode';
 
 void main() {
+  test('FCM diagnostic writes are a no-op outside private opt-in', () async {
+    var sent = false;
+    final result = await _sendAfterFcmDiagnosticPreControl(
+      writeControl: () => _writeFcmDiagnosticControl(
+        chatId: 'chat',
+        senderProfileId: 'sender',
+        recipientProfileId: 'recipient',
+        diagnosticPath: '',
+        statusPath: '',
+      ),
+      send: () async {
+        sent = true;
+        return 'sent';
+      },
+    );
+    expect(result, 'sent');
+    expect(sent, isTrue);
+  });
+
+  test('FCM pre-control failure is fixed-safe and prevents the send', () async {
+    final directory = await Directory.systemTemp.createTemp('fcm-diag-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final statusFile = File(
+      '${directory.path}${Platform.pathSeparator}status',
+    );
+    await statusFile.writeAsString('pre=unknown\npost=unknown\n');
+    var sent = false;
+
+    await expectLater(
+      _sendAfterFcmDiagnosticPreControl(
+        writeControl: () => _writeFcmDiagnosticControl(
+          chatId: 'chat',
+          senderProfileId: 'sender',
+          recipientProfileId: 'recipient',
+          diagnosticPath: directory.path,
+          statusPath: statusFile.path,
+        ),
+        send: () async {
+          sent = true;
+        },
+      ),
+      throwsA(isA<TestFailure>()),
+    );
+    expect(sent, isFalse);
+    expect(await statusFile.readAsString(), 'pre=failed\npost=unknown\n');
+  });
+
+  test('FCM status-file failure exposes only fixed-safe text', () async {
+    final directory = await Directory.systemTemp.createTemp('fcm-diag-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final controlFile = File(
+      '${directory.path}${Platform.pathSeparator}control',
+    );
+    final statusPath =
+        '${directory.path}${Platform.pathSeparator}missing${Platform.pathSeparator}status';
+
+    await expectLater(
+      _writeFcmDiagnosticControl(
+        chatId: 'chat',
+        senderProfileId: 'sender',
+        recipientProfileId: 'recipient',
+        diagnosticPath: controlFile.path,
+        statusPath: statusPath,
+      ),
+      throwsA(
+        isA<TestFailure>().having(
+          (failure) => failure.message,
+          'message',
+          'FCM diagnostic status write failed',
+        ),
+      ),
+    );
+  });
+
   test('offline DM triggers recorded FCM push payload', () async {
     final probe = await probeLiveGateway();
     expect(probe, isA<LiveGatewayReady>());
@@ -117,29 +212,30 @@ void main() {
     final dm = await ctx.chatsClient().createDm(
       authorization: a.authorizationHeader,
       otherProfileId: b.activeProfileId,
-      );
-      final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
+    );
+    final chatId = (dm as ChatsApiOk<VoiceChat>).data.id;
 
-      await _writeFcmDiagnosticControl(
+    final send = await _sendAfterFcmDiagnosticPreControl(
+      writeControl: () => _writeFcmDiagnosticControl(
         chatId: chatId,
         senderProfileId: a.activeProfileId,
         recipientProfileId: b.activeProfileId,
-      );
-
-      final send = await ctx.messagesClient().sendMessage(
-      authorization: a.authorizationHeader,
+      ),
+      send: () => ctx.messagesClient().sendMessage(
+        authorization: a.authorizationHeader,
+        chatId: chatId,
+        content: 'fcm delivery probe ${DateTime.now().millisecondsSinceEpoch}',
+        clientMessageId: qaClientMessageId(),
+      ),
+    );
+    expect(send, isA<MessagesApiOk<VoiceMessage>>());
+    final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
+    await _writeFcmDiagnosticControl(
       chatId: chatId,
-      content: 'fcm delivery probe ${DateTime.now().millisecondsSinceEpoch}',
-      clientMessageId: qaClientMessageId(),
-      );
-      expect(send, isA<MessagesApiOk<VoiceMessage>>());
-      final sentMessage = (send as MessagesApiOk<VoiceMessage>).data;
-      await _writeFcmDiagnosticControl(
-        chatId: chatId,
-        senderProfileId: a.activeProfileId,
-        recipientProfileId: b.activeProfileId,
-        messageId: sentMessage.id,
-      );
+      senderProfileId: a.activeProfileId,
+      recipientProfileId: b.activeProfileId,
+      messageId: sentMessage.id,
+    );
 
     final uri = recorderEndpoint.replace(
       queryParameters: {'profile_id': b.activeProfileId},
