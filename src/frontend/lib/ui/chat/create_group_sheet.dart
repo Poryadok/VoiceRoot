@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
+import '../../state/create_group_friends_provider.dart';
 import '../../state/social_providers.dart';
 import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
-import '../core/voice_state_panel.dart';
 
 /// Minimum invitees besides the creator (3 people total per text-chat.md).
 const int kMinGroupInvitees = 2;
@@ -17,6 +17,7 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
 
   static const Key sheetKey = Key('create_group_sheet');
   static const Key nameFieldKey = Key('create_group_name');
+  static const Key searchFieldKey = Key('create_group_friend_search');
   static const Key submitKey = Key('create_group_submit');
 
   static Key memberTileKey(String profileId) =>
@@ -40,12 +41,14 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
 
 class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   final _nameController = TextEditingController();
+  final _searchController = TextEditingController();
   final _selected = <String>{};
   var _submitting = false;
 
   @override
   void dispose() {
     _nameController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -83,7 +86,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final friendsAsync = ref.watch(friendsListProvider);
+    final friendsAsync = ref.watch(createGroupFriendsProvider);
     final theme = Theme.of(context);
 
     return SafeArea(
@@ -117,28 +120,96 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
+            TextField(
+              key: CreateGroupSheet.searchFieldKey,
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: l10n.socialSearchHint,
+                prefixIcon: const Icon(Icons.search),
+              ),
+              textInputAction: TextInputAction.search,
+              enabled: !_submitting,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: friendsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => VoiceStatePanel(
+                error: (e, st) => _createGroupStatePanel(
+                  context,
                   title: socialListErrorMessage(l10n, e),
                   icon: Icons.cloud_off_outlined,
                   actionLabel: l10n.commonRetry,
-                  onAction: () => ref.invalidate(friendsListProvider),
+                  onAction: () => ref.invalidate(createGroupFriendsProvider),
                 ),
-                data: (data) {
-                  final ids = data.friends;
+                data: (ids) {
                   if (ids.isEmpty) {
-                    return VoiceStatePanel(
+                    return _createGroupStatePanel(
+                      context,
                       title: l10n.socialFriendsEmpty,
                       message: l10n.chatCreateGroupFriendsEmptyHint,
                       icon: Icons.people_outline,
                     );
                   }
+                  final query = _searchController.text.trim().toLowerCase();
+                  final searchQuery = query.startsWith('@')
+                      ? query.substring(1)
+                      : query;
+                  var visibleIds = ids;
+                  if (searchQuery.isNotEmpty) {
+                    final profiles = {
+                      for (final profileId in ids)
+                        profileId: ref.watch(profileProvider(profileId)),
+                    };
+                    final failedProfileIds = profiles.entries
+                        .where((entry) => entry.value.hasError)
+                        .map((entry) => entry.key)
+                        .toList(growable: false);
+                    if (failedProfileIds.isNotEmpty) {
+                      final error = profiles[failedProfileIds.first]!.error!;
+                      return _createGroupStatePanel(
+                        context,
+                        title: socialListErrorMessage(l10n, error),
+                        icon: Icons.cloud_off_outlined,
+                        actionLabel: l10n.commonRetry,
+                        onAction: () {
+                          for (final profileId in failedProfileIds) {
+                            ref.invalidate(profileProvider(profileId));
+                          }
+                        },
+                      );
+                    }
+                    if (profiles.values.any(
+                      (profile) => profile.isLoading && !profile.hasValue,
+                    )) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    visibleIds = ids
+                        .where((profileId) {
+                          final profile = profiles[profileId]?.valueOrNull;
+                          final displayName = profile?.displayName
+                              .toLowerCase();
+                          final handle = profile?.handle
+                              .replaceFirst(RegExp(r'^@'), '')
+                              .toLowerCase();
+                          return (displayName?.contains(searchQuery) ??
+                                  false) ||
+                              (handle?.contains(searchQuery) ?? false);
+                        })
+                        .toList(growable: false);
+                    if (visibleIds.isEmpty) {
+                      return _createGroupStatePanel(
+                        context,
+                        title: l10n.socialSearchEmpty,
+                        message: l10n.socialSearchEmptyHint,
+                        icon: Icons.search_off,
+                      );
+                    }
+                  }
                   return ListView.builder(
-                    itemCount: ids.length,
+                    itemCount: visibleIds.length,
                     itemBuilder: (context, index) {
-                      final profileId = ids[index];
+                      final profileId = visibleIds[index];
                       final profileAsync = ref.watch(
                         profileProvider(profileId),
                       );
@@ -200,4 +271,50 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
       ),
     );
   }
+}
+
+Widget _createGroupStatePanel(
+  BuildContext context, {
+  required String title,
+  IconData? icon,
+  String? message,
+  String? actionLabel,
+  VoidCallback? onAction,
+}) {
+  final theme = Theme.of(context);
+  return Semantics(
+    container: true,
+    label: title,
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 4),
+            ],
+            ExcludeSemantics(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            if (message != null && message.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            if (actionLabel != null && onAction != null)
+              TextButton(onPressed: onAction, child: Text(actionLabel)),
+          ],
+        ),
+      ),
+    ),
+  );
 }
