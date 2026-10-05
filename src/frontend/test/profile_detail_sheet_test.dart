@@ -1,17 +1,26 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_theme.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -440,4 +449,388 @@ void main() {
     expect(find.text('Could not complete this action.'), findsOneWidget);
     expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
   });
+
+  testWidgets('friend profile adds and removes favorites through the API', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final captureTheme = await _captureProfileTheme(tester);
+    var isFavorite = false;
+    var isFriend = true;
+    var selfProfileId = 'p-friend';
+    var failFavoritesLoad = false;
+    var failNextFavoriteUpdate = false;
+    var deferNextFavoriteUpdate = false;
+    final favoriteUpdateStarted = Completer<void>();
+    final deferredFavoriteResponse = Completer<http.Response>();
+    late AuthController authController;
+    final favoriteRequests = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      if (request.url.path.startsWith('/api/v1/users/profiles/') &&
+          !request.url.path.endsWith('/presence')) {
+        final profileId = request.url.path.split('/').last;
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': profileId,
+              'account_id': 'a-friend',
+              'username': 'bob',
+              'discriminator': '0001',
+              'display_name': 'Bob',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/presence')) {
+        final profileId = request.url.path.split('/').reversed.skip(1).first;
+        return http.Response(
+          jsonEncode({
+            'presenceStatus': {'profileId': profileId, 'status': 'online'},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/requests') {
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {'incoming': [], 'outgoing': []},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends') {
+        return http.Response(
+          jsonEncode({
+            'friend_list': {
+              'profile_ids': isFriend ? [selfProfileId] : <String>[],
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/favorites' &&
+          request.method == 'GET') {
+        if (failFavoritesLoad) {
+          return http.Response(
+            jsonEncode({
+              'error': 'internal',
+              'message': 'favorites-load-private-diagnostic',
+            }),
+            500,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'friend_list': {
+              'profile_ids': isFavorite ? ['p-friend'] : <String>[],
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/favorites' &&
+          request.method == 'POST') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        favoriteRequests.add(body);
+        if (failNextFavoriteUpdate) {
+          failNextFavoriteUpdate = false;
+          return http.Response(
+            jsonEncode({
+              'error': 'internal',
+              'message': 'favorite-private-diagnostic',
+            }),
+            500,
+          );
+        }
+        if (deferNextFavoriteUpdate) {
+          deferNextFavoriteUpdate = false;
+          favoriteUpdateStarted.complete();
+          return deferredFavoriteResponse.future;
+        }
+        isFavorite = body['favorite'] as bool;
+        return http.Response('{}', 200);
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-friend',
+        client: client,
+        theme: captureTheme,
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+    expect(find.bySemanticsLabel('Add to favorites'), findsOneWidget);
+    await _captureProfileFavorites(tester, 'profile-favorites-portrait.png');
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Add to favorites'));
+    await tester.pumpAndSettle();
+    await _captureProfileFavorites(tester, 'profile-favorites-landscape.png');
+    final favoriteButton = find.byKey(const Key('profile_favorite_toggle'));
+    final favoriteFocus = tester
+        .widget<OutlinedButton>(favoriteButton)
+        .focusNode!;
+    favoriteFocus.requestFocus();
+    await tester.pump();
+    expect(favoriteFocus.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+
+    expect(favoriteRequests, [
+      {'friend_profile_id': 'p-friend', 'favorite': true},
+    ]);
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Remove from favorites'));
+    await tester.pumpAndSettle();
+
+    expect(favoriteRequests, [
+      {'friend_profile_id': 'p-friend', 'favorite': true},
+      {'friend_profile_id': 'p-friend', 'favorite': false},
+    ]);
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+
+    failNextFavoriteUpdate = true;
+    await tester.tap(find.byTooltip('Add to favorites'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('favorite-private-diagnostic'), findsNothing);
+
+    await tester.tap(find.byTooltip('Add to favorites'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+
+    isFriend = false;
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-friend',
+        client: client,
+        theme: captureTheme,
+        key: const ValueKey('not-friend'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Add to favorites'), findsNothing);
+
+    isFriend = true;
+    failFavoritesLoad = true;
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-friend',
+        client: client,
+        theme: captureTheme,
+        key: const ValueKey('favorite-load-error'),
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Add to favorites'), findsNothing);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(
+      find.textContaining('favorites-load-private-diagnostic'),
+      findsNothing,
+    );
+    failFavoritesLoad = false;
+    await tester.ensureVisible(find.text('Try again'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+
+    deferNextFavoriteUpdate = true;
+    await tester.tap(find.byTooltip('Remove from favorites'));
+    await tester.pump();
+    await favoriteUpdateStarted.future;
+    authController.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'replacement-access',
+        refreshToken: 'replacement-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'prof-test',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    deferredFavoriteResponse.complete(
+      http.Response(
+        jsonEncode({
+          'error': 'internal',
+          'message': 'stale-session-private-diagnostic',
+        }),
+        500,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Could not complete this action.'), findsNothing);
+    expect(
+      find.textContaining('stale-session-private-diagnostic'),
+      findsNothing,
+    );
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+
+    selfProfileId = 'prof-test';
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'prof-test',
+        client: client,
+        theme: captureTheme,
+        key: const ValueKey('self-profile'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Add to favorites'), findsNothing);
+  });
+}
+
+Widget _profileDetailTestApp({
+  required String profileId,
+  required MockClient client,
+  Key? key,
+  ThemeData? theme,
+  void Function(AuthController controller)? onAuthController,
+}) {
+  AuthController createAuthController(Ref ref) {
+    final controller = authenticatedAuthController(ref);
+    onAuthController?.call(controller);
+    return controller;
+  }
+
+  return ProviderScope(
+    key: key,
+    overrides: [
+      ...voiceThemeTestOverrides(),
+      profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
+      authControllerProvider.overrideWith(createAuthController),
+      gatewayConfigProvider.overrideWithValue(
+        const GatewayConfig(baseUrl: 'http://api.test'),
+      ),
+      realtimeAutoConnectProvider.overrideWithValue(false),
+      httpClientProvider.overrideWithValue(client),
+    ],
+    child: MaterialApp(
+      theme: theme ?? voiceTestTheme(),
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: RepaintBoundary(
+        key: const Key('profile_favorites_capture'),
+        child: Scaffold(body: ProfileDetailSheet(profileId: profileId)),
+      ),
+    ),
+  );
+}
+
+bool _profileFavoritesCaptureFontsLoaded = false;
+
+const _profileFavoritesCaptureEnvironmentKey =
+    'VOICE_PROFILE_FAVORITES_CAPTURE_DIR';
+
+Future<ThemeData?> _captureProfileTheme(WidgetTester tester) async {
+  final captureDirectory =
+      Platform.environment[_profileFavoritesCaptureEnvironmentKey];
+  if (captureDirectory == null || captureDirectory.isEmpty) return null;
+
+  if (!_profileFavoritesCaptureFontsLoaded) {
+    final loaded = await tester.runAsync(() async {
+      final noto = FontLoader(VoiceTheme.fontFamily)
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+      await noto.load();
+
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+      if (flutterRoot == null || flutterRoot.isEmpty) {
+        throw StateError('FLUTTER_ROOT is required to load Material Icons');
+      }
+      final iconFont = File(
+        [
+          flutterRoot,
+          'bin',
+          'cache',
+          'artifacts',
+          'material_fonts',
+          'MaterialIcons-Regular.otf',
+        ].join(Platform.pathSeparator),
+      );
+      final bytes = await iconFont.readAsBytes();
+      final iconData = ByteData.sublistView(Uint8List.fromList(bytes));
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(Future<ByteData>.value(iconData))).load();
+      return true;
+    });
+    if (loaded != true) {
+      throw StateError('Production font loading did not complete');
+    }
+    _profileFavoritesCaptureFontsLoaded = true;
+  }
+
+  final theme = await tester.runAsync(() async {
+    final catalog = await VoiceTokenCatalog.load();
+    return VoiceTheme.build(
+      catalog: catalog,
+      mode: VoiceThemeMode.dark,
+      profileAccent: catalog.profileAccentAt(0),
+    );
+  });
+  if (theme == null) {
+    throw StateError('Voice design tokens did not load for capture');
+  }
+  return theme;
+}
+
+Future<void> _captureProfileFavorites(
+  WidgetTester tester,
+  String filename,
+) async {
+  final captureDirectory =
+      Platform.environment[_profileFavoritesCaptureEnvironmentKey];
+  if (captureDirectory == null || captureDirectory.isEmpty) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const Key('profile_favorites_capture')),
+  );
+  final captured = await tester.runAsync(() async {
+    final image = await boundary.toImage(
+      pixelRatio: tester.view.devicePixelRatio,
+    );
+    try {
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) throw StateError('PNG encoding returned null');
+      final output = File(
+        '$captureDirectory${Platform.pathSeparator}$filename',
+      );
+      await output.parent.create(recursive: true);
+      await output.writeAsBytes(png.buffer.asUint8List(), flush: true);
+      return true;
+    } finally {
+      image.dispose();
+    }
+  });
+  if (captured != true) {
+    throw StateError('Profile Favorites capture did not complete');
+  }
 }
