@@ -17,9 +17,20 @@ import (
 )
 
 const (
-	composeFcmCandidateLimit = 16
-	composeFcmWindow         = 5 * time.Second
-	composeFcmKeyByteLimit   = 128
+	composeFcmCandidateLimit     = 16
+	composeFcmWindow             = 5 * time.Second
+	composeFcmKeyByteLimit       = 128
+	composeFcmAdmissionCountLimit = 255
+)
+
+type composeFcmAdmissionKind uint8
+
+const (
+	composeFcmAdmissionInvalid composeFcmAdmissionKind = iota
+	composeFcmAdmissionWindow
+	composeFcmAdmissionTuple
+	composeFcmAdmissionIdentity
+	composeFcmAdmissionKindCount
 )
 
 type composeFcmControlState uint8
@@ -48,6 +59,9 @@ type composeFcmObserver struct {
 	emitted            bool
 	overflow           bool
 	ambiguous          bool
+	admissionCounts    [composeFcmAdmissionKindCount]uint8
+	admissionSeen      bool
+	admissionOverflow  bool
 }
 
 type composeFcmTrace struct {
@@ -85,24 +99,31 @@ func newComposeFcmObserver() *composeFcmObserver {
 }
 
 func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) *composeFcmTrace {
-	if o == nil || eventID == "" || messageID == "" || chatID == "" || senderID == "" ||
-		len(eventID) > composeFcmKeyByteLimit || len(messageID) > composeFcmKeyByteLimit ||
-		len(chatID) > composeFcmKeyByteLimit || len(senderID) > composeFcmKeyByteLimit {
+	if o == nil {
 		return nil
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if eventID == "" || messageID == "" || chatID == "" || senderID == "" ||
+		len(eventID) > composeFcmKeyByteLimit || len(messageID) > composeFcmKeyByteLimit ||
+		len(chatID) > composeFcmKeyByteLimit || len(senderID) > composeFcmKeyByteLimit {
+		o.recordAdmissionLocked(composeFcmAdmissionIdentity)
+		return nil
+	}
 	if o.controlState == composeFcmControlInvalid {
+		o.recordAdmissionLocked(composeFcmAdmissionInvalid)
 		return nil
 	}
 	key := messageID + "\x00" + eventID
 	existing := o.candidates[key]
 	if existing != nil && (existing.chatID != chatID || existing.senderID != senderID) {
 		o.ambiguous = true
+		o.recordAdmissionLocked(composeFcmAdmissionTuple)
 		return nil
 	}
 	c := o.control
 	if o.controlState == composeFcmControlValid && (c.ChatID != chatID || c.SenderProfileID != senderID || c.MessageID != "" && c.MessageID != messageID) {
+		o.recordAdmissionLocked(composeFcmAdmissionTuple)
 		return nil
 	}
 	now := time.Now()
@@ -112,6 +133,7 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 			o.preControlStarted = now
 		}
 		if now.Sub(o.preControlStarted) >= composeFcmWindow {
+			o.recordAdmissionLocked(composeFcmAdmissionWindow)
 			return nil
 		}
 	} else {
@@ -119,6 +141,7 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 			o.postControlStarted = now
 		}
 		if now.Sub(o.postControlStarted) >= composeFcmWindow {
+			o.recordAdmissionLocked(composeFcmAdmissionWindow)
 			return nil
 		}
 	}
@@ -130,6 +153,8 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 	}
 	if len(o.candidates) >= composeFcmCandidateLimit {
 		o.overflow = true
+		o.admissionSeen = true
+		o.admissionOverflow = true
 		return nil
 	}
 	target := ""
@@ -140,6 +165,54 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 		memberOK: "unknown", present: "unknown", inbox: "unknown", basePush: "unknown", finalPush: "unknown", presence: "unknown", policy: "unknown", route: "unknown"}
 	o.candidates[key] = trace
 	return trace
+}
+
+// recordAdmissionLocked stores only bounded counts of why observer admission was rejected.
+// It is never an event or recipient outcome; callers hold o.mu.
+func (o *composeFcmObserver) recordAdmissionLocked(kind composeFcmAdmissionKind) {
+	if kind >= composeFcmAdmissionKindCount {
+		o.admissionOverflow = true
+		o.admissionSeen = true
+		return
+	}
+	o.admissionSeen = true
+	if o.admissionCounts[kind] == composeFcmAdmissionCountLimit {
+		o.admissionOverflow = true
+		return
+	}
+	o.admissionCounts[kind]++
+}
+
+func (o *composeFcmObserver) admissionClassLocked() string {
+	if o.admissionOverflow || o.overflow {
+		return "overflow"
+	}
+	if !o.admissionSeen {
+		return "none"
+	}
+	classification := ""
+	for kind, count := range o.admissionCounts {
+		if count == 0 {
+			continue
+		}
+		if classification != "" {
+			return "mixed"
+		}
+		switch composeFcmAdmissionKind(kind) {
+		case composeFcmAdmissionInvalid:
+			classification = "invalid"
+		case composeFcmAdmissionWindow:
+			classification = "window"
+		case composeFcmAdmissionTuple:
+			classification = "tuple"
+		case composeFcmAdmissionIdentity:
+			classification = "identity"
+		}
+	}
+	if classification == "" {
+		return "overflow"
+	}
+	return classification
 }
 
 func (o *composeFcmObserver) finish(trace *composeFcmTrace, routeResult string) {
@@ -393,7 +466,7 @@ func (o *composeFcmObserver) printUnknownLocked(reason string) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=false reason=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow", "expired", "incomplete"), boundedCount(len(o.candidates)))
+	fmt.Printf("compose_fcm_diag valid=false reason=%s admission=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow", "expired", "incomplete"), o.admissionClassLocked(), boundedCount(len(o.candidates)))
 	clear(o.candidates)
 }
 
@@ -406,8 +479,8 @@ func (o *composeFcmObserver) printTraceLocked(t *composeFcmTrace) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=true reason=matched candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s\n",
-		boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"))
+	fmt.Printf("compose_fcm_diag valid=true reason=matched admission=%s candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s\n",
+		o.admissionClassLocked(), boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"))
 	clear(o.candidates)
 }
 

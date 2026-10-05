@@ -2,15 +2,21 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/compose-fcm-diagnostic-lib.sh"
 
-valid='compose_fcm_diag valid=true reason=matched candidates=1 attempts=2 member_result=ok member_count=2 recipient_present=true inbox=main base_push=true final_push=true presence=offline policy=ok token_rows=1 fcm_tokens=1 dispatcher_returns=1 route=ack'
+valid='compose_fcm_diag valid=true reason=matched admission=none candidates=1 attempts=2 member_result=ok member_count=2 recipient_present=true inbox=main base_push=true final_push=true presence=offline policy=ok token_rows=1 fcm_tokens=1 dispatcher_returns=1 route=ack'
 unknown="${VOICE_FCM_DIAG_UNKNOWN}"
 [[ "$(voice_fcm_diag_parse_log "${valid}")" == "${valid}" ]]
+for admission in invalid window tuple identity mixed overflow; do
+  candidate="${valid/admission=none/admission=${admission}}"
+  [[ "$(voice_fcm_diag_parse_log "${candidate}")" == "${candidate}" ]]
+done
 [[ "$(voice_fcm_diag_parse_log '')" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid}"$'\n'"${valid}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log 'password=private-sentinel')" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "untrusted-prefix ${valid}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid}"$'\n'"untrusted-prefix ${valid}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid/ candidates=1 / candidates=17 }")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/admission=none/admission=untrusted}")" == "${unknown}" ]]
+[[ "$(voice_fcm_diag_parse_log "${valid/admission=none/admission=private}")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid/ member_count=2 / member_count=10000 }")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "${valid%route=ack}route=unk")" == "${unknown}" ]]
 [[ "$(voice_fcm_diag_parse_log "$(printf '%65537s' x)")" == "${unknown}" ]]

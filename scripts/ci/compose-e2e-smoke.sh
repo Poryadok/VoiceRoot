@@ -90,29 +90,29 @@ fi
 # tag. The numeric runner identity must read the private control file but cannot
 # write through the read-only bind mount. Abort before the FCM test if it fails.
 if [[ -z "${TRACE_FILE}" ]]; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 VOICE_FCM_DIAG_UID="$(id -u)"
 VOICE_FCM_DIAG_GID="$(id -g)"
 if ! voice_fcm_diag_identity_valid "${VOICE_FCM_DIAG_UID}" "${VOICE_FCM_DIAG_GID}"; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 export VOICE_FCM_DIAG_UID VOICE_FCM_DIAG_GID VOICE_FCM_DIAGNOSTIC_DIR="${TRACE_DIR}"
 chmod 700 "${TRACE_DIR}"
 chmod 600 "${TRACE_FILE}"
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" build notification >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" run --rm --no-deps --entrypoint /bin/sh notification -ec 'test -r /run/voice-fcm/correlation.json; ! (printf x >>/run/voice-fcm/correlation.json) 2>/dev/null; ! (touch /run/voice-fcm/write-probe) 2>/dev/null' >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 echo 'compose_fcm_preflight=pass'
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" up -d --no-deps --force-recreate --wait --wait-timeout 60 notification >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 

@@ -134,6 +134,93 @@ func TestComposeFcmObserverBoundsUntrustedCorrelationKeys(t *testing.T) {
 	}
 }
 
+func TestComposeFcmObserverAdmissionClassificationIsBoundedAndAnonymous(t *testing.T) {
+	newObserver := func() *composeFcmObserver {
+		return &composeFcmObserver{candidates: make(map[string]*composeFcmTrace)}
+	}
+	terminal := func(o *composeFcmObserver) string {
+		return captureComposeFcmOutput(t, func() {
+			o.mu.Lock()
+			defer o.mu.Unlock()
+			o.printUnknownLocked("unknown")
+		})
+	}
+	validControl := composeFcmControl{
+		MessageID: diagnosticTestMessage, ChatID: diagnosticTestChat,
+		SenderProfileID: diagnosticTestSender, RecipientID: diagnosticTestTarget,
+	}
+	validBegin := func(o *composeFcmObserver) {
+		o.begin("event-admission", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+	}
+
+	for _, tc := range []struct {
+		name string
+		want string
+		set  func(*composeFcmObserver)
+	}{
+		{"none", "admission=none", func(*composeFcmObserver) {}},
+		{"invalid", "admission=invalid", func(o *composeFcmObserver) {
+			o.controlState = composeFcmControlInvalid
+			validBegin(o)
+		}},
+		{"window", "admission=window", func(o *composeFcmObserver) {
+			o.control, o.controlState = validControl, composeFcmControlValid
+			o.postControlStarted = time.Now().Add(-composeFcmWindow)
+			validBegin(o)
+		}},
+		{"tuple", "admission=tuple", func(o *composeFcmObserver) {
+			o.control, o.controlState = validControl, composeFcmControlValid
+			o.control.ChatID = "other-chat"
+			validBegin(o)
+		}},
+		{"identity", "admission=identity", func(o *composeFcmObserver) {
+			o.begin("", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+		}},
+		{"mixed", "admission=mixed", func(o *composeFcmObserver) {
+			o.controlState = composeFcmControlInvalid
+			validBegin(o)
+			o.begin("", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+		}},
+		{"counter saturation", "admission=overflow", func(o *composeFcmObserver) {
+			o.controlState = composeFcmControlInvalid
+			for i := 0; i <= composeFcmAdmissionCountLimit; i++ {
+				validBegin(o)
+			}
+		}},
+		{"candidate capacity", "admission=overflow", func(o *composeFcmObserver) {
+			for i := 0; i <= composeFcmCandidateLimit; i++ {
+				eventID := string(rune('a' + i))
+				o.begin(eventID, diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := newObserver()
+			tc.set(o)
+			output := terminal(o)
+			if !strings.Contains(output, "valid=false") || !strings.Contains(output, tc.want) ||
+				!strings.Contains(output, "recipient_present=unknown") || strings.Contains(output, diagnosticTestTarget) ||
+				!strings.Contains(output, "member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown") {
+				t.Fatalf("admission output did not remain anonymous/fail-closed: %q", output)
+			}
+		})
+	}
+
+	t.Run("closed window records only window admission", func(t *testing.T) {
+		o := newObserver()
+		o.control, o.controlState = composeFcmControl{
+			MessageID: diagnosticTestMessage, ChatID: diagnosticTestChat,
+			SenderProfileID: diagnosticTestSender, RecipientID: diagnosticTestTarget,
+		}, composeFcmControlValid
+		o.postControlStarted = time.Now().Add(-composeFcmWindow)
+		o.begin("event-expiry", diagnosticTestMessage, diagnosticTestChat, diagnosticTestSender)
+		output := terminal(o)
+		if !strings.Contains(output, "admission=window") || !strings.Contains(output, "recipient_present=unknown") {
+			t.Fatalf("window expiry did not remain anonymous: %q", output)
+		}
+	})
+}
+
 func TestComposeFcmObserverUnreadActualRouteRemainsUnchangedAndUnknown(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "control.json")
 	senderID, recipientID, chatID, messageID, eventID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
