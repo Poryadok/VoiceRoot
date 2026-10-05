@@ -712,6 +712,150 @@ void main() {
     expect(find.byKey(ForwardMessageSheet.sheetKey), findsOneWidget);
   });
 
+  testWidgets('profile switch during a pending batch forward stops the batch', (
+    tester,
+  ) async {
+    final forwardResponse = Completer<http.Response>();
+    final forwardRequests = <String>[];
+    var chatListRequests = 0;
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => ForwardMessageSheet.show(
+              context,
+              sourceMessages: const [
+                sourceMessage,
+                VoiceMessage(
+                  id: 'msg-src-second',
+                  chatId: 'chat-source',
+                  senderProfileId: 'profile-b',
+                  content: 'Forward me second',
+                ),
+              ],
+              sourceChatId: 'chat-source',
+            ),
+            child: const Text('Open forward'),
+          ),
+        ),
+        extraOverrides: [
+          profileProvider.overrideWith((ref, profileId) async {
+            return const VoiceProfile(
+              id: 'friend-target',
+              accountId: 'acc-friend',
+              username: 'friend',
+              discriminator: '1010',
+              displayName: 'Friend',
+            );
+          }),
+        ],
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/chats') {
+            chatListRequests++;
+            return http.Response(
+              jsonEncode({
+                'chat_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends') {
+            return http.Response(
+              jsonEncode({
+                'friend_list': {
+                  'friends': [
+                    {'profile_id': 'friend-target'},
+                  ],
+                  'next_cursor': '',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/chats/dm') {
+            return http.Response(
+              jsonEncode({
+                'chat': {
+                  'id': 'chat-friend',
+                  'type': 'CHAT_TYPE_DM',
+                  'creator_profile_id': 'profile-test',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/messages/forward') {
+            forwardRequests.add(req.headers['authorization'] ?? 'missing-auth');
+            if (forwardRequests.length == 1) return forwardResponse.future;
+            return http.Response(
+              jsonEncode({
+                'message': {
+                  'id': 'msg-forwarded-second',
+                  'chat': {'id': 'chat-friend'},
+                  'sender_profile_id': 'different-profile',
+                  'content': 'Forward me second',
+                  'type': 'forward',
+                  'message_kind': 'MESSAGE_KIND_FORWARD',
+                  'forward_from_id': 'msg-src-second',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open forward'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ForwardMessageSheet.contactTileKey('friend-target')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ForwardMessageSheet.submitButtonKey));
+    await tester.pump();
+    expect(forwardRequests, hasLength(1));
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(ForwardMessageSheet.sheetKey)),
+    );
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'different-token',
+        refreshToken: 'different-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'different-profile',
+        expiresInSeconds: 900,
+      ),
+    );
+    container.read(selectedChatIdProvider.notifier).state = 'new-profile-chat';
+    await tester.pump(const Duration(milliseconds: 250));
+    final chatListRequestsBeforeCompletion = chatListRequests;
+    forwardResponse.complete(
+      http.Response(
+        jsonEncode({
+          'message': {
+            'id': 'msg-forwarded-first',
+            'chat': {'id': 'chat-friend'},
+            'sender_profile_id': 'profile-test',
+            'content': 'Forward me',
+            'type': 'forward',
+            'message_kind': 'MESSAGE_KIND_FORWARD',
+            'forward_from_id': 'msg-src',
+          },
+        }),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(forwardRequests, hasLength(1));
+    expect(find.byKey(ForwardMessageSheet.sheetKey), findsOneWidget);
+    expect(container.read(selectedChatIdProvider), 'new-profile-chat');
+    expect(chatListRequests, chatListRequestsBeforeCompletion);
+  });
+
   testWidgets('existing DM is shown once and searchable by friend profile', (
     tester,
   ) async {

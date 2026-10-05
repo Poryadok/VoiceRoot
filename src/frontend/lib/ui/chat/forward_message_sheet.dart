@@ -219,7 +219,14 @@ class _ForwardMessageSheetState extends ConsumerState<ForwardMessageSheet> {
               targetChatId: targetChatId,
               commentary: commentary.isEmpty ? null : commentary,
               withoutAttribution: widget.withoutAttribution,
+              expectedProfileId: expectedOwner,
+              expectedAuthorization: expectedAuthorization,
             );
+        final afterForward = ref.read(authControllerProvider).session;
+        if (afterForward?.activeProfileId != expectedOwner ||
+            afterForward?.authorizationHeader != expectedAuthorization) {
+          err = kChatActionStaleContext;
+        }
       }
     }
     if (!mounted) return;
