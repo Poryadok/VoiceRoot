@@ -11,6 +11,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 ROW_IDS = ('auth-mail', 'minio-credentials', 'principal-secrets', 'user-search-cursor',
@@ -114,6 +115,11 @@ def _read(kube, descriptor):
 def _matches(obj, desired):
     if obj['kind'] == 'Secret':
         _secret(obj, desired)
+    elif set(desired) == {'private_semantic_sha256'}:
+        if (obj['kind'] != 'ConfigMap' or not isinstance(desired['private_semantic_sha256'], str)
+                or not re.fullmatch(r'[a-f0-9]{64}', desired['private_semantic_sha256'])
+                or digest(semantic(obj)) != desired['private_semantic_sha256']):
+            _fail('private_semantic_mismatch')
     elif semantic(obj) != desired:
         _fail('preserve_semantic_mismatch')
 
@@ -143,7 +149,7 @@ def _validate(plan, mode):
                 or 'data' in manifest and manifest['kind'] != 'ConfigMap'):
             _fail('unsupported_action')
         indexed[action['id']] = action
-    descriptors, used = [], set()
+    descriptors, used, owner_rows = [], set(), set()
     for row in checks:
         if set(row) - {'id', 'disposition', 'objects', 'reason', 'enabled'}:
             _fail('plan_row_invalid')
@@ -180,15 +186,17 @@ def _validate(plan, mode):
                 _fail('auth_mail_predicate_invalid')
             if disposition == 'action':
                 action = indexed.get(obj.get('action_id'))
-                if (not action or action['row'] != row['id'] or obj['kind'] != action['manifest']['kind']
+                if (not action or obj['kind'] != action['manifest']['kind']
                         or obj['name'] != action['manifest']['metadata']['name']
                         or obj['desired'] != semantic(action['manifest'])):
                     _fail('action_target_mismatch')
                 used.add(obj['action_id'])
+                if action['row'] == row['id']:
+                    owner_rows.add(obj['action_id'])
             elif 'action_id' in obj:
                 _fail('preserve_action_invalid')
             descriptors.append((disposition, obj))
-    if used != set(indexed):
+    if used != set(indexed) or owner_rows != set(indexed):
         _fail('unconsumed_action')
     targets = {}
     for disposition, obj in descriptors:

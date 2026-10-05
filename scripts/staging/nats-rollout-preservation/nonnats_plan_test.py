@@ -30,6 +30,28 @@ class Fake:
         return copy.deepcopy(self.objects[(kind.lower(), name)])
 
 class PlanTests(unittest.TestCase):
+    def test_private_semantic_hash_rejects_forgery_without_serializing_data(self):
+        kube, plan = fixture()
+        obj = kube.objects[('configmap', 'voice-app-config')]
+        obj['data'] = {'livekit.yaml': 'private-inline-livekit-key'}
+        plan['checks'][1]['objects'][0]['desired'] = {'private_semantic_sha256': subject.digest(subject.semantic(obj))}
+        binding = subject.preflight(kube, plan, 'images-only')
+        self.assertNotIn('private-inline-livekit-key', json.dumps(binding))
+        self.assertTrue(subject.revalidate(kube, binding))
+        plan['checks'][1]['objects'][0]['desired']['private_semantic_sha256'] = '0' * 64
+        with self.assertRaises(subject.PlanError): subject.preflight(kube, plan, 'images-only')
+
+    def test_shared_action_across_identical_target_rows(self):
+        kube, plan = self.full_fixture()
+        manifest = {'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'voice-app-config', 'namespace': NS}, 'data': {'S3_SIGNING_ENDPOINT': 'new'}}
+        for row in plan['checks']:
+            if row['objects'][0]['kind'] != 'ConfigMap': continue
+            row['disposition'] = 'action'
+            row['objects'][0]['desired'] = subject.semantic(manifest)
+            row['objects'][0]['action_id'] = 'config'
+        plan['actions'] = [{'id': 'config', 'row': 'domains', 'manifest': manifest}]
+        self.assertTrue(subject.revalidate(kube, subject.preflight(kube, plan, 'full')))
+
     def full_fixture(self):
         kube, plan = fixture()
         plan['mode'] = 'full'
