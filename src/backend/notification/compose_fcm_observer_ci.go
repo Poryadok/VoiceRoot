@@ -32,32 +32,34 @@ type composeFcmObserver struct {
 	path       string
 	mu         sync.Mutex
 	candidates map[string]*composeFcmTrace
+	control    composeFcmControl
+	controlOK  bool
 	started    time.Time
 	emitted    bool
 	overflow   bool
 }
 
 type composeFcmTrace struct {
-	owner      *composeFcmObserver
-	messageID  string
-	eventID    string
-	chatID     string
-	senderID   string
-	target     string
-	attempts   int
-	memberRows int
-	memberOK   string
-	present    string
-	inbox      string
-	basePush   string
-	finalPush  string
-	presence   string
-	policy     string
-	tokenRows  int
-	fcmTokens  int
-	sends      int
-	route      string
-	finished   bool
+	owner             *composeFcmObserver
+	messageID         string
+	eventID           string
+	chatID            string
+	senderID          string
+	target            string
+	attempts          int
+	memberRows        int
+	memberOK          string
+	present           string
+	inbox             string
+	basePush          string
+	finalPush         string
+	presence          string
+	policy            string
+	tokenRows         int
+	fcmTokens         int
+	dispatcherReturns int
+	route             string
+	finished          bool
 }
 
 func newComposeFcmObserver() *composeFcmObserver {
@@ -74,12 +76,12 @@ func (o *composeFcmObserver) begin(eventID, messageID, chatID, senderID string) 
 	if o == nil || eventID == "" || messageID == "" || chatID == "" || senderID == "" {
 		return nil
 	}
-	c, ok := o.readControl()
-	if !ok || c.ChatID != chatID || c.SenderProfileID != senderID {
-		return nil
-	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	c := o.control
+	if !o.controlOK || c.ChatID != chatID || c.SenderProfileID != senderID {
+		return nil
+	}
 	now := time.Now()
 	if o.started.IsZero() {
 		o.started = now
@@ -155,6 +157,19 @@ func (t *composeFcmTrace) baseFor(decisions map[string]delivery.DeliveryDecision
 	}
 }
 
+func (t *composeFcmTrace) finalFor(decisions map[string]delivery.DeliveryDecision) {
+	if t == nil {
+		return
+	}
+	decision, ok := decisions[t.target]
+	if !ok {
+		return
+	}
+	t.owner.mu.Lock()
+	t.finalPush = boolWord(decision.Push)
+	t.owner.mu.Unlock()
+}
+
 func (t *composeFcmTrace) context(ctx context.Context) context.Context {
 	if t == nil {
 		return ctx
@@ -193,19 +208,19 @@ func (t *composeFcmTrace) Tokens(profile uuid.UUID, rows, fcmEligible int, outco
 	t.owner.mu.Unlock()
 }
 
-func (t *composeFcmTrace) SendAttempt(profile uuid.UUID, service string) {
+func (t *composeFcmTrace) DispatcherReturned(profile uuid.UUID, service string) {
 	if t == nil || profile.String() != t.recipientID() || service != "fcm" {
 		return
 	}
 	t.owner.mu.Lock()
-	t.sends = boundedCount(t.sends + 1)
+	t.dispatcherReturns = boundedCount(t.dispatcherReturns + 1)
 	t.owner.mu.Unlock()
 }
 
 // Recipient is set from the pre-send control record when the trace is created.
 func (t *composeFcmTrace) recipientID() string { return t.target }
 
-func (t *composeFcmObserver) readControl() (composeFcmControl, bool) {
+func (o *composeFcmObserver) readControl() (composeFcmControl, bool) {
 	info, err := os.Lstat(o.path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > 4096 {
 		return composeFcmControl{}, false
@@ -227,6 +242,7 @@ func (o *composeFcmObserver) collect() {
 	for range ticker.C {
 		c, ok := o.readControl()
 		o.mu.Lock()
+		o.control, o.controlOK = c, ok
 		if !o.started.IsZero() && time.Since(o.started) > composeFcmWindow {
 			if !ok || c.MessageID == "" {
 				o.emitUnknownLocked()
@@ -280,7 +296,7 @@ func (o *composeFcmObserver) printUnknownLocked(reason string) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=false reason=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow"), boundedCount(len(o.candidates)))
+	fmt.Printf("compose_fcm_diag valid=false reason=%s candidates=%d attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown\n", safeWord(reason, "unknown", "ambiguous", "overflow"), boundedCount(len(o.candidates)))
 	clear(o.candidates)
 }
 
@@ -289,8 +305,8 @@ func (o *composeFcmObserver) printTraceLocked(t *composeFcmTrace) {
 		return
 	}
 	o.emitted = true
-	fmt.Printf("compose_fcm_diag valid=true reason=matched candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d send_attempts=%d route=%s\n",
-		boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.sends), safeWord(t.route, "ack", "nak", "unknown"))
+	fmt.Printf("compose_fcm_diag valid=true reason=matched candidates=1 attempts=%d member_result=%s member_count=%d recipient_present=%s inbox=%s base_push=%s final_push=%s presence=%s policy=%s token_rows=%d fcm_tokens=%d dispatcher_returns=%d route=%s\n",
+		boundedCount(t.attempts), safeWord(t.memberOK, "ok", "error", "unknown"), boundedCount(t.memberRows), safeWord(t.present, "true", "false", "unknown"), safeWord(t.inbox, "main", "requests", "unknown"), safeWord(t.basePush, "true", "false", "unknown"), safeWord(t.finalPush, "true", "false", "unknown"), safeWord(t.presence, "online", "offline", "unknown"), safeWord(t.policy, "ok", "error", "unknown"), boundedCount(t.tokenRows), boundedCount(t.fcmTokens), boundedCount(t.dispatcherReturns), safeWord(t.route, "ack", "nak", "unknown"))
 	clear(o.candidates)
 }
 

@@ -60,9 +60,17 @@ done
 TRACE_DIR=''
 TRACE_FILE=''
 cleanup_fcm_diagnostic() {
+  local original_status=$?
+  trap - EXIT
   if [[ -n "${TRACE_FILE}" ]]; then
-    voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}" || true
+    if ! voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}"; then
+      echo 'compose_fcm_cleanup=failed' >&2
+      if ((original_status == 0)); then
+        original_status=1
+      fi
+    fi
   fi
+  exit "${original_status}"
 }
 trap cleanup_fcm_diagnostic EXIT
 trap 'exit 130' INT
@@ -82,29 +90,29 @@ fi
 # tag. The numeric runner identity must read the private control file but cannot
 # write through the read-only bind mount. Abort before the FCM test if it fails.
 if [[ -z "${TRACE_FILE}" ]]; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 VOICE_FCM_DIAG_UID="$(id -u)"
 VOICE_FCM_DIAG_GID="$(id -g)"
 if ! voice_fcm_diag_identity_valid "${VOICE_FCM_DIAG_UID}" "${VOICE_FCM_DIAG_GID}"; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 export VOICE_FCM_DIAG_UID VOICE_FCM_DIAG_GID VOICE_FCM_DIAGNOSTIC_DIR="${TRACE_DIR}"
 chmod 700 "${TRACE_DIR}"
 chmod 600 "${TRACE_FILE}"
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" build notification >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" run --rm --no-deps --entrypoint /bin/sh notification -ec 'test -r /run/voice-fcm/correlation.json; ! (printf x >>/run/voice-fcm/correlation.json) 2>/dev/null; ! (touch /run/voice-fcm/write-probe) 2>/dev/null' >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 echo 'compose_fcm_preflight=pass'
 if ! docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" up -d --no-deps --force-recreate --wait --wait-timeout 60 notification >/dev/null 2>&1; then
-  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 send_attempts=0 route=unknown'
+  echo 'compose_fcm_diag valid=false reason=unknown candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
 
@@ -117,8 +125,8 @@ flutter_status=$?
 set -e
 
 if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" && -s "${TRACE_FILE}" ]]; then
-  diagnostic_logs="$(timeout 5s docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" logs --no-color --tail 100 notification 2>/dev/null | head -c 65537 || true)"
-  voice_fcm_diag_parse_log "${diagnostic_logs}"
+  diagnostic_logs="$(timeout 5s docker compose -f "${ROOT}/docker-compose.yml" -f "${ROOT}/scripts/ci/compose-fcm-diagnostic.yml" logs --no-color --no-log-prefix --tail 100 notification 2>/dev/null | head -c 65537 || true)"
+  diagnostic_line="$(voice_fcm_diag_parse_log "${diagnostic_logs}")"
   port_mapping="$(docker compose -f "${ROOT}/docker-compose.yml" port nats 4222 2>/dev/null || true)"
   mapped_port=''
   if [[ "${port_mapping}" =~ :([0-9]+)$ ]]; then
@@ -141,13 +149,36 @@ if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" && -s "${TRACE_FILE}" ]]; th
     if [[ -n "${probe_line}" ]]; then
       printf '%s\n' "${probe_line}"
     elif ((probe_status != 0)); then
-      echo 'compose_fcm_probe available=false stage=probe_failed event_match_count=0 event_scan=unknown consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
+      echo 'compose_fcm_probe available=false stage=probe_failed event_match_count=0 event_scan=unknown consumer_info_available=unknown delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
     else
-      echo 'compose_fcm_probe available=false stage=probe_output_unavailable event_match_count=0 event_scan=unknown consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
+      echo 'compose_fcm_probe available=false stage=probe_output_unavailable event_match_count=0 event_scan=unknown consumer_info_available=unknown delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
     fi
   else
-    echo 'compose_fcm_probe available=false stage=port_lookup event_match_count=0 event_scan=unknown consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
+    echo 'compose_fcm_probe available=false stage=port_lookup event_match_count=0 event_scan=unknown consumer_info_available=unknown delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown'
   fi
+fi
+
+cleanup_failed=false
+if [[ -n "${TRACE_FILE}" ]]; then
+  if voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}"; then
+    TRACE_FILE=''
+    TRACE_DIR=''
+  else
+    cleanup_failed=true
+    echo 'compose_fcm_cleanup=failed' >&2
+  fi
+fi
+trap - EXIT
+if [[ -n "${diagnostic_line:-}" ]]; then
+  if [[ "${cleanup_failed}" == true ]]; then
+    echo "${VOICE_FCM_DIAG_UNKNOWN}"
+  else
+    printf '%s\n' "${diagnostic_line}"
+  fi
+fi
+
+if [[ "${cleanup_failed}" == true && "${flutter_status}" == 0 ]]; then
+  exit 1
 fi
 
 if voice_fcm_diag_preserve_status "${flutter_status}"; then

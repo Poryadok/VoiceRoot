@@ -152,6 +152,9 @@ func routeMessageNotificationObserved(
 			if err != nil {
 				return err
 			}
+			if trace != nil {
+				trace.finalFor(decisions)
+			}
 			preview, senderLabel := pushCopyFields(ctx, enrich, ev.GetMessageId(), ev.GetSenderProfileId())
 			deepLink := messagePushDeepLink(ev.GetChatId(), ev.GetMessageId())
 			title, body := pushcopy.TitleForSender(senderLabel, "Reply"), pushcopy.MessageBody(preview)
@@ -195,6 +198,9 @@ func routeMessageNotificationObserved(
 			decisions, err = deliveryForMember(decisions, member)
 			if err != nil {
 				return err
+			}
+			if trace != nil {
+				trace.finalFor(decisions)
 			}
 			titleFallback := "New message"
 			if typ == delivery.TypeMessageRequest {

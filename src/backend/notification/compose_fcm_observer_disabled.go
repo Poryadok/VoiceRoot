@@ -17,6 +17,6 @@ type composeFcmObserver struct{}
 func (*composeFcmObserver) begin(string, string, string, string) *composeFcmTrace { return nil }
 func (*composeFcmObserver) finish(*composeFcmTrace, string)                       {}
 func (*composeFcmTrace) members([]chatmembers.Member, error)                      {}
-func (*composeFcmTrace) base(delivery.DeliveryDecision)                           {}
 func (*composeFcmTrace) baseFor(map[string]delivery.DeliveryDecision)             {}
+func (*composeFcmTrace) finalFor(map[string]delivery.DeliveryDecision)            {}
 func (*composeFcmTrace) context(ctx context.Context) context.Context              { return ctx }

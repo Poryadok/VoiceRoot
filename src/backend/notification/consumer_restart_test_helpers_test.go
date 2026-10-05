@@ -208,7 +208,7 @@ func TestSequenceAtOrAfterDoesNotConflateUnavailableWithFalse(t *testing.T) {
 }
 
 func composeFCMProbeUnavailable(stage string) {
-	fmt.Printf("compose_fcm_probe available=false stage=%s event_match_count=0 event_scan=unknown consumer_info_available=false delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", stage)
+	fmt.Printf("compose_fcm_probe available=false stage=%s event_match_count=0 event_scan=unknown consumer_info_available=unknown delivered_seq_ge_event=unknown ack_floor_seq_ge_event=unknown\n", stage)
 }
 
 type notificationRestartPush struct {

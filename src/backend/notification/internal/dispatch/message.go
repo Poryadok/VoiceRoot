@@ -44,7 +44,7 @@ type MessageDiagnosticObserver interface {
 	Decision(profile uuid.UUID, basePush, finalPush bool, presence string, policy string)
 	FinalDecision(profile uuid.UUID, finalPush bool)
 	Tokens(profile uuid.UUID, rows, fcmEligible int, outcome string)
-	SendAttempt(profile uuid.UUID, service string)
+	DispatcherReturned(profile uuid.UUID, service string)
 }
 
 type messageDiagnosticContextKey struct{}
@@ -228,10 +228,11 @@ func (p *MessagePusher) sendPush(
 				devicePayload.Title = "Game update"
 				devicePayload.Body = "A game event is waiting in Voice."
 			}
+			err := p.Pusher.Send(ctx, recipient, tok, devicePayload)
 			if observer := messageDiagnosticObserverFromContext(ctx); observer != nil {
-				observer.SendAttempt(recipient, tok.PushService)
+				observer.DispatcherReturned(recipient, tok.PushService)
 			}
-			if err := p.Pusher.Send(ctx, recipient, tok, devicePayload); err != nil {
+			if err != nil {
 				if err == fcm.ErrInvalidToken || err == apns.ErrInvalidToken {
 					_ = p.Tokens.DeleteByToken(ctx, tok.Token)
 					continue
