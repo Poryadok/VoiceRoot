@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import '../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
+import '../gen/voice/messaging/v1/messaging.pbenum.dart'
+    show MessageContentType;
 import 'api_result.dart';
 import 'gateway_http.dart';
 import 'proto_mappers.dart';
@@ -70,9 +72,7 @@ class MessageMention {
 
   static String encodeJson(List<MessageMention> mentions) {
     if (mentions.isEmpty) return '[]';
-    return jsonEncode(
-      mentions.map((m) => m.toJson()).toList(growable: false),
-    );
+    return jsonEncode(mentions.map((m) => m.toJson()).toList(growable: false));
   }
 }
 
@@ -130,6 +130,7 @@ class VoiceMessage {
     this.deletedAt,
     this.createdAt,
     this.isPinned = false,
+    this.contentType,
     this.threadParentId,
     this.isE2e = false,
     this.decryptionFailed = false,
@@ -149,6 +150,7 @@ class VoiceMessage {
   final DateTime? deletedAt;
   final DateTime? createdAt;
   final bool isPinned;
+  final MessageContentType? contentType;
   final String? threadParentId;
   final bool isE2e;
   final bool decryptionFailed;
@@ -254,6 +256,7 @@ class VoiceMessage {
       deletedAt: deletedAt,
       createdAt: createdAt,
       isPinned: isPinned ?? this.isPinned,
+      contentType: contentType,
       threadParentId: threadParentId,
       isE2e: isE2e ?? this.isE2e,
       decryptionFailed: decryptionFailed ?? this.decryptionFailed,
@@ -413,8 +416,7 @@ class SharedMediaItemData {
 
   bool get isLink => externalUrl != null && externalUrl!.isNotEmpty;
   bool get isVideo => attachmentType == 'video';
-  bool get isE2eEncrypted =>
-      e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
+  bool get isE2eEncrypted => e2eKeyWire != null && e2eKeyWire!.isNotEmpty;
 }
 
 class SharedMediaListData {
@@ -480,28 +482,26 @@ class VoiceMessagesClient {
     if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
     if (pageSize != null) params['page_size'] = '$pageSize';
 
-    final uri = _gateway.replace(path: '/api/v1/messages', queryParameters: params);
+    final uri = _gateway.replace(
+      path: '/api/v1/messages',
+      queryParameters: params,
+    );
     final result = await _gateway.getProto(
       uri,
       authorization: authorization,
       createEmpty: messaging_pb.GetMessagesResponse.create,
     );
-    return _map(
-      result,
-      (data) {
-        final list = messageListFromProto(
-          data.hasMessageList()
-              ? data.messageList
-              : messaging_pb.MessageList(),
-        );
-        return MessageListData(
-          messages: list.messages,
-          nextCursor: list.nextCursor,
-          hasMore: list.hasMore,
-          dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
-        );
-      },
-    );
+    return _map(result, (data) {
+      final list = messageListFromProto(
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
+      );
+      return MessageListData(
+        messages: list.messages,
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+        dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
+      );
+    });
   }
 
   Future<MessagesApiResult<MessageListData>> getThreadMessages({
@@ -530,9 +530,7 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
   }
@@ -692,9 +690,7 @@ class VoiceMessagesClient {
     return _map(
       result,
       (data) => messageListFromProto(
-        data.hasMessageList()
-            ? data.messageList
-            : messaging_pb.MessageList(),
+        data.hasMessageList() ? data.messageList : messaging_pb.MessageList(),
       ),
     );
   }
