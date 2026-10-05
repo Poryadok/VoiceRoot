@@ -14,6 +14,7 @@ import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/ui/settings/e2e_key_backup_screen.dart';
 import 'package:voice_frontend/ui/settings/security_settings_screen.dart';
 
 import 'support/test_voice_token_catalog.dart';
@@ -30,6 +31,105 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 }
 
 void main() {
+  testWidgets(
+    'security settings opens the backup screen and loads status with current session',
+    (tester) async {
+      final requests = <http.Request>[];
+      final mock = MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/2fa/status') {
+          return http.Response(jsonEncode({'enabled': false}), 200);
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/e2e-key-backup') {
+          return http.Response(jsonEncode({'error': 'not found'}), 404);
+        }
+        return http.Response('not found', 404);
+      });
+
+      final gateway = GatewayHttpClient(
+        httpClient: mock,
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+        authorizationProvider: () => 'Bearer token',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            voiceAuthClientProvider.overrideWithValue(
+              VoiceAuthClient(gateway: gateway),
+            ),
+            authControllerProvider.overrideWith((ref) {
+              final controller = AuthController(
+                authClient: ref.watch(voiceAuthClientProvider),
+                storage: ref.watch(authSessionStorageProvider),
+                guestCredentialsStorage: ref.watch(
+                  guestCredentialsStorageProvider,
+                ),
+              );
+              controller.state = const AuthState(
+                session: AuthSession(
+                  accessToken: 'token',
+                  refreshToken: 'refresh',
+                  expiresInSeconds: 900,
+                  accountId: 'account-1',
+                  activeProfileId: 'profile-primary',
+                ),
+              );
+              return controller;
+            }),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SecuritySettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('security_e2e_key_backup')),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byKey(SecuritySettingsScreen.screenKey),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byKey(const Key('security_e2e_key_backup')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(E2eKeyBackupScreen.screenKey), findsOneWidget);
+      expect(
+        find.text('No encrypted key backup is saved for this account.'),
+        findsOneWidget,
+      );
+      final backupRequest = requests.singleWhere(
+        (request) => request.url.path == '/api/v1/auth/e2e-key-backup',
+      );
+      expect(backupRequest.method, 'GET');
+      expect(backupRequest.headers['authorization'], 'Bearer token');
+      expect(
+        requests.where(
+          (request) => request.url.path == '/api/v1/auth/e2e-key-backup',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
   testWidgets('security settings deletes account after password confirm', (
     tester,
   ) async {
