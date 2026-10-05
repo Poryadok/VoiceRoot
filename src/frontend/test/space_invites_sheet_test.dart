@@ -290,7 +290,10 @@ void main() {
 
       await tester.tap(find.text('Advanced'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(SpaceInvitesSheet.maxUsesFieldKey));
+      final maxUsesFinder = find.byKey(SpaceInvitesSheet.maxUsesFieldKey);
+      await tester.ensureVisible(maxUsesFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(maxUsesFinder);
       await tester.pumpAndSettle();
       for (final choice in ['1', '5', '10', '25', '50', '100', 'unlimited']) {
         expect(
@@ -1197,7 +1200,11 @@ void main() {
     final launcherFocus = FocusNode(debugLabel: 'space invite launcher');
     addTearDown(launcherFocus.dispose);
 
-    Future<void> captureAt(Size size, String filename) async {
+    Future<void> captureAt(
+      Size size,
+      String filename, {
+      required String maxUsesFilename,
+    }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       tester.binding.handleMetricsChanged();
@@ -1256,9 +1263,48 @@ void main() {
       if (captureEnabled) {
         await _writeSpaceInviteCapture(tester, captureDirectory, filename);
       }
+
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(SpaceInvitesSheet.maxUsesFieldKey));
+      await tester.pumpAndSettle();
+      if (size.height < 500 &&
+          find
+              .byKey(const Key('space_invite_max_uses_choice_1'))
+              .evaluate()
+              .isEmpty) {
+        await tester.drag(find.text('5').last, const Offset(0, 160));
+        await tester.pumpAndSettle();
+      }
+      if (size.height >= 500) {
+        for (final option in ['1', '5', '10', '25', '50', '100', 'unlimited']) {
+          expect(
+            find.byKey(Key('space_invite_max_uses_choice_$option')),
+            findsAtLeastNWidgets(1),
+          );
+        }
+      } else {
+        expect(
+          find.byKey(const Key('space_invite_max_uses_choice_1')),
+          findsAtLeastNWidgets(1),
+        );
+      }
+      if (captureEnabled) {
+        await _writeSpaceInviteCapture(
+          tester,
+          captureDirectory,
+          maxUsesFilename,
+        );
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
     }
 
-    await captureAt(const Size(390, 844), 'space-invites-v-390x844.png');
+    await captureAt(
+      const Size(390, 844),
+      'space-invites-v-390x844.png',
+      maxUsesFilename: 'space-invites-max-uses-v-390x844.png',
+    );
     await tester.tap(find.byKey(const Key('qr_invite_inv-expiring')));
     await tester.pumpAndSettle();
     expect(find.byType(QrImageView), findsOneWidget);
@@ -1272,7 +1318,11 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
-    await captureAt(const Size(844, 390), 'space-invites-h-844x390.png');
+    await captureAt(
+      const Size(844, 390),
+      'space-invites-h-844x390.png',
+      maxUsesFilename: 'space-invites-max-uses-h-844x390.png',
+    );
     expect(tester.takeException(), isNull);
   });
 }
