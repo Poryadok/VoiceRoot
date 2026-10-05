@@ -103,6 +103,26 @@ void main() {
     expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsOneWidget);
   });
 
+  testWidgets('left swipe hides the mobile pin bar and header restores it', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(390, 844));
+    await tester.pumpWidget(_pinnedRoomApp());
+    await tester.pumpAndSettle();
+
+    final bar = find.byKey(ChatRoomPanel.pinnedBarKey);
+    expect(bar, findsOneWidget);
+    await tester.fling(bar, const Offset(-500, 0), 1000);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsNothing);
+    final restore = find.byTooltip('Show pinned messages');
+    expect(restore, findsOneWidget);
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsOneWidget);
+  });
+
   testWidgets('room list opens all five pins and selects the tapped row', (
     tester,
   ) async {
@@ -256,6 +276,49 @@ void main() {
     expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
   });
 
+  testWidgets('pinned list traps Tab focus and restores the live trigger', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    await tester.pumpWidget(_pinnedRoomApp(pinCount: 5));
+    await tester.pumpAndSettle();
+
+    final trigger = find.byTooltip('Open all pinned messages');
+    var triggerFocused = false;
+    for (var index = 0; index < 80; index++) {
+      if (_primaryFocusWithin(tester, trigger)) {
+        triggerFocused = true;
+        break;
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(triggerFocused || _primaryFocusWithin(tester, trigger), isTrue);
+    expect(_primaryFocusWithin(tester, trigger), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    final panel = find.byKey(PinnedMessagesPanel.panelKey);
+    expect(panel, findsOneWidget);
+    for (var index = 0; index < 8; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, panel), isTrue);
+    }
+    for (var index = 0; index < 4; index++) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, panel), isTrue);
+    }
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(PinnedMessagesPanel.panelKey), findsNothing);
+    expect(_primaryFocusWithin(tester, trigger), isTrue);
+  });
+
   testWidgets('failed pin fetch is not treated as a confirmed empty list', (
     tester,
   ) async {
@@ -287,6 +350,51 @@ void main() {
     expect(find.byKey(const Key('chat_room_pins_error')), findsNothing);
     expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsNothing);
   });
+
+  testWidgets(
+    'pin-load error keeps full accessible retry target at 1.5x in H and V',
+    (tester) async {
+      final captureDir = Platform.environment['VOICE_PINNED_CAPTURE_DIR'];
+      for (final viewport in const [Size(1280, 800), Size(390, 844)]) {
+        final orientation = viewport.width > viewport.height ? 'h' : 'v';
+        await _setViewport(tester, viewport);
+        await tester.pumpWidget(
+          _pinnedRoomApp(
+            pinCount: 0,
+            failFirstPinnedRequest: true,
+            textScale: 1.5,
+            captureBoundary: captureDir != null && captureDir.isNotEmpty,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final error = find.byKey(const Key('chat_room_pins_error'));
+        expect(error, findsOneWidget);
+        final l10n = AppLocalizations.of(tester.element(error))!;
+        final message = find.descendant(
+          of: error,
+          matching: find.text(l10n.backendUnavailable),
+        );
+        expect(message, findsOneWidget);
+        expect(find.bySemanticsLabel(l10n.backendUnavailable), findsOneWidget);
+        final retry = find.descendant(
+          of: error,
+          matching: find.byType(TextButton),
+        );
+        expect(retry, findsOneWidget);
+        expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
+        expect(tester.takeException(), isNull);
+        if (captureDir != null && captureDir.isNotEmpty) {
+          await _writeCapture(
+            tester,
+            captureDir,
+            'pin_error_${orientation}_1_5',
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 
   testWidgets('standalone Chat Info pin jump can be cancelled safely', (
     tester,
@@ -422,6 +530,7 @@ Future<void> _setDesktopViewport(WidgetTester tester) async {
 Widget _pinnedRoomApp({
   String? contentType,
   int pinCount = 1,
+  double textScale = 1,
   bool standaloneInfo = false,
   bool captureBoundary = false,
   bool failFirstPinnedRequest = false,
@@ -571,6 +680,12 @@ Widget _pinnedRoomApp({
     locale: const Locale('en'),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: room,
   );
   return ProviderScope(
@@ -579,6 +694,22 @@ Widget _pinnedRoomApp({
         ? RepaintBoundary(key: _captureBoundaryKey, child: app)
         : app,
   );
+}
+
+bool _primaryFocusWithin(WidgetTester tester, Finder ancestor) {
+  final primaryFocus = tester.binding.focusManager.primaryFocus?.context;
+  if (primaryFocus is! Element) return false;
+  final target = tester.element(ancestor);
+  if (identical(primaryFocus, target)) return true;
+  var found = false;
+  primaryFocus.visitAncestorElements((element) {
+    if (identical(element, target)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
 }
 
 const _captureBoundaryKey = Key('pinned_navigation_capture');

@@ -884,7 +884,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                                   )
                                   .retryPinnedMessages(),
                               style: TextButton.styleFrom(
-                                minimumSize: const Size(0, 40),
+                                minimumSize: const Size(48, 48),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                 ),
