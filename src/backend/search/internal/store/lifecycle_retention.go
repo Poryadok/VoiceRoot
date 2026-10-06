@@ -151,7 +151,7 @@ func pruneExpiredLifecycleSpace(ctx context.Context, pool *pgxpool.Pool, spaceID
 			return err
 		}
 		if inserted.RowsAffected() != sourceItems {
-			return errors.New("Search Chat purge evidence conflicts with compact terminal binding")
+			return errors.New("search chat purge evidence conflicts with compact terminal binding")
 		}
 		for _, statement := range []string{
 			`DELETE FROM search_space_chat_manifest_items i USING search_space_purge_receipts p WHERE i.space_id=$1 AND p.space_id=i.space_id AND p.deletion_operation_id=i.deletion_operation_id AND p.retain_until < clock_timestamp()`,
