@@ -28,7 +28,7 @@ func renewalFixture(t *testing.T) ([]byte, string, string, []byte, string, strin
 	u.Pub.Allow = []string{"$JS.API.STREAM.INFO.chat_events"}
 	u.Sub.Allow = []string{"_INBOX.voice.bootstrap.reply.>"}
 	u.Expires = time.Now().Add(time.Hour).Unix()
-	u.Limits.NatsLimits.Payload = 65536
+	u.NatsLimits.Payload = 65536
 	token, _ := u.Encode(ap)
 	seed, _ := uk.Seed()
 	creds, _ := jwt.FormatUserConfig(token, seed)

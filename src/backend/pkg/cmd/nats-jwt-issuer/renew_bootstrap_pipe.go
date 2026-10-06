@@ -50,7 +50,7 @@ func renewBootstrapPipe(input io.Reader, output io.Writer) error {
 	}
 	return nil
 }
-func runRenewBootstrapPipe(descriptor string) error {
+func runRenewBootstrapPipe(descriptor string) (err error) {
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
 		return renewalFailure()
 	}
@@ -62,7 +62,11 @@ func runRenewBootstrapPipe(descriptor string) error {
 	if output == nil {
 		return renewalFailure()
 	}
-	defer output.Close()
+	defer func() {
+		if output.Close() != nil {
+			err = renewalFailure()
+		}
+	}()
 	s, e := output.Stat()
 	if e != nil || s.Mode()&os.ModeNamedPipe == 0 {
 		return renewalFailure()
