@@ -7,6 +7,7 @@ import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
+import '../../state/dm_permission_provider.dart';
 import '../../state/presence_providers.dart';
 import '../../state/matchmaking_providers.dart';
 import '../../state/social_providers.dart';
@@ -67,9 +68,22 @@ class ProfileDetailSheet extends ConsumerWidget {
           );
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
-    final activeId = ref.watch(authControllerProvider).activeProfileId;
-    final isGuest = ref.watch(authControllerProvider).isGuest;
+    final auth = ref.watch(authControllerProvider);
+    final activeId = auth.activeProfileId;
+    final isGuest = auth.isGuest;
     final isSelf = activeId == profileId;
+    final session = auth.session;
+    final dmPermissionRequest = session == null || activeId == null
+        ? null
+        : (
+            authorization: session.authorizationHeader,
+            accountId: session.accountId,
+            viewerProfileId: activeId,
+            targetProfileId: profileId,
+          );
+    final dmPermission = !isGuest && !isSelf && dmPermissionRequest != null
+        ? ref.watch(dmPermissionProvider(dmPermissionRequest))
+        : null;
 
     final outgoing = requestsAsync.valueOrNull?.outgoing ?? const [];
     final incoming = requestsAsync.valueOrNull?.incoming ?? const [];
@@ -217,13 +231,32 @@ class ProfileDetailSheet extends ConsumerWidget {
                   ),
                   if (!isSelf) ...[
                     const SizedBox(height: 20),
-                    OutlinedButton(
-                      key: ProfileDetailSheet.messageKey,
-                      onPressed: isGuest
-                          ? null
-                          : () => _openDm(context, ref, profileId),
-                      child: Text(l10n.profileMessage),
-                    ),
+                    if (isGuest)
+                      OutlinedButton(
+                        key: ProfileDetailSheet.messageKey,
+                        onPressed: null,
+                        child: Text(l10n.profileMessage),
+                      )
+                    else if (dmPermission != null)
+                      dmPermission.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (error, stackTrace) => VoiceStatePanel(
+                          title: l10n.chatListLoadError,
+                          icon: Icons.cloud_off_outlined,
+                          actionLabel: l10n.commonRetry,
+                          onAction: () => ref.invalidate(
+                            dmPermissionProvider(dmPermissionRequest!),
+                          ),
+                        ),
+                        data: (allowed) => allowed
+                            ? OutlinedButton(
+                                key: ProfileDetailSheet.messageKey,
+                                onPressed: () =>
+                                    _openDm(context, ref, profileId),
+                                child: Text(l10n.profileMessage),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
                     const SizedBox(height: 8),
                     _FriendActionButton(
                       profileId: profileId,
