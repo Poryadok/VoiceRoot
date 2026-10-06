@@ -1925,6 +1925,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.';
 
   @override
+  String get appIconSubscriptionStatusChecking =>
+      'Проверяем статус Voice Plus…';
+
+  @override
   String get appIconApplyFailure =>
       'Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.';
 

@@ -937,6 +937,7 @@
   "appIconSavedChoiceNotice": "Your saved icon will return when Voice Plus is active again.",
   "appIconUnavailable": "Runtime app icons are unavailable on this device.",
   "appIconSubscriptionStatusError": "Voice Plus status could not be checked. Retry or choose Voice Sky.",
+  "appIconSubscriptionStatusChecking": "Checking Voice Plus status…",
   "appIconApplyFailure": "The app icon could not be applied. Your saved choice is kept; retry to apply it.",
   "appIconRetry": "Retry",
   "appIconApply": "Apply {iconName}",
