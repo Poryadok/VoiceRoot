@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -527,20 +528,126 @@ void main() {
           .hasFocus,
       isTrue,
     );
+    semantics.dispose();
+  });
+
+  testWidgets('portrait Chat Info sheet hands off to existing search', (
+    tester,
+  ) async {
+    final captureTheme = await _loadCaptureTheme(tester);
     tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        theme: captureTheme,
+        client: MockClient((_) async => http.Response('not found', 404)),
+        home: const Scaffold(body: ChatRoomPanel(chatId: _e2eChatId)),
+      ),
+    );
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatRoomPanel.chatInfoKey));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Search messages'), findsOneWidget);
+
+    await tester.tap(find.text('Search messages'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
     expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
     await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
     expect(find.textContaining('loaded local secret needle'), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(InChatSearch.searchFieldKey)).width,
-      lessThan(390),
-    );
     await _captureSearchState(tester, 'chat-info-search-v.png');
-    semantics.dispose();
   });
+
+  testWidgets(
+    'consumed Chat Info handoff is ignored when profile changes before frame',
+    (tester) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        e2eInChatSearchTestApp(
+          chatId: _e2eChatId,
+          onContainer: (value) => container = value,
+          client: MockClient((_) async => http.Response('not found', 404)),
+          home: const Scaffold(body: ChatRoomPanel(chatId: _e2eChatId)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final current = container.read(authControllerProvider);
+      final currentSession = current.session!;
+
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: currentSession.activeProfileId,
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      container.read(authControllerProvider.notifier).state = current.copyWith(
+        session: AuthSession(
+          accessToken: currentSession.accessToken,
+          refreshToken: currentSession.refreshToken,
+          accountId: currentSession.accountId,
+          activeProfileId: 'profile-after-handoff',
+          expiresInSeconds: currentSession.expiresInSeconds,
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+
+      final changedProfile = container.read(authControllerProvider);
+      final changedSession = changedProfile.session!;
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: changedSession.activeProfileId,
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      container.read(authControllerProvider.notifier).state = changedProfile
+          .copyWith(
+            session: AuthSession(
+              accessToken: changedSession.accessToken,
+              refreshToken: changedSession.refreshToken,
+              accountId: changedSession.accountId,
+              activeProfileId: 'newer-handoff-profile',
+              expiresInSeconds: changedSession.expiresInSeconds,
+            ),
+          );
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: 'newer-handoff-profile',
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+            .focusNode!
+            .hasFocus,
+        isTrue,
+      );
+    },
+  );
 
   testWidgets('Chat Info search ignores stale chat and profile requests', (
     tester,

@@ -202,6 +202,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
+  var _chatInfoSearchHandoffGeneration = 0;
   var _pinnedBarHidden = false;
   var _pinnedJumpGeneration = 0;
   String? _shownPinnedMessageId;
@@ -238,6 +239,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
       _inChatSearchController.clear();
       _inChatSearchTriggerFocus.unfocus();
@@ -267,6 +269,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   void _closeInChatSearch() {
+    _chatInfoSearchHandoffGeneration++;
     if (!_inChatSearchOpen) return;
     setState(() {
       _inChatSearchOpen = false;
@@ -280,6 +283,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   void _openInChatSearch() {
+    _chatInfoSearchHandoffGeneration++;
     setState(() => _inChatSearchOpen = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
@@ -289,6 +293,17 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     });
   }
+
+  bool _isCurrentChatInfoSearchHandoff(
+    ChatInfoSearchRequest request,
+    int generation,
+  ) =>
+      mounted &&
+      _chatInfoSearchHandoffGeneration == generation &&
+      widget.chatId == request.chatId &&
+      ref.read(selectedChatIdProvider) == request.chatId &&
+      ref.read(authControllerProvider).activeProfileId ==
+          request.viewerProfileId;
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -758,16 +773,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (identical(ref.read(chatInfoSearchRequestProvider), request)) {
         ref.read(chatInfoSearchRequestProvider.notifier).state = null;
       }
-      setState(() => _inChatSearchOpen = true);
+      final handoffGeneration = ++_chatInfoSearchHandoffGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted ||
-            widget.chatId != request.chatId ||
-            ref.read(selectedChatIdProvider) != request.chatId ||
-            ref.read(authControllerProvider).activeProfileId !=
-                request.viewerProfileId) {
+        if (!_isCurrentChatInfoSearchHandoff(request, handoffGeneration)) {
           return;
         }
-        _inChatSearchFocus.requestFocus();
+        setState(() => _inChatSearchOpen = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_isCurrentChatInfoSearchHandoff(request, handoffGeneration) &&
+              _inChatSearchOpen) {
+            _inChatSearchFocus.requestFocus();
+          }
+        });
       });
     });
 
