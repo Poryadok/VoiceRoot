@@ -53,6 +53,22 @@ type secretMetadata struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--authenticate-existing-actor" {
+		if authenticateExistingActor() != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS actor scratch authentication refused")
+			os.Exit(1)
+		}
+		fmt.Println("NATS_EXISTING_ACTOR_SERVER_AUTHENTICATION=VERIFIED")
+		return
+	}
+	if len(os.Args) == 3 && os.Args[1] == "--verify-existing-actor" {
+		if runVerifyActorPipe(os.Args[2]) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS actor verification refused")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS actor verified through private controller pipe")
+		return
+	}
 	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-bootstrap" {
 		if runRenewBootstrapPipe(os.Args[2]) != nil {
 			fmt.Fprintln(os.Stderr, "Existing NATS bootstrap renewal refused; no credentials printed")

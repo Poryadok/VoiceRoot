@@ -4,14 +4,14 @@ import json
 import unittest
 import renderer_transition as transition
 
-REPO = 'ghcr.io/poryadok/voiceroot/nats-config-renderer'
+REPO = 'ghcr.io/poryadok/voiceroot/nats-hub-config-renderer'
 OLD = REPO+'@sha256:'+'1'*64
 TARGET = REPO+'@sha256:'+'2'*64
 SOURCE = 'a'*40
 STORAGE = {'pvc_name':'voice-nats-jsdata-d202610040049430b','pvc_uid':'pvc-uid','pv_uid':'pv-uid','generation':'r20260930a4'}
 
 def hub():
-    return {'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-nats-pvc-candidate','namespace':'voice','uid':'hub-uid','resourceVersion':'100'},'spec':{'replicas':1,'strategy':{'type':'Recreate'},'selector':{'matchLabels':{'app':'hub'}},'template':{'metadata':{'labels':{'app':'hub'}},'spec':{'initContainers':[{'name':'nats-config-renderer','image':REPO+':old-tag','command':['/renderer'],'args':['--out','/config/nats.conf'],'env':[{'name':'PRIVATE_REF','valueFrom':{'secretKeyRef':{'name':'existing','key':'account.jwt'}}}]}],'containers':[{'name':'nats','image':'nats@sha256:'+'3'*64}],'volumes':[{'name':'js','persistentVolumeClaim':{'claimName':STORAGE['pvc_name']}}]}}}}
+    return {'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-nats-pvc-candidate','namespace':'voice-staging','uid':'hub-uid','resourceVersion':'100'},'spec':{'replicas':1,'strategy':{'type':'Recreate'},'selector':{'matchLabels':{'app':'hub'}},'template':{'metadata':{'labels':{'app':'hub'}},'spec':{'initContainers':[{'name':'nats-config-renderer','image':REPO+':old-tag','command':['/renderer'],'args':['--out','/config/nats.conf'],'env':[{'name':'PRIVATE_REF','valueFrom':{'secretKeyRef':{'name':'existing','key':'account.jwt'}}}]}],'containers':[{'name':'nats','image':'nats@sha256:'+'3'*64}],'volumes':[{'name':'js','persistentVolumeClaim':{'claimName':STORAGE['pvc_name']}}]}}}}
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()

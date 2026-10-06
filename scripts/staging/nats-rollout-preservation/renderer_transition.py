@@ -109,7 +109,7 @@ def _snapshot(value, storage):
     if type(value) is not dict or set(value)-{'apiVersion','kind','metadata','spec','status'} or value.get('apiVersion')!='apps/v1' or value.get('kind')!='Deployment':
         _fail()
     metadata=value.get('metadata'); spec=value.get('spec')
-    if type(metadata) is not dict or metadata.get('name')!=HUB or metadata.get('namespace') not in (None,'voice') or type(spec) is not dict:
+    if type(metadata) is not dict or metadata.get('name')!=HUB or metadata.get('namespace') not in (None,'voice-staging') or type(spec) is not dict:
         _fail()
     _text(metadata.get('uid'));_text(metadata.get('resourceVersion'),r'[1-9][0-9]{0,31}')
     if type(spec.get('replicas')) is not int or spec['replicas']<0:
