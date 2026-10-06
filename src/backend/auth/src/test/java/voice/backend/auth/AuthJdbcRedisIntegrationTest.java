@@ -345,7 +345,18 @@ class AuthJdbcRedisIntegrationTest {
         "{\"email\":\"" + email + "\",\"password\":\"" + password
             + "\",\"device_info_json\":\"{}\"}"));
     var enrollment = authService.enable2FA(registered.get("access_token").asText(), password);
-    authService.verify2FA(registered.get("access_token").asText(), "000000");
+    String enrollmentSecret = java.util.Arrays.stream(
+            java.net.URI.create(enrollment.totpUri()).getRawQuery().split("&"))
+        .filter(parameter -> parameter.startsWith("secret="))
+        .map(parameter -> java.net.URLDecoder.decode(
+            parameter.substring("secret=".length()), java.nio.charset.StandardCharsets.UTF_8))
+        .findFirst()
+        .orElseThrow();
+    String currentTotpCode = String.format(
+        java.util.Locale.ROOT,
+        "%06d",
+        new com.warrenstrange.googleauth.GoogleAuthenticator().getTotpPassword(enrollmentSecret));
+    authService.verify2FA(registered.get("access_token").asText(), currentTotpCode);
     UUID accountId = UUID.fromString(registered.get("account_id").asText());
     String backupCode = enrollment.backupCodes().getFirst();
     long activeCodesBefore = activeBackupCodeCount(accountId);
@@ -411,6 +422,9 @@ class AuthJdbcRedisIntegrationTest {
   @Test
   void legacyRefreshRejectsFloorPublishedByRolledBackPasswordChange() throws Exception {
     LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-rollback-floor@example.test");
+    var passwordSession = freshPasswordSession(fixture.email());
+    String passwordSessionRefreshHash = new voice.backend.auth.security.RefreshTokenCodec()
+        .hash(passwordSession.refreshToken());
     CountDownLatch profileLookupStarted = new CountDownLatch(1);
     CountDownLatch releaseProfileLookup = new CountDownLatch(1);
     AuthService refreshService = serviceWithPrimaryProfile(
@@ -436,7 +450,7 @@ class AuthJdbcRedisIntegrationTest {
       AuthService failingPasswordService = serviceWithPrimaryProfile(
           failAfterPasswordUpdate, null, null, fixture.profileId());
       assertThatThrownBy(() -> failingPasswordService.changePassword(
-          fixture.accessToken(), "Correct horse battery staple", "New safer password", null))
+          passwordSession.accessToken(), "Correct horse battery staple", "New safer password", null))
           .isInstanceOf(IllegalStateException.class)
           .hasMessageContaining("injected transaction rollback");
 
@@ -458,7 +472,8 @@ class AuthJdbcRedisIntegrationTest {
           .isEqualTo(durableEpoch);
       assertThat(redisTemplate.opsForValue().get(floorKey(fixture.accountId())))
           .isEqualTo(Long.toString(durableEpoch + 1));
-      assertThat(activeRefreshTokenCount(fixture.accountId())).isZero();
+      assertThat(refreshTokens.findByHash(passwordSessionRefreshHash).orElseThrow().revoked()).isFalse();
+      assertThat(activeRefreshTokenCount(fixture.accountId())).isEqualTo(1);
     } finally {
       releaseProfileLookup.countDown();
       worker.shutdownNow();
@@ -468,6 +483,7 @@ class AuthJdbcRedisIntegrationTest {
   @Test
   void legacyRefreshPhaseBRejectsAfterPasswordChangeWinsBetweenUserLookupAndIssue() throws Exception {
     LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-race@example.test");
+    var passwordSession = freshPasswordSession(fixture.email());
     CountDownLatch profileLookupStarted = new CountDownLatch(1);
     CountDownLatch releaseProfileLookup = new CountDownLatch(1);
     AuthService gatedService = serviceWithPrimaryProfile(profileLookupStarted, releaseProfileLookup,
@@ -477,7 +493,8 @@ class AuthJdbcRedisIntegrationTest {
       Future<?> refresh = worker.submit(() ->
           gatedService.refresh(new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}")));
       assertThat(profileLookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
-      authService.changePassword(fixture.accessToken(), "Correct horse battery staple", "New safer password", null);
+      authService.changePassword(
+          passwordSession.accessToken(), "Correct horse battery staple", "New safer password", null);
       releaseProfileLookup.countDown();
 
       assertThatThrownBy(() -> refresh.get(5, TimeUnit.SECONDS))
@@ -494,11 +511,13 @@ class AuthJdbcRedisIntegrationTest {
   @Test
   void passwordChangeAfterLegacyRefreshPhaseBRevokesTheReplacementSession() throws Exception {
     LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-after-refresh@example.test");
+    var passwordSession = freshPasswordSession(fixture.email());
     AuthService profileService = serviceWithPrimaryProfile(null, null, fixture.profileId());
     var replacement = profileService.refresh(
         new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}"));
 
-    authService.changePassword(fixture.accessToken(), "Correct horse battery staple", "New safer password", null);
+    authService.changePassword(
+        passwordSession.accessToken(), "Correct horse battery staple", "New safer password", null);
 
     assertThatThrownBy(() -> authService.validate(replacement.accessToken()))
         .isInstanceOf(voice.backend.auth.service.AuthException.class)
@@ -912,7 +931,13 @@ class AuthJdbcRedisIntegrationTest {
         refreshToken,
         refreshHash,
         registered.get("access_token").asText(),
-        registered.get("profile_id").asText());
+        registered.get("profile_id").asText(),
+        email);
+  }
+
+  private voice.backend.auth.service.AuthSession freshPasswordSession(String email) {
+    return authService.login(
+        new LoginCommand(email, null, "Correct horse battery staple", null, "{}"));
   }
 
   private AuthService serviceWithPrimaryProfile(
@@ -993,7 +1018,12 @@ class AuthJdbcRedisIntegrationTest {
   }
 
   private record LegacyRefreshFixture(
-      UUID accountId, String refreshToken, String refreshHash, String accessToken, String profileId) {}
+      UUID accountId,
+      String refreshToken,
+      String refreshHash,
+      String accessToken,
+      String profileId,
+      String email) {}
 
   private boolean conditionalRestore(UUID accountId) throws Exception {
     Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class);
