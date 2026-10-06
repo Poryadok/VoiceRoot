@@ -49,6 +49,7 @@ jobs:
       global: ${{ steps.filter.outputs.global }}
       ci_global: ${{ steps.filter.outputs.ci_global }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
+      a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -1466,7 +1467,10 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          needs.changes.outputs.global == 'true'
+          (
+            needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.a1_t106_live == 'true'
+          )
         ) ||
         (
           github.event_name == 'push' &&
