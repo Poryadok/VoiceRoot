@@ -7,6 +7,37 @@ from apply import digest
 
 
 class StageTest(unittest.TestCase):
+    def test_hub_renderer_actual_pin_requires_explicit_opt_in(self):
+        hub={'metadata':{'uid':'hub'},'spec':{'template':{'spec':{
+            'initContainers':[{'name':'nats-config-renderer','image':'renderer:old'}],
+            'containers':[{'name':'nats','image':'broker:fixed'}]}}}}
+        rows=[{'kind':'ReplicaSet','metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'hub'}]},'spec':{'template':copy.deepcopy(hub['spec']['template'])}},
+              {'kind':'Pod','metadata':{'ownerReferences':[{'kind':'ReplicaSet','uid':'rs'}]},'status':{'phase':'Running',
+                'initContainerStatuses':[{'name':'nats-config-renderer','imageID':'example.invalid/renderer@sha256:'+'a'*64}],
+                'containerStatuses':[{'name':'nats','ready':True,'imageID':'example.invalid/nats@sha256:'+'b'*64}]}}]
+        self.assertEqual(runtime_stage.running_image_pins({runtime_stage.HUB:hub},rows),{})
+        pins=runtime_stage.running_image_pins({runtime_stage.HUB:hub},rows,include_hub=True)
+        self.assertEqual(pins[runtime_stage.HUB+'/nats-config-renderer'],'example.invalid/renderer@sha256:'+'a'*64)
+        self.assertEqual(pins[runtime_stage.HUB+'/nats'],'example.invalid/nats@sha256:'+'b'*64)
+
+    def test_renderer_post_start_gate_runs_before_first_app_restart(self):
+        self.marker['data']['phase']='rollout-verified'
+        self.stage.renderer_transition={'verified':True}
+        self.stage.renderer_post_start=unittest.mock.Mock(side_effect=Blocked('renderer_live_output_changed'))
+        calls=[]
+        def parent_restart(stage):
+            stage.scale(runtime_stage.HUB,1);stage.wait_ready(runtime_stage.HUB)
+            stage.scale('voice-user',1)
+        with patch.object(runtime_stage.Staging,'restart',parent_restart),patch.object(runtime_stage.Staging,'wait_ready'),patch.object(self.stage,'scale',side_effect=lambda name,n:calls.append((name,n))):
+            with self.assertRaisesRegex(Blocked,'renderer_live_output_changed'):self.stage.restart()
+        self.assertEqual(calls,[(runtime_stage.HUB,1)])
+        self.stage.renderer_post_start.assert_called_once_with(self.stage)
+
+    def test_renderer_restart_without_bound_post_start_gate_is_forbidden(self):
+        self.marker['data']['phase']='rollout-verified';self.stage.renderer_transition={'verified':True}
+        with patch.object(runtime_stage.Staging,'restart') as restart:
+            with self.assertRaisesRegex(Blocked,'renderer_restart_proof_missing'):self.stage.restart()
+        restart.assert_not_called()
     def test_user_restore_cas_is_durable_before_readiness_wait_can_interrupt(self):
         original={"metadata":{"annotations":{}},"spec":{"containers":[{"name":"user","env":[]}]}}
         baseline={"metadata":{"uid":"user","resourceVersion":"1"},"spec":{"template":original}}
