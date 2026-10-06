@@ -27,6 +27,7 @@ service ChatService {
   // DM
   rpc CreateDM(CreateDMRequest) returns (CreateDMResponse);       // ✓
   rpc GetDM(GetDMRequest) returns (GetDMResponse);               // ✓ find or create
+  rpc CanCreateDM(CanCreateDMRequest) returns (CanCreateDMResponse); // ✓ read-only {allowed}
 
   // Текстовые групповые чаты (group | channel)
   rpc CreateChat(CreateChatRequest) returns (CreateChatResponse); // ✓
@@ -77,6 +78,8 @@ service ChatService {
   rpc ArchiveChat(ArchiveChatRequest) returns (ArchiveChatResponse); // ✓ write + list archive inbox
 }
 ```
+
+`CanCreateDM` evaluates the authenticated caller against the selected active target, account blocks, and the target's `allow_dm` audience. A policy denial, blocked pair, guest-ineligible caller, self-target, or missing/inactive target returns `allowed=false` without revealing the specific reason or privacy settings. Missing authentication, malformed identifiers, and unavailable authorization dependencies retain typed errors. This RPC does not depend on the DM store and never creates/promotes/clears a conversation or publishes chat events. `CreateDM` repeats its existing checks and remains authoritative when opening a chat.
 
 ### BE-116 Space audit producer dependency (accepted target; not implemented)
 

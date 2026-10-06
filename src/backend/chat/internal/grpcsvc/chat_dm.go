@@ -32,6 +32,70 @@ func (s *ChatGRPC) GetDM(ctx context.Context, req *chatv1.GetDMRequest) (*chatv1
 	return &chatv1.GetDMResponse{Chat: chatRowToProto(c)}, nil
 }
 
+// CanCreateDM reports the caller-relative DM authorization without opening or
+// changing a conversation. CreateDM remains the authoritative mutation and
+// repeats these checks when the user acts.
+func (s *ChatGRPC) CanCreateDM(ctx context.Context, req *chatv1.CanCreateDMRequest) (*chatv1.CanCreateDMResponse, error) {
+	allowed, err := s.canCreateDM(ctx, req.GetOtherProfileId())
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.CanCreateDMResponse{Allowed: allowed}, nil
+}
+
+func (s *ChatGRPC) canCreateDM(ctx context.Context, otherProfileRaw string) (bool, error) {
+	if s == nil {
+		return false, status.Error(codes.Unavailable, "dm authorization unavailable")
+	}
+	accountID, ok := authctx.AccountID(ctx)
+	if !ok {
+		return false, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	callerProfile, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return false, status.Error(codes.Unauthenticated, "missing profile")
+	}
+	if err := guestguard.RequireRegular(ctx); err != nil {
+		if status.Code(err) == codes.PermissionDenied {
+			return false, nil
+		}
+		return false, err
+	}
+	otherProfile, err := parseUUIDField("other_profile_id", otherProfileRaw)
+	if err != nil {
+		return false, err
+	}
+	if otherProfile == callerProfile {
+		return false, nil
+	}
+	otherAccount, err := s.requireActiveDMPeer(ctx, otherProfile)
+	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound, codes.PermissionDenied:
+			return false, nil
+		default:
+			return false, err
+		}
+	}
+	if s.Blocks == nil {
+		return false, status.Error(codes.Unavailable, "dm block status unavailable")
+	}
+	blocked, err := s.Blocks.AccountPairBlocked(ctx, accountID, otherAccount)
+	if err != nil {
+		return false, status.Error(codes.Unavailable, "dm block status unavailable")
+	}
+	if blocked {
+		return false, nil
+	}
+	if err := s.ensureDMPrivacy(ctx, callerProfile, otherProfile); err != nil {
+		if status.Code(err) == codes.PermissionDenied {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // ensureDM applies PLAN app stack: DM without friendship; blocks via Social (both directions).
 func (s *ChatGRPC) ensureDM(ctx context.Context, otherProfileRaw string) (*store.ChatRow, error) {
 	if s == nil || s.DM == nil {

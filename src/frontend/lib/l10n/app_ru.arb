@@ -681,6 +681,25 @@
   "spaceInviteCopied": "Ссылка скопирована",
   "spaceInviteRevoke": "Отозвать",
   "spaceInviteUses": "{used} использований{maxSuffix}",
+  "spaceInviteExpiryLabel": "Срок действия",
+  "spaceInviteExpiry30Minutes": "30 минут",
+  "spaceInviteExpiry1Hour": "1 час",
+  "spaceInviteExpiry6Hours": "6 часов",
+  "spaceInviteExpiry12Hours": "12 часов",
+  "spaceInviteExpiry1Day": "1 день",
+  "spaceInviteExpiry7Days": "7 дней",
+  "spaceInviteExpiryNever": "Без срока",
+  "spaceInviteExpiresAt": "Истекает: {date}",
+  "@spaceInviteExpiresAt": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "spaceInviteShowQr": "Показать QR-код",
+  "spaceInviteQrTitle": "QR-код приглашения",
+  "spaceInviteQrSemanticLabel": "QR-код приглашения в спейс",
+  "spaceInviteRevokeConfirmTitle": "Отозвать ссылку-приглашение?",
+  "spaceInviteRevokeConfirmBody": "После отзыва эту ссылку больше нельзя будет использовать.",
   "spaceInviteJoinTooltip": "Вступить по инвайту",
   "spaceInviteJoinTitle": "Вступить в спейс",
   "spaceInviteJoinSubtitle": "Вставьте код или ссылку от друга.",

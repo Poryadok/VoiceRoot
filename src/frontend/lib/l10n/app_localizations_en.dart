@@ -1529,6 +1529,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spaceInviteExpiryLabel => 'Expires after';
+
+  @override
+  String get spaceInviteExpiry30Minutes => '30 minutes';
+
+  @override
+  String get spaceInviteExpiry1Hour => '1 hour';
+
+  @override
+  String get spaceInviteExpiry6Hours => '6 hours';
+
+  @override
+  String get spaceInviteExpiry12Hours => '12 hours';
+
+  @override
+  String get spaceInviteExpiry1Day => '1 day';
+
+  @override
+  String get spaceInviteExpiry7Days => '7 days';
+
+  @override
+  String get spaceInviteExpiryNever => 'Never';
+
+  @override
+  String spaceInviteExpiresAt(String date) {
+    return 'Expires $date';
+  }
+
+  @override
+  String get spaceInviteShowQr => 'Show QR code';
+
+  @override
+  String get spaceInviteQrTitle => 'Invite QR code';
+
+  @override
+  String get spaceInviteQrSemanticLabel => 'QR code for space invite';
+
+  @override
+  String get spaceInviteRevokeConfirmTitle => 'Revoke invite link?';
+
+  @override
+  String get spaceInviteRevokeConfirmBody =>
+      'People with this link will no longer be able to use it.';
+
+  @override
   String get spaceInviteJoinTooltip => 'Join space by invite';
 
   @override

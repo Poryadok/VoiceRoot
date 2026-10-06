@@ -12,6 +12,9 @@ option go_package = "voice.app/voice/chat/v1;chatv1";
 service ChatService {
   rpc CreateDM(CreateDMRequest) returns (CreateDMResponse);
   rpc GetDM(GetDMRequest) returns (GetDMResponse);
+  // Read-only caller-relative DM authorization for gating profile actions.
+  // Does not create, promote, or otherwise mutate a DM.
+  rpc CanCreateDM(CanCreateDMRequest) returns (CanCreateDMResponse);
 
   rpc CreateChat(CreateChatRequest) returns (CreateChatResponse);
   rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse);
@@ -584,4 +587,13 @@ message PrepareSpaceDeletionManifestResponse {
 // @voice.hash=domain_separated_sha256
 message GetSpacePurgeManifestPageResponse {
   voice.chat.v1.SpacePurgeManifestPage page = 1;
+}
+
+// Caller-relative, read-only DM action capability; this never creates a chat.
+message CanCreateDMRequest {
+  string other_profile_id = 1;
+}
+
+message CanCreateDMResponse {
+  bool allowed = 1;
 }
