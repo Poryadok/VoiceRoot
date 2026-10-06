@@ -4,17 +4,28 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:voice_frontend/app.dart';
+import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
+import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
-import 'package:voice_frontend/ui/core/voice_compact_banner.dart';
+
+import 'support/auth_test_overrides.dart';
+import 'support/fake_voice_api_clients.dart';
 
 const _captureDirectoryVariable = 'VOICE_NETWORK_OFFLINE_CAPTURE_DIR';
-const _captureBoundaryKey = Key('network_offline_banner_capture');
+const _captureBoundaryKey = Key('network_offline_app_capture');
+const _captureChatId = 'network-offline-capture-chat';
 
 void main() {
-  testWidgets('renders the reconnect banner at H/V reference viewports', (
+  testWidgets('captures reconnect status in the real shell and open chat', (
     tester,
   ) async {
     addTearDown(() {
@@ -36,58 +47,112 @@ void main() {
     );
 
     for (final viewport in [
-      (name: 'h', size: const Size(1280, 800)),
-      (name: 'v', size: const Size(390, 844)),
+      (name: 'h', size: const Size(1280, 800), openChat: false),
+      (name: 'v', size: const Size(390, 844), openChat: true),
     ]) {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = viewport.size;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: theme,
-          locale: const Locale('en'),
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Builder(
-            builder: (context) {
-              final media = MediaQuery.of(context);
-              final l10n = AppLocalizations.of(context)!;
-              return MediaQuery(
-                data: media.copyWith(textScaler: const TextScaler.linear(1.5)),
-                child: Scaffold(
-                  body: RepaintBoundary(
-                    key: _captureBoundaryKey,
-                    child: ColoredBox(
-                      color: theme.scaffoldBackgroundColor,
-                      child: SafeArea(
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: VoiceCompactBanner(
-                            message: l10n.chatRealtimeReconnecting,
-                            detail: l10n.networkReconnectDetails,
-                            actionLabel: l10n.commonRetry,
-                            onAction: () {},
-                            onDismiss: () {},
-                          ),
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => httpResponseOk),
+          ),
+          voiceMaterialThemeProvider.overrideWith((ref) async => theme),
+          if (viewport.openChat)
+            voiceChatsClientProvider.overrideWithValue(
+              FakeVoiceChatsClient(
+                pages: [
+                  const ChatListData(
+                    items: [
+                      ChatListItem(
+                        chat: VoiceChat(
+                          id: _captureChatId,
+                          type: 'CHAT_TYPE_GROUP',
+                          creatorProfileId: 'capture-owner',
+                          name: 'Offline capture room',
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              );
-            },
+                  const ChatListData(
+                    items: [
+                      ChatListItem(
+                        chat: VoiceChat(
+                          id: _captureChatId,
+                          type: 'CHAT_TYPE_GROUP',
+                          creatorProfileId: 'capture-owner',
+                          name: 'Offline capture room',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          connectivityWatcherProvider.overrideWith((ref) {}),
+          realtimeHubProvider.overrideWith((ref) => _CaptureRealtimeHub(ref)),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+      if (viewport.openChat) {
+        container.read(selectedChatIdProvider.notifier).state = _captureChatId;
+      }
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: RepaintBoundary(
+            key: _captureBoundaryKey,
+            child: MediaQuery(
+              data: MediaQueryData(
+                textScaler: const TextScaler.linear(1.5),
+                size: viewport.size,
+                devicePixelRatio: 1,
+              ),
+              child: const VoiceApp(locale: Locale('en')),
+            ),
           ),
         ),
       );
+      await tester.pump();
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.reconnecting;
+      await tester.pump(reconnectBannerShowDelay);
 
-      expect(find.text('Reconnecting…'), findsOneWidget);
+      final bannerKey = viewport.openChat
+          ? const Key('chat_room_reconnect_banner')
+          : const Key('global_reconnect_banner');
+      expect(find.byKey(bannerKey), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.text('Reconnecting…'),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.text(
           'Drafts stay on this device. Realtime updates resume after reconnection.',
         ),
         findsOneWidget,
+        reason: 'status copy belongs to the active reconnect banner',
       );
-      expect(find.text('Try again'), findsOneWidget);
-      expect(find.byTooltip('Close'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.text('Try again'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.byTooltip('Close'),
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
 
       if (shouldCapture) {
@@ -97,9 +162,12 @@ void main() {
           expectedSize: viewport.size,
         );
       }
+      await tester.pumpWidget(const SizedBox.shrink());
     }
   });
 }
+
+final httpResponseOk = http.Response('OK', 200);
 
 Future<void> _loadProductionFonts(WidgetTester tester) async {
   final loaded = await tester.runAsync(() async {
@@ -162,4 +230,26 @@ Future<void> _writeCapture(
   if (written != true) {
     throw StateError('Network banner capture did not complete');
   }
+}
+
+class _CaptureRealtimeHub extends RealtimeHub {
+  _CaptureRealtimeHub(super.ref);
+
+  @override
+  Stream<RealtimeFrame> get events => const Stream.empty();
+
+  @override
+  bool get canRetryCurrentSession => true;
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  Future<void> retryCurrentSession() async {}
+
+  @override
+  void ensureSubscribed(String chatId) {}
+
+  @override
+  Future<void> dispose() async {}
 }

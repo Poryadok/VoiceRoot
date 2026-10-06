@@ -32,7 +32,6 @@ class VoiceShortcuts extends ConsumerWidget {
         SingleActivator(LogicalKeyboardKey.arrowUp): _PrevMessageIntent(),
         SingleActivator(LogicalKeyboardKey.keyR): _ReplyMessageIntent(),
         SingleActivator(LogicalKeyboardKey.keyE): _ReactMessageIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): _OpenMessageMenuIntent(),
       },
       child: Actions(
         actions: {
@@ -93,14 +92,6 @@ class VoiceShortcuts extends ConsumerWidget {
           _ReactMessageIntent: _MessageShortcutAction<_ReactMessageIntent>(
             onInvoke: (_) {
               ref.read(chatMessageKeyboardProvider.notifier).reactToSelected();
-              return null;
-            },
-          ),
-          _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
-            onInvoke: (_) {
-              ref
-                  .read(chatMessageKeyboardProvider.notifier)
-                  .openContextMenuOnSelected();
               return null;
             },
           ),
@@ -177,10 +168,6 @@ class _ReplyMessageIntent extends Intent {
 
 class _ReactMessageIntent extends Intent {
   const _ReactMessageIntent();
-}
-
-class _OpenMessageMenuIntent extends Intent {
-  const _OpenMessageMenuIntent();
 }
 
 /// Signals [VoiceApp] to open settings (Ctrl+,).

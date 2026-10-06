@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/chat_draft_storage.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/chat_draft_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
+import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/ui/chat/chat_composer_text_field.dart';
+import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
+import 'support/markdown_test_helpers.dart';
 
 // Pre-release screen reader checklist (docs/features/accessibility.md).
 // Run manually on one Android (TalkBack) and one iOS (VoiceOver) build before
@@ -282,23 +289,102 @@ void main() {
     expect(container.read(selectedChatIdProvider), 'chat-b');
   });
 
-  testWidgets('Enter opens context menu request for selected message', (
+  testWidgets('Enter opens the selected message menu from focused list', (
     tester,
   ) async {
-    final container = await _pumpShortcuts(tester);
+    late _KeyboardRoomController roomController;
+    final roomControllerOverride = chatRoomControllerProvider('chat-a')
+        .overrideWith((ref) {
+          return roomController = _KeyboardRoomController(ref, 'chat-a');
+        });
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        selectedChatIdProvider.overrideWith((ref) => 'chat-a'),
+        chatListControllerProvider.overrideWith(
+          _KeyboardChatListController.new,
+        ),
+        chatDraftStorageProvider.overrideWithValue(InMemoryChatDraftStorage()),
+        roomControllerOverride,
+      ],
+    );
     addTearDown(container.dispose);
 
-    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
-    container.read(chatMessageKeyboardProvider.notifier).state = 'msg-1';
-    await tester.pump();
-
-    _invokeOpenMessageMenu(container);
-    await tester.pump();
-
-    expect(
-      container.read(chatMessageContextMenuRequestProvider('chat-a')),
-      'msg-1',
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: VoiceShortcuts(
+            child: const Scaffold(body: ChatRoomPanel(chatId: 'chat-a')),
+          ),
+        ),
+      ),
     );
+    await tester.pumpAndSettle();
+    roomController.state = const ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: 'msg-1',
+          chatId: 'chat-a',
+          senderProfileId: 'peer',
+          content: 'hello',
+        ),
+      ],
+      historyProfileId: 'prof-test',
+    );
+    await tester.pump();
+    expectMessagePlainText(tester, 'hello');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(container.read(chatMessageKeyboardProvider), 'msg-1');
+    final selectedMessageFocus = tester.widget<Focus>(
+      find.byKey(ChatRoomPanel.selectedMessageFocusKey),
+    );
+    expect(selectedMessageFocus.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('message_action_copy_as_new')), findsOneWidget);
+  });
+
+  testWidgets('focused composer Enter still invokes its send action', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    var sendCalls = 0;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+        child: MaterialApp(
+          home: VoiceShortcuts(
+            child: Scaffold(
+              body: ChatComposerTextField(
+                controller: controller,
+                focusNode: focusNode,
+                decoration: const InputDecoration(),
+                onSend: () => sendCalls++,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), 'draft');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(sendCalls, 1);
+    expect(controller.text, 'draft');
   });
 
   test('arrow keys move keyboard selection across messages', () {
@@ -418,13 +504,6 @@ void _invokeNextUnreadChat(ProviderContainer container) {
   container.read(unreadChatNavigationProvider.notifier).selectNextUnread();
 }
 
-/// Mirrors [_OpenMessageMenuIntent] action wiring in [VoiceShortcuts].
-void _invokeOpenMessageMenu(ProviderContainer container) {
-  container
-      .read(chatMessageKeyboardProvider.notifier)
-      .openContextMenuOnSelected();
-}
-
 Future<ProviderContainer> _pumpShortcuts(
   WidgetTester tester, {
   Widget child = const SizedBox.expand(),
@@ -461,6 +540,49 @@ Future<ProviderContainer> _pumpShortcuts(
   await tester.pump();
 
   return container;
+}
+
+class _KeyboardRoomController extends ChatRoomController {
+  _KeyboardRoomController(super.ref, super.chatId) : super() {
+    state = const ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: 'msg-1',
+          chatId: 'chat-a',
+          senderProfileId: 'peer',
+          content: 'hello',
+        ),
+      ],
+      historyProfileId: 'prof-test',
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _KeyboardChatListController extends ChatListController {
+  _KeyboardChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-a',
+            type: 'CHAT_TYPE_GROUP',
+            creatorProfileId: 'prof-test',
+            name: 'Keyboard room',
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+
+  @override
+  Future<void> loadMore() async {}
 }
 
 /// [FakeVoiceChatsClient] consumes pages; duplicate seed so concurrent loads

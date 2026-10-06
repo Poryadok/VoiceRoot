@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
@@ -70,64 +73,111 @@ void main() {
   testWidgets('shell banner can be dismissed and returns on a new failure', (
     tester,
   ) async {
-    const voipChannel = MethodChannel('voice/voip');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(voipChannel, (_) async => null);
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(voipChannel, null),
-    );
-    final container = ProviderContainer(
-      overrides: [
-        ...voiceAppTestOverrides(
-          client: MockClient((_) async => http.Response('OK', 200)),
+    final previousTargetPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      const voipChannel = MethodChannel('voice/voip');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(voipChannel, (_) async => null);
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(voipChannel, null),
+      );
+      var retryCalls = 0;
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('OK', 200)),
+          ),
+          connectivityWatcherProvider.overrideWith((ref) {}),
+          realtimeHubProvider.overrideWith(
+            (ref) =>
+                _RetryRecordingRealtimeHub(ref, onRetry: () => retryCalls++),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const VoiceApp(locale: Locale('en')),
         ),
-        connectivityWatcherProvider.overrideWith((ref) {}),
-      ],
-    );
-    addTearDown(container.dispose);
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.connected;
+      );
+      await tester.pump();
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.reconnecting;
+      await tester.pump(reconnectBannerShowDelay);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const VoiceApp(locale: Locale('en')),
-      ),
-    );
-    await tester.pump();
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.reconnecting;
-    await tester.pump(reconnectBannerShowDelay);
+      expect(find.byKey(const Key('global_reconnect_banner')), findsOneWidget);
+      expect(
+        find.text(
+          'Drafts stay on this device. Realtime updates resume after reconnection.',
+        ),
+        findsOneWidget,
+      );
+      final banner = find.byKey(const Key('global_reconnect_banner'));
+      final retryButton = find.descendant(
+        of: banner,
+        matching: find.widgetWithText(TextButton, 'Try again'),
+      );
+      expect(retryButton, findsOneWidget);
+      expect(
+        tester.getSemantics(retryButton).hasFlag(SemanticsFlag.isButton),
+        isTrue,
+      );
+      bool retryOwnsPrimaryFocus() {
+        final focusContext = FocusManager.instance.primaryFocus?.context;
+        if (focusContext == null) return false;
+        return find
+            .descendant(
+              of: retryButton,
+              matching: find.byWidget(focusContext.widget),
+            )
+            .evaluate()
+            .isNotEmpty;
+      }
 
-    expect(find.byKey(const Key('global_reconnect_banner')), findsOneWidget);
-    expect(
-      find.text(
-        'Drafts stay on this device. Realtime updates resume after reconnection.',
-      ),
-      findsOneWidget,
-    );
-    final retryButton = find.text('Try again');
-    expect(retryButton, findsOneWidget);
-    expect(
-      tester.getSemantics(retryButton).hasFlag(SemanticsFlag.isButton),
-      isTrue,
-    );
-    Focus.of(tester.element(retryButton)).requestFocus();
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-    expect(find.byTooltip('Close'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close'));
-    await tester.pump();
-    expect(find.byKey(const Key('global_reconnect_banner')), findsNothing);
+      var tabCount = 0;
+      while (!retryOwnsPrimaryFocus() && tabCount < 40) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        tabCount++;
+      }
+      expect(
+        retryOwnsPrimaryFocus(),
+        isTrue,
+        reason:
+            'bounded Tab traversal should focus the Retry TextButton itself',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      final retryCallsAfterEnter = retryCalls;
+      await tester.tap(retryButton);
+      await tester.pump();
+      expect(retryCalls, retryCallsAfterEnter + 1);
+      expect(retryCallsAfterEnter, 1);
+      final dismiss = find.descendant(
+        of: banner,
+        matching: find.byTooltip('Close'),
+      );
+      expect(dismiss, findsOneWidget);
+      await tester.tap(dismiss);
+      await tester.pump();
+      expect(find.byKey(const Key('global_reconnect_banner')), findsNothing);
 
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.connected;
-    await tester.pump(reconnectBannerHideDelay);
-    container.read(realtimeLinkStatusProvider.notifier).state =
-        RealtimeLinkStatus.reconnecting;
-    await tester.pump(reconnectBannerShowDelay);
-    expect(find.byKey(const Key('global_reconnect_banner')), findsOneWidget);
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.connected;
+      await tester.pump(reconnectBannerHideDelay);
+      container.read(realtimeLinkStatusProvider.notifier).state =
+          RealtimeLinkStatus.reconnecting;
+      await tester.pump(reconnectBannerShowDelay);
+      expect(find.byKey(const Key('global_reconnect_banner')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousTargetPlatform;
+    }
   });
 
   testWidgets('shows failure when base URL missing', (tester) async {
@@ -221,4 +271,28 @@ void main() {
     expect(find.textContaining('Start the full API stack'), findsOneWidget);
     expect(find.text('No conversations yet'), findsNothing);
   });
+}
+
+class _RetryRecordingRealtimeHub extends RealtimeHub {
+  _RetryRecordingRealtimeHub(super.ref, {required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Stream<RealtimeFrame> get events => const Stream.empty();
+
+  @override
+  bool get canRetryCurrentSession => true;
+
+  @override
+  Future<void> ensureConnected() async {}
+
+  @override
+  Future<void> retryCurrentSession() async => onRetry();
+
+  @override
+  void ensureSubscribed(String chatId) {}
+
+  @override
+  Future<void> dispose() async {}
 }
