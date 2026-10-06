@@ -374,6 +374,29 @@ class VoiceChatsClient {
     return _map(result, (data) => voiceChatFromProto(data.chat));
   }
 
+  Future<ChatsApiResult<bool>> canCreateDm({
+    required String authorization,
+    required String otherProfileId,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/chats/dm-permission/$otherProfileId'),
+      authorization: authorization,
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) when data['allowed'] is bool =>
+        ChatsApiOk<bool>(data['allowed']! as bool),
+      GatewayHttpOk() => const ChatsApiFailure(
+        message: 'invalid DM permission response',
+        errorCode: 'invalid_response',
+      ),
+      GatewayHttpFailure(:final error) => ChatsApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
   Future<ChatsApiResult<VoiceChat>> createGroup({
     required String authorization,
     required String name,

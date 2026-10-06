@@ -62,6 +62,8 @@ POST /api/v1/realtime/ws-ticket → Gateway (short-lived WS ticket; JWT в за�
 /ws                      → Realtime Service (WebSocket upgrade; `Authorization` или `?ticket=`)
 ```
 
+The caller-relative profile action check is `GET /api/v1/chats/dm-permission/{other_profile_id}` and returns only `{ "allowed": boolean }` from Chat `CanCreateDM`. Gateway preserves typed authorization/dependency errors. The route performs no chat mutation; the subsequent `POST /api/v1/chats/dm` repeats Chat authorization.
+
 ### T14 SDK authorization routes
 
 Gateway applies a route-specific principal policy to the Auth consumer routes.
