@@ -3232,14 +3232,19 @@ class ChatActions {
     required String name,
     required List<String> memberProfileIds,
   }) async {
+    final session = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    if (session == null || auth == null) return 'not_authenticated';
     final createResult = await _ref
         .read(voiceChatsClientProvider)
         .createGroup(authorization: auth, name: name);
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (createResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk(:final data) => _inviteGroupMembers(
+        session: session,
         auth: auth,
         chatId: data.id,
         memberProfileIds: memberProfileIds,
@@ -3248,10 +3253,14 @@ class ChatActions {
   }
 
   Future<String?> _inviteGroupMembers({
+    required AuthSession session,
     required String auth,
     required String chatId,
     required List<String> memberProfileIds,
   }) async {
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     final inviteResult = await _ref
         .read(voiceChatsClientProvider)
         .addGroupMembers(
@@ -3259,10 +3268,19 @@ class ChatActions {
           chatId: chatId,
           profileIds: memberProfileIds,
         );
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (inviteResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => _selectGroupChat(chatId),
     };
+  }
+
+  bool _isCurrentGroupActionSession(AuthSession expected) {
+    final current = _ref.read(authControllerProvider).session;
+    return current?.activeProfileId == expected.activeProfileId &&
+        current?.authorizationHeader == expected.authorizationHeader;
   }
 
   String? _selectGroupChat(String chatId) {

@@ -487,14 +487,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         isOffline ||
         room.isDmPeerDeleted ||
         (blockChannelMainFeed && replyTarget == null);
+    final chatListState = ref.watch(chatListControllerProvider);
+    final roomBelongsToViewer =
+        activeId != null && room.historyProfileId == activeId;
+    final listBelongsToViewer =
+        activeId != null && chatListState.profileId == activeId;
     final peerId = isGroup
         ? null
         : resolveDmPeerForChatId(
             chatId: widget.chatId,
-            knownPeers: ref.watch(dmPeerProfileByChatIdProvider),
-            listItems: ref.watch(chatListControllerProvider).items,
+            knownPeers: const {},
+            listItems: listBelongsToViewer ? chatListState.items : const [],
             activeProfileId: activeId,
-            messages: room.messages,
+            messages: roomBelongsToViewer ? room.messages : const [],
           );
     final peerProfile = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull

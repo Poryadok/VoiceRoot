@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/create_group_friends_provider.dart';
 import '../../state/social_providers.dart';
@@ -13,7 +14,14 @@ const int kMinGroupInvitees = 2;
 
 /// Bottom sheet: group name + multi-select friends → POST /api/v1/chats + members.
 class CreateGroupSheet extends ConsumerStatefulWidget {
-  const CreateGroupSheet({super.key});
+  const CreateGroupSheet({
+    super.key,
+    this.requiredMemberProfileId,
+    this.expectedViewerProfileId,
+  });
+
+  final String? requiredMemberProfileId;
+  final String? expectedViewerProfileId;
 
   static const Key sheetKey = Key('create_group_sheet');
   static const Key nameFieldKey = Key('create_group_name');
@@ -23,14 +31,21 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
   static Key memberTileKey(String profileId) =>
       Key('create_group_member_$profileId');
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(
+    BuildContext context, {
+    String? requiredMemberProfileId,
+    String? expectedViewerProfileId,
+  }) {
     final container = ProviderScope.containerOf(context);
     return showVoiceBottomSheet<void>(
       context: context,
       scrollable: false,
       child: UncontrolledProviderScope(
         container: container,
-        child: const CreateGroupSheet(),
+        child: CreateGroupSheet(
+          requiredMemberProfileId: requiredMemberProfileId,
+          expectedViewerProfileId: expectedViewerProfileId,
+        ),
       ),
     );
   }
@@ -46,6 +61,15 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   var _submitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    final requiredId = widget.requiredMemberProfileId;
+    if (requiredId != null && requiredId.isNotEmpty) {
+      _selected.add(requiredId);
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _searchController.dispose();
@@ -56,7 +80,10 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     final name = _nameController.text.trim();
     return !_submitting &&
         name.isNotEmpty &&
-        _selected.length >= kMinGroupInvitees;
+        _selected.length >= kMinGroupInvitees &&
+        (widget.expectedViewerProfileId == null ||
+            ref.read(authControllerProvider).activeProfileId ==
+                widget.expectedViewerProfileId);
   }
 
   Future<void> _submit() async {
@@ -87,6 +114,10 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final friendsAsync = ref.watch(createGroupFriendsProvider);
+    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final viewerMatches =
+        widget.expectedViewerProfileId == null ||
+        activeProfileId == widget.expectedViewerProfileId;
     final theme = Theme.of(context);
 
     return SafeArea(
@@ -119,6 +150,8 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               l10n.chatCreateGroupMembersHint,
               style: theme.textTheme.bodySmall,
             ),
+            if (widget.requiredMemberProfileId case final requiredId?)
+              _requiredMemberTile(requiredId),
             const SizedBox(height: 8),
             TextField(
               key: CreateGroupSheet.searchFieldKey,
@@ -143,7 +176,12 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                   onAction: () => ref.invalidate(createGroupFriendsProvider),
                 ),
                 data: (ids) {
-                  if (ids.isEmpty) {
+                  final availableIds = widget.requiredMemberProfileId == null
+                      ? ids
+                      : ids
+                            .where((id) => id != widget.requiredMemberProfileId)
+                            .toList(growable: false);
+                  if (availableIds.isEmpty) {
                     return _createGroupStatePanel(
                       context,
                       title: l10n.socialFriendsEmpty,
@@ -155,10 +193,10 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                   final searchQuery = query.startsWith('@')
                       ? query.substring(1)
                       : query;
-                  var visibleIds = ids;
+                  var visibleIds = availableIds;
                   if (searchQuery.isNotEmpty) {
                     final profiles = {
-                      for (final profileId in ids)
+                      for (final profileId in availableIds)
                         profileId: ref.watch(profileProvider(profileId)),
                     };
                     final failedProfileIds = profiles.entries
@@ -184,7 +222,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                     )) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    visibleIds = ids
+                    visibleIds = availableIds
                         .where((profileId) {
                           final profile = profiles[profileId]?.valueOrNull;
                           final displayName = profile?.displayName
@@ -257,7 +295,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               ),
             FilledButton(
               key: CreateGroupSheet.submitKey,
-              onPressed: _canSubmit ? _submit : null,
+              onPressed: _canSubmit && viewerMatches ? _submit : null,
               child: _submitting
                   ? const SizedBox(
                       width: 20,
@@ -317,4 +355,20 @@ Widget _createGroupStatePanel(
       ),
     ),
   );
+}
+
+extension on _CreateGroupSheetState {
+  Widget _requiredMemberTile(String profileId) {
+    final profile = ref.watch(profileProvider(profileId)).valueOrNull;
+    final label = profile?.displayName ?? profile?.handle ?? profileId;
+    return CheckboxListTile(
+      key: CreateGroupSheet.memberTileKey(profileId),
+      value: true,
+      onChanged: null,
+      title: Text(label),
+      subtitle: profile == null ? null : Text(profile.handle),
+      secondary: const Icon(Icons.lock_outline),
+      controlAffinity: ListTileControlAffinity.leading,
+    );
+  }
 }

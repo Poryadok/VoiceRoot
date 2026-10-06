@@ -10,6 +10,7 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/bot_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
@@ -17,6 +18,7 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/channel_settings_panel.dart';
+import 'package:voice_frontend/ui/chat/create_group_sheet.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -57,7 +59,11 @@ void main() {
     pending.complete(const []);
   });
 
-  Widget testApp({required Widget home, required http.Client client}) {
+  Widget testApp({
+    required Widget home,
+    required http.Client client,
+    List<Override> extraOverrides = const [],
+  }) {
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
@@ -72,6 +78,7 @@ void main() {
           const GatewayConfig(baseUrl: 'http://api.test'),
         ),
         httpClientProvider.overrideWithValue(client),
+        ...extraOverrides,
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
@@ -82,6 +89,77 @@ void main() {
       ),
     );
   }
+
+  testWidgets('DM Chat Info offers the documented create-group action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatInfoPanel(chatId: 'dm-chat'),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {
+                  'items': [
+                    {
+                      'chat': {
+                        'id': 'dm-chat',
+                        'type': 'CHAT_TYPE_DM',
+                        'creator_profile_id': 'profile-me',
+                      },
+                      'dm_peer_profile_id': 'dm-peer',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('chat_info_create_group')), findsOneWidget);
+    await tester.tap(find.byKey(ChatInfoPanel.createGroupKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+    expect(
+      find.byKey(CreateGroupSheet.memberTileKey('dm-peer')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('DM Chat Info ignores a peer remembered for another session', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatInfoPanel(chatId: 'dm-chat'),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode({
+                'chat_list': {'items': []},
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [
+          dmPeerProfileByChatIdProvider.overrideWith(
+            (ref) => const {'dm-chat': 'peer-from-another-profile'},
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatInfoPanel.createGroupKey), findsNothing);
+  });
 
   Future<void> verifyWideSettingsCanReturn(
     WidgetTester tester,
