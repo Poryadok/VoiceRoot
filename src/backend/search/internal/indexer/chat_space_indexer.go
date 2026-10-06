@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,10 @@ import (
 // ChatProjectionStore indexes chat titles for global search.
 type ChatProjectionStore interface {
 	UpsertChat(ctx context.Context, chatID uuid.UUID, title string) error
+}
+
+type ChatDeletionProjectionStore interface {
+	DeleteChat(ctx context.Context, chatID, spaceID, operationID uuid.UUID, generation uint64, manifestID uuid.UUID, manifestHash []byte) error
 }
 
 // SpaceProjectionStore indexes public space catalog rows.
@@ -48,11 +53,45 @@ func (idx *ChatSpaceIndexer) Handle(ctx context.Context, env *eventsv1.ChatStrea
 	switch p := env.GetPayload().(type) {
 	case *eventsv1.ChatStreamEvent_ChatCreated:
 		return idx.handleChatCreated(ctx, p.ChatCreated.GetChatId())
+	case *eventsv1.ChatStreamEvent_ChatUpdated:
+		return idx.handleChatCreated(ctx, p.ChatUpdated.GetChatId())
+	case *eventsv1.ChatStreamEvent_ChatDeleted:
+		return idx.handleChatDeleted(ctx, p.ChatDeleted)
 	case *eventsv1.ChatStreamEvent_SpaceCreated:
 		return idx.handleSpaceCreated(ctx, p.SpaceCreated.GetSpaceId())
 	default:
 		return nil
 	}
+}
+
+func (idx *ChatSpaceIndexer) handleChatDeleted(ctx context.Context, deleted *eventsv1.ChatDeleted) error {
+	if deleted == nil {
+		return newPermanentConsumeError("invalid chat.deleted payload")
+	}
+	if idx.Chats == nil {
+		return fmt.Errorf("chat indexer not configured")
+	}
+	chatID, chatErr := uuid.Parse(deleted.GetChatId())
+	spaceID, spaceErr := uuid.Parse(deleted.GetSpaceId())
+	operationID, operationErr := uuid.Parse(deleted.GetDeletionOperationId())
+	manifestID, manifestErr := uuid.Parse(deleted.GetManifestId())
+	if chatErr != nil || spaceErr != nil || operationErr != nil || manifestErr != nil ||
+		chatID == uuid.Nil || spaceID == uuid.Nil || operationID == uuid.Nil || manifestID == uuid.Nil ||
+		deleted.GetGeneration() == 0 || len(deleted.GetManifestSha256()) != 32 {
+		return newPermanentConsumeError("invalid chat.deleted purge binding")
+	}
+	if chatID.String() != deleted.GetChatId() || spaceID.String() != deleted.GetSpaceId() || operationID.String() != deleted.GetDeletionOperationId() || manifestID.String() != deleted.GetManifestId() {
+		return newPermanentConsumeError("invalid chat.deleted purge binding")
+	}
+	deleter, ok := idx.Chats.(ChatDeletionProjectionStore)
+	if !ok {
+		return fmt.Errorf("chat projection store does not support terminal deletion")
+	}
+	err := deleter.DeleteChat(ctx, chatID, spaceID, operationID, deleted.GetGeneration(), manifestID, deleted.GetManifestSha256())
+	if errors.Is(err, store.ErrChatDeletedProjectionConflict) {
+		return newPermanentConsumeError("chat.deleted conflicts with the permanent purge fence")
+	}
+	return err
 }
 
 func (idx *ChatSpaceIndexer) handleChatCreated(ctx context.Context, chatRaw string) error {

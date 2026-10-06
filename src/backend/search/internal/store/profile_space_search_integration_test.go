@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,43 @@ import (
 
 	"voice/backend/pkg/integrationtest"
 )
+
+func TestProfileSpaceSearchStore_DeleteChatRequiresPermanentP3Fence_postgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	root := searchModuleRepoRoot(t)
+	pool := integrationtest.StartPostgres(t, ctx, "searchdb", filepath.Join(root, "src", "backend", "migrations", "search_db", "000001_init.up.sql"))
+	for _, name := range []string{"000003_space_lifecycle.up.sql", "000009_managed_chat_message_purge.up.sql", "000010_chat_manifest_root_binding.up.sql"} {
+		integrationtest.ApplySQLFile(t, ctx, pool, root, filepath.Join("src", "backend", "migrations", "search_db", name))
+	}
+	st := NewProfileSpaceSearchStore(pool)
+	spaceID, operationID, manifestID, chatID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	manifestHash := sha256.Sum256([]byte("exact chat purge manifest"))
+	require.NoError(t, st.UpsertChat(ctx, chatID, "Purge fixture"))
+	_, err := pool.Exec(ctx, `INSERT INTO search_space_lifecycle_fences(space_id,generation,state,deletion_operation_id,updated_at) VALUES($1,2,'PURGE_DECIDED',$2,clock_timestamp())`, spaceID, operationID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO search_space_chat_manifests(space_id,deletion_operation_id,generation,manifest_id,manifest_sha256,item_count,page_count,sealed,created_at,root_manifest_id,root_manifest_sha256,root_manifest_item_count)
+		VALUES($1,$2,1,$3,$4,1,1,true,clock_timestamp(),$3,$4,1)`, spaceID, operationID, manifestID.String(), manifestHash[:])
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO search_space_chat_manifest_items(space_id,deletion_operation_id,generation,page_index,item_index,chat_id) VALUES($1,$2,1,0,0,$3)`, spaceID, operationID, chatID)
+	require.NoError(t, err)
+	delete := func(chat, space, op uuid.UUID) error {
+		return st.DeleteChat(ctx, chat, space, op, 2, manifestID, manifestHash[:])
+	}
+	require.ErrorIs(t, delete(chatID, spaceID, operationID), ErrChatDeletedProjectionNotReady, "PurgeDecided is not terminal")
+	_, err = pool.Exec(ctx, `UPDATE search_space_lifecycle_fences SET state='PURGED' WHERE space_id=$1`, spaceID)
+	require.NoError(t, err)
+	require.ErrorIs(t, delete(uuid.New(), spaceID, operationID), ErrChatDeletedProjectionConflict, "chat must be in the exact purged manifest")
+	require.ErrorIs(t, delete(chatID, uuid.New(), operationID), ErrChatDeletedProjectionNotReady, "space binding must have its own terminal fence")
+	require.NoError(t, delete(chatID, spaceID, operationID))
+	require.NoError(t, delete(chatID, spaceID, operationID), "terminal projection deletion is idempotent")
+	var remaining int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM chat_search_documents WHERE chat_id=$1`, chatID).Scan(&remaining))
+	require.Zero(t, remaining)
+	require.Error(t, st.UpsertChat(ctx, chatID, "late replay"), "permanent P3 fence must block late chat.updated/created projection replay")
+}
 
 func TestProfileSpaceSearchStore_ProfileILIKE_postgres(t *testing.T) {
 	if testing.Short() {

@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	eventsv1 "voice.app/voice/events/v1"
 
 	eventsv1 "voice.app/voice/events/v1"
 )
@@ -86,6 +87,12 @@ func TestFriendAcceptedPublishesInboxChangeToBothProfiles(t *testing.T) {
 type friendAcceptedChatEventsSpy struct{ changes [][3]string }
 
 func (*friendAcceptedChatEventsSpy) PublishChatCreated(context.Context, string, string) error {
+	return nil
+}
+func (*friendAcceptedChatEventsSpy) PublishChatUpdated(context.Context, string, []string) error {
+	return nil
+}
+func (*friendAcceptedChatEventsSpy) PublishChatDeleted(context.Context, *eventsv1.ChatStreamEvent) error {
 	return nil
 }
 func (s *friendAcceptedChatEventsSpy) PublishChatMemberChanged(_ context.Context, chatID, profileID, change string) error {
