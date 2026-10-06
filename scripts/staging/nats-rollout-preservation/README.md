@@ -13,7 +13,60 @@ No bootstrap Job runs against the retained store. NATS ConfigMaps, Secrets,
 credentials, streams and consumers are retained. A failed proof retains the
 owned fence and reports BLOCKED; it does not restart clients or overwrite data.
 
-## V3 upgrade and explicit existing-actor enrollment
+## V4 full-master safeguards and compatible backend proof
+
+V4 delivery uses the separate absent-only directory
+`/home/pmd/voice-nats-rollout-v4`. The reviewed captured launcher runs
+`--install --upgrade-v4` against the exact installed V3 binding. It preserves
+the original code as `installed/code-v3-preserved`, existing enrollment,
+policy, recovery material and units. It does not issue or renew service actors.
+The sole known failed prebuild request can receive a root-owned disposition
+under the operation lock only when its exact request/response, active marker,
+source directory and absent build/operation match the reviewed predecessor.
+Its original STARTED journal remains unchanged; every other unfinished request
+or identity drift vetoes the upgrade. Published V3 assets remain immutable.
+
+Full deployment validates selected existing mounted actor identities, signed
+effective permissions and actual isolated server authentication. This grant
+compatibility evidence does not claim exercised business publication, ACK or
+delivery. Captured generation, role credential key/path/container, source ACL
+and Secret identities are rechecked before fencing and after custody.
+Unsupported authority is a prerequisite veto, never a silent grant renewal.
+
+Crossing Space migration16 requires one coherent MVCC snapshot containing
+version and pre-counts, a restored dump proof, and full encrypted off-node byte
+readback before migration. The snapshot closes before ALTER; version, count and
+default postconditions gate restart. Already-applied16 does not repeat its
+backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
+(including empty strings) are rechecked under the writer fence before any
+native contract mutation or database Job; conflicting data is not rewritten.
+
+The hub renderer is a separately bound root-only init image transition; the
+runner cannot apply arbitrary hub changes. Exact captured inputs and private
+old/new output equality precede startup. Actual completed init identity,
+generated configuration and unchanged broker are checked after hub readiness
+and before applications resume. Failure refences; native migration/CAS still
+require closed writers. Renderer retry validates the recorded completed DB
+state rather than rerunning migrations or assuming the original version.
+
+The first compatible populated backend witness is the reviewed Story image
+pair, whose four schema UP files are identical and whose old binary has passed
+the documented text-write probe on current clean4. Root independently binds
+the actual mounted Story actor, application DSN, PostgreSQL authority, clean4
+and exact image/source witness; the disposable probe is not a live receipt.
+Unknown old Story content and unproved backend rollback selections, including
+historical Bot/Search, fail closed. Ordinary frontend rollback remains separate.
+
+Acceptance order is populated Story transition, an ordinary postrelease record,
+fresh latest-operation rollback preserving that record and all dynamic native
+consumer/ACK state, current Story re-upgrade, then the entire current-master
+catalog (22 apps and renderer) with migrations, readiness and smoke evidence.
+Final state must be current master. Keep automatic deployment disabled until
+that full state and preservation proof pass. An incompatible failed full apply
+stays fenced for separately authorized forward repair; no SQL DOWN, previous
+DB archive or earlier native cut is a recovery shortcut.
+
+## Historical V3 upgrade and explicit existing-actor enrollment
 
 V3 uses a separate absent-only delivery directory,
 `/home/pmd/voice-nats-rollout-v3`. Preserve the published V2 assets and its
@@ -59,7 +112,7 @@ receipt advance only after the complete proof, without replaying bootstrap Jobs.
 
 Increasing the social duplicate window does not establish retroactive 24-hour
 deduplication history. Fresh rollback captures current post-release records and
-retains additive configuration. User is the first backend acceptance target;
+retains additive configuration. User was the initial backend acceptance target;
 future Realtime/Space/Social releases still require their actual existing actor
 rights and, for Social, the documented DB/outbox compatibility prerequisites.
 Keep automatic deployment disabled until the populated backend transition and
