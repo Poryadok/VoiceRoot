@@ -8,8 +8,10 @@ import tarfile
 
 KNOWN=('root_main.py','controller.py','commands.py','docker_runtime.py','stage_runtime.py','scenario.py','deployed-contract.json')
 ROLLOUT=('apply.py','bridge.py','bridge_client.py','bridge_root.py','compiler.py','encrypted_cut.py','errors.py','github_custody.py','guard.py','installer.py','migrations.py','native_store.py','normalize.py','nonnats_plan.py','nonnats_runtime.py','source_authority.py','source_plan.py','rollout_census.py','preserve.py','root_cli.py','runner.py','runtime_stage.py','transaction.py','workflow_entry.py')
+ROLLOUT+=('bootstrap_auth.py','bootstrap_enrollment.py','bootstrap_renewal.py','bootstrap_root.py','bootstrap_selection.py',
+    'nats_contract_actor.py','nats_contract_plan.py','nats_contract_custody.py','nats_migration.py','nats_root_plan.py')
 
-def build(kernel,output):
+def build(kernel,output,renewer):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
     raw=kernel.read_bytes()
     if not raw.startswith(b'\x7fELF') or len(raw)>32<<20:raise ValueError('Linux kernel required')
@@ -20,6 +22,9 @@ def build(kernel,output):
             if path.is_symlink():raise ValueError('source symlink')
             contents[directory+'/'+name]=path.read_bytes()
     contents['nats-known-baseline/kernel']=raw
+    raw=Path(renewer).read_bytes()
+    if not raw.startswith(b'\x7fELF') or len(raw)>32<<20:raise ValueError('Linux bootstrap renewer required')
+    contents['nats-rollout-preservation/bootstrap-renewer']=raw
     contents['configure-kubectl-ci.sh']=(source/'configure-kubectl-ci.sh').read_bytes()
     contents['mail-only-patch.py']=(source/'mail-only-patch.py').read_bytes()
     contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()},sort_keys=True).encode()
@@ -37,5 +42,5 @@ def build(kernel,output):
     return sha
 
 if __name__=='__main__':
-    if len(sys.argv)!=3:raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR')
+    if len(sys.argv)!=4:raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR LINUX_BOOTSTRAP_RENEWER')
     build(*sys.argv[1:])

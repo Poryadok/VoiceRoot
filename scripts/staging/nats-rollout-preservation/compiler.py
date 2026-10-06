@@ -18,7 +18,7 @@ SOURCE_MANIFESTS=('deploy/staging/services.yaml','deploy/staging/gateway-deploym
  'deploy/templates/network-policy-file-user-principal.yaml',
  'deploy/templates/network-policy-search-user-projection.yaml')
 
-def compatible_bootstrap(source,contract,decoder):
+def compatible_bootstrap(source,contract,decoder,target_scripts=None):
     paths=[]
     scripts=contract.get('scripts',[])
     if len(scripts)!=4 or {r.get('part') for r in scripts}!={'realtime','notification','search','analytics-chat'}:
@@ -33,7 +33,8 @@ def compatible_bootstrap(source,contract,decoder):
         if row.get('kind')!='ConfigMap' or row.get('metadata',{}).get('name')!='voice-nats-'+expected['part']+'-bootstrap':
             raise Blocked('rollout_bootstrap_source_invalid')
         script=row.get('data',{}).get('bootstrap.sh')
-        if not isinstance(script,str) or hashlib.sha256(script.encode()).hexdigest()!=expected['sha256']:
+        wanted=(target_scripts or {}).get(expected['part'],expected['sha256'])
+        if not isinstance(script,str) or hashlib.sha256(script.encode()).hexdigest()!=wanted:
             raise Blocked('rollout_bootstrap_contract_unsupported')
         paths.append(relative)
     return paths
@@ -90,7 +91,7 @@ def main(args):
     required={'registry','tag','mode','changed_services','images','contract','enrolled','generation','dataPVC','s3_signing_endpoint'}
     optional={'gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host',
         'gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability',
-        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
+        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','bootstrap_target_scripts'}
     if not required<=set(p) or set(p)-required-optional:
         raise Blocked('rollout_compile_parameters_invalid')
     if not re.fullmatch(r'[a-z0-9][a-z0-9./_-]{1,253}',p['registry']) or not re.fullmatch(r'[a-f0-9]{40}',p['tag']):
@@ -103,7 +104,7 @@ def main(args):
         rows=[producer.get('Deployment','voice-'+name) for name in sorted(set(p['changed_services']))]
         source_paths=tuple('deploy/staging/'+({'web':'flutter-web'}.get(name,name))+'.yaml' for name in sorted(set(p['changed_services'])))
     else:
-        bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml)
+        bootstrap_paths=compatible_bootstrap(source,p['contract'],decode_yaml,p.get('bootstrap_target_scripts'))
         rows=rendered_source(source,p,decode_yaml)
         source_paths=SOURCE_MANIFESTS
     import source_plan

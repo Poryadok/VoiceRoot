@@ -55,6 +55,26 @@ class DockerRuntime:
         if self.run([*args,'--filter','label='+LABEL+'='+self.operation,'--format','{{.ID}}']):
             raise Blocked('operation_container_writer_present')
 
+    def allow_bound_store(self, path, claim, pv, verify_closed):
+        """Enroll one already-verified selected PV, never an arbitrary mount.
+
+        The rollout caller must have verified original native records/census
+        before invoking this, and the supplied stage check revalidates the
+        physical fence, captured UID/PV and trusted filesystem ancestors.
+        Existing reset-store authorization remains independently unchanged.
+        """
+        verify_closed()
+        path=Path(path)
+        if path.resolve(strict=True)!=path:raise Blocked('selected_store_path_changed')
+        if path.is_relative_to(self.base):return # private owned proof/fixture store
+        from stage_runtime import pv_storage_path
+        if pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],pv['metadata']['uid'])!=str(path):
+            raise Blocked('selected_store_binding_changed')
+        row=path.lstat()
+        if not stat.S_ISDIR(row.st_mode) or row.st_uid!=65532 or stat.S_IMODE(row.st_mode)!=0o700:
+            raise Blocked('selected_store_custody_invalid')
+        self.new_stores.add(str(path))
+
     @staticmethod
     def _run(args, timeout=60, limit=1<<20):
         output=capture(['/usr/bin/docker','--host=unix:///var/run/docker.sock',*args],

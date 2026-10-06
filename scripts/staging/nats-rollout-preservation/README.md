@@ -13,11 +13,66 @@ No bootstrap Job runs against the retained store. NATS ConfigMaps, Secrets,
 credentials, streams and consumers are retained. A failed proof retains the
 owned fence and reports BLOCKED; it does not restart clients or overwrite data.
 
-## Installation
+## V3 upgrade and explicit existing-actor enrollment
+
+V3 uses a separate absent-only delivery directory,
+`/home/pmd/voice-nats-rollout-v3`. Preserve the published V2 assets and its
+existing download directory. Build both Linux executables with Go 1.26,
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`: the known-baseline kernel and
+`src/backend/pkg/cmd/nats-jwt-issuer` bootstrap renewer. Then run
+`python bundle.py KERNEL OUTPUT LINUX_BOOTSTRAP_RENEWER`. Review every archived
+member, both executable hashes and the complete captured launcher command.
+Unreviewed build output is not an installation command.
+
+After the reviewed V3 bytes have been published and downloaded, the human root
+captured launcher first runs `--install --upgrade-v3`. This accepts only the
+recorded immutable V2 predecessor, preserves it as `installed/code-v2-preserved`,
+and swaps the verified staged code under the global operation lock. It retains
+the existing policy, recovery key/certificate, units, requests and journals.
+Queued or interrupted requests, a non-active marker, a different predecessor
+or an untrusted staged tree veto the upgrade. A retry between the two renames
+accepts only the same recorded new binding. A partial staged copy fails closed;
+inspect its exact root-owned receipt and custody before any manual recovery,
+never delete `installed/`, the preserved V2 code, policy or recovery material.
+
+The separate human command `--enroll-existing-bootstrap` uses only the already
+validated private account signer at
+`/var/lib/voice-nats-issuer/app-account-r20260930a4.seed`. The CI request bridge
+has no issuer action. Fresh signed-chain, revocation, scoped-authority and
+immutable old Secret checks precede renewal. The same account, actor and user
+seed retain all existing claims and deny rules; only the four documented fixed
+publish permissions are added. A create-only immutable new bootstrap Secret is
+authenticated with its existing reply prefix in a pinned network-none scratch
+broker before an atomic root enrollment. The old Secret and Windows signer
+original remain intact. Never paste seed, JWT or credentials into a receipt.
+
+Normal backend prepare binds that enrollment, the approved source, pinned
+server and complete current contract. The authoritative closed native cut and
+encrypted full off-node readback precede the two fixed stream UPDATEs and one
+new-policy durable CREATE. Preserve every old record, existing consumer
+config/ACK/pending/redelivery state and dynamic resource. The post-config cold
+ledger is the app-apply baseline; do not compare changed config bytes to the
+pre-migration ledger or restore that old archive. Only proved pinned recovery
+timestamp observations are classified; durable and untouched-stream creation
+identity remains strict. The public script ConfigMaps and root active-contract
+receipt advance only after the complete proof, without replaying bootstrap Jobs.
+
+Increasing the social duplicate window does not establish retroactive 24-hour
+deduplication history. Fresh rollback captures current post-release records and
+retains additive configuration. User is the first backend acceptance target;
+future Realtime/Space/Social releases still require their actual existing actor
+rights and, for Social, the documented DB/outbox compatibility prerequisites.
+Keep automatic deployment disabled until the populated backend transition and
+fresh latest-operation rollback have both passed on the same selected PVC/PV.
+
+## Historical V2 installation
+
+The following V2 installation receipt is retained for provenance. Do not rerun
+it on the already installed host or substitute its bytes for the V3 upgrade.
 
 Build the Linux kernel from `../nats-known-baseline` with Go 1.26 and
 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o KERNEL .`.
-Run `python bundle.py KERNEL OUTPUT` to produce `rollout-bundle.tar` and the
+The historical V2 builder used `python bundle.py KERNEL OUTPUT` to produce `rollout-bundle.tar` and the
 checksum-bound `rollout-root.sh`. Review the complete code manifest and launcher
 before copying these two files to `/home/pmd/voice-nats-rollout/` on pmdebook.
 Both files must belong to pmd and must not be writable by another user/group.
