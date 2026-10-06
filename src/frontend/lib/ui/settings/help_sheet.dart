@@ -134,7 +134,12 @@ class _HelpSheetState extends ConsumerState<HelpSheet> {
               maxHeight: MediaQuery.sizeOf(context).height * .9,
             ),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.fromLTRB(
+                showShortcuts ? 20 : 16,
+                16,
+                showShortcuts ? 20 : 16,
+                showShortcuts ? 28 : 30,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,7 +162,31 @@ class _HelpSheetState extends ConsumerState<HelpSheet> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  ExcludeSemantics(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: voice.elevated,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const SizedBox(
+                        width: 54,
+                        height: 54,
+                        child: Icon(Icons.help_outline, size: 26),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Text(
+                      l10n.settingsHelpSubtitle,
+                      style: TextStyle(
+                        color: voice.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
                   TextField(
                     key: HelpSheet.searchKey,
                     controller: _searchController,

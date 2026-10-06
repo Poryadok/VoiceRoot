@@ -109,7 +109,7 @@ void main() {
   testWidgets('Help reference fits a narrow viewport without overflow', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 640);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -144,10 +144,15 @@ void main() {
 
     await tester.tap(find.text('Open help'));
     await tester.pumpAndSettle();
-    await _captureIfRequested(tester, 'help-shortcuts-narrow.png');
+    await _captureIfRequested(tester, 'help-shortcuts-mobile.png');
 
     expect(tester.takeException(), isNull);
     expect(find.text('Help'), findsOneWidget);
+    expect(find.byIcon(Icons.help_outline), findsOneWidget);
+    expect(
+      find.text('Find an answer or contact the Voice team.'),
+      findsOneWidget,
+    );
     expect(find.text('Keyboard shortcuts'), findsNothing);
     expect(find.text('Ctrl+K'), findsNothing);
   });

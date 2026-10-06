@@ -3530,6 +3530,12 @@ abstract class AppLocalizations {
   /// **'Help'**
   String get settingsHelpTitle;
 
+  /// No description provided for @settingsHelpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find an answer or contact the Voice team.'**
+  String get settingsHelpSubtitle;
+
   /// No description provided for @settingsHelpSearchHint.
   ///
   /// In en, this message translates to:

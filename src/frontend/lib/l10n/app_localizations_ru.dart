@@ -1950,6 +1950,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHelpTitle => 'Помощь';
 
   @override
+  String get settingsHelpSubtitle =>
+      'Найдите ответ или свяжитесь с командой Voice.';
+
+  @override
   String get settingsHelpSearchHint => 'Например, войс-комнаты';
 
   @override

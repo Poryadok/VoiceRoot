@@ -886,6 +886,7 @@
   "trayQuit": "Выйти",
   "settingsHelp": "Помощь",
   "settingsHelpTitle": "Помощь",
+  "settingsHelpSubtitle": "Найдите ответ или свяжитесь с командой Voice.",
   "settingsHelpSearchHint": "Например, войс-комнаты",
   "settingsHelpDocsLabel": "Документация проекта",
   "settingsHelpSupportLabel": "Связаться с поддержкой",

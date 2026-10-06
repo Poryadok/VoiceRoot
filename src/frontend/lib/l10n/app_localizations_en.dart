@@ -1942,6 +1942,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsHelpTitle => 'Help';
 
   @override
+  String get settingsHelpSubtitle =>
+      'Find an answer or contact the Voice team.';
+
+  @override
   String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
 
   @override

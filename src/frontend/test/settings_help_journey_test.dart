@@ -80,6 +80,11 @@ void main() {
       await tester.tap(find.byKey(const Key('settings_help')));
       await tester.pumpAndSettle();
 
+      expect(find.byIcon(Icons.help_outline), findsOneWidget);
+      expect(
+        find.text('Find an answer or contact the Voice team.'),
+        findsOneWidget,
+      );
       for (final title in ['Chats', 'Spaces', 'Matchmaking', 'Voice']) {
         expect(find.text(title), findsOneWidget);
       }
@@ -173,6 +178,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('settings_help')));
     await tester.tap(find.byKey(const Key('settings_help')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('settings_help_docs')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings_help_docs')));
     await tester.pumpAndSettle();
