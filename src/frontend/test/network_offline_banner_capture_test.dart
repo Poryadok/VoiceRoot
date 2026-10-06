@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/routing/deep_link_listener.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -93,6 +94,10 @@ void main() {
                 ],
               ),
             ),
+          if (viewport.openChat)
+            voiceMessagesClientProvider.overrideWithValue(
+              _CaptureVoiceMessagesClient(),
+            ),
           connectivityWatcherProvider.overrideWith((ref) {}),
           realtimeHubProvider.overrideWith((ref) => _CaptureRealtimeHub(ref)),
         ],
@@ -121,9 +126,19 @@ void main() {
         ),
       );
       await tester.pump();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'selected-room fixture must lay out before reconnect begins',
+      );
       container.read(realtimeLinkStatusProvider.notifier).state =
           RealtimeLinkStatus.reconnecting;
       await tester.pump(reconnectBannerShowDelay);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'reconnect state must lay out without overflowing',
+      );
 
       final bannerKey = viewport.openChat
           ? const Key('chat_room_reconnect_banner')
@@ -157,6 +172,40 @@ void main() {
         ),
         findsOneWidget,
       );
+      if (viewport.openChat) {
+        final visibleSurface = Offset.zero & viewport.size;
+        final roomContent = [
+          find.text('No messages yet'),
+          find.text('Send the first message when you are ready.'),
+          find.descendant(
+            of: find.byKey(bannerKey),
+            matching: find.text('Try again'),
+          ),
+          find.descendant(
+            of: find.byKey(bannerKey),
+            matching: find.byTooltip('Close'),
+          ),
+        ];
+        expect(roomContent[0], findsOneWidget);
+        expect(roomContent[1], findsOneWidget);
+        for (final finder in roomContent) {
+          final rect = tester.getRect(finder);
+          expect(
+            rect.left >= visibleSurface.left &&
+                rect.top >= visibleSurface.top &&
+                rect.right <= visibleSurface.right &&
+                rect.bottom <= visibleSurface.bottom,
+            isTrue,
+            reason: 'room recovery content must remain inside the viewport',
+          );
+        }
+        expect(
+          find.byKey(const Key('chat_room_pins_error')),
+          findsNothing,
+          reason:
+              'capture should not include an unrelated pinned-messages error',
+        );
+      }
       expect(tester.takeException(), isNull);
 
       if (shouldCapture) {
@@ -256,6 +305,14 @@ class _CaptureRealtimeHub extends RealtimeHub {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _CaptureVoiceMessagesClient extends FakeVoiceMessagesClient {
+  @override
+  Future<MessagesApiResult<MessageListData>> getPinnedMessages({
+    required String authorization,
+    required String chatId,
+  }) async => const MessagesApiOk(MessageListData(messages: []));
 }
 
 class _CaptureNoopDeepLinkListener extends DeepLinkListener {
