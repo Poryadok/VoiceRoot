@@ -17,6 +17,19 @@ FIELDS={
     'finish':{'operation','claim_rv'},
     'status':{'operation'},
 }
+PREPARE_STAGES=frozenset(('source-capture','workload-capture','policy-validation',
+    'image-selection','contract-selection','nats-preflight','target-build'))
+
+def prepare_error(error):
+    # Class labels only: no exception text, arguments or remote response body.
+    name=type(error).__name__
+    if name=='SourceError':return 'source_authority_rejected'
+    if name=='CustodyError':return 'transport_rejected'
+    if name=='Blocked':return 'guard_rejected'
+    if name in ('KeyError','ValueError','TypeError','FileExistsError','PermissionError','TimeoutError'):
+        return 'exception_'+name
+    if isinstance(error,(KeyboardInterrupt,SystemExit)):return 'interrupted'
+    return 'unexpected'
 
 def validate(row):
     if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
@@ -44,7 +57,7 @@ def _save(path,row):
     finally:
         if scratch.exists():scratch.unlink()
 
-def dispatch(directory,request,execute,recover):
+def dispatch(directory,request,execute,recover,execute_observed=None):
     """Never rerun an interrupted mutation unless checkpoint proves completion.
 
     Tokens are excluded from the durable journal. The request hash includes
@@ -68,7 +81,17 @@ def dispatch(directory,request,execute,recover):
     else:
         state={'schema':'voice-nats-bridge-request-v1','request_sha256':wanted,'request':public,'phase':'STARTED'}
         _save(path,state)
-        result=execute(request)
+        def observe(name,status):
+            if request['action'] not in ('prepare','prepare-rollback') or name not in PREPARE_STAGES or status not in ('STARTED','COMPLETE'):
+                raise BridgeError('bridge_prepare_stage_invalid')
+            state['prepare_stage']={'name':name,'status':status}
+            _save(path,state)
+        try:
+            result=execute(request) if execute_observed is None else execute_observed(request,observe)
+        except BaseException as error:
+            if execute_observed is not None:
+                state['prepare_error']=prepare_error(error);_save(path,state)
+            raise
     if not isinstance(result,dict):raise BridgeError('bridge_result_invalid')
     state['phase']='COMPLETE';state['result']=result;_save(path,state)
     return result
@@ -118,7 +141,7 @@ def drain(installed):
                 # Replace the runner inode with a root-created copy. A runner
                 # descriptor opened before claim cannot alter the replay input.
                 _save(claimed,request)
-                result=dispatch(installed/'journal',request,actions.execute,actions.recover)
+                result=dispatch(installed/'journal',request,actions.execute,actions.recover,execute_observed=actions.execute_observed)
             except Exception as error:result={'status':'BLOCKED','error':safe_error(error)}
             _save(response,result)
             import grp
