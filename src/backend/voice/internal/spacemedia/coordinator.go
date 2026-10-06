@@ -195,15 +195,34 @@ func (c *Coordinator) reconcileParticipant(ctx context.Context, call store.Call,
 }
 
 func (c *Coordinator) eject(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) error {
+	_, _, err := c.ejectParticipant(ctx, call, participant)
+	return err
+}
+
+// RevokeSpaceMediaParticipant removes only the exact incarnation captured by
+// the caller's current call snapshot. The revoking CAS remains durable if the
+// LiveKit removal fails, so a client leave cannot erase a pending target.
+func (c *Coordinator) RevokeSpaceMediaParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) (store.Call, bool, error) {
+	if c == nil || c.Store == nil || c.Media == nil || call.SpaceID == "" || participant.ProfileID == "" || participant.Identity == "" || participant.Generation == "" {
+		return store.Call{}, false, store.ErrInvalidState
+	}
+	current, ok := call.SpaceMedia[participant.ProfileID]
+	if !ok || current.Identity != participant.Identity || current.Generation != participant.Generation {
+		return call, false, nil
+	}
+	return c.ejectParticipant(ctx, call, current)
+}
+
+func (c *Coordinator) ejectParticipant(ctx context.Context, call store.Call, participant store.SpaceMediaParticipant) (store.Call, bool, error) {
 	_, matched, err := c.Store.BeginSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
 	if err != nil || !matched {
-		return err
+		return call, false, err
 	}
 	if err := c.Media.RemoveParticipant(ctx, call.LivekitRoomName, participant.Identity); err != nil {
-		return err
+		return call, false, err
 	}
-	_, _, err = c.Store.CompleteSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
-	return err
+	updated, completed, err := c.Store.CompleteSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
+	return updated, completed, err
 }
 
 func (c *Coordinator) ReconcileAll(ctx context.Context) error {

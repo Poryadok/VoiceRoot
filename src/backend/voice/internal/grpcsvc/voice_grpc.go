@@ -43,6 +43,10 @@ type FederatedMediaTokenIssuer interface {
 	JoinToken(context.Context, mediaauthority.RouteRequest) (mediaauthority.ExchangeResult, error)
 }
 
+type SpaceMediaParticipantRevoker interface {
+	RevokeSpaceMediaParticipant(context.Context, voicestore.Call, voicestore.SpaceMediaParticipant) (voicestore.Call, bool, error)
+}
+
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
@@ -56,6 +60,7 @@ type VoiceGRPC struct {
 	SpaceMembers             SpaceMembership
 	VoiceRoomAccessResolver  AuthoritativeVoiceRoomAccessResolver
 	SpaceVoiceRoomGrants     SpaceVoiceRoomGrantResolver
+	SpaceMediaRevoker        SpaceMediaParticipantRevoker
 	SpaceTokens              *livekit.SpaceTokenIssuer
 	SpaceMediaReady          bool
 	SpaceLifecycle           SpaceLifecycleController
@@ -483,7 +488,7 @@ func containsProfile(profiles []string, profileID string) bool {
 }
 
 func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenRequest) (*callsv1.GetJoinTokenResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, delegatedAccountID, delegatedEpoch, err := callerVoiceUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -511,6 +516,22 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
 		return nil, status.Error(codes.FailedPrecondition, "call is not active")
 	}
+	if call.IsVoiceRoom() && (delegatedAccountID == "" || delegatedEpoch <= 0) {
+		return nil, status.Error(codes.Unauthenticated, "verified Space media identity required")
+	}
+	if call.IsVoiceRoom() && call.SpaceID != "" {
+		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
+		if accessErr != nil {
+			return nil, accessErr
+		}
+		if call.SpaceID != access.SpaceID {
+			return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
+		}
+		if err := s.ensureVoiceJoinPermission(ctx, access.SpaceID, profileID, call.VoiceRoomID); err != nil {
+			return nil, err
+		}
+		return s.getSpaceMediaJoinToken(ctx, call, profileID, access)
+	}
 	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
 	if err != nil {
 		return nil, err
@@ -519,33 +540,12 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil, err
 	}
-	if call.IsVoiceRoom() {
-		access, err := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
-		if err != nil {
-			return nil, err
-		}
-		if call.SpaceID != access.SpaceID {
-			return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
-		}
-		if err := s.ensureVoiceJoinPermission(ctx, access.SpaceID, profileID, call.VoiceRoomID); err != nil {
-			return nil, err
-		}
-		if call.SpaceID != "" {
-			return s.getSpaceMediaJoinToken(ctx, call, profileID, access)
-		}
-	}
 	canPublish, err := s.voicePublishGrant(ctx, call, profileID)
 	if err != nil {
 		return nil, err
 	}
 	if call.IsVoiceRoom() && s.FederatedMedia != nil {
-		accountID, accountOK := authctx.AccountID(ctx)
-		epoch, epochOK := authctx.SessionEpoch(ctx)
-		md, _ := metadata.FromIncomingContext(ctx)
-		if !accountOK || !epochOK || len(md.Get(authctx.HeaderAccountID)) != 1 || len(md.Get(authctx.HeaderProfileID)) != 1 {
-			return nil, status.Error(codes.Unauthenticated, "verified media identity required")
-		}
-		result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{AccountID: accountID, ProfileID: profileID, SpaceID: call.SpaceID, ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName, SessionEpoch: epoch, CanPublish: canPublish != nil && *canPublish})
+		result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{AccountID: delegatedAccountID, ProfileID: profileID, SpaceID: call.SpaceID, ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName, SessionEpoch: delegatedEpoch, CanPublish: canPublish != nil && *canPublish})
 		if mediaErr == nil {
 			return &callsv1.GetJoinTokenResponse{Jwt: result.JWT, LivekitUrl: result.LivekitURL, ExpiresAt: timestamppb.New(time.UnixMilli(result.ExpiresAt))}, nil
 		}

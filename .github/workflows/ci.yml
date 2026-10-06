@@ -1382,8 +1382,12 @@ jobs:
         run: bash scripts/ci/wait-postgres-steady.sh "$GITHUB_WORKSPACE"
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
+      - name: Generate disposable media principal and TLS fixture
+        run: |
+          echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
+          python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
-        run: make compose-app-up
+        run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build
       - name: Wait for gateway health
         run: |
           for i in $(seq 1 72); do

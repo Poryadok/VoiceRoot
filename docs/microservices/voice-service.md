@@ -363,12 +363,17 @@ projection, complete bundle and qualified capacity acceptance remain open.
 - Кодеки: Opus (32 kbps audio), VP8/VP9 (video)
 - LiveKit Simulcast для screen share (адаптивное качество)
 
-## Phase-0 Space-room media, roster и lifecycle (target; не реализовано)
+## Phase-0 Space-room media, roster и lifecycle (partial implementation; full target remains open)
 
-R22.3 предоставляет только source-disabled PostgreSQL evidence/classification
-foundation. Coordinator, handlers, LiveKit/NATS adapters, registration, grant
-issuance и public readiness остаются не реализованы; Redis v2 encoding и replay
-deadline bridge semantics (D2/D3) также остаются отдельными gates.
+R22.3 PostgreSQL evidence/classification остается source-disabled. Отдельный
+BE255 implementation slice добавляет Space-room join/leave admission, короткий
+LiveKit grant, durable Space/Role invalidation delivery и Voice reconciliation
+с точным удалением LiveKit incarnation. Это не завершает Phase-0: Auth epoch
+сейчас сохраняется в grant, но Voice не re-resolve текущий Auth epoch; eligibility
+повторного подключения после его смены остается release gate. Roster projection,
+move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
+также остаются отдельными gates. Hosted Linux proof относится только к явно
+выбранному BE255 media consumer и не означает завершение R22.3/BE255 целиком.
 
 **Public surface.** Gateway exposes Space room actions under
 `/api/v1/spaces/{space_id}/voice-rooms/{voice_room_id}`: `POST /join`,

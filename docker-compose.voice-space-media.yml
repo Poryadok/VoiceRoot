@@ -1,0 +1,93 @@
+services:
+  auth:
+    user: "0:0"
+    expose: ["9091", "9092"]
+    environment:
+      AUTH_PRINCIPAL_GRPC_PORT: "9091"
+      AUTH_SESSION_FLOOR_GRPC_PORT: "9092"
+      AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
+      AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
+      AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE: /run/phase0/ca.crt
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json"}'
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
+    depends_on:
+      phase0-jwks:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.crt:/run/phase0/auth.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
+
+  gateway:
+    user: "0:0"
+    environment:
+      GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
+      GATEWAY_PRINCIPAL_ACTIVE_KID: current
+      GATEWAY_VOICE_USER_GRPC_ADDR: voice:9092
+      GATEWAY_VOICE_USER_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_VOICE_USER_TLS_SERVER_NAME: voice
+      GATEWAY_VOICE_USER_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_VOICE_USER_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+    depends_on:
+      # Voice loads Gateway's signed-principal JWKS during startup. Do not make
+      # Gateway wait for Voice health or the first JWKS request deadlocks.
+      voice:
+        condition: service_started
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/gateway:/run/phase0/gateway:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.crt:/run/phase0/gateway-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gateway-client.key:/run/phase0/gateway-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+
+  voice:
+    user: "0:0"
+    expose: ["8443", "9092"]
+    environment:
+      VOICE_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/voice/current.pem
+      VOICE_PRINCIPAL_KID: current
+      VOICE_PRINCIPAL_NEXT_PRIVATE_KEY_FILE: /run/phase0/voice/next.pem
+      VOICE_PRINCIPAL_NEXT_KID: next
+      VOICE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/voice-jwks.crt
+      VOICE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/voice-jwks.key
+      VOICE_PRINCIPAL_JWKS_LISTEN_ADDR: :8443
+      VOICE_USER_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      VOICE_USER_PRINCIPAL_TLS_CERT_FILE: /run/phase0/voice-game-grpc.crt
+      VOICE_USER_PRINCIPAL_TLS_KEY_FILE: /run/phase0/voice-game-grpc.key
+      VOICE_USER_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      VOICE_USER_PRINCIPAL_GRPC_LISTEN: :9092
+      VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
+      VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
+      VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
+      VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
+      VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE: /run/phase0/voice-client.key
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gateway":"https://phase0-jwks:8443/gateway/jwks.json"}'
+      S2S_JWKS_CA_FILE: /run/phase0/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/voice-client.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/voice-client.key
+    depends_on:
+      phase0-jwks:
+        condition: service_started
+      auth:
+        condition: service_healthy
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/voice/current.pem:/run/phase0/voice/current.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/voice/next.pem:/run/phase0/voice/next.pem:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-jwks.crt:/run/phase0/voice-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-jwks.key:/run/phase0/voice-jwks.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.crt:/run/phase0/voice-game-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-game-grpc.key:/run/phase0/voice-game-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.crt:/run/phase0/voice-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/voice-client.key:/run/phase0/voice-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+
+  phase0-jwks:
+    profiles: ["app"]
+    image: nginx:1.28-alpine
+    user: "0:0"
+    expose: ["8443"]
+    volumes:
+      - ./docker/phase0/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.crt:/run/phase0/proxy.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/proxy.key:/run/phase0/proxy.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro

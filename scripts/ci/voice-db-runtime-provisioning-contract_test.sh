@@ -643,7 +643,17 @@ space_media_path_allowed() {
     src/backend/voice/internal/store/call_store.go|\
     src/backend/voice/internal/store/redis_store.go|\
     src/backend/voice/internal/store/redis_store_test.go|\
-    src/backend/voice/main.go)
+    src/backend/voice/main.go|\
+    src/backend/user/pb/voice/auth/v1/auth.pb.go|\
+  src/backend/user/pb/voice/auth/v1/auth_grpc.pb.go|\
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go|\
+    src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go|\
+    protos/voice/auth/v1/auth.proto|\
+    src/backend/voice/internal/principalgrpc/interceptor.go|\
+    src/backend/voice/internal/sessionfloor/client.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/config.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/runtime.go)
       return 0
       ;;
   esac
@@ -683,7 +693,17 @@ for be255_path in \
   src/backend/voice/internal/store/call_store.go \
   src/backend/voice/internal/store/redis_store.go \
   src/backend/voice/internal/store/redis_store_test.go \
-  src/backend/voice/main.go; do
+  src/backend/voice/main.go \
+  src/backend/user/pb/voice/auth/v1/auth.pb.go \
+  src/backend/user/pb/voice/auth/v1/auth_grpc.pb.go \
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go \
+  src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go \
+  protos/voice/auth/v1/auth.proto \
+  src/backend/voice/internal/principalgrpc/interceptor.go \
+  src/backend/voice/internal/sessionfloor/client.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/config.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/runtime.go; do
   space_media_path_allowed "${be255_path}" || {
     printf 'F13 oracle bug: approved BE-255 path was rejected: %s\n' "${be255_path}" >&2
     exit 2
@@ -695,6 +715,12 @@ for unrelated_space_media_path in \
   src/backend/voice/internal/spacemedia/unrelated.go \
   src/backend/voice/internal/roomlifecycle/lifecycle_worker.go \
   src/backend/voice/internal/livekit/match_found.go \
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go.near-match \
+  src/backend/user/pb/voice/auth/v1/unrelated.pb.go \
+  src/backend/voice/internal/sessionfloor/unrelated.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/unrelated.go \
+  src/backend/voice/internal/principalgrpc/interceptor.go.near-match \
+  protos/voice/auth/v1/unrelated.proto \
   src/backend/voice/pb/voice/events/v1/events.pb.go \
   deploy/nats/operator-owned-stream.yaml; do
   if space_media_path_allowed "${unrelated_space_media_path}"; then

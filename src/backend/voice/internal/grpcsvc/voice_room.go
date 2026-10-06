@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/principal"
 	voicestore "voice/backend/voice/internal/store"
 
 	callsv1 "voice.app/voice/calls/v1"
@@ -153,7 +154,7 @@ func moveReceipt(actor, target, operationID, fromRoom, toRoom, spaceID string, m
 }
 
 func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, _, _, err := callerVoiceUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +183,9 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 		return nil, status.Error(codes.PermissionDenied, "space assertion does not match canonical voice room owner")
 	}
 	spaceID = access.SpaceID
+	if s.Roles == nil {
+		return nil, status.Error(codes.Unavailable, "voice join permission check unavailable")
+	}
 	if err := s.ensureVoiceJoinPermission(ctx, spaceID, profileID, voiceRoomID); err != nil {
 		return nil, err
 	}
@@ -252,7 +256,7 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 }
 
 func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceRoomRequest) (*callsv1.LeaveVoiceRoomResponse, error) {
-	profileID, err := callerProfile(ctx)
+	profileID, _, _, err := callerVoiceUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -274,10 +278,64 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	if !call.IsParticipant(profileID) {
 		return &callsv1.LeaveVoiceRoomResponse{}, nil
 	}
+	if participant, ok := call.SpaceMedia[profileID]; call.SpaceID != "" && ok {
+		if err := s.leaveSpaceMediaParticipant(ctx, call, profileID, participant); err != nil {
+			return nil, err
+		}
+		return &callsv1.LeaveVoiceRoomResponse{}, nil
+	}
 	if _, err := s.leaveOpenVoiceSession(ctx, call, profileID); err != nil {
 		return nil, err
 	}
 	return &callsv1.LeaveVoiceRoomResponse{}, nil
+}
+
+func callerVoiceUser(ctx context.Context) (profileID, accountID string, epoch int64, err error) {
+	if verified, ok := principal.FromContext(ctx); ok {
+		account, accountErr := uuid.Parse(verified.AccountID)
+		profile, profileErr := uuid.Parse(verified.ProfileID)
+		if verified.Issuer != "gateway" || verified.Audience != "voice" || accountErr != nil || account.String() != verified.AccountID || profileErr != nil || profile.String() != verified.ProfileID || verified.SessionEpoch <= 0 {
+			return "", "", 0, status.Error(codes.Unauthenticated, "invalid delegated Voice identity")
+		}
+		return verified.ProfileID, verified.AccountID, verified.SessionEpoch, nil
+	}
+	profileID, err = callerProfile(ctx)
+	return profileID, "", 0, err
+}
+
+func (s *VoiceGRPC) leaveSpaceMediaParticipant(ctx context.Context, call voicestore.Call, profileID string, participant voicestore.SpaceMediaParticipant) error {
+	if s.SpaceMediaRevoker == nil {
+		return status.Error(codes.Unavailable, "Space media revocation is not ready")
+	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return err
+	}
+	updated, removed, err := s.SpaceMediaRevoker.RevokeSpaceMediaParticipant(ctx, call, participant)
+	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return status.Error(codes.Unavailable, "Space media participant removal is pending")
+	}
+	if !removed {
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil
+	}
+	for _, share := range call.ScreenShares {
+		if share.ProfileID == profileID {
+			s.publishScreenShareStopped(ctx, updated, profileID, share.StreamID)
+		}
+	}
+	if err := s.releaseAccountVoiceProfile(ctx, profileID, call.RoomID); err != nil {
+		return err
+	}
+	if updated.Status == callsv1.CallStatus_CALL_STATUS_ENDED {
+		s.publishEnded(ctx, updated, "hangup", profileID)
+	}
+	return nil
 }
 
 func (s *VoiceGRPC) ensureSpaceMember(ctx context.Context, spaceID, profileID string) error {

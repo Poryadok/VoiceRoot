@@ -134,7 +134,13 @@ func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, res
 			w.WriteHeader(http.StatusNoContent)
 			return true
 		case r.Method == http.MethodGet && action == "token":
-			resp, err := t.clients.voice.GetJoinToken(ctx, &callsv1.GetJoinTokenRequest{RoomId: roomID})
+			req := &callsv1.GetJoinTokenRequest{RoomId: roomID}
+			userCtx, err := t.voiceUserContext(r, req, callsv1.VoiceService_GetJoinToken_FullMethodName)
+			if err != nil {
+				writeGRPCError(w, err)
+				return true
+			}
+			resp, err := t.clients.voiceUser.GetJoinToken(userCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true

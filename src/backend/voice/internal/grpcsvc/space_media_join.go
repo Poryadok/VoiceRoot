@@ -6,11 +6,9 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"voice/backend/voice/internal/authctx"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
@@ -24,13 +22,9 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 	if s.SpaceTokens == nil || s.SpaceVoiceRoomGrants == nil {
 		return nil, status.Error(codes.FailedPrecondition, "Space media grant issuer is not configured")
 	}
-	accountID, accountOK := authctx.AccountID(ctx)
-	sessionEpoch, epochOK := authctx.SessionEpoch(ctx)
-	md, _ := metadata.FromIncomingContext(ctx)
+	verifiedProfileID, accountID, sessionEpoch, identityErr := callerVoiceUser(ctx)
 	parsedAccountID, parseErr := uuid.Parse(accountID)
-	if !accountOK || parseErr != nil || parsedAccountID == uuid.Nil || parsedAccountID.String() != accountID || !epochOK || sessionEpoch <= 0 ||
-		len(md.Get(authctx.HeaderAccountID)) != 1 || md.Get(authctx.HeaderAccountID)[0] != accountID ||
-		len(md.Get(authctx.HeaderProfileID)) != 1 || md.Get(authctx.HeaderProfileID)[0] != profileID {
+	if identityErr != nil || verifiedProfileID != profileID || accountID == "" || parseErr != nil || parsedAccountID == uuid.Nil || parsedAccountID.String() != accountID || sessionEpoch <= 0 {
 		return nil, status.Error(codes.Unauthenticated, "verified media identity required")
 	}
 	if access.SpaceID != call.SpaceID || access.AccessEpoch == 0 {
@@ -106,10 +100,19 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, "Space media token could not be issued")
 	}
+	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
+		return nil, err
+	}
 	_, err = s.Calls.AdmitSpaceMediaParticipant(ctx, call.RoomID, voicestore.SpaceMediaParticipant{
 		ProfileID: profileID, Identity: identity, Generation: generation, Issued: issued,
 	}, maxParticipants)
 	if err != nil {
+		s.releaseAccountVoiceReservations(ctx, fences)
 		if errors.Is(err, voicestore.ErrSpaceMediaStaleGrant) || errors.Is(err, voicestore.ErrSpaceMediaTransition) {
 			return nil, status.Error(codes.FailedPrecondition, "Space media authority changed; retry join")
 		}

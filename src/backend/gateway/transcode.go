@@ -45,6 +45,9 @@ type grpcClients struct {
 	chat               chatv1.ChatServiceClient
 	messaging          messagingv1.MessagingServiceClient
 	voice              callsv1.VoiceServiceClient
+	voiceUser          callsv1.VoiceServiceClient
+	voiceUserConn      *grpc.ClientConn
+	voiceUserErr       error
 	file               filev1.FileServiceClient
 	space              spacev1.SpaceServiceClient
 	spaceLifecycle     spacev1.SpaceServiceClient
@@ -88,6 +91,17 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 			clients.connections = append(clients.connections, conn)
 			clients.spaceLifecycleConn = conn
 			clients.spaceLifecycle = spacev1.NewSpaceServiceClient(conn)
+		}
+	}
+	if cfg, enabled, err := voiceUserMediaClientConfigFromEnv(); err != nil {
+		clients.voiceUserErr = err
+	} else if enabled {
+		conn, err := cfg.dial()
+		clients.voiceUserErr = err
+		if err == nil {
+			clients.connections = append(clients.connections, conn)
+			clients.voiceUserConn = conn
+			clients.voiceUser = callsv1.NewVoiceServiceClient(conn)
 		}
 	}
 	dial := func(addr string) (*grpc.ClientConn, error) {
@@ -204,6 +218,9 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 // first profile request.
 func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
+		if c.voiceUserErr != nil {
+			return c.voiceUserErr
+		}
 		if c.spaceLifecycleErr != nil {
 			return c.spaceLifecycleErr
 		}

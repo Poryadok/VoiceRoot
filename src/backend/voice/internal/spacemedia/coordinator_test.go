@@ -142,6 +142,64 @@ func TestOutOfOrderAuthoritiesKeepIndependentMonotonicFloors(t *testing.T) {
 	require.Zero(t, progress.Reconciled.PolicyEpoch)
 }
 
+func TestSpaceMediaLeaveEjectionFailureRetainsRevocationTarget(t *testing.T) {
+	ctx := context.Background()
+	spaceID, roomID, voiceRoomID, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile, uuid.NewString())
+	call, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	participant := call.SpaceMedia[profile]
+	media := &fakeMedia{err: errors.New("injected ejection failure")}
+	c := &Coordinator{Store: calls, Media: media}
+
+	_, removed, err := c.RevokeSpaceMediaParticipant(ctx, call, participant)
+	require.Error(t, err)
+	require.False(t, removed)
+	require.Equal(t, []string{participant.Identity}, media.removed)
+
+	current, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	require.True(t, current.SpaceMedia[profile].Revoking, "a failed ejection must remain discoverable for retry")
+	require.Equal(t, participant.Identity, current.SpaceMedia[profile].Identity)
+	require.Equal(t, participant.Generation, current.SpaceMedia[profile].Generation)
+	require.True(t, current.IsParticipant(profile), "failed ejection must not erase the roster target")
+}
+
+func TestSpaceMediaLeaveWithStaleGenerationCannotEjectNewIncarnation(t *testing.T) {
+	ctx := context.Background()
+	spaceID, roomID, voiceRoomID, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile, uuid.NewString())
+	oldCall, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	old := oldCall.SpaceMedia[profile]
+	_, matched, err := calls.BeginSpaceMediaRevocation(ctx, roomID, profile, old.Identity, old.Generation)
+	require.NoError(t, err)
+	require.True(t, matched)
+	_, matched, err = calls.CompleteSpaceMediaRevocation(ctx, roomID, profile, old.Identity, old.Generation)
+	require.NoError(t, err)
+	require.True(t, matched)
+	newGeneration := uuid.NewString()
+	newIdentity := mediaIdentity(profile) + "-next"
+	_, err = calls.AdmitSpaceMediaParticipant(ctx, roomID, store.SpaceMediaParticipant{
+		ProfileID: profile, Identity: newIdentity, Generation: newGeneration,
+		Issued: store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 2, PolicyEpoch: 2, CanJoin: true, CanSubscribe: true},
+	}, store.MaxSpaceProVoiceParticipants)
+	require.NoError(t, err)
+	media := &fakeMedia{}
+	c := &Coordinator{Store: calls, Media: media}
+
+	_, removed, err := c.RevokeSpaceMediaParticipant(ctx, oldCall, old)
+	require.NoError(t, err)
+	require.False(t, removed)
+	require.Empty(t, media.removed, "a stale leave must not eject the current incarnation")
+
+	current, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	require.Equal(t, newIdentity, current.SpaceMedia[profile].Identity)
+	require.Equal(t, newGeneration, current.SpaceMedia[profile].Generation)
+	require.True(t, current.IsParticipant(profile))
+}
+
 func newRoomStore(t *testing.T, ctx context.Context, spaceID, roomID, voiceRoomID string, profiles ...string) *store.MemoryCallStore {
 	t.Helper()
 	calls := store.NewMemoryCallStore()
