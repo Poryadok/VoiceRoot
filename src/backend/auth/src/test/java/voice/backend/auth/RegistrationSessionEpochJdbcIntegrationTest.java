@@ -66,6 +66,8 @@ import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 class RegistrationSessionEpochJdbcIntegrationTest {
   private static final Clock CLOCK =
       Clock.fixed(Instant.parse("2026-09-06T09:00:00Z"), ZoneOffset.UTC);
+  private static final JwtService JWT_SERVICE =
+      JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
 
   @Container
   static final PostgreSQLContainer<?> POSTGRES =
@@ -197,6 +199,70 @@ class RegistrationSessionEpochJdbcIntegrationTest {
   }
 
   @Test
+  void concurrentRefreshesAcrossAuthServicesConsumeOneJdbcRowOnlyOnce() throws Exception {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    SwitchableFloors floors = new SwitchableFloors();
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService setup = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var initial = setup.register(command("concurrent-refresh@example.test", false));
+
+    CountDownLatch bothObservedActive = new CountDownLatch(2);
+    CountDownLatch release = new CountDownLatch(1);
+    RefreshTokenRepository firstReadGate = refreshReadBarrier(tokens, bothObservedActive, release);
+    RefreshTokenRepository secondReadGate = refreshReadBarrier(tokens, bothObservedActive, release);
+    AuthService first = service(dataSource, jdbc, accounts, firstReadGate, floors, profiles);
+    AuthService second = service(dataSource, jdbc, accounts, secondReadGate, floors, profiles);
+    var workers = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var firstRefresh = workers.submit(() -> refreshSucceeds(first, initial.refreshToken()));
+      var secondRefresh = workers.submit(() -> refreshSucceeds(second, initial.refreshToken()));
+      assertThat(bothObservedActive.await(5, TimeUnit.SECONDS)).isTrue();
+      release.countDown();
+
+      assertThat(List.of(firstRefresh.get(5, TimeUnit.SECONDS), secondRefresh.get(5, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder(true, false);
+      assertThat(tokens.findByHash(new RefreshTokenCodec().hash(initial.refreshToken())))
+          .get()
+          .extracting(RefreshTokenRecord::revoked)
+          .isEqualTo(true);
+      assertThat(activeRefreshTokenCount()).isEqualTo(1);
+    } finally {
+      release.countDown();
+      workers.shutdownNow();
+    }
+  }
+
+  private static RefreshTokenRepository refreshReadBarrier(
+      RefreshTokenRepository delegate, CountDownLatch observed, CountDownLatch release) {
+    return new DelegatingRefreshTokens(delegate) {
+      private final AtomicBoolean firstRead = new AtomicBoolean(true);
+
+      @Override
+      public Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+        Optional<RefreshTokenRecord> record = super.findByHash(tokenHash);
+        if (firstRead.compareAndSet(true, false)) {
+          observed.countDown();
+          await(release);
+        }
+        return record;
+      }
+    };
+  }
+
+  private static boolean refreshSucceeds(AuthService service, String refreshToken) {
+    try {
+      service.refresh(new voice.backend.auth.service.RefreshCommand(refreshToken, "{}"));
+      return true;
+    } catch (voice.backend.auth.service.AuthException expected) {
+      if ("token_revoked".equals(expected.getMessage())) return false;
+      throw expected;
+    }
+  }
+
+  @Test
   void profileSwitchPausedBeforeAccountLockCannotIssueAfterPasswordChange() throws Exception {
     DriverManagerDataSource dataSource = dataSource();
     NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
@@ -294,7 +360,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
         new AuthService(
             accounts, refreshTokens, new RefreshTokenCodec(),
             new BCryptPasswordHasher(),
-            JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK),
+            JWT_SERVICE,
             new InMemoryTokenBlacklist(CLOCK), new TotpService(jdbcTotpProperties()),
             new BackupCodeService(backupCodes), CLOCK, Duration.ofDays(30),
             profiles, (PhoneHashResolver) hashes -> Map.of(), new InMemorySubscriptionTierStore(),

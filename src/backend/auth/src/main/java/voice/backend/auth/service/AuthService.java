@@ -41,6 +41,7 @@ public class AuthService {
   public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
   static final Duration ACCOUNT_RESTORE_GRACE = Duration.ofDays(30);
   private record LoginPreparation(Account account, PreparedSessionEpoch epoch) {}
+  private record RefreshPreparation(Account account, PreparedSessionEpoch epoch) {}
 
   private final AccountRepository accounts;
   private final RefreshTokenRepository refreshTokens;
@@ -288,41 +289,91 @@ public class AuthService {
     try {
       RefreshTokenRecord observed = refreshRecord(command.refreshToken());
       ensureUsableRefresh(observed);
-      String observedProfileId;
-      if (observed.profileId() == null) {
-        Account observedAccount = accounts.findById(observed.accountId().toString())
-            .orElseThrow(() -> new AuthException("invalid_token"));
-        ensureActive(observedAccount);
-        observedProfileId = primaryProfileProvisioner.ensurePrimaryProfile(
-            observed.accountId(), displayHint(observedAccount), "guest".equals(observedAccount.type()));
+      AuthSession session;
+      if (observed.profileId() != null) {
+        String profileId = observed.profileId().toString();
+        session = securityTransaction(() -> {
+          accounts.lockForSecurityMutation(observed.accountId());
+          RefreshTokenRecord current = currentRefreshForUpdate(observed);
+          Account account = accountForRefresh(current);
+          PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+          consumeRefresh(current, account);
+          return issueSessionForProfile(account, prepared, profileId, command.deviceInfoJson());
+        });
       } else {
-        observedProfileId = observed.profileId().toString();
+        // Consume a legacy one-time refresh credential before crossing the external User boundary.
+        // The later locked phase must not upgrade this already-consumed origin to a newer floor.
+        RefreshPreparation preparation = securityTransaction(() -> {
+          accounts.lockForSecurityMutation(observed.accountId());
+          RefreshTokenRecord current = currentRefreshForUpdate(observed);
+          if (current.profileId() != null) {
+            throw new AuthException("token_revoked");
+          }
+          Account account = accountForRefresh(current);
+          PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+          consumeRefresh(current, account);
+          return new RefreshPreparation(account, prepared);
+        });
+        String profileId = requireProfileId(primaryProfileProvisioner.ensurePrimaryProfile(
+            preparation.account().id(), displayHint(preparation.account()),
+            "guest".equals(preparation.account().type())));
+        session = securityTransaction(() -> {
+          accounts.lockForSecurityMutation(observed.accountId());
+          Account current = accounts.findById(observed.accountId().toString())
+              .orElseThrow(() -> new AuthException("invalid_token"));
+          ensureActive(current);
+          requireRefreshEpochUnchanged(current, preparation.epoch());
+          return issueSessionForProfile(current, preparation.epoch(), profileId, command.deviceInfoJson());
+        });
       }
-      AuthSession session = securityTransaction(() -> {
-        accounts.lockForSecurityMutation(observed.accountId());
-        RefreshTokenRecord current = refreshTokens.findByHash(observed.tokenHash())
-            .orElseThrow(() -> new AuthException("invalid_token"));
-        if (!current.accountId().equals(observed.accountId())) {
-          throw new AuthException("invalid_token");
-        }
-        ensureUsableRefresh(current);
-        Account account = accounts.findById(current.accountId().toString())
-            .orElseThrow(() -> new AuthException("invalid_token"));
-        ensureActive(account);
-        PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-        Instant now = Instant.now(clock);
-        if (!refreshTokens.revokeIfActive(current.tokenHash(), now)) {
-          throw new AuthException("token_revoked");
-        }
-        tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
-        touchLastOnline(account);
-        return issueSessionForProfile(account, prepared, observedProfileId, command.deviceInfoJson());
-      });
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
       recordAuthLoginMetric(false);
       throw ex;
+    }
+  }
+
+  private RefreshTokenRecord currentRefreshForUpdate(RefreshTokenRecord observed) {
+    RefreshTokenRecord current = refreshTokens.findByHash(observed.tokenHash())
+        .orElseThrow(() -> new AuthException("invalid_token"));
+    if (!current.accountId().equals(observed.accountId())) {
+      throw new AuthException("invalid_token");
+    }
+    ensureUsableRefresh(current);
+    return current;
+  }
+
+  private Account accountForRefresh(RefreshTokenRecord current) {
+    Account account = accounts.findById(current.accountId().toString())
+        .orElseThrow(() -> new AuthException("invalid_token"));
+    ensureActive(account);
+    return account;
+  }
+
+  private void consumeRefresh(RefreshTokenRecord current, Account account) {
+    if (!refreshTokens.revokeIfActive(current.tokenHash(), Instant.now(clock))) {
+      throw new AuthException("token_revoked");
+    }
+    tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
+    touchLastOnline(account);
+  }
+
+  private void requireRefreshEpochUnchanged(Account account, PreparedSessionEpoch prepared) {
+    if (!account.id().equals(prepared.accountId()) || account.sessionEpoch() != prepared.sessionEpoch()) {
+      throw new AuthException("token_revoked");
+    }
+    long floor;
+    try {
+      floor = sessionEpochFloors.requireFloor(account.id());
+    } catch (RuntimeException unavailable) {
+      throw new SessionEpochFloorUnavailableException("session epoch floor unavailable", unavailable);
+    }
+    if (floor <= 0 || floor < prepared.sessionEpoch()) {
+      throw new SessionEpochFloorUnavailableException("invalid session epoch floor");
+    }
+    if (floor != prepared.sessionEpoch()) {
+      throw new AuthException("token_revoked");
     }
   }
 

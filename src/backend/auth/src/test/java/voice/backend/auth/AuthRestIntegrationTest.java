@@ -38,7 +38,7 @@ class AuthRestIntegrationTest {
   @Test
   void guestWithoutKnownPasswordCannotChangePasswordOrMutateSessionOrFactors() throws Exception {
     JsonNode guest = session(postJson("/api/v1/auth/register",
-        "{\"guest\":true,\"device_info_json\":\"{}\"}"));
+        "{\"guest\":true,\"password\":\"Guest bootstrap password 1\",\"device_info_json\":\"{}\"}"));
     String token = guest.get("access_token").asText();
 
     mockMvc.perform(post("/api/v1/auth/password/change")

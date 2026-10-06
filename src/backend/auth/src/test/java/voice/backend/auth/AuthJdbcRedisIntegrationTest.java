@@ -52,15 +52,18 @@ import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.testcontainers.containers.GenericContainer;
@@ -77,9 +80,25 @@ import voice.backend.auth.oauth.OAuthException;
 import voice.backend.auth.oauth.OAuthTokenRequest;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.repository.BackupCodeRepository;
+import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.RefreshTokenRepository;
+import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.JwtService;
+import voice.backend.auth.security.TokenBlacklist;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.BackupCodeService;
 import voice.backend.auth.service.LoginCommand;
+import voice.backend.auth.service.TotpService;
+import voice.backend.auth.userdb.PrimaryProfileProvisioner;
+import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
+import voice.backend.auth.service.InMemorySubscriptionTierStore;
+import voice.backend.auth.repository.InMemoryE2EKeyBackupRepository;
+import voice.backend.auth.events.NoopAuthEventPublisher;
+import voice.backend.auth.mail.NoopMailSender;
+import voice.backend.auth.service.InMemoryAccountRestoreTokenStore;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration.RecordingUserContractPorts;
 
@@ -125,6 +144,13 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired AuthGrpcService grpcService;
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
+  @Autowired RefreshTokenRepository refreshTokens;
+  @Autowired BackupCodeRepository backupCodes;
+  @Autowired TokenBlacklist tokenBlacklist;
+  @Autowired TotpService totpService;
+  @Autowired SessionEpochFloorStore sessionEpochFloors;
+  @Autowired StringRedisTemplate redisTemplate;
+  @Autowired @Qualifier("authSecurityTransactionTemplate") TransactionTemplate securityTransactions;
   @Autowired AuthProperties authProperties;
   @Autowired OAuthAuthorizationCodeStore oauthCodes;
   @Autowired Clock clock;
@@ -309,6 +335,175 @@ class AuthJdbcRedisIntegrationTest {
     mockMvc.perform(get("/api/v1/auth/.well-known/jwks.json"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.keys[0].kid", is("test-key")));
+  }
+
+  @Test
+  void malformedRedisFloorRollsBackJdbcBackupCodeUseAndAllowsOneRetry() throws Exception {
+    String email = "jdbc-login-backup-floor@example.test";
+    String password = "Correct horse battery staple";
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"" + email + "\",\"password\":\"" + password
+            + "\",\"device_info_json\":\"{}\"}"));
+    var enrollment = authService.enable2FA(registered.get("access_token").asText(), password);
+    authService.verify2FA(registered.get("access_token").asText(), "000000");
+    UUID accountId = UUID.fromString(registered.get("account_id").asText());
+    String backupCode = enrollment.backupCodes().getFirst();
+    long activeCodesBefore = activeBackupCodeCount(accountId);
+    long activeRefreshBefore = activeRefreshTokenCount(accountId);
+    long durableEpoch = accounts.findById(accountId.toString()).orElseThrow().sessionEpoch();
+    String floorKey = "auth:session:min_epoch:" + accountId;
+    redisTemplate.opsForValue().set(floorKey, "malformed-test-floor");
+
+    assertThatThrownBy(() -> authService.login(
+        new LoginCommand(email, null, password, backupCode, "{}")))
+        .isInstanceOf(voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException.class);
+
+    assertThat(activeBackupCodeCount(accountId)).isEqualTo(activeCodesBefore);
+    assertThat(activeRefreshTokenCount(accountId)).isEqualTo(activeRefreshBefore);
+
+    redisTemplate.opsForValue().set(floorKey, Long.toString(durableEpoch));
+    assertThat(authService.login(new LoginCommand(email, null, password, backupCode, "{}")).accessToken())
+        .isNotBlank();
+    assertThat(activeBackupCodeCount(accountId)).isEqualTo(activeCodesBefore - 1);
+    long activeRefreshAfterLogin = activeRefreshTokenCount(accountId);
+    assertThat(activeRefreshAfterLogin).isEqualTo(activeRefreshBefore + 1);
+
+    assertThatThrownBy(() -> authService.login(
+        new LoginCommand(email, null, password, backupCode, "{}")))
+        .isInstanceOf(voice.backend.auth.service.AuthException.class)
+        .hasMessage("invalid_totp");
+    assertThat(activeBackupCodeCount(accountId)).isEqualTo(activeCodesBefore - 1);
+    assertThat(activeRefreshTokenCount(accountId)).isEqualTo(activeRefreshAfterLogin);
+  }
+
+  @Test
+  void legacyRefreshRejectsFloorAheadAfterPhaseAWithoutReconcilingConsumedOrigin() throws Exception {
+    LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-floor-race@example.test");
+    CountDownLatch profileLookupStarted = new CountDownLatch(1);
+    CountDownLatch releaseProfileLookup = new CountDownLatch(1);
+    AuthService gatedService = serviceWithPrimaryProfile(profileLookupStarted, releaseProfileLookup,
+        fixture.profileId());
+    ExecutorService worker = Executors.newSingleThreadExecutor();
+    try {
+      Future<?> refresh = worker.submit(() ->
+          gatedService.refresh(new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}")));
+      assertThat(profileLookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      long epochAtPhaseA = accounts.findById(fixture.accountId().toString()).orElseThrow().sessionEpoch();
+      assertThat(refreshTokens.findByHash(fixture.refreshHash()).orElseThrow().revoked()).isTrue();
+      redisTemplate.opsForValue().set(floorKey(fixture.accountId()), Long.toString(epochAtPhaseA + 1));
+
+      releaseProfileLookup.countDown();
+      assertThatThrownBy(() -> refresh.get(5, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasMessageContaining("token_revoked");
+
+      assertThat(accounts.findById(fixture.accountId().toString()).orElseThrow().sessionEpoch())
+          .isEqualTo(epochAtPhaseA);
+      assertThat(redisTemplate.opsForValue().get(floorKey(fixture.accountId())))
+          .isEqualTo(Long.toString(epochAtPhaseA + 1));
+      assertThat(activeRefreshTokenCount(fixture.accountId())).isZero();
+    } finally {
+      releaseProfileLookup.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  @Test
+  void legacyRefreshRejectsFloorPublishedByRolledBackPasswordChange() throws Exception {
+    LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-rollback-floor@example.test");
+    CountDownLatch profileLookupStarted = new CountDownLatch(1);
+    CountDownLatch releaseProfileLookup = new CountDownLatch(1);
+    AuthService refreshService = serviceWithPrimaryProfile(
+        profileLookupStarted, releaseProfileLookup, fixture.profileId());
+    ExecutorService worker = Executors.newSingleThreadExecutor();
+    try {
+      Future<?> refresh = worker.submit(() -> refreshService.refresh(
+          new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}")));
+      assertThat(profileLookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      long durableEpoch = accounts.findById(fixture.accountId().toString()).orElseThrow().sessionEpoch();
+      assertThat(redisTemplate.opsForValue().get(floorKey(fixture.accountId())))
+          .isEqualTo(Long.toString(durableEpoch));
+
+      var accountTemplate = new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(
+          java.util.Objects.requireNonNull(jdbc.getDataSource()));
+      AccountRepository failAfterPasswordUpdate = new JdbcAccountRepository(accountTemplate) {
+        @Override
+        public void updatePasswordHash(UUID accountId, String passwordHash) {
+          super.updatePasswordHash(accountId, passwordHash);
+          throw new IllegalStateException("injected transaction rollback after epoch floor publication");
+        }
+      };
+      AuthService failingPasswordService = serviceWithPrimaryProfile(
+          failAfterPasswordUpdate, null, null, fixture.profileId());
+      assertThatThrownBy(() -> failingPasswordService.changePassword(
+          fixture.accessToken(), "Correct horse battery staple", "New safer password", null))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("injected transaction rollback");
+
+      assertThat(accounts.findById(fixture.accountId().toString()).orElseThrow().sessionEpoch())
+          .isEqualTo(durableEpoch);
+      String persistedPasswordHash = accounts.findById(fixture.accountId().toString()).orElseThrow().passwordHash();
+      BCryptPasswordHasher passwordHasher = new BCryptPasswordHasher();
+      assertThat(passwordHasher.matches("Correct horse battery staple", persistedPasswordHash)).isTrue();
+      assertThat(passwordHasher.matches("New safer password", persistedPasswordHash)).isFalse();
+      assertThat(redisTemplate.opsForValue().get(floorKey(fixture.accountId())))
+          .isEqualTo(Long.toString(durableEpoch + 1));
+      assertThat(refreshTokens.findByHash(fixture.refreshHash()).orElseThrow().revoked()).isTrue();
+
+      releaseProfileLookup.countDown();
+      assertThatThrownBy(() -> refresh.get(5, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasMessageContaining("token_revoked");
+      assertThat(accounts.findById(fixture.accountId().toString()).orElseThrow().sessionEpoch())
+          .isEqualTo(durableEpoch);
+      assertThat(redisTemplate.opsForValue().get(floorKey(fixture.accountId())))
+          .isEqualTo(Long.toString(durableEpoch + 1));
+      assertThat(activeRefreshTokenCount(fixture.accountId())).isZero();
+    } finally {
+      releaseProfileLookup.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  @Test
+  void legacyRefreshPhaseBRejectsAfterPasswordChangeWinsBetweenUserLookupAndIssue() throws Exception {
+    LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-race@example.test");
+    CountDownLatch profileLookupStarted = new CountDownLatch(1);
+    CountDownLatch releaseProfileLookup = new CountDownLatch(1);
+    AuthService gatedService = serviceWithPrimaryProfile(profileLookupStarted, releaseProfileLookup,
+        fixture.profileId());
+    ExecutorService worker = Executors.newSingleThreadExecutor();
+    try {
+      Future<?> refresh = worker.submit(() ->
+          gatedService.refresh(new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}")));
+      assertThat(profileLookupStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      authService.changePassword(fixture.accessToken(), "Correct horse battery staple", "New safer password", null);
+      releaseProfileLookup.countDown();
+
+      assertThatThrownBy(() -> refresh.get(5, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasMessageContaining("token_revoked");
+      assertThat(refreshTokens.findByHash(fixture.refreshHash()).orElseThrow().revoked()).isTrue();
+      assertThat(activeRefreshTokenCount(fixture.accountId())).isZero();
+    } finally {
+      releaseProfileLookup.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  @Test
+  void passwordChangeAfterLegacyRefreshPhaseBRevokesTheReplacementSession() throws Exception {
+    LegacyRefreshFixture fixture = registerLegacyRefresh("legacy-password-after-refresh@example.test");
+    AuthService profileService = serviceWithPrimaryProfile(null, null, fixture.profileId());
+    var replacement = profileService.refresh(
+        new voice.backend.auth.service.RefreshCommand(fixture.refreshToken(), "{}"));
+
+    authService.changePassword(fixture.accessToken(), "Correct horse battery staple", "New safer password", null);
+
+    assertThatThrownBy(() -> authService.validate(replacement.accessToken()))
+        .isInstanceOf(voice.backend.auth.service.AuthException.class)
+        .hasMessage("token_revoked");
+    assertThat(activeRefreshTokenCount(fixture.accountId())).isZero();
   }
 
   /**
@@ -705,6 +900,100 @@ class AuthJdbcRedisIntegrationTest {
         .getContentAsString();
     return objectMapper.readTree(response);
   }
+
+  private LegacyRefreshFixture registerLegacyRefresh(String email) throws Exception {
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"" + email + "\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    String refreshToken = registered.get("refresh_token").asText();
+    String refreshHash = new voice.backend.auth.security.RefreshTokenCodec().hash(refreshToken);
+    assertThat(jdbc.update("UPDATE refresh_tokens SET profile_id=NULL WHERE token_hash=?", refreshHash)).isEqualTo(1);
+    return new LegacyRefreshFixture(
+        UUID.fromString(registered.get("account_id").asText()),
+        refreshToken,
+        refreshHash,
+        registered.get("access_token").asText(),
+        registered.get("profile_id").asText());
+  }
+
+  private AuthService serviceWithPrimaryProfile(
+      CountDownLatch lookupStarted, CountDownLatch releaseLookup, String profileId) {
+    return serviceWithPrimaryProfile(accounts, lookupStarted, releaseLookup, profileId);
+  }
+
+  private AuthService serviceWithPrimaryProfile(
+      AccountRepository accountRepository,
+      CountDownLatch lookupStarted,
+      CountDownLatch releaseLookup,
+      String profileId) {
+    PrimaryProfileProvisioner provisioner = new PrimaryProfileProvisioner() {
+      @Override
+      public String ensurePrimaryProfile(UUID accountId, String displayHint, boolean guestAccount) {
+        if (lookupStarted != null) {
+          lookupStarted.countDown();
+          awaitLatch(releaseLookup);
+        }
+        return profileId;
+      }
+
+      @Override
+      public void clearGuestAccountFlag(UUID accountId) {}
+    };
+    AuthService service = new AuthService(
+        accountRepository,
+        refreshTokens,
+        new voice.backend.auth.security.RefreshTokenCodec(),
+        new BCryptPasswordHasher(),
+        jwtService,
+        tokenBlacklist,
+        totpService,
+        new BackupCodeService(backupCodes),
+        clock,
+        authProperties.getRefresh().getTtl(),
+        provisioner,
+        null,
+        new InMemorySubscriptionTierStore(),
+        new NoOpProfileSwitchValidator(),
+        new InMemoryE2EKeyBackupRepository(),
+        new NoopAuthEventPublisher(),
+        new SimpleMeterRegistry(),
+        new InMemoryAccountRestoreTokenStore(),
+        new NoopMailSender(),
+        sessionEpochFloors);
+    service.configureSecurityTransactions(securityTransactions);
+    return service;
+  }
+
+  private long activeRefreshTokenCount(UUID accountId) {
+    return jdbc.queryForObject(
+        "SELECT count(*) FROM refresh_tokens WHERE account_id=? AND revoked_at IS NULL",
+        Long.class,
+        accountId);
+  }
+
+  private long activeBackupCodeCount(UUID accountId) {
+    return jdbc.queryForObject(
+        "SELECT count(*) FROM backup_codes WHERE account_id=? AND used_at IS NULL",
+        Long.class,
+        accountId);
+  }
+
+  private String floorKey(UUID accountId) {
+    return "auth:session:min_epoch:" + accountId;
+  }
+
+  private static void awaitLatch(CountDownLatch latch) {
+    try {
+      if (!latch.await(5, TimeUnit.SECONDS)) {
+        throw new IllegalStateException("profile lookup release timed out");
+      }
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("profile lookup interrupted", interrupted);
+    }
+  }
+
+  private record LegacyRefreshFixture(
+      UUID accountId, String refreshToken, String refreshHash, String accessToken, String profileId) {}
 
   private boolean conditionalRestore(UUID accountId) throws Exception {
     Method method = AccountRepository.class.getMethod("restoreDeleted", UUID.class);

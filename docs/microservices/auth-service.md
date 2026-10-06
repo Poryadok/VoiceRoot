@@ -15,6 +15,8 @@
 - JWT access token (15 мин) + opaque refresh token (30 дней)
 - Refresh token rotation (одноразовые)
 - Refresh rows retain the session's active `profile_id`; refreshing a switched-profile session keeps that profile instead of silently issuing a primary-profile token. Legacy refresh rows without a profile retain primary-profile fallback behavior.
+- A legacy refresh row is consumed and its prior access JTI is revoked before the primary-profile User lookup. If that authority is unavailable or malformed, Auth issues no replacement session and the presented refresh credential remains spent; retry requires normal sign-in. When User returns a profile, Auth rechecks that the durable account epoch and required Redis floor still equal the phase-A prepared epoch before issuing. It does not reconcile an already-consumed refresh onto a newer floor.
+- JDBC login keeps backup-code consumption and session issuance in one SQL transaction: a failed epoch-floor preparation rolls back the code row, so the same code can be retried after recovery and is consumed once on success. The memory test profile does not model that rollback and only proves that a failed preparation issues no session.
 - Отзыв всех сессий через Auth-owned `session_epoch`; strict-потребители Gateway и Realtime проверяют floor fail-closed
 - 2FA (TOTP — Google Authenticator и аналоги)
 - JWT blacklist (Redis, для логаута и ротации)
