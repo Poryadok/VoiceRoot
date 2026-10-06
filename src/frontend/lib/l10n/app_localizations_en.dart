@@ -813,6 +813,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRealtimeReconnecting => 'Reconnecting…';
 
   @override
+  String get networkReconnectDetails =>
+      'Drafts stay on this device. Realtime updates resume after reconnection.';
+
+  @override
   String get chatRealtimeOffline => 'Offline';
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/theme/voice_colors.dart';
 import 'package:voice_frontend/theme/voice_metrics.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
 /// Taller viewport for widget tests that render full-screen forms or sheets.
 void bindLargeTestViewport(WidgetTester tester) {
@@ -36,6 +37,7 @@ ThemeData voiceTestTheme() {
     textDisabled: Color(0xFF6E6E6E),
     borderDefault: Color(0xFF3D3D3D),
     borderStrong: Color(0xFFF0F0F0),
+    dividerRail: Color(0xFF505050),
     error: Color(0xFFEF9A9A),
     success: Color(0xFF81C784),
     warning: Color(0xFFFFD54F),
@@ -54,7 +56,7 @@ ThemeData voiceTestTheme() {
     radius: {'sm': 4, 'md': 6, 'lg': 8, 'bubble': 16, 'pill': 999},
     layout: {'railWidth': 56, 'listWidth': 320},
     stroke: {'hairline': 1, 'strong': 2},
-    type: {},
+    type: {'label': VoiceTypeToken(size: 14, weight: 500, lineHeight: 20)},
   );
   return ThemeData(
     useMaterial3: true,

@@ -93,7 +93,8 @@ class VoiceApp extends ConsumerWidget {
     return themeAsync.when(
       skipLoadingOnReload: true,
       data: (theme) {
-        if (!auth.isAuthenticated || auth.isEmailVerificationPending ||
+        if (!auth.isAuthenticated ||
+            auth.isEmailVerificationPending ||
             auth.isEmailVerificationPromotionPending) {
           return MaterialApp(
             locale: effectiveLocale,
@@ -146,7 +147,8 @@ class _AuthenticatedRouterApp extends ConsumerStatefulWidget {
       _AuthenticatedRouterAppState();
 }
 
-class _AuthenticatedRouterAppState extends ConsumerState<_AuthenticatedRouterApp> {
+class _AuthenticatedRouterAppState
+    extends ConsumerState<_AuthenticatedRouterApp> {
   late final MobileShellOverlayObserver _overlayObserver =
       MobileShellOverlayObserver((delta) {
         if (!mounted) return;
@@ -315,12 +317,40 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final health = ref.watch(gatewayHealthProvider);
     final selectedChatId = ref.watch(selectedChatIdProvider);
     final selectedSpaceId = ref.watch(selectedSpaceIdProvider);
+    final navigationSection = ref.watch(navigationSectionProvider);
     final sidePanel = ref.watch(shellSidePanelProvider);
     final profileAsync = ref.watch(activeProfileProvider);
     final voice = VoiceColors.of(context);
     final shellNav = ref.read(shellNavigationProvider);
     final inSpace = selectedSpaceId != null;
-    final reconnectBannerVisible = ref.watch(reconnectBannerVisibleProvider);
+    final reconnectBanner = ref.watch(reconnectBannerVisibleProvider);
+    final deviceOffline = ref.watch(isDeviceOfflineProvider);
+    final canRetryBanner =
+        !deviceOffline &&
+        !reconnectBanner.retrying &&
+        ref.read(realtimeHubProvider).canRetryCurrentSession;
+
+    Widget buildReconnectBanner({required bool narrow}) => VoiceCompactBanner(
+      key: const Key('global_reconnect_banner'),
+      message: deviceOffline
+          ? l10n.chatRealtimeOffline
+          : l10n.chatRealtimeReconnecting,
+      detail: deviceOffline
+          ? l10n.chatOfflineSendBlocked
+          : l10n.networkReconnectDetails,
+      icon: deviceOffline ? Icons.cloud_off_outlined : Icons.sync_problem,
+      actionLabel: canRetryBanner ? l10n.commonRetry : null,
+      onAction: !canRetryBanner
+          ? null
+          : () => ref.read(reconnectBannerVisibleProvider.notifier).retry(),
+      onDismiss: () =>
+          ref.read(reconnectBannerVisibleProvider.notifier).dismiss(),
+      networkLayout: narrow
+          ? VoiceNetworkBannerLayout.phone
+          : VoiceNetworkBannerLayout.desktop,
+      isReconnecting: !deviceOffline,
+      tone: VoiceBannerTone.warning,
+    );
 
     final isGuest = ref.watch(authControllerProvider).isGuest;
     final sessionLabel = profileAsync.when(
@@ -359,110 +389,121 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
           child: VersionPolicyOverlay(
             child: CallErrorListener(
               child: Scaffold(
-              backgroundColor: voice.canvas,
-              drawer: showMobileTabs
-                  ? MobileShellDrawer(onOpenSettings: _openSettingsSheet)
-                  : null,
-              bottomNavigationBar: showMobileTabs
-                  ? const MobileShellTabBar()
-                  : null,
-              body: Stack(
-                children: [
-                  SafeArea(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final narrow = VoiceLayout.isNarrow(
-                          constraints.maxWidth,
-                        );
-                        final onBackToChats = selectedChatId == null
-                            ? null
-                            : shellNav.backToChatList;
-
-                        final sidePanelChild =
-                            sidePanel != ShellSidePanel.none && !narrow
-                            ? SidePanelHost(onEmojiSelected: _onEmojiSelected)
-                            : null;
-
-                        return ThreeColumnShell(
-                          railChild: narrow
+                backgroundColor: voice.canvas,
+                drawer: showMobileTabs
+                    ? MobileShellDrawer(onOpenSettings: _openSettingsSheet)
+                    : null,
+                bottomNavigationBar: showMobileTabs
+                    ? const MobileShellTabBar()
+                    : null,
+                body: Stack(
+                  children: [
+                    SafeArea(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final narrow = VoiceLayout.isNarrow(
+                            constraints.maxWidth,
+                          );
+                          final statusBannerInNavigation =
+                              reconnectBanner.visible &&
+                              !inSpace &&
+                              navigationSection == NavigationSection.chats &&
+                              (!narrow || selectedChatId == null);
+                          final onBackToChats = selectedChatId == null
                               ? null
-                              : DesktopShellRail(
+                              : shellNav.backToChatList;
+
+                          final sidePanelChild =
+                              sidePanel != ShellSidePanel.none && !narrow
+                              ? SidePanelHost(onEmojiSelected: _onEmojiSelected)
+                              : null;
+
+                          return ThreeColumnShell(
+                            railChild: narrow
+                                ? null
+                                : DesktopShellRail(
+                                    onOpenSettings: _openSettingsSheet,
+                                  ),
+                            navigationChild: NavigationPanel(
+                              collapsed: inSpace,
+                              statusBanner: statusBannerInNavigation
+                                  ? buildReconnectBanner(narrow: narrow)
+                                  : null,
+                              statusBannerAtListEnd:
+                                  statusBannerInNavigation && !narrow,
+                            ),
+                            navigationCollapsed: inSpace,
+                            middleChild: inSpace
+                                ? SpaceTreeColumn(
+                                    spaceId: selectedSpaceId,
+                                    selectedChatId: selectedChatId,
+                                    onTextChatSelected:
+                                        shellNav.selectChatInSpace,
+                                  )
+                                : null,
+                            mainChild: selectedChatId == null
+                                ? Center(child: Text(l10n.chatRoomSelectPrompt))
+                                : ChatRoomPanel(
+                                    chatId: selectedChatId,
+                                    onBack: narrow ? onBackToChats : null,
+                                    showReconnectBanner:
+                                        !statusBannerInNavigation,
+                                  ),
+                            sidePanelChild: sidePanelChild,
+                            showMainOnlyOnNarrow:
+                                narrow && selectedChatId != null,
+                            mobileRailChild: showMobileChatStrip
+                                ? const MobileChatStrip()
+                                : null,
+                            header: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const GuestSaveAccountReminderBanner(),
+                                const GuestRestrictedActions(),
+                                if (reconnectBanner.visible &&
+                                    selectedChatId == null &&
+                                    !statusBannerInNavigation)
+                                  buildReconnectBanner(narrow: narrow),
+                                _SessionBar(
+                                  narrow: narrow,
+                                  onOpenDrawer: showMobileTabs
+                                      ? () => Scaffold.of(context).openDrawer()
+                                      : null,
+                                  onLogout: () => ref
+                                      .read(authControllerProvider.notifier)
+                                      .logout(),
+                                  onEditProfile:
+                                      profileAsync.valueOrNull == null
+                                      ? null
+                                      : () => _openProfileEditSheet(
+                                          profileAsync.valueOrNull!,
+                                        ),
                                   onOpenSettings: _openSettingsSheet,
+                                  sessionLabel: sessionLabel,
+                                  logoutLabel: l10n.authLogout,
+                                  editProfileTooltip: l10n.profileEditTooltip,
+                                  settingsTooltip: l10n.settingsTooltip,
                                 ),
-                          navigationChild: NavigationPanel(collapsed: inSpace),
-                          navigationCollapsed: inSpace,
-                          middleChild: inSpace
-                              ? SpaceTreeColumn(
-                                  spaceId: selectedSpaceId,
-                                  selectedChatId: selectedChatId,
-                                  onTextChatSelected:
-                                      shellNav.selectChatInSpace,
-                                )
-                              : null,
-                          mainChild: selectedChatId == null
-                              ? Center(child: Text(l10n.chatRoomSelectPrompt))
-                              : ChatRoomPanel(
-                                  chatId: selectedChatId,
-                                  onBack: narrow ? onBackToChats : null,
-                                ),
-                          sidePanelChild: sidePanelChild,
-                          showMainOnlyOnNarrow:
-                              narrow && selectedChatId != null,
-                          mobileRailChild: showMobileChatStrip
-                              ? const MobileChatStrip()
-                              : null,
-                          header: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const GuestSaveAccountReminderBanner(),
-                              const GuestRestrictedActions(),
-                              if (reconnectBannerVisible &&
-                                  selectedChatId == null)
-                                VoiceCompactBanner(
-                                  key: const Key('global_reconnect_banner'),
-                                  message: l10n.chatRealtimeReconnecting,
-                                  icon: Icons.sync_problem,
-                                  tone: VoiceBannerTone.warning,
-                                ),
-                              _SessionBar(
-                                narrow: narrow,
-                                onOpenDrawer: showMobileTabs
-                                    ? () => Scaffold.of(context).openDrawer()
-                                    : null,
-                                onLogout: () => ref
-                                    .read(authControllerProvider.notifier)
-                                    .logout(),
-                                onEditProfile: profileAsync.valueOrNull == null
-                                    ? null
-                                    : () => _openProfileEditSheet(
-                                        profileAsync.valueOrNull!,
-                                      ),
-                                onOpenSettings: _openSettingsSheet,
-                                sessionLabel: sessionLabel,
-                                logoutLabel: l10n.authLogout,
-                                editProfileTooltip: l10n.profileEditTooltip,
-                                settingsTooltip: l10n.settingsTooltip,
-                              ),
-                              if (_GatewayStatusBar.shouldShow(health))
-                                _GatewayStatusBar(asyncHealth: health),
-                            ],
-                          ),
-                        );
-                      },
+                                if (_GatewayStatusBar.shouldShow(health))
+                                  _GatewayStatusBar(asyncHealth: health),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const IncomingCallOverlay(),
-                  const MatchmakingMatchOverlayHost(),
-                  const MatchRatingOverlayHost(),
-                  const OutgoingCallOverlay(),
-                  const SafeArea(child: ActiveCallPanel()),
-                ],
+                    const IncomingCallOverlay(),
+                    const MatchmakingMatchOverlayHost(),
+                    const MatchRatingOverlayHost(),
+                    const OutgoingCallOverlay(),
+                    const SafeArea(child: ActiveCallPanel()),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }

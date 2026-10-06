@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -76,10 +77,14 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
     required this.chatId,
     this.onBack,
     this.attachmentPicker,
+    this.showReconnectBanner = true,
   });
 
   static const Key panelKey = Key('chat_room_panel');
   static const Key messagesKey = Key('chat_room_messages');
+  static const Key selectedMessageFocusKey = Key(
+    'chat_room_selected_message_focus',
+  );
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
   static const Key attachKey = Key('chat_room_attach');
@@ -117,6 +122,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   final String chatId;
   final VoidCallback? onBack;
   final ChatAttachmentPicker? attachmentPicker;
+  final bool showReconnectBanner;
 
   @override
   ConsumerState<ChatRoomPanel> createState() => _ChatRoomPanelState();
@@ -176,6 +182,9 @@ class _PendingAttachmentUpload {
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
   final _composerFocus = FocusNode();
+  final _selectedMessageFocus = FocusNode(
+    debugLabel: 'chat-room-selected-message',
+  );
   final _attachFocus = FocusNode();
   final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
@@ -212,6 +221,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _attachmentUploadFailure = null;
     _composer.dispose();
     _composerFocus.dispose();
+    _selectedMessageFocus.dispose();
     _attachFocus.dispose();
     _emojiFocus.dispose();
     _scrollController.dispose();
@@ -388,7 +398,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final currentPinnedMessage = pinnedMessages.isEmpty
         ? null
         : pinnedMessages[currentPinnedIndex];
-    final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
+    final deviceOffline = ref.watch(isDeviceOfflineProvider);
+    final isOffline = deviceOffline || room.isOfflineCache;
+    final reconnectBanner = ref.watch(reconnectBannerVisibleProvider);
+    final canRetryBanner =
+        !isOffline &&
+        !reconnectBanner.retrying &&
+        ref.read(realtimeHubProvider).canRetryCurrentSession;
     final canCall = ref.watch(gatewayConfigProvider).canPlaceVoiceCalls;
     final isGuest = ref.watch(authControllerProvider).isGuest;
     String? groupName;
@@ -471,6 +487,156 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final peerIsPremium =
         peerId != null && ref.watch(profilePremiumBadgeProvider(peerId));
     final voice = VoiceColors.of(context);
+    final headerTitle = _inChatSearchOpen
+        ? KeyedSubtree(
+            key: const Key('in_chat_search_inline_header'),
+            child: TextField(
+              key: InChatSearch.searchFieldKey,
+              controller: _inChatSearchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: l10n.inChatSearchHint,
+                isDense: true,
+                border: InputBorder.none,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          )
+        : !isGroup && peerProfile != null
+        ? ChatAuthorLabel(
+            displayName: title,
+            isPremium: peerIsPremium,
+            verificationType: peerProfile.verificationType,
+            style: Theme.of(context).textTheme.titleMedium,
+            premiumBadgeSemanticLabel: l10n.premiumBadgeLabel,
+            verifiedBadgeSemanticLabel:
+                peerProfile.verificationType == 'organization'
+                ? l10n.verifiedBadgeOrganization
+                : l10n.verifiedBadgePersonal,
+          )
+        : Text(title, style: Theme.of(context).textTheme.titleMedium);
+    final headerLeading = <Widget>[
+      if (widget.onBack != null) ...[
+        IconButton(
+          tooltip: l10n.chatRoomBack,
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back),
+        ),
+        const SizedBox(width: 4),
+      ],
+      if (peerProfile != null) ...[
+        VoiceAvatar(
+          imageUrl: peerProfile.avatarUrl,
+          label: peerProfile.displayName,
+          radius: 16,
+        ),
+        const SizedBox(width: 8),
+      ],
+      if (peerPresence != null) ...[
+        PresenceIndicator(
+          key: ChatRoomPanel.peerPresenceKey,
+          presence: peerPresence,
+          semanticLabel: _presenceLabel(l10n, peerPresence.status),
+          size: 10,
+        ),
+        const SizedBox(width: 8),
+      ],
+    ];
+    final headerActions = <Widget>[
+      IconButton(
+        key: ChatRoomPanel.inChatSearchKey,
+        tooltip: l10n.inChatSearchOpen,
+        onPressed: () {
+          setState(() {
+            _inChatSearchOpen = !_inChatSearchOpen;
+            if (!_inChatSearchOpen) _inChatSearchController.clear();
+          });
+        },
+        icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
+      ),
+      IconButton(
+        key: ChatRoomPanel.chatInfoKey,
+        tooltip: l10n.chatInfoOpen,
+        onPressed: () => openChatInfoPanel(
+          context,
+          ref,
+          chatId: widget.chatId,
+          groupName: groupName,
+          isGroup: isGroup,
+        ),
+        icon: const Icon(Icons.info_outline),
+      ),
+      if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
+        IconButton(
+          key: ChatRoomPanel.pinnedMessagesHeaderKey,
+          tooltip: l10n.chatPinnedMessagesRestore,
+          onPressed: () => setState(() => _pinnedBarHidden = false),
+          icon: const Icon(Icons.push_pin_outlined),
+        ),
+      if (shareUrlForChat(chatId: widget.chatId, spaceId: spaceId) != null)
+        VoiceShareLinkButton(
+          link: shareUrlForChat(chatId: widget.chatId, spaceId: spaceId)!,
+          tooltip: l10n.shareLinkAction,
+        ),
+      if (isGroup) ...[
+        if (canCall && !inThisGroupVoice)
+          _GroupVoiceHeaderButton(
+            activeGroupCall: activeGroupCall,
+            chatId: widget.chatId,
+            l10n: l10n,
+          ),
+        if (canSetSlowMode)
+          IconButton(
+            key: ChatRoomPanel.spaceSlowModeKey,
+            tooltip: l10n.spaceSlowMode,
+            onPressed: () => SpaceChatSlowModeSheet.show(
+              context,
+              chatId: widget.chatId,
+              currentSeconds: slowModeSeconds,
+            ),
+            icon: const Icon(Icons.timer_outlined),
+          ),
+        IconButton(
+          key: ChatRoomPanel.groupMembersKey,
+          tooltip: l10n.chatGroupMembersTooltip,
+          onPressed: () => openChatInfoPanel(
+            context,
+            ref,
+            chatId: widget.chatId,
+            groupName: groupName,
+            isGroup: true,
+          ),
+          icon: const Icon(Icons.group_outlined),
+        ),
+      ],
+      if (!isGroup && peerId != null && canCall) ...[
+        IconButton(
+          key: ChatRoomPanel.audioCallKey,
+          tooltip: l10n.callStartAudio,
+          onPressed: isGuest
+              ? null
+              : () => ref
+                    .read(callControllerProvider.notifier)
+                    .startCall(chatId: widget.chatId, calleeProfileId: peerId),
+          icon: const Icon(Icons.call_outlined),
+        ),
+        IconButton(
+          key: ChatRoomPanel.videoCallKey,
+          tooltip: l10n.callStartVideo,
+          onPressed: isGuest
+              ? null
+              : () => ref
+                    .read(callControllerProvider.notifier)
+                    .startCall(
+                      chatId: widget.chatId,
+                      calleeProfileId: peerId,
+                      mediaKind: VoiceCallMediaKind.video,
+                    ),
+          icon: const Icon(Icons.videocam_outlined),
+        ),
+      ],
+      _RealtimeBadge(status: room.realtimeStatus, l10n: l10n),
+    ];
 
     if (!_unreadCaptured) {
       ChatListItem? listItem;
@@ -536,6 +702,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (next != (prev ?? 0)) {
         _refocusComposer();
       }
+    });
+
+    ref.listen<String?>(chatMessageKeyboardProvider, (previous, next) {
+      if (next == null || !room.messages.any((message) => message.id == next)) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            ref.read(selectedChatIdProvider) != widget.chatId ||
+            ref.read(chatMessageKeyboardProvider) != next) {
+          return;
+        }
+        _selectedMessageFocus.requestFocus();
+      });
     });
 
     ref.listen(chatMessageReactionRequestProvider(widget.chatId), (prev, next) {
@@ -638,195 +818,70 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     horizontal: 12,
                     vertical: 8,
                   ),
-                  child: Row(
-                    children: [
-                      if (widget.onBack != null) ...[
-                        IconButton(
-                          tooltip: l10n.chatRoomBack,
-                          onPressed: widget.onBack,
-                          icon: const Icon(Icons.arrow_back),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      if (peerProfile != null) ...[
-                        VoiceAvatar(
-                          imageUrl: peerProfile.avatarUrl,
-                          label: peerProfile.displayName,
-                          radius: 16,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (peerPresence != null) ...[
-                        PresenceIndicator(
-                          key: ChatRoomPanel.peerPresenceKey,
-                          presence: peerPresence,
-                          semanticLabel: _presenceLabel(
-                            l10n,
-                            peerPresence.status,
-                          ),
-                          size: 10,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: _inChatSearchOpen
-                            ? KeyedSubtree(
-                                key: const Key('in_chat_search_inline_header'),
-                                child: TextField(
-                                  key: InChatSearch.searchFieldKey,
-                                  controller: _inChatSearchController,
-                                  autofocus: true,
-                                  decoration: InputDecoration(
-                                    hintText: l10n.inChatSearchHint,
-                                    isDense: true,
-                                    border: InputBorder.none,
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              )
-                            : !isGroup && peerProfile != null
-                            ? ChatAuthorLabel(
-                                displayName: title,
-                                isPremium: peerIsPremium,
-                                verificationType: peerProfile.verificationType,
-                                style: Theme.of(context).textTheme.titleMedium,
-                                premiumBadgeSemanticLabel:
-                                    l10n.premiumBadgeLabel,
-                                verifiedBadgeSemanticLabel:
-                                    peerProfile.verificationType ==
-                                        'organization'
-                                    ? l10n.verifiedBadgeOrganization
-                                    : l10n.verifiedBadgePersonal,
-                              )
-                            : Text(
-                                title,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                      ),
-                      IconButton(
-                        key: ChatRoomPanel.inChatSearchKey,
-                        tooltip: l10n.inChatSearchOpen,
-                        onPressed: () {
-                          setState(() {
-                            _inChatSearchOpen = !_inChatSearchOpen;
-                            if (!_inChatSearchOpen) {
-                              _inChatSearchController.clear();
-                            }
-                          });
-                        },
-                        icon: Icon(
-                          _inChatSearchOpen ? Icons.close : Icons.search,
-                        ),
-                      ),
-                      IconButton(
-                        key: ChatRoomPanel.chatInfoKey,
-                        tooltip: l10n.chatInfoOpen,
-                        onPressed: () => openChatInfoPanel(
-                          context,
-                          ref,
-                          chatId: widget.chatId,
-                          groupName: groupName,
-                          isGroup: isGroup,
-                        ),
-                        icon: const Icon(Icons.info_outline),
-                      ),
-                      if (pinnedMessages.isNotEmpty && _pinnedBarHidden)
-                        IconButton(
-                          key: ChatRoomPanel.pinnedMessagesHeaderKey,
-                          tooltip: l10n.chatPinnedMessagesRestore,
-                          onPressed: () =>
-                              setState(() => _pinnedBarHidden = false),
-                          icon: const Icon(Icons.push_pin_outlined),
-                        ),
-                      if (shareUrlForChat(
-                            chatId: widget.chatId,
-                            spaceId: spaceId,
-                          ) !=
-                          null)
-                        VoiceShareLinkButton(
-                          link: shareUrlForChat(
-                            chatId: widget.chatId,
-                            spaceId: spaceId,
-                          )!,
-                          tooltip: l10n.shareLinkAction,
-                        ),
-                      if (isGroup) ...[
-                        if (canCall && !inThisGroupVoice)
-                          _GroupVoiceHeaderButton(
-                            activeGroupCall: activeGroupCall,
-                            chatId: widget.chatId,
-                            l10n: l10n,
-                          ),
-                        if (canSetSlowMode)
-                          IconButton(
-                            key: ChatRoomPanel.spaceSlowModeKey,
-                            tooltip: l10n.spaceSlowMode,
-                            onPressed: () => SpaceChatSlowModeSheet.show(
-                              context,
-                              chatId: widget.chatId,
-                              currentSeconds: slowModeSeconds,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 600) {
+                        return Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ...headerLeading,
+                            SizedBox(
+                              width: constraints.maxWidth * 0.45,
+                              child: headerTitle,
                             ),
-                            icon: const Icon(Icons.timer_outlined),
-                          ),
-                        IconButton(
-                          key: ChatRoomPanel.groupMembersKey,
-                          tooltip: l10n.chatGroupMembersTooltip,
-                          onPressed: () => openChatInfoPanel(
-                            context,
-                            ref,
-                            chatId: widget.chatId,
-                            groupName: groupName,
-                            isGroup: true,
-                          ),
-                          icon: const Icon(Icons.group_outlined),
-                        ),
-                      ],
-                      if (!isGroup && peerId != null && canCall) ...[
-                        IconButton(
-                          key: ChatRoomPanel.audioCallKey,
-                          tooltip: l10n.callStartAudio,
-                          onPressed: isGuest
-                              ? null
-                              : () => ref
-                                    .read(callControllerProvider.notifier)
-                                    .startCall(
-                                      chatId: widget.chatId,
-                                      calleeProfileId: peerId,
-                                    ),
-                          icon: const Icon(Icons.call_outlined),
-                        ),
-                        IconButton(
-                          key: ChatRoomPanel.videoCallKey,
-                          tooltip: l10n.callStartVideo,
-                          onPressed: isGuest
-                              ? null
-                              : () => ref
-                                    .read(callControllerProvider.notifier)
-                                    .startCall(
-                                      chatId: widget.chatId,
-                                      calleeProfileId: peerId,
-                                      mediaKind: VoiceCallMediaKind.video,
-                                    ),
-                          icon: const Icon(Icons.videocam_outlined),
-                        ),
-                      ],
-                      _RealtimeBadge(status: room.realtimeStatus, l10n: l10n),
-                    ],
+                            ...headerActions,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          ...headerLeading,
+                          Expanded(child: headerTitle),
+                          ...headerActions,
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
-              if (ref.watch(reconnectBannerVisibleProvider))
+              if (!reconnectBanner.dismissed &&
+                  ((reconnectBanner.visible && widget.showReconnectBanner) ||
+                      room.isOfflineCache))
                 VoiceCompactBanner(
-                  key: ChatRoomPanel.reconnectBannerKey,
-                  message: l10n.chatRealtimeReconnecting,
-                  icon: Icons.sync_problem,
-                  tone: VoiceBannerTone.warning,
-                ),
-              if (room.isOfflineCache || ref.watch(isDeviceOfflineProvider))
-                VoiceCompactBanner(
-                  key: ChatRoomPanel.offlineBannerKey,
-                  message: l10n.chatOfflineReadOnly,
-                  icon: Icons.cloud_off_outlined,
+                  key: isOffline
+                      ? ChatRoomPanel.offlineBannerKey
+                      : ChatRoomPanel.reconnectBannerKey,
+                  message: isOffline
+                      ? (room.isOfflineCache
+                            ? l10n.chatOfflineReadOnly
+                            : l10n.chatRealtimeOffline)
+                      : l10n.chatRealtimeReconnecting,
+                  detail: isOffline
+                      ? l10n.chatOfflineSendBlocked
+                      : l10n.networkReconnectDetails,
+                  icon: isOffline
+                      ? Icons.cloud_off_outlined
+                      : Icons.sync_problem,
+                  actionLabel: canRetryBanner ? l10n.commonRetry : null,
+                  onAction: !canRetryBanner
+                      ? null
+                      : () => ref
+                            .read(reconnectBannerVisibleProvider.notifier)
+                            .retry(),
+                  onDismiss: () => ref
+                      .read(reconnectBannerVisibleProvider.notifier)
+                      .dismiss(),
+                  networkLayout:
+                      reconnectBanner.visible && widget.showReconnectBanner
+                      ? VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)
+                            ? VoiceNetworkBannerLayout.phone
+                            : VoiceNetworkBannerLayout.desktop
+                      : null,
+                  isReconnecting:
+                      !deviceOffline &&
+                      !room.isOfflineCache &&
+                      reconnectBanner.visible &&
+                      widget.showReconnectBanner,
                   tone: VoiceBannerTone.warning,
                 ),
               if (room.pinnedMessages.isEmpty &&
@@ -1023,23 +1078,50 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                                   message: l10n.chatRoomEmptyHint,
                                   icon: Icons.chat_bubble_outline,
                                 )
-                        : _MessageListView(
-                            key: ChatRoomPanel.messagesKey,
-                            chatId: widget.chatId,
-                            scrollController: _scrollController,
-                            room: room,
-                            ephemeralMessages: ephemeralMessages,
-                            deferredInteraction: deferredInteraction,
-                            activeId: activeId,
-                            isGroup: isGroup,
-                            l10n: l10n,
-                            initialUnreadCount: _initialUnreadCount,
-                            highlightedMessageId: _highlightedMessageId,
-                            keyboardSelectedMessageId: ref.watch(
-                              chatMessageKeyboardProvider,
+                        : Focus(
+                            key: ChatRoomPanel.selectedMessageFocusKey,
+                            focusNode: _selectedMessageFocus,
+                            onKeyEvent: (node, event) {
+                              if (!node.hasPrimaryFocus ||
+                                  event is! KeyDownEvent ||
+                                  event.logicalKey !=
+                                      LogicalKeyboardKey.enter) {
+                                return KeyEventResult.ignored;
+                              }
+                              final selectedId = ref.read(
+                                chatMessageKeyboardProvider,
+                              );
+                              if (selectedId == null ||
+                                  ref.read(selectedChatIdProvider) !=
+                                      widget.chatId ||
+                                  !room.messages.any(
+                                    (message) => message.id == selectedId,
+                                  )) {
+                                return KeyEventResult.ignored;
+                              }
+                              ref
+                                  .read(chatMessageKeyboardProvider.notifier)
+                                  .openContextMenuOnSelected();
+                              return KeyEventResult.handled;
+                            },
+                            child: _MessageListView(
+                              key: ChatRoomPanel.messagesKey,
+                              chatId: widget.chatId,
+                              scrollController: _scrollController,
+                              room: room,
+                              ephemeralMessages: ephemeralMessages,
+                              deferredInteraction: deferredInteraction,
+                              activeId: activeId,
+                              isGroup: isGroup,
+                              l10n: l10n,
+                              initialUnreadCount: _initialUnreadCount,
+                              highlightedMessageId: _highlightedMessageId,
+                              keyboardSelectedMessageId: ref.watch(
+                                chatMessageKeyboardProvider,
+                              ),
+                              onLongPress: (msg, isMine) =>
+                                  _showMessageActions(msg, isMine),
                             ),
-                            onLongPress: (msg, isMine) =>
-                                _showMessageActions(msg, isMine),
                           ),
                     if (_inChatSearchOpen)
                       Positioned(

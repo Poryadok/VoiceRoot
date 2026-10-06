@@ -813,6 +813,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatRealtimeReconnecting => 'Переподключение…';
 
   @override
+  String get networkReconnectDetails =>
+      'Черновики остаются на устройстве. Обновления чата продолжатся после подключения.';
+
+  @override
   String get chatRealtimeOffline => 'Офлайн';
 
   @override
