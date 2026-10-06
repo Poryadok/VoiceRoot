@@ -144,6 +144,7 @@ class OAuth2SessionEpochExchangeTest {
     Harness harness = new Harness(new RecordingCodeStore());
     String email = "oauth-authorize-epoch@example.com";
     String password = "Correct horse battery staple";
+    harness.auth.register(new RegisterCommand(email, null, password, false, "{}"));
     var login = new LoginCommand(email, null, password, null, "{}");
     var session = harness.auth.login(login);
     long expectedEpoch = harness.auth.validate(session.accessToken()).sessionEpoch();
