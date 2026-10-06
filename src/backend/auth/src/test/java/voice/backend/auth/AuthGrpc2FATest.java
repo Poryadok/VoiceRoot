@@ -221,7 +221,7 @@ class AuthGrpc2FATest {
 
       assertThat(client.validateToken(ValidateTokenRequest.newBuilder()
           .setAccessToken(currentAccess)
-          .build()).getClaims().getUserId()).isEqualTo(registered.getAccountId());
+          .build()).getClaims().getUserId()).isEqualTo(registered.getSession().getAccountId());
 
       assertThatThrownBy(() -> client.login(LoginRequest.newBuilder()
           .setEmail("grpc-2fa-disable-rejected@voice-qa.test")
