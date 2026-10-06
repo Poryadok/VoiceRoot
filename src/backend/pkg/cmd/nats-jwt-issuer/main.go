@@ -53,6 +53,14 @@ type secretMetadata struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--renew-existing-bootstrap" {
+		if runRenewBootstrapPipe(os.Args[2]) != nil {
+			fmt.Fprintln(os.Stderr, "Existing NATS bootstrap renewal refused; no credentials printed")
+			os.Exit(1)
+		}
+		fmt.Println("Existing NATS bootstrap renewed through private controller pipe")
+		return
+	}
 	namespace := flag.String("namespace", "", "voice-staging or voice-prod")
 	cert := flag.String("tls-cert", "", "TLS certificate PEM with voice-nats SAN")
 	key := flag.String("tls-key", "", "matching TLS private key PEM")

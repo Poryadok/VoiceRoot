@@ -15,12 +15,13 @@ import nonnats_plan
 import nonnats_runtime
 from controller import Blocked, file_sha
 from native_store import verify_archive,preflight as native_preflight
-from root_main import capture_inputs,revalidate_inputs,save as root_save
+from root_main import capture_inputs,revalidate_inputs,save as root_save,private_json
 from docker_runtime import DockerRuntime
 from runtime_stage import RolloutStage
 from preserve import capture_cut, verify_post_apply, canonical
 from normalize import normalize_target,image_only_documents
 from errors import safe_error
+from nats_migration import apply_contract
 
 def save(path,row):root_save(path,row,limit=128<<20)
 
@@ -77,7 +78,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -109,7 +110,16 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     claim=kube.get('pvc',stage.expected['source_claim'])
     capacity=claim['status']['capacity']['storage']
     state['native_capacity']=native_preflight(stage.final_path,base,capacity)
-    state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'])
+    try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+    except FileNotFoundError:enrollment=None
+    state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+    if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
+    if nats_authority is not None:
+        if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
+        state['nats_contract']=copy.deepcopy(nats_authority['plan'])
+        state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
+        state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
+        state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
     shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
     state['kernel_sha256']=file_sha(base/'kernel')
     state['phase']='FENCE';save(base/'checkpoint.json',state)
@@ -136,8 +146,15 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract):
-    if state['phase']!='AWAITING_OFF_NODE' or state['status']!='WAITING':
+    recovery=(state['phase']=='NATS_CONTRACT_MIGRATION' and state['status']=='BLOCKED'
+        and state.get('custody',{}).get('verified') is True and 'nats_contract' in state
+        and state['target']['mode']=='images-only'
+        and state['context']['marker']['data'].get('phase')=='rollout-capturing')
+    if not recovery and (state['phase']!='AWAITING_OFF_NODE' or state['status']!='WAITING'):
         raise Blocked('rollout_offnode_phase_invalid')
+    if 'nats_contract' in state:
+        expires=dt.datetime.fromisoformat(state['nats_contract_expires_at'])
+        if expires.tzinfo is None or dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('nats_migration_authority_expired')
     cut=state['cut'];manifest=cut['manifest']
     if (off_node_archive_sha!=manifest['archive_sha256'] or
         off_node_manifest_sha!=cut['manifest_sha256'] or
@@ -147,12 +164,22 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
     stage=reconstruct(kube,state,journal)
-    revalidate_inputs(kube,contract,state['provenance'])
+    # An interrupted owned CM CAS is checked by advance's exact UID/hash/
+    # operation annotation. Credential provenance remains strict on retries.
+    revalidate_inputs(kube,{'scripts':[]} if recovery else contract,state['provenance'])
     stage.verify_final_storage()
     if 'nonnats' in state:nonnats_runtime.verify(kube,state['nonnats'],state['nonnats_binding'],stage)
     if canonical(state['migrations'])!=state['target']['migration_sha256']:raise Blocked('rollout_target_migration_digest_invalid')
     state['phase']='DATABASE_MIGRATIONS';save(Path(base)/'checkpoint.json',state)
     try:
+        if 'nats_contract' in state:
+            state['phase']='NATS_CONTRACT_MIGRATION';save(Path(base)/'checkpoint.json',state)
+            state['nats_migration']=apply_contract(base,state,stage,journal)
+            save(Path(base)/'checkpoint.json',state)
+            from nats_contract_custody import advance
+            active=advance(kube,state,stage,journal)
+            save(guard.ROOT/'installed'/'active-contract.json',active)
+            state['active_contract']=active;save(Path(base)/'checkpoint.json',state)
         state['migration_jobs']=migrations.execute(kube,stage,state['migrations'],state['target']['mode'],
                                                     state['migration_secret_metadata'],journal)
         stage.prepared()
@@ -201,7 +228,8 @@ def finish(kube,base,state,receipt,claim_rv,contract):
     state['context']=context(stage);state['phase']='POST_APPLY_PROOF';save(Path(base)/'checkpoint.json',state)
     try:
         runtime=DockerRuntime(base,state['operation'])
-        state['preservation']=verify_post_apply(runtime,stage.final_path,state['cut'],stage.verify_final_storage)
+        baseline=state.get('nats_migration',{}).get('cut',state['cut'])
+        state['preservation']=verify_post_apply(runtime,stage.final_path,baseline,stage.verify_final_storage)
         stage.verified();state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
         state['restart']=stage.restart()
@@ -237,7 +265,8 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         state['phase']='ROLLBACK_TEMPLATES';save(Path(base)/'checkpoint.json',state)
         stage.restore_original_templates()
         state['phase']='ROLLBACK_PROOF';save(Path(base)/'checkpoint.json',state)
-        state['preservation']=verify_post_apply(DockerRuntime(base,state['operation']),stage.final_path,state['cut'],stage.verify_final_storage)
+        baseline=state.get('nats_migration',{}).get('cut',state['cut'])
+        state['preservation']=verify_post_apply(DockerRuntime(base,state['operation']),stage.final_path,baseline,stage.verify_final_storage)
         stage.verified()
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
         state['restart']=stage.restart()
