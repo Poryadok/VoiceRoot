@@ -605,6 +605,104 @@ identity_publisher_path_allowed() {
   return 1
 }
 
+# BE-255 adds the bounded Space voice-room media vertical while R22.2 room
+# lifecycle remains source-disabled. Keep this admission file-by-file: it must
+# not grant neighboring Voice runtime, lifecycle, MatchFound, proto, or data
+# store work.
+space_media_path_allowed() {
+  case "$1" in
+    src/backend/role/go.mod|\
+    src/backend/role/internal/outboxdelivery/voice_policy.go|\
+    src/backend/role/internal/outboxdelivery/voice_policy_test.go|\
+    src/backend/role/internal/roleevents/jetstream.go|\
+    src/backend/role/internal/roleevents/jetstream_test.go|\
+    src/backend/role/internal/store/voice_policy_invalidation_outbox.go|\
+    src/backend/role/main.go|\
+    src/backend/space/internal/outboxdelivery/voice_invalidation.go|\
+    src/backend/space/internal/outboxdelivery/voice_invalidation_test.go|\
+    src/backend/space/internal/spaceevents/jetstream.go|\
+    src/backend/space/internal/spaceevents/jetstream_test.go|\
+    src/backend/space/internal/spaceevents/jetstream_transport_test.go|\
+    src/backend/space/internal/store/voice_access_invalidation_outbox.go|\
+    src/backend/space/main.go|\
+    src/backend/voice/internal/grpcsvc/space_media_join.go|\
+    src/backend/voice/internal/grpcsvc/space_media_join_test.go|\
+    src/backend/voice/internal/grpcsvc/voice_grpc.go|\
+    src/backend/voice/internal/grpcsvc/voice_room.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_access.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_integration_test.go|\
+    src/backend/voice/internal/livekit/space_token.go|\
+    src/backend/voice/internal/livekit/space_token_test.go|\
+    src/backend/voice/internal/s2s/role_voice_room_grants.go|\
+    src/backend/voice/internal/s2s/voice_room_access.go|\
+    src/backend/voice/internal/spacemedia/consumer.go|\
+    src/backend/voice/internal/spacemedia/consumer_test.go|\
+    src/backend/voice/internal/spacemedia/coordinator.go|\
+    src/backend/voice/internal/spacemedia/coordinator_test.go|\
+    src/backend/voice/internal/store/call_store.go|\
+    src/backend/voice/internal/store/redis_store.go|\
+    src/backend/voice/internal/store/redis_store_test.go|\
+    src/backend/voice/main.go)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+for be255_path in \
+  src/backend/role/go.mod \
+  src/backend/role/internal/outboxdelivery/voice_policy.go \
+  src/backend/role/internal/outboxdelivery/voice_policy_test.go \
+  src/backend/role/internal/roleevents/jetstream.go \
+  src/backend/role/internal/roleevents/jetstream_test.go \
+  src/backend/role/internal/store/voice_policy_invalidation_outbox.go \
+  src/backend/role/main.go \
+  src/backend/space/internal/outboxdelivery/voice_invalidation.go \
+  src/backend/space/internal/outboxdelivery/voice_invalidation_test.go \
+  src/backend/space/internal/spaceevents/jetstream.go \
+  src/backend/space/internal/spaceevents/jetstream_test.go \
+  src/backend/space/internal/spaceevents/jetstream_transport_test.go \
+  src/backend/space/internal/store/voice_access_invalidation_outbox.go \
+  src/backend/space/main.go \
+  src/backend/voice/internal/grpcsvc/space_media_join.go \
+  src/backend/voice/internal/grpcsvc/space_media_join_test.go \
+  src/backend/voice/internal/grpcsvc/voice_grpc.go \
+  src/backend/voice/internal/grpcsvc/voice_room.go \
+  src/backend/voice/internal/grpcsvc/voice_room_access.go \
+  src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go \
+  src/backend/voice/internal/grpcsvc/voice_room_integration_test.go \
+  src/backend/voice/internal/livekit/space_token.go \
+  src/backend/voice/internal/livekit/space_token_test.go \
+  src/backend/voice/internal/s2s/role_voice_room_grants.go \
+  src/backend/voice/internal/s2s/voice_room_access.go \
+  src/backend/voice/internal/spacemedia/consumer.go \
+  src/backend/voice/internal/spacemedia/consumer_test.go \
+  src/backend/voice/internal/spacemedia/coordinator.go \
+  src/backend/voice/internal/spacemedia/coordinator_test.go \
+  src/backend/voice/internal/store/call_store.go \
+  src/backend/voice/internal/store/redis_store.go \
+  src/backend/voice/internal/store/redis_store_test.go \
+  src/backend/voice/main.go; do
+  space_media_path_allowed "${be255_path}" || {
+    printf 'F13 oracle bug: approved BE-255 path was rejected: %s\n' "${be255_path}" >&2
+    exit 2
+  }
+done
+for unrelated_space_media_path in \
+  src/backend/role/internal/outboxdelivery/unrelated.go \
+  src/backend/space/internal/store/voice_access_invalidation_outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/unrelated.go \
+  src/backend/voice/internal/roomlifecycle/lifecycle_worker.go \
+  src/backend/voice/internal/livekit/match_found.go \
+  src/backend/voice/pb/voice/events/v1/events.pb.go \
+  deploy/nats/operator-owned-stream.yaml; do
+  if space_media_path_allowed "${unrelated_space_media_path}"; then
+    printf 'F13 oracle bug: unrelated or forbidden BE-255 near-match was accepted: %s\n' "${unrelated_space_media_path}" >&2
+    exit 2
+  fi
+done
+
 t31_runtime_path_allowed() {
   local path="$1"
   grep -Fxq -- "${path}" "${ROOT}/scripts/ci/t31-r22-scope-allowlist.txt"
@@ -845,6 +943,9 @@ while IFS= read -r file; do
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
+    continue
+  fi
+  if [[ "${r22_runtime_delta}" == true ]] && space_media_path_allowed "${file}"; then
     continue
   fi
   case "${file}" in
