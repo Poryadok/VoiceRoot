@@ -815,7 +815,7 @@
   },
   "chatGroupMembersTooltip": "Участники группы",
   "chatGroupMembersTitle": "Участники",
-  "chatGroupMembersSubtitle": "Владелец может удалять участников. Участники могут выйти из группы.",
+  "chatGroupMembersSubtitle": "Владелец и администраторы могут удалять участников. Участники могут выйти из группы.",
   "chatGroupMembersLoadError": "Не удалось загрузить участников",
   "chatInfoTitle": "Информация о чате",
   "chatInfoOpen": "Информация о чате",
@@ -827,6 +827,9 @@
   "chatSharedMediaEmpty": "Пока ничего нет",
   "chatSharedMediaLoadError": "Не удалось загрузить медиа",
   "chatGroupRoleOwner": "Владелец",
+  "chatGroupRoleAdmin": "Администратор",
+  "chatGroupAddMembers": "Добавить участников",
+  "chatGroupMembersLimitReached": "Группа заполнена (500/500). Для больших сообществ создайте спейс.",
   "chatGroupMemberYou": "{name} (вы)",
   "@chatGroupMemberYou": {
     "placeholders": {

@@ -3251,7 +3251,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatGroupMembersSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Owner can remove members. Members can leave the group.'**
+  /// **'Owners and admins can remove members. Members can leave the group.'**
   String get chatGroupMembersSubtitle;
 
   /// No description provided for @chatGroupMembersLoadError.
@@ -3319,6 +3319,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Owner'**
   String get chatGroupRoleOwner;
+
+  /// No description provided for @chatGroupRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get chatGroupRoleAdmin;
+
+  /// No description provided for @chatGroupAddMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Add members'**
+  String get chatGroupAddMembers;
+
+  /// No description provided for @chatGroupMembersLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'This group has reached its 500-member limit. Create a Space for a larger community.'**
+  String get chatGroupMembersLimitReached;
 
   /// No description provided for @chatGroupMemberYou.
   ///
