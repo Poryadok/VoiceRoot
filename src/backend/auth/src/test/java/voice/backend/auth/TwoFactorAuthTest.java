@@ -304,8 +304,8 @@ class TwoFactorAuthTest {
                 + "\",\"new_password\":\"A replacement password\",\"totp_code\":\"000000\"}"))
         .andExpect(status().isNoContent());
     mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
-            .content("{\"email\":\"" + email + "\",\"password\":\"A replacement password\"
-                + ",\"totp_code\":\"000000\"}"))
+            .content("{\"email\":\"" + email
+                + "\",\"password\":\"A replacement password\",\"totp_code\":\"000000\"}"))
         .andExpect(status().isOk());
   }
 
