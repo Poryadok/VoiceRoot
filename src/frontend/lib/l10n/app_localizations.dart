@@ -4046,6 +4046,42 @@ abstract class AppLocalizations {
   /// **'Two-factor authentication is enabled.'**
   String get security2faEnabled;
 
+  /// No description provided for @security2faStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-factor status is unavailable. Try again before changing this setting.'**
+  String get security2faStatusUnavailable;
+
+  /// No description provided for @security2faManualSecretLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup key'**
+  String get security2faManualSecretLabel;
+
+  /// No description provided for @security2faCopyBackupCodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy backup codes'**
+  String get security2faCopyBackupCodes;
+
+  /// No description provided for @security2faDownloadBackupCodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Download backup codes'**
+  String get security2faDownloadBackupCodes;
+
+  /// No description provided for @security2faBackupCodesCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup codes copied.'**
+  String get security2faBackupCodesCopied;
+
+  /// No description provided for @security2faBackupCodesDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save backup codes. Try again.'**
+  String get security2faBackupCodesDownloadFailed;
+
   /// No description provided for @security2faDisableTitle.
   ///
   /// In en, this message translates to:

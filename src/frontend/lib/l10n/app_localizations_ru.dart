@@ -2239,6 +2239,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get security2faEnabled => 'Двухфакторная аутентификация включена.';
 
   @override
+  String get security2faStatusUnavailable =>
+      'Не удалось загрузить статус двухфакторной аутентификации. Повторите попытку, прежде чем менять эту настройку.';
+
+  @override
+  String get security2faManualSecretLabel => 'Ключ настройки';
+
+  @override
+  String get security2faCopyBackupCodes => 'Скопировать резервные коды';
+
+  @override
+  String get security2faDownloadBackupCodes => 'Скачать резервные коды';
+
+  @override
+  String get security2faBackupCodesCopied => 'Резервные коды скопированы.';
+
+  @override
+  String get security2faBackupCodesDownloadFailed =>
+      'Не удалось сохранить резервные коды. Попробуйте ещё раз.';
+
+  @override
   String get security2faDisableTitle =>
       'Отключить двухфакторную аутентификацию';
 

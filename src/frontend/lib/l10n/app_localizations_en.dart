@@ -2225,6 +2225,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get security2faEnabled => 'Two-factor authentication is enabled.';
 
   @override
+  String get security2faStatusUnavailable =>
+      'Two-factor status is unavailable. Try again before changing this setting.';
+
+  @override
+  String get security2faManualSecretLabel => 'Setup key';
+
+  @override
+  String get security2faCopyBackupCodes => 'Copy backup codes';
+
+  @override
+  String get security2faDownloadBackupCodes => 'Download backup codes';
+
+  @override
+  String get security2faBackupCodesCopied => 'Backup codes copied.';
+
+  @override
+  String get security2faBackupCodesDownloadFailed =>
+      'Could not save backup codes. Try again.';
+
+  @override
   String get security2faDisableTitle => 'Disable two-factor authentication';
 
   @override
