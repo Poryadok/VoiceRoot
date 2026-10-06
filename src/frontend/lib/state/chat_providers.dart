@@ -2347,13 +2347,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String messageId, {
     required bool currentlyPinned,
   }) async {
+    final initialSession = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
+    final refreshToken = initialSession?.refreshToken;
     if (auth == null || profileId == null) {
       return const PinMutationResult.failure(message: 'not_authenticated');
     }
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
+    final optimisticPinnedMessages = state.pinnedMessages;
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
         ? await client.unpinMessage(
@@ -2371,6 +2374,48 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: generation,
     )) {
+      final currentSession = _ref.read(authControllerProvider).session;
+      final currentProfileId = _activeProfileId();
+      final currentAuth = _ref.read(authorizationHeaderProvider);
+      final sameProfileRefreshed =
+          mounted &&
+          currentProfileId == profileId &&
+          currentAuth != null &&
+          (currentAuth != auth || currentSession?.refreshToken != refreshToken);
+      if (sameProfileRefreshed) {
+        // The old mutation result is no longer authoritative after token
+        // rotation. Roll back only our own optimistic snapshot; if a newer
+        // same-viewer pin update already replaced it, preserve that update
+        // while a post-mutation read reconciles the current server state.
+        if (identical(state.pinnedMessages, optimisticPinnedMessages)) {
+          _applyPinDelta(messageId: messageId, pinned: currentlyPinned);
+        }
+        final refreshedAuth = currentAuth;
+        final refreshedProfileId = currentProfileId!;
+        final currentGeneration = _loadGeneration;
+        await _refreshPinnedMessages(
+          refreshedAuth,
+          profileId: refreshedProfileId,
+          generation: currentGeneration,
+        );
+        if (!_isCurrentMutation(
+          profileId: refreshedProfileId,
+          authorization: refreshedAuth,
+          generation: currentGeneration,
+        )) {
+          return const PinMutationResult.stale();
+        }
+        if (state.pinnedMessagesStatus == PinnedMessagesLoadStatus.loaded) {
+          final authoritativePinned = state.pinnedMessages.any(
+            (message) => message.id == messageId,
+          );
+          _applyPinDelta(messageId: messageId, pinned: authoritativePinned);
+          if (authoritativePinned == !currentlyPinned) {
+            return const PinMutationResult.success();
+          }
+          return const PinMutationResult.failure(message: 'unknown_error');
+        }
+      }
       return const PinMutationResult.stale();
     }
     switch (result) {
