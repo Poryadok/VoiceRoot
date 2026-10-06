@@ -374,6 +374,43 @@ void main() {
     expect(find.text('Could not complete this action.'), findsOneWidget);
   });
 
+  testWidgets('ambiguous provisioning secret fails closed', (tester) async {
+    final client = MockClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/auth/2fa/status') {
+        return http.Response(jsonEncode({'enabled': false}), 200);
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/auth/2fa/enable') {
+        return http.Response(
+          jsonEncode({
+            'totp_uri':
+                'otpauth://totp/Voice:test?secret=DUMMY-AMBIGUOUS-ONE&secret=DUMMY-AMBIGUOUS-TWO&issuer=Voice',
+            'secret_backup_hint': 'DUMMY-AMBIGUOUS-HINT',
+            'backup_codes': ['DUMMY-AMBIGUOUS-CODE'],
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    await _pumpSecuritySettings(tester, client);
+    await tester.enterText(
+      find.byKey(SecuritySettingsScreen.passwordFieldKey),
+      'test-password',
+    );
+    await tester.tap(find.byKey(SecuritySettingsScreen.enableButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(SecuritySettingsScreen.qrKey), findsNothing);
+    expect(find.text('DUMMY-AMBIGUOUS-ONE'), findsNothing);
+    expect(find.text('DUMMY-AMBIGUOUS-TWO'), findsNothing);
+    expect(find.text('DUMMY-AMBIGUOUS-HINT'), findsNothing);
+    expect(find.text('DUMMY-AMBIGUOUS-CODE'), findsNothing);
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+  });
+
   testWidgets('late enrollment response is discarded after account changes', (
     tester,
   ) async {

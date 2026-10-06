@@ -185,8 +185,10 @@ class _SecuritySettingsScreenState
         !uri.hasQuery) {
       return null;
     }
-    final secret = uri.queryParameters['secret']?.trim();
-    return secret == null || secret.isEmpty ? null : secret;
+    final secretValues = uri.queryParametersAll['secret'] ?? const <String>[];
+    if (secretValues.length != 1) return null;
+    final secret = secretValues.single.trim();
+    return secret.isEmpty ? null : secret;
   }
 
   @override
