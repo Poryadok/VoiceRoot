@@ -1,5 +1,6 @@
 """Authenticated OpenSSL CMS backup; recovery keys never leave root custody."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -87,8 +88,58 @@ def initialize_recovery_key(key_directory):
         scratch.rmdir()
 
 
-def encrypt_cut(base, key_directory):
+def space_members(base, receipt):
+    """Only the root-produced restored dump may join the fixed cut payload."""
+    if receipt is None:return (), {}
+    import space_migration
+    backup=receipt['backup']
+    wanted=dict(backup,offnode_verified=True)
+    space_migration.require_backup(receipt['requirement'],wanted)
+    if receipt.get('exporter_closed') is not True:
+        raise CryptoError('backup_space_exporter_open')
+    hashes={}
+    for name in ('space-before.dump','space-before-manifest.json'):
+        fd,row=regular(Path(base)/name,private=True)
+        digest=hashlib.sha256();count=0;raw=bytearray()
+        with os.fdopen(fd,'rb') as stream:
+            while chunk:=stream.read(1<<20):
+                count+=len(chunk);digest.update(chunk)
+                if name.endswith('.json'):
+                    if count>1<<20:raise CryptoError('backup_space_manifest_large')
+                    raw.extend(chunk)
+        if count!=row.st_size:raise CryptoError('backup_space_file_changed')
+        hashes[name]=digest.hexdigest()
+        if name.endswith('.dump'):
+            if count!=backup['dump_bytes'] or hashes[name]!=backup['dump_sha256']:
+                raise CryptoError('backup_space_dump_changed')
+        elif json.loads(raw)!=receipt:raise CryptoError('backup_space_manifest_changed')
+    return ('space-before.dump','space-before-manifest.json'),hashes
+
+
+def authorize_space(base,state):
+    """Derive off-node Space evidence only from the verified enclosing cipher."""
+    receipt=state.get('space_backup')
+    if receipt is None:return None
+    target=state.get('target',{})
+    if (receipt.get('operation')!=state['operation'] or receipt.get('source_sha')!=target.get('tag')
+        or receipt.get('migration_plan_sha256')!=target.get('migration_sha256')):
+        raise CryptoError('backup_space_source_binding_changed')
+    _,hashes=space_members(base,receipt)
+    binding=state.get('cipher_binding',{});custody=state.get('custody',{})
+    keys=('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')
+    if (state.get('cipher_space_members')!=hashes or custody.get('verified') is not True
+        or custody.get('schema')!='voice-nats-custody-v1'
+        or custody.get('destination')!='github:Poryadok/VoiceRoot'
+        or any(custody.get(k)!=binding.get(k) or k not in binding for k in keys)
+        or binding.get('operation')!=state['operation']):
+        raise CryptoError('backup_space_offnode_unverified')
+    import space_migration
+    return space_migration.require_backup(receipt['requirement'],dict(receipt['backup'],offnode_verified=True))
+
+
+def encrypt_cut(base, key_directory, space=None):
     base, key_directory = directory(base), directory(key_directory)
+    extra,space_hashes=space_members(base,space)
     for path in (key_directory / 'recovery-key.pem', key_directory / 'recovery-cert.pem'):
         fd, _ = regular(path, private=True)
         os.close(fd)
@@ -101,7 +152,7 @@ def encrypt_cut(base, key_directory):
         payload = scratch / 'payload.tar'
         with tarfile.open(payload, 'w') as bundle:
             payload.chmod(0o600)
-            for name in ('rollout-before.tar', 'rollout-before-manifest.json', 'copy-checkpoint.json'):
+            for name in ('rollout-before.tar', 'rollout-before-manifest.json', 'copy-checkpoint.json',*extra):
                 fd, row = regular(base / name)
                 with os.fdopen(fd, 'rb') as stream:
                     member = tarfile.TarInfo(name)
@@ -122,7 +173,9 @@ def encrypt_cut(base, key_directory):
         with target.open('rb') as stream:
             while chunk := stream.read(1 << 20):
                 sha.update(chunk)
-        return {'cipher_sha256': sha.hexdigest(), 'cipher_bytes': target.stat().st_size}
+        result={'cipher_sha256': sha.hexdigest(), 'cipher_bytes': target.stat().st_size}
+        if space_hashes:result['space_members']=space_hashes
+        return result
     except BaseException:
         target.unlink()
         raise
