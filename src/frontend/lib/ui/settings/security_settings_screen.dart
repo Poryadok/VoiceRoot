@@ -1,14 +1,21 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../backend/auth_client.dart';
+import '../../backend/auth_session.dart';
 import '../../l10n/app_localizations.dart';
 import '../auth/auth_errors.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
+import '../chat/e2e_attachment_actions.dart';
 import 'active_sessions_screen.dart';
 import 'e2e_key_backup_screen.dart';
 
@@ -22,6 +29,17 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   static const Key passwordFieldKey = Key('security_password');
   static const Key enableButtonKey = Key('security_enable');
   static const Key qrKey = Key('security_qr');
+  static const Key statusRetryKey = Key('security_2fa_status_retry');
+  static const Key statusUnavailableKey = Key(
+    'security_2fa_status_unavailable',
+  );
+  static const Key manualSecretKey = Key('security_2fa_manual_secret');
+  static const Key backupCodesKey = Key('security_2fa_backup_codes');
+  static const Key copyBackupCodesKey = Key('security_2fa_copy_backup_codes');
+  static const Key downloadBackupCodesKey = Key(
+    'security_2fa_download_backup_codes',
+  );
+  static const Key disableButtonKey = Key('security_2fa_disable');
   static const Key totpFieldKey = Key('security_totp');
   static const Key verifyButtonKey = Key('security_verify');
 
@@ -46,29 +64,138 @@ class _SecuritySettingsScreenState
   final _passwordController = TextEditingController();
   final _totpController = TextEditingController();
   TotpEnrollmentData? _enrollment;
+  AuthSession? _enrollmentOwner;
+  String? _manualSecret;
   bool? _twoFactorEnabled;
+  var _twoFactorLoading = true;
+  var _twoFactorUnavailable = false;
+  var _backupCodesVerified = false;
+  var _backupActionBusy = false;
   var _busy = false;
   String? _error;
+  var _authContextGeneration = 0;
+  var _statusRequestGeneration = 0;
+  late final ProviderSubscription<AuthState> _authSubscription;
   final _deletePasswordController = TextEditingController();
   final _deleteTotpController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _authSubscription = ref.listenManual(authControllerProvider, (
+      previous,
+      next,
+    ) {
+      final before = previous?.session;
+      final after = next.session;
+      if (before?.accountId == after?.accountId &&
+          before?.activeProfileId == after?.activeProfileId) {
+        return;
+      }
+      _authContextGeneration++;
+      _passwordController.clear();
+      _totpController.clear();
+      if (!mounted) return;
+      setState(() {
+        _step = _SecurityStep.password;
+        _enrollment = null;
+        _enrollmentOwner = null;
+        _manualSecret = null;
+        _backupCodesVerified = false;
+        _twoFactorEnabled = null;
+        _twoFactorLoading = after != null;
+        _twoFactorUnavailable = after == null;
+        _busy = false;
+        _backupActionBusy = false;
+        _error = null;
+      });
+      if (after != null) _loadTwoFactorStatus();
+    });
     _loadTwoFactorStatus();
   }
 
   Future<void> _loadTwoFactorStatus() async {
+    final generation = _authContextGeneration;
+    final request = ++_statusRequestGeneration;
     final session = ref.read(authControllerProvider).session;
+    if (mounted) {
+      setState(() {
+        _twoFactorLoading = session != null;
+        _twoFactorUnavailable = session == null;
+        _twoFactorEnabled = null;
+      });
+    }
     if (session == null) return;
-    final enabled = await ref
-        .read(voiceAuthClientProvider)
-        .is2FAEnabled(session: session);
-    if (mounted && enabled != null) setState(() => _twoFactorEnabled = enabled);
+
+    bool? enabled;
+    try {
+      enabled = await ref
+          .read(voiceAuthClientProvider)
+          .is2FAEnabled(session: session);
+    } on Object {
+      enabled = null;
+    }
+    if (!mounted ||
+        generation != _authContextGeneration ||
+        request != _statusRequestGeneration) {
+      return;
+    }
+    if (ref.read(authControllerProvider).session != session) {
+      unawaited(_loadTwoFactorStatus());
+      return;
+    }
+    setState(() {
+      _twoFactorLoading = false;
+      _twoFactorUnavailable = enabled == null;
+      _twoFactorEnabled = enabled;
+    });
+  }
+
+  bool _isCurrentSession(AuthSession session, int generation) =>
+      mounted &&
+      generation == _authContextGeneration &&
+      ref.read(authControllerProvider).session == session;
+
+  bool _continueWithCurrentSession(AuthSession session, int generation) {
+    if (_isCurrentSession(session, generation)) return true;
+    if (!mounted || generation != _authContextGeneration) return false;
+    _passwordController.clear();
+    _totpController.clear();
+    setState(() {
+      _step = _SecurityStep.password;
+      _enrollment = null;
+      _enrollmentOwner = null;
+      _manualSecret = null;
+      _backupCodesVerified = false;
+      _busy = false;
+      _backupActionBusy = false;
+      _error = null;
+      _twoFactorEnabled = null;
+      _twoFactorUnavailable = false;
+      _twoFactorLoading = true;
+    });
+    unawaited(_loadTwoFactorStatus());
+    return false;
+  }
+
+  String? _secretFromTotpUri(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        uri.scheme != 'otpauth' ||
+        uri.host != 'totp' ||
+        !uri.hasQuery) {
+      return null;
+    }
+    final secretValues = uri.queryParametersAll['secret'] ?? const <String>[];
+    if (secretValues.length != 1) return null;
+    final secret = secretValues.single.trim();
+    return secret.isEmpty ? null : secret;
   }
 
   @override
   void dispose() {
+    _authSubscription.close();
+    _statusRequestGeneration++;
     _passwordController.dispose();
     _totpController.dispose();
     _deletePasswordController.dispose();
@@ -81,28 +208,63 @@ class _SecuritySettingsScreenState
     if (password.isEmpty) return;
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final generation = _authContextGeneration;
 
     setState(() {
       _busy = true;
       _error = null;
     });
 
-    final result = await ref
-        .read(voiceAuthClientProvider)
-        .enable2FA(session: session, password: password);
+    Enable2FAResult result;
+    try {
+      result = await ref
+          .read(voiceAuthClientProvider)
+          .enable2FA(session: session, password: password);
+    } on Object {
+      if (_continueWithCurrentSession(session, generation)) {
+        setState(() {
+          _busy = false;
+          _error = 'commonActionFailed';
+        });
+      }
+      return;
+    }
 
-    if (!mounted) return;
+    if (!_continueWithCurrentSession(session, generation)) return;
     switch (result) {
       case Enable2FAOk(:final enrollment):
+        final manualSecret = _secretFromTotpUri(enrollment.totpUri);
+        if (manualSecret == null ||
+            enrollment.backupCodes.isEmpty ||
+            enrollment.backupCodes.any((code) => code.trim().isEmpty)) {
+          setState(() {
+            _busy = false;
+            _error = 'commonActionFailed';
+          });
+          return;
+        }
         setState(() {
           _enrollment = enrollment;
+          _enrollmentOwner = session;
+          _manualSecret = manualSecret;
+          _backupCodesVerified = false;
           _step = _SecurityStep.enroll;
           _busy = false;
         });
-      case Enable2FAFailure(:final message):
+      case Enable2FAFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         setState(() {
           _busy = false;
-          _error = message;
+          _error =
+              resolveAuthErrorKey(
+                errorCode: errorCode,
+                statusCode: statusCode,
+                message: message,
+              ) ??
+              'commonActionFailed';
         });
     }
   }
@@ -112,27 +274,71 @@ class _SecuritySettingsScreenState
     if (code.isEmpty) return;
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final generation = _authContextGeneration;
 
     setState(() {
       _busy = true;
       _error = null;
     });
 
-    final result = await ref
-        .read(voiceAuthClientProvider)
-        .verify2FA(session: session, totpCode: code);
+    AuthSessionResult result;
+    try {
+      result = await ref
+          .read(voiceAuthClientProvider)
+          .verify2FA(session: session, totpCode: code);
+    } on Object {
+      if (_continueWithCurrentSession(session, generation)) {
+        setState(() {
+          _busy = false;
+          _error = 'commonActionFailed';
+        });
+      }
+      return;
+    }
 
-    if (!mounted) return;
+    if (!_continueWithCurrentSession(session, generation)) return;
     switch (result) {
       case AuthSessionOk(:final session):
-        await ref.read(authControllerProvider.notifier).applySession(session);
-        if (!mounted) return;
+        final owner = _enrollmentOwner;
+        if (owner == null ||
+            owner.accountId != session.accountId ||
+            owner.activeProfileId != session.activeProfileId) {
+          setState(() {
+            _busy = false;
+            _error = 'commonActionFailed';
+          });
+          return;
+        }
+        try {
+          await ref.read(authControllerProvider.notifier).applySession(session);
+        } on Object {
+          if (_continueWithCurrentSession(owner, generation)) {
+            setState(() {
+              _busy = false;
+              _error = 'commonActionFailed';
+            });
+          }
+          return;
+        }
+        if (!mounted || generation != _authContextGeneration) return;
+        if (ref.read(authControllerProvider).session != session) {
+          unawaited(_loadTwoFactorStatus());
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.security2faEnabled),
           ),
         );
-        Navigator.of(context).pop();
+        setState(() {
+          _twoFactorEnabled = true;
+          _twoFactorLoading = false;
+          _twoFactorUnavailable = false;
+          _backupCodesVerified = true;
+          _enrollmentOwner = session;
+          _busy = false;
+          _error = null;
+        });
       case AuthSessionFailure(
         :final message,
         :final errorCode,
@@ -146,7 +352,7 @@ class _SecuritySettingsScreenState
                 statusCode: statusCode,
                 message: message,
               ) ??
-              message;
+              'commonActionFailed';
         });
     }
   }
@@ -156,14 +362,26 @@ class _SecuritySettingsScreenState
     final code = _totpController.text.trim();
     final session = ref.read(authControllerProvider).session;
     if (password.isEmpty || code.isEmpty || session == null) return;
+    final generation = _authContextGeneration;
     setState(() {
       _busy = true;
       _error = null;
     });
-    final result = await ref
-        .read(voiceAuthClientProvider)
-        .disable2FA(session: session, password: password, totpCode: code);
-    if (!mounted) return;
+    AuthApiResult<void> result;
+    try {
+      result = await ref
+          .read(voiceAuthClientProvider)
+          .disable2FA(session: session, password: password, totpCode: code);
+    } on Object {
+      if (_continueWithCurrentSession(session, generation)) {
+        setState(() {
+          _busy = false;
+          _error = 'commonActionFailed';
+        });
+      }
+      return;
+    }
+    if (!_continueWithCurrentSession(session, generation)) return;
     switch (result) {
       case AuthApiOk<void>():
         await ref.read(authControllerProvider.notifier).logout();
@@ -177,9 +395,101 @@ class _SecuritySettingsScreenState
                 statusCode: statusCode,
                 message: message,
               ) ??
-              message;
+              'commonActionFailed';
         });
     }
+  }
+
+  List<String>? _verifiedBackupCodesForCurrentAccount() {
+    final session = ref.read(authControllerProvider).session;
+    final owner = _enrollmentOwner;
+    final codes = _enrollment?.backupCodes;
+    if (!_backupCodesVerified ||
+        session == null ||
+        owner == null ||
+        codes == null ||
+        owner.accountId != session.accountId ||
+        owner.activeProfileId != session.activeProfileId) {
+      return null;
+    }
+    return codes;
+  }
+
+  Future<void> _copyBackupCodes() async {
+    final codes = _verifiedBackupCodesForCurrentAccount();
+    final session = ref.read(authControllerProvider).session;
+    final generation = _authContextGeneration;
+    if (codes == null || session == null || _backupActionBusy) return;
+    setState(() => _backupActionBusy = true);
+    try {
+      await Clipboard.setData(ClipboardData(text: codes.join('\n')));
+    } on Object {
+      if (!mounted ||
+          generation != _authContextGeneration ||
+          ref.read(authControllerProvider).session?.accountId !=
+              session.accountId ||
+          ref.read(authControllerProvider).session?.activeProfileId !=
+              session.activeProfileId) {
+        return;
+      }
+      setState(() => _backupActionBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.commonActionFailed),
+        ),
+      );
+      return;
+    }
+    if (!mounted ||
+        generation != _authContextGeneration ||
+        ref.read(authControllerProvider).session?.accountId !=
+            session.accountId ||
+        ref.read(authControllerProvider).session?.activeProfileId !=
+            session.activeProfileId) {
+      return;
+    }
+    setState(() => _backupActionBusy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context)!.security2faBackupCodesCopied,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadBackupCodes() async {
+    final codes = _verifiedBackupCodesForCurrentAccount();
+    final session = ref.read(authControllerProvider).session;
+    final generation = _authContextGeneration;
+    if (codes == null || session == null || _backupActionBusy) return;
+    setState(() => _backupActionBusy = true);
+    bool saved;
+    try {
+      saved = await saveDecryptedE2eAttachment(
+        bytes: Uint8List.fromList(utf8.encode(codes.join('\n'))),
+        fileName: 'voice-2fa-backup-codes.txt',
+      );
+    } on Object {
+      saved = false;
+    }
+    if (!mounted ||
+        generation != _authContextGeneration ||
+        ref.read(authControllerProvider).session?.accountId !=
+            session.accountId ||
+        ref.read(authControllerProvider).session?.activeProfileId !=
+            session.activeProfileId) {
+      return;
+    }
+    setState(() => _backupActionBusy = false);
+    if (saved) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context)!.security2faBackupCodesDownloadFailed,
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDeleteAccount() async {
@@ -366,9 +676,22 @@ class _SecuritySettingsScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_twoFactorEnabled == true)
-                  _buildDisableStep(context, l10n, voice)
-                else
+                if (_twoFactorLoading)
+                  Center(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (_twoFactorUnavailable ||
+                    _twoFactorEnabled == null ||
+                    ref.watch(authControllerProvider).session == null)
+                  _buildTwoFactorUnavailable(context, l10n)
+                else if (_twoFactorEnabled == true) ...[
+                  if (_verifiedBackupCodesForCurrentAccount() case final codes?)
+                    _buildVerifiedBackupCodes(context, l10n, codes),
+                  _buildDisableStep(context, l10n, voice),
+                ] else
                   switch (_step) {
                     _SecurityStep.password => _buildPasswordStep(
                       context,
@@ -462,6 +785,69 @@ class _SecuritySettingsScreenState
     );
   }
 
+  Widget _buildTwoFactorUnavailable(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.security2faStatusUnavailable,
+          key: SecuritySettingsScreen.statusUnavailableKey,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        const SizedBox(height: 12),
+        VoiceSecondaryButton(
+          key: SecuritySettingsScreen.statusRetryKey,
+          onPressed: _twoFactorLoading ? null : _loadTwoFactorStatus,
+          child: Text(l10n.commonRetry),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerifiedBackupCodes(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<String> codes,
+  ) {
+    return Column(
+      key: SecuritySettingsScreen.backupCodesKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.security2faBackupCodesTitle,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        for (final code in codes)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: SelectableText(
+              code,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFamily: VoiceTheme.fontFamily,
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        VoiceSecondaryButton(
+          key: SecuritySettingsScreen.copyBackupCodesKey,
+          onPressed: _busy || _backupActionBusy ? null : _copyBackupCodes,
+          child: Text(l10n.security2faCopyBackupCodes),
+        ),
+        const SizedBox(height: 8),
+        VoiceSecondaryButton(
+          key: SecuritySettingsScreen.downloadBackupCodesKey,
+          onPressed: _busy || _backupActionBusy ? null : _downloadBackupCodes,
+          child: Text(l10n.security2faDownloadBackupCodes),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   Widget _buildPasswordStep(
     BuildContext context,
     AppLocalizations l10n,
@@ -489,7 +875,7 @@ class _SecuritySettingsScreenState
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(
-            authErrorMessage(l10n, _error!),
+            authFormErrorMessage(l10n, _error!),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
@@ -538,12 +924,13 @@ class _SecuritySettingsScreenState
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(
-            authErrorMessage(l10n, _error!),
+            authFormErrorMessage(l10n, _error!),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
         const SizedBox(height: 24),
         VoiceSecondaryButton(
+          key: SecuritySettingsScreen.disableButtonKey,
           onPressed: _busy ? null : _disable2FA,
           child: Text(
             l10n.security2faDisable,
@@ -583,27 +970,28 @@ class _SecuritySettingsScreenState
               child: QrImageView(
                 data: enrollment.totpUri,
                 size: 200,
-                backgroundColor: voice.surface,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          l10n.security2faBackupCodesTitle,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        Text(l10n.security2faManualSecretLabel),
         const SizedBox(height: 8),
-        ...enrollment.backupCodes.map(
-          (code) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: SelectableText(
-              code,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
-            ),
-          ),
+        SelectableText(
+          _manualSecret ?? '',
+          key: SecuritySettingsScreen.manualSecretKey,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontFamily: VoiceTheme.fontFamily),
         ),
         const SizedBox(height: 24),
         VoicePrimaryButton(
@@ -641,7 +1029,7 @@ class _SecuritySettingsScreenState
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(
-            authErrorMessage(l10n, _error!),
+            authFormErrorMessage(l10n, _error!),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
