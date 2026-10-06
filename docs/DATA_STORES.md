@@ -252,7 +252,7 @@ business idempotency independently of per-attempt JWT replay rejection.
 | `messaging_db` | lifecycle fence, imported Chat pages, Messaging File-reference producer pages, purge/release operation evidence and compact PURGED fence |
 | `file_db` | `file_blobs`, exact `file_references`, subject-bound access capabilities, Space lifecycle fences, reference operations, producer declarations/chunks/seals and GC operations |
 | `voice_db` | lifecycle fence/operation receipts and compact terminal fence; Redis remains a projection, never the durable deletion authority |
-| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence |
+| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence; Search retains the non-payload operation/generation/manifest/hash binding needed to validate terminal Chat deletion after manifest retention expires |
 | `subscription_db` | lifecycle fence/receipts, purged Space billing detail and permanent provider-event HMAC dedup fences |
 | Moderation DB | atomic `TARGET_DELETED` resolution, sanction snapshot/detached report relation and deletion of Space report evidence |
 | Analytics ClickHouse | existing 90-day raw HMAC events and de-identified aggregates; no raw deleted Space key |
