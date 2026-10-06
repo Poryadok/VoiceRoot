@@ -202,6 +202,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
     JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
     JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    JdbcBackupCodeRepository backupCodes = new JdbcBackupCodeRepository(jdbc);
     SwitchableFloors floors = new SwitchableFloors();
     RecordingProfiles profiles = new RecordingProfiles(false);
     AuthService setup = service(dataSource, jdbc, accounts, tokens, floors, profiles);
@@ -216,7 +217,8 @@ class RegistrationSessionEpochJdbcIntegrationTest {
         await(continueSwitch);
       }
     };
-    AuthService switchService = service(dataSource, jdbc, accounts, tokens, floors, profiles, gated);
+    AuthService switchService = service(
+        dataSource, jdbc, accounts, tokens, backupCodes, floors, profiles, gated);
     var delayedSwitch = java.util.concurrent.CompletableFuture.supplyAsync(() ->
         switchService.switchActiveProfile(initial.accessToken(), UUID.randomUUID().toString(), "{}"));
     assertThat(validationStarted.await(5, TimeUnit.SECONDS)).isTrue();

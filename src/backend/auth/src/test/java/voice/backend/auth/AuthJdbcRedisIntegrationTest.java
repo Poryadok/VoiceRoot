@@ -35,15 +35,18 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -64,12 +68,18 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import voice.backend.auth.config.AuthProperties;
 import voice.backend.auth.grpc.AuthGrpcService;
 import voice.backend.auth.oauth.FormUrlEncodedTestSupport;
+import voice.backend.auth.oauth.OAuth2Service;
+import voice.backend.auth.oauth.OAuthAuthorizationCodeStore;
+import voice.backend.auth.oauth.OAuthException;
+import voice.backend.auth.oauth.OAuthTokenRequest;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.security.JwtService;
 import voice.backend.auth.service.AuthService;
+import voice.backend.auth.service.LoginCommand;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration;
 import voice.backend.auth.support.JdbcUserContractTestConfiguration.RecordingUserContractPorts;
 
@@ -115,6 +125,10 @@ class AuthJdbcRedisIntegrationTest {
   @Autowired AuthGrpcService grpcService;
   @Autowired AuthService authService;
   @Autowired AccountRepository accounts;
+  @Autowired AuthProperties authProperties;
+  @Autowired OAuthAuthorizationCodeStore oauthCodes;
+  @Autowired Clock clock;
+  @Autowired JdbcTemplate jdbc;
   @Autowired RecordingUserContractPorts userContract;
 
   @BeforeEach
@@ -408,6 +422,159 @@ class AuthJdbcRedisIntegrationTest {
         .perform(post("/api/v1/auth/validate").header("Authorization", "Bearer " + accessToken))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.user_id", not(blankOrNullString())));
+  }
+
+  @Test
+  void oauthExchangeHoldsPostgresRowLockThroughRedisConsumeBeforePasswordChange() throws Exception {
+    String email = "oauth-password-row-lock@example.com";
+    String currentPassword = "Correct horse battery staple";
+    String newPassword = "A longer replacement password";
+    registerOAuthUser(email);
+    String verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1hvtT0ZLU3-8xr4";
+    String challenge = voice.backend.auth.oauth.PkceVerifier.s256Challenge(verifier);
+    String code = oauthAuthorizeAndLogin(email, currentPassword, challenge);
+    var bearer = authService.login(new LoginCommand(email, null, currentPassword, null, "{}"));
+
+    AuthService secondAuthInstance = authService.withClock(clock);
+    assertThat(secondAuthInstance).isNotSameAs(authService);
+    CountDownLatch consumeEntered = new CountDownLatch(1);
+    CountDownLatch releaseConsume = new CountDownLatch(1);
+    OAuthAuthorizationCodeStore pausingCodes =
+        new PausingOAuthAuthorizationCodeStore(oauthCodes, consumeEntered, releaseConsume);
+    OAuth2Service secondOauthInstance =
+        new OAuth2Service(authProperties, secondAuthInstance, pausingCodes, clock);
+    OAuthTokenRequest exchangeRequest =
+        new OAuthTokenRequest(
+            "authorization_code", code, "http://localhost:9082/callback",
+            "voice-developer-portal", verifier, null);
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    Future<String> exchange =
+        executor.submit(() -> secondOauthInstance.exchangeAuthorizationCode(exchangeRequest).accessToken());
+    try {
+      assertThat(consumeEntered.await(5, TimeUnit.SECONDS)).isTrue();
+      Future<Integer> passwordChange =
+          executor.submit(
+              () ->
+                  mockMvc
+                      .perform(
+                          post("/api/v1/auth/password/change")
+                              .header("Authorization", "Bearer " + bearer.accessToken())
+                              .contentType(MediaType.APPLICATION_JSON)
+                              .content(
+                                  "{\"current_password\":\""
+                                      + currentPassword
+                                      + "\",\"new_password\":\""
+                                      + newPassword
+                                      + "\"}"))
+                      .andReturn()
+                      .getResponse()
+                      .getStatus());
+      assertThat(awaitPostgresAccountLockWaiters(1, Duration.ofSeconds(5))).isTrue();
+      assertThat(passwordChange.isDone()).isFalse();
+      releaseConsume.countDown();
+      String issuedToken = exchange.get(10, TimeUnit.SECONDS);
+      assertThat(passwordChange.get(10, TimeUnit.SECONDS)).isEqualTo(204);
+      assertThatThrownBy(() -> authService.validate(issuedToken))
+          .isInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasMessage("token_revoked");
+    } finally {
+      releaseConsume.countDown();
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void passwordChangeCommittedBeforeOAuthExchangeRejectsStaleRedisCodeWithoutConsumingIt()
+      throws Exception {
+    String email = "oauth-password-first@example.com";
+    String currentPassword = "Correct horse battery staple";
+    registerOAuthUser(email);
+    String verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1hvtT0ZLU3-8xr4";
+    String challenge = voice.backend.auth.oauth.PkceVerifier.s256Challenge(verifier);
+    String code = oauthAuthorizeAndLogin(email, currentPassword, challenge);
+    var bearer = authService.login(new LoginCommand(email, null, currentPassword, null, "{}"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/auth/password/change")
+                .header("Authorization", "Bearer " + bearer.accessToken())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"current_password\":\""
+                        + currentPassword
+                        + "\",\"new_password\":\"A longer replacement password\"}"))
+        .andExpect(status().isNoContent());
+
+    AuthService secondAuthInstance = authService.withClock(clock);
+    OAuth2Service secondOauthInstance =
+        new OAuth2Service(authProperties, secondAuthInstance, oauthCodes, clock);
+    OAuthTokenRequest exchangeRequest =
+        new OAuthTokenRequest(
+            "authorization_code", code, "http://localhost:9082/callback",
+            "voice-developer-portal", verifier, null);
+    assertThatThrownBy(() -> secondOauthInstance.exchangeAuthorizationCode(exchangeRequest))
+        .isInstanceOf(OAuthException.class)
+        .hasMessage("invalid_grant");
+    assertThat(oauthCodes.peek(code)).isPresent();
+  }
+
+  private boolean awaitPostgresAccountLockWaiters(int expected, Duration timeout)
+      throws InterruptedException {
+    long deadline = System.nanoTime() + timeout.toNanos();
+    while (System.nanoTime() < deadline) {
+      Long waiters =
+          jdbc.queryForObject(
+              "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() "
+                  + "AND wait_event_type='Lock' AND query ILIKE '%FROM accounts%' "
+                  + "AND query ILIKE '%FOR UPDATE%'",
+              Long.class);
+      if (waiters != null && waiters >= expected) {
+        return true;
+      }
+      Thread.sleep(25);
+    }
+    return false;
+  }
+
+  private static final class PausingOAuthAuthorizationCodeStore
+      implements OAuthAuthorizationCodeStore {
+    private final OAuthAuthorizationCodeStore delegate;
+    private final CountDownLatch consumeEntered;
+    private final CountDownLatch releaseConsume;
+
+    private PausingOAuthAuthorizationCodeStore(
+        OAuthAuthorizationCodeStore delegate,
+        CountDownLatch consumeEntered,
+        CountDownLatch releaseConsume) {
+      this.delegate = delegate;
+      this.consumeEntered = consumeEntered;
+      this.releaseConsume = releaseConsume;
+    }
+
+    @Override
+    public void save(voice.backend.auth.oauth.OAuthAuthorizationCode code, Duration ttl) {
+      delegate.save(code, ttl);
+    }
+
+    @Override
+    public java.util.Optional<voice.backend.auth.oauth.OAuthAuthorizationCode> peek(String code) {
+      return delegate.peek(code);
+    }
+
+    @Override
+    public java.util.Optional<voice.backend.auth.oauth.OAuthAuthorizationCode> consume(String code) {
+      consumeEntered.countDown();
+      try {
+        if (!releaseConsume.await(10, TimeUnit.SECONDS)) {
+          throw new IllegalStateException("OAuth consume release timed out");
+        }
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("OAuth consume wait interrupted", interrupted);
+      }
+      return delegate.consume(code);
+    }
   }
 
   private void registerOAuthUser(String email) throws Exception {
