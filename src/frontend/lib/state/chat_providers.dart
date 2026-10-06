@@ -183,6 +183,21 @@ final e2eDecryptedAttachmentThumbProvider =
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
 
+/// One-shot handoff from Chat Info to the mounted room's existing search UI.
+/// Auto-dispose ensures an unconsumed request cannot survive room teardown.
+class ChatInfoSearchRequest {
+  const ChatInfoSearchRequest({
+    required this.chatId,
+    required this.viewerProfileId,
+  });
+
+  final String chatId;
+  final String? viewerProfileId;
+}
+
+final chatInfoSearchRequestProvider =
+    StateProvider.autoDispose<ChatInfoSearchRequest?>((ref) => null);
+
 /// Changes when a successful block/unblock may change the visible DM history.
 final socialBlockVisibilityRevisionProvider = StateProvider<int>((ref) => 0);
 

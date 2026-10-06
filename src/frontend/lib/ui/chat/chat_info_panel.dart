@@ -162,6 +162,20 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               },
             ),
           ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(l10n.inChatSearchOpen),
+          onTap: () {
+            ref
+                .read(chatInfoSearchRequestProvider.notifier)
+                .state = ChatInfoSearchRequest(
+              chatId: widget.chatId,
+              viewerProfileId: ref.read(authControllerProvider).activeProfileId,
+            );
+            ref.read(shellNavigationProvider).closeSidePanel();
+            if (context.mounted) Navigator.of(context).maybePop();
+          },
+        ),
         if ((roomExists &&
                 roomState!.pinnedMessagesStatus ==
                     PinnedMessagesLoadStatus.loading &&

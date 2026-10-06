@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -188,6 +187,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _attachFocus = FocusNode();
   final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
+  final _inChatSearchTriggerFocus = FocusNode(
+    debugLabel: 'chat-room-search-trigger',
+  );
+  final _inChatSearchFocus = FocusNode(debugLabel: 'chat-room-search-field');
   var _uploadingAttachment = false;
   var _attachmentOperation = 0;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
@@ -224,6 +227,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _selectedMessageFocus.dispose();
     _attachFocus.dispose();
     _emojiFocus.dispose();
+    _inChatSearchTriggerFocus.dispose();
+    _inChatSearchFocus.dispose();
     _scrollController.dispose();
     _inChatSearchController.dispose();
     super.dispose();
@@ -233,6 +238,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _inChatSearchOpen = false;
+      _inChatSearchController.clear();
+      _inChatSearchTriggerFocus.unfocus();
       _pinnedJumpGeneration++;
       _pinnedBarHidden = false;
       _shownPinnedMessageId = null;
@@ -255,6 +263,30 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _composerFocus.requestFocus();
+    });
+  }
+
+  void _closeInChatSearch() {
+    if (!_inChatSearchOpen) return;
+    setState(() {
+      _inChatSearchOpen = false;
+      _inChatSearchController.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_inChatSearchOpen) {
+        _inChatSearchTriggerFocus.requestFocus();
+      }
+    });
+  }
+
+  void _openInChatSearch() {
+    setState(() => _inChatSearchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _inChatSearchOpen &&
+          ref.read(selectedChatIdProvider) == widget.chatId) {
+        _inChatSearchFocus.requestFocus();
+      }
     });
   }
 
@@ -493,6 +525,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             child: TextField(
               key: InChatSearch.searchFieldKey,
               controller: _inChatSearchController,
+              focusNode: _inChatSearchFocus,
               autofocus: true,
               decoration: InputDecoration(
                 hintText: l10n.inChatSearchHint,
@@ -545,12 +578,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final headerActions = <Widget>[
       IconButton(
         key: ChatRoomPanel.inChatSearchKey,
+        focusNode: _inChatSearchTriggerFocus,
         tooltip: l10n.inChatSearchOpen,
         onPressed: () {
-          setState(() {
-            _inChatSearchOpen = !_inChatSearchOpen;
-            if (!_inChatSearchOpen) _inChatSearchController.clear();
-          });
+          if (_inChatSearchOpen) {
+            _closeInChatSearch();
+          } else {
+            _openInChatSearch();
+          }
         },
         icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
       ),
@@ -702,6 +737,38 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (next != (prev ?? 0)) {
         _refocusComposer();
       }
+    });
+
+    ref.listen<ChatInfoSearchRequest?>(chatInfoSearchRequestProvider, (
+      previous,
+      request,
+    ) {
+      if (request == null) return;
+      final isCurrentContext =
+          ref.read(selectedChatIdProvider) == request.chatId &&
+          ref.read(authControllerProvider).activeProfileId ==
+              request.viewerProfileId;
+      if (!isCurrentContext) {
+        if (identical(ref.read(chatInfoSearchRequestProvider), request)) {
+          ref.read(chatInfoSearchRequestProvider.notifier).state = null;
+        }
+        return;
+      }
+      if (widget.chatId != request.chatId || !mounted) return;
+      if (identical(ref.read(chatInfoSearchRequestProvider), request)) {
+        ref.read(chatInfoSearchRequestProvider.notifier).state = null;
+      }
+      setState(() => _inChatSearchOpen = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            widget.chatId != request.chatId ||
+            ref.read(selectedChatIdProvider) != request.chatId ||
+            ref.read(authControllerProvider).activeProfileId !=
+                request.viewerProfileId) {
+          return;
+        }
+        _inChatSearchFocus.requestFocus();
+      });
     });
 
     ref.listen<String?>(chatMessageKeyboardProvider, (previous, next) {
@@ -1136,10 +1203,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             controller: _inChatSearchController,
                             showSearchField: false,
                             onActiveMessageChanged: _scrollToMessage,
-                            onDismiss: () => setState(() {
-                              _inChatSearchOpen = false;
-                              _inChatSearchController.clear();
-                            }),
+                            onDismiss: _closeInChatSearch,
                           ),
                         ),
                       ),
