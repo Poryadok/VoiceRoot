@@ -12,7 +12,8 @@ import time
 
 class RenewalError(ValueError):pass
 def fail():raise RenewalError('existing_bootstrap_private_renewal_refused')
-def invoke(executable,request,*,timeout=15):
+def invoke(executable,request,*,timeout=15,mode='--renew-existing-bootstrap'):
+    if mode not in ('--renew-existing-bootstrap','--verify-existing-actor'):fail()
     raw=json.dumps(request,separators=(',',':')).encode()
     if not 0<len(raw)<=1048576 or not 0<timeout<=30:fail()
     read_fd,write_fd=os.pipe();deadline=time.monotonic()+timeout
@@ -35,7 +36,7 @@ def invoke(executable,request,*,timeout=15):
     reader=threading.Thread(target=read_private,daemon=True);reader.start()
     process=None
     try:
-        process=subprocess.Popen([str(executable),'--renew-existing-bootstrap',str(write_fd)],
+        process=subprocess.Popen([str(executable),mode,str(write_fd)],
             stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
             pass_fds=(write_fd,),env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'})
         os.close(write_fd);write_fd=None

@@ -125,6 +125,7 @@ def main_unlocked(args,code):
     if len(args)==2 and args[0]=='--prepare-rollback':
         prior=operation_path(args[1]);previous=private_json(prior/'checkpoint.json')
         if previous.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
+        if previous.get('renderer_authority') is not None:raise Blocked('renderer_rollback_protected_bridge_required')
         value=transaction.rollback_package(previous)
         expected=previous['context']['expected'];kube=Kube()
         namespace=kube.get('namespace',guard.NS);marker=kube.get('configmap','voice-nats-generation')
@@ -159,7 +160,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -177,7 +178,7 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority)
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

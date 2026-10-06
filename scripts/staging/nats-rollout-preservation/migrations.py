@@ -4,6 +4,7 @@ import base64
 import re
 from urllib.parse import quote
 import guard
+import bot_migration
 from controller import Blocked
 
 IMAGE='migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539'
@@ -89,6 +90,10 @@ def preflight(kube,plan,mode):
         if not isinstance(user,str) or not re.fullmatch(r'[a-z_][a-z0-9_]{0,31}',user):
             raise Blocked('rollout_database_authority_invalid')
         metadata=dict(metadata,app_config={k:config['metadata'][k] for k in ('uid','resourceVersion')})
+    if bot_migration.required(plan):
+        try:metadata=dict(metadata,bot_prerequisite=bot_migration.capture(kube))
+        except bot_migration.PrerequisiteError:
+            raise Blocked('bot_forward_constraint_prerequisite_failed') from None
     return metadata
 
 def legacy_credentials(kube,plan,operation,secret_metadata):

@@ -8,6 +8,7 @@ import copy,datetime as dt,hashlib,json,os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
 import bridge_root,guard,root_cli,transaction,encrypted_cut,github_custody
+import actor_root
 import github_custody_test as http
 from native_store import archive_closed_store
 from nats_contract_plan import digest
@@ -23,12 +24,13 @@ class Tests(unittest.TestCase):
             binding={'nats-known-baseline/kernel':hashlib.sha256(kernel.read_bytes()).hexdigest()}
             store=workspace/'store';store.mkdir();(store/'record.blk').write_bytes(b'five known fixture records')
             uid='a'*8+'-'+ 'a'*4+'-'+ 'a'*4+'-'+ 'a'*4+'-'+ 'a'*12
-            old={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':guard.NS,'uid':uid,'resourceVersion':'1'},
-                'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'user','image':'registry/user@sha256:'+'1'*64}]}}}}
-            wanted=copy.deepcopy(old);wanted['spec']['template']['spec']['containers'][0]['image']='registry/user@sha256:'+'2'*64
+            old_image=next(iter(actor_root.STORY_IMAGES));child,config,component=actor_root.STORY_IMAGES[old_image]
+            old={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-story','namespace':guard.NS,'uid':uid,'resourceVersion':'1'},
+                'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'story','image':old_image}]}}}}
+            wanted=copy.deepcopy(old);wanted['spec']['template']['spec']['containers'][0]['image']='ghcr.io/poryadok/voiceroot/story@sha256:09c6481710665e056d5b29c092189bff899a78e6c457be5a521edec12bbb0fa9'
             empty={'checks':[],'actions':[]}
-            target={'mode':'images-only','changed_services':['user'],'tag':'c'*40,'images':{'voice-user/user':wanted['spec']['template']['spec']['containers'][0]['image']},
-                'template_hashes':{'voice-user':digest(wanted['spec']['template'])},'manifest_sha256':digest([wanted]),
+            target={'mode':'images-only','changed_services':['story'],'tag':'c'*40,'images':{'voice-story/story':wanted['spec']['template']['spec']['containers'][0]['image']},
+                'template_hashes':{'voice-story':digest(wanted['spec']['template'])},'manifest_sha256':digest([wanted]),
                 'migration_sha256':digest([]),'nonnats_sha256':digest(empty)}
             scripts={part:{'part':part,'configMapUID':part,'configMapResourceVersion':'1','sha256':hashlib.sha256(b'old').hexdigest(),'bytes':3} for part in ('realtime','analytics-chat')}
             contract={'scripts':list(scripts.values()),'consumer_pairs':[]}
@@ -47,13 +49,13 @@ class Tests(unittest.TestCase):
                     current['data']['bootstrap.sh']=changes[0]['value'];current['metadata']['annotations']=changes[1]['value'];current['metadata']['resourceVersion']='2'
                     return copy.deepcopy(current)
             kube=Kube();stage=Mock();stage.operation='a'*12;stage.expected={'namespace_uid':'namespace','generation':'r20260930a4','source_claim':'selected','source_claim_uid':'claim'}
-            stage.snapshots={'voice-user':copy.deepcopy(old)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
-            stage.old_images={'voice-user/user':old['spec']['template']['spec']['containers'][0]['image']}
+            stage.snapshots={'voice-story':copy.deepcopy(old)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
+            stage.old_images={'voice-story/story':old_image}
             stage.marker=marker;stage.service={};stage.final_claim=claim;stage.final_pv={'metadata':{'uid':'pv'},'spec':{'local':{'path':str(store)}}};stage.final_path=store
             order=[];messages=[5]
             def fence():
                 stage.marker['data'].update(phase='rollout-capturing',knownRolloutOperation=stage.operation)
-                stage.snapshots['voice-user']['spec']['replicas']=0;order.append('closed-fence')
+                stage.snapshots['voice-story']['spec']['replicas']=0;order.append('closed-fence')
             stage.fence.side_effect=fence
             def prepared():stage.marker['data']['phase']='rollout-prepared';order.append('prepared-after-config-proof')
             stage.prepared.side_effect=prepared;stage.verified.side_effect=lambda:order.append('verified-before-restart')
@@ -63,6 +65,10 @@ class Tests(unittest.TestCase):
             stage.restart.side_effect=restart
             enrollment={'fixture':'existing-actor-auth-proof'};authority={'plan':{'migration_id':'fixed-approved','sources':{}},'binding':{},
                 'scripts':{part:{'script':'target','sha256':hashlib.sha256(b'target').hexdigest()} for part in scripts}}
+            # Explicit external actor fixture; actual role/auth/schema checks have
+            # separate real-capture and pinned-binary tests, never caller flags.
+            actor={'roles':['story'],'proofs':{'story':{'fixture-external-auth':True}},'mounts':{'story':{'fixture-exact-mount':True}},'binding':{'fixture-same-account':True},'story_schema':{'clean_version':4}}
+            actor['compatible_story_candidate']={'schema':'voice-reviewed-story-compatible-pair-v1','image':old_image,'child_sha256':child,'config_sha256':config,'component_source_sha':component,'schema_sha256':transaction.canonical(actor['story_schema']),'actor_sha256':transaction.canonical({'binding':actor['binding'],'mount':actor['mounts']['story'],'proof':actor['proofs']['story']})}
             def cold(runtime,source,fence):
                 fence();manifest=archive_closed_store(source,runtime.base/'rollout-before.tar')
                 order.append('original-cold-cut')
@@ -80,13 +86,14 @@ class Tests(unittest.TestCase):
                 patch.object(root_cli,'Kube',return_value=kube),patch.object(bridge_root,'Kube',return_value=kube),\
                 patch('grp.getgrnam',return_value=type('Group',(),{'gr_gid':1000})()),\
                 patch.object(transaction.RolloutStage,'capture',return_value=stage),patch.object(transaction,'reconstruct',return_value=stage),\
-                patch.object(transaction,'native_preflight',return_value={}),patch.object(transaction,'private_json',return_value=enrollment),\
+                patch.multiple(transaction,native_preflight=Mock(return_value={}),private_json=Mock(return_value=enrollment)),\
                 patch.object(transaction,'capture_inputs',return_value={}) as capture,\
                 patch.object(transaction.nonnats_runtime,'preflight',return_value={}),patch.object(transaction.nonnats_runtime,'verify',return_value={'verified':True}),\
                 patch.object(transaction.nonnats_plan,'revalidate'),patch('source_plan.verify_db_init'),\
+                patch.object(actor_root,'revalidate'),\
                 patch.object(transaction,'DockerRuntime',side_effect=runtime),patch.object(transaction,'capture_cut',side_effect=cold),\
                 patch.object(transaction,'apply_contract',side_effect=migration),patch.object(transaction,'verify_post_apply',side_effect=proof):
-                state=root_cli.prepare_value({'target':target,'manifests':[wanted],'contract':contract,'migrations':[],'nonnats':empty},code,binding,'a'*12,nats_authority=authority)
+                state=root_cli.prepare_value({'target':target,'manifests':[wanted],'contract':contract,'migrations':[],'nonnats':empty},code,binding,'a'*12,nats_authority=authority,actor_authority=actor,actor_services=['story'])
                 capture.assert_called_once();self.assertEqual(capture.call_args.kwargs['bootstrap_enrollment'],enrollment)
                 self.assertEqual(order,['closed-fence','original-cold-cut']);base=workspace/('rollout-'+'a'*12)
                 recovery=installed/'recovery';recovery.mkdir(mode=0o700);encrypted_cut.initialize_recovery_key(recovery)
@@ -112,7 +119,7 @@ class Tests(unittest.TestCase):
                 from apply import paused_documents
                 paused=paused_documents(json.loads((base/'apply-manifests.json').read_bytes()),state['authorization'])
                 self.assertEqual(paused[0]['spec']['replicas'],0)
-                self.assertEqual(paused[0]['spec']['template']['spec']['containers'][0]['image'],target['images']['voice-user/user'])
+                self.assertEqual(paused[0]['spec']['template']['spec']['containers'][0]['image'],target['images']['voice-story/story'])
                 with patch.object(guard,'protected_receipt',side_effect=lambda path:protected_receipt(path,root=workspace)):
                     result=actions.execute({'action':'finish','operation':'a'*12,'claim_rv':'2'})
                 self.assertEqual(result['status'],'PASS');self.assertEqual(order,['closed-fence','original-cold-cut','complete-offnode-readback','migration-after-custody','prepared-after-config-proof','post-config-store-proof','verified-before-restart','sole-restart'])
@@ -122,12 +129,15 @@ class Tests(unittest.TestCase):
                 self.assertEqual(package['target']['images'],previous['context']['old_images'])
                 old_archive=previous['cut']['manifest']['archive_sha256']
                 (store/'record.blk').write_bytes((store/'record.blk').read_bytes()+b'known-post-release-record');messages[0]=6
-                stage.operation='b'*12;stage.snapshots={'voice-user':copy.deepcopy(wanted)}
+                stage.operation='b'*12;stage.snapshots={'voice-story':copy.deepcopy(wanted)}
                 stage.original_snapshots=copy.deepcopy(stage.snapshots);stage.old_images=copy.deepcopy(target['images'])
                 order.clear()
                 def rollback_producer(request,prior):
                     self.assertEqual(prior['operation'],'a'*12)
-                    return root_cli.prepare_value(package,code,actions.binding,request['nonce'][:12],previous=prior,nats_authority=authority)
+                    fresh_actor=copy.deepcopy(actor);image=stage.old_images['voice-story/story']
+                    fresh_child,fresh_config,fresh_component=actor_root.STORY_IMAGES[image]
+                    fresh_actor['compatible_story_candidate'].update(image=image,child_sha256=fresh_child,config_sha256=fresh_config,component_source_sha=fresh_component)
+                    return root_cli.prepare_value(package,code,actions.binding,request['nonce'][:12],previous=prior,nats_authority=authority,actor_authority=fresh_actor,actor_services=['story'])
                 with patch.object(actions,'_prepare',side_effect=rollback_producer):
                     fresh=actions.execute({'action':'prepare-rollback','operation':'a'*12,'nonce':'b'*64})
                 fresh_base=workspace/('rollout-'+'b'*12)

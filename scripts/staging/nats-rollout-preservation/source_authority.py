@@ -272,8 +272,8 @@ def _manifest(name, reference, headers, deadline):
     return digest, body, len(raw)
 
 
-def _resolve_image(name, sha, deadline):
-    if name not in IMAGE_NAMES or not re.fullmatch(r'[a-f0-9]{40}', sha): _fail()
+def _resolve_image(name, sha, deadline, *, identity=False):
+    if name not in IMAGE_NAMES or not re.fullmatch(r'sha256:[a-f0-9]{64}' if identity else r'[a-f0-9]{40}', sha): _fail()
     token = _get('https://ghcr.io/token?service=ghcr.io&scope=repository:poryadok/voiceroot/' + name + ':pull', {}, deadline)['token']
     if not isinstance(token, str) or not token or '\r' in token or '\n' in token: _fail()
     accept = ', '.join(('application/vnd.oci.image.index.v1+json', 'application/vnd.oci.image.manifest.v1+json',
@@ -293,9 +293,28 @@ def _resolve_image(name, sha, deadline):
     config = _json(raw)
     if config['os'] != 'linux' or config['architecture'] != 'amd64': _fail()
     labels = config.get('config', {}).get('Labels') or {}
-    if ('org.opencontainers.image.revision' in labels and labels['org.opencontainers.image.revision'] != sha
+    if not identity and ('org.opencontainers.image.revision' in labels and labels['org.opencontainers.image.revision'] != sha
             or 'org.opencontainers.image.source' in labels and labels['org.opencontainers.image.source'].removesuffix('.git') != 'https://github.com/' + REPO): _fail()
+    if identity:
+        return {'requested_image':REGISTRY+'/'+name+'@'+sha,
+                'manifest_image':REGISTRY+'/'+name+'@'+digest,
+                'config_sha256':descriptor['digest'].removeprefix('sha256:')}
     return REGISTRY + '/' + name + '@' + digest
+
+
+def immutable_image_identity(image, deadline):
+    # Content identity only; this does not attest source revision or CI approval.
+    match=re.fullmatch(re.escape(REGISTRY)+r'/([a-z0-9-]+)@(sha256:[a-f0-9]{64})',image)
+    if match is None or match[1] not in IMAGE_NAMES:_fail()
+    return _resolve_image(match[1],match[2],deadline,identity=True)
+
+
+def same_image_content(actual, target, deadline):
+    pattern=re.escape(REGISTRY)+r'/([a-z0-9-]+)@sha256:[a-f0-9]{64}'
+    left=re.fullmatch(pattern,actual);right=re.fullmatch(pattern,target)
+    if left is None or right is None or left[1]!=right[1] or left[1] not in IMAGE_NAMES:_fail()
+    a=immutable_image_identity(actual,deadline);b=immutable_image_identity(target,deadline)
+    return a['manifest_image']==b['manifest_image'] and a['config_sha256']==b['config_sha256']
 
 
 def capture_source(token, run_id, source_sha, destination):
