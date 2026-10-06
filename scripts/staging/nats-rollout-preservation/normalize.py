@@ -4,7 +4,7 @@ import guard
 from apply import paused_documents,digest
 from controller import Blocked
 
-def image_only_documents(stage,documents,target):
+def image_only_documents(stage,documents,target,renderer_authority=None):
     # Validate the compiled input before transforming it. Image-only mode
     # preserves current environment, mounts, identity refs and strategies.
     paused_documents(documents,{'target':target,'pvc':{'name':stage.expected['source_claim']}})
@@ -22,15 +22,20 @@ def image_only_documents(stage,documents,target):
             if image is None:raise Blocked('rollout_images_only_container_changed')
             c['image']=image;used[key]=image
         rows.append(row)
-    if used!=target['images']:raise Blocked('rollout_images_only_container_changed')
+    renderer_images={}
+    if renderer_authority is not None:
+        import renderer_root
+        renderer_images=renderer_root.validate_target(target,renderer_authority,stage)
+    if used|renderer_images!=target['images']:raise Blocked('rollout_images_only_container_changed')
     if guard.frontend_image_only(target) and not any(stage.old_images.get(key)!=image for key,image in used.items()):
         raise Blocked('rollout_frontend_actual_image_change_required')
     updated=copy.deepcopy(target)
     updated['template_hashes']={r['metadata']['name']:digest(r['spec']['template']) for r in rows}
+    if renderer_authority is not None:updated['template_hashes'][renderer_root.HUB]=target['template_hashes'][renderer_root.HUB]
     updated['manifest_sha256']=digest(rows)
     return rows,updated
 
-def normalize_target(kube,stage,documents,target):
+def normalize_target(kube,stage,documents,target,renderer_authority=None):
     receipt={'target':target,'pvc':{'name':stage.expected['source_claim']}}
     rows=paused_documents(documents,receipt)
     names={(r['kind'],r['metadata']['name']) for r in rows}
@@ -62,6 +67,10 @@ def normalize_target(kube,stage,documents,target):
                 if target['images'].get(row['metadata']['name']+'/'+c['name'])!=c['image']:
                     raise Blocked('rollout_target_normalization_image_changed')
             templates[row['metadata']['name']]=digest(template)
+    if renderer_authority is not None:
+        import renderer_root
+        renderer_root.validate_target(target,renderer_authority,stage)
+        templates[renderer_root.HUB]=target['template_hashes'][renderer_root.HUB]
     if identities or set(templates)!=set(target['template_hashes']):raise Blocked('rollout_target_normalization_inventory_changed')
     wanted['template_hashes']=templates
     return wanted

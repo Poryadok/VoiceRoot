@@ -31,6 +31,16 @@ class Actions:
     def __init__(self,code):
         self.code=Path(code);self.binding=root_cli.code_binding(self.code)
 
+    def _report(self,name,status):
+        observer=getattr(self,'_observer',None)
+        if observer is not None:observer(name,status)
+
+    def execute_observed(self,request,observe):
+        if getattr(self,'_observer',None) is not None:raise Blocked('bridge_operation_already_observed')
+        self._observer=observe
+        try:return self.execute(request)
+        finally:self._observer=None
+
     def state(self,operation):
         base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)))
         state=private_json(base/'checkpoint.json')
@@ -90,15 +100,23 @@ class Actions:
         self._idle();operation=request['nonce'][:12]
         source_run,execution=self._dispatcher(request)
         workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
+        self._report('source-capture','STARTED')
         approved=source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace)
+        self._report('source-capture','COMPLETE')
+        self._report('workload-capture','STARTED')
         kube=Kube();marker=kube.get('configmap','voice-nats-generation')
         frontends=[s for s in request['changed_services'] if s in ('web','admin','developer-portal')] if request['mode']=='images-only' else ['web','admin','developer-portal']
-        stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends])
+        renderer_selected=request['mode']=='full' or previous is not None and previous.get('renderer_authority') is not None
+        stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else []))
+        self._report('workload-capture','COMPLETE')
+        self._report('policy-validation','STARTED')
         policy=private_json(INSTALLED/'policy.json')
         optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
         if not set(policy)<=optional or 's3_signing_endpoint' not in policy:raise Blocked('bridge_policy_invalid')
+        self._report('policy-validation','COMPLETE')
+        self._report('image-selection','STARTED')
         names=request['changed_services'] if request['mode']=='images-only' else [n.removeprefix('voice-') for n in stage.snapshots if n!=HUB]
-        images={}
+        images={};image_deadline=time.monotonic()+600
         for service in names:
             if service not in approved['images'] or service=='nats-hub-config-renderer':raise Blocked('bridge_target_service_invalid')
             name='voice-'+service;row=stage.snapshots[name]
@@ -108,9 +126,14 @@ class Actions:
                 # image; sidecar/init images retain the captured running pins.
                 if image.split('@',1)[0]==source_authority.REGISTRY+'/'+service:image=approved['images'][service]
                 if previous is not None:
-                    if key not in previous['target']['images'] or stage.old_images[key]!=previous['target']['images'][key]:raise Blocked('bridge_rollback_current_image_changed')
+                    if key not in previous['target']['images']:raise Blocked('bridge_rollback_current_image_changed')
+                    expected_image=previous['target']['images'][key]
+                    if stage.old_images[key]!=expected_image and not source_authority.same_image_content(stage.old_images[key],expected_image,image_deadline):
+                        raise Blocked('bridge_rollback_current_image_changed')
                     image=previous['context']['old_images'][key]
                 images[key]=image
+        self._report('image-selection','COMPLETE')
+        self._report('contract-selection','STARTED')
         contract=json.loads(public_read(self.code/'nats-known-baseline'/'deployed-contract.json'))
         try:active_contract=private_json(INSTALLED/'active-contract.json')
         except FileNotFoundError:active_contract=None
@@ -123,6 +146,21 @@ class Actions:
             'mode':request['mode'],'changed_services':request['changed_services'],'images':images,
             'contract':contract,
             'enrolled':list(stage.snapshots),'generation':marker['data']['generation'],'dataPVC':marker['data']['dataPVC']}
+        self._report('contract-selection','COMPLETE')
+        self._report('nats-preflight','STARTED')
+        renderer_authority=None
+        if renderer_selected:
+            import renderer_root
+            renderer_image=approved['images']['nats-hub-config-renderer']
+            if previous is not None:
+                current_renderer=stage.old_images[HUB+'/nats-config-renderer']
+                expected_renderer=previous['renderer_authority']['descriptor']['images']['target']
+                if current_renderer!=expected_renderer and not source_authority.same_image_content(current_renderer,expected_renderer,image_deadline):
+                    raise Blocked('renderer_rollback_current_image_changed')
+                renderer_image=previous['renderer_authority']['descriptor']['images']['old']
+            renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
+        import actor_root
+        actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
         nats_authority=None
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
             try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
@@ -131,21 +169,29 @@ class Actions:
                 import nats_root_plan
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
+        self._report('nats-preflight','COMPLETE')
+        self._report('target-build','STARTED')
         build=workspace.parent/(operation+'-build');build.mkdir(mode=0o700)
         parameter_path=build/'parameters.json';save(parameter_path,parameters)
         output=build/('target-'+approved['source_sha']+'.json')
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if renderer_authority is not None:value['target']=renderer_root.bind_target(value['target'],renderer_authority)
+        self._report('target-build','COMPLETE')
         def authority_before_fence():
             source_authority._head(source_authority._headers(request['token']),approved['source_sha'],time.monotonic()+30)
+            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
+            if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority)
             if nats_authority is not None:
                 current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
                 # Business records may advance, but config/consumer intent and
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority)
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority)
         base=guard.ROOT/('rollout-'+operation)
+        state['service_actor_authority']=actor_authority
+        state['service_actor_services']=names
         state['source_authority']={key:value for key,value in approved.items() if key!='source_files'}
         state['execution_authority']=execution
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'original_release_source':previous['target']['tag'],'images':images}
@@ -154,10 +200,15 @@ class Actions:
 
     def _encrypt(self,base,state,execution):
         cut=state['cut']
-        save(base/'copy-checkpoint.json',{'schema':'nats-rollout-copy-v1','operation':state['operation'],
+        copy_binding={'schema':'nats-rollout-copy-v1','operation':state['operation'],
             'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-            'census_sha256':cut['census_sha256']})
-        cipher=encrypted_cut.encrypt_cut(base,INSTALLED/'recovery')
+            'census_sha256':cut['census_sha256']}
+        if 'space_backup' in state:
+            _,members=encrypted_cut.space_members(base,state['space_backup'])
+            copy_binding['space_members']=members
+        save(base/'copy-checkpoint.json',copy_binding)
+        cipher=encrypted_cut.encrypt_cut(base,INSTALLED/'recovery',space=state.get('space_backup'))
+        if 'space_members' in cipher:state['cipher_space_members']=cipher.pop('space_members')
         state['cipher_binding']={**cipher,'operation':state['operation'],'challenge':secrets.token_hex(16),
             'run_id':execution['dispatcher_run_id'],'head_sha':execution['head_sha'],'created_at':dt.datetime.now(dt.timezone.utc).isoformat()}
         gid=grp.getgrnam('pmd').gr_gid;export=base/'export';export.mkdir(mode=0o750)
@@ -174,13 +225,16 @@ class Actions:
             active=private_json(INSTALLED/'active-release.json')
             if active.get('operation')!=previous['operation'] or active.get('target_sha256')!=previous['target']['manifest_sha256']:raise Blocked('bridge_rollback_latest_release_required')
             transaction.rollback_package(previous) # successful images-only/immutable old pins gate
-            changed=previous['input_target']['changed_services']
+            changed=transaction.rollback_services(previous)
             return self._prepare({**request,'mode':'images-only','changed_services':changed},previous)
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
         if request['action']=='authorize':
             receipt=github_custody.verify_artifact(request['token'],state['cipher_binding'],base/'rollout-backup.cms',request['artifact_id'])
             state['custody']=receipt;save(base/'checkpoint.json',state)
+            import actor_root
+            actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
+                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
             transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'])
             gid=grp.getgrnam('pmd').gr_gid
             for name in ('apply-authorization.json','apply-manifests.json'):os.chown(base/name,0,gid);(base/name).chmod(0o440)

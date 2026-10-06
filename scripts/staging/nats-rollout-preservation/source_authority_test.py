@@ -17,6 +17,41 @@ TREE = 'b' * 40
 
 
 class SourceTests(unittest.TestCase):
+    def test_immutable_runtime_index_and_child_require_same_content_chain(self):
+        prefix=module.REGISTRY+'/auth@sha256:'
+        actual=prefix+'a'*64; target=prefix+'b'*64
+        rows={actual:{'requested_image':actual,'manifest_image':target,'config_sha256':'c'*64},
+              target:{'requested_image':target,'manifest_image':target,'config_sha256':'c'*64}}
+        with patch.object(module,'immutable_image_identity',side_effect=lambda image,deadline:rows[image],create=True):
+            self.assertTrue(module.same_image_content(actual,target,1))
+            rows[actual]['config_sha256']='d'*64
+            self.assertFalse(module.same_image_content(actual,target,1))
+            rows[actual]['config_sha256']='c'*64;rows[actual]['manifest_image']=prefix+'e'*64
+            self.assertFalse(module.same_image_content(actual,target,1))
+            with self.assertRaises(module.SourceError):module.same_image_content(actual,module.REGISTRY+'/user@sha256:'+'b'*64,1)
+            for bad in ('sha256:'+'a'*64,prefix+'not-a-hash','evil.example/auth@sha256:'+'a'*64):
+                with self.assertRaises(module.SourceError):module.same_image_content(bad,target,1)
+
+    def test_immutable_identity_validates_actual_index_child_and_config_bytes(self):
+        index={'schemaVersion':2,'mediaType':'application/vnd.oci.image.index.v1+json','manifests':[
+            {'digest':self.manifest_digest,'size':len(self.manifest),'platform':{'os':'linux','architecture':'amd64'}}]}
+        def lookup(index_value,*,bad_config=False):
+            raw=json.dumps(index_value).encode();root='sha256:'+hashlib.sha256(raw).hexdigest()
+            def fetch(url,headers,limit,deadline,target=None):
+                if url.endswith('/manifests/'+root):return raw,{'Docker-Content-Digest':root}
+                if bad_config and '/blobs/' in url:return self.config+b' ',{}
+                return self.fetch(url,headers,limit,deadline,target)
+            with patch.object(module,'_fetch',fetch):
+                return module.immutable_image_identity(module.REGISTRY+'/auth@'+root,1)
+        row=lookup(index)
+        self.assertEqual(row['manifest_image'],module.REGISTRY+'/auth@'+self.manifest_digest)
+        self.assertEqual(row['config_sha256'],hashlib.sha256(self.config).hexdigest())
+        bad=copy.deepcopy(index);bad['manifests'][0]['size']+=1
+        with self.assertRaises(module.SourceError):lookup(bad)
+        bad=copy.deepcopy(index);bad['manifests'].append(copy.deepcopy(bad['manifests'][0]))
+        with self.assertRaises(module.SourceError):lookup(bad)
+        with self.assertRaises(module.SourceError):lookup(index,bad_config=True)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.destination = Path(self.temp.name) / 'source'; self.destination.mkdir(mode=0o700)
