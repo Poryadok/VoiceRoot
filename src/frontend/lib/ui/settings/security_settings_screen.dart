@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../auth/auth_errors.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme.dart';
 import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import '../chat/e2e_attachment_actions.dart';
@@ -825,9 +826,9 @@ class _SecuritySettingsScreenState
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: SelectableText(
               code,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontFamily: VoiceTheme.fontFamily,
+              ),
             ),
           ),
         const SizedBox(height: 16),
@@ -990,7 +991,7 @@ class _SecuritySettingsScreenState
           key: SecuritySettingsScreen.manualSecretKey,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+          ).textTheme.bodyMedium?.copyWith(fontFamily: VoiceTheme.fontFamily),
         ),
         const SizedBox(height: 24),
         VoicePrimaryButton(
