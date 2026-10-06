@@ -11,6 +11,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/routing/deep_link_listener.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
@@ -58,6 +59,9 @@ void main() {
             client: MockClient((_) async => httpResponseOk),
           ),
           voiceMaterialThemeProvider.overrideWith((ref) async => theme),
+          deepLinkListenerProvider.overrideWith(
+            _CaptureNoopDeepLinkListener.new,
+          ),
           if (viewport.openChat)
             voiceChatsClientProvider.overrideWithValue(
               FakeVoiceChatsClient(
@@ -252,4 +256,11 @@ class _CaptureRealtimeHub extends RealtimeHub {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _CaptureNoopDeepLinkListener extends DeepLinkListener {
+  _CaptureNoopDeepLinkListener(super.ref);
+
+  @override
+  Future<void> start() async {}
 }
