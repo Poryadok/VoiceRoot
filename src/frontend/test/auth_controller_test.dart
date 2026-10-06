@@ -350,6 +350,47 @@ void main() {
   );
 
   test(
+    'conditional logout rejects a newer login for the same account and profile',
+    () async {
+      final mock = MockClient((_) async => http.Response('not found', 404));
+      final storage = InMemoryAuthSessionStorage();
+      const original = AuthSession(
+        accessToken: 'original-access',
+        refreshToken: 'original-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      const replacement = AuthSession(
+        accessToken: 'new-login-access',
+        refreshToken: 'new-login-refresh',
+        accountId: 'acc-1',
+        activeProfileId: 'prof-1',
+        expiresInSeconds: 900,
+      );
+      await storage.write(original);
+      final container = buildContainer(mock: mock, storage: storage);
+      addTearDown(container.dispose);
+      final controller = container.read(authControllerProvider.notifier);
+      controller.state = const AuthState(session: original);
+      final installGeneration = controller.sessionInstallGeneration;
+
+      await controller.applySession(replacement);
+
+      expect(
+        await controller.logoutIfCurrent(
+          original,
+          serverAlreadyRevoked: true,
+          sessionInstallGeneration: installGeneration,
+        ),
+        isFalse,
+      );
+      expect(controller.state.session, replacement);
+      expect(await storage.read(), replacement);
+    },
+  );
+
+  test(
     'conditional logout fails closed for storage without compare-and-clear',
     () async {
       const original = AuthSession(

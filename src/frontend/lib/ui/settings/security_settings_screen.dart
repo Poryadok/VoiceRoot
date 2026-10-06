@@ -186,6 +186,20 @@ class _SecuritySettingsScreenState
       generation == _authContextGeneration &&
       ref.read(authControllerProvider).session == session;
 
+  bool _isCurrentPasswordChangeSession(
+    AuthSession session,
+    int contextGeneration,
+    int sessionInstallGeneration,
+  ) {
+    final controller = ref.read(authControllerProvider.notifier);
+    final current = ref.read(authControllerProvider).session;
+    return mounted &&
+        contextGeneration == _authContextGeneration &&
+        controller.sessionInstallGeneration == sessionInstallGeneration &&
+        current?.accountId == session.accountId &&
+        current?.activeProfileId == session.activeProfileId;
+  }
+
   bool _continueWithCurrentSession(AuthSession session, int generation) {
     if (_isCurrentSession(session, generation)) return true;
     if (!mounted || generation != _authContextGeneration) return false;
@@ -625,6 +639,9 @@ class _SecuritySettingsScreenState
     final newPassword = _changeNewPasswordController.text;
     final confirmation = _changeConfirmPasswordController.text;
     final session = ref.read(authControllerProvider).session;
+    final sessionInstallGeneration = ref
+        .read(authControllerProvider.notifier)
+        .sessionInstallGeneration;
     final generation = _authContextGeneration;
     if (session == null || _busy) return;
     if (_twoFactorLoading ||
@@ -672,13 +689,23 @@ class _SecuritySettingsScreenState
       }
       return;
     }
-    if (!_isCurrentSession(session, generation)) return;
+    if (!_isCurrentPasswordChangeSession(
+      session,
+      generation,
+      sessionInstallGeneration,
+    )) {
+      return;
+    }
 
     switch (result) {
       case AuthApiOk<void>():
         final didLogout = await ref
             .read(authControllerProvider.notifier)
-            .logoutIfCurrent(session, serverAlreadyRevoked: true);
+            .logoutIfCurrent(
+              session,
+              serverAlreadyRevoked: true,
+              sessionInstallGeneration: sessionInstallGeneration,
+            );
         if (!didLogout || !mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -250,6 +250,71 @@ void main() {
   );
 
   testWidgets(
+    'password change logs out the same login after a pending refresh rotates it',
+    (tester) async {
+      final changeRequested = Completer<void>();
+      final changeResponse = Completer<http.Response>();
+      const rotated = AuthSession(
+        accessToken: 'rotated-access',
+        refreshToken: 'rotated-refresh',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-primary',
+      );
+      final client = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/2fa/status') {
+          return http.Response(jsonEncode({'enabled': false}), 200);
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/auth/password/change') {
+          changeRequested.complete();
+          return changeResponse.future;
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/auth/refresh') {
+          return http.Response(
+            jsonEncode({'session': rotated.toJson()}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      final controller = await _pumpSecuritySettings(tester, client);
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.changePasswordButtonKey),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordCurrentFieldKey),
+        'current-password',
+      );
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordNewFieldKey),
+        'replacement-password',
+      );
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordConfirmFieldKey),
+        'replacement-password',
+      );
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.changePasswordSubmitKey),
+      );
+      await changeRequested.future;
+
+      expect(await controller.refreshOn401(), isTrue);
+      expect(controller.state.session, rotated);
+      changeResponse.complete(http.Response('', 204));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(controller.state.session, isNull);
+    },
+  );
+
+  testWidgets(
     'unknown 2FA status is unavailable until retry confirms disabled',
     (tester) async {
       final pendingStatus = Completer<http.Response>();
