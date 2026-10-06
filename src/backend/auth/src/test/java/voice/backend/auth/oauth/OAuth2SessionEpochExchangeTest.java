@@ -158,7 +158,7 @@ class OAuth2SessionEpochExchangeTest {
   }
 
   @Test
-  void aheadFloorRecoveryIsPreservedAndPasswordChangeRevokesPreparedAuthority() {
+  void aheadFloorRecoveryIsPreservedAndPasswordChangeRevokesPreparedAuthority() throws Exception {
     Harness harness = new Harness(new RecordingCodeStore());
     String email = "oauth-ahead-floor-password@example.com";
     String oldPassword = "Correct horse battery staple";
