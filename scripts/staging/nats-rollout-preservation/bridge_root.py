@@ -111,18 +111,40 @@ class Actions:
                     if key not in previous['target']['images'] or stage.old_images[key]!=previous['target']['images'][key]:raise Blocked('bridge_rollback_current_image_changed')
                     image=previous['context']['old_images'][key]
                 images[key]=image
+        contract=json.loads(public_read(self.code/'nats-known-baseline'/'deployed-contract.json'))
+        try:active_contract=private_json(INSTALLED/'active-contract.json')
+        except FileNotFoundError:active_contract=None
+        if active_contract is not None:
+            if (active_contract.get('schema')!='voice-nats-active-contract-v1' or active_contract.get('migration_id')!='space-chat-social-24h-friend-removed-v1'
+                or active_contract.get('generation')!=stage.expected['generation'] or active_contract.get('namespace_uid')!=stage.expected['namespace_uid']
+                or active_contract.get('pvc_uid')!=stage.expected['source_claim_uid']):raise Blocked('nats_active_contract_identity_changed')
+            contract=active_contract['contract']
         parameters={**policy,'registry':source_authority.REGISTRY,'tag':approved['source_sha'],
             'mode':request['mode'],'changed_services':request['changed_services'],'images':images,
-            'contract':json.loads(public_read(self.code/'nats-known-baseline'/'deployed-contract.json')),
+            'contract':contract,
             'enrolled':list(stage.snapshots),'generation':marker['data']['generation'],'dataPVC':marker['data']['dataPVC']}
+        nats_authority=None
+        if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
+            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+            except FileNotFoundError:enrollment=None
+            if enrollment is not None:
+                import nats_root_plan
+                nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
+                parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         build=workspace.parent/(operation+'-build');build.mkdir(mode=0o700)
         parameter_path=build/'parameters.json';save(parameter_path,parameters)
         output=build/('target-'+approved['source_sha']+'.json')
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
-        def authority_before_fence():source_authority._head(source_authority._headers(request['token']),approved['source_sha'],time.monotonic()+30)
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence)
+        def authority_before_fence():
+            source_authority._head(source_authority._headers(request['token']),approved['source_sha'],time.monotonic()+30)
+            if nats_authority is not None:
+                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
+                # Business records may advance, but config/consumer intent and
+                # dynamic subject ownership cannot change between plan/fence.
+                if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority)
         base=guard.ROOT/('rollout-'+operation)
         state['source_authority']={key:value for key,value in approved.items() if key!='source_files'}
         state['execution_authority']=execution

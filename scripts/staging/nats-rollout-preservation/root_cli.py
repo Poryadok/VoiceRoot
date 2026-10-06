@@ -102,7 +102,7 @@ def publish_copy(base,state):
     cut=state['cut'];row={'schema':'nats-rollout-copy-v1','operation':state['operation'],
        'phase':state['phase'],'fence_status':state['fence_status'],
        'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-       'census_sha256':cut['census_sha256'],'messages':sum(s['messages'] for s in cut['census']['streams']),
+       'census_sha256':cut['census_sha256'],'messages':sum(s['state']['messages'] for s in cut['census']['streams']),
        'streams':len(cut['census']['streams']),'consumers':len(cut['census']['consumers'])}
     save(base/'copy-checkpoint.json',row)
     gid=grp.getgrnam('pmd').gr_gid
@@ -114,6 +114,13 @@ def publish_copy(base,state):
 
 def main_unlocked(args,code):
     binding=code_binding(code)
+    if args==['--enroll-existing-bootstrap']:
+        # Explicit human command only; CI bridge has no issuer action.
+        from bridge_root import Actions
+        from bootstrap_root import enroll_current
+        from bootstrap_auth import prove
+        enroll_current(Kube(),code,binding,Actions(code)._idle,private_json,save,prove)
+        print('NATS_EXISTING_BOOTSTRAP_ENROLLMENT=READY');return
     previous=None
     if len(args)==2 and args[0]=='--prepare-rollback':
         prior=operation_path(args[1]);previous=private_json(prior/'checkpoint.json')
@@ -152,7 +159,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -170,7 +177,7 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence)
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

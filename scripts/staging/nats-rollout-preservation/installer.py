@@ -1,5 +1,6 @@
 """One human-root installation of immutable code and the fixed inbox service."""
 import grp
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,80 @@ import root_cli
 from root_main import operation_lock,private_json,save
 from controller import Blocked
 from stage_runtime import Kube
+
+V2_BINDING='57457481c7af3148f501083f941dfac0f1c17e75d75b879e377d060a7f5fee77'
+
+def binding_sha(code):
+    return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+def sync_directory(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+def upgrade_code(code,installed,gid):
+    """Fixed reviewed V2 predecessor, preserved backup and resumable renames.
+
+    Caller holds the global operation lock and has proved host/queue idle.
+    Policy, recovery, request journals and units are never replaced.
+    """
+    code=Path(code);installed=Path(installed);wanted=binding_sha(code)
+    record=installed/'upgrade-v3.json';current=installed/'code'
+    staged=installed/'code-v3-staged';old=installed/'code-v2-preserved'
+    if record.exists():
+        receipt=private_json(record)
+        if receipt!={'schema':'voice-nats-code-upgrade-v3','from':V2_BINDING,'to':wanted}:
+            raise Blocked('bridge_upgrade_receipt_conflict')
+    else:
+        if binding_sha(current)!=V2_BINDING or old.exists() or staged.exists():
+            raise Blocked('bridge_upgrade_predecessor_unapproved')
+        save(record,{'schema':'voice-nats-code-upgrade-v3','from':V2_BINDING,'to':wanted})
+    if current.exists() and binding_sha(current)==wanted:
+        if not old.exists() or binding_sha(old)!=V2_BINDING:raise Blocked('bridge_upgrade_backup_unapproved')
+        return
+    if old.exists():
+        if binding_sha(old)!=V2_BINDING or current.exists():raise Blocked('bridge_upgrade_backup_conflict')
+    elif binding_sha(current)!=V2_BINDING:raise Blocked('bridge_upgrade_predecessor_unapproved')
+    if staged.exists():
+        if binding_sha(staged)!=wanted:raise Blocked('bridge_upgrade_staged_unapproved')
+    else:
+        shutil.copytree(code,staged)
+        for path in [staged,*staged.rglob('*')]:
+            os.chown(path,0,gid);path.chmod(0o750 if path.is_dir() else 0o550 if path.name in ('kernel','bootstrap-renewer') else 0o440)
+        if binding_sha(staged)!=wanted:raise Blocked('bridge_upgrade_staged_unapproved')
+        sync_directory(installed)
+    if not old.exists():
+        os.rename(current,old);sync_directory(installed)
+    os.rename(staged,current);sync_directory(installed)
+    if binding_sha(current)!=wanted or binding_sha(old)!=V2_BINDING:raise Blocked('bridge_upgrade_verification_failed')
+
+def upgrade(code):
+    if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
+    root_cli.code_binding(Path(code));installed=guard.ROOT/'installed'
+    with operation_lock():
+        marker=Kube().get('configmap','voice-nats-generation')
+        if marker['data'].get('phase')!='active':raise Blocked('bridge_upgrade_live_operation_present')
+        for base in guard.ROOT.glob('rollout-*'):
+            if root_cli.rollout_directory_kind(base)=='capture':continue
+            if private_json(base/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):raise Blocked('bridge_upgrade_live_operation_present')
+        for path in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses',installed/'recovery'):
+            row=path.lstat()
+            if not path.is_dir() or path.is_symlink() or row.st_uid!=0 or row.st_mode&0o002 or path.name!='inbox' and row.st_mode&0o020:raise Blocked('bridge_upgrade_directory_untrusted')
+        # Close the runner ingress while checking and replacing code. Requests
+        # are preserved; an existing queued request vetoes, never gets removed.
+        inbox=installed/'inbox';inbox.chmod(0o700)
+        try:
+            if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
+            for path in (installed/'journal').iterdir():
+                if private_json(path).get('phase')!='COMPLETE':raise Blocked('bridge_upgrade_interrupted_request')
+            policy=private_json(installed/'policy.json')
+            for name in ('recovery-key.pem','recovery-cert.pem'):
+                fd,_=encrypted_cut.regular(installed/'recovery'/name,private=name=='recovery-key.pem')
+                os.close(fd)
+            upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid)
+            if private_json(installed/'policy.json')!=policy:raise Blocked('bridge_upgrade_policy_changed')
+        finally:inbox.chmod(0o1730)
+    print('NATS_ROLLOUT_BRIDGE=UPGRADED_V3_KEYS_POLICY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -75,7 +150,7 @@ def install(code,policy_path):
             path.chmod(mode)
         shutil.copytree(code,installed/'code')
         for path in [installed/'code',*(installed/'code').rglob('*')]:
-            os.chown(path,0,gid);path.chmod(0o750 if path.is_dir() else 0o550 if path.name=='kernel' else 0o440)
+            os.chown(path,0,gid);path.chmod(0o750 if path.is_dir() else 0o550 if path.name in ('kernel','bootstrap-renewer') else 0o440)
         save(installed/'policy.json',policy)
         encrypted_cut.initialize_recovery_key(installed/'recovery')
         for suffix,text in (('service',SERVICE),('path',PATH_UNIT),('timer',TIMER)):
@@ -87,5 +162,6 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON')
-    install(Path(__file__).resolve().parents[1],sys.argv[1])
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v3')
+    if sys.argv[1]=='--upgrade-v3':upgrade(Path(__file__).resolve().parents[1])
+    else:install(Path(__file__).resolve().parents[1],sys.argv[1])
