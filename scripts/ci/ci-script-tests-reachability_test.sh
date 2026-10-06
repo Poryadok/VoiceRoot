@@ -22,8 +22,17 @@ echo "${global_paths}" | grep -Fxq "  - ${GO_DOWNLOAD_HELPER}" \
   || fail "Docker Go module download helper must be a global CI-policy path"
 
 pr_trigger="$(sed -n '/^  pull_request:$/,/^  push:$/p' "${WORKFLOW}" | sed '$d')"
-echo "${pr_trigger}" | grep -Fq 'branches: [master, codex/game-sdk-federation-docs]' \
-  || fail "CI must run for PRs targeting master and the game SDK feature base"
+echo "${pr_trigger}" | grep -Fq 'master' \
+  || fail "CI must run for PRs targeting master"
+echo "${pr_trigger}" | grep -Fq 'codex/game-sdk-federation-docs' \
+  || fail "CI must run for PRs targeting the game SDK feature base"
+echo "${pr_trigger}" | grep -Fq 'codex/appearance-settings-view' \
+  || fail "CI must run for PRs targeting the Appearance feature base"
+echo "${pr_trigger}" | grep -Fq 'codex/settings-app-icon' \
+  || fail "CI must run for PRs targeting the App Icon feature base"
+pr_branches="$(echo "${pr_trigger}" | sed -n 's/.*branches: \[\(.*\)\].*/\1/p')"
+[[ -n "${pr_branches}" && "${pr_branches}" != *'*'* && "${pr_branches}" != *'?'* ]] \
+  || fail "CI pull-request branch filter must remain exact, without wildcard widening"
 push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
 echo "${push_trigger}" | grep -Fq 'branches: [master]' \
   || fail "CI push trigger must remain limited to master"
