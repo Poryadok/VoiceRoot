@@ -350,7 +350,7 @@ request and response remain the wire-contract source of truth.
 
 `POST /api/v1/auth/password/change` requires the current bearer credential and accepts `current_password`, `new_password`, and optional `totp_code`. Auth derives the account from the authenticated principal; the request has no account identifier. The current password is mandatory for every account. When TOTP is enabled, `totp_code` accepts either a valid TOTP value or one unused backup code. The new password uses the existing minimum-length and password validation rules.
 
-Success returns `204 No Content` and creates no replacement `AuthSession`. Auth serializes the password mutation, refresh rotation, and authenticated replacement-session paths on the account row; those paths reload and revalidate the current session epoch while holding the lock. The password operation updates the password hash and session epoch, revokes every refresh row, and publishes the session-epoch floor before the SQL transaction commits. A floor-store failure rolls back SQL changes; a later SQL commit failure fails closed and does not return success. A successful client request therefore requires the user to sign in again.
+Success returns `204 No Content` and creates no replacement `AuthSession`. Auth serializes the password mutation, refresh rotation, and authenticated replacement-session paths on the account row; those paths reload and revalidate the current session epoch while holding the lock. The password operation advances the durable session epoch to a checked value strictly greater than both the durable epoch and the authoritative floor, revokes every refresh row, and publishes that epoch floor before the SQL transaction commits. If a still-current session has a floor ahead of its durable row, Auth preserves the existing reconciliation behavior and advances beyond that floor; a racing higher floor is retried a bounded number of times. Missing, invalid, unavailable, or exhausted epoch state fails closed without changing the password. A floor-store failure rolls back SQL changes; a later SQL commit failure fails closed and does not return success, although the caller may not know whether the database committed. A successful client request therefore requires the user to sign in again.
 
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is
@@ -514,8 +514,16 @@ Only `response_type=code` and `grant_type=authorization_code` are accepted.
 The configured client must be enabled, the redirect URI must exactly match one
 of that client's configured URIs, and the authorization request and exchange
 use the S256 PKCE challenge. The authorization code is bound to the client,
-redirect URI, challenge, and logged-in account/profile, and expires according
-to that client's `authorization-code-ttl` (default `PT60S`). The token response
+redirect URI, challenge, logged-in account/profile, and the session epoch of the
+successful login that authorized it; it expires according to that client's
+`authorization-code-ttl` (default `PT60S`). Exchange locks and reloads the
+account, rejects an unbound legacy code or a code from a stale session epoch,
+then prepares the floor, consumes the code, and signs the token while holding
+that lock. A floor-ahead code may use the existing recovery path only while its
+bound durable session epoch remains current. All Auth instances serving the
+flow must run the corrected implementation before this revocation guarantee is
+claimed; older instances can otherwise accept legacy authorization-code data.
+The token response
 contains an access token; this endpoint does not return a refresh token. A
 configured client secret is checked during exchange; an empty client-secret
 setting skips that check.

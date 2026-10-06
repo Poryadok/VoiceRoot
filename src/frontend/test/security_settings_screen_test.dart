@@ -315,6 +315,66 @@ void main() {
   );
 
   testWidgets(
+    'password change accepts the existing alphanumeric backup-code format',
+    (tester) async {
+      Map<String, dynamic>? submitted;
+      final client = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/2fa/status') {
+          return http.Response(jsonEncode({'enabled': true}), 200);
+        }
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/auth/password/change') {
+          submitted = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({'error': 'invalid_totp'}),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      await _pumpSecuritySettings(tester, client);
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.changePasswordButtonKey),
+      );
+      await tester.pumpAndSettle();
+      final factorField = tester.widget<TextField>(
+        find.byKey(SecuritySettingsScreen.changePasswordTotpFieldKey),
+      );
+      expect(factorField.keyboardType, TextInputType.text);
+
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordCurrentFieldKey),
+        'current-password',
+      );
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordNewFieldKey),
+        'replacement-password',
+      );
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordConfirmFieldKey),
+        'replacement-password',
+      );
+      await tester.enterText(
+        find.byKey(SecuritySettingsScreen.changePasswordTotpFieldKey),
+        'ABCD2345XZ',
+      );
+      await tester.tap(
+        find.byKey(SecuritySettingsScreen.changePasswordSubmitKey),
+      );
+      await tester.pumpAndSettle();
+
+      expect(submitted?['totp_code'], 'ABCD2345XZ');
+      expect(
+        find.byKey(SecuritySettingsScreen.changePasswordTotpFieldKey),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'unknown 2FA status is unavailable until retry confirms disabled',
     (tester) async {
       final pendingStatus = Completer<http.Response>();

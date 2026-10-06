@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.userdb.PhoneHashResolver;
@@ -380,11 +381,45 @@ public class AuthService {
     return issueOAuthAccessToken(accountId, profileId, prepareOAuthAccessToken(accountId));
   }
 
-  /** Prepares an active OAuth account's epoch before an authorization-code consume. */
+  /** Prepares the current durable epoch for an internal OAuth issuer. */
   public PreparedSessionEpoch prepareOAuthAccessToken(String accountId) {
-    Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
+    Account account = accounts.findById(accountId)
+        .orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     return sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+  }
+
+  /**
+   * Runs an interactive authorization-code exchange under the shared account-row lock. The
+   * callback includes one-time code consumption and signing, so a password change cannot pass
+   * between origin validation and token issuance.
+   */
+  public <T> T withOAuthAuthorizationCodeEpoch(
+      String accountId,
+      long originSessionEpoch,
+      Function<PreparedSessionEpoch, T> exchange) {
+    final UUID id;
+    try {
+      id = UUID.fromString(accountId);
+    } catch (RuntimeException invalid) {
+      throw new AuthException("invalid_token");
+    }
+    if (originSessionEpoch <= 0) {
+      throw new AuthException("invalid_token");
+    }
+    java.util.Objects.requireNonNull(exchange, "exchange");
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(id);
+      Account account = accounts.findById(accountId)
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (account.sessionEpoch() != originSessionEpoch) {
+        throw new AuthException("invalid_token");
+      }
+      PreparedSessionEpoch prepared =
+          sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      return exchange.apply(prepared);
+    });
   }
 
   /** Signs an OAuth access token from a previously prepared epoch without another floor write. */
@@ -393,7 +428,7 @@ public class AuthService {
     Account account = accounts.findById(accountId).orElseThrow(() -> new AuthException("invalid_token"));
     ensureActive(account);
     if (!account.id().equals(prepared.accountId())) {
-      throw new IllegalStateException("prepared session epoch account mismatch");
+      throw new AuthException("invalid_token");
     }
     String expectedProfileId = requireProfileId(profileId);
     String ensuredProfileId = requireProfileId(primaryProfileProvisioner.ensurePrimaryProfile(
@@ -578,14 +613,60 @@ public class AuthService {
       }
 
       String passwordHash = passwordHasher.hash(newPassword);
+      long nextEpoch = advancePasswordChangeEpoch(account.id(), account.sessionEpoch());
       accounts.updatePasswordHash(account.id(), passwordHash);
-      long nextEpoch = accounts.incrementSessionEpoch(account.id());
-      sessionEpochIssuanceGate.prepare(account.id(), nextEpoch);
       Instant now = Instant.now(clock);
       refreshTokens.revokeAllForAccount(account.id(), now);
       tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
       return null;
     });
+  }
+
+  private long advancePasswordChangeEpoch(UUID accountId, long durableEpoch) {
+    long observedFloor;
+    try {
+      observedFloor = sessionEpochFloors.requireFloor(accountId);
+    } catch (RuntimeException unavailable) {
+      throw new SessionEpochFloorUnavailableException(
+          "session epoch floor unavailable", unavailable);
+    }
+    if (observedFloor <= 0 || durableEpoch <= 0) {
+      throw new SessionEpochFloorUnavailableException("invalid session epoch floor");
+    }
+
+    long baseline = Math.max(durableEpoch, observedFloor);
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (baseline == Long.MAX_VALUE) {
+        throw new SessionEpochFloorUnavailableException("session epoch exhausted");
+      }
+      long requested = baseline + 1;
+      long advanced;
+      try {
+        advanced = accounts.advanceSessionEpochAtLeast(accountId, requested);
+      } catch (RuntimeException unavailable) {
+        throw new SessionEpochFloorUnavailableException(
+            "durable session epoch unavailable", unavailable);
+      }
+      if (advanced <= 0 || advanced < requested) {
+        throw new SessionEpochFloorUnavailableException("invalid durable session epoch");
+      }
+
+      long confirmedFloor;
+      try {
+        confirmedFloor = sessionEpochFloors.recordAtLeast(accountId, advanced);
+      } catch (RuntimeException unavailable) {
+        throw new SessionEpochFloorUnavailableException(
+            "session epoch floor unavailable", unavailable);
+      }
+      if (confirmedFloor <= 0 || confirmedFloor < advanced) {
+        throw new SessionEpochFloorUnavailableException("invalid session epoch floor");
+      }
+      if (confirmedFloor == advanced) {
+        return advanced;
+      }
+      baseline = Math.max(advanced, confirmedFloor);
+    }
+    throw new SessionEpochFloorUnavailableException("session epoch floor kept advancing");
   }
 
   /**

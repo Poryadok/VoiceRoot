@@ -36,6 +36,28 @@ class AuthRestIntegrationTest {
   }
 
   @Test
+  void guestWithoutKnownPasswordCannotChangePasswordOrMutateSessionOrFactors() throws Exception {
+    JsonNode guest = session(postJson("/api/v1/auth/register",
+        "{\"guest\":true,\"device_info_json\":\"{}\"}"));
+    String token = guest.get("access_token").asText();
+
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + token)
+            .contentType("application/json")
+            .content("{\"current_password\":\"not-known\",\"new_password\":\"A longer replacement password\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error", is("invalid_credentials")));
+
+    mockMvc.perform(post("/api/v1/auth/validate")
+            .header("Authorization", "Bearer " + token))
+        .andExpect(status().isOk());
+    mockMvc.perform(get("/api/v1/auth/2fa/status")
+            .header("Authorization", "Bearer " + token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.enabled", is(false)));
+  }
+
+  @Test
   void changePasswordRequiresCurrentPasswordAndRevokesEveryExistingSession() throws Exception {
     String email = "rest-change-password@example.test";
     String oldPassword = "Correct horse battery staple";

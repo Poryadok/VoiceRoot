@@ -1020,7 +1020,10 @@ class _SecuritySettingsScreenState
           TextField(
             key: SecuritySettingsScreen.changePasswordTotpFieldKey,
             controller: _changeTotpController,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.text,
+            textCapitalization: TextCapitalization.characters,
+            autocorrect: false,
+            autofillHints: const [AutofillHints.oneTimeCode],
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submitChangePassword(),
             decoration: InputDecoration(
