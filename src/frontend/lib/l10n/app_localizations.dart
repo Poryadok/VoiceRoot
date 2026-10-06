@@ -3434,6 +3434,66 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearance;
 
+  /// No description provided for @appIconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconTitle;
+
+  /// No description provided for @appIconDeviceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This choice applies on this device only.'**
+  String get appIconDeviceNotice;
+
+  /// No description provided for @appIconPlusRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus is required to apply this icon.'**
+  String get appIconPlusRequired;
+
+  /// No description provided for @appIconSavedChoiceNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your saved icon will return when Voice Plus is active again.'**
+  String get appIconSavedChoiceNotice;
+
+  /// No description provided for @appIconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime app icons are unavailable on this device.'**
+  String get appIconUnavailable;
+
+  /// No description provided for @appIconSubscriptionStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus status could not be checked. Retry or choose Voice Sky.'**
+  String get appIconSubscriptionStatusError;
+
+  /// No description provided for @appIconApplyFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The app icon could not be applied. Your saved choice is kept; retry to apply it.'**
+  String get appIconApplyFailure;
+
+  /// No description provided for @appIconRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get appIconRetry;
+
+  /// No description provided for @appIconApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {iconName}'**
+  String appIconApply(String iconName);
+
+  /// No description provided for @appIconSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get appIconSelected;
+
   /// No description provided for @settingsTheme.
   ///
   /// In en, this message translates to:

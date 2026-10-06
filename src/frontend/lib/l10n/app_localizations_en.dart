@@ -1894,6 +1894,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearance => 'Appearance';
 
   @override
+  String get appIconTitle => 'App Icon';
+
+  @override
+  String get appIconDeviceNotice => 'This choice applies on this device only.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Voice Plus is required to apply this icon.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Your saved icon will return when Voice Plus is active again.';
+
+  @override
+  String get appIconUnavailable =>
+      'Runtime app icons are unavailable on this device.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Voice Plus status could not be checked. Retry or choose Voice Sky.';
+
+  @override
+  String get appIconApplyFailure =>
+      'The app icon could not be applied. Your saved choice is kept; retry to apply it.';
+
+  @override
+  String get appIconRetry => 'Retry';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Apply $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Selected';
+
+  @override
   String get settingsTheme => 'Theme';
 
   @override

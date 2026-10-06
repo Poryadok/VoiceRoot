@@ -104,11 +104,56 @@ if resolve_voice_base pull_request "${zero_sha}" "${push_before}" >/dev/null 2>&
   fail "Voice scope base must reject an invalid pull request base SHA"
 fi
 
+windows_job_block="$(sed -n '/^  flutter-windows:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+[[ -n "${windows_job_block}" ]] || fail "CI workflow must define flutter-windows"
+echo "${windows_job_block}" | grep -Fq "github.event_name == 'pull_request'" \
+  || fail "Windows desktop build must be selected for native-target PR changes"
+echo "${windows_job_block}" | grep -Fq "needs.changes.outputs.windows_desktop == 'true'" \
+  || fail "Windows desktop PR selection must use its dedicated path filter"
+echo "${windows_job_block}" | grep -Fq "github.event_name == 'workflow_dispatch' && inputs.profile == 'full'" \
+  || fail "Windows desktop build must preserve manual full-profile selection"
+echo "${windows_job_block}" | grep -Fq "needs.changes.outputs.run_flutter_tier2 == 'true'" \
+  || fail "Windows desktop build must preserve its master/manual tier-2 predicate"
 gate_block="$(sed -n '/^  ci-gate:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \
   || fail "ci-gate must require ci-script-tests"
 grep -Fq 'check_if "${GLOBAL}" ci-script-tests' "${REQUIRED_JOBS}" \
   || fail "ci-gate must require ci-script-tests for global CI-policy paths"
+echo "${gate_block}" | grep -Eq '^      - flutter-windows$' \
+  || fail "ci-gate must wait for the Windows desktop job"
+echo "${gate_block}" | grep -Fq 'RUN_WINDOWS_DESKTOP:' \
+  || fail "ci-gate must receive the conditional Windows selection"
+echo "${gate_block}" | grep -Fq 'JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}' \
+  || fail "ci-gate must receive the Windows job result"
+grep -Fq 'check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require Windows only when its job selector is true"
+
+echo "== Windows path-filter restricted-pattern model (not dorny equivalence) =="
+python - "${PATH_FILTERS}" <<'PY'
+import fnmatch
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r"(?m)^windows_desktop:\s*\n((?:[ \t]+-\s+[^\n]+\n)+)", text)
+if not match:
+    raise SystemExit("FAIL: windows_desktop path filter is missing or empty")
+patterns = [line.strip()[2:].strip().strip("'\"") for line in match.group(1).splitlines()]
+cases = {
+    "src/frontend/windows/runner/desktop_host.cpp": True,
+    "src/frontend/pubspec.yaml": True,
+    "src/frontend/assets/app_icons/voice_sky.png": True,
+    "src/frontend/lib/services/windows_desktop_host.dart": False,
+    "src/backend/windows/desktop_host.cpp": False,
+    "src/frontend/assets/avatars/profile.png": False,
+}
+for path, expected in cases.items():
+    actual = any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
+    if actual != expected:
+        raise SystemExit(f"FAIL: Windows path-filter model for {path}: expected {expected}, got {actual}")
+print("Windows path-filter model cases passed; actual dorny selection is verified by the PR job.")
+PY
 
 compose_e2e_block="$(sed -n '/^  compose-e2e:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 [[ -n "${compose_e2e_block}" ]] || fail "CI workflow must define a compose-e2e job"

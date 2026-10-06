@@ -1902,6 +1902,44 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAppearance => 'Оформление';
 
   @override
+  String get appIconTitle => 'Значок приложения';
+
+  @override
+  String get appIconDeviceNotice =>
+      'Этот выбор применяется только на этом устройстве.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Для применения этого значка нужна подписка Voice Plus.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Сохранённый значок вернётся, когда Voice Plus снова будет активен.';
+
+  @override
+  String get appIconUnavailable =>
+      'На этом устройстве нельзя изменить значок работающего приложения.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.';
+
+  @override
+  String get appIconApplyFailure =>
+      'Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.';
+
+  @override
+  String get appIconRetry => 'Повторить';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Применить: $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Выбран';
+
+  @override
   String get settingsTheme => 'Тема';
 
   @override

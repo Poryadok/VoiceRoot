@@ -52,6 +52,7 @@ jobs:
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      windows_desktop: ${{ steps.filter.outputs.windows_desktop }}
       auth: ${{ steps.filter.outputs.auth }}
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -1224,10 +1225,12 @@ jobs:
     if: >-
       always() &&
       needs.changes.result == 'success' &&
-      (github.event_name == 'push' && github.ref == 'refs/heads/master' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
-      needs.changes.outputs.code == 'true' &&
-      needs.changes.outputs.run_flutter_tier2 == 'true'
+      ((github.event_name == 'pull_request' &&
+        needs.changes.outputs.windows_desktop == 'true') ||
+       (((github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+        needs.changes.outputs.code == 'true' &&
+        needs.changes.outputs.run_flutter_tier2 == 'true'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -1267,6 +1270,7 @@ jobs:
       - ci-script-tests
       - flutter
       - flutter-device-driver
+      - flutter-windows
       - web
       - golangci
       - backend-go-pkg
@@ -1290,6 +1294,7 @@ jobs:
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_WINDOWS_DESKTOP: ${{ (github.event_name == 'pull_request' && needs.changes.outputs.windows_desktop == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true') }}
           RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
           RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
@@ -1303,6 +1308,7 @@ jobs:
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}
           JOB_GOLANGCI: ${{ needs.golangci.result }}
