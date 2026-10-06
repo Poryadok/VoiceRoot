@@ -330,7 +330,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
         !reconnectBanner.retrying &&
         ref.read(realtimeHubProvider).canRetryCurrentSession;
 
-    Widget buildReconnectBanner() => VoiceCompactBanner(
+    Widget buildReconnectBanner({required bool narrow}) => VoiceCompactBanner(
       key: const Key('global_reconnect_banner'),
       message: deviceOffline
           ? l10n.chatRealtimeOffline
@@ -345,6 +345,9 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
           : () => ref.read(reconnectBannerVisibleProvider.notifier).retry(),
       onDismiss: () =>
           ref.read(reconnectBannerVisibleProvider.notifier).dismiss(),
+      networkLayout: narrow
+          ? VoiceNetworkBannerLayout.phone
+          : VoiceNetworkBannerLayout.desktop,
       tone: VoiceBannerTone.warning,
     );
 
@@ -423,7 +426,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                             navigationChild: NavigationPanel(
                               collapsed: inSpace,
                               statusBanner: statusBannerInNavigation
-                                  ? buildReconnectBanner()
+                                  ? buildReconnectBanner(narrow: narrow)
                                   : null,
                             ),
                             navigationCollapsed: inSpace,
@@ -457,7 +460,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                 if (reconnectBanner.visible &&
                                     selectedChatId == null &&
                                     !statusBannerInNavigation)
-                                  buildReconnectBanner(),
+                                  buildReconnectBanner(narrow: narrow),
                                 _SessionBar(
                                   narrow: narrow,
                                   onOpenDrawer: showMobileTabs

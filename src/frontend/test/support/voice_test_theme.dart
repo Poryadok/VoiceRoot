@@ -36,6 +36,7 @@ ThemeData voiceTestTheme() {
     textDisabled: Color(0xFF6E6E6E),
     borderDefault: Color(0xFF3D3D3D),
     borderStrong: Color(0xFFF0F0F0),
+    dividerRail: Color(0xFF505050),
     error: Color(0xFFEF9A9A),
     success: Color(0xFF81C784),
     warning: Color(0xFFFFD54F),

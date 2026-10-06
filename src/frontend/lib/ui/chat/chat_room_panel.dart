@@ -870,6 +870,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   onDismiss: () => ref
                       .read(reconnectBannerVisibleProvider.notifier)
                       .dismiss(),
+                  networkLayout:
+                      reconnectBanner.visible && widget.showReconnectBanner
+                      ? VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)
+                            ? VoiceNetworkBannerLayout.phone
+                            : VoiceNetworkBannerLayout.desktop
+                      : null,
                   tone: VoiceBannerTone.warning,
                 ),
               if (room.pinnedMessages.isEmpty &&

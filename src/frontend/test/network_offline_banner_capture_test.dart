@@ -223,6 +223,66 @@ void main() {
         ),
         findsOneWidget,
       );
+      final tokenColors = catalog.colorsFor(
+        viewport.themeMode == VoiceThemeMode.light ? 'light' : 'dark',
+      );
+      final isPhoneRoute = viewport.size.width <= VoiceLayout.narrowBreakpoint;
+      final networkSurface = find.descendant(
+        of: find.byKey(bannerKey),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).border != null,
+          description: 'Network banner card surface',
+        ),
+      );
+      expect(
+        networkSurface,
+        findsOneWidget,
+        reason: 'Network status uses the bordered named-reference surface',
+      );
+      final surfaceContainer = tester.widget<Container>(networkSurface);
+      final surfaceDecoration = surfaceContainer.decoration! as BoxDecoration;
+      expect(
+        surfaceContainer.margin,
+        isPhoneRoute
+            ? const EdgeInsets.fromLTRB(16, 12, 16, 4)
+            : const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      );
+      expect(
+        surfaceContainer.padding,
+        isPhoneRoute
+            ? const EdgeInsets.fromLTRB(12, 10, 8, 10)
+            : const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      );
+      expect(surfaceDecoration.color, tokenColors['color.background.canvas']);
+      expect(
+        surfaceDecoration.border,
+        Border.all(color: tokenColors['color.divider.rail']!, width: 1),
+      );
+      expect(
+        surfaceDecoration.borderRadius,
+        BorderRadius.circular(catalog.radius['md']!),
+      );
+      expect(
+        surfaceDecoration.boxShadow,
+        isPhoneRoute
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.09),
+                  offset: const Offset(0, 5),
+                  blurRadius: 16,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  offset: const Offset(0, 8),
+                  blurRadius: 24,
+                ),
+              ],
+      );
       if (viewport.selectedChat) {
         final visibleSurface = Offset.zero & viewport.size;
         final roomContent = [
