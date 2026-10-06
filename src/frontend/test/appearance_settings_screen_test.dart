@@ -32,6 +32,8 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('Settings opens a dedicated Appearance screen', (tester) async {
+    final openerFocus = FocusNode(debugLabel: 'settings opener');
+    addTearDown(openerFocus.dispose);
     final container = ProviderContainer(
       overrides: voiceAppTestOverrides(
         client: MockClient((_) async => http.Response('', 404)),
@@ -39,15 +41,46 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(_settingsLauncher(container));
-    await _openAppearance(tester);
+    await tester.pumpWidget(
+      _settingsLauncher(container, openerFocus: openerFocus),
+    );
+    openerFocus.requestFocus();
+    await tester.pump();
+    expect(openerFocus.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('settings_appearance')));
+    await tester.tap(find.byKey(const Key('settings_appearance')));
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance_settings_screen')), findsOneWidget);
     expect(find.byKey(const Key('appearance_theme_picker')), findsOneWidget);
     expect(find.byKey(AppearanceSettingsScreen.languageKey), findsOneWidget);
+    await container
+        .read(appThemePreferenceProvider.notifier)
+        .setPreference(AppThemePreference.dark);
+    await tester.pumpAndSettle();
+    final systemOption = find.byKey(
+      AppearanceSettingsScreen.themeOptionKey(AppThemePreference.system),
+    );
+    final systemInkWell = find.descendant(
+      of: systemOption,
+      matching: find.byType(InkWell),
+    );
+    final appearanceFocus = Focus.of(tester.element(systemInkWell));
+    appearanceFocus.requestFocus();
+    await tester.pump();
+    expect(appearanceFocus.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      container.read(appThemePreferenceProvider),
+      AppThemePreference.system,
+    );
     await tester.tap(find.byKey(AppearanceSettingsScreen.backKey));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('test_open_settings')), findsOneWidget);
+    expect(openerFocus.hasPrimaryFocus, isTrue);
   });
 
   testWidgets('the four theme choices update and persist their selection', (
@@ -226,31 +259,35 @@ void main() {
   );
 }
 
-Widget _settingsLauncher(ProviderContainer container, {ThemeData? theme}) =>
-    UncontrolledProviderScope(
-      container: container,
-      child: RepaintBoundary(
-        key: _captureBoundaryKey,
-        child: MaterialApp(
-          theme: theme ?? voiceTestTheme(),
-          debugShowCheckedModeBanner: false,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: TextButton(
-                key: const Key('test_open_settings'),
-                onPressed: () => showVoiceBottomSheet<void>(
-                  context: context,
-                  child: const SettingsSheet(),
-                ),
-                child: const Text('Open settings'),
-              ),
+Widget _settingsLauncher(
+  ProviderContainer container, {
+  ThemeData? theme,
+  FocusNode? openerFocus,
+}) => UncontrolledProviderScope(
+  container: container,
+  child: RepaintBoundary(
+    key: _captureBoundaryKey,
+    child: MaterialApp(
+      theme: theme ?? voiceTestTheme(),
+      debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            key: const Key('test_open_settings'),
+            focusNode: openerFocus,
+            onPressed: () => showVoiceBottomSheet<void>(
+              context: context,
+              child: const SettingsSheet(),
             ),
+            child: const Text('Open settings'),
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
 
 Future<ThemeData?> _loadCaptureTheme(WidgetTester tester) async {
   final directory = Platform.environment[_captureDirectoryKey];
