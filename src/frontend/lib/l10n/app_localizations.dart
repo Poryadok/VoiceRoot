@@ -3428,6 +3428,12 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settingsTooltip;
 
+  /// No description provided for @settingsAppearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearance;
+
   /// No description provided for @settingsTheme.
   ///
   /// In en, this message translates to:

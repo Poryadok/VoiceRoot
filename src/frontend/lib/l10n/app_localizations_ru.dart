@@ -1899,6 +1899,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTooltip => 'Настройки';
 
   @override
+  String get settingsAppearance => 'Оформление';
+
+  @override
   String get settingsTheme => 'Тема';
 
   @override
