@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	eventsv1 "voice.app/voice/events/v1"
-
-	eventsv1 "voice.app/voice/events/v1"
 )
 
 type friendDMStoreStub struct {
