@@ -28,6 +28,321 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('contact profile hides message when DM permission is denied', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.path == '/api/v1/users/profiles/p-contact') {
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': 'p-contact',
+              'account_id': 'a-contact',
+              'username': 'contact',
+              'discriminator': '0001',
+              'display_name': 'Contact',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/chats/dm-permission/p-contact') {
+        return http.Response(jsonEncode({'allowed': false}), 200);
+      }
+      if (request.url.path.endsWith('/presence')) {
+        final profileId = request.url.path.split('/').reversed.skip(1).first;
+        return http.Response(
+          jsonEncode({
+            'presenceStatus': {'profileId': profileId, 'status': 'online'},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/requests') {
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {'incoming': [], 'outgoing': []},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends') {
+        return http.Response(
+          jsonEncode({
+            'friend_list': {'profile_ids': <String>[]},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      _profileDetailTestApp(profileId: 'p-contact', client: client),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      requests.where(
+        (request) =>
+            request.url.path == '/api/v1/chats/dm-permission/p-contact',
+      ),
+      hasLength(1),
+    );
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+    expect(
+      requests.where(
+        (request) =>
+            request.url.path == '/api/v1/chats/dm' && request.method == 'POST',
+      ),
+      isEmpty,
+    );
+  });
+
+  testWidgets('contact profile retries permission before allowing a DM', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final captureTheme = await _captureProfileTheme(tester);
+    var permissionReads = 0;
+    var dmCreates = 0;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/users/profiles/p-contact') {
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': 'p-contact',
+              'account_id': 'a-contact',
+              'username': 'contact',
+              'discriminator': '0001',
+              'display_name': 'Contact',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/chats/dm-permission/p-contact') {
+        permissionReads++;
+        if (permissionReads == 1) {
+          return http.Response(
+            jsonEncode({'error': 'unavailable', 'message': 'private-reason'}),
+            503,
+          );
+        }
+        if (permissionReads == 2) {
+          return http.Response(jsonEncode({'allowed': 'yes'}), 200);
+        }
+        return http.Response(jsonEncode({'allowed': true}), 200);
+      }
+      if (request.url.path == '/api/v1/chats/dm' && request.method == 'POST') {
+        dmCreates++;
+        return http.Response('{}', 200);
+      }
+      if (request.url.path.endsWith('/presence')) {
+        final profileId = request.url.path.split('/').reversed.skip(1).first;
+        return http.Response(
+          jsonEncode({
+            'presenceStatus': {'profileId': profileId, 'status': 'online'},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/requests') {
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {'incoming': [], 'outgoing': []},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends') {
+        return http.Response(
+          jsonEncode({
+            'friend_list': {'profile_ids': <String>[]},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-contact',
+        client: client,
+        theme: captureTheme,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final sheetContext = tester.element(
+      find.byKey(ProfileDetailSheet.sheetKey),
+    );
+    final l10n = AppLocalizations.of(sheetContext)!;
+    final semantics = tester.ensureSemantics();
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+    expect(find.text(l10n.chatListLoadError), findsOneWidget);
+    expect(find.text(l10n.commonRetry), findsOneWidget);
+    expect(find.bySemanticsLabel(l10n.chatListLoadError), findsOneWidget);
+    expect(find.bySemanticsLabel(l10n.commonRetry), findsOneWidget);
+    semantics.dispose();
+    expect(find.textContaining('private-reason'), findsNothing);
+    expect(dmCreates, 0);
+    expect(tester.takeException(), isNull);
+    await _captureProfileFavorites(
+      tester,
+      'contact-dm-permission-error-portrait.png',
+    );
+
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.chatListLoadError), findsOneWidget);
+    expect(find.text(l10n.commonRetry), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _captureProfileFavorites(
+      tester,
+      'contact-dm-permission-error-landscape.png',
+    );
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(l10n.commonRetry));
+    await tester.pumpAndSettle();
+
+    expect(permissionReads, 2);
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+    expect(find.text(l10n.chatListLoadError), findsOneWidget);
+    await tester.tap(find.text(l10n.commonRetry));
+    await tester.pumpAndSettle();
+
+    expect(permissionReads, 3);
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsOneWidget);
+    expect(find.bySemanticsLabel(l10n.profileMessage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byKey(ProfileDetailSheet.messageKey));
+    await tester.pumpAndSettle();
+    await _captureProfileFavorites(tester, 'contact-dm-allowed-portrait.png');
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pumpAndSettle();
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byKey(ProfileDetailSheet.messageKey));
+    await tester.pumpAndSettle();
+    await _captureProfileFavorites(tester, 'contact-dm-allowed-landscape.png');
+    await tester.tap(find.byKey(ProfileDetailSheet.messageKey));
+    await tester.pumpAndSettle();
+    expect(dmCreates, 1);
+  });
+
+  testWidgets('stale DM permission cannot enable contact after viewer switch', (
+    tester,
+  ) async {
+    final firstPermission = Completer<http.Response>();
+    final firstPermissionStarted = Completer<void>();
+    var permissionReads = 0;
+    var dmCreates = 0;
+    AuthController? authController;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v1/users/profiles/p-contact') {
+        return http.Response(
+          jsonEncode({
+            'profile': {
+              'id': 'p-contact',
+              'account_id': 'a-contact',
+              'username': 'contact',
+              'discriminator': '0001',
+              'display_name': 'Contact',
+              'locale': 'en',
+              'theme': 'dark',
+              'is_primary': true,
+              'verification_type': 'none',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/chats/dm-permission/p-contact') {
+        permissionReads++;
+        if (permissionReads == 1) {
+          firstPermissionStarted.complete();
+          return firstPermission.future;
+        }
+        return http.Response(jsonEncode({'allowed': false}), 200);
+      }
+      if (request.url.path == '/api/v1/chats/dm' && request.method == 'POST') {
+        dmCreates++;
+        return http.Response('{}', 200);
+      }
+      if (request.url.path.endsWith('/presence')) {
+        final profileId = request.url.path.split('/').reversed.skip(1).first;
+        return http.Response(
+          jsonEncode({
+            'presenceStatus': {'profileId': profileId, 'status': 'online'},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends/requests') {
+        return http.Response(
+          jsonEncode({
+            'friend_request_list': {'incoming': [], 'outgoing': []},
+          }),
+          200,
+        );
+      }
+      if (request.url.path == '/api/v1/friends') {
+        return http.Response(
+          jsonEncode({
+            'friend_list': {'profile_ids': <String>[]},
+          }),
+          200,
+        );
+      }
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-contact',
+        client: client,
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pump();
+    await firstPermissionStarted.future;
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+
+    authController!.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'replacement-access',
+        refreshToken: 'replacement-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'viewer-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pumpAndSettle();
+    firstPermission.complete(http.Response(jsonEncode({'allowed': true}), 200));
+    await tester.pumpAndSettle();
+
+    expect(permissionReads, 2);
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsNothing);
+    expect(dmCreates, 0);
+  });
+
   testWidgets('profile detail shows Remove from friends for existing friend', (
     tester,
   ) async {
@@ -170,6 +485,7 @@ void main() {
   ) async {
     const diagnostic = 'dm-private-diagnostic';
     final dmRequests = <http.Request>[];
+    final permissionRequests = <http.Request>[];
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -213,6 +529,10 @@ void main() {
                   200,
                 );
               }
+              if (req.url.path == '/api/v1/chats/dm-permission/p-dm') {
+                permissionRequests.add(req);
+                return http.Response(jsonEncode({'allowed': true}), 200);
+              }
               if (req.url.path == '/api/v1/friends/requests') {
                 return http.Response(
                   jsonEncode({
@@ -251,10 +571,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(permissionRequests, hasLength(1));
+    expect(permissionRequests.single.method, 'GET');
+    expect(
+      permissionRequests.single.url.path,
+      '/api/v1/chats/dm-permission/p-dm',
+    );
+    expect(find.byKey(ProfileDetailSheet.messageKey), findsOneWidget);
     await tester.tap(find.byKey(ProfileDetailSheet.messageKey));
     await tester.pumpAndSettle();
 
     expect(dmRequests, hasLength(1));
+    expect(permissionRequests, hasLength(1));
     expect(dmRequests.single.method, 'POST');
     expect(dmRequests.single.url.path, '/api/v1/chats/dm');
     expect(
@@ -515,6 +843,9 @@ void main() {
           }),
           200,
         );
+      }
+      if (request.url.path == '/api/v1/chats/dm-permission/p-friend') {
+        return http.Response(jsonEncode({'allowed': true}), 200);
       }
       if (request.url.path == '/api/v1/friends/favorites' &&
           request.method == 'GET') {
