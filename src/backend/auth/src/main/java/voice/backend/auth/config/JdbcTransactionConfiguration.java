@@ -35,6 +35,11 @@ public class JdbcTransactionConfiguration {
   }
 
   @Bean
+  TransactionTemplate authSecurityTransactionTemplate(PlatformTransactionManager transactions) {
+    return new TransactionTemplate(transactions);
+  }
+
+  @Bean
   RegistrationSessionEpochPreparer registrationSessionEpochPreparer(
       @Qualifier("guestConversionTransactionTemplate") TransactionTemplate transactions,
       AccountRepository accounts,

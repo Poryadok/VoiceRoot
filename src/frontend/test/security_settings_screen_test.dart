@@ -25,21 +25,36 @@ import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/settings/e2e_key_backup_screen.dart';
 import 'package:voice_frontend/ui/settings/security_settings_screen.dart';
+import 'package:voice_frontend/ui/settings/settings_sheet.dart';
 
 import 'support/test_voice_token_catalog.dart';
 
 const _securityCaptureRootKey = Key('security_capture_root');
 var _securityCaptureFontsLoaded = false;
 
-class _MemoryAuthStorage implements AuthSessionStorage {
-  @override
-  Future<void> clear() async {}
+class _MemoryAuthStorage
+    implements AuthSessionStorage, ConditionalAuthSessionStorage {
+  AuthSession? session;
 
   @override
-  Future<AuthSession?> read() async => null;
+  Future<void> clear() async {
+    session = null;
+  }
 
   @override
-  Future<void> write(AuthSession session) async {}
+  Future<AuthSession?> read() async => session;
+
+  @override
+  Future<void> write(AuthSession value) async {
+    session = value;
+  }
+
+  @override
+  Future<bool> clearIfUnchanged(AuthSession expected) async {
+    if (session != expected) return false;
+    session = null;
+    return true;
+  }
 }
 
 Future<ThemeData?> _securityCaptureTheme(WidgetTester tester) async {
@@ -112,6 +127,27 @@ Future<void> _captureSecurityState(WidgetTester tester, String filename) async {
   }
 }
 
+class _SettingsSecurityEntryHost extends ConsumerWidget {
+  const _SettingsSecurityEntryHost();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(authControllerProvider);
+    return Scaffold(
+      body: Center(
+        child: TextButton(
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => const SettingsSheet(),
+          ),
+          child: const Text('Open settings'),
+        ),
+      ),
+    );
+  }
+}
+
 class _TestPathProviderPlatform extends PathProviderPlatform {
   _TestPathProviderPlatform(this.directory);
 
@@ -128,6 +164,7 @@ Future<AuthController> _pumpSecuritySettings(
   WidgetTester tester,
   MockClient client, {
   ThemeData? theme,
+  Widget? home,
   AuthSession? session = const AuthSession(
     accessToken: 'token',
     refreshToken: 'refresh',
@@ -164,6 +201,9 @@ Future<AuthController> _pumpSecuritySettings(
             guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
           );
           controller.state = AuthState(session: session);
+          if (session != null) {
+            unawaited(ref.read(authSessionStorageProvider).write(session));
+          }
           return controller;
         }),
       ],
@@ -174,7 +214,7 @@ Future<AuthController> _pumpSecuritySettings(
           theme: theme,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const SecuritySettingsScreen(),
+          home: home ?? const SecuritySettingsScreen(),
         ),
       ),
     ),
@@ -184,6 +224,31 @@ Future<AuthController> _pumpSecuritySettings(
 }
 
 void main() {
+  testWidgets(
+    'Settings security entry exposes the documented password-change action',
+    (tester) async {
+      final client = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/2fa/status') {
+          return http.Response(jsonEncode({'enabled': false}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+
+      await _pumpSecuritySettings(
+        tester,
+        client,
+        home: const _SettingsSecurityEntryHost(),
+      );
+      await tester.tap(find.text('Open settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_security')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Change password'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'unknown 2FA status is unavailable until retry confirms disabled',
     (tester) async {

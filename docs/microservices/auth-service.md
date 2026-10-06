@@ -346,6 +346,12 @@ revokes all account sessions, clears the TOTP enrollment, and invalidates every
 backup code from that enrollment. The user must sign in again. The protobuf
 request and response remain the wire-contract source of truth.
 
+### Authenticated password change
+
+`POST /api/v1/auth/password/change` requires the current bearer credential and accepts `current_password`, `new_password`, and optional `totp_code`. Auth derives the account from the authenticated principal; the request has no account identifier. The current password is mandatory for every account. When TOTP is enabled, `totp_code` accepts either a valid TOTP value or one unused backup code. The new password uses the existing minimum-length and password validation rules.
+
+Success returns `204 No Content` and creates no replacement `AuthSession`. Auth serializes the password mutation, refresh rotation, and authenticated replacement-session paths on the account row; those paths reload and revalidate the current session epoch while holding the lock. The password operation updates the password hash and session epoch, revokes every refresh row, and publishes the session-epoch floor before the SQL transaction commits. A floor-store failure rolls back SQL changes; a later SQL commit failure fails closed and does not return success. A successful client request therefore requires the user to sign in again.
+
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is
 selected by Auth using the User-owned profile contract described in

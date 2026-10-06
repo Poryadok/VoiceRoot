@@ -2131,6 +2131,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get securitySettingsTitle => 'Security';
 
   @override
+  String get securityChangePasswordAction => 'Change password';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Password changed. Sign in with your new password.';
+
+  @override
   String get appealSettingsTitle => 'Appeal a sanction';
 
   @override

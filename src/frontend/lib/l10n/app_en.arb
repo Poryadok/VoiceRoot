@@ -1021,6 +1021,8 @@
   "premiumBadgeLabel": "Premium",
   "settingsSecurity": "Security & trust",
   "securitySettingsTitle": "Security",
+  "securityChangePasswordAction": "Change password",
+  "securityChangePasswordSuccess": "Password changed. Sign in with your new password.",
   "appealSettingsTitle": "Appeal a sanction",
   "appealTitle": "Submit an appeal",
   "appealDescription": "You may appeal a sanction once within 7 days. Enter the sanction ID from your notification and explain why you believe the decision was wrong.",

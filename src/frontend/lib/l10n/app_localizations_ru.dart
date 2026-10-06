@@ -2144,6 +2144,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get securitySettingsTitle => 'Безопасность';
 
   @override
+  String get securityChangePasswordAction => 'Изменить пароль';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Пароль изменён. Войдите с новым паролем.';
+
+  @override
   String get appealSettingsTitle => 'Апелляция на санкцию';
 
   @override

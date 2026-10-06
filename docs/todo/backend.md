@@ -493,7 +493,7 @@ and Voice IDs denied while history remains.
 
 - [ ] **[Auth] Resend на staging/prod** — `ResendMailSender` есть; без `RESEND_API_KEY` → `NoopMailSender`. [ci.md](ci.md).
 - [x] **[Auth] NATS `user.guest_converted` not wired in compose/staging** — **done (compose):** `AUTH_NATS_URL` + `depends_on: nats` in `docker-compose.yml`; convert publishes + `TestComposeConvertGuestNATS_live`. Staging env still worth verifying separately.
-- [ ] **[Auth] Password change (logged-in) + revoke-all-refresh not implemented** — reset-via-OTP есть; нет change-password для сессии. UI reset — [client.md](client.md).
+- [ ] **[Auth] Password change (logged-in) + revoke-all-refresh** — `POST /api/v1/auth/password/change` and the Settings form are implemented in the current change; keep this item open until the exact-head hosted Auth and Flutter checks pass. Reset-via-OTP remains a separate recovery flow. See [auth-service.md](../microservices/auth-service.md#authenticated-password-change) and [auth-and-contacts.md](../features/auth-and-contacts.md#смена-пароля-из-settings).
 
 ### Realtime
 

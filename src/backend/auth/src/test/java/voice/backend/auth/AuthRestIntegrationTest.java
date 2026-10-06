@@ -36,6 +36,76 @@ class AuthRestIntegrationTest {
   }
 
   @Test
+  void changePasswordRequiresCurrentPasswordAndRevokesEveryExistingSession() throws Exception {
+    String email = "rest-change-password@example.test";
+    String oldPassword = "Correct horse battery staple";
+    String newPassword = "A longer replacement password";
+    JsonNode first = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"" + email + "\",\"password\":\"" + oldPassword + "\",\"device_info_json\":\"{}\"}"));
+    JsonNode second = session(postJson("/api/v1/auth/login",
+        "{\"email\":\"" + email + "\",\"password\":\"" + oldPassword + "\",\"device_info_json\":\"{}\"}"));
+
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + first.get("access_token").asText())
+            .contentType("application/json")
+            .content("{\"current_password\":\"wrong\",\"new_password\":\"" + newPassword + "\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error", is("invalid_credentials")));
+    mockMvc.perform(post("/api/v1/auth/validate")
+            .header("Authorization", "Bearer " + first.get("access_token").asText()))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/auth/login").contentType("application/json")
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + oldPassword + "\"}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .contentType("application/json")
+            .content("{\"current_password\":\"" + oldPassword + "\",\"new_password\":\"" + newPassword + "\"}"))
+        .andExpect(status().isUnauthorized());
+
+    var changed = mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + first.get("access_token").asText())
+            .contentType("application/json")
+            .content("{\"current_password\":\"" + oldPassword + "\",\"new_password\":\"" + newPassword + "\"}"))
+        .andExpect(status().isNoContent())
+        .andReturn();
+    assertThat(changed.getResponse().getContentAsString()).isEmpty();
+
+    for (JsonNode session : new JsonNode[] {first, second}) {
+      mockMvc.perform(post("/api/v1/auth/validate")
+              .header("Authorization", "Bearer " + session.get("access_token").asText()))
+          .andExpect(status().isUnauthorized());
+      mockMvc.perform(post("/api/v1/auth/refresh").contentType("application/json")
+              .content("{\"refresh_token\":\"" + session.get("refresh_token").asText() + "\"}"))
+          .andExpect(status().isUnauthorized());
+    }
+    mockMvc.perform(post("/api/v1/auth/login").contentType("application/json")
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + oldPassword + "\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error", is("invalid_credentials")));
+    mockMvc.perform(post("/api/v1/auth/login").contentType("application/json")
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + newPassword + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.access_token").isNotEmpty());
+  }
+
+  @Test
+  void changePasswordRejectsShortReplacementWithoutInvalidatingCaller() throws Exception {
+    String email = "rest-change-password-short@example.test";
+    JsonNode registered = session(postJson("/api/v1/auth/register",
+        "{\"email\":\"" + email + "\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + registered.get("access_token").asText())
+            .contentType("application/json")
+            .content("{\"current_password\":\"Correct horse battery staple\",\"new_password\":\"short\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error", is("validation_failed")));
+    mockMvc.perform(post("/api/v1/auth/validate")
+            .header("Authorization", "Bearer " + registered.get("access_token").asText()))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void registerLoginRefreshValidateLogoutAndJwksWorkOverRest() throws Exception {
     JsonNode registered = session(postJson("/api/v1/auth/register",
         "{\"email\":\"rest@example.com\",\"password\":\"Correct horse battery staple\",\"device_info_json\":\"{}\"}"));

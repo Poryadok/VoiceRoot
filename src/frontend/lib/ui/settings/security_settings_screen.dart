@@ -52,6 +52,22 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   );
   static const Key deleteAccountTotpKey = Key('security_delete_account_totp');
   static const Key activeSessionsButtonKey = Key('security_active_sessions');
+  static const Key changePasswordButtonKey = Key('security_change_password');
+  static const Key changePasswordCurrentFieldKey = Key(
+    'security_change_password_current',
+  );
+  static const Key changePasswordNewFieldKey = Key(
+    'security_change_password_new',
+  );
+  static const Key changePasswordConfirmFieldKey = Key(
+    'security_change_password_confirm',
+  );
+  static const Key changePasswordTotpFieldKey = Key(
+    'security_change_password_totp',
+  );
+  static const Key changePasswordSubmitKey = Key(
+    'security_change_password_submit',
+  );
 
   @override
   ConsumerState<SecuritySettingsScreen> createState() =>
@@ -78,6 +94,13 @@ class _SecuritySettingsScreenState
   late final ProviderSubscription<AuthState> _authSubscription;
   final _deletePasswordController = TextEditingController();
   final _deleteTotpController = TextEditingController();
+  final _changeCurrentPasswordController = TextEditingController();
+  final _changeNewPasswordController = TextEditingController();
+  final _changeConfirmPasswordController = TextEditingController();
+  final _changeTotpController = TextEditingController();
+  var _changePasswordOpen = false;
+  var _changePasswordSecondFactorRequired = false;
+  String? _changePasswordError;
 
   @override
   void initState() {
@@ -95,6 +118,10 @@ class _SecuritySettingsScreenState
       _authContextGeneration++;
       _passwordController.clear();
       _totpController.clear();
+      _changeCurrentPasswordController.clear();
+      _changeNewPasswordController.clear();
+      _changeConfirmPasswordController.clear();
+      _changeTotpController.clear();
       if (!mounted) return;
       setState(() {
         _step = _SecurityStep.password;
@@ -108,6 +135,9 @@ class _SecuritySettingsScreenState
         _busy = false;
         _backupActionBusy = false;
         _error = null;
+        _changePasswordOpen = false;
+        _changePasswordSecondFactorRequired = false;
+        _changePasswordError = null;
       });
       if (after != null) _loadTwoFactorStatus();
     });
@@ -200,6 +230,10 @@ class _SecuritySettingsScreenState
     _totpController.dispose();
     _deletePasswordController.dispose();
     _deleteTotpController.dispose();
+    _changeCurrentPasswordController.dispose();
+    _changeNewPasswordController.dispose();
+    _changeConfirmPasswordController.dispose();
+    _changeTotpController.dispose();
     super.dispose();
   }
 
@@ -562,6 +596,114 @@ class _SecuritySettingsScreenState
     }
   }
 
+  void _openChangePassword() {
+    _changeCurrentPasswordController.clear();
+    _changeNewPasswordController.clear();
+    _changeConfirmPasswordController.clear();
+    _changeTotpController.clear();
+    setState(() {
+      _changePasswordOpen = true;
+      _changePasswordSecondFactorRequired = false;
+      _changePasswordError = null;
+    });
+  }
+
+  void _cancelChangePassword() {
+    _changeCurrentPasswordController.clear();
+    _changeNewPasswordController.clear();
+    _changeConfirmPasswordController.clear();
+    _changeTotpController.clear();
+    setState(() {
+      _changePasswordOpen = false;
+      _changePasswordSecondFactorRequired = false;
+      _changePasswordError = null;
+    });
+  }
+
+  Future<void> _submitChangePassword() async {
+    final currentPassword = _changeCurrentPasswordController.text;
+    final newPassword = _changeNewPasswordController.text;
+    final confirmation = _changeConfirmPasswordController.text;
+    final session = ref.read(authControllerProvider).session;
+    final generation = _authContextGeneration;
+    if (session == null || _busy) return;
+    if (_twoFactorLoading ||
+        _twoFactorUnavailable ||
+        _twoFactorEnabled == null) {
+      setState(() => _changePasswordError = 'commonActionFailed');
+      return;
+    }
+    if (currentPassword.isEmpty) {
+      setState(() => _changePasswordError = AuthErrorKeys.emptyFields);
+      return;
+    }
+    if (newPassword.length < 8) {
+      setState(() => _changePasswordError = AuthErrorKeys.passwordTooShort);
+      return;
+    }
+    if (newPassword != confirmation) {
+      setState(() => _changePasswordError = AuthErrorKeys.passwordMismatch);
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _changePasswordError = null;
+    });
+    AuthApiResult<void> result;
+    try {
+      result = await ref
+          .read(voiceAuthClientProvider)
+          .changePassword(
+            session: session,
+            currentPassword: currentPassword,
+            newPassword: newPassword,
+            totpCode:
+                _twoFactorEnabled == true || _changePasswordSecondFactorRequired
+                ? _changeTotpController.text
+                : null,
+          );
+    } on Object {
+      if (_isCurrentSession(session, generation)) {
+        setState(() {
+          _busy = false;
+          _changePasswordError = 'commonActionFailed';
+        });
+      }
+      return;
+    }
+    if (!_isCurrentSession(session, generation)) return;
+
+    switch (result) {
+      case AuthApiOk<void>():
+        final didLogout = await ref
+            .read(authControllerProvider.notifier)
+            .logoutIfCurrent(session, serverAlreadyRevoked: true);
+        if (!didLogout || !mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.securityChangePasswordSuccess,
+            ),
+          ),
+        );
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      case AuthApiFailure(:final message, :final errorCode, :final statusCode):
+        final errorKey = resolveAuthErrorKey(
+          errorCode: errorCode,
+          statusCode: statusCode,
+          message: message,
+        );
+        setState(() {
+          _busy = false;
+          _changePasswordError = errorKey ?? 'commonActionFailed';
+          if (errorKey == AuthErrorKeys.totpRequired) {
+            _changePasswordSecondFactorRequired = true;
+          }
+        });
+    }
+  }
+
   Future<String?> _showDeletePasswordDialog(AppLocalizations l10n) {
     _deletePasswordController.clear();
     return showDialog<String>(
@@ -676,6 +818,20 @@ class _SecuritySettingsScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                VoiceSecondaryButton(
+                  key: SecuritySettingsScreen.changePasswordButtonKey,
+                  onPressed: _busy
+                      ? null
+                      : _changePasswordOpen
+                      ? _cancelChangePassword
+                      : _openChangePassword,
+                  child: Text(l10n.securityChangePasswordAction),
+                ),
+                if (_changePasswordOpen) ...[
+                  const SizedBox(height: 16),
+                  _buildChangePasswordForm(context, l10n),
+                ],
+                const SizedBox(height: 24),
                 if (_twoFactorLoading)
                   Center(
                     child: Semantics(
@@ -782,6 +938,102 @@ class _SecuritySettingsScreenState
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildChangePasswordForm(BuildContext context, AppLocalizations l10n) {
+    final factorRequired =
+        _twoFactorEnabled == true || _changePasswordSecondFactorRequired;
+    final statusKnown =
+        !_twoFactorLoading &&
+        !_twoFactorUnavailable &&
+        _twoFactorEnabled != null;
+    return Column(
+      key: const Key('security_change_password_form'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.securityChangePasswordAction,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: SecuritySettingsScreen.changePasswordCurrentFieldKey,
+          controller: _changeCurrentPasswordController,
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(labelText: l10n.authPasswordLabel),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: SecuritySettingsScreen.changePasswordNewFieldKey,
+          controller: _changeNewPasswordController,
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: l10n.passwordResetNewPasswordLabel,
+            helperText: l10n.authPasswordHelper,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: SecuritySettingsScreen.changePasswordConfirmFieldKey,
+          controller: _changeConfirmPasswordController,
+          obscureText: true,
+          textInputAction: factorRequired
+              ? TextInputAction.next
+              : TextInputAction.done,
+          onSubmitted: factorRequired ? null : (_) => _submitChangePassword(),
+          decoration: InputDecoration(
+            labelText: l10n.passwordResetConfirmPasswordLabel,
+          ),
+        ),
+        if (factorRequired) ...[
+          const SizedBox(height: 12),
+          TextField(
+            key: SecuritySettingsScreen.changePasswordTotpFieldKey,
+            controller: _changeTotpController,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submitChangePassword(),
+            decoration: InputDecoration(
+              labelText: l10n.authTotpLabel,
+              helperText: l10n.security2faVerifyHint,
+            ),
+          ),
+        ],
+        if (!statusKnown) ...[
+          const SizedBox(height: 12),
+          Text(
+            l10n.security2faStatusUnavailable,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+          const SizedBox(height: 8),
+          VoiceSecondaryButton(
+            onPressed: _twoFactorLoading ? null : _loadTwoFactorStatus,
+            child: Text(l10n.commonRetry),
+          ),
+        ],
+        if (_changePasswordError != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            authFormErrorMessage(l10n, _changePasswordError!),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 16),
+        VoicePrimaryButton(
+          key: SecuritySettingsScreen.changePasswordSubmitKey,
+          onPressed: _busy || !statusKnown ? null : _submitChangePassword,
+          isLoading: _busy,
+          child: Text(l10n.commonSave),
+        ),
+        const SizedBox(height: 8),
+        VoiceSecondaryButton(
+          onPressed: _busy ? null : _cancelChangePassword,
+          child: Text(l10n.commonCancel),
+        ),
+      ],
     );
   }
 

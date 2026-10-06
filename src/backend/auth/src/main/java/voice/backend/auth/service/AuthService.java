@@ -9,6 +9,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
+import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 import voice.backend.auth.userdb.ProfileSwitchValidator;
@@ -37,6 +39,7 @@ public class AuthService {
   /** Max opaque encrypted blob size for E2E key backup (512 KiB). */
   public static final int E2E_KEY_BACKUP_MAX_BLOB_BYTES = 512 * 1024;
   static final Duration ACCOUNT_RESTORE_GRACE = Duration.ofDays(30);
+  private record LoginPreparation(Account account, PreparedSessionEpoch epoch) {}
 
   private final AccountRepository accounts;
   private final RefreshTokenRepository refreshTokens;
@@ -59,6 +62,7 @@ public class AuthService {
   private final MailSender mailSender;
   private final SessionEpochFloorStore sessionEpochFloors;
   private final SessionEpochIssuanceGate sessionEpochIssuanceGate;
+  private TransactionTemplate securityTransactions;
   private RegistrationSessionEpochPreparer registrationSessionEpochPreparer;
   private AccountDeletionOperationRepository deletionOperations;
   private AccountDeletionRestoreTokenCodec deletionTokenCodec;
@@ -133,6 +137,7 @@ public class AuthService {
         restoreTokenStore,
         mailSender,
         sessionEpochFloors);
+    copy.securityTransactions = securityTransactions;
     if (deletionOperations != null && deletionTokenCodec != null && deletionEventPublisher != null
         && deletionStarter != null && deletionFloorWorker != null && deletionEventWorker != null) {
       copy.configureAccountDeletion(
@@ -166,6 +171,20 @@ public class AuthService {
       RegistrationSessionEpochPreparer registrationSessionEpochPreparer) {
     this.registrationSessionEpochPreparer =
         java.util.Objects.requireNonNull(registrationSessionEpochPreparer, "registrationSessionEpochPreparer");
+  }
+
+  public void configureSecurityTransactions(TransactionTemplate transactions) {
+    this.securityTransactions = java.util.Objects.requireNonNull(transactions, "transactions");
+  }
+
+  private <T> T securityTransaction(Supplier<T> operation) {
+    TransactionTemplate transactions = securityTransactions;
+    if (transactions != null) {
+      return transactions.execute(status -> operation.get());
+    }
+    synchronized (accounts) {
+      return operation.get();
+    }
   }
 
   public AuthSession register(RegisterCommand command) {
@@ -214,26 +233,48 @@ public class AuthService {
     return issueSession(account, prepared, command.deviceInfoJson());
   }
 
-  public AuthSession login(LoginCommand command) {
+  public synchronized AuthSession login(LoginCommand command) {
     try {
-      Account account = findLoginAccount(command.email(), command.phone());
-      if (!passwordHasher.matches(command.password(), account.passwordHash())) {
-        throw new AuthException("invalid_credentials");
-      }
-      ensureActive(account);
-      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-      if (account.totpEnabled()) {
-        String code = command.totpCode();
-        if (code == null || code.isBlank()) {
-          throw new AuthException("totp_required");
+      Account observed = findLoginAccount(command.email(), command.phone());
+      LoginPreparation preparation = securityTransaction(() -> {
+        accounts.lockForSecurityMutation(observed.id());
+        Account account = accounts.findById(observed.id().toString())
+            .orElseThrow(() -> new AuthException("invalid_credentials"));
+        if (!passwordHasher.matches(command.password(), account.passwordHash())) {
+          throw new AuthException("invalid_credentials");
         }
-        boolean validTotp = account.totpSecret() != null && totpService.verifyEncrypted(account.totpSecret(), code.trim());
-        if (!validTotp && !backupCodeService.consume(account.id(), code.trim())) {
-          throw new AuthException("invalid_totp");
+        ensureActive(account);
+        if (account.totpEnabled()) {
+          String code = command.totpCode();
+          if (code == null || code.isBlank()) {
+            throw new AuthException("totp_required");
+          }
+          boolean validTotp = account.totpSecret() != null
+              && totpService.verifyEncrypted(account.totpSecret(), code.trim());
+          if (!validTotp && !backupCodeService.consume(account.id(), code.trim())) {
+            throw new AuthException("invalid_totp");
+          }
         }
-      }
-      touchLastOnline(account);
-      AuthSession session = issueSession(account, prepared, command.deviceInfoJson());
+        PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+        touchLastOnline(account);
+        return new LoginPreparation(account, prepared);
+      });
+      String profileId = primaryProfileProvisioner.ensurePrimaryProfile(
+          preparation.account().id(), displayHint(preparation.account()),
+          "guest".equals(preparation.account().type()));
+      AuthSession session = securityTransaction(() -> {
+        accounts.lockForSecurityMutation(observed.id());
+        Account current = accounts.findById(observed.id().toString())
+            .orElseThrow(() -> new AuthException("invalid_credentials"));
+        ensureActive(current);
+        if (current.sessionEpoch() != preparation.epoch().sessionEpoch()
+            || !passwordHasher.matches(command.password(), current.passwordHash())
+            || current.totpEnabled() != preparation.account().totpEnabled()
+            || !java.util.Arrays.equals(current.totpSecret(), preparation.account().totpSecret())) {
+          throw new AuthException("token_revoked");
+        }
+        return issueSessionForProfile(current, preparation.epoch(), profileId, command.deviceInfoJson());
+      });
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -244,19 +285,38 @@ public class AuthService {
 
   public synchronized AuthSession refresh(RefreshCommand command) {
     try {
-      RefreshTokenRecord current = refreshRecord(command.refreshToken());
-      ensureUsableRefresh(current);
-      Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
-      ensureActive(account);
-      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-      refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
-      tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
-      touchLastOnline(account);
-      String profileId = current.profileId() == null
-          ? primaryProfileProvisioner.ensurePrimaryProfile(
-              account.id(), displayHint(account), "guest".equals(account.type()))
-          : current.profileId().toString();
-      AuthSession session = issueSessionForProfile(account, prepared, profileId, command.deviceInfoJson());
+      RefreshTokenRecord observed = refreshRecord(command.refreshToken());
+      ensureUsableRefresh(observed);
+      String observedProfileId;
+      if (observed.profileId() == null) {
+        Account observedAccount = accounts.findById(observed.accountId().toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+        ensureActive(observedAccount);
+        observedProfileId = primaryProfileProvisioner.ensurePrimaryProfile(
+            observed.accountId(), displayHint(observedAccount), "guest".equals(observedAccount.type()));
+      } else {
+        observedProfileId = observed.profileId().toString();
+      }
+      AuthSession session = securityTransaction(() -> {
+        accounts.lockForSecurityMutation(observed.accountId());
+        RefreshTokenRecord current = refreshTokens.findByHash(observed.tokenHash())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+        if (!current.accountId().equals(observed.accountId())) {
+          throw new AuthException("invalid_token");
+        }
+        ensureUsableRefresh(current);
+        Account account = accounts.findById(current.accountId().toString())
+            .orElseThrow(() -> new AuthException("invalid_token"));
+        ensureActive(account);
+        PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+        Instant now = Instant.now(clock);
+        if (!refreshTokens.revokeIfActive(current.tokenHash(), now)) {
+          throw new AuthException("token_revoked");
+        }
+        tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
+        touchLastOnline(account);
+        return issueSessionForProfile(account, prepared, observedProfileId, command.deviceInfoJson());
+      });
       recordAuthLoginMetric(true);
       return session;
     } catch (RuntimeException ex) {
@@ -352,17 +412,18 @@ public class AuthService {
 
   /** Issues a replacement session only after the durable email-verification promotion is complete. */
   public AuthSession issueVerifiedEmailSession(UUID accountId) {
-    Account account =
-        accounts
-            .findById(accountId.toString())
-            .orElseThrow(() -> new AuthException("invalid_token"));
-    ensureActive(account);
-    if (!"regular".equals(account.type())) {
-      throw new AuthException("verification_pending");
-    }
-    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-    touchLastOnline(account);
-    return issueSession(account, prepared, "{}");
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (!"regular".equals(account.type())) {
+        throw new AuthException("verification_pending");
+      }
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      touchLastOnline(account);
+      return issueSession(account, prepared, "{}");
+    });
   }
 
   public void setAccountStatus(String accountId, String status) {
@@ -419,38 +480,54 @@ public class AuthService {
 
   public TotpEnrollment enable2FA(String accessToken, String password) {
     TokenClaims claims = validate(accessToken);
-    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (!passwordHasher.matches(password, account.passwordHash())) {
-      throw new AuthException("invalid_credentials");
-    }
-    String secret = totpService.generateSecret();
-    byte[] encrypted = totpService.encryptSecret(secret);
-    accounts.saveTotpSecret(account.id(), encrypted, false);
-    List<String> backupCodes = backupCodeService.generateAndStore(account.id());
-    String label = displayHint(account);
-    String hint = "Saved";
-    if (backupCodes.size() > 1) {
-      hint = "Saved " + backupCodes.size() + " codes";
-    }
-    return new TotpEnrollment(
-        totpService.buildTotpUriFromSecret(label, secret),
-        hint,
-        backupCodes);
+    UUID accountId = UUID.fromString(claims.userId());
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      validate(accessToken);
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (!passwordHasher.matches(password, account.passwordHash())) {
+        throw new AuthException("invalid_credentials");
+      }
+      String secret = totpService.generateSecret();
+      byte[] encrypted = totpService.encryptSecret(secret);
+      accounts.saveTotpSecret(account.id(), encrypted, false);
+      List<String> backupCodes = backupCodeService.generateAndStore(account.id());
+      String label = displayHint(account);
+      String hint = "Saved";
+      if (backupCodes.size() > 1) {
+        hint = "Saved " + backupCodes.size() + " codes";
+      }
+      return new TotpEnrollment(
+          totpService.buildTotpUriFromSecret(label, secret),
+          hint,
+          backupCodes);
+    });
   }
 
   public AuthSession verify2FA(String accessToken, String totpCode) {
     TokenClaims claims = validate(accessToken);
-    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    if (account.totpSecret() == null || account.totpSecret().length == 0) {
-      throw new AuthException("totp_not_enrolled");
-    }
-    if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
-      throw new AuthException("invalid_totp");
-    }
-    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-    accounts.setTotpEnabled(account.id(), true);
-    Account fresh = accounts.findById(account.id().toString()).orElse(account);
-    return issueSession(fresh, prepared, "{}");
+    UUID accountId = UUID.fromString(claims.userId());
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      TokenClaims currentClaims = validate(accessToken);
+      if (!accountId.toString().equals(currentClaims.userId())) {
+        throw new AuthException("invalid_token");
+      }
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      if (account.totpSecret() == null || account.totpSecret().length == 0) {
+        throw new AuthException("totp_not_enrolled");
+      }
+      if (!totpService.verifyEncrypted(account.totpSecret(), totpCode)) {
+        throw new AuthException("invalid_totp");
+      }
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      accounts.setTotpEnabled(account.id(), true);
+      Account fresh = accounts.findById(account.id().toString()).orElse(account);
+      return issueSession(fresh, prepared, "{}");
+    });
   }
 
   public boolean is2FAEnabled(String accessToken) {
@@ -459,37 +536,96 @@ public class AuthService {
         () -> new AuthException("invalid_token"));
   }
 
+  /** Changes an authenticated account password and revokes every issued session. */
+  public synchronized void changePassword(
+      String accessToken, String currentPassword, String newPassword, String secondFactor) {
+    if (newPassword == null || newPassword.length() < 8) {
+      throw new AuthException("validation_failed");
+    }
+    TokenClaims claims = validate(accessToken);
+    UUID accountId;
+    try {
+      accountId = UUID.fromString(claims.userId());
+    } catch (RuntimeException invalid) {
+      throw new AuthException("invalid_token");
+    }
+
+    securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      TokenClaims currentClaims = validate(accessToken);
+      if (!accountId.toString().equals(currentClaims.userId())) {
+        throw new AuthException("invalid_token");
+      }
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (currentClaims.sessionEpoch() < account.sessionEpoch()) {
+        throw new AuthException("token_revoked");
+      }
+      if (currentPassword == null || !passwordHasher.matches(currentPassword, account.passwordHash())) {
+        throw new AuthException("invalid_credentials");
+      }
+      if (account.totpEnabled()) {
+        if (secondFactor == null || secondFactor.isBlank()) {
+          throw new AuthException("totp_required");
+        }
+        String code = secondFactor.trim();
+        boolean validTotp = account.totpSecret() != null
+            && totpService.verifyEncrypted(account.totpSecret(), code);
+        if (!validTotp && !backupCodeService.consume(account.id(), code)) {
+          throw new AuthException("invalid_totp");
+        }
+      }
+
+      String passwordHash = passwordHasher.hash(newPassword);
+      accounts.updatePasswordHash(account.id(), passwordHash);
+      long nextEpoch = accounts.incrementSessionEpoch(account.id());
+      sessionEpochIssuanceGate.prepare(account.id(), nextEpoch);
+      Instant now = Instant.now(clock);
+      refreshTokens.revokeAllForAccount(account.id(), now);
+      tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
+      return null;
+    });
+  }
+
   /**
    * Removes a confirmed TOTP enrollment. The current access credential and every refresh
    * credential are revoked, so disabling a factor always requires a fresh sign-in.
    */
   public synchronized void disable2FA(String accessToken, String password, String secondFactor) {
     TokenClaims claims = validate(accessToken);
-    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    ensureActive(account);
-    if (account.email() == null && account.phone() == null) {
-      throw new AuthException("validation_failed");
-    }
-    if (!account.totpEnabled() || account.totpSecret() == null || account.totpSecret().length == 0) {
-      throw new AuthException("totp_not_enrolled");
-    }
-    if (!passwordHasher.matches(password, account.passwordHash())) {
-      throw new AuthException("invalid_credentials");
-    }
-    if (secondFactor == null || secondFactor.isBlank()
-        || !totpService.verifyEncrypted(account.totpSecret(), secondFactor.trim())) {
-      throw new AuthException("invalid_totp");
-    }
-    // Seal the session fence before changing factor state. If a dependency fails, the
-    // account remains protected by TOTP; after the fence succeeds, a partial retry can
-    // only leave the account more restricted, never with live pre-change credentials.
-    long epoch = accounts.incrementSessionEpoch(account.id());
-    sessionEpochIssuanceGate.prepare(account.id(), epoch);
-    Instant now = Instant.now(clock);
-    refreshTokens.revokeAllForAccount(account.id(), now);
-    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    accounts.saveTotpSecret(account.id(), null, false);
-    backupCodeService.invalidate(account.id());
+    UUID accountId = UUID.fromString(claims.userId());
+    securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      TokenClaims currentClaims = validate(accessToken);
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (account.email() == null && account.phone() == null) {
+        throw new AuthException("validation_failed");
+      }
+      if (!account.totpEnabled() || account.totpSecret() == null || account.totpSecret().length == 0) {
+        throw new AuthException("totp_not_enrolled");
+      }
+      if (!passwordHasher.matches(password, account.passwordHash())) {
+        throw new AuthException("invalid_credentials");
+      }
+      if (secondFactor == null || secondFactor.isBlank()
+          || !totpService.verifyEncrypted(account.totpSecret(), secondFactor.trim())) {
+        throw new AuthException("invalid_totp");
+      }
+      // Seal the session fence before changing factor state. If a dependency fails, the
+      // account remains protected by TOTP; after the fence succeeds, a partial retry can
+      // only leave the account more restricted, never with live pre-change credentials.
+      long epoch = accounts.incrementSessionEpoch(account.id());
+      sessionEpochIssuanceGate.prepare(account.id(), epoch);
+      Instant now = Instant.now(clock);
+      refreshTokens.revokeAllForAccount(account.id(), now);
+      tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
+      accounts.saveTotpSecret(account.id(), null, false);
+      backupCodeService.invalidate(account.id());
+      return null;
+    });
   }
 
   public AuthSession switchActiveProfile(String accessToken, String profileId, String deviceInfoJson) {
@@ -501,44 +637,57 @@ public class AuthService {
         UUID.fromString(claims.profileId()),
         targetProfile,
         claims.subscriptionTier());
-    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    ensureActive(account);
-    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    return issueSessionForProfile(account, prepared, profileId, deviceInfoJson == null ? "{}" : deviceInfoJson);
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      TokenClaims currentClaims = validate(accessToken);
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (currentClaims.sessionEpoch() < account.sessionEpoch()) {
+        throw new AuthException("token_revoked");
+      }
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
+      return issueSessionForProfile(account, prepared, profileId,
+          deviceInfoJson == null ? "{}" : deviceInfoJson);
+    });
   }
 
   public AuthSession convertGuest(String accessToken, ConvertGuestCommand command) {
     TokenClaims claims = validate(accessToken);
-    Account account = accounts.findById(claims.userId()).orElseThrow(() -> new AuthException("invalid_token"));
-    ensureActive(account);
-    ensureAnonymousGuest(account);
-    if (command.password() == null || command.password().length() < 8) {
-      throw new AuthException("validation_failed");
-    }
-    String passwordHash = passwordHasher.hash(command.password());
-    String email = normalize(command.email());
-    String phone = normalize(command.phone());
-    if (email == null || phone != null) {
-      throw new AuthException("validation_failed");
-    }
-    if (email != null) {
-      accounts
-          .findByEmail(email)
+    UUID accountId = UUID.fromString(claims.userId());
+    return securityTransaction(() -> {
+      accounts.lockForSecurityMutation(accountId);
+      TokenClaims currentClaims = validate(accessToken);
+      Account account = accounts.findById(accountId.toString())
+          .orElseThrow(() -> new AuthException("invalid_token"));
+      ensureActive(account);
+      if (currentClaims.sessionEpoch() < account.sessionEpoch()) {
+        throw new AuthException("token_revoked");
+      }
+      ensureAnonymousGuest(account);
+      if (command.password() == null || command.password().length() < 8) {
+        throw new AuthException("validation_failed");
+      }
+      String passwordHash = passwordHasher.hash(command.password());
+      String email = normalize(command.email());
+      String phone = normalize(command.phone());
+      if (email == null || phone != null) {
+        throw new AuthException("validation_failed");
+      }
+      accounts.findByEmail(email)
           .filter(existing -> !existing.id().equals(account.id()))
-          .ifPresent(ignored -> {
-            throw new AuthException("registration_conflict");
-          });
-    }
-    PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-    Account converted;
-    try {
-      converted = accounts.convertGuest(account.id(), email, phone, passwordHash);
-    } catch (IllegalArgumentException ex) {
-      throw new AuthException("registration_conflict");
-    }
-    tokenBlacklist.revoke(claims.jti(), jwtService.ttl(claims));
-    return issueSession(converted, prepared, "{}");
+          .ifPresent(ignored -> { throw new AuthException("registration_conflict"); });
+      PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
+      Account converted;
+      try {
+        converted = accounts.convertGuest(account.id(), email, phone, passwordHash);
+      } catch (IllegalArgumentException ex) {
+        throw new AuthException("registration_conflict");
+      }
+      tokenBlacklist.revoke(currentClaims.jti(), jwtService.ttl(currentClaims));
+      return issueSession(converted, prepared, "{}");
+    });
   }
 
   public DeleteAccountResult deleteAccount(String accessToken, String password) {

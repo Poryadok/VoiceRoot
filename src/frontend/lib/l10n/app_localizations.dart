@@ -3872,6 +3872,18 @@ abstract class AppLocalizations {
   /// **'Security'**
   String get securitySettingsTitle;
 
+  /// No description provided for @securityChangePasswordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get securityChangePasswordAction;
+
+  /// No description provided for @securityChangePasswordSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed. Sign in with your new password.'**
+  String get securityChangePasswordSuccess;
+
   /// No description provided for @appealSettingsTitle.
   ///
   /// In en, this message translates to:

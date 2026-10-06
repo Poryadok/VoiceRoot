@@ -986,6 +986,54 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
+  /// Logs out only the exact session whose authenticated action just completed.
+  /// A late response must never clear a replacement account/session.
+  Future<bool> logoutIfCurrent(
+    AuthSession expected, {
+    bool serverAlreadyRevoked = false,
+  }) async {
+    final generation = _profileSwitchGeneration;
+    if (state.session != expected) return false;
+    final guestSnapshot = state.isGuest
+        ? await _guestCredentialsStorage.snapshot()
+        : null;
+    if (!_isCurrentSession(expected, generation)) return false;
+
+    if (!serverAlreadyRevoked) {
+      await _authClient.logout(session: expected);
+      if (!_isCurrentSession(expected, generation)) return false;
+    }
+
+    final storage = _storage;
+    if (storage is! ConditionalAuthSessionStorage) return false;
+    final conditionalStorage = storage as ConditionalAuthSessionStorage;
+    final cleared = await conditionalStorage.clearIfUnchanged(expected);
+    if (!cleared) return false;
+    if (!_isCurrentSession(expected, generation)) return false;
+
+    if (guestSnapshot != null &&
+        !await _guestCredentialsStorage.clearIfUnchanged(guestSnapshot)) {
+      return false;
+    }
+    if (!_isCurrentSession(expected, generation)) return false;
+
+    _terminateProfileSession();
+    state = state.copyWith(
+      clearSession: true,
+      isSubmitting: false,
+      clearError: true,
+      clearGuest: true,
+      clearGuestNickname: true,
+      clearPendingGuestConversionEmail: true,
+      isGuestConversionPromotionPending: false,
+      clearEmailVerificationRecoveryState: true,
+    );
+    return true;
+  }
+
+  bool _isCurrentSession(AuthSession expected, int generation) =>
+      generation == _profileSwitchGeneration && state.session == expected;
+
   Future<void> _authenticate(
     Future<AuthSessionResult> Function() call, {
     bool recoverEmailVerification = false,
