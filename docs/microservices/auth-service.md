@@ -316,6 +316,7 @@ service AuthService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Enable2FA(Enable2FARequest) returns (Enable2FAResponse);
   rpc Verify2FA(Verify2FARequest) returns (Verify2FAResponse);
+  rpc Disable2FA(Disable2FARequest) returns (Disable2FAResponse);
   rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse);
   rpc ConvertGuest(ConvertGuestRequest) returns (ConvertGuestResponse);
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
@@ -333,6 +334,17 @@ service AuthService {
   rpc DeleteE2EKeyBackup(DeleteE2EKeyBackupRequest) returns (DeleteE2EKeyBackupResponse);
 }
 ```
+
+### Disable2FA
+
+Authenticated REST: `POST /api/v1/auth/2fa/disable` (Gateway transcoding), or
+the `Disable2FA` gRPC method. Both accept `password` and `totp_code`; the
+current access credential is required through the `Authorization: Bearer`
+header for REST or current-RPC metadata for gRPC. The TOTP code must be valid
+for the enrolled factor. Success returns HTTP `204` or an empty gRPC response,
+revokes all account sessions, clears the TOTP enrollment, and invalidates every
+backup code from that enrollment. The user must sign in again. The protobuf
+request and response remain the wire-contract source of truth.
 
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is

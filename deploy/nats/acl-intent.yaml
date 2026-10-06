@@ -294,6 +294,7 @@ bootstrap:
     - $JS.API.STREAM.INFO.user_profile_projection
     - $JS.API.STREAM.CREATE.message_events
     - $JS.API.STREAM.CREATE.chat_events
+    - $JS.API.STREAM.UPDATE.chat_events
     - $JS.API.STREAM.CREATE.file_events
     - $JS.API.STREAM.CREATE.moderation_events
     - $JS.API.STREAM.CREATE.bot_events

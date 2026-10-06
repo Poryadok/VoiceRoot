@@ -6,7 +6,7 @@ import hashlib, io, json, os, pathlib, stat, sys, tarfile, uuid
 EXPECTED_SHA='__BUNDLE_SHA256__'
 EXPECTED_BYTES=__BUNDLE_BYTES__
 FILES=__BUNDLE_FILES__
-SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout/rollout-bundle.tar')
+SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout-v3/rollout-bundle.tar')
 ROOT=pathlib.Path('/var/lib/voice-nats-preservation')
 try:
     for parent in (*ROOT.parents[::-1],ROOT):
@@ -32,7 +32,7 @@ try:
     captured=ROOT/('rollout-code-'+uuid.uuid4().hex);captured.mkdir(mode=0o700)
     for name,content in contents.items():
         outpath=captured/name;outpath.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        out=os.open(outpath,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o500 if name.endswith('/kernel') else 0o400)
+        out=os.open(outpath,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o500 if name.endswith(('/kernel','/bootstrap-renewer')) else 0o400)
         with os.fdopen(out,'wb') as stream:stream.write(content);stream.flush();os.fsync(stream.fileno())
     arguments=sys.argv[1:]
     entry='root_cli.py'

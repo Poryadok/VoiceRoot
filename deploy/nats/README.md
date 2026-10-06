@@ -35,8 +35,8 @@ The reviewed policy is [`acl-intent.yaml`](acl-intent.yaml). It enumerates all
 19 services and the Job-only bootstrap identity with exact event, consumer,
 pull and ACK permissions. Service users cannot create, update or delete
 JetStream state. The bootstrap identity has only the scoped stream create/info
-permissions it needs, plus an in-place update permission for the `social_events`
-duplicate window; it cannot delete streams. Reply inbox subscriptions use scoped service prefixes, never
+permissions it needs, plus exact in-place update permissions for the
+`chat_events` subject additions and `social_events` duplicate window; it cannot delete streams. Reply inbox subscriptions use scoped service prefixes, never
 `_INBOX.>` or `$JS.API.>`. The disposable fixture command above is for proof
 only; its signing seeds are discarded.
 
@@ -73,6 +73,34 @@ stdin; the hosted proof reports its byte count against the 48 KiB limit.
 `voice-nats-bootstrap-credentials`. It
 must be stored and mounted separately from `voice-nats-service-credentials`;
 no application pod or leaf sidecar may receive it.
+
+## Existing account additive rollout prerequisite
+
+The retained staging generation `r20260930a4` has an immutable bootstrap
+credential Secret. The October 6 signed-claim projection confirmed that its
+existing user lacks the two exact stream UPDATE permissions and the new
+`social_events/rt_realtime1_friend_removed` CREATE/INFO permissions. Current
+source policy includes those four subjects; this does not update deployed JWTs.
+The existing reply prefix remains `_INBOX.voice.bootstrap.reply`, with no
+unrestricted inbox grant.
+
+Renew only that same bootstrap user under the same APP account and existing
+user seed, using the protected existing account signer. Preserve every other
+claim, deny list, expiry, response policy and connection limit. The general
+fresh issuer above creates new identities and must not be used for this upgrade.
+A scoped signer that cannot grant the exact policy remains a preflight veto;
+never change signer/account JWT to evade its scope.
+
+Create a new immutable bootstrap-only Secret and enroll its exact identity and
+credential hash under root custody for the active generation. Preserve the old
+immutable Secret, all operator/account/service identities, hub/PVC, and completed
+bootstrap Jobs. Enrollment requires isolated authentication/INFO with the
+existing reply prefix and atomic root-owned generation/UID/RV bindings. No
+implicit issuance, Secret replacement, bootstrap replay or migration is allowed
+through an ordinary deployment. The bounded renewal/enrollment and additive
+migration operator require their separate reviewed implementation before this
+stage's backend rollout can proceed. Application-user policy changes remain
+independent prerequisites for each affected target service.
 
 ## Per-service leaf topology
 
