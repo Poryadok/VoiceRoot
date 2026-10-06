@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
@@ -18,10 +19,39 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 
 	"voice/backend/messaging/internal/messageevents"
+	"voice/backend/messaging/internal/store"
 )
 
 // CONTRACT_MATRIX: stream message.events (JetStream name message_events), subject message.sent; Messaging publishes; Realtime et al. subscribe.
 const contractMessageSentSubject = "message.sent"
+
+func storedOutboxEvents(t *testing.T, pool *pgxpool.Pool, subject string) []*eventsv1.MessageStreamEvent {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `SELECT payload_bytes FROM message_event_outbox WHERE subject=$1 ORDER BY created_at,event_id`, subject)
+	require.NoError(t, err)
+	defer rows.Close()
+	var events []*eventsv1.MessageStreamEvent
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		var event eventsv1.MessageStreamEvent
+		if err := proto.Unmarshal(raw, &event); err != nil {
+			t.Fatal(err)
+		}
+		events = append(events, &event)
+	}
+	require.NoError(t, rows.Err())
+	return events
+}
+
+func outboxCountForChat(t *testing.T, pool *pgxpool.Pool, subject string, chatID uuid.UUID) int {
+	t.Helper()
+	var count int
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM message_event_outbox WHERE subject=$1 AND chat_id=$2`, subject, chatID).Scan(&count))
+	return count
+}
 
 type spyMessageEvents struct {
 	mu         sync.Mutex
@@ -212,6 +242,7 @@ func TestMessagingGRPC_JetStream_MessageSentRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 	msgID := sendResp.GetMessage().GetId()
+	require.NoError(t, (&messageevents.OutboxDispatcher{Store: &store.MessagesStore{Pool: pool}, Publisher: jsPub}).DispatchBatch(ctx))
 
 	raw, err := sub.NextMsg(5 * time.Second)
 	require.NoError(t, err)
@@ -264,6 +295,7 @@ func TestMessagingGRPC_MessageSentAbsentSendSilentDefaultsFalse(t *testing.T) {
 		MentionsJson: "[]",
 	})
 	require.NoError(t, err)
+	require.NoError(t, (&messageevents.OutboxDispatcher{Store: &store.MessagesStore{Pool: pool}, Publisher: jsPub}).DispatchBatch(ctx))
 
 	raw, err := sub.NextMsg(5 * time.Second)
 	require.NoError(t, err)
@@ -288,8 +320,7 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	acctA := uuid.New()
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
-	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: spy})
+	client, _ := startMessagingServerWired(t, pool, messagingWire{})
 
 	mk := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
 	clientID := uuid.New().String()
@@ -304,16 +335,11 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	require.NoError(t, err)
 	msgID := sendResp.GetMessage().GetId()
 
-	sent, mentionEv, edited, deleted, read := spy.snapshot()
+	sent := storedOutboxEvents(t, pool, "message.sent")
 	require.Len(t, sent, 1)
-	require.Equal(t, msgID, sent[0][0])
-	require.Equal(t, chatID.String(), sent[0][1])
-	require.Equal(t, profA.String(), sent[0][2])
-	require.Equal(t, "false", sent[0][3])
-	require.Empty(t, mentionEv)
-	require.Empty(t, edited)
-	require.Empty(t, deleted)
-	require.Empty(t, read)
+	require.Equal(t, msgID, sent[0].GetMessageSent().GetMessageId())
+	require.Equal(t, chatID.String(), sent[0].GetMessageSent().GetChatId())
+	require.Equal(t, profA.String(), sent[0].GetMessageSent().GetSenderProfileId())
 
 	_, err = client.MarkRead(withProfileCtx(ctx, acctA, profA), &messagingv1.MarkReadRequest{
 		Chat:              chatDMRef(chatID),
@@ -330,16 +356,17 @@ func TestMessagingGRPC_MessageEvents_SendEditDelete(t *testing.T) {
 	_, err = client.DeleteMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.DeleteMessageRequest{MessageId: msgID})
 	require.NoError(t, err)
 
-	sent, _, edited, deleted, read = spy.snapshot()
-	require.Len(t, sent, 1)
-	require.Len(t, read, 1)
-	require.Equal(t, msgID, read[0][0])
-	require.Equal(t, chatID.String(), read[0][1])
-	require.Equal(t, profA.String(), read[0][2])
-	require.Len(t, edited, 1)
-	require.Equal(t, msgID, edited[0][0])
-	require.Equal(t, chatID.String(), edited[0][1])
-	require.Len(t, deleted, 1)
-	require.Equal(t, msgID, deleted[0][0])
-	require.Equal(t, chatID.String(), deleted[0][1])
+	reads := storedOutboxEvents(t, pool, "message.read")
+	require.Len(t, reads, 1)
+	require.Equal(t, msgID, reads[0].GetMessageRead().GetMessageId())
+	require.Equal(t, chatID.String(), reads[0].GetMessageRead().GetChatId())
+	require.Equal(t, profA.String(), reads[0].GetMessageRead().GetProfileId())
+	edits := storedOutboxEvents(t, pool, "message.edited")
+	require.Len(t, edits, 1)
+	require.Equal(t, msgID, edits[0].GetMessageEdited().GetMessageId())
+	require.Equal(t, chatID.String(), edits[0].GetMessageEdited().GetChatId())
+	deletes := storedOutboxEvents(t, pool, "message.deleted")
+	require.Len(t, deletes, 1)
+	require.Equal(t, msgID, deletes[0].GetMessageDeleted().GetMessageId())
+	require.Equal(t, chatID.String(), deletes[0].GetMessageDeleted().GetChatId())
 }

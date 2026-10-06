@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"voice/backend/messaging/internal/messageevents"
 	"voice/backend/messaging/internal/messageid"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/principal"
@@ -130,7 +131,19 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 		rowData.GameCharacterBindingID = optionalUUIDValue(intent.GetCharacterBindingId())
 		rowData.GameCardActionsEnabled = false
 	}
-	row, expired, inserted, err := s.Messages.InsertGameEventMessage(ctx, rowData, expiresAt)
+	policy, err := s.loadMutationChatPolicy(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	var spaceID *uuid.UUID
+	if policy.SpaceID != nil {
+		spaceID = policy.SpaceID
+	}
+	event, err := messageevents.NewGameEventMessageSentOutbox(messageID.String(), chatID.String(), senderID.String(), intent.GetAppId(), intent.GetEnvironmentId())
+	if err != nil {
+		return nil, status.Error(codes.Internal, "game event message event could not be encoded")
+	}
+	row, expired, inserted, err := s.Messages.InsertGameEventMessageWithOutbox(ctx, rowData, expiresAt, spaceID, event)
 	if err != nil {
 		if errors.Is(err, store.ErrGameEventMessageConflict) {
 			return nil, status.Error(codes.AlreadyExists, "game event idempotency conflict")
@@ -139,11 +152,6 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 	}
 	if expired {
 		return &messagingv1.SendGameEventMessageResponse{Status: gameintegrationv1.GameEventPublicationStatus_GAME_EVENT_PUBLICATION_STATUS_EXPIRED}, nil
-	}
-	if inserted && s.MessageEvents != nil {
-		if err := s.MessageEvents.PublishGameEventMessageSent(ctx, row.ID.String(), row.ChatID.String(), row.SenderProfileID.String(), intent.GetAppId(), intent.GetEnvironmentId()); err != nil {
-			s.logPublishError(ctx, "message.sent", err, slog.String("message_id", row.ID.String()), slog.String("chat_id", row.ChatID.String()))
-		}
 	}
 	messageIDString := row.ID.String()
 	return &messagingv1.SendGameEventMessageResponse{

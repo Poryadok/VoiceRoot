@@ -23,21 +23,42 @@ func (s *MessagesStore) CleanupSpaceLifecycleEvidence(ctx context.Context) error
 	if err != nil {
 		return err
 	}
-	var children []uuid.UUID
+	type expiredParent struct{ space, operation, chat, child uuid.UUID }
+	var parents []expiredParent
 	for rows.Next() {
 		var space, operation, chat uuid.UUID
 		if err = rows.Scan(&space, &operation, &chat); err != nil {
 			rows.Close()
 			return err
 		}
-		children = append(children, uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("voice.messaging.v1.SpaceChatPurge\x00%s\x00%s\x00%s", space, operation, chat))))
+		child := uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("voice.messaging.v1.SpaceChatPurge\x00%s\x00%s\x00%s", space, operation, chat)))
+		parents = append(parents, expiredParent{space: space, operation: operation, chat: chat, child: child})
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return err
 	}
+	children := make([]uuid.UUID, 0, len(parents))
+	for _, parent := range parents {
+		var undelivered bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(
+SELECT 1 FROM managed_chat_purge_events e
+LEFT JOIN message_event_outbox o ON o.event_id=e.event_id
+WHERE e.operation_id=$1 AND (o.event_id IS NULL OR o.message_id<>e.message_id OR o.payload_sha256<>e.event_sha256 OR o.pubacked_at IS NULL OR o.puback_sequence IS NULL OR o.puback_sequence<=0))`, parent.child).Scan(&undelivered); err != nil {
+			return err
+		}
+		if undelivered {
+			// Retain the parent manifest and compact operation evidence while any
+			// frozen event is unacknowledged or its delivery receipt is missing.
+			return tx.Commit(ctx)
+		}
+		children = append(children, parent.child)
+	}
 	if len(children) > 0 {
+		if _, err = tx.Exec(ctx, `DELETE FROM message_event_outbox WHERE event_id IN (SELECT event_id FROM managed_chat_purge_events WHERE operation_id=ANY($1::uuid[])) AND pubacked_at IS NOT NULL`, children); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(ctx, `DELETE FROM managed_chat_purge_messages WHERE operation_id=ANY($1::uuid[])`, children); err != nil {
 			return err
 		}

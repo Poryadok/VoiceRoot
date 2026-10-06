@@ -15,7 +15,7 @@
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | —                         | —                                |
-| Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; JetStream dispatcher retries exact bytes until positive PubAck |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
