@@ -77,6 +77,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
     required this.chatId,
     this.onBack,
     this.attachmentPicker,
+    this.showReconnectBanner = true,
   });
 
   static const Key panelKey = Key('chat_room_panel');
@@ -121,6 +122,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   final String chatId;
   final VoidCallback? onBack;
   final ChatAttachmentPicker? attachmentPicker;
+  final bool showReconnectBanner;
 
   @override
   ConsumerState<ChatRoomPanel> createState() => _ChatRoomPanelState();
@@ -842,7 +844,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 ),
               ),
               if (!reconnectBanner.dismissed &&
-                  (reconnectBanner.visible || room.isOfflineCache))
+                  ((reconnectBanner.visible && widget.showReconnectBanner) ||
+                      room.isOfflineCache))
                 VoiceCompactBanner(
                   key: isOffline
                       ? ChatRoomPanel.offlineBannerKey

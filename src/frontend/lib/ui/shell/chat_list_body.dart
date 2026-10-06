@@ -34,7 +34,12 @@ import 'quick_access_actions.dart';
 
 /// Reusable chat list content for navigation column and legacy middle column.
 class ChatListBody extends ConsumerStatefulWidget {
-  const ChatListBody({super.key, this.showHeader = true, this.onChatSelected});
+  const ChatListBody({
+    super.key,
+    this.showHeader = true,
+    this.onChatSelected,
+    this.statusBanner,
+  });
 
   static const Key listKey = Key('chat_list_view');
   static Key tileKey(String chatId) => Key('chat_list_tile_$chatId');
@@ -63,6 +68,7 @@ class ChatListBody extends ConsumerStatefulWidget {
 
   final bool showHeader;
   final void Function(String chatId)? onChatSelected;
+  final Widget? statusBanner;
 
   @override
   ConsumerState<ChatListBody> createState() => _ChatListBodyState();
@@ -136,6 +142,15 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
       }
     }
 
+    Widget scrollableState(Widget panel) => LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: panel,
+        ),
+      ),
+    );
+
     return KeyedSubtree(
       key: OnboardingAnchorKeys.chatsNav,
       child: Column(
@@ -187,6 +202,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
               ),
             ),
           const _MySpacesStrip(),
+          if (widget.statusBanner != null) widget.statusBanner!,
           Expanded(
             child: Builder(
               builder: (context) {
@@ -225,36 +241,40 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                       : Exception(errorMessage);
                   return KeyedSubtree(
                     key: ChatListBody.unavailableKey,
-                    child: VoiceStatePanel(
-                      title: l10n.chatListLoadError,
-                      message: chatListErrorMessage(l10n, error),
-                      icon: Icons.cloud_off_outlined,
-                      actionLabel: l10n.commonRetry,
-                      onAction: reconcilerScope != null
-                          ? () => ref
-                                .read(inboxReconcilerProvider.notifier)
-                                .retry(
-                                  inbox == 'requests'
-                                      ? InboxScope.requests
-                                      : InboxScope.main,
-                                )
-                          : () => ref
-                                .read(chatListControllerProvider.notifier)
-                                .loadInitial(),
+                    child: scrollableState(
+                      VoiceStatePanel(
+                        title: l10n.chatListLoadError,
+                        message: chatListErrorMessage(l10n, error),
+                        icon: Icons.cloud_off_outlined,
+                        actionLabel: l10n.commonRetry,
+                        onAction: reconcilerScope != null
+                            ? () => ref
+                                  .read(inboxReconcilerProvider.notifier)
+                                  .retry(
+                                    inbox == 'requests'
+                                        ? InboxScope.requests
+                                        : InboxScope.main,
+                                  )
+                            : () => ref
+                                  .read(chatListControllerProvider.notifier)
+                                  .loadInitial(),
+                      ),
                     ),
                   );
                 }
                 if (items.isEmpty) {
-                  return VoiceStatePanel(
-                    title: inbox == 'requests'
-                        ? l10n.chatInboxRequests
-                        : l10n.chatListEmpty,
-                    message: inbox == 'requests'
-                        ? l10n.chatMessageRequestsEmptyHint
-                        : l10n.chatListEmptyHint,
-                    icon: inbox == 'requests'
-                        ? Icons.mark_email_unread_outlined
-                        : Icons.forum_outlined,
+                  return scrollableState(
+                    VoiceStatePanel(
+                      title: inbox == 'requests'
+                          ? l10n.chatInboxRequests
+                          : l10n.chatListEmpty,
+                      message: inbox == 'requests'
+                          ? l10n.chatMessageRequestsEmptyHint
+                          : l10n.chatListEmptyHint,
+                      icon: inbox == 'requests'
+                          ? Icons.mark_email_unread_outlined
+                          : Icons.forum_outlined,
+                    ),
                   );
                 }
                 final hasFooter = reconcilerScope != null

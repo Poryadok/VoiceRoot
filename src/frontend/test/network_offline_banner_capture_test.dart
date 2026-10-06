@@ -15,9 +15,12 @@ import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/routing/deep_link_listener.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
+import 'package:voice_frontend/theme/voice_layout.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
+import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
@@ -27,7 +30,7 @@ const _captureBoundaryKey = Key('network_offline_app_capture');
 const _captureChatId = 'network-offline-capture-chat';
 
 void main() {
-  testWidgets('captures reconnect status in the real shell and open chat', (
+  testWidgets('keeps one reconnect banner in the visible network context', (
     tester,
   ) async {
     addTearDown(() {
@@ -42,16 +45,38 @@ void main() {
       await _loadProductionFonts(tester);
     }
     final catalog = await VoiceTokenCatalog.load();
-    final theme = await VoiceTheme.build(
-      catalog: catalog,
-      mode: VoiceThemeMode.dark,
-      profileAccent: catalog.profileAccentAt(0),
-    );
 
     for (final viewport in [
-      (name: 'h', size: const Size(1280, 800), openChat: false),
-      (name: 'v', size: const Size(390, 844), openChat: true),
+      (
+        name: 'h',
+        size: const Size(1280, 800),
+        selectedChat: false,
+        themeMode: VoiceThemeMode.dark,
+      ),
+      (
+        name: 'v',
+        size: const Size(390, 844),
+        selectedChat: true,
+        themeMode: VoiceThemeMode.dark,
+      ),
+      (
+        name: 'light-h',
+        size: const Size(1280, 800),
+        selectedChat: true,
+        themeMode: VoiceThemeMode.light,
+      ),
+      (
+        name: 'light-v',
+        size: const Size(390, 844),
+        selectedChat: false,
+        themeMode: VoiceThemeMode.light,
+      ),
     ]) {
+      final theme = await VoiceTheme.build(
+        catalog: catalog,
+        mode: viewport.themeMode,
+        profileAccent: catalog.profileAccentAt(0),
+      );
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = viewport.size;
       final container = ProviderContainer(
@@ -63,7 +88,7 @@ void main() {
           deepLinkListenerProvider.overrideWith(
             _CaptureNoopDeepLinkListener.new,
           ),
-          if (viewport.openChat)
+          if (viewport.selectedChat)
             voiceChatsClientProvider.overrideWithValue(
               FakeVoiceChatsClient(
                 pages: [
@@ -94,7 +119,7 @@ void main() {
                 ],
               ),
             ),
-          if (viewport.openChat)
+          if (viewport.selectedChat)
             voiceMessagesClientProvider.overrideWithValue(
               _CaptureVoiceMessagesClient(),
             ),
@@ -105,7 +130,7 @@ void main() {
       addTearDown(container.dispose);
       container.read(realtimeLinkStatusProvider.notifier).state =
           RealtimeLinkStatus.connected;
-      if (viewport.openChat) {
+      if (viewport.selectedChat) {
         container.read(selectedChatIdProvider.notifier).state = _captureChatId;
       }
 
@@ -137,13 +162,39 @@ void main() {
       expect(
         tester.takeException(),
         isNull,
-        reason: 'reconnect state must lay out without overflowing',
+        reason:
+            'reconnect state must lay out without overflowing (${viewport.name})',
       );
 
-      final bannerKey = viewport.openChat
-          ? const Key('chat_room_reconnect_banner')
-          : const Key('global_reconnect_banner');
-      expect(find.byKey(bannerKey), findsOneWidget);
+      final navigationOwnsBanner =
+          viewport.size.width > VoiceLayout.narrowBreakpoint ||
+          !viewport.selectedChat;
+      const globalBannerKey = Key('global_reconnect_banner');
+      final roomBannerKey = ChatRoomPanel.reconnectBannerKey;
+      final bannerKey = navigationOwnsBanner ? globalBannerKey : roomBannerKey;
+      expect(
+        find.byKey(globalBannerKey).evaluate().length,
+        navigationOwnsBanner ? 1 : 0,
+      );
+      expect(
+        find.byKey(roomBannerKey).evaluate().length,
+        navigationOwnsBanner ? 0 : 1,
+      );
+      expect(
+        find.byKey(bannerKey),
+        findsOneWidget,
+        reason: 'the actual mounted network context owns the single banner',
+      );
+      if (navigationOwnsBanner) {
+        expect(
+          find.descendant(
+            of: find.byType(ChatListBody),
+            matching: find.byKey(globalBannerKey),
+          ),
+          findsOneWidget,
+          reason: 'the desktop/mobile list route owns the status slot',
+        );
+      }
       expect(
         find.descendant(
           of: find.byKey(bannerKey),
@@ -172,7 +223,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      if (viewport.openChat) {
+      if (viewport.selectedChat) {
         final visibleSurface = Offset.zero & viewport.size;
         final roomContent = [
           find.text('No messages yet'),

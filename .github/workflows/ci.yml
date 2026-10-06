@@ -311,6 +311,8 @@ jobs:
           flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-v.png"
+          test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-h.png"
+          test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-v.png"
       - name: Upload NetworkOffline banner reference captures
         if: >-
           success() &&
@@ -322,6 +324,8 @@ jobs:
           path: |
             ${{ runner.temp }}/network-offline-captures/network-offline-h.png
             ${{ runner.temp }}/network-offline-captures/network-offline-v.png
+            ${{ runner.temp }}/network-offline-captures/network-offline-light-h.png
+            ${{ runner.temp }}/network-offline-captures/network-offline-light-v.png
           if-no-files-found: error
           retention-days: 7
       - name: Capture Channel Settings horizontal and vertical views
