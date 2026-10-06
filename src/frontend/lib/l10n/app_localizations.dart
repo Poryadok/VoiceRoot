@@ -3530,6 +3530,36 @@ abstract class AppLocalizations {
   /// **'Help'**
   String get settingsHelpTitle;
 
+  /// No description provided for @settingsHelpSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search help (e.g. voice rooms)'**
+  String get settingsHelpSearchHint;
+
+  /// No description provided for @settingsHelpDocsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Project documentation'**
+  String get settingsHelpDocsLabel;
+
+  /// No description provided for @settingsHelpSupportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact support'**
+  String get settingsHelpSupportLabel;
+
+  /// No description provided for @settingsHelpNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No help topics match your search.'**
+  String get settingsHelpNoResults;
+
+  /// No description provided for @settingsHelpLaunchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open link.'**
+  String get settingsHelpLaunchError;
+
   /// No description provided for @settingsHelpChatsTitle.
   ///
   /// In en, this message translates to:

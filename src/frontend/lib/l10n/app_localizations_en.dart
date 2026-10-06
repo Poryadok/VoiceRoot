@@ -1942,6 +1942,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsHelpTitle => 'Help';
 
   @override
+  String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
+
+  @override
+  String get settingsHelpDocsLabel => 'Project documentation';
+
+  @override
+  String get settingsHelpSupportLabel => 'Contact support';
+
+  @override
+  String get settingsHelpNoResults => 'No help topics match your search.';
+
+  @override
+  String get settingsHelpLaunchError => 'Could not open link.';
+
+  @override
   String get settingsHelpChatsTitle => 'Chats';
 
   @override
