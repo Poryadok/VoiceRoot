@@ -213,14 +213,14 @@ func TestJoinVoiceRoom_SpaceLifecycleAdmissionFailsClosed(t *testing.T) {
 	}
 }
 
-func TestGetJoinToken_ReResolvesCanonicalRoomBeforeRoleAndMint(t *testing.T) {
+func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *testing.T) {
 	canonical, stored, room, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	for _, tc := range []struct {
 		name, stored string
 		access       CanonicalVoiceRoomAccess
 		resolverErr  error
 		want         codes.Code
-	}{{"mints", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true}, nil, codes.OK}, {"stored mismatch", stored, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true}, nil, codes.PermissionDenied}, {"nonmember", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Active: true}, nil, codes.PermissionDenied}, {"inactive", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true}, nil, codes.PermissionDenied}, {"unavailable", canonical, CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "space"), codes.Unavailable}} {
+	}{{"media readiness absent", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1}, nil, codes.Unavailable}, {"stored mismatch", stored, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, Active: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"nonmember", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Active: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"inactive", canonical, CanonicalVoiceRoomAccess{SpaceID: canonical, Member: true, AccessEpoch: 1}, nil, codes.PermissionDenied}, {"unavailable", canonical, CanonicalVoiceRoomAccess{}, status.Error(codes.Unavailable, "space"), codes.Unavailable}} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 			resolver := &canonicalAccessResolver{result: tc.access, err: tc.resolverErr}
@@ -232,17 +232,13 @@ func TestGetJoinToken_ReResolvesCanonicalRoomBeforeRoleAndMint(t *testing.T) {
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, []canonicalAccessCall{{room, profile}}, resolver.calls)
 			require.Zero(t, legacy.calls)
-			if tc.want == codes.OK {
-				require.Equal(t, "canonical-token", response.GetJwt())
+			if tc.name == "media readiness absent" {
+				require.Equal(t, "canonical", tc.access.SpaceID)
 				requireVoiceRoleCheck(t, roles.joinChecks, canonical, profile, room)
-				requireVoiceRoleCheck(t, roles.speakChecks, canonical, profile, room)
-				require.Equal(t, 1, tokens.joinCalls)
-			} else {
-				require.Nil(t, response)
-				require.Empty(t, roles.joinChecks)
-				require.Empty(t, roles.speakChecks)
-				require.Zero(t, tokens.joinCalls)
 			}
+			require.Nil(t, response)
+			require.Empty(t, roles.speakChecks)
+			require.Zero(t, tokens.joinCalls)
 		})
 	}
 }

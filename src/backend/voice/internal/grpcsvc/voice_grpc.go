@@ -55,6 +55,9 @@ type VoiceGRPC struct {
 	ChatMembers              ChatMembership
 	SpaceMembers             SpaceMembership
 	VoiceRoomAccessResolver  AuthoritativeVoiceRoomAccessResolver
+	SpaceVoiceRoomGrants     SpaceVoiceRoomGrantResolver
+	SpaceTokens              *livekit.SpaceTokenIssuer
+	SpaceMediaReady          bool
 	SpaceLifecycle           SpaceLifecycleController
 	SpacePro                 SpaceProLookup
 	Roles                    RolePermissionChecker
@@ -526,6 +529,9 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		}
 		if err := s.ensureVoiceJoinPermission(ctx, access.SpaceID, profileID, call.VoiceRoomID); err != nil {
 			return nil, err
+		}
+		if call.SpaceID != "" {
+			return s.getSpaceMediaJoinToken(ctx, call, profileID, access)
 		}
 	}
 	canPublish, err := s.voicePublishGrant(ctx, call, profileID)

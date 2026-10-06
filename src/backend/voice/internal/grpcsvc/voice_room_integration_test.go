@@ -319,13 +319,15 @@ func TestVoiceGRPCVoiceRoom_spaceMemberViewsRosterWithoutJoining(t *testing.T) {
 	require.Len(t, states.GetParticipants(), 1)
 }
 
-func TestVoiceGRPCVoiceRoom_leaveRemovesParticipant(t *testing.T) {
+func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemoveParticipant(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
 	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
 	require.NoError(t, err)
 	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
 	require.NoError(t, err)
+	spaceMembers := f.svc.SpaceMembers.(*mapSpaceMembers)
+	delete(spaceMembers.members[f.spaceID], "profile-member")
 
 	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx("profile-member"), &callsv1.LeaveVoiceRoomRequest{
 		VoiceRoomId: f.voiceRoomID,
@@ -337,6 +339,16 @@ func TestVoiceGRPCVoiceRoom_leaveRemovesParticipant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 1)
+
+	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx("profile-outsider"), &callsv1.LeaveVoiceRoomRequest{
+		VoiceRoomId: f.voiceRoomID,
+	})
+	require.NoError(t, err)
+	states, err = f.svc.GetVoiceStates(voiceTestCtx("profile-owner"), &callsv1.GetVoiceStatesRequest{
+		VoiceRoomId: &f.voiceRoomID,
+	})
+	require.NoError(t, err)
+	require.Len(t, states.GetParticipants(), 1, "a different profile's leave cannot remove the remaining participant")
 }
 
 func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {

@@ -271,11 +271,6 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	if err != nil {
 		return nil, storeErr(err)
 	}
-	if call.SpaceID != "" {
-		if err := s.ensureSpaceMember(ctx, call.SpaceID, profileID); err != nil {
-			return nil, err
-		}
-	}
 	if !call.IsParticipant(profileID) {
 		return &callsv1.LeaveVoiceRoomResponse{}, nil
 	}

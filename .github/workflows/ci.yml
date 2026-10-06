@@ -1408,7 +1408,10 @@ jobs:
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
-        run: bash scripts/ci/compose-e2e-smoke.sh
+        run: |
+          bash scripts/ci/compose-e2e-smoke.sh
+          cd src/backend/gateway
+          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^TestComposeSpaceVoiceRoomBidirectionalAudio_live$' ./...
 
   a1-e2e:
     needs: changes

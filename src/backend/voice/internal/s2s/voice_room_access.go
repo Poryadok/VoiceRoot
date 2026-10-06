@@ -32,5 +32,7 @@ func (g *GRPCVoiceRoomAccessResolver) ResolveVoiceRoomAccess(ctx context.Context
 	if err != nil {
 		return grpcsvc.CanonicalVoiceRoomAccess{}, err
 	}
-	return grpcsvc.CanonicalVoiceRoomAccess{SpaceID: resp.GetSpaceId(), Member: resp.GetMember(), Active: resp.GetActive()}, nil
+	return grpcsvc.CanonicalVoiceRoomAccess{
+		SpaceID: resp.GetSpaceId(), Member: resp.GetMember(), Active: resp.GetActive(), AccessEpoch: resp.GetAccessEpoch(),
+	}, nil
 }

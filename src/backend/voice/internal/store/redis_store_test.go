@@ -72,6 +72,67 @@ func TestRedisCallStore_PersistsGroupVoiceLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
+func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing.T) {
+	ctx := t.Context()
+	store, client := newRedisCallStoreForTest(t, "space-media-store:")
+	const roomID, voiceRoomID, spaceID, profileID = "space-call", "voice-room", "space-id", "member"
+	_, err := store.CreateCall(ctx, Call{
+		RoomID: roomID, LivekitRoomName: "lk-space", VoiceRoomID: voiceRoomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: "owner", MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = store.RaiseSpaceMediaEpochFloor(ctx, spaceID, SpaceAccessEpoch, 4)
+	require.NoError(t, err)
+	_, err = store.RaiseSpaceMediaEpochFloor(ctx, spaceID, RolePolicyEpoch, 7)
+	require.NoError(t, err)
+	stale := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 3, 7)
+	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, stale, MaxVoiceRoomParticipants)
+	require.ErrorIs(t, err, ErrSpaceMediaStaleGrant)
+
+	first := testSpaceMediaParticipant(profileID, "identity-1", "generation-1", 4, 7)
+	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, first, MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	require.Equal(t, "space-call", client.Get(ctx, store.activeKey(profileID)).Val())
+
+	call, changed, err := store.BeginSpaceMediaRevocation(ctx, roomID, profileID, "identity-old", "generation-old")
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, "generation-1", call.SpaceMedia[profileID].Generation)
+	_, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
+	require.NoError(t, err)
+	require.True(t, changed)
+	_, changed, err = store.CompleteSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	second := testSpaceMediaParticipant(profileID, "identity-2", "generation-2", 4, 7)
+	_, err = store.AdmitSpaceMediaParticipant(ctx, roomID, second, MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	call, changed, err = store.BeginSpaceMediaRevocation(ctx, roomID, profileID, first.Identity, first.Generation)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, "generation-2", call.SpaceMedia[profileID].Generation)
+	call, err = store.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	require.Equal(t, second, call.SpaceMedia[profileID])
+	require.Equal(t, "space-call", client.Get(ctx, store.activeKey(profileID)).Val())
+
+	active, err := store.ListActiveSpaceVoiceCalls(ctx, spaceID)
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	require.Equal(t, roomID, active[0].RoomID)
+	require.LessOrEqual(t, client.TTL(ctx, store.callKey(roomID)).Val(), time.Duration(0), "Space calls must stay enumerable beyond the generic 24-hour call TTL")
+	require.LessOrEqual(t, client.TTL(ctx, store.activeKey(profileID)).Val(), time.Duration(0), "Space session fences must outlive stale bearer expiry")
+	require.LessOrEqual(t, client.TTL(ctx, store.activeSpaceVoiceRoomsKey(spaceID)).Val(), time.Duration(0), "Space room index must not expire")
+}
+
+func testSpaceMediaParticipant(profileID, identity, generation string, accessEpoch, policyEpoch uint64) SpaceMediaParticipant {
+	grant := SpaceMediaGrant{SessionEpoch: 2, AccessEpoch: accessEpoch, PolicyEpoch: policyEpoch, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}
+	return SpaceMediaParticipant{ProfileID: profileID, Identity: identity, Generation: generation, Issued: grant, Reconciled: grant}
+}
+
 func TestRedisCallStore_IndexesVoiceRoomsAndExpiredRingingCalls(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newRedisCallStoreForTest(t, "voice-test:")

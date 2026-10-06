@@ -28,6 +28,7 @@ const (
 	subjectSpaceMemberLeft    = "space.member_left"
 	subjectSpaceUpdated       = "space.updated"
 	subjectSpaceDeleted       = "space.deleted"
+	subjectVoiceAccessInvalid = "space.voice_room_access_invalidated"
 )
 
 // JetStreamPublisher publishes ChatStreamEvent payloads to NATS JetStream.
@@ -92,7 +93,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
 
 func spaceEventStreamSubjects() []string {
-	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted, "space.deletion_scheduled", "space.restored"}
+	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted, subjectVoiceAccessInvalid, "space.deletion_scheduled", "space.restored"}
 }
 
 func streamHasSubject(info *nats.StreamInfo, subject string) bool {
@@ -170,6 +171,36 @@ func (p *JetStreamPublisher) publishProto(ctx context.Context, subject string, e
 	}
 	natslog.LogPublish(p.Logger, subject, requestID, "space event published", attrs...)
 	return nil
+}
+
+// PublishVoiceRoomAccessInvalidated publishes the immutable Space outbox event
+// on its dedicated subject and returns only after JetStream confirms storage.
+func (p *JetStreamPublisher) PublishVoiceRoomAccessInvalidated(ctx context.Context, env *eventsv1.ChatStreamEvent) (*nats.PubAck, error) {
+	if p == nil || p.js == nil {
+		return nil, fmt.Errorf("jetstream publisher not initialized")
+	}
+	if ctx == nil || env == nil || env.GetEventId() == "" {
+		return nil, fmt.Errorf("invalid Space Voice invalidation envelope")
+	}
+	access := env.GetVoiceRoomAccessInvalidated()
+	if access == nil || access.GetSpaceId() == "" || access.GetAccessEpoch() == 0 {
+		return nil, fmt.Errorf("invalid Space Voice invalidation payload")
+	}
+	if err := p.ensureStream(); err != nil {
+		return nil, err
+	}
+	data, err := proto.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("marshal ChatStreamEvent: %w", err)
+	}
+	msg := &nats.Msg{Subject: subjectVoiceAccessInvalid, Data: data, Header: nats.Header{}}
+	natslog.SetRequestIDHeader(msg.Header, correlation.FromGRPC(ctx))
+	msg.Header.Set(nats.MsgIdHdr, env.GetEventId())
+	ack, err := p.js.PublishMsg(msg, nats.Context(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("jetstream publish %s: %w", subjectVoiceAccessInvalid, err)
+	}
+	return ack, nil
 }
 
 // PublishTreeNodeUpserted implements Publisher.

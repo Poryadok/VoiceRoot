@@ -5,11 +5,31 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventsv1 "voice.app/voice/events/v1"
 	idhash "voice/backend/analytics/internal/hash"
 )
+
+func TestMapperFromRoleSubjectIgnoresTypedSpaceVoiceInvalidationAndKeepsLegacyJSON(t *testing.T) {
+	m := Mapper{HashKey: "test-key"}
+	typed, err := proto.Marshal(&eventsv1.RoleStreamEvent{
+		EventId: "66666666-6666-6666-6666-666666666666",
+		Payload: &eventsv1.RoleStreamEvent_VoiceRoomPolicyInvalidated{
+			VoiceRoomPolicyInvalidated: &eventsv1.VoiceRoomPolicyInvalidated{
+				SpaceId: "11111111-1111-1111-1111-111111111111", PolicyEpoch: 4,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Nil(t, m.FromRoleSubject("role.voice_policy_invalidated", typed))
+
+	legacy := m.FromRoleSubject("role.voice_override_removed", []byte(`{"space_id":"11111111-1111-1111-1111-111111111111","role_id":"22222222-2222-2222-2222-222222222222"}`))
+	require.NotNil(t, legacy)
+	require.Equal(t, "role_voice_override_removed", legacy.GetEventType())
+	require.Equal(t, "role", legacy.GetSourceService())
+}
 
 func TestMapperFromMessageSent(t *testing.T) {
 	m := Mapper{HashKey: "test-key"}
