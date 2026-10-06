@@ -1215,6 +1215,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageUnpin => 'Unpin message';
 
   @override
+  String get chatPinnedLimitReached => 'You can pin up to 5 messages.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

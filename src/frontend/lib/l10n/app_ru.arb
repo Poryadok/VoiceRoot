@@ -527,6 +527,7 @@
   "chatPinnedTypeMusic": "Музыка",
   "chatPinnedTypeVideoMessage": "Видеосообщение",
   "chatMessageUnpin": "Открепить сообщение",
+  "chatPinnedLimitReached": "Можно закрепить не более 5 сообщений.",
   "chatPinnedBar": "{count, plural, one{{count} закреплённое сообщение} few{{count} закреплённых сообщения} many{{count} закреплённых сообщений} other{{count} закреплённых сообщения}}",
   "@chatPinnedBar": {
     "placeholders": {

@@ -2252,6 +2252,12 @@ abstract class AppLocalizations {
   /// **'Unpin message'**
   String get chatMessageUnpin;
 
+  /// No description provided for @chatPinnedLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You can pin up to 5 messages.'**
+  String get chatPinnedLimitReached;
+
   /// No description provided for @chatPinnedBar.
   ///
   /// In en, this message translates to:

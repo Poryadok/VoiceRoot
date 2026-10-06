@@ -132,7 +132,19 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             trailing: const Icon(Icons.chevron_right),
             onTap: () => PinnedMessagesPanel.show(
               context,
+              chatId: widget.chatId,
+              spaceId: spaceId,
+              isGroup: widget.isGroup,
               messages: pinnedMessages,
+              onUnpin: (messageId) => roomExists
+                  ? ref
+                        .read(roomProvider.notifier)
+                        .togglePinWithResult(messageId, currentlyPinned: true)
+                  : _unpinStandalonePinnedMessage(
+                      messageId,
+                      pinsKey,
+                      authorization: authorization,
+                    ),
               onOpenMessage: (messageId) {
                 // A standalone Chat Info panel can be opened without mounting
                 // the room. Initialize it only when the user explicitly jumps
@@ -376,6 +388,44 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         widget.chatId == key.$1 &&
         currentAuth.activeProfileId == key.$2 &&
         currentAuth.session?.authorizationHeader == authorization;
+  }
+
+  Future<PinMutationResult> _unpinStandalonePinnedMessage(
+    String messageId,
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) async {
+    final profileId = key.$2;
+    if (authorization == null || profileId == null || profileId.isEmpty) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
+    final generation = _standalonePinsGeneration;
+    final result = await ref
+        .read(voiceMessagesClientProvider)
+        .unpinMessage(
+          authorization: authorization,
+          chatId: key.$1,
+          messageId: messageId,
+        );
+    if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+      return const PinMutationResult.stale();
+    }
+    return switch (result) {
+      MessagesApiOk<void>() => () {
+        setState(() {
+          _standalonePinnedMessages = _standalonePinnedMessages
+              .where((message) => message.id != messageId)
+              .toList(growable: false);
+        });
+        return const PinMutationResult.success();
+      }(),
+      MessagesApiFailure(:final message, :final errorCode, :final statusCode) =>
+        PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        ),
+    };
   }
 }
 

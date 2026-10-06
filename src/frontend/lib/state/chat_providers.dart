@@ -1101,6 +1101,41 @@ class ChatRoomState {
 
 enum PinnedMessagesLoadStatus { idle, loading, loaded, failed }
 
+class PinMutationResult {
+  const PinMutationResult.success()
+    : succeeded = true,
+      stale = false,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  const PinMutationResult.failure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  }) : succeeded = false,
+       stale = false;
+
+  const PinMutationResult.stale()
+    : succeeded = false,
+      stale = true,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  final bool succeeded;
+  final bool stale;
+  final String? message;
+  final String? errorCode;
+  final int? statusCode;
+
+  bool get permissionDenied =>
+      statusCode == 403 || errorCode == 'permission_denied';
+
+  bool get pinLimitReached =>
+      statusCode == 429 && errorCode == 'resource_exhausted';
+}
+
 class PendingPinnedMessageJump {
   PendingPinnedMessageJump(this.messageId);
 
@@ -2301,10 +2336,23 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String messageId, {
     required bool currentlyPinned,
   }) async {
+    final result = await togglePinWithResult(
+      messageId,
+      currentlyPinned: currentlyPinned,
+    );
+    return result.message;
+  }
+
+  Future<PinMutationResult> togglePinWithResult(
+    String messageId, {
+    required bool currentlyPinned,
+  }) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    if (auth == null || profileId == null) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
@@ -2323,7 +2371,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: generation,
     )) {
-      return null;
+      return const PinMutationResult.stale();
     }
     switch (result) {
       case MessagesApiOk<void>():
@@ -2334,11 +2382,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             generation: generation,
           ),
         );
-        return null;
-      case MessagesApiFailure(:final message):
+        return const PinMutationResult.success();
+      case MessagesApiFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         unawaited(loadInitial());
         state = state.copyWith(errorMessage: message);
-        return message;
+        return PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        );
     }
   }
 

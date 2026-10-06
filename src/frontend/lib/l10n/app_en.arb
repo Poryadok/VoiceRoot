@@ -564,6 +564,7 @@
   "chatPinnedTypeMusic": "Music",
   "chatPinnedTypeVideoMessage": "Video message",
   "chatMessageUnpin": "Unpin message",
+  "chatPinnedLimitReached": "You can pin up to 5 messages.",
   "chatPinnedBar": "{count, plural, =1{1 pinned message} other{{count} pinned messages}}",
   "@chatPinnedBar": {
     "placeholders": {
