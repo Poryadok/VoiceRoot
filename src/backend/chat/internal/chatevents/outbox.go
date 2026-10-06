@@ -3,6 +3,7 @@ package chatevents
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,7 +45,7 @@ func (w *ChatDeletedOutbox) Run(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		if err := w.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			// A failed batch is retried on the next ordinary poll; durable rows remain pending.
+			slog.Warn("chat deleted outbox batch failed; durable rows will be retried")
 		}
 		select {
 		case <-ctx.Done():
