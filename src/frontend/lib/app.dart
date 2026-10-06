@@ -348,6 +348,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       networkLayout: narrow
           ? VoiceNetworkBannerLayout.phone
           : VoiceNetworkBannerLayout.desktop,
+      isReconnecting: !deviceOffline,
       tone: VoiceBannerTone.warning,
     );
 
@@ -428,6 +429,8 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                               statusBanner: statusBannerInNavigation
                                   ? buildReconnectBanner(narrow: narrow)
                                   : null,
+                              statusBannerAtListEnd:
+                                  statusBannerInNavigation && !narrow,
                             ),
                             navigationCollapsed: inSpace,
                             middleChild: inSpace

@@ -68,6 +68,29 @@ void main() {
       findsOneWidget,
       reason: 'the shell should show offline status before Realtime connects',
     );
+    final banner = find.byKey(const Key('global_reconnect_banner'));
+    expect(
+      find.descendant(
+        of: banner,
+        matching: find.byIcon(Icons.cloud_off_outlined),
+      ),
+      findsOneWidget,
+      reason: 'device-offline status stays a static offline mark',
+    );
+    expect(
+      find.descendant(
+        of: banner,
+        matching: find.byKey(const Key('network_reconnecting_progress')),
+      ),
+      findsNothing,
+      reason: 'device-offline status must not imply a reconnect spinner',
+    );
+    final offlineMark = find.descendant(
+      of: banner,
+      matching: find.byKey(const Key('network_offline_mark')),
+    );
+    expect(offlineMark, findsOneWidget);
+    expect(tester.getSize(offlineMark), const Size(36, 36));
   });
 
   testWidgets('shell banner can be dismissed and returns on a new failure', (
@@ -121,7 +144,7 @@ void main() {
       final banner = find.byKey(const Key('global_reconnect_banner'));
       final retryButton = find.descendant(
         of: banner,
-        matching: find.widgetWithText(TextButton, 'Try again'),
+        matching: find.widgetWithText(OutlinedButton, 'Try again'),
       );
       expect(retryButton, findsOneWidget);
       expect(

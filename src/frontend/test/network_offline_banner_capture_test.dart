@@ -88,37 +88,36 @@ void main() {
           deepLinkListenerProvider.overrideWith(
             _CaptureNoopDeepLinkListener.new,
           ),
-          if (viewport.selectedChat)
-            voiceChatsClientProvider.overrideWithValue(
-              FakeVoiceChatsClient(
-                pages: [
-                  const ChatListData(
-                    items: [
-                      ChatListItem(
-                        chat: VoiceChat(
-                          id: _captureChatId,
-                          type: 'CHAT_TYPE_GROUP',
-                          creatorProfileId: 'capture-owner',
-                          name: 'Offline capture room',
-                        ),
+          voiceChatsClientProvider.overrideWithValue(
+            FakeVoiceChatsClient(
+              pages: [
+                const ChatListData(
+                  items: [
+                    ChatListItem(
+                      chat: VoiceChat(
+                        id: _captureChatId,
+                        type: 'CHAT_TYPE_GROUP',
+                        creatorProfileId: 'capture-owner',
+                        name: 'Offline capture room',
                       ),
-                    ],
-                  ),
-                  const ChatListData(
-                    items: [
-                      ChatListItem(
-                        chat: VoiceChat(
-                          id: _captureChatId,
-                          type: 'CHAT_TYPE_GROUP',
-                          creatorProfileId: 'capture-owner',
-                          name: 'Offline capture room',
-                        ),
+                    ),
+                  ],
+                ),
+                const ChatListData(
+                  items: [
+                    ChatListItem(
+                      chat: VoiceChat(
+                        id: _captureChatId,
+                        type: 'CHAT_TYPE_GROUP',
+                        creatorProfileId: 'capture-owner',
+                        name: 'Offline capture room',
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
           if (viewport.selectedChat)
             voiceMessagesClientProvider.overrideWithValue(
               _CaptureVoiceMessagesClient(),
@@ -194,6 +193,27 @@ void main() {
           findsOneWidget,
           reason: 'the desktop/mobile list route owns the status slot',
         );
+        final seededRow = find.byKey(ChatListBody.tileKey(_captureChatId));
+        expect(
+          seededRow,
+          findsOneWidget,
+          reason: 'the route fixture contains a real visible chat row',
+        );
+        final bannerTop = tester.getTopLeft(find.byKey(globalBannerKey)).dy;
+        final rowTop = tester.getTopLeft(seededRow).dy;
+        if (viewport.size.width > VoiceLayout.narrowBreakpoint) {
+          expect(
+            bannerTop,
+            greaterThan(rowTop),
+            reason: 'desktop status follows the visible chat-list rows',
+          );
+        } else {
+          expect(
+            bannerTop,
+            lessThan(rowTop),
+            reason: 'phone status precedes the scrollable chat-list rows',
+          );
+        }
       }
       expect(
         find.descendant(
@@ -216,6 +236,26 @@ void main() {
         ),
         findsOneWidget,
       );
+      final isPhoneRoute = viewport.size.width <= VoiceLayout.narrowBreakpoint;
+      final retryButton = find.descendant(
+        of: find.byKey(bannerKey),
+        matching: find.byType(OutlinedButton),
+      );
+      expect(
+        retryButton,
+        findsOneWidget,
+        reason: 'Network retry uses the outlined reference control',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.byIcon(Icons.refresh),
+        ),
+        findsOneWidget,
+        reason: 'Network retry includes its refresh glyph',
+      );
+      final retryStyle = tester.widget<OutlinedButton>(retryButton).style!;
+      expect(retryStyle.minimumSize!.resolve(const {})!.height, 36);
       expect(
         find.descendant(
           of: find.byKey(bannerKey),
@@ -223,10 +263,43 @@ void main() {
         ),
         findsOneWidget,
       );
+      final titleText = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.text('Reconnecting…'),
+        ),
+      );
+      expect(titleText.style?.fontSize, 14);
+      expect(titleText.style?.fontWeight, FontWeight.w500);
+      expect(titleText.style?.height, closeTo(20 / 14, 0.02));
+      final detailText = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.text(
+            'Drafts stay on this device. Realtime updates resume after reconnection.',
+          ),
+        ),
+      );
+      expect(detailText.style?.fontSize, 12);
+      expect(detailText.style?.height, closeTo(16 / 12, 0.02));
+      if (isPhoneRoute) {
+        final progress = find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.byKey(const Key('network_reconnecting_progress')),
+        );
+        expect(progress, findsOneWidget);
+        expect(tester.getSize(progress), const Size(22, 22));
+      } else {
+        final mark = find.descendant(
+          of: find.byKey(bannerKey),
+          matching: find.byKey(const Key('network_offline_mark')),
+        );
+        expect(mark, findsOneWidget);
+        expect(tester.getSize(mark), const Size(36, 36));
+      }
       final tokenColors = catalog.colorsFor(
         viewport.themeMode == VoiceThemeMode.light ? 'light' : 'dark',
       );
-      final isPhoneRoute = viewport.size.width <= VoiceLayout.narrowBreakpoint;
       final networkSurface = find.descendant(
         of: find.byKey(bannerKey),
         matching: find.byWidgetPredicate(

@@ -15,6 +15,7 @@ class VoiceCompactBanner extends StatelessWidget {
     this.onAction,
     this.onDismiss,
     this.networkLayout,
+    this.isReconnecting = false,
     this.tone = VoiceBannerTone.neutral,
   });
 
@@ -25,6 +26,7 @@ class VoiceCompactBanner extends StatelessWidget {
   final VoidCallback? onAction;
   final VoidCallback? onDismiss;
   final VoiceNetworkBannerLayout? networkLayout;
+  final bool isReconnecting;
   final VoiceBannerTone tone;
 
   @override
@@ -42,13 +44,24 @@ class VoiceCompactBanner extends StatelessWidget {
       ),
       VoiceBannerTone.neutral => (voice.elevated, voice.textSecondary),
     };
+    final metrics = context.voiceMetrics;
+    final networkTitleStyle = metrics.typeStyle('label');
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           message,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: fg),
+          style:
+              (networkLayout == null
+                      ? Theme.of(context).textTheme.bodySmall
+                      : networkTitleStyle?.toTextStyle(color: fg) ??
+                            const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              height: 20 / 14,
+                            ))
+                  ?.copyWith(color: fg),
         ),
         if (detail != null)
           Text(
@@ -59,7 +72,30 @@ class VoiceCompactBanner extends StatelessWidget {
     );
     final actions = <Widget>[
       if (actionLabel != null && onAction != null)
-        TextButton(onPressed: onAction, child: Text(actionLabel!)),
+        if (networkLayout == null)
+          TextButton(onPressed: onAction, child: Text(actionLabel!))
+        else
+          OutlinedButton.icon(
+            onPressed: onAction,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: Text(actionLabel!),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              visualDensity: VisualDensity.compact,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  metrics.corner('md', fallback: 6),
+                ),
+              ),
+              side: BorderSide(color: voice.borderDefault),
+            ),
+          ),
+      if (networkLayout != null &&
+          actionLabel != null &&
+          onAction != null &&
+          onDismiss != null)
+        const SizedBox(width: 8),
       if (onDismiss != null)
         IconButton(
           tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
@@ -77,10 +113,41 @@ class VoiceCompactBanner extends StatelessWidget {
           VoiceNetworkBannerLayout.phone => 10.0,
           null => pad / 2,
         };
+        final Widget leading = switch (networkLayout) {
+          VoiceNetworkBannerLayout.desktop => Container(
+            key: const Key('network_offline_mark'),
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: voice.elevated,
+              borderRadius: BorderRadius.circular(
+                metrics.corner('lg', fallback: 8),
+              ),
+            ),
+            child: Icon(icon, size: 20, color: voice.warning),
+          ),
+          VoiceNetworkBannerLayout.phone when isReconnecting => SizedBox(
+            key: const Key('network_reconnecting_progress'),
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: voice.warning,
+            ),
+          ),
+          VoiceNetworkBannerLayout.phone => SizedBox(
+            key: const Key('network_offline_mark'),
+            width: 22,
+            height: 22,
+            child: Icon(icon, size: 16, color: voice.warning),
+          ),
+          null => Icon(icon, size: 16, color: fg),
+        };
         final iconAndText = Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 16, color: fg),
+            leading,
             SizedBox(width: gap),
             Expanded(child: text),
           ],
@@ -89,7 +156,7 @@ class VoiceCompactBanner extends StatelessWidget {
         if (!narrow) {
           return Row(
             children: [
-              Icon(icon, size: 16, color: fg),
+              leading,
               SizedBox(width: gap),
               Expanded(child: text),
               ...actions,
@@ -128,7 +195,6 @@ class VoiceCompactBanner extends StatelessWidget {
     }
 
     final isPhone = layout == VoiceNetworkBannerLayout.phone;
-    final metrics = context.voiceMetrics;
     return Container(
       margin: isPhone
           ? const EdgeInsets.fromLTRB(16, 12, 16, 4)

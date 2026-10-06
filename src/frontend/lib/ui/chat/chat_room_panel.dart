@@ -398,7 +398,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final currentPinnedMessage = pinnedMessages.isEmpty
         ? null
         : pinnedMessages[currentPinnedIndex];
-    final isOffline = ref.watch(isDeviceOfflineProvider) || room.isOfflineCache;
+    final deviceOffline = ref.watch(isDeviceOfflineProvider);
+    final isOffline = deviceOffline || room.isOfflineCache;
     final reconnectBanner = ref.watch(reconnectBannerVisibleProvider);
     final canRetryBanner =
         !isOffline &&
@@ -876,6 +877,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             ? VoiceNetworkBannerLayout.phone
                             : VoiceNetworkBannerLayout.desktop
                       : null,
+                  isReconnecting:
+                      !deviceOffline &&
+                      !room.isOfflineCache &&
+                      reconnectBanner.visible &&
+                      widget.showReconnectBanner,
                   tone: VoiceBannerTone.warning,
                 ),
               if (room.pinnedMessages.isEmpty &&

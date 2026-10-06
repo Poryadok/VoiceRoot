@@ -39,6 +39,7 @@ class ChatListBody extends ConsumerStatefulWidget {
     this.showHeader = true,
     this.onChatSelected,
     this.statusBanner,
+    this.statusBannerAtListEnd = false,
   });
 
   static const Key listKey = Key('chat_list_view');
@@ -69,6 +70,7 @@ class ChatListBody extends ConsumerStatefulWidget {
   final bool showHeader;
   final void Function(String chatId)? onChatSelected;
   final Widget? statusBanner;
+  final bool statusBannerAtListEnd;
 
   @override
   ConsumerState<ChatListBody> createState() => _ChatListBodyState();
@@ -202,7 +204,8 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
               ),
             ),
           const _MySpacesStrip(),
-          if (widget.statusBanner != null) widget.statusBanner!,
+          if (widget.statusBanner != null && !widget.statusBannerAtListEnd)
+            widget.statusBanner!,
           Expanded(
             child: Builder(
               builder: (context) {
@@ -559,6 +562,8 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
               },
             ),
           ),
+          if (widget.statusBanner != null && widget.statusBannerAtListEnd)
+            widget.statusBanner!,
         ],
       ),
     );

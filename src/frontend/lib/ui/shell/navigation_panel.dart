@@ -17,6 +17,7 @@ class NavigationPanel extends ConsumerWidget {
     super.key,
     required this.collapsed,
     this.statusBanner,
+    this.statusBannerAtListEnd = false,
   });
 
   static const Key panelKey = Key('navigation_panel');
@@ -26,13 +27,18 @@ class NavigationPanel extends ConsumerWidget {
 
   final bool collapsed;
   final Widget? statusBanner;
+  final bool statusBannerAtListEnd;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (collapsed) {
       return _CollapsedNavigation(panelKey: panelKey);
     }
-    return _ExpandedNavigation(key: panelKey, statusBanner: statusBanner);
+    return _ExpandedNavigation(
+      key: panelKey,
+      statusBanner: statusBanner,
+      statusBannerAtListEnd: statusBannerAtListEnd,
+    );
   }
 }
 
@@ -83,9 +89,14 @@ class _CollapsedNavigation extends ConsumerWidget {
 }
 
 class _ExpandedNavigation extends ConsumerStatefulWidget {
-  const _ExpandedNavigation({super.key, this.statusBanner});
+  const _ExpandedNavigation({
+    super.key,
+    this.statusBanner,
+    this.statusBannerAtListEnd = false,
+  });
 
   final Widget? statusBanner;
+  final bool statusBannerAtListEnd;
 
   @override
   ConsumerState<_ExpandedNavigation> createState() =>
@@ -149,7 +160,10 @@ class _ExpandedNavigationState extends ConsumerState<_ExpandedNavigation> {
             ),
             Expanded(
               child: section == NavigationSection.chats
-                  ? ChatListBody(statusBanner: widget.statusBanner)
+                  ? ChatListBody(
+                      statusBanner: widget.statusBanner,
+                      statusBannerAtListEnd: widget.statusBannerAtListEnd,
+                    )
                   : const SocialPanel(),
             ),
           ],
