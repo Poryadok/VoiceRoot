@@ -299,6 +299,7 @@ jobs:
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
+        id: network_offline_capture
         if: >-
           github.event_name == 'pull_request' ||
           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
@@ -307,12 +308,26 @@ jobs:
         env:
           VOICE_NETWORK_OFFLINE_CAPTURE_DIR: ${{ runner.temp }}/network-offline-captures
         run: |
+          set -o pipefail
           mkdir -p "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR"
-          flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1
+          flutter test test/network_offline_banner_capture_test.dart --reporter expanded --concurrency=1 2>&1 |
+            tee "$RUNNER_TEMP/network-offline-capture-test.log"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-v.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-h.png"
           test -s "$VOICE_NETWORK_OFFLINE_CAPTURE_DIR/network-offline-light-v.png"
+      - name: Upload NetworkOffline capture diagnostics on failure
+        if: >-
+          failure() &&
+          steps.network_offline_capture.outcome == 'failure' &&
+          (github.event_name == 'pull_request' ||
+           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+        uses: actions/upload-artifact@v6
+        with:
+          name: network-offline-capture-failure-${{ github.run_id }}
+          path: ${{ runner.temp }}/network-offline-capture-test.log
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Upload NetworkOffline banner reference captures
         if: >-
           success() &&
