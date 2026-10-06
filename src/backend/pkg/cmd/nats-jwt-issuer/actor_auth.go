@@ -9,7 +9,7 @@ import (
 )
 
 // Scratch broker CONNECT and PING/PONG only: no PUB, SUB, ACK, or JS API.
-func authenticateExistingActor() error {
+func authenticateExistingActor() (result error) {
 	const path = "/inputs/actor.creds"
 	before, e := os.Lstat(path)
 	if e != nil || !before.Mode().IsRegular() || before.Mode().Perm()&0022 != 0 || before.Size() <= 0 || before.Size() > 262144 {
@@ -19,7 +19,11 @@ func authenticateExistingActor() error {
 	if e != nil {
 		return renewalFailure()
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			result = renewalFailure()
+		}
+	}()
 	after, e := file.Stat()
 	if e != nil || !os.SameFile(before, after) {
 		return renewalFailure()
