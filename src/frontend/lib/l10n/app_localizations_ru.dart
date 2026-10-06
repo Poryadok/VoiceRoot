@@ -1954,6 +1954,12 @@ class AppLocalizationsRu extends AppLocalizations {
       'Найдите ответ или свяжитесь с командой Voice.';
 
   @override
+  String get settingsHelpHeading => 'Чем помочь?';
+
+  @override
+  String get settingsHelpBackLabel => 'Назад';
+
+  @override
   String get settingsHelpSearchHint => 'Например, войс-комнаты';
 
   @override

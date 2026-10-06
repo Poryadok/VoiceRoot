@@ -3536,6 +3536,18 @@ abstract class AppLocalizations {
   /// **'Find an answer or contact the Voice team.'**
   String get settingsHelpSubtitle;
 
+  /// No description provided for @settingsHelpHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'How can we help?'**
+  String get settingsHelpHeading;
+
+  /// No description provided for @settingsHelpBackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsHelpBackLabel;
+
   /// No description provided for @settingsHelpSearchHint.
   ///
   /// In en, this message translates to:

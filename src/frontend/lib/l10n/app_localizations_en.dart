@@ -1946,6 +1946,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Find an answer or contact the Voice team.';
 
   @override
+  String get settingsHelpHeading => 'How can we help?';
+
+  @override
+  String get settingsHelpBackLabel => 'Back';
+
+  @override
   String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
 
   @override

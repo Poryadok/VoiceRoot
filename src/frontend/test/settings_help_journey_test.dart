@@ -81,10 +81,100 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.help_outline), findsOneWidget);
+      expect(find.text('How can we help?'), findsOneWidget);
       expect(
         find.text('Find an answer or contact the Voice team.'),
         findsOneWidget,
       );
+      expect(find.bySemanticsLabel('How can we help?'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Find an answer or contact the Voice team.'),
+        findsOneWidget,
+      );
+      final semantics = tester.ensureSemantics();
+      expect(
+        tester
+            .getSemantics(find.byTooltip('Close help'))
+            .getSemanticsData()
+            .flagsCollection
+            .isButton,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSemantics(find.text('How can we help?'))
+            .getSemanticsData()
+            .flagsCollection
+            .isHeader,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSemantics(
+              find.descendant(
+                of: find.byKey(const Key('settings_help_search')),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .getSemanticsData()
+            .flagsCollection
+            .isTextField,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('settings_help_docs')))
+            .getSemanticsData()
+            .flagsCollection
+            .isButton,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('settings_help_support')))
+            .getSemanticsData()
+            .flagsCollection
+            .isButton,
+        isTrue,
+      );
+      expect(
+        find.bySemanticsLabel('Search help (e.g. voice rooms)'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Project documentation'), findsOneWidget);
+      expect(find.bySemanticsLabel('Contact support'), findsOneWidget);
+
+      final close = find.byTooltip('Close help');
+      final search = find.byKey(const Key('settings_help_search'));
+      final docs = find.byKey(const Key('settings_help_docs'));
+      final support = find.byKey(const Key('settings_help_support'));
+      await _tabUntilPrimaryFocusWithin(tester, close);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, search), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, docs), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, support), isTrue);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, docs), isTrue);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, search), isTrue);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(_primaryFocusWithin(tester, close), isTrue);
+      semantics.dispose();
+
       for (final title in ['Chats', 'Spaces', 'Matchmaking', 'Voice']) {
         expect(find.text(title), findsOneWidget);
       }
@@ -124,6 +214,11 @@ void main() {
         (launchCalls[1].arguments as Map)['url'],
         'https://github.com/Poryadok/VoiceRoot/issues',
       );
+
+      await tester.ensureVisible(close);
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+      expect(search, findsNothing);
     },
   );
 
@@ -179,18 +274,67 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('settings_help')));
     await tester.tap(find.byKey(const Key('settings_help')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('settings_help_docs')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings_help_docs')));
+    final close = find.byTooltip('Close help');
+    final search = find.byKey(const Key('settings_help_search'));
+    final docs = find.byKey(const Key('settings_help_docs'));
+    await _tabUntilPrimaryFocusWithin(tester, close);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, search), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, docs), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
     expect(find.text('Could not open link.'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Try again'), findsOneWidget);
+    semantics.dispose();
     expect(launchAttempts, 1);
-    await tester.ensureVisible(find.text('Try again'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Try again'));
+    final support = find.byKey(const Key('settings_help_support'));
+    final retryLabel = find.text('Try again');
+    final retry = find.ancestor(
+      of: retryLabel,
+      matching: find.byType(TextButton),
+    );
+    expect(_primaryFocusWithin(tester, docs), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, support), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(_primaryFocusWithin(tester, retry), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(launchAttempts, 2);
   });
+}
+
+bool _primaryFocusWithin(WidgetTester tester, Finder target) {
+  final focusContext = FocusManager.instance.primaryFocus?.context;
+  if (focusContext == null) return false;
+  final targetElement = tester.element(target);
+  var found = false;
+  focusContext.visitAncestorElements((ancestor) {
+    if (identical(ancestor, targetElement)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
+Future<void> _tabUntilPrimaryFocusWithin(
+  WidgetTester tester,
+  Finder target,
+) async {
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (_primaryFocusWithin(tester, target)) return;
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+  }
+  expect(_primaryFocusWithin(tester, target), isTrue);
 }
