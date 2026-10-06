@@ -161,11 +161,36 @@ func TestGroupRoles_PublishesRoleAndOwnershipChangesOnlyAfterSuccess(t *testing.
 		ChatId: chat.GetId(), NewOwnerProfileId: successor.String(),
 	})
 	require.NoError(t, err)
+	members, err := client.ListMembers(ctxFor(t, profiles, successor), &chatv1.ListMembersRequest{
+		ChatId: chat.GetId(),
+		Page:   &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	roles := map[string]string{}
+	for _, member := range members.GetMemberList().GetMembers() {
+		roles[member.GetProfileId()] = member.GetRole()
+	}
+	require.Equal(t, "member", roles[owner.String()])
+	require.Equal(t, "owner", roles[successor.String()])
+	require.Equal(t, "member", roles[ordinary.String()])
 	_, err = client.SetGroupMemberRole(ctxFor(t, profiles, ordinary), &chatv1.SetGroupMemberRoleRequest{
-		ChatId: chat.GetId(), ProfileId: successor.String(), Role: "member",
+		ChatId: chat.GetId(), ProfileId: owner.String(), Role: "admin",
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	members, err = client.ListMembers(ctxFor(t, profiles, successor), &chatv1.ListMembersRequest{
+		ChatId: chat.GetId(),
+		Page:   &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	roles = map[string]string{}
+	for _, member := range members.GetMemberList().GetMembers() {
+		roles[member.GetProfileId()] = member.GetRole()
+	}
+	require.Equal(t, "member", roles[owner.String()])
+	require.Equal(t, "owner", roles[successor.String()])
+	require.Equal(t, "member", roles[ordinary.String()])
 
 	_, changes := spy.snapshot()
 	require.Equal(t, [][3]string{
