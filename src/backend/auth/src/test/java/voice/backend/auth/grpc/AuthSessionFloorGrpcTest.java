@@ -125,12 +125,14 @@ class AuthSessionFloorGrpcTest {
   private static String token(KeyPair keyPair, GetVoiceSessionEpochFloorRequest request,
       String requestId, Instant now) throws Exception {
     String header = encode(JSON.writeValueAsBytes(Map.of("alg", "RS256", "kid", "current")));
-    String claims = encode(JSON.writeValueAsBytes(Map.of(
-        "iss", "voice", "sub", "service:voice", "principal_type", "service", "aud", "auth",
-        "rpc", RPC, "request_id", requestId,
-        "request_hash", AuthPrincipalServerInterceptor.requestHash(request),
-        "jti", UUID.randomUUID().toString(), "iat", now.getEpochSecond(),
-        "nbf", now.getEpochSecond(), "exp", now.plusSeconds(20).getEpochSecond())));
+    String claims = encode(JSON.writeValueAsBytes(Map.ofEntries(
+        Map.entry("iss", "voice"), Map.entry("sub", "service:voice"),
+        Map.entry("principal_type", "service"), Map.entry("aud", "auth"),
+        Map.entry("rpc", RPC), Map.entry("request_id", requestId),
+        Map.entry("request_hash", AuthPrincipalServerInterceptor.requestHash(request)),
+        Map.entry("jti", UUID.randomUUID().toString()),
+        Map.entry("iat", now.getEpochSecond()), Map.entry("nbf", now.getEpochSecond()),
+        Map.entry("exp", now.plusSeconds(20).getEpochSecond()))));
     String unsigned = header + "." + claims;
     Signature signature = Signature.getInstance("SHA256withRSA");
     signature.initSign(keyPair.getPrivate());
