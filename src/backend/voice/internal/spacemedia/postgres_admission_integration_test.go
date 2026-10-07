@@ -132,7 +132,6 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	admissions := NewPostgresAdmissionStore(pool)
 
 	creator := admissionFixture()
-	creator.Events = nil
 	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
 	require.NoError(t, admissions.Fence(ctx, creator))
 	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
@@ -173,6 +172,29 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 		require.NoError(t, err)
 	}
 	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+
+	require.Len(t, creator.Events, 2, "a created Space room has exactly two canonical event intents")
+	expectedCreatorEvents := make(map[uuid.UUID]AdmissionEvent, len(creator.Events))
+	for _, event := range creator.Events {
+		expectedCreatorEvents[event.ID] = event
+	}
+	require.Len(t, expectedCreatorEvents, len(creator.Events), "creator event IDs are unique")
+	for range creator.Events {
+		item, err := admissions.ClaimOutbox(ctx, time.Second)
+		require.NoError(t, err)
+		require.NotNil(t, item, "each projected creator event is publishable")
+		expected, ok := expectedCreatorEvents[item.ID]
+		require.True(t, ok, "only the creator's canonical event intents are claimable")
+		require.Equal(t, creator.OperationID, item.OperationID)
+		require.Equal(t, expected.Subject, item.Subject)
+		require.Equal(t, expected.Payload, item.Payload)
+		delete(expectedCreatorEvents, item.ID)
+		require.NoError(t, admissions.MarkOutboxDelivered(ctx, *item))
+	}
+	require.Empty(t, expectedCreatorEvents, "both creator events were delivered exactly once")
+	item, err := admissions.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item, "the cap-rejected operation remains unprojected and unclaimable")
 
 	faultingAdmissions := &lostCleanupAckAdmissionStore{PostgresAdmissionStore: admissions, loseNextCleanupAck: true}
 	coordinator := &Coordinator{
@@ -256,9 +278,17 @@ func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t 
 	require.ErrorIs(t, store.ReleaseFence(ctx, wrongTuple), ErrAdmissionConflict)
 	recovery, err := store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
-	require.Len(t, recovery, 1)
-	require.Equal(t, failed.OperationID, recovery[0].OperationID)
-	require.Equal(t, AdmissionAborting, recovery[0].State)
+	require.Len(t, recovery, 2)
+	recoveryByOperation := make(map[uuid.UUID]Admission, len(recovery))
+	for _, row := range recovery {
+		recoveryByOperation[row.OperationID] = row
+	}
+	failedRecovery, ok := recoveryByOperation[failed.OperationID]
+	require.True(t, ok, "aborting cap operation remains recoverable")
+	require.Equal(t, AdmissionAborting, failedRecovery.State)
+	otherRecovery, ok := recoveryByOperation[other.OperationID]
+	require.True(t, ok, "unrelated fenced operation remains recoverable")
+	require.Equal(t, AdmissionFenced, otherRecovery.State)
 	var stillOwned uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, failed.AccountID).Scan(&stillOwned))
 	require.Equal(t, failed.OperationID, stillOwned, "failed cleanup must preserve the exact live fence")
@@ -271,7 +301,9 @@ func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t 
 	require.NoError(t, store.MarkCleanupCompleted(ctx, failed.OperationID, failed.Generation))
 	recovery, err = store.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
-	require.Empty(t, recovery)
+	require.Len(t, recovery, 1)
+	require.Equal(t, other.OperationID, recovery[0].OperationID)
+	require.Equal(t, AdmissionFenced, recovery[0].State)
 	var remaining int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id=$1`, failed.AccountID).Scan(&remaining))
 	require.Zero(t, remaining)
@@ -544,7 +576,7 @@ func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
 		prepareResult <- admissions.Prepare(ctx, joiner)
 	}()
 	<-prepareStarted
-	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads")
+	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state")
 	require.NoError(t, headLock.Commit(ctx))
 	require.NoError(t, <-leaveResult)
 	require.ErrorIs(t, <-prepareResult, ErrRoomHeadPending)

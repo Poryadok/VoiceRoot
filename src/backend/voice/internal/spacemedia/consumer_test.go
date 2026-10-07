@@ -41,7 +41,8 @@ func TestSpaceAccessMessageACKFollowsFullReconciliation(t *testing.T) {
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
 	coordinator := &Coordinator{
-		Store: calls,
+		Store:      calls,
+		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 4},
 		}},
