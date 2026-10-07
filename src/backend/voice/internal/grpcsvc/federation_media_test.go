@@ -42,15 +42,28 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11}}
 	svc.VoiceRoomAccessResolver = resolver
 	svc.Roles = &canonicalRolePermissions{}
-	joined, err := svc.JoinVoiceRoom(voiceTestCtx(profile), &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
+	svc.SpaceMediaReady = true
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+	svc.SessionEpochChecker = currentSessionCheckerFunc(func(context.Context, string, int64) error { return nil })
+	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
+	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
+	joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
+	joined, err := svc.JoinVoiceRoom(verifiedVoiceUserContext(t, &callsv1.GetJoinTokenRequest{}, account, profile, 5), joinRequest)
 	require.NoError(t, err)
 	edge := &routedMediaFixture{}
 	svc.FederatedMedia = edge
-	svc.SpaceMediaReady = true
-	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
-	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 	request := &callsv1.GetJoinTokenRequest{RoomId: joined.VoiceSession.RoomId}
 	ctx := verifiedVoiceUserContext(t, request, account, profile, 5)
+	for _, failedAdmission := range []readySpaceMediaAdmission{
+		{projectionErr: fmt.Errorf("projection not confirmed")},
+		{headErr: fmt.Errorf("room generation is closing")},
+	} {
+		svc.SpaceMediaAdmissions = failedAdmission
+		_, gateErr := svc.GetJoinToken(ctx, request)
+		require.Equal(t, codes.Unavailable, status.Code(gateErr))
+		require.Empty(t, edge.requests, "unconfirmed PG projection or room head must precede federation")
+	}
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
 	hosted, err := svc.GetJoinToken(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "wss://node.test", hosted.GetLivekitUrl())
@@ -60,10 +73,10 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	require.Equal(t, mediaauthority.RouteRequest{AccountID: account, ProfileID: profile, SpaceID: space, ResourceID: room, RoomName: call.LivekitRoomName, SessionEpoch: 5, CanPublish: true}, edge.requests[0])
 	stored, err := svc.Calls.GetCall(ctx, request.RoomId)
 	require.NoError(t, err)
-	require.Empty(t, stored.SpaceMedia, "hosted federation must not fall through to the local issuer")
+	require.Contains(t, stored.SpaceMedia, profile, "federation is reached only after confirmed canonical Space admission")
 	floors, err := svc.Calls.GetSpaceMediaEpochFloors(ctx, space)
 	require.NoError(t, err)
-	require.Equal(t, voicestore.SpaceMediaEpochFloors{}, floors)
+	require.Equal(t, voicestore.SpaceMediaEpochFloors{AccessEpoch: 11, PolicyEpoch: 7}, floors)
 
 	for _, failure := range []struct {
 		name string
@@ -83,10 +96,10 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 			require.Len(t, edge.requests, before+1)
 			unchanged, getErr := svc.Calls.GetCall(ctx, request.RoomId)
 			require.NoError(t, getErr)
-			require.Empty(t, unchanged.SpaceMedia)
+			require.Contains(t, unchanged.SpaceMedia, profile)
 			unchangedFloors, floorErr := svc.Calls.GetSpaceMediaEpochFloors(ctx, space)
 			require.NoError(t, floorErr)
-			require.Equal(t, voicestore.SpaceMediaEpochFloors{}, unchangedFloors)
+			require.Equal(t, voicestore.SpaceMediaEpochFloors{AccessEpoch: 11, PolicyEpoch: 7}, unchangedFloors)
 		})
 	}
 
@@ -180,13 +193,16 @@ func TestGetJoinTokenFederationRequiresCurrentAuthFloorBeforeHandler(t *testing.
 			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Active: true, Member: true, AccessEpoch: 11}}
 			svc.VoiceRoomAccessResolver = resolver
 			svc.Roles = &canonicalRolePermissions{}
-			joined, err := svc.JoinVoiceRoom(voiceTestCtx(profile), &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
+			svc.SpaceMediaReady = true
+			svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+			svc.SessionEpochChecker = currentSessionCheckerFunc(func(context.Context, string, int64) error { return nil })
+			svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
+			svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
+			joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
+			joined, err := svc.JoinVoiceRoom(verifiedVoiceUserContext(t, &callsv1.GetJoinTokenRequest{}, account, profile, 5), joinRequest)
 			require.NoError(t, err)
 			edge := &routedMediaFixture{}
 			svc.FederatedMedia = edge
-			svc.SpaceMediaReady = true
-			svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
-			svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 			request := &callsv1.GetJoinTokenRequest{RoomId: joined.VoiceSession.RoomId}
 			key, err := rsa.GenerateKey(rand.Reader, 2048)
 			require.NoError(t, err)
@@ -214,10 +230,10 @@ func TestGetJoinTokenFederationRequiresCurrentAuthFloorBeforeHandler(t *testing.
 			require.Empty(t, edge.requests, "Auth admission failure must precede Federation")
 			stored, getErr := svc.Calls.GetCall(context.Background(), request.GetRoomId())
 			require.NoError(t, getErr)
-			require.Empty(t, stored.SpaceMedia, "Auth admission failure must precede local token issuance")
+			require.Contains(t, stored.SpaceMedia, profile, "a later Auth failure must preserve the already confirmed admission")
 			floors, floorErr := svc.Calls.GetSpaceMediaEpochFloors(context.Background(), space)
 			require.NoError(t, floorErr)
-			require.Equal(t, voicestore.SpaceMediaEpochFloors{}, floors)
+			require.Equal(t, voicestore.SpaceMediaEpochFloors{AccessEpoch: 11, PolicyEpoch: 7}, floors)
 		})
 	}
 }

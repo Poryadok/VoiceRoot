@@ -2,6 +2,7 @@ package voice.backend.auth.grpc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -63,7 +64,7 @@ class AuthSessionFloorGrpcTest {
     var unavailable = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, accounts, floors));
     assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
 
-    when(floors.requireFloor(accountId)).thenReturn(0L);
+    doReturn(0L).when(floors).requireFloor(accountId);
     unavailable = assertThrows(StatusRuntimeException.class, () -> invoke(accountId, accounts, floors));
     assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
   }

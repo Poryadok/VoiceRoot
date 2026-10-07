@@ -53,7 +53,7 @@ func (c voiceUserMediaClientConfig) tlsConfig() (*tls.Config, error) {
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(data) {
-		return nil, errors.New("Voice user-principal CA has no certificates")
+		return nil, errors.New("voice user-principal CA has no certificates")
 	}
 	cert, err := tls.LoadX509KeyPair(c.cert, c.key)
 	if err != nil {

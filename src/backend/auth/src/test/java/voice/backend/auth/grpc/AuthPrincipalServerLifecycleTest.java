@@ -102,7 +102,7 @@ class AuthPrincipalServerLifecycleTest {
       assertStatus(privateChannel, ISSUE, Status.Code.UNAVAILABLE);
       assertStatus(privateChannel, LOOKUP, Status.Code.UNAVAILABLE);
       assertStatus(floorChannel, FLOOR, Status.Code.UNAVAILABLE);
-      assertEquals(1, loginCalls.get()); assertEquals(2, proofCalls.get());
+       assertEquals(1, loginCalls.get()); assertEquals(3, proofCalls.get());
     } finally { server.stop(); close(legacy); close(privateChannel); close(floorChannel); }
   }
 

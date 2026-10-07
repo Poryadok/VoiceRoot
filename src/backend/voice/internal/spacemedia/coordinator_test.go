@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,112 @@ type fakeMedia struct {
 	err     error
 }
 
+type currentEpochChecker struct{ err error }
+
+func (c currentEpochChecker) RequireCurrent(context.Context, string, int64) error { return c.err }
+
+type fakeAdmissionRecovery struct {
+	released        int
+	cleaned         int
+	projected       int
+	reads           int
+	pages           [][]store.SpaceMediaAdmission
+	projectionReads int
+	projectionPages [][]store.SpaceMediaAdmission
+	roomCreator     store.SpaceMediaAdmission
+}
+
+func (f *fakeAdmissionRecovery) RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error) {
+	f.reads++
+	if len(f.pages) == 0 {
+		return nil, nil
+	}
+	page := f.pages[0]
+	f.pages = f.pages[1:]
+	return page, nil
+}
+func (f *fakeAdmissionRecovery) ProjectionRows(context.Context, uuid.UUID, int, bool) ([]store.SpaceMediaAdmission, error) {
+	f.projectionReads++
+	if len(f.projectionPages) == 0 {
+		return nil, nil
+	}
+	page := f.projectionPages[0]
+	f.projectionPages = f.projectionPages[1:]
+	return page, nil
+}
+func (f *fakeAdmissionRecovery) RoomCreator(context.Context, string, uint64) (store.SpaceMediaAdmission, error) {
+	if f.roomCreator.OperationID == uuid.Nil {
+		return store.SpaceMediaAdmission{}, store.ErrNotFound
+	}
+	return f.roomCreator, nil
+}
+func (f *fakeAdmissionRecovery) MarkAborting(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeAdmissionRecovery) ReleaseFence(context.Context, store.SpaceMediaAdmission) error {
+	f.released++
+	return nil
+}
+func (f *fakeAdmissionRecovery) MarkCleanupCompleted(context.Context, uuid.UUID, string) error {
+	f.cleaned++
+	return nil
+}
+func (f *fakeAdmissionRecovery) MarkProjectionApplied(context.Context, uuid.UUID, string) error {
+	f.projected++
+	return nil
+}
+func (f *fakeAdmissionRecovery) BeginRoomLeave(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeAdmissionRecovery) ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error {
+	return nil
+}
+func (f *fakeAdmissionRecovery) RecoverOrphanRoomHeads(context.Context) error { return nil }
+func (f *fakeAdmissionRecovery) CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error {
+	f.released++
+	return nil
+}
+
+func TestCoordinatorDrainsEveryAdmissionRecoveryPageBeforeReady(t *testing.T) {
+	row := store.SpaceMediaAdmission{State: AdmissionCommitted, ProjectionApplied: true, ParticipantState: "ACTIVE"}
+	admissions := &fakeAdmissionRecovery{pages: [][]store.SpaceMediaAdmission{{row}, nil}}
+	c := &Coordinator{
+		Store: store.NewMemoryCallStore(), Calls: store.NewMemoryCallStore(),
+		Access: fakeAccess{}, Grants: fakeGrants{}, Media: &fakeMedia{}, Admissions: admissions,
+		SessionEpochChecker: currentEpochChecker{},
+	}
+	require.NoError(t, c.reconcileAdmissions(context.Background()))
+	require.Equal(t, 2, admissions.reads, "readiness recovery must drain every bounded page")
+}
+
+func TestCoordinatorRebuildsLostCallProjectionFromDurableAdmission(t *testing.T) {
+	spaceID, voiceRoomID := uuid.NewString(), uuid.NewString()
+	profileID, accountID, operationID := uuid.New(), uuid.New(), uuid.New()
+	row := store.SpaceMediaAdmission{
+		OperationID: operationID, Generation: uuid.NewString(), AccountID: accountID, ProfileID: profileID,
+		SpaceID: uuid.MustParse(spaceID), RoomID: uuid.NewString(), VoiceRoomID: voiceRoomID, RoomGeneration: 1,
+		Identity: "space-media-recovery-identity", CreatedRoom: true, CallStartedAt: time.Now().UTC(),
+		MaxParticipants: store.MaxVoiceRoomParticipants, SessionEpoch: 5, AccessEpoch: 11, PolicyEpoch: 7,
+		CanJoin: true, CanSubscribe: true, State: AdmissionCommitted, ParticipantState: "ACTIVE", ProjectionApplied: true,
+	}
+	admissions := &fakeAdmissionRecovery{projectionPages: [][]store.SpaceMediaAdmission{{row}, nil}, roomCreator: row}
+	calls := store.NewMemoryCallStore()
+	c := &Coordinator{
+		Store: calls, Calls: calls,
+		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+			profileID.String(): {SpaceID: spaceID, Active: true, Member: true, AccessEpoch: 11},
+		}},
+		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
+			profileID.String(): {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
+		}},
+		Media: &fakeMedia{}, Admissions: admissions, SessionEpochChecker: currentEpochChecker{},
+	}
+	require.NoError(t, c.reconcileAdmissions(context.Background()))
+	call, err := calls.GetCall(context.Background(), row.RoomID)
+	require.NoError(t, err)
+	require.True(t, call.IsParticipant(profileID.String()))
+	participant := call.SpaceMedia[profileID.String()]
+	require.Equal(t, operationID.String(), participant.AdmissionOperationID)
+	require.Equal(t, row.RoomGeneration, participant.RoomGeneration)
+	require.Equal(t, 3, admissions.projectionReads, "creator and joiner pages are drained before readiness")
+}
+
 func (f *fakeMedia) RemoveParticipant(_ context.Context, _, identity string) error {
 	f.removed = append(f.removed, identity)
 	return f.err
@@ -55,9 +162,9 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 		profileB: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
 	}}
 	media := &fakeMedia{}
-	c := &Coordinator{Store: calls, Access: access, Grants: grants, Media: media}
+	c := &Coordinator{Store: calls, Access: access, Grants: grants, Media: media, Admissions: &fakeAdmissionRecovery{}, SessionEpochChecker: currentEpochChecker{}}
 
-	err := c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.SpaceAccessEpoch, Epoch: 4, ProfileID: profileA})
+	err = c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.SpaceAccessEpoch, Epoch: 4, ProfileID: profileA})
 
 	require.NoError(t, err)
 	require.Equal(t, []string{identityB}, media.removed, "a narrow hint must not hide the other profile")
@@ -84,7 +191,7 @@ func TestDelayedInvalidationUsesCurrentRestoredRights(t *testing.T) {
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 			profile: {PolicyEpoch: 12, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
 		}},
-		Media: media,
+		Media: media, SessionEpochChecker: currentEpochChecker{},
 	}
 
 	err := c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.RolePolicyEpoch, Epoch: 10})
@@ -108,7 +215,7 @@ func TestFailedTargetRemovalLeavesReconciliationIncomplete(t *testing.T) {
 			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
 		}},
 		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{}},
-		Media:  media,
+		Media:  media, SessionEpochChecker: currentEpochChecker{},
 	}
 
 	err := c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.SpaceAccessEpoch, Epoch: 2})
@@ -121,6 +228,119 @@ func TestFailedTargetRemovalLeavesReconciliationIncomplete(t *testing.T) {
 	call, getErr := calls.GetCall(ctx, roomID)
 	require.NoError(t, getErr)
 	require.True(t, call.SpaceMedia[profile].Revoking, "retry must retain the exact in-flight revocation")
+}
+
+func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
+	ctx := context.Background()
+	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
+	media := &fakeMedia{}
+	readiness := []bool{}
+	c := &Coordinator{
+		Store: calls, Calls: calls, Admissions: &fakeAdmissionRecovery{}, Media: media,
+		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+		}},
+		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
+			profileID: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
+		}},
+		SessionEpochChecker: currentEpochChecker{}, OnReadiness: func(ready bool) { readiness = append(readiness, ready) },
+	}
+
+	require.NoError(t, c.ReconcileAll(ctx))
+	require.Equal(t, []bool{false, true}, readiness)
+
+	readiness = nil
+	media.err = errors.New("authority-driven ejection did not complete")
+	c.Access = fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+		profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
+	}}
+	err := c.ReconcileAll(ctx)
+	require.Error(t, err)
+	require.Equal(t, []bool{false}, readiness, "failed convergence must keep serving closed")
+}
+
+func TestAbortRetryDrainsExactCommittedProjectionBeforeReleasingFence(t *testing.T) {
+	ctx := context.Background()
+	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
+	call, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	participant := call.SpaceMedia[profileID]
+	admissions := &fakeAdmissionRecovery{}
+	media := &fakeMedia{}
+	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Media: media}
+	operationID, err := uuid.Parse(participant.AdmissionOperationID)
+	require.NoError(t, err)
+	row := store.SpaceMediaAdmission{
+		OperationID: operationID, Generation: participant.Generation, AccountID: uuid.MustParse(participant.AccountID),
+		ProfileID: uuid.MustParse(profileID), SpaceID: uuid.MustParse(spaceID), RoomID: roomID,
+		VoiceRoomID: voiceRoomID, Identity: participant.Identity, State: AdmissionAborting,
+	}
+
+	err = c.abortAdmission(ctx, row)
+
+	require.NoError(t, err)
+	current, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	require.NotContains(t, current.SpaceMedia, profileID, "a retry must drain an operation-owned participant before fence release")
+	require.Equal(t, []string{participant.Identity}, media.removed)
+	require.Equal(t, 2, admissions.released, "projection drain and final cleanup both release only the exact operation")
+	require.Equal(t, 1, admissions.cleaned)
+}
+
+func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing.T) {
+	ctx := context.Background()
+	spaceID, voiceRoomID := uuid.NewString(), uuid.NewString()
+	activeRoomID, pendingRoomID := uuid.NewString(), uuid.NewString()
+	activeProfile, pendingProfile := uuid.NewString(), uuid.NewString()
+	calls := store.NewMemoryCallStore()
+	_, err := calls.CreateCall(ctx, store.Call{
+		RoomID: activeRoomID, LivekitRoomName: "lk-active", VoiceRoomID: voiceRoomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: activeProfile, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+	})
+	require.NoError(t, err)
+	_, err = calls.AdmitSpaceMediaParticipant(ctx, activeRoomID, store.SpaceMediaParticipant{
+		AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: activeProfile,
+		Identity: mediaIdentity(activeProfile), Generation: uuid.NewString(),
+		Issued: store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
+	}, store.MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	_, err = calls.CreateCall(ctx, store.Call{
+		RoomID: pendingRoomID, LivekitRoomName: "lk-pending", VoiceRoomID: voiceRoomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: pendingProfile, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_UNSPECIFIED,
+	})
+	require.NoError(t, err)
+	access := fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+		pendingProfile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
+	}}
+	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
+		pendingProfile: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
+	}}
+	admissions := &fakeAdmissionRecovery{}
+	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Access: access, Grants: grants,
+		SessionEpochChecker: currentEpochChecker{}, Media: &fakeMedia{}}
+	row := store.SpaceMediaAdmission{
+		OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: uuid.New(), ProfileID: uuid.MustParse(pendingProfile),
+		SpaceID: uuid.MustParse(spaceID), RoomID: pendingRoomID, VoiceRoomID: voiceRoomID,
+		Identity: mediaIdentity(pendingProfile), CreatedRoom: true, CallStartedAt: time.Now().UTC(),
+		MaxParticipants: store.MaxVoiceRoomParticipants, SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1,
+		CanJoin: true, CanSubscribe: true, State: AdmissionCommitted,
+	}
+
+	err = c.recoverCommittedAdmission(ctx, row)
+
+	require.NoError(t, err)
+	loser, err := calls.GetCall(ctx, pendingRoomID)
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ENDED, loser.Status)
+	require.Equal(t, 1, admissions.released)
+	require.Equal(t, 1, admissions.cleaned)
+	require.Zero(t, admissions.projected, "a losing operation must never become outbox-claimable")
 }
 
 func TestOutOfOrderAuthoritiesKeepIndependentMonotonicFloors(t *testing.T) {
@@ -212,7 +432,7 @@ func newRoomStore(t *testing.T, ctx context.Context, spaceID, roomID, voiceRoomI
 	require.NoError(t, err)
 	for _, profile := range profiles {
 		_, err := calls.AdmitSpaceMediaParticipant(ctx, roomID, store.SpaceMediaParticipant{
-			ProfileID: profile, Identity: mediaIdentity(profile), Generation: uuid.NewString(),
+			AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: profile, Identity: mediaIdentity(profile), Generation: uuid.NewString(),
 			Issued:     store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
 			Reconciled: store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
 		}, store.MaxSpaceProVoiceParticipants)

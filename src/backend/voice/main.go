@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -152,12 +153,14 @@ func main() {
 		}
 	}
 	var userPrincipalRuntime *voiceuserprincipalruntime.Runtime
+	var sessionEpochChecker grpcsvc.CurrentSessionEpochChecker
 	if userPrincipalEnabled {
 		epochClient, epochConn, clientErr := authFloorConfig.Dial(voiceIssuer)
 		if clientErr != nil {
 			log.Fatalf("voice Auth session-floor client: %v", clientErr)
 		}
 		defer func() { _ = epochConn.Close() }()
+		sessionEpochChecker = epochClient
 		userPrincipalRuntime, err = voiceuserprincipalruntime.New(runCtx, userPrincipalConfig, epochClient)
 		if err != nil {
 			log.Fatalf("voice user-principal runtime: %v", err)
@@ -353,6 +356,7 @@ func main() {
 	}
 
 	tokenTTL := time.Hour
+	spaceMediaAdmissions := spacemedia.NewPostgresAdmissionStore(lifecyclePool)
 	federatedMedia, err := federationmedia.LoadFromEnv(os.Getenv)
 	if err != nil {
 		log.Fatal("federated media configuration invalid")
@@ -371,6 +375,7 @@ func main() {
 		SpaceMembers:             spaceMembers,
 		VoiceRoomAccessResolver:  voiceRoomAccessResolver,
 		SpaceVoiceRoomGrants:     voiceRoomGrantResolver,
+		SpaceMediaAdmissions:     spaceMediaAdmissions,
 		SpaceTokens: livekit.NewSpaceTokenIssuer(
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
@@ -389,16 +394,23 @@ func main() {
 			strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
 			tokenTTL,
 		),
-		Events:      events,
-		RingTimeout: 30 * time.Second,
-		Logger:      logger,
+		Events:              events,
+		RingTimeout:         30 * time.Second,
+		Logger:              logger,
+		SessionEpochChecker: sessionEpochChecker,
 	}
 	if federatedMedia != nil {
 		voiceSvc.FederatedMedia = federatedMedia
 	}
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+		if sessionEpochChecker == nil {
+			log.Fatal("Space media admission requires the current Auth session-floor checker")
+		}
 		if !callStoreDurable {
 			log.Fatal("Space media invalidation requires the durable Voice Redis call store")
+		}
+		if err := voiceSvc.SpaceMediaAdmissions.CheckSchema(runCtx); err != nil {
+			log.Fatalf("Space media PostgreSQL admission schema: %v", err)
 		}
 		if voiceRoomAccessResolver == nil || voiceRoomGrantResolver == nil {
 			log.Fatal("Space media invalidation requires Space and Role authority resolvers")
@@ -408,12 +420,17 @@ func main() {
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 			strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
 		)
+		spaceMediaServing := &atomic.Bool{}
+		voiceSvc.SpaceMediaServing = spaceMediaServing
 		spaceMediaCoordinator := &spacemedia.Coordinator{
-			Store: callStore, Access: voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
+			Store: callStore, Calls: callStore, Admissions: spaceMediaAdmissions,
+			SessionEpochChecker: sessionEpochChecker,
+			Access:              voiceRoomAccessResolver, Grants: voiceRoomGrantResolver, Media: mediaLifecycle,
 			Every: spacemedia.ReconcileInterval,
 			OnError: func(err error) {
 				logger.Warn("Space media authority reconciliation failed", slog.String("error", err.Error()))
 			},
+			OnReadiness: spaceMediaServing.Store,
 		}
 		voiceSvc.SpaceMediaRevoker = spaceMediaCoordinator
 		invalidationConsumer, err := spacemedia.StartInvalidationConsumer(runCtx, natsURL, spaceMediaCoordinator, logger)
@@ -424,7 +441,21 @@ func main() {
 		if err := spaceMediaCoordinator.ReconcileAll(runCtx); err != nil {
 			log.Fatalf("Space media initial reconciliation: %v", err)
 		}
-		voiceSvc.SpaceMediaReady = true
+		admissionPublisher, ok := events.(spacemedia.AdmissionOutboxPublisher)
+		if !ok {
+			log.Fatal("Space media durable event publisher is not configured")
+		}
+		admissionRelay := &spacemedia.AdmissionOutboxRelay{
+			Store: spaceMediaAdmissions, Publisher: admissionPublisher,
+			OnError: func(err error) {
+				logger.Warn("Space media admission outbox delivery failed", slog.String("error", err.Error()))
+			},
+		}
+		go func() {
+			if err := admissionRelay.Run(runCtx); err != nil && runCtx.Err() == nil {
+				logger.Error("Space media admission outbox relay stopped", slog.String("error", err.Error()))
+			}
+		}()
 		go func() {
 			if err := spaceMediaCoordinator.Run(runCtx); err != nil && runCtx.Err() == nil {
 				logger.Error("Space media authority reconciler stopped", slog.String("error", err.Error()))

@@ -56,7 +56,7 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 	if target == "" {
 		return voicestore.VoiceRoomMoveResult{}, status.Error(codes.InvalidArgument, "participant_profile_id is required")
 	}
-	for field, value := range map[string]string{"from_voice_room_id": fromRoom, "to_voice_room_id": toRoom, "space.id": assertedSpace, "operation_id": operationID} {
+	for field, value := range map[string]string{"from_voice_room_id": fromRoom, "to_voice_room_id": toRoom, "operation_id": operationID} {
 		if value == "" {
 			return voicestore.VoiceRoomMoveResult{}, status.Errorf(codes.InvalidArgument, "%s is required", field)
 		}
@@ -74,15 +74,6 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 		ActorProfileID: actor, ParticipantProfileID: target, OperationID: operationID,
 		FromVoiceRoomID: fromRoom, ToVoiceRoomID: toRoom, SpaceID: assertedSpace,
 	}
-	if replay, found, err := s.Calls.FindVoiceRoomMove(ctx, moveReq); err != nil {
-		return voicestore.VoiceRoomMoveResult{}, moveStoreErr(err)
-	} else if found {
-		if err := s.transferAccountVoiceProfile(ctx, target, replay.Source.RoomID, replay.Destination.RoomID, actor); err != nil {
-			return voicestore.VoiceRoomMoveResult{}, err
-		}
-		return replay, nil
-	}
-
 	// The authoritative resolver proves membership and canonical ownership for
 	// each involved profile.  Deliberately do not resolve destination access for
 	// actor: a moderator is allowed to move someone there without VOICE_JOIN.
@@ -94,9 +85,27 @@ func (s *VoiceGRPC) moveVoiceRoomParticipant(ctx context.Context, actor, target,
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, err
 	}
+	// Space transfers need both room-head generations and operation-owned
+	// participant fences. Until that atomic transfer exists, fail closed before
+	// replay lookup or any roster/event mutation. Ordinary DM/group moves keep
+	// their existing path.
+	if actorSource.SpaceID != "" || targetSource.SpaceID != "" {
+		return voicestore.VoiceRoomMoveResult{}, status.Error(codes.Unavailable, "Space voice-room transfer is not available")
+	}
+	if replay, found, err := s.Calls.FindVoiceRoomMove(ctx, moveReq); err != nil {
+		return voicestore.VoiceRoomMoveResult{}, moveStoreErr(err)
+	} else if found {
+		if err := s.transferAccountVoiceProfile(ctx, target, replay.Source.RoomID, replay.Destination.RoomID, actor); err != nil {
+			return voicestore.VoiceRoomMoveResult{}, err
+		}
+		return replay, nil
+	}
 	targetDestination, err := s.resolveCanonicalVoiceRoomAccess(ctx, toRoom, target)
 	if err != nil {
 		return voicestore.VoiceRoomMoveResult{}, err
+	}
+	if targetDestination.SpaceID != "" {
+		return voicestore.VoiceRoomMoveResult{}, status.Error(codes.Unavailable, "Space voice-room transfer is not available")
 	}
 	if actorSource.SpaceID != assertedSpace || targetSource.SpaceID != assertedSpace || targetDestination.SpaceID != assertedSpace {
 		return voicestore.VoiceRoomMoveResult{}, status.Error(codes.PermissionDenied, "voice rooms and participants must share the asserted space")
@@ -191,14 +200,11 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 	}
 
 	call, err := s.Calls.GetCallByVoiceRoomID(ctx, voiceRoomID)
+	created := false
 	if errors.Is(err, voicestore.ErrNotFound) {
 		now := s.now()
 		roomID := uuid.NewString()
-		fences, reserveErr := s.reserveAccountVoiceProfiles(ctx, roomID, []string{profileID}, profileID)
-		if reserveErr != nil {
-			return nil, reserveErr
-		}
-		call, err = s.Calls.CreateCall(ctx, voicestore.Call{
+		call = voicestore.Call{
 			RoomID:             roomID,
 			LivekitRoomName:    "voice-room-" + voiceRoomID,
 			VoiceRoomID:        voiceRoomID,
@@ -206,52 +212,33 @@ func (s *VoiceGRPC) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoo
 			SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
 			InitiatorProfileID: profileID,
 			MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
-			Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
+			Status:             callsv1.CallStatus_CALL_STATUS_UNSPECIFIED,
 			StartedAt:          now,
-		})
-		if err != nil {
-			s.releaseAccountVoiceReservations(ctx, fences)
-			return nil, storeErr(err)
+			States:             map[string]voicestore.ParticipantState{},
 		}
-		if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
-			_, _ = s.Calls.SetStatus(ctx, call.RoomID, callsv1.CallStatus_CALL_STATUS_ENDED, s.now())
-			s.releaseAccountVoiceReservations(ctx, fences)
-			return nil, err
-		}
-		s.publishCallStarted(ctx, call)
-		s.publishVoiceMemberJoined(ctx, call, profileID)
-		return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
+		created = true
 	} else if err != nil {
 		return nil, storeErr(err)
 	} else if call.SpaceID != access.SpaceID {
 		return nil, status.Error(codes.PermissionDenied, "stored voice room space does not match canonical owner")
 	}
-	if err == nil {
-		fences, reserveErr := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
-		if reserveErr != nil {
-			return nil, reserveErr
-		}
-		if !call.IsParticipant(profileID) {
-			maxParticipants := voicestore.MaxVoiceRoomParticipants
-			if s.SpacePro != nil {
-				if ok, err := s.SpacePro.HasSpacePro(ctx, spaceID); err == nil && ok {
-					maxParticipants = voicestore.MaxSpaceProVoiceParticipants
-				}
-			}
-			call, err = s.Calls.AddParticipant(ctx, call.RoomID, profileID, maxParticipants)
-			if err != nil {
-				s.releaseAccountVoiceReservations(ctx, fences)
-				return nil, storeErr(err)
-			}
-			s.publishVoiceMemberJoined(ctx, call, profileID)
-		}
-		if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
-			s.releaseAccountVoiceReservations(ctx, fences)
-			return nil, err
-		}
-		return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
+	if s.SpaceVoiceRoomGrants == nil {
+		return nil, status.Error(codes.Unavailable, "Space voice authority is not configured")
 	}
-
+	maxParticipants := voicestore.MaxVoiceRoomParticipants
+	if s.SpacePro != nil {
+		pro, err := s.SpacePro.HasSpacePro(ctx, spaceID)
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "Space subscription check unavailable")
+		}
+		if pro {
+			maxParticipants = voicestore.MaxSpaceProVoiceParticipants
+		}
+	}
+	call, err = s.admitSpaceVoiceRoom(ctx, call, profileID, access, maxParticipants, created)
+	if err != nil {
+		return nil, err
+	}
 	return &callsv1.JoinVoiceRoomResponse{VoiceSession: voiceSessionToProto(call)}, nil
 }
 
@@ -278,7 +265,11 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	if !call.IsParticipant(profileID) {
 		return &callsv1.LeaveVoiceRoomResponse{}, nil
 	}
-	if participant, ok := call.SpaceMedia[profileID]; call.SpaceID != "" && ok {
+	if call.SpaceID != "" || len(call.SpaceMedia) > 0 {
+		participant, ok := call.SpaceMedia[profileID]
+		if call.SpaceID == "" || !ok {
+			return nil, status.Error(codes.Unavailable, "Space media admission is not confirmed")
+		}
 		if err := s.leaveSpaceMediaParticipant(ctx, call, profileID, participant); err != nil {
 			return nil, err
 		}
@@ -286,6 +277,24 @@ func (s *VoiceGRPC) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceR
 	}
 	if _, err := s.leaveOpenVoiceSession(ctx, call, profileID); err != nil {
 		return nil, err
+	}
+	if participant, ok := call.SpaceMedia[profileID]; ok {
+		if s.SpaceMediaAdmissions == nil {
+			return nil, status.Error(codes.Unavailable, "Space media admission fence is unavailable")
+		}
+		operationID, opErr := uuid.Parse(participant.AdmissionOperationID)
+		accountID, accountErr := uuid.Parse(participant.AccountID)
+		profileUUID, profileErr := uuid.Parse(profileID)
+		spaceUUID, spaceErr := uuid.Parse(call.SpaceID)
+		if opErr != nil || accountErr != nil || profileErr != nil || spaceErr != nil {
+			return nil, status.Error(codes.Unavailable, "Space media admission fence is invalid")
+		}
+		if err := s.SpaceMediaAdmissions.ReleaseFence(ctx, voicestore.SpaceMediaAdmission{
+			OperationID: operationID, Generation: participant.Generation, AccountID: accountID,
+			ProfileID: profileUUID, SpaceID: spaceUUID, RoomID: call.RoomID,
+		}); err != nil {
+			return nil, status.Error(codes.Unavailable, "Space media admission fence release failed")
+		}
 	}
 	return &callsv1.LeaveVoiceRoomResponse{}, nil
 }
@@ -304,33 +313,36 @@ func callerVoiceUser(ctx context.Context) (profileID, accountID string, epoch in
 }
 
 func (s *VoiceGRPC) leaveSpaceMediaParticipant(ctx context.Context, call voicestore.Call, profileID string, participant voicestore.SpaceMediaParticipant) error {
-	if s.SpaceMediaRevoker == nil {
+	if s.SpaceMediaRevoker == nil || s.SpaceMediaAdmissions == nil {
 		return status.Error(codes.Unavailable, "Space media revocation is not ready")
 	}
-	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
-	if err != nil {
-		return err
+	operationID, operationErr := uuid.Parse(participant.AdmissionOperationID)
+	accountID, accountErr := uuid.Parse(participant.AccountID)
+	profileUUID, profileErr := uuid.Parse(profileID)
+	spaceUUID, spaceErr := uuid.Parse(call.SpaceID)
+	if operationErr != nil || accountErr != nil || profileErr != nil || spaceErr != nil || participant.Generation == "" {
+		return status.Error(codes.Unavailable, "Space media admission fence is invalid")
 	}
-	if err := s.commitAccountVoiceReservations(ctx, fences); err != nil {
-		s.releaseAccountVoiceReservations(ctx, fences)
-		return err
+	if err := s.SpaceMediaAdmissions.BeginRoomLeave(ctx, operationID, participant.Generation); err != nil {
+		return status.Error(codes.Unavailable, "Space media participant drain is pending")
 	}
 	updated, removed, err := s.SpaceMediaRevoker.RevokeSpaceMediaParticipant(ctx, call, participant)
 	if err != nil {
-		s.releaseAccountVoiceReservations(ctx, fences)
 		return status.Error(codes.Unavailable, "Space media participant removal is pending")
 	}
+	if err := s.SpaceMediaAdmissions.CompleteRoomLeave(ctx, voicestore.SpaceMediaAdmission{
+		OperationID: operationID, Generation: participant.Generation, AccountID: accountID,
+		ProfileID: profileUUID, SpaceID: spaceUUID, RoomID: call.RoomID,
+	}); err != nil {
+		return status.Error(codes.Unavailable, "Space media participant cleanup is pending")
+	}
 	if !removed {
-		s.releaseAccountVoiceReservations(ctx, fences)
 		return nil
 	}
 	for _, share := range call.ScreenShares {
 		if share.ProfileID == profileID {
 			s.publishScreenShareStopped(ctx, updated, profileID, share.StreamID)
 		}
-	}
-	if err := s.releaseAccountVoiceProfile(ctx, profileID, call.RoomID); err != nil {
-		return err
 	}
 	if updated.Status == callsv1.CallStatus_CALL_STATUS_ENDED {
 		s.publishEnded(ctx, updated, "hangup", profileID)

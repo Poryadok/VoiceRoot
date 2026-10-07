@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,27 @@ type SpaceMediaParticipantRevoker interface {
 	RevokeSpaceMediaParticipant(context.Context, voicestore.Call, voicestore.SpaceMediaParticipant) (voicestore.Call, bool, error)
 }
 
+type SpaceMediaAdmissionStore interface {
+	CheckSchema(context.Context) error
+	ClaimRoomHead(context.Context, string, string, string, uuid.UUID, bool) (voicestore.SpaceMediaRoomHead, error)
+	AbandonRoomClaim(context.Context, string, uint64, uuid.UUID) error
+	Prepare(context.Context, voicestore.SpaceMediaAdmission) error
+	Fence(context.Context, voicestore.SpaceMediaAdmission) error
+	MarkCommitted(context.Context, uuid.UUID, string) error
+	MarkProjectionApplied(context.Context, uuid.UUID, string) error
+	ConfirmProjection(context.Context, uuid.UUID, string) error
+	ConfirmRoomHeadOpen(context.Context, voicestore.SpaceMediaAdmission) error
+	MarkAborting(context.Context, uuid.UUID, string) error
+	ReleaseFence(context.Context, voicestore.SpaceMediaAdmission) error
+	MarkCleanupCompleted(context.Context, uuid.UUID, string) error
+	BeginRoomLeave(context.Context, uuid.UUID, string) error
+	CompleteRoomLeave(context.Context, voicestore.SpaceMediaAdmission) error
+}
+
+type CurrentSessionEpochChecker interface {
+	RequireCurrent(context.Context, string, int64) error
+}
+
 type VoiceGRPC struct {
 	callsv1.UnimplementedVoiceServiceServer
 
@@ -61,8 +83,11 @@ type VoiceGRPC struct {
 	VoiceRoomAccessResolver  AuthoritativeVoiceRoomAccessResolver
 	SpaceVoiceRoomGrants     SpaceVoiceRoomGrantResolver
 	SpaceMediaRevoker        SpaceMediaParticipantRevoker
+	SpaceMediaAdmissions     SpaceMediaAdmissionStore
+	SessionEpochChecker      CurrentSessionEpochChecker
 	SpaceTokens              *livekit.SpaceTokenIssuer
 	SpaceMediaReady          bool
+	SpaceMediaServing        *atomic.Bool
 	SpaceLifecycle           SpaceLifecycleController
 	SpacePro                 SpaceProLookup
 	Roles                    RolePermissionChecker
@@ -76,6 +101,16 @@ type VoiceGRPC struct {
 	RingTimeout              time.Duration
 	// Logger emits structured nats_publish errors when JetStream publish fails after a successful RPC.
 	Logger *slog.Logger
+}
+
+func (s *VoiceGRPC) spaceMediaOperational() bool {
+	if s == nil {
+		return false
+	}
+	if s.SpaceMediaServing != nil {
+		return s.SpaceMediaServing.Load()
+	}
+	return s.SpaceMediaReady
 }
 
 // ManagedGameSessionGrantChecker reads Role's session-scoped grant ledger.
@@ -538,6 +573,49 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 			return nil, err
 		}
 		if s.FederatedMedia != nil {
+			if s.SessionEpochChecker == nil {
+				return nil, status.Error(codes.Unavailable, "Auth session authority unavailable")
+			}
+			if s.SpaceVoiceRoomGrants == nil {
+				return nil, status.Error(codes.Unavailable, "Space voice media authority unavailable")
+			}
+			if err := s.SessionEpochChecker.RequireCurrent(ctx, delegatedAccountID, delegatedEpoch); err != nil {
+				if status.Code(err) == codes.Unauthenticated {
+					return nil, status.Error(codes.Unauthenticated, "verified Space media identity is stale")
+				}
+				return nil, status.Error(codes.Unavailable, "Auth session authority unavailable")
+			}
+			grants, grantErr := s.SpaceVoiceRoomGrants.ResolveVoiceRoomGrants(ctx, call.SpaceID, call.VoiceRoomID, profileID)
+			if grantErr != nil {
+				if status.Code(grantErr) == codes.PermissionDenied || status.Code(grantErr) == codes.NotFound {
+					return nil, status.Error(codes.PermissionDenied, "Space voice media permission denied")
+				}
+				return nil, status.Error(codes.Unavailable, "Space voice media authority unavailable")
+			}
+			if grants.PolicyEpoch == 0 || !grants.CanJoin || !grants.CanSubscribe {
+				return nil, status.Error(codes.PermissionDenied, "Space voice media permission denied")
+			}
+			participant, admitted := call.SpaceMedia[profileID]
+			if !admitted || participant.Revoking || participant.AccountID != delegatedAccountID ||
+				participant.Issued.SessionEpoch != uint64(delegatedEpoch) || participant.Issued.AccessEpoch != access.AccessEpoch ||
+				participant.Issued.PolicyEpoch != grants.PolicyEpoch || participant.Issued.CanPublishAudio != grants.CanPublishAudio ||
+				!participant.Issued.CanJoin || !participant.Issued.CanSubscribe {
+				return nil, status.Error(codes.FailedPrecondition, "Space media admission is not confirmed")
+			}
+			accessFloors, floorErr := s.Calls.RaiseSpaceMediaEpochFloor(ctx, call.SpaceID, voicestore.SpaceAccessEpoch, access.AccessEpoch)
+			if floorErr != nil {
+				return nil, storeErr(floorErr)
+			}
+			policyFloors, floorErr := s.Calls.RaiseSpaceMediaEpochFloor(ctx, call.SpaceID, voicestore.RolePolicyEpoch, grants.PolicyEpoch)
+			if floorErr != nil {
+				return nil, storeErr(floorErr)
+			}
+			if accessFloors.AccessEpoch > access.AccessEpoch || policyFloors.PolicyEpoch > grants.PolicyEpoch {
+				return nil, status.Error(codes.FailedPrecondition, "Space media authority changed; retry join")
+			}
+			if err := s.ensureConfirmedSpaceMediaCall(ctx, call); err != nil {
+				return nil, err
+			}
 			result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{
 				AccountID: delegatedAccountID, ProfileID: profileID, SpaceID: call.SpaceID,
 				ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName,
@@ -612,6 +690,9 @@ func (s *VoiceGRPC) UpdateVoiceState(ctx context.Context, req *callsv1.UpdateVoi
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureConfirmedSpaceMediaCall(ctx, call); err != nil {
+		return nil, err
+	}
 	if req.IsMuted != nil && !req.GetIsMuted() {
 		if err := s.ensureVoiceSpeakPermission(ctx, call, profileID); err != nil {
 			return nil, err
@@ -665,6 +746,9 @@ func (s *VoiceGRPC) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceSta
 			return nil, err
 		}
 	}
+	if err := s.ensureConfirmedSpaceMediaCall(ctx, call); err != nil {
+		return nil, err
+	}
 	var participants []*callsv1.VoiceParticipantState
 	for _, id := range call.ProfileIDs() {
 		state := call.States[id]
@@ -697,11 +781,17 @@ func (s *VoiceGRPC) GetActiveCall(ctx context.Context, _ *callsv1.GetActiveCallR
 		if err != nil {
 			return nil, storeErr(err)
 		}
+		if err := s.ensureConfirmedSpaceMediaCall(ctx, call); err != nil {
+			return nil, err
+		}
 		return &callsv1.GetActiveCallResponse{CallSession: callToProto(call)}, nil
 	}
 	call, err := s.Calls.GetActiveCall(ctx, profileID)
 	if err != nil {
 		return nil, storeErr(err)
+	}
+	if err := s.ensureConfirmedSpaceMediaCall(ctx, call); err != nil {
+		return nil, err
 	}
 	return &callsv1.GetActiveCallResponse{CallSession: callToProto(call)}, nil
 }

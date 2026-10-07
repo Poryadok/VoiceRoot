@@ -14,7 +14,6 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/s2s"
-	"voice/backend/voice/internal/store"
 )
 
 type invalidationAckMessage struct {

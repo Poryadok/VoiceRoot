@@ -12,7 +12,7 @@ from nats_contract_plan import compile_plan,digest
 from rollout_census import census
 from stage_runtime import HUB
 
-TARGET_FILES={'realtime':'565dc420d8a90f47165001f9cd72cc0cfd7df499fb6c05efc24f17f69201557c','analytics-chat':'db6d4faf9d7bd41b04ff55a0683c4f49cc33ea836f25f8d556a939fa0eff55de'}
+TARGET_FILES={'realtime':'e466b67d6fdf66e816fe0ffbd7e91ad59be96f79b735977d6d5a77f819fbf23d','analytics-chat':'2c3befbb0817f55c61f781215625b21e887ab52c5abbb758dda4073c7f0d0d06'}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 def monitor(kube):
     hub=kube.get('deployment',HUB)
@@ -39,15 +39,19 @@ def preflight(kube,source,enrollment,contract,decoder):
         def monitor_jsz(self,broker):return tree
     row=census(Runtime(),'root-live-monitor',account)
     detail=next(a for a in tree['account_details'] if a['id']==account)['stream_detail']
-    streams={s['name']:{'config':s['config'],'state':s['state']} for s in detail}
-    current=[c for s in detail if s['name']=='social_events' for c in s['consumer_detail'] if c['name']=='rt_realtime1_friend_removed']
-    if len(current)>1:fail()
+    streams={s['name']:{'config':s['config'],'state':s['state'],'consumer_detail':s.get('consumer_detail',[])} for s in detail}
+    current={}
+    for stream in detail:
+        for consumer in stream.get('consumer_detail',[]):
+            key=(stream['name'],consumer.get('durable') or consumer['name'])
+            if key in current:fail()
+            current[key]=consumer
     from bootstrap_auth import prove
     def unchanged():select(kube,enrollment,generation)
     live_auth=prove(secret_bytes(kube.get('secret',enrollment['secret']['name']),'bootstrap.creds'),kube.get('secret','voice-nats-operator-'+generation),unchanged)
     if live_auth!=enrollment['auth_proof']:fail()
-    normalized=live_auth['normalized_consumer']
-    plan=compile_plan(source,streams,current[0] if current else None,normalized)
+    normalized={(row['stream'],row['durable']):row['config'] for row in live_auth['normalized_consumers']}
+    plan=compile_plan(source,streams,current,normalized)
     scripts={}
     for old in contract['scripts']:
         part=old['part']

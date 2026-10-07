@@ -85,12 +85,59 @@ type SpaceMediaGrant struct {
 }
 
 type SpaceMediaParticipant struct {
-	ProfileID  string          `json:"profile_id"`
-	Identity   string          `json:"identity"`
-	Generation string          `json:"generation"`
-	Issued     SpaceMediaGrant `json:"issued"`
-	Reconciled SpaceMediaGrant `json:"reconciled"`
-	Revoking   bool            `json:"revoking"`
+	AccountID            string          `json:"account_id,omitempty"`
+	AdmissionOperationID string          `json:"admission_operation_id,omitempty"`
+	RoomGeneration       uint64          `json:"room_generation,omitempty"`
+	CreatedRoom          bool            `json:"created_room,omitempty"`
+	ProfileID            string          `json:"profile_id"`
+	Identity             string          `json:"identity"`
+	Generation           string          `json:"generation"`
+	Issued               SpaceMediaGrant `json:"issued"`
+	Reconciled           SpaceMediaGrant `json:"reconciled"`
+	Revoking             bool            `json:"revoking"`
+}
+
+type SpaceMediaAdmissionEvent struct {
+	ID      uuid.UUID
+	Subject string
+	Payload []byte
+}
+
+type SpaceMediaAdmission struct {
+	OperationID       uuid.UUID
+	Generation        string
+	RoomGeneration    uint64
+	AccountID         uuid.UUID
+	ProfileID         uuid.UUID
+	SpaceID           uuid.UUID
+	RoomID            string
+	VoiceRoomID       string
+	Identity          string
+	CreatedRoom       bool
+	CallStartedAt     time.Time
+	MaxParticipants   int
+	SessionEpoch      uint64
+	AccessEpoch       uint64
+	PolicyEpoch       uint64
+	CanJoin           bool
+	CanPublishAudio   bool
+	CanSubscribe      bool
+	State             string
+	ParticipantState  string
+	ProjectionApplied bool
+	Events            []SpaceMediaAdmissionEvent
+}
+
+// SpaceMediaRoomHead is the PostgreSQL authority for one canonical Space
+// voice-room incarnation. Redis indexes are only projections of this claim.
+type SpaceMediaRoomHead struct {
+	VoiceRoomID        string
+	SpaceID            string
+	RoomID             string
+	RoomGeneration     uint64
+	CreatorOperationID uuid.UUID
+	State              string
+	Ready              bool
 }
 
 type SpaceMediaEpochKind uint8
@@ -619,7 +666,7 @@ func (s *MemoryCallStore) AdmitSpaceMediaParticipant(_ context.Context, roomID s
 	if !ok {
 		return Call{}, ErrNotFound
 	}
-	if !call.IsVoiceRoom() || call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE || participant.ProfileID == "" ||
+	if !call.IsVoiceRoom() || (call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE && call.Status != callsv1.CallStatus_CALL_STATUS_UNSPECIFIED) || participant.ProfileID == "" ||
 		participant.Identity == "" || participant.Generation == "" || participant.Issued.SessionEpoch == 0 ||
 		participant.Issued.AccessEpoch == 0 || participant.Issued.PolicyEpoch == 0 || !participant.Issued.CanJoin || !participant.Issued.CanSubscribe {
 		return Call{}, ErrInvalidState
@@ -633,6 +680,11 @@ func (s *MemoryCallStore) AdmitSpaceMediaParticipant(_ context.Context, roomID s
 			return call, nil
 		}
 		return Call{}, ErrSpaceMediaTransition
+	}
+	for existingRoomID, existing := range s.calls {
+		if existingRoomID != roomID && existing.IsVoiceRoom() && existing.Status == callsv1.CallStatus_CALL_STATUS_ACTIVE && existing.VoiceRoomID == call.VoiceRoomID {
+			return Call{}, ErrActiveCall
+		}
 	}
 	if err := s.ensureNoActiveCallExceptLocked(participant.ProfileID, roomID); err != nil {
 		return Call{}, err
@@ -649,6 +701,7 @@ func (s *MemoryCallStore) AdmitSpaceMediaParticipant(_ context.Context, roomID s
 	}
 	participant.Reconciled = participant.Issued
 	call.SpaceMedia[participant.ProfileID] = participant
+	call.Status = callsv1.CallStatus_CALL_STATUS_ACTIVE
 	s.calls[roomID] = call
 	return call, nil
 }

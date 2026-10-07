@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +31,71 @@ type staticSpaceMediaGrants struct {
 	err    error
 }
 
+type readySpaceMediaAdmission struct {
+	err           error
+	projectionErr error
+	headErr       error
+}
+
+type currentSessionCheckerFunc func(context.Context, string, int64) error
+
+func (f currentSessionCheckerFunc) RequireCurrent(ctx context.Context, accountID string, epoch int64) error {
+	return f(ctx, accountID, epoch)
+}
+
+func (r readySpaceMediaAdmission) CheckSchema(context.Context) error { return r.err }
+func (r readySpaceMediaAdmission) ClaimRoomHead(_ context.Context, voiceRoomID, spaceID, roomID string, operationID uuid.UUID, allowCreate bool) (voicestore.SpaceMediaRoomHead, error) {
+	head := voicestore.SpaceMediaRoomHead{VoiceRoomID: voiceRoomID, SpaceID: spaceID, RoomID: roomID, RoomGeneration: 1, State: "OPEN", Ready: !allowCreate}
+	if allowCreate {
+		head.CreatorOperationID = operationID
+	} else {
+		head.CreatorOperationID = uuid.New()
+	}
+	return head, r.err
+}
+func (r readySpaceMediaAdmission) AbandonRoomClaim(context.Context, string, uint64, uuid.UUID) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) Prepare(context.Context, voicestore.SpaceMediaAdmission) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) Fence(context.Context, voicestore.SpaceMediaAdmission) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) MarkCommitted(context.Context, uuid.UUID, string) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) MarkProjectionApplied(context.Context, uuid.UUID, string) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) ConfirmProjection(context.Context, uuid.UUID, string) error {
+	if r.projectionErr != nil {
+		return r.projectionErr
+	}
+	return r.err
+}
+func (r readySpaceMediaAdmission) ConfirmRoomHeadOpen(context.Context, voicestore.SpaceMediaAdmission) error {
+	if r.headErr != nil {
+		return r.headErr
+	}
+	return r.err
+}
+func (r readySpaceMediaAdmission) MarkAborting(context.Context, uuid.UUID, string) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) ReleaseFence(context.Context, voicestore.SpaceMediaAdmission) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) MarkCleanupCompleted(context.Context, uuid.UUID, string) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) BeginRoomLeave(context.Context, uuid.UUID, string) error {
+	return r.err
+}
+func (r readySpaceMediaAdmission) CompleteRoomLeave(context.Context, voicestore.SpaceMediaAdmission) error {
+	return r.err
+}
+
 func (r staticSpaceMediaGrants) ResolveVoiceRoomGrants(context.Context, string, string, string) (CanonicalVoiceRoomGrants, error) {
 	return r.grants, r.err
 }
@@ -38,6 +104,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	spaceID, roomID, profileID, accountID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	svc.SpaceMediaReady = true
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
 		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
 	}}
@@ -53,6 +120,20 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: time.Unix(1700000000, 0).UTC(),
 	})
 	require.NoError(t, err)
+	generation := uuid.NewString()
+	identity, err := livekit.SpaceParticipantIdentity(profileID, generation)
+	require.NoError(t, err)
+	_, err = svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
+		AccountID: accountID, AdmissionOperationID: uuid.NewString(), ProfileID: profileID,
+		Identity: identity, Generation: generation,
+		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 9, AccessEpoch: 11, PolicyEpoch: 7, CanJoin: true, CanSubscribe: true},
+	}, voicestore.MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	svc.SessionEpochChecker = currentSessionCheckerFunc(func(_ context.Context, gotAccount string, gotEpoch int64) error {
+		require.Equal(t, accountID, gotAccount)
+		require.Equal(t, int64(9), gotEpoch)
+		return nil
+	})
 	request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
 	ctx := verifiedVoiceUserContext(t, request, accountID, profileID, 9)
 	response, err := svc.GetJoinToken(ctx, request)
@@ -132,4 +213,76 @@ func TestGetJoinToken_SpaceMediaReadinessFailsClosed(t *testing.T) {
 	svc := &VoiceGRPC{}
 	_, err := svc.getSpaceMediaJoinToken(context.Background(), voicestore.Call{}, "profile", CanonicalVoiceRoomAccess{})
 	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+func TestGetJoinToken_SpaceMediaAdmissionSchemaFailsClosed(t *testing.T) {
+	svc := &VoiceGRPC{SpaceMediaReady: true, SpaceMediaAdmissions: readySpaceMediaAdmission{err: fmt.Errorf("schema missing")}}
+	_, err := svc.getSpaceMediaJoinToken(context.Background(), voicestore.Call{}, "profile", CanonicalVoiceRoomAccess{})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}
+
+func TestSpaceMediaPublicReadsFailClosedUntilReconciliationIsReady(t *testing.T) {
+	profileID, spaceID, voiceRoomID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := voicestore.NewMemoryCallStore()
+	generation := uuid.NewString()
+	identity, err := livekit.SpaceParticipantIdentity(profileID, generation)
+	require.NoError(t, err)
+	call, err := calls.CreateCall(t.Context(), voicestore.Call{
+		RoomID: uuid.NewString(), VoiceRoomID: voiceRoomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: profileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+		States: map[string]voicestore.ParticipantState{profileID: {}},
+	})
+	require.NoError(t, err)
+	_, err = calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
+		AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: profileID,
+		Identity: identity, Generation: generation, RoomGeneration: 1, CreatedRoom: true,
+		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
+	}, voicestore.MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	ready := &atomic.Bool{}
+	svc := &VoiceGRPC{Calls: calls, SpaceMediaReady: true, SpaceMediaServing: ready, SpaceMediaAdmissions: readySpaceMediaAdmission{}}
+
+	_, activeErr := svc.GetActiveCall(voiceTestCtx(profileID), &callsv1.GetActiveCallRequest{})
+	_, statesErr := svc.GetVoiceStates(voiceTestCtx(profileID), &callsv1.GetVoiceStatesRequest{RoomId: call.RoomID})
+	require.Equal(t, codes.Unavailable, status.Code(activeErr))
+	require.Equal(t, codes.Unavailable, status.Code(statesErr))
+
+	ready.Store(true)
+	active, activeErr := svc.GetActiveCall(voiceTestCtx(profileID), &callsv1.GetActiveCallRequest{})
+	states, statesErr := svc.GetVoiceStates(voiceTestCtx(profileID), &callsv1.GetVoiceStatesRequest{RoomId: call.RoomID})
+	require.NoError(t, activeErr)
+	require.Equal(t, call.RoomID, active.GetCallSession().GetRoomId())
+	require.NoError(t, statesErr)
+	require.Len(t, states.GetParticipants(), 1)
+
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{projectionErr: fmt.Errorf("projection is still pending")}
+	_, statesErr = svc.GetVoiceStates(voiceTestCtx(profileID), &callsv1.GetVoiceStatesRequest{RoomId: call.RoomID})
+	require.Equal(t, codes.Unavailable, status.Code(statesErr), "Redis membership alone cannot authorize a public Space roster read")
+	muted := true
+	_, updateErr := svc.UpdateVoiceState(voiceTestCtx(profileID), &callsv1.UpdateVoiceStateRequest{RoomId: call.RoomID, IsMuted: &muted})
+	require.Equal(t, codes.Unavailable, status.Code(updateErr), "an unconfirmed projection cannot authorize Space participant mutation")
+	unchanged, err := calls.GetCall(t.Context(), call.RoomID)
+	require.NoError(t, err)
+	require.False(t, unchanged.States[profileID].IsMuted)
+}
+
+func TestLeaveSpaceVoiceRoomFailsClosedWhenParticipantHasNoAdmission(t *testing.T) {
+	profileID, spaceID, voiceRoomID, roomID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	calls := voicestore.NewMemoryCallStore()
+	call, err := calls.CreateCall(t.Context(), voicestore.Call{
+		RoomID: roomID, VoiceRoomID: voiceRoomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: profileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE,
+		States: map[string]voicestore.ParticipantState{profileID: {}},
+	})
+	require.NoError(t, err)
+	svc := &VoiceGRPC{Calls: calls}
+	_, err = svc.LeaveVoiceRoom(voiceTestCtx(profileID), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: voiceRoomID})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	current, err := calls.GetCall(t.Context(), call.RoomID)
+	require.NoError(t, err)
+	require.True(t, current.IsParticipant(profileID), "an unjournaled Space projection cannot use legacy leave mutation")
 }

@@ -1021,7 +1021,9 @@ func TestTranscodeVoiceTokenPreservesLegacyDMAndNeverDowngradesConfiguredPrincip
 			options.transcoder = &transcoder{}
 		}
 		options.transcoder.clients.voice = callsv1.NewVoiceServiceClient(legacyConn)
-		options.transcoder.clients.voiceUser = callsv1.NewVoiceServiceClient(delegatedConn)
+		if options.transcoder.clients.voiceUserRequired || options.transcoder.clients.voiceUserErr != nil || options.transcoder.lifecycleIssuer != nil {
+			options.transcoder.clients.voiceUser = callsv1.NewVoiceServiceClient(delegatedConn)
+		}
 		return legacy, delegated, newGatewayForContract(t, options)
 	}
 

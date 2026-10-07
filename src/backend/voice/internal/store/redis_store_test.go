@@ -128,6 +128,32 @@ func TestRedisCallStore_SpaceMediaFloorsAndGenerationFencedRevocation(t *testing
 	require.LessOrEqual(t, client.TTL(ctx, store.activeSpaceVoiceRoomsKey(spaceID)).Val(), time.Duration(0), "Space room index must not expire")
 }
 
+func TestRedisCallStore_SpaceAdmissionHasOneActiveRoomIncarnation(t *testing.T) {
+	ctx := t.Context()
+	store, client := newRedisCallStoreForTest(t, "space-media-single-room:")
+	for _, roomID := range []string{"pending-first", "pending-second"} {
+		_, err := store.CreateCall(ctx, Call{
+			RoomID: roomID, LivekitRoomName: "lk-" + roomID, VoiceRoomID: "voice-room-single",
+			SpaceID: "space", SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+			InitiatorProfileID: roomID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+			Status: callsv1.CallStatus_CALL_STATUS_UNSPECIFIED,
+		})
+		require.NoError(t, err)
+	}
+	first := testSpaceMediaParticipant("account-a", "identity-a", "generation-a", 1, 1)
+	first.AccountID, first.AdmissionOperationID = "account-a", "operation-a"
+	_, err := store.AdmitSpaceMediaParticipant(ctx, "pending-first", first, MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	second := testSpaceMediaParticipant("account-b", "identity-b", "generation-b", 1, 1)
+	second.AccountID, second.AdmissionOperationID = "account-b", "operation-b"
+	_, err = store.AdmitSpaceMediaParticipant(ctx, "pending-second", second, MaxVoiceRoomParticipants)
+	require.ErrorIs(t, err, ErrActiveCall, "WATCH must reject a room index owned by another incarnation")
+	require.Equal(t, "pending-first", client.Get(ctx, store.activeVoiceRoomKey("voice-room-single")).Val())
+	loser, err := store.GetCall(ctx, "pending-second")
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_UNSPECIFIED, loser.Status, "losing shell stays hidden until exact abort cleanup")
+}
+
 func testSpaceMediaParticipant(profileID, identity, generation string, accessEpoch, policyEpoch uint64) SpaceMediaParticipant {
 	grant := SpaceMediaGrant{SessionEpoch: 2, AccessEpoch: accessEpoch, PolicyEpoch: policyEpoch, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}
 	return SpaceMediaParticipant{ProfileID: profileID, Identity: identity, Generation: generation, Issued: grant, Reconciled: grant}

@@ -226,11 +226,11 @@ func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 		}
 		if c.voiceUserRequired {
 			if c.voiceUserConn == nil {
-				return fmt.Errorf("Voice user-principal connection is not configured")
+				return fmt.Errorf("voice user-principal connection is not configured")
 			}
 			c.voiceUserConn.Connect()
 			if err := grpcclient.WaitForReady(ctx, c.voiceUserConn); err != nil {
-				return fmt.Errorf("Voice user-principal readiness: %w", err)
+				return fmt.Errorf("voice user-principal readiness: %w", err)
 			}
 		}
 		if c.spaceLifecycleErr != nil {
