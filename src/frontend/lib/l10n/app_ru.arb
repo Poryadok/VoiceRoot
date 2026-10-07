@@ -889,6 +889,7 @@
   "appIconSavedChoiceNotice": "Сохранённый значок вернётся, когда Voice Plus снова будет активен.",
   "appIconUnavailable": "На этом устройстве нельзя изменить значок работающего приложения.",
   "appIconSubscriptionStatusError": "Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.",
+  "appIconSubscriptionStatusChecking": "Проверяем статус Voice Plus…",
   "appIconApplyFailure": "Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.",
   "appIconRetry": "Повторить",
   "appIconApply": "Применить: {iconName}",

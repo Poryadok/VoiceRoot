@@ -47,7 +47,10 @@ class _AppIconSettingsScreenState extends ConsumerState<AppIconSettingsScreen> {
     final saved = preference.valueOrNull ?? AppIconPreference.voiceSky;
     final selected = _draft ?? saved;
     final plus = subscription.valueOrNull?.isPremium == true;
-    final statusKnown = subscription.hasValue;
+    final statusKnown =
+        subscription.hasValue &&
+        !subscription.isLoading &&
+        !subscription.hasError;
     final canApply =
         _hostSupported &&
         !runtime.applying &&
@@ -94,6 +97,13 @@ class _AppIconSettingsScreenState extends ConsumerState<AppIconSettingsScreen> {
                         ),
                       ),
                     ],
+                    if (subscription.isLoading) ...[
+                      const SizedBox(height: 12),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(l10n.appIconSubscriptionStatusChecking),
+                      ),
+                    ],
                     if (saved.requiresPlus && !plus && statusKnown) ...[
                       const SizedBox(height: 12),
                       Text(l10n.appIconSavedChoiceNotice),
@@ -120,7 +130,7 @@ class _AppIconSettingsScreenState extends ConsumerState<AppIconSettingsScreen> {
                           ),
                       ],
                     ),
-                    if (selected.requiresPlus && !plus) ...[
+                    if (selected.requiresPlus && !plus && statusKnown) ...[
                       const SizedBox(height: 12),
                       Text(l10n.appIconPlusRequired),
                     ],

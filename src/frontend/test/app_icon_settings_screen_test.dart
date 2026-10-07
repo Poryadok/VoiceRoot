@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -29,6 +30,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
   });
 
   testWidgets(
@@ -127,6 +129,88 @@ void main() {
     );
     debugDefaultTargetPlatformOverride = null;
   });
+
+  testWidgets(
+    'pending and failed entitlement checks do not claim Plus is required',
+    (tester) async {
+      final pending = Completer<VoiceSubscription?>();
+      var attempts = 0;
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('', 404)),
+          ),
+          windowsDesktopHostProvider.overrideWithValue(
+            RecordingWindowsDesktopHost(),
+          ),
+          subscriptionProvider.overrideWith((ref) async {
+            attempts++;
+            if (attempts == 1) return pending.future;
+            if (attempts == 2) throw StateError('subscription unavailable');
+            return _subscription(status: 'active');
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_app(container));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(AppearanceSettingsScreen.appIconKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(AppIconSettingsScreen.optionKey(AppIconPreference.coral)),
+      );
+      await tester.pump();
+
+      expect(
+        find.text('Voice Plus is required to apply this icon.'),
+        findsNothing,
+      );
+      expect(find.text('Checking Voice Plus status…'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(AppIconSettingsScreen.applyKey))
+            .onPressed,
+        isNull,
+      );
+
+      pending.complete(null);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Voice Plus is required to apply this icon.'),
+        findsOneWidget,
+      );
+      expect(find.text('Checking Voice Plus status…'), findsNothing);
+
+      await container
+          .refresh(subscriptionProvider.future)
+          .catchError((_) => null);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Voice Plus status could not be checked. Retry or choose Voice Sky.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Voice Plus is required to apply this icon.'),
+        findsNothing,
+      );
+      expect(find.text('Retry'), findsOneWidget);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(attempts, 3);
+      expect(find.text('Checking Voice Plus status…'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(AppIconSettingsScreen.applyKey))
+            .onPressed,
+        isNotNull,
+      );
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
 
   testWidgets('captures the complete horizontal and vertical reference views', (
     tester,

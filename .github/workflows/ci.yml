@@ -299,6 +299,10 @@ jobs:
           flutter pub get
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded --concurrency=1
+      - name: AppIcon Chrome favicon DOM regression
+        if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
+        working-directory: src/frontend
+        run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         if: >-
           github.event_name == 'pull_request' ||

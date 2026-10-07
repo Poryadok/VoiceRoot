@@ -1937,6 +1937,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Voice Plus status could not be checked. Retry or choose Voice Sky.';
 
   @override
+  String get appIconSubscriptionStatusChecking => 'Checking Voice Plus status…';
+
+  @override
   String get appIconApplyFailure =>
       'The app icon could not be applied. Your saved choice is kept; retry to apply it.';
 

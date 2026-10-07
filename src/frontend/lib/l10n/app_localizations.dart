@@ -3506,6 +3506,12 @@ abstract class AppLocalizations {
   /// **'Voice Plus status could not be checked. Retry or choose Voice Sky.'**
   String get appIconSubscriptionStatusError;
 
+  /// No description provided for @appIconSubscriptionStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Voice Plus status…'**
+  String get appIconSubscriptionStatusChecking;
+
   /// No description provided for @appIconApplyFailure.
   ///
   /// In en, this message translates to:
