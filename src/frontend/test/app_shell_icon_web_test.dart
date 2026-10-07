@@ -16,12 +16,16 @@ void main() {
     'replaces and revokes only the current document favicon object URL',
     () async {
       final head = html.document.head!;
+      final icon = html.LinkElement()
+        ..rel = 'icon'
+        ..type = 'image/png'
+        ..href = 'favicon.png';
+      head.insertBefore(icon, head.firstChild);
       final originalIconLinks = html.document
           .querySelectorAll('link[rel~="icon"]')
           .toList();
       expect(originalIconLinks, isNotEmpty);
-      final icon = originalIconLinks.first as html.LinkElement;
-      final originalIconHref = icon.href;
+      expect(originalIconLinks.first, same(icon));
       final manifest = html.LinkElement()
         ..rel = 'manifest'
         ..href = '/manifest.webmanifest';
@@ -32,12 +36,8 @@ void main() {
       head.append(appleTouchIcon);
       addTearDown(() {
         icon.remove();
-        icon.href = originalIconHref;
         manifest.remove();
         appleTouchIcon.remove();
-        for (final link in originalIconLinks) {
-          if (link.parent == null) head.append(link);
-        }
       });
 
       await app_icon.apply(AppIconPreference.voiceSky);
