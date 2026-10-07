@@ -33,6 +33,26 @@ void main() {
   testWidgets('keeps one reconnect banner in the visible network context', (
     tester,
   ) async {
+    const voipChannel = MethodChannel('voice/voip');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    var stoppedVoipControllers = 0;
+    messenger.setMockMethodCallHandler(voipChannel, (call) async {
+      if (call.method != 'stop') {
+        throw StateError('Unexpected VoIP method: ${call.method}');
+      }
+      stoppedVoipControllers += 1;
+      return null;
+    });
+    // Registered before the containers so their LIFO teardown runs with the
+    // native stop boundary installed, including its asynchronous completion.
+    addTearDown(() async {
+      try {
+        await Future<void>.delayed(Duration.zero);
+        expect(stoppedVoipControllers, 4);
+      } finally {
+        messenger.setMockMethodCallHandler(voipChannel, null);
+      }
+    });
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
