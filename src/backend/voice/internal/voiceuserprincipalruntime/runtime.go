@@ -89,7 +89,7 @@ func New(ctx context.Context, config Config, epochs SessionEpochChecker) (*Runti
 		if err != nil {
 			return nil, principalgrpc.Unavailable(errors.New("Gateway principal JWKS unavailable"))
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
 			return nil, principalgrpc.Unavailable(errors.New("Gateway principal JWKS unavailable"))
 		}

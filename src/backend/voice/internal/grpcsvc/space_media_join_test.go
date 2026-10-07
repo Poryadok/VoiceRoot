@@ -27,6 +27,7 @@ import (
 	"voice/backend/voice/internal/voiceuserprincipalruntime"
 
 	callsv1 "voice.app/voice/calls/v1"
+	eventsv1 "voice.app/voice/events/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -35,10 +36,28 @@ type staticSpaceMediaGrants struct {
 	err    error
 }
 
+type listenOnlyRolePermissions struct {
+	RolePermissionChecker
+}
+
+func (listenOnlyRolePermissions) EnsureVoiceSpeak(context.Context, string, string, string) error {
+	return ErrVoiceSpeakDenied
+}
+
+type admissionTransition struct {
+	operationID uuid.UUID
+	generation  string
+}
+
 type readySpaceMediaAdmission struct {
-	err           error
-	projectionErr error
-	headErr       error
+	err                     error
+	projectionErr           error
+	headErr                 error
+	preparedAdmissions      *[]voicestore.SpaceMediaAdmission
+	abortingAdmissions      *[]admissionTransition
+	releasedFences          *[]voicestore.SpaceMediaAdmission
+	cleanupAdmissions       *[]admissionTransition
+	cleanupFailuresToInject *int
 }
 
 type currentSessionCheckerFunc func(context.Context, string, int64) error
@@ -60,7 +79,10 @@ func (r readySpaceMediaAdmission) ClaimRoomHead(_ context.Context, voiceRoomID, 
 func (r readySpaceMediaAdmission) AbandonRoomClaim(context.Context, string, uint64, uuid.UUID) error {
 	return r.err
 }
-func (r readySpaceMediaAdmission) Prepare(context.Context, voicestore.SpaceMediaAdmission) error {
+func (r readySpaceMediaAdmission) Prepare(_ context.Context, admission voicestore.SpaceMediaAdmission) error {
+	if r.preparedAdmissions != nil {
+		*r.preparedAdmissions = append(*r.preparedAdmissions, admission)
+	}
 	return r.err
 }
 func (r readySpaceMediaAdmission) Fence(context.Context, voicestore.SpaceMediaAdmission) error {
@@ -84,13 +106,26 @@ func (r readySpaceMediaAdmission) ConfirmRoomHeadOpen(context.Context, voicestor
 	}
 	return r.err
 }
-func (r readySpaceMediaAdmission) MarkAborting(context.Context, uuid.UUID, string) error {
+func (r readySpaceMediaAdmission) MarkAborting(_ context.Context, operationID uuid.UUID, generation string) error {
+	if r.abortingAdmissions != nil {
+		*r.abortingAdmissions = append(*r.abortingAdmissions, admissionTransition{operationID: operationID, generation: generation})
+	}
 	return r.err
 }
-func (r readySpaceMediaAdmission) ReleaseFence(context.Context, voicestore.SpaceMediaAdmission) error {
+func (r readySpaceMediaAdmission) ReleaseFence(_ context.Context, admission voicestore.SpaceMediaAdmission) error {
+	if r.releasedFences != nil {
+		*r.releasedFences = append(*r.releasedFences, admission)
+	}
 	return r.err
 }
-func (r readySpaceMediaAdmission) MarkCleanupCompleted(context.Context, uuid.UUID, string) error {
+func (r readySpaceMediaAdmission) MarkCleanupCompleted(_ context.Context, operationID uuid.UUID, generation string) error {
+	if r.cleanupAdmissions != nil {
+		*r.cleanupAdmissions = append(*r.cleanupAdmissions, admissionTransition{operationID: operationID, generation: generation})
+	}
+	if r.cleanupFailuresToInject != nil && *r.cleanupFailuresToInject > 0 {
+		*r.cleanupFailuresToInject--
+		return errors.New("injected cleanup failure")
+	}
 	return r.err
 }
 func (r readySpaceMediaAdmission) BeginRoomLeave(context.Context, uuid.UUID, string) error {
@@ -142,6 +177,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
 		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
 	}}
+	svc.Roles = listenOnlyRolePermissions{RolePermissionChecker: &canonicalRolePermissions{}}
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
 		PolicyEpoch: 7, CanJoin: true, CanPublishAudio: false, CanSubscribe: true,
 	}}
@@ -276,9 +312,10 @@ func joinSpaceVoiceUserAs(t *testing.T, svc *VoiceGRPC, accountID, profileID str
 func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testing.T) {
 	spaceID, voiceRoomID, accountID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
+	preparedAdmissions := make([]voicestore.SpaceMediaAdmission, 0, 1)
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	svc.SpaceMediaReady = true
-	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{preparedAdmissions: &preparedAdmissions}
 	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
 		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
 	}}
@@ -307,8 +344,34 @@ func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testin
 	require.True(t, participant.Issued.CanJoin)
 	require.True(t, participant.Issued.CanSubscribe)
 	require.Equal(t, uint64(9), participant.Issued.SessionEpoch)
-	require.Len(t, events.startedCall, 1)
-	require.Len(t, events.memberJoined, 1)
+
+	// Space lifecycle events are durable Prepare intents. The legacy publisher
+	// is exercised by its dedicated delivery tests, not by this admission fake.
+	require.Len(t, preparedAdmissions, 1)
+	prepared := preparedAdmissions[0]
+	require.Equal(t, participant.AdmissionOperationID, prepared.OperationID.String())
+	require.Equal(t, participant.Generation, prepared.Generation)
+	require.Equal(t, call.RoomID, prepared.RoomID)
+	require.True(t, prepared.CreatedRoom)
+	require.Len(t, prepared.Events, 2)
+	require.Equal([]string{"voice.call_started", "voice.member_joined"}, []string{
+		prepared.Events[0].Subject, prepared.Events[1].Subject,
+	})
+	require.NotEqual(t, uuid.Nil, prepared.Events[0].ID)
+	require.NotEqual(t, uuid.Nil, prepared.Events[1].ID)
+	require.NotEqual(t, prepared.Events[0].ID, prepared.Events[1].ID)
+	require.NotEmpty(t, prepared.Events[0].Payload)
+	require.NotEmpty(t, prepared.Events[1].Payload)
+	var started eventsv1.VoiceStreamEvent
+	require.NoError(t, proto.Unmarshal(prepared.Events[0].Payload, &started))
+	require.Equal(t, prepared.Events[0].ID.String(), started.GetEventId())
+	require.Equal(t, voiceRoomID, started.GetCallStarted().GetVoiceRoomId())
+	var memberJoined eventsv1.VoiceStreamEvent
+	require.NoError(t, proto.Unmarshal(prepared.Events[1].Payload, &memberJoined))
+	require.Equal(t, prepared.Events[1].ID.String(), memberJoined.GetEventId())
+	require.Equal(t, profileID, memberJoined.GetVoiceMemberJoined().GetJoinedProfileId())
+	require.Empty(t, events.startedCall, "admission intent is not legacy producer delivery")
+	require.Empty(t, events.memberJoined, "admission intent is not legacy producer delivery")
 }
 
 func TestGetJoinToken_SpaceMediaReadinessFailsClosed(t *testing.T) {

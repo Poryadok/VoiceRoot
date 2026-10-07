@@ -49,10 +49,19 @@ type fakeAdmissionRecovery struct {
 	roomCreator     store.SpaceMediaAdmission
 	confirmed       map[string]store.SpaceMediaAdmission
 	confirmCalls    int
+	recoveryRows    []store.SpaceMediaAdmission
+	markAbortFails  int
+	markAbortCalls  int
+	releaseFails    int
+	releaseCalls    int
+	releasedRows    []store.SpaceMediaAdmission
 }
 
 func (f *fakeAdmissionRecovery) RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error) {
 	f.reads++
+	if f.recoveryRows != nil {
+		return append([]store.SpaceMediaAdmission(nil), f.recoveryRows...), nil
+	}
 	if len(f.pages) == 0 {
 		return nil, nil
 	}
@@ -94,13 +103,37 @@ func (f *fakeAdmissionRecovery) RoomCreator(context.Context, string, uint64) (st
 	}
 	return f.roomCreator, nil
 }
-func (f *fakeAdmissionRecovery) MarkAborting(context.Context, uuid.UUID, string) error { return nil }
-func (f *fakeAdmissionRecovery) ReleaseFence(context.Context, store.SpaceMediaAdmission) error {
-	f.released++
+func (f *fakeAdmissionRecovery) MarkAborting(_ context.Context, operationID uuid.UUID, generation string) error {
+	f.markAbortCalls++
+	if f.markAbortFails > 0 {
+		f.markAbortFails--
+		return errors.New("injected abort transition failure")
+	}
+	for i := range f.recoveryRows {
+		if f.recoveryRows[i].OperationID == operationID && f.recoveryRows[i].Generation == generation {
+			f.recoveryRows[i].State = AdmissionAborting
+		}
+	}
 	return nil
 }
-func (f *fakeAdmissionRecovery) MarkCleanupCompleted(context.Context, uuid.UUID, string) error {
+func (f *fakeAdmissionRecovery) ReleaseFence(_ context.Context, admission store.SpaceMediaAdmission) error {
+	f.released++
+	f.releaseCalls++
+	f.releasedRows = append(f.releasedRows, admission)
+	if f.releaseFails > 0 {
+		f.releaseFails--
+		return errors.New("injected fence release acknowledgement failure")
+	}
+	return nil
+}
+func (f *fakeAdmissionRecovery) MarkCleanupCompleted(_ context.Context, operationID uuid.UUID, generation string) error {
 	f.cleaned++
+	for i := range f.recoveryRows {
+		if f.recoveryRows[i].OperationID == operationID && f.recoveryRows[i].Generation == generation {
+			f.recoveryRows = append(f.recoveryRows[:i], f.recoveryRows[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 func (f *fakeAdmissionRecovery) MarkProjectionApplied(context.Context, uuid.UUID, string) error {
@@ -115,6 +148,75 @@ func (f *fakeAdmissionRecovery) RecoverOrphanRoomHeads(context.Context) error { 
 func (f *fakeAdmissionRecovery) CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error {
 	f.released++
 	return nil
+}
+
+func TestCoordinatorRetriesCommittedRoomFullAbortThroughRecovery(t *testing.T) {
+	ctx := context.Background()
+	spaceID, voiceRoomID, roomID := uuid.New(), uuid.NewString(), uuid.NewString()
+	profileID, accountID := uuid.New(), uuid.New()
+	admission := store.SpaceMediaAdmission{
+		OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: accountID, ProfileID: profileID,
+		SpaceID: spaceID, RoomID: roomID, VoiceRoomID: voiceRoomID, RoomGeneration: 1,
+		Identity: "cap-rejected-identity", CreatedRoom: false, MaxParticipants: store.MaxVoiceRoomParticipants,
+		SessionEpoch: 3, AccessEpoch: 4, PolicyEpoch: 5, CanJoin: true, CanSubscribe: true,
+		State: AdmissionCommitted, ParticipantState: "PREPARED",
+	}
+	calls := store.NewMemoryCallStore()
+	_, err := calls.CreateCall(ctx, store.Call{
+		RoomID: roomID, LivekitRoomName: "voice-room-" + voiceRoomID, VoiceRoomID: voiceRoomID,
+		SpaceID: spaceID.String(), SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: uuid.NewString(), MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, States: map[string]store.ParticipantState{},
+		SpaceMedia: map[string]store.SpaceMediaParticipant{},
+	})
+	require.NoError(t, err)
+	for i := 0; i < store.MaxVoiceRoomParticipants; i++ {
+		profile := uuid.NewString()
+		_, err = calls.AdmitSpaceMediaParticipant(ctx, roomID, store.SpaceMediaParticipant{
+			AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: profile,
+			Identity: "existing-" + profile, Generation: uuid.NewString(),
+			Issued: store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 4, PolicyEpoch: 5, CanJoin: true, CanSubscribe: true},
+		}, store.MaxVoiceRoomParticipants)
+		require.NoError(t, err)
+	}
+	admissions := &fakeAdmissionRecovery{recoveryRows: []store.SpaceMediaAdmission{admission}, markAbortFails: 1, releaseFails: 1}
+	c := &Coordinator{
+		Store: calls, Calls: calls, Admissions: admissions,
+		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+			profileID.String(): {SpaceID: spaceID.String(), Active: true, Member: true, AccessEpoch: 4},
+		}},
+		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
+			profileID.String(): {PolicyEpoch: 5, CanJoin: true, CanSubscribe: true},
+		}},
+		SessionEpochChecker: currentEpochChecker{},
+	}
+	firstErr := c.reconcileAdmissions(ctx)
+	require.ErrorContains(t, firstErr, "injected abort transition failure")
+	require.Len(t, admissions.recoveryRows, 1, "a failed transition leaves the committed row available for retry")
+	require.Equal(t, AdmissionCommitted, admissions.recoveryRows[0].State)
+	require.Zero(t, admissions.released)
+	require.Zero(t, admissions.cleaned)
+
+	releaseErr := c.reconcileAdmissions(ctx)
+	require.ErrorContains(t, releaseErr, "injected fence release acknowledgement failure")
+	require.Len(t, admissions.recoveryRows, 1)
+	require.Equal(t, AdmissionAborting, admissions.recoveryRows[0].State)
+	require.Zero(t, admissions.cleaned)
+
+	require.NoError(t, c.reconcileAdmissions(ctx), "recovery retries an ambiguous exact-fence release")
+	require.Empty(t, admissions.recoveryRows)
+	require.Equal(t, 2, admissions.markAbortCalls)
+	require.Equal(t, 2, admissions.releaseCalls)
+	require.Len(t, admissions.releasedRows, 2)
+	for _, released := range admissions.releasedRows {
+		require.Equal(t, admission.OperationID, released.OperationID)
+		require.Equal(t, admission.Generation, released.Generation)
+	}
+	require.Equal(t, 1, admissions.cleaned)
+	call, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	require.Len(t, call.SpaceMedia, store.MaxVoiceRoomParticipants)
+	require.NotContains(t, call.SpaceMedia, profileID.String())
 }
 
 func fakeRecoveryForCommittedCall(t *testing.T, ctx context.Context, calls *store.MemoryCallStore, roomID string) *fakeAdmissionRecovery {

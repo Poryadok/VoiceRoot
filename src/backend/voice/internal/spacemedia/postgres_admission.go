@@ -462,7 +462,7 @@ WHERE voice_room_id=$1 AND room_generation=$2 AND call_room_id=$3`, a.VoiceRoomI
 	return nil
 }
 
-// RecoverOrphanRoomHead closes only an old creator claim that has no durable
+// RecoverOrphanRoomHeads closes only an old creator claim that has no durable
 // admission row. The age guard prevents recovery from racing the short
 // claim-to-Prepare window of a live request.
 func (s *PostgresAdmissionStore) RecoverOrphanRoomHeads(ctx context.Context) error {
@@ -558,7 +558,7 @@ func (s *PostgresAdmissionStore) BeginRoomLeave(ctx context.Context, operationID
 	if participantState == "ENDED" {
 		return tx.Commit(ctx)
 	}
-	if participantState != "ACTIVE" && participantState != "REVOKING" && !(participantState == "PREPARED" && admissionState == "ABORTING") {
+	if participantState != "ACTIVE" && participantState != "REVOKING" && (participantState != "PREPARED" || admissionState != "ABORTING") {
 		return ErrAdmissionConflict
 	}
 	if _, err = tx.Exec(ctx, `UPDATE voice_space_media_admissions SET participant_state='REVOKING',updated_at=clock_timestamp() WHERE operation_id=$1 AND generation=$2`, operationID, generation); err != nil {

@@ -393,9 +393,9 @@ func (c *Coordinator) recoverCommittedAdmission(ctx context.Context, admission s
 			Issued: store.SpaceMediaGrant{SessionEpoch: admission.SessionEpoch, AccessEpoch: admission.AccessEpoch, PolicyEpoch: admission.PolicyEpoch,
 				CanJoin: admission.CanJoin, CanPublishAudio: admission.CanPublishAudio, CanSubscribe: admission.CanSubscribe},
 		}, admission.MaxParticipants); err != nil {
-			if errors.Is(err, store.ErrActiveCall) {
-				// Another operation won the single active-call slot for this
-				// voice_room_id. This operation never became public; abort its
+			if errors.Is(err, store.ErrActiveCall) || errors.Is(err, store.ErrRoomFull) {
+				// Another operation won the active-call slot or the room reached its
+				// participant cap. This operation never became public; abort its
 				// exact fence and hidden shell, leaving its outbox unclaimable.
 				return c.abortAdmission(ctx, admission)
 			}

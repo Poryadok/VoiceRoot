@@ -268,7 +268,11 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 			f.svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
 				PolicyEpoch: 7, CanJoin: true, CanPublishAudio: tc.wantPublish, CanSubscribe: true,
 			}}
-			f.svc.Roles = tc.roles
+			joinRoles := tc.roles
+			if joinRoles == nil {
+				joinRoles = &recordingVoiceRolePermissions{}
+			}
+			f.svc.Roles = joinRoles
 			_, err := joinSpaceVoiceUser(t, f.svc, ownerProfileID, f.joinReq(ownerProfileID))
 			require.NoError(t, err)
 			joined, err := joinSpaceVoiceUser(t, f.svc, memberProfileID, f.joinReq(memberProfileID))
@@ -280,6 +284,9 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 			}
 			request := &callsv1.GetJoinTokenRequest{RoomId: roomID}
 			ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, fixtureAccountID(profileID), profileID, 9)
+			if tc.roles == nil {
+				f.svc.Roles = nil
+			}
 			response, err := f.svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.wantCode, status.Code(err))
 			if tc.wantRoleCall {

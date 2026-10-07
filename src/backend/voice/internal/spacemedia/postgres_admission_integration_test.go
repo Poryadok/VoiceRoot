@@ -2,6 +2,7 @@ package spacemedia
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,8 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/voice/internal/gameprovision"
+	"voice/backend/voice/internal/grpcsvc"
 	"voice/backend/voice/internal/store"
 )
 
@@ -121,6 +124,163 @@ func TestPostgresAdmissionFenceRequiresExactOperationRelease(t *testing.T) {
 	var got uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, first.AccountID).Scan(&got))
 	require.Equal(t, second.OperationID, got)
+}
+
+func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	admissions := NewPostgresAdmissionStore(pool)
+
+	creator := admissionFixture()
+	creator.Events = nil
+	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
+	require.NoError(t, admissions.Fence(ctx, creator))
+	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
+
+	failed := admissionFixture()
+	failed.RoomID, failed.SpaceID, failed.VoiceRoomID = creator.RoomID, creator.SpaceID, creator.VoiceRoomID
+	failed.CreatedRoom = false
+	require.NoError(t, prepareAdmission(ctx, admissions, &failed))
+	require.NoError(t, admissions.Fence(ctx, failed))
+	require.NoError(t, admissions.MarkCommitted(ctx, failed.OperationID, failed.Generation))
+
+	calls := store.NewMemoryCallStore()
+	_, err := calls.CreateCall(ctx, store.Call{
+		RoomID: creator.RoomID, LivekitRoomName: "voice-room-" + creator.VoiceRoomID,
+		VoiceRoomID: creator.VoiceRoomID, SpaceID: creator.SpaceID.String(),
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: creator.ProfileID.String(), MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, States: map[string]store.ParticipantState{},
+		SpaceMedia: map[string]store.SpaceMediaParticipant{},
+	})
+	require.NoError(t, err)
+	_, err = calls.AdmitSpaceMediaParticipant(ctx, creator.RoomID, store.SpaceMediaParticipant{
+		AccountID: creator.AccountID.String(), AdmissionOperationID: creator.OperationID.String(),
+		RoomGeneration: creator.RoomGeneration, CreatedRoom: true, ProfileID: creator.ProfileID.String(),
+		Identity: creator.Identity, Generation: creator.Generation,
+		Issued: store.SpaceMediaGrant{SessionEpoch: creator.SessionEpoch, AccessEpoch: creator.AccessEpoch,
+			PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+	}, store.MaxVoiceRoomParticipants)
+	require.NoError(t, err)
+	for i := 1; i < store.MaxVoiceRoomParticipants; i++ {
+		profile := uuid.NewString()
+		_, err = calls.AdmitSpaceMediaParticipant(ctx, creator.RoomID, store.SpaceMediaParticipant{
+			AccountID: uuid.NewString(), AdmissionOperationID: uuid.NewString(), ProfileID: profile,
+			Identity: "existing-" + profile, Generation: uuid.NewString(),
+			Issued: store.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: creator.AccessEpoch,
+				PolicyEpoch: creator.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+		}, store.MaxVoiceRoomParticipants)
+		require.NoError(t, err)
+	}
+	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+
+	faultingAdmissions := &lostCleanupAckAdmissionStore{PostgresAdmissionStore: admissions, loseNextCleanupAck: true}
+	coordinator := &Coordinator{
+		Store: calls, Calls: calls, Admissions: faultingAdmissions,
+		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
+			failed.ProfileID.String(): {SpaceID: failed.SpaceID.String(), Active: true, Member: true, AccessEpoch: failed.AccessEpoch},
+		}},
+		Grants: fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
+			failed.ProfileID.String(): {PolicyEpoch: failed.PolicyEpoch, CanJoin: true, CanSubscribe: true},
+		}},
+		SessionEpochChecker: currentEpochChecker{},
+	}
+	// The durable cleanup commits, then its acknowledgement is lost. The caller
+	// must report the ambiguity; a normal recovery retry then observes completion.
+	err = coordinator.reconcileAdmissions(ctx)
+	require.ErrorContains(t, err, "injected cleanup acknowledgement lost after commit")
+	rows, err := admissions.RecoveryRows(ctx, 20)
+	require.NoError(t, err)
+	require.Empty(t, rows, "the cleanup effect committed despite the lost acknowledgement")
+	item, err := admissions.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item, "the cap-rejected operation remains unclaimable after committed cleanup")
+	var failedFenceCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id=$1 AND admission_operation_id=$2 AND admission_generation=$3`, failed.AccountID, failed.OperationID, failed.Generation).Scan(&failedFenceCount))
+	require.Zero(t, failedFenceCount)
+	var survivingOperation uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, creator.AccountID).Scan(&survivingOperation))
+	require.Equal(t, creator.OperationID, survivingOperation, "cleanup must preserve the other committed operation fence")
+	call, err := calls.GetCall(ctx, creator.RoomID)
+	require.NoError(t, err)
+	require.Len(t, call.SpaceMedia, store.MaxVoiceRoomParticipants)
+	require.NotContains(t, call.SpaceMedia, failed.ProfileID.String())
+
+	require.NoError(t, coordinator.reconcileAdmissions(ctx), "a normal retry after lost acknowledgement is harmless")
+	rows, err = admissions.RecoveryRows(ctx, 20)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	item, err = admissions.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, creator.AccountID).Scan(&survivingOperation))
+	require.Equal(t, creator.OperationID, survivingOperation)
+}
+
+type lostCleanupAckAdmissionStore struct {
+	*PostgresAdmissionStore
+	loseNextCleanupAck bool
+}
+
+func (s *lostCleanupAckAdmissionStore) MarkCleanupCompleted(ctx context.Context, operationID uuid.UUID, generation string) error {
+	if err := s.PostgresAdmissionStore.MarkCleanupCompleted(ctx, operationID, generation); err != nil {
+		return err
+	}
+	if s.loseNextCleanupAck {
+		s.loseNextCleanupAck = false
+		return errors.New("injected cleanup acknowledgement lost after commit")
+	}
+	return nil
+}
+
+func TestPostgresAdmissionCapAbortReleasesExactFenceAndKeepsOutboxUnclaimable(t *testing.T) {
+	ctx := context.Background()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	store := NewPostgresAdmissionStore(pool)
+	failed := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, store, &failed))
+	require.NoError(t, store.Fence(ctx, failed))
+	require.NoError(t, store.MarkCommitted(ctx, failed.OperationID, failed.Generation))
+
+	other := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, store, &other))
+	require.NoError(t, store.Fence(ctx, other))
+
+	item, err := store.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item, "a committed admission without a confirmed projection cannot publish")
+	require.NoError(t, store.MarkAborting(ctx, failed.OperationID, failed.Generation))
+
+	wrongTuple := failed
+	wrongTuple.ProfileID = uuid.New()
+	require.ErrorIs(t, store.ReleaseFence(ctx, wrongTuple), ErrAdmissionConflict)
+	recovery, err := store.RecoveryRows(ctx, 20)
+	require.NoError(t, err)
+	require.Len(t, recovery, 1)
+	require.Equal(t, failed.OperationID, recovery[0].OperationID)
+	require.Equal(t, AdmissionAborting, recovery[0].State)
+	var stillOwned uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, failed.AccountID).Scan(&stillOwned))
+	require.Equal(t, failed.OperationID, stillOwned, "failed cleanup must preserve the exact live fence")
+	item, err = store.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item, "ABORTING cap rejection must never become publishable")
+
+	// Recovery retries with the exact operation tuple after the first cleanup attempt failed.
+	require.NoError(t, store.ReleaseFence(ctx, failed))
+	require.NoError(t, store.MarkCleanupCompleted(ctx, failed.OperationID, failed.Generation))
+	recovery, err = store.RecoveryRows(ctx, 20)
+	require.NoError(t, err)
+	require.Empty(t, recovery)
+	var remaining int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id=$1`, failed.AccountID).Scan(&remaining))
+	require.Zero(t, remaining)
+	var otherOwner uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, other.AccountID).Scan(&otherOwner))
+	require.Equal(t, other.OperationID, otherOwner, "cleanup must preserve every unrelated operation fence")
+	item, err = store.ClaimOutbox(ctx, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, item, "cleaned cap rejection must remain unclaimable")
 }
 
 func TestPostgresRoomHeadSerializesJoinersAndReopensOnlyAfterFinalLeave(t *testing.T) {

@@ -44,7 +44,12 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	svc.Roles = &canonicalRolePermissions{}
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
-	svc.SessionEpochChecker = currentSessionCheckerFunc(func(context.Context, string, int64) error { return nil })
+	svc.SessionEpochChecker = currentSessionCheckerFunc(func(_ context.Context, gotAccount string, gotEpoch int64) error {
+		if gotAccount != account || gotEpoch != 9 {
+			return fmt.Errorf("unexpected test session authority")
+		}
+		return nil
+	})
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
 	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 	joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
@@ -53,7 +58,7 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	edge := &routedMediaFixture{}
 	svc.FederatedMedia = edge
 	request := &callsv1.GetJoinTokenRequest{RoomId: joined.VoiceSession.RoomId}
-	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, account, profile, 5)
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, account, profile, 9)
 	for _, failedAdmission := range []readySpaceMediaAdmission{
 		{projectionErr: fmt.Errorf("projection not confirmed")},
 		{headErr: fmt.Errorf("room generation is closing")},
@@ -70,7 +75,7 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	require.Len(t, edge.requests, 1)
 	call, err := svc.Calls.GetCall(ctx, request.RoomId)
 	require.NoError(t, err)
-	require.Equal(t, mediaauthority.RouteRequest{AccountID: account, ProfileID: profile, SpaceID: space, ResourceID: room, RoomName: call.LivekitRoomName, SessionEpoch: 5, CanPublish: true}, edge.requests[0])
+	require.Equal(t, mediaauthority.RouteRequest{AccountID: account, ProfileID: profile, SpaceID: space, ResourceID: room, RoomName: call.LivekitRoomName, SessionEpoch: 9, CanPublish: true}, edge.requests[0])
 	stored, err := svc.Calls.GetCall(ctx, request.RoomId)
 	require.NoError(t, err)
 	require.Contains(t, stored.SpaceMedia, profile, "federation is reached only after confirmed canonical Space admission")

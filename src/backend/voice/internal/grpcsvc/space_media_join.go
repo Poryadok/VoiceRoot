@@ -301,6 +301,18 @@ func (s *VoiceGRPC) admitSpaceVoiceRoom(ctx context.Context, call voicestore.Cal
 		Identity: identity, Generation: generation, Issued: issued,
 	}, maxParticipants)
 	if err != nil {
+		if errors.Is(err, voicestore.ErrRoomFull) {
+			if abortErr := s.SpaceMediaAdmissions.MarkAborting(ctx, operationID, generation); abortErr != nil {
+				return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
+			}
+			if releaseErr := s.SpaceMediaAdmissions.ReleaseFence(ctx, admission); releaseErr != nil {
+				return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
+			}
+			if cleanupErr := s.SpaceMediaAdmissions.MarkCleanupCompleted(ctx, operationID, generation); cleanupErr != nil {
+				return voicestore.Call{}, status.Error(codes.Unavailable, "Space media admission cleanup is pending")
+			}
+			return voicestore.Call{}, storeErr(err)
+		}
 		return voicestore.Call{}, status.Error(codes.Unavailable, "Space media projection is pending recovery")
 	}
 	if err := s.SpaceMediaAdmissions.MarkProjectionApplied(ctx, operationID, generation); err != nil {

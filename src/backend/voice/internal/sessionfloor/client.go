@@ -53,7 +53,7 @@ func ConfigFromEnv() (Config, bool, error) {
 	}
 	for _, value := range values {
 		if value == "" || value != strings.TrimSpace(value) {
-			return Config{}, true, errors.New("Voice Auth session-floor TLS configuration is incomplete")
+			return Config{}, true, errors.New("voice Auth session-floor TLS configuration is incomplete")
 		}
 	}
 	return config, true, nil
@@ -61,26 +61,26 @@ func ConfigFromEnv() (Config, bool, error) {
 
 func (c Config) Dial(issuer *principal.Issuer) (*Client, *grpc.ClientConn, error) {
 	if issuer == nil || strings.TrimSpace(c.Address) == "" || strings.TrimSpace(c.ServerName) == "" {
-		return nil, nil, errors.New("Voice Auth session-floor client configuration is incomplete")
+		return nil, nil, errors.New("voice Auth session-floor client configuration is incomplete")
 	}
 	caPEM, err := os.ReadFile(c.CAFile)
 	if err != nil {
-		return nil, nil, errors.New("Voice Auth session-floor CA unavailable")
+		return nil, nil, errors.New("voice Auth session-floor CA unavailable")
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return nil, nil, errors.New("Voice Auth session-floor CA invalid")
+		return nil, nil, errors.New("voice Auth session-floor CA invalid")
 	}
 	certificate, err := tls.LoadX509KeyPair(c.ClientCertFile, c.ClientKeyFile)
 	if err != nil {
-		return nil, nil, errors.New("Voice Auth session-floor client certificate unavailable")
+		return nil, nil, errors.New("voice Auth session-floor client certificate unavailable")
 	}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(c.Address), grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 		MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: c.ServerName,
 		Certificates: []tls.Certificate{certificate},
 	})))
 	if err != nil {
-		return nil, nil, errors.New("Voice Auth session-floor transport unavailable")
+		return nil, nil, errors.New("voice Auth session-floor transport unavailable")
 	}
 	return New(authv1.NewAuthServiceClient(conn), issuer), conn, nil
 }
