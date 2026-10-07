@@ -143,7 +143,7 @@ func (s *MessagingGRPC) SendGameEventMessage(ctx context.Context, req *messaging
 	if err != nil {
 		return nil, status.Error(codes.Internal, "game event message event could not be encoded")
 	}
-	row, expired, inserted, err := s.Messages.InsertGameEventMessageWithOutbox(ctx, rowData, expiresAt, spaceID, event)
+	row, expired, _, err := s.Messages.InsertGameEventMessageWithOutbox(ctx, rowData, expiresAt, spaceID, event)
 	if err != nil {
 		if errors.Is(err, store.ErrGameEventMessageConflict) {
 			return nil, status.Error(codes.AlreadyExists, "game event idempotency conflict")

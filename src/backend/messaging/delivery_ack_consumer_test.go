@@ -124,7 +124,7 @@ func TestMessagingBindsWithoutConsumerCreatePermission(t *testing.T) {
 	deliverySub, err := subscribeDeliveryAck(context.Background(), js, deliveryStoreStub{}, deliveryPolicyStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deliverySub.Unsubscribe() })
-	privacySub, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, privacyPublisherStub{}, nil)
+	privacySub, err := subscribeReceiptPrivacy(context.Background(), js, privacyStoreStub{}, privacyTargetsStub{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = privacySub.Unsubscribe() })
 }

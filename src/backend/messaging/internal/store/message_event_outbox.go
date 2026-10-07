@@ -294,6 +294,19 @@ func (s *MessagesStore) ClearPublicReadReceiptsWithOutbox(ctx context.Context, p
 			return nil, err
 		}
 	}
+	var referencesPendingPurge bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(
+  SELECT 1
+  FROM read_receipts rr
+  JOIN managed_chat_purge_operations o ON o.chat_id=rr.chat_id AND o.state='PENDING'
+  JOIN managed_chat_purge_messages p ON p.operation_id=o.operation_id AND p.message_id=rr.last_read_message_id
+  WHERE rr.chat_id=ANY($1) AND rr.last_read_message_id IS NOT NULL
+)`, chatIDs).Scan(&referencesPendingPurge); err != nil {
+		return nil, err
+	}
+	if referencesPendingPurge {
+		return nil, ErrMessageMutationPurging
+	}
 	rows, err := tx.Query(ctx, `
 WITH own_before AS (
   SELECT rr.chat_id, rr.profile_id, rr.last_read_message_id

@@ -780,6 +780,17 @@ receipts. Space-level Messaging completion follows only after every manifest
 chat returns both owner receipts. Full request/receipt bytes retain 30 days from
 this participant's completion and the compact `PURGED` fence is permanent.
 
+Public read-receipt opt-out is serialized against the same per-chat purge lock.
+If any receipt the operation would revoke points to a message already included
+in a `PENDING` purge manifest, `ClearPublicReadReceiptsWithOutbox` rejects the
+whole transaction with the retryable `ErrMessageMutationPurging` result before
+changing receipts or inserting revocation events. The consumer retries after
+the purge completes; revocations committed before the freeze are part of the
+immutable event set and must receive PubAck before purge side effects. Existing
+`PENDING` operations whose event-set hash is null remain fail-closed and need
+explicit operator recovery; Messaging does not backfill their event set or
+silently resume them.
+
 The child uses the existing T33 `PurgeManagedChatContent` protocol:
 `request_sha256` is SHA-256 of its deterministic protobuf request bytes, matching
 its service-principal request binding. The P3 adapter verifies that digest;

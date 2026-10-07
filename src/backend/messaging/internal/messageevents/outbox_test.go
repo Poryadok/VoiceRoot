@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	eventsv1 "voice.app/voice/events/v1"
@@ -25,9 +26,10 @@ func TestEncodeOutboxEventPersistsExactStableEnvelopeAndHeaders(t *testing.T) {
 	require.NoError(t, err)
 	second, err := encodeOutboxEvent(subjectMessageSent, event, headers)
 	require.NoError(t, err)
-	require.Equal(t, "11111111-1111-4111-8111-111111111111", first.EventID)
+	expectedEventID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	require.Equal(t, expectedEventID, first.EventID)
 	require.Equal(t, subjectMessageSent, first.Subject)
 	require.Equal(t, headers, first.Headers)
 	require.True(t, bytes.Equal(first.Payload, second.Payload), "persisted retry bytes must be deterministic")
-	require.Equal(t, event.GetEventId(), first.EventID)
+	require.Equal(t, event.GetEventId(), first.EventID.String())
 }

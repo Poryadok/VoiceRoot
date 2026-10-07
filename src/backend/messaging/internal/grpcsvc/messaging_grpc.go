@@ -1649,7 +1649,7 @@ func (s *MessagingGRPC) insertForwardCommentary(ctx context.Context, chatID, pro
 		}
 		events = append(events, event)
 	}
-	saved, err := s.insertMessageWithAttachments(ctx, row, events)
+	_, err = s.insertMessageWithAttachments(ctx, row, events)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
