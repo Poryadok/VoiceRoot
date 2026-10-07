@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -13,18 +16,21 @@ import (
 	"google.golang.org/grpc/status"
 
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/pkg/principal"
 )
 
 type recordingVoiceRooms struct {
 	callsv1.UnimplementedVoiceServiceServer
-	joinVoiceRoomID    string
-	joinSpaceID        string
-	leaveVoiceRoom     string
-	statesVoiceRoom    string
-	moveRequest        *callsv1.MoveVoiceRoomParticipantRequest
-	moveProfileMD      []string
-	moveSelfErr        error
-	moveParticipantErr error
+	joinVoiceRoomID     string
+	joinSpaceID         string
+	joinHasPrincipalMD  bool
+	leaveVoiceRoom      string
+	leaveHasPrincipalMD bool
+	statesVoiceRoom     string
+	moveRequest         *callsv1.MoveVoiceRoomParticipantRequest
+	moveProfileMD       []string
+	moveSelfErr         error
+	moveParticipantErr  error
 }
 
 func TestTranscodeSpaceVoiceRoomModeratorMovePathBindsSpaceAndTarget(t *testing.T) {
@@ -61,7 +67,8 @@ func (s *recordingVoiceRooms) MoveToVoiceRoom(_ context.Context, _ *callsv1.Move
 	return &callsv1.MoveToVoiceRoomResponse{}, nil
 }
 
-func (s *recordingVoiceRooms) JoinVoiceRoom(_ context.Context, req *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
+func (s *recordingVoiceRooms) JoinVoiceRoom(ctx context.Context, req *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
+	s.joinHasPrincipalMD = hasRequestBoundPrincipalMetadata(ctx)
 	s.joinVoiceRoomID = req.GetVoiceRoomId()
 	if req.GetSpace() != nil {
 		s.joinSpaceID = req.GetSpace().GetId()
@@ -75,9 +82,34 @@ func (s *recordingVoiceRooms) JoinVoiceRoom(_ context.Context, req *callsv1.Join
 	}, nil
 }
 
-func (s *recordingVoiceRooms) LeaveVoiceRoom(_ context.Context, req *callsv1.LeaveVoiceRoomRequest) (*callsv1.LeaveVoiceRoomResponse, error) {
+func (s *recordingVoiceRooms) LeaveVoiceRoom(ctx context.Context, req *callsv1.LeaveVoiceRoomRequest) (*callsv1.LeaveVoiceRoomResponse, error) {
+	s.leaveHasPrincipalMD = hasRequestBoundPrincipalMetadata(ctx)
 	s.leaveVoiceRoom = req.GetVoiceRoomId()
 	return &callsv1.LeaveVoiceRoomResponse{}, nil
+}
+
+func hasRequestBoundPrincipalMetadata(ctx context.Context) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return false
+	}
+	authorization, requestIDs := md.Get("authorization"), md.Get("x-request-id")
+	return len(authorization) == 1 && strings.HasPrefix(authorization[0], "Bearer ") &&
+		len(requestIDs) == 1 && strings.TrimSpace(requestIDs[0]) != ""
+}
+
+func newRequestBoundVoiceRoomTranscoder(t *testing.T, server *recordingVoiceRooms) *transcoder {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "voice-room-test", PrivateKey: key})
+	require.NoError(t, err)
+	conn, cleanup := startBufconnVoiceConn(t, server)
+	t.Cleanup(cleanup)
+	return &transcoder{
+		lifecycleIssuer: issuer,
+		clients:         grpcClients{voiceUser: callsv1.NewVoiceServiceClient(conn)},
+	}
 }
 
 func (s *recordingVoiceRooms) GetVoiceStates(ctx context.Context, req *callsv1.GetVoiceStatesRequest) (*callsv1.GetVoiceStatesResponse, error) {
@@ -98,14 +130,14 @@ func TestTranscodeVoiceRoomJoin(t *testing.T) {
 	t.Parallel()
 
 	grpcRec := &recordingVoiceRooms{}
-	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
-	t.Cleanup(cleanup)
-
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {
+				UserID: "00000000-0000-4000-8000-000000000001", ProfileID: "00000000-0000-4000-8000-000000000002",
+				SessionEpoch: 1, ExpiresAt: time.Now().Add(time.Hour), AccountType: "regular",
+			},
 		},
-		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+		transcoder: newRequestBoundVoiceRoomTranscoder(t, grpcRec),
 	})
 
 	body := `{"space":{"id":"space-1"}}`
@@ -115,20 +147,21 @@ func TestTranscodeVoiceRoomJoin(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
 	require.Equal(t, "vr-1", grpcRec.joinVoiceRoomID)
 	require.Equal(t, "space-1", grpcRec.joinSpaceID)
+	require.True(t, grpcRec.joinHasPrincipalMD)
 }
 
 func TestTranscodeVoiceRoomLeave(t *testing.T) {
 	t.Parallel()
 
 	grpcRec := &recordingVoiceRooms{}
-	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
-	t.Cleanup(cleanup)
-
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {
+				UserID: "00000000-0000-4000-8000-000000000001", ProfileID: "00000000-0000-4000-8000-000000000002",
+				SessionEpoch: 1, ExpiresAt: time.Now().Add(time.Hour), AccountType: "regular",
+			},
 		},
-		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+		transcoder: newRequestBoundVoiceRoomTranscoder(t, grpcRec),
 	})
 
 	resp := performRequest(h, http.MethodPost, "/api/v1/voice/rooms/vr-2/leave", "", map[string]string{
@@ -136,6 +169,7 @@ func TestTranscodeVoiceRoomLeave(t *testing.T) {
 	})
 	require.Equal(t, http.StatusNoContent, resp.Code)
 	require.Equal(t, "vr-2", grpcRec.leaveVoiceRoom)
+	require.True(t, grpcRec.leaveHasPrincipalMD)
 }
 
 func TestTranscodeVoiceRoomStates(t *testing.T) {

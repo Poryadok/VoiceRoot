@@ -266,6 +266,158 @@ func TestPostgresRoomHeadRecoversCrashBetweenClaimAndPrepare(t *testing.T) {
 	require.Equal(t, head.RoomGeneration+1, reopened.RoomGeneration)
 }
 
+func TestPostgresLastLeaveSerializesAfterPreparedAdmissionAndDrainsExactFence(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	admissions := NewPostgresAdmissionStore(pool)
+	creator := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
+	require.NoError(t, admissions.Fence(ctx, creator))
+	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
+	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+
+	joiner := admissionFixture()
+	joiner.VoiceRoomID, joiner.SpaceID, joiner.RoomID = creator.VoiceRoomID, creator.SpaceID, creator.RoomID
+	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
+	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("pending join")}}
+	// Prepare the second participant, then hold the canonical room head while
+	// both Fence and the final leave queue on PostgreSQL's actual row lock. The
+	// observed wait state makes the chosen Fence-first serialization explicit.
+	require.NoError(t, admissions.Prepare(ctx, joiner))
+	headLock, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	var state string
+	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
+	require.Equal(t, "OPEN", state)
+	fenceStarted := make(chan struct{})
+	fenceResult := make(chan error, 1)
+	go func() {
+		close(fenceStarted)
+		fenceResult <- admissions.Fence(ctx, joiner)
+	}()
+	<-fenceStarted
+	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads")
+	leaveStarted := make(chan struct{})
+	leaveResult := make(chan error, 1)
+	go func() {
+		close(leaveStarted)
+		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
+	}()
+	<-leaveStarted
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	require.NoError(t, headLock.Commit(ctx))
+	require.NoError(t, <-fenceResult)
+	require.NoError(t, <-leaveResult)
+
+	var joinerState, participantState, headState string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state,participant_state FROM voice_space_media_admissions WHERE operation_id=$1`, joiner.OperationID).Scan(&joinerState, &participantState))
+	require.Equal(t, "ABORTING", joinerState)
+	require.Equal(t, "PREPARED", participantState, "a fenced pending join is never promoted after final leave starts")
+	require.ErrorIs(t, admissions.MarkCommitted(ctx, joiner.OperationID, joiner.Generation), ErrRoomHeadPending)
+	require.ErrorIs(t, admissions.ConfirmProjection(ctx, joiner.OperationID, joiner.Generation), ErrAdmissionConflict)
+	var undelivered int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_media_admission_outbox WHERE operation_id=$1 AND delivered_at IS NULL`, joiner.OperationID).Scan(&undelivered))
+	require.Equal(t, 1, undelivered, "the member event remains durable but unpublished while cleanup is pending")
+
+	// Exact operation cleanup removes only its own fence; neither stale creator
+	// cleanup nor the pending join may release another participant's fence.
+	require.NoError(t, admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation))
+	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, admissions.BeginRoomLeave(ctx, joiner.OperationID, joiner.Generation))
+	require.NoError(t, admissions.CompleteRoomLeave(ctx, joiner))
+	require.NoError(t, admissions.MarkCleanupCompleted(ctx, joiner.OperationID, joiner.Generation))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&headState))
+	require.Equal(t, "ENDED", headState)
+	var fences int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id IN ($1,$2)`, creator.AccountID, joiner.AccountID).Scan(&fences))
+	require.Zero(t, fences)
+	next := admissionFixture()
+	next.VoiceRoomID, next.SpaceID = creator.VoiceRoomID, creator.SpaceID
+	nextHead, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
+	require.NoError(t, err)
+	require.Equal(t, creator.RoomGeneration+1, nextHead.RoomGeneration)
+	require.NotEqual(t, creator.RoomID, nextHead.RoomID)
+	next.AccountID, next.ProfileID = joiner.AccountID, joiner.ProfileID
+	next.RoomGeneration = nextHead.RoomGeneration
+	require.NoError(t, admissions.Prepare(ctx, next))
+	require.NoError(t, admissions.Fence(ctx, next))
+	require.NoError(t, admissions.CompleteRoomLeave(ctx, joiner), "stale cleanup is idempotent and cannot release a newer exact-operation fence")
+	var currentFence uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT admission_operation_id FROM voice_account_voice_fences WHERE account_id=$1`, next.AccountID).Scan(&currentFence))
+	require.Equal(t, next.OperationID, currentFence)
+}
+
+func TestPostgresLastLeaveWinsBeforePendingPrepareAndFence(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := startSpaceMediaAdmissionPostgres(t, ctx)
+	admissions := NewPostgresAdmissionStore(pool)
+	creator := admissionFixture()
+	require.NoError(t, prepareAdmission(ctx, admissions, &creator))
+	require.NoError(t, admissions.Fence(ctx, creator))
+	require.NoError(t, admissions.MarkCommitted(ctx, creator.OperationID, creator.Generation))
+	require.NoError(t, admissions.MarkProjectionApplied(ctx, creator.OperationID, creator.Generation))
+	joiner := admissionFixture()
+	joiner.VoiceRoomID, joiner.SpaceID, joiner.RoomID = creator.VoiceRoomID, creator.SpaceID, creator.RoomID
+	joiner.RoomGeneration, joiner.CreatedRoom = creator.RoomGeneration, false
+	joiner.Events = []AdmissionEvent{{ID: uuid.New(), Subject: "voice.member_joined", Payload: []byte("denied join")}}
+
+	// The leave is the first waiter on the real room-head row lock. Once it
+	// commits CLOSING, a delayed Prepare and Fence must have no durable effects.
+	headLock, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	var state string
+	require.NoError(t, headLock.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2 FOR UPDATE`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
+	leaveStarted := make(chan struct{})
+	leaveResult := make(chan error, 1)
+	go func() {
+		close(leaveStarted)
+		leaveResult <- admissions.BeginRoomLeave(ctx, creator.OperationID, creator.Generation)
+	}()
+	<-leaveStarted
+	waitForPostgresLockWait(t, ctx, pool, "SELECT state,room_generation FROM voice_space_media_room_heads")
+	prepareStarted := make(chan struct{})
+	prepareResult := make(chan error, 1)
+	go func() {
+		close(prepareStarted)
+		prepareResult <- admissions.Prepare(ctx, joiner)
+	}()
+	<-prepareStarted
+	waitForPostgresLockWait(t, ctx, pool, "SELECT room_generation,space_id,call_room_id,creator_operation_id,state FROM voice_space_media_room_heads")
+	require.NoError(t, headLock.Commit(ctx))
+	require.NoError(t, <-leaveResult)
+	require.ErrorIs(t, <-prepareResult, ErrRoomHeadPending)
+	require.ErrorIs(t, admissions.Fence(ctx, joiner), ErrRoomHeadPending)
+	var admissionRows, outboxRows, joinerFences int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_media_admissions WHERE operation_id=$1`, joiner.OperationID).Scan(&admissionRows))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_space_media_admission_outbox WHERE operation_id=$1`, joiner.OperationID).Scan(&outboxRows))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM voice_account_voice_fences WHERE account_id=$1`, joiner.AccountID).Scan(&joinerFences))
+	require.Zero(t, admissionRows)
+	require.Zero(t, outboxRows)
+	require.Zero(t, joinerFences)
+	require.NoError(t, admissions.CompleteRoomLeave(ctx, creator))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_room_heads WHERE voice_room_id=$1 AND room_generation=$2`, creator.VoiceRoomID, creator.RoomGeneration).Scan(&state))
+	require.Equal(t, "ENDED", state)
+	next := admissionFixture()
+	next.VoiceRoomID, next.SpaceID = creator.VoiceRoomID, creator.SpaceID
+	nextHead, err := admissions.ClaimRoomHead(ctx, next.VoiceRoomID, next.SpaceID.String(), next.RoomID, next.OperationID, true)
+	require.NoError(t, err)
+	require.Equal(t, creator.RoomGeneration+1, nextHead.RoomGeneration)
+	require.NotEqual(t, creator.RoomID, nextHead.RoomID)
+}
+
+func waitForPostgresLockWait(t *testing.T, ctx context.Context, pool *pgxpool.Pool, queryMarker string) {
+	t.Helper()
+	var lastErr error
+	require.Eventually(t, func() bool {
+		var waiting bool
+		lastErr = pool.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%' || $1 || '%')`, queryMarker).Scan(&waiting)
+		return lastErr == nil && waiting
+	}, 4*time.Second, 10*time.Millisecond, "expected a PostgreSQL transaction to wait on the held room-head row lock; last query error: %v", lastErr)
+}
+
 func admissionFixture() Admission {
 	return Admission{
 		OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: uuid.New(), ProfileID: uuid.New(),

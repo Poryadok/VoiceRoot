@@ -33,13 +33,13 @@ func TestVoiceGRPCVoiceRoom_freeRejects33rdParticipant(t *testing.T) {
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), join)
+	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", join)
 	require.NoError(t, err)
 	for i := 1; i < freeVoiceRoomCap; i++ {
-		_, err = svc.JoinVoiceRoom(voiceTestCtx(fmt.Sprintf("profile-%02d", i)), join)
+		_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", i), join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = svc.JoinVoiceRoom(voiceTestCtx(fmt.Sprintf("profile-%02d", freeVoiceRoomCap)), join)
+	_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", freeVoiceRoomCap), join)
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }
 
@@ -60,13 +60,13 @@ func TestVoiceGRPCVoiceRoom_spaceProAllows33rdParticipant(t *testing.T) {
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), join)
+	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", join)
 	require.NoError(t, err)
 	for i := 1; i < 32; i++ {
-		_, err = svc.JoinVoiceRoom(voiceTestCtx(fmt.Sprintf("profile-%02d", i)), join)
+		_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", i), join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = svc.JoinVoiceRoom(voiceTestCtx("profile-32"), join)
+	_, err = joinSpaceVoiceUser(t, svc, "profile-32", join)
 	require.NoError(t, err)
 }
 

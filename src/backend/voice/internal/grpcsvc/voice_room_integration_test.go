@@ -116,9 +116,9 @@ func (f voiceRoomFixture) joinReq(profileID string) *callsv1.JoinVoiceRoomReques
 
 func (f voiceRoomFixture) joinParticipants(t *testing.T) string {
 	t.Helper()
-	joined, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	joined, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 	require.NoError(t, err)
 	return joined.GetVoiceSession().GetRoomId()
 }
@@ -173,7 +173,7 @@ func liveKitCanPublish(t *testing.T, token string) (allowed, present bool) {
 func TestVoiceGRPCJoinVoiceRoom_createsActiveSession(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	joined, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	joined, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 	session := joined.GetVoiceSession()
 	require.NotEmpty(t, session.GetRoomId())
@@ -184,10 +184,10 @@ func TestVoiceGRPCJoinVoiceRoom_createsActiveSession(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_memberJoinsExistingRoom(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 	require.NoError(t, err)
 
 	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-member"), &callsv1.GetVoiceStatesRequest{
@@ -258,9 +258,9 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 				ownerProfileID:  true,
 				memberProfileID: true,
 			}}}
-			_, err := f.svc.JoinVoiceRoom(voiceTestCtx(ownerProfileID), f.joinReq(ownerProfileID))
+			_, err := joinSpaceVoiceUser(t, f.svc, ownerProfileID, f.joinReq(ownerProfileID))
 			require.NoError(t, err)
-			joined, err := f.svc.JoinVoiceRoom(voiceTestCtx(memberProfileID), f.joinReq(memberProfileID))
+			joined, err := joinSpaceVoiceUser(t, f.svc, memberProfileID, f.joinReq(memberProfileID))
 			require.NoError(t, err)
 			roomID := joined.GetVoiceSession().GetRoomId()
 			f.svc.Roles = tc.roles
@@ -270,7 +270,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 				profileID = ownerProfileID
 			}
 			request := &callsv1.GetJoinTokenRequest{RoomId: roomID}
-			ctx := verifiedVoiceUserContext(t, request, uuid.NewString(), profileID, 9)
+			ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, uuid.NewString(), profileID, 9)
 			response, err := f.svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.wantCode, status.Code(err))
 			if tc.wantRoleCall {
@@ -292,7 +292,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 func TestVoiceGRPCVoiceRoom_nonMemberDenied(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-stranger"), f.joinReq("profile-stranger"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-stranger", f.joinReq("profile-stranger"))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
@@ -305,11 +305,11 @@ func TestVoiceGRPCJoinVoiceRoom_roleDenyPermissionDenied(t *testing.T) {
 		f.spaceID: {"profile-owner": true},
 	}}
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err = joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 }
 
@@ -330,7 +330,7 @@ func TestVoiceGRPCJoinVoiceRoom_roleDependencyFailsClosedBeforeSideEffects(t *te
 			f.svc.Calls = calls
 			f.svc.Roles = tc.role
 
-			_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+			_, err := joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 			require.Equal(t, tc.want, status.Code(err))
 			require.Zero(t, calls.createCalls, "denial must precede call/session persistence")
 			_, err = calls.GetCallByVoiceRoomID(t.Context(), f.voiceRoomID)
@@ -358,10 +358,10 @@ func TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny(t *testing.T) {
 		},
 	}
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
 }
@@ -369,7 +369,7 @@ func TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_spaceMemberViewsRosterWithoutJoining(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 
 	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-member"), &callsv1.GetVoiceStatesRequest{
@@ -382,9 +382,9 @@ func TestVoiceGRPCVoiceRoom_spaceMemberViewsRosterWithoutJoining(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemoveParticipant(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, "profile-member", f.joinReq("profile-member"))
 	require.NoError(t, err)
 	spaceMembers := f.svc.SpaceMembers.(*mapSpaceMembers)
 	delete(spaceMembers.members[f.spaceID], "profile-member")
@@ -413,7 +413,7 @@ func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemovePart
 
 func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *testing.T) {
 	f := startVoiceRoomFixture(t)
-	joined, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	joined, err := joinSpaceVoiceUser(t, f.svc, "profile-owner", f.joinReq("profile-owner"))
 	require.NoError(t, err)
 	call, err := f.svc.Calls.GetCall(t.Context(), joined.GetVoiceSession().GetRoomId())
 	require.NoError(t, err)
@@ -447,13 +447,13 @@ func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), join)
+	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", join)
 	require.NoError(t, err)
 	for i := 1; i < 32; i++ {
-		_, err = svc.JoinVoiceRoom(voiceTestCtx(fmt.Sprintf("profile-%02d", i)), join)
+		_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", i), join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = svc.JoinVoiceRoom(voiceTestCtx("profile-32"), join)
+	_, err = joinSpaceVoiceUser(t, svc, "profile-32", join)
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }
 

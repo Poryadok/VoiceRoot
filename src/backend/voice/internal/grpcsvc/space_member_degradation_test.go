@@ -21,7 +21,7 @@ func TestJoinVoiceRoom_SpaceMembersNotConfigured(t *testing.T) {
 	spaceID := uuid.New().String()
 	voiceRoomID := uuid.New().String()
 
-	_, err := svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), &callsv1.JoinVoiceRoomRequest{
+	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	})

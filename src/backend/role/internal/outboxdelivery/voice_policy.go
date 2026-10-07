@@ -40,7 +40,7 @@ func NewVoicePolicyDispatcher(source voicePolicySource, publisher voicePolicyPub
 
 func (d *VoicePolicyDispatcher) DispatchOnce(ctx context.Context) error {
 	if d == nil || d.store == nil || d.publisher == nil {
-		return fmt.Errorf("Role Voice policy dispatcher is not configured")
+		return fmt.Errorf("voice policy dispatcher is not configured")
 	}
 	cursor := uuid.Nil
 	for {
@@ -53,7 +53,7 @@ func (d *VoicePolicyDispatcher) DispatchOnce(ctx context.Context) error {
 		}
 		for _, row := range rows {
 			if row.SpaceID == uuid.Nil || row.EventID == uuid.Nil || row.Epoch == 0 || strings.Compare(row.SpaceID.String(), cursor.String()) <= 0 {
-				return fmt.Errorf("invalid or unordered Role Voice policy row")
+				return fmt.Errorf("invalid or unordered voice policy row")
 			}
 			if row.Epoch > d.acked[row.SpaceID] {
 				envelope := &eventsv1.RoleStreamEvent{
@@ -70,7 +70,7 @@ func (d *VoicePolicyDispatcher) DispatchOnce(ctx context.Context) error {
 					return err
 				}
 				if ack == nil || ack.Stream != "role_events" || ack.Sequence == 0 {
-					return fmt.Errorf("Role Voice policy invalidation lacks role_events PubAck")
+					return fmt.Errorf("voice policy invalidation lacks role_events publish acknowledgement")
 				}
 				d.acked[row.SpaceID] = row.Epoch
 			}

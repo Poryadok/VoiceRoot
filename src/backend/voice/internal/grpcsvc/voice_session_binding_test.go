@@ -82,7 +82,7 @@ func TestVoiceSessionBinding_CanonicalJoinAndActiveResponse(t *testing.T) {
 	svc := newTestVoiceService(time.Now(), events)
 	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true}}
 	svc.VoiceRoomAccessResolver = resolver
-	joined, err := svc.JoinVoiceRoom(voiceTestCtx(profile), &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
+	joined, err := joinSpaceVoiceUser(t, svc, profile, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
 	require.NoError(t, err)
 	require.Equal(t, space, joined.GetVoiceSession().GetSpaceId())
 	require.Equal(t, room, joined.GetVoiceSession().GetVoiceRoomId())

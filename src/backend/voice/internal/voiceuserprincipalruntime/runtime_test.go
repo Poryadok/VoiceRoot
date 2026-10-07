@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
+	"voice/backend/voice/internal/principalgrpc"
 )
 
 func TestAllowsOnlySpaceMediaAdmissionAndLeaveRPCs(t *testing.T) {
@@ -30,5 +31,6 @@ func TestAllowsOnlySpaceMediaAdmissionAndLeaveRPCs(t *testing.T) {
 
 func TestMissingRuntimeFailsClosed(t *testing.T) {
 	_, err := (*Runtime)(nil).Verify(context.Background(), "", callsv1.VoiceService_JoinVoiceRoom_FullMethodName, "request", "sha256:"+strings.Repeat("0", 64))
-	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Code(principalgrpc.VerificationStatus(err)))
 }

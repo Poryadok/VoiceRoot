@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	callsv1 "voice.app/voice/calls/v1"
 )
 

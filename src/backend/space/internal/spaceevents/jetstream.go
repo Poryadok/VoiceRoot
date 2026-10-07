@@ -93,7 +93,7 @@ func (p *JetStreamPublisher) ensureStream() error {
 func (p *JetStreamPublisher) Validate() error { return p.ensureStream() }
 
 func spaceEventStreamSubjects() []string {
-	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted, subjectVoiceAccessInvalid, "space.deletion_scheduled", "space.restored"}
+	return []string{"chat.created", "chat.member_changed", "chat.dm_peer_deleted", subjectSpaceTreeChanged, subjectSpaceCreated, subjectVoiceRoomCreated, subjectVoiceRoomDeleted, subjectSpaceInviteCreated, subjectSpaceMemberJoined, subjectSpaceMemberLeft, subjectSpaceUpdated, subjectSpaceDeleted, "space.deletion_scheduled", "space.restored", subjectVoiceAccessInvalid}
 }
 
 func streamHasSubject(info *nats.StreamInfo, subject string) bool {

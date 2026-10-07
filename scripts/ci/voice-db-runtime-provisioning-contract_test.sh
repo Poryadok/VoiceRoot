@@ -653,7 +653,12 @@ space_media_path_allowed() {
     src/backend/voice/internal/sessionfloor/client.go|\
     src/backend/voice/internal/voiceuserprincipalruntime/config.go|\
     src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go|\
-    src/backend/voice/internal/voiceuserprincipalruntime/runtime.go)
+    src/backend/voice/internal/voiceuserprincipalruntime/runtime.go|\
+    src/backend/role/Dockerfile|\
+    src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go|\
+    src/backend/voice/internal/gameprovision/account_voice_fence.go|\
+    src/backend/voice/internal/spacemedia/outbox.go|\
+    src/backend/voice/internal/spacemedia/postgres_admission.go)
       return 0
       ;;
   esac
@@ -661,6 +666,11 @@ space_media_path_allowed() {
 }
 
 for be255_path in \
+  src/backend/role/Dockerfile \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go \
+  src/backend/voice/internal/spacemedia/outbox.go \
+  src/backend/voice/internal/spacemedia/postgres_admission.go \
   src/backend/role/go.mod \
   src/backend/role/internal/outboxdelivery/voice_policy.go \
   src/backend/role/internal/outboxdelivery/voice_policy_test.go \
@@ -709,7 +719,80 @@ for be255_path in \
     exit 2
   }
 done
+# These five files were independently reviewed as part of the accepted BE-255
+# checkpoint. Keep their content exception narrower than the static path list.
+accepted_be255_checkpoint='19c86161506d16ec7d7507648ec4b2e87e1c99d2'
+git -C "${ROOT}" ls-tree -r "${accepted_be255_checkpoint}" >"${TMP_DIR}/be255-checkpoint-tree"
+be255_checkpoint_path_authorized_in_delta() {
+  local path="$1" delta="$2" actual_blob="$3" expected_blob checkpoint_blob
+  case "${path}" in
+    src/backend/role/Dockerfile)
+      expected_blob='a8810b9df3e6ee09b250ce1e0b9b052b2853ad32' ;;
+    src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go)
+      expected_blob='507374dffe11b1f1efac5cda6ad9f302fd34ba6c' ;;
+    src/backend/voice/internal/gameprovision/account_voice_fence.go)
+      expected_blob='901fb1952369f1093fa23baed913c7648cdf11c8' ;;
+    src/backend/voice/internal/spacemedia/outbox.go)
+      expected_blob='e53dd810e2d769565dbfab77f2cecbe78b9cef2f' ;;
+    src/backend/voice/internal/spacemedia/postgres_admission.go)
+      expected_blob='964af5a24a7df5dc7b1bb23c5aee7ba14c9237af' ;;
+    *) return 1 ;;
+  esac
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  checkpoint_blob="$(awk -F '\t' -v path="${path}" '$2 == path { split($1, fields, " "); print fields[3] }' "${TMP_DIR}/be255-checkpoint-tree")"
+  [[ "${checkpoint_blob}" == "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
+}
+
+be255_fixture_paths=(
+  'src/backend/role/Dockerfile'
+  'src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go'
+  'src/backend/voice/internal/gameprovision/account_voice_fence.go'
+  'src/backend/voice/internal/spacemedia/outbox.go'
+  'src/backend/voice/internal/spacemedia/postgres_admission.go'
+)
+be255_fixture_blobs=(
+  'a8810b9df3e6ee09b250ce1e0b9b052b2853ad32'
+  '507374dffe11b1f1efac5cda6ad9f302fd34ba6c'
+  '901fb1952369f1093fa23baed913c7648cdf11c8'
+  'e53dd810e2d769565dbfab77f2cecbe78b9cef2f'
+  '964af5a24a7df5dc7b1bb23c5aee7ba14c9237af'
+)
+: >"${TMP_DIR}/be255-empty-delta"
+for index in "${!be255_fixture_paths[@]}"; do
+  path="${be255_fixture_paths[${index}]}"
+  blob="${be255_fixture_blobs[${index}]}"
+  printf '%s\n' "${path}" >"${TMP_DIR}/be255-fixture-delta"
+  be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-fixture-delta" "${blob}" || {
+    printf 'F13 oracle bug: exact approved BE-255 path/blob was rejected: %s\n' "${path}" >&2
+    exit 2
+  }
+  if be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-empty-delta" "${blob}"; then
+    printf 'F13 oracle bug: BE-255 path absent from delta was accepted: %s\n' "${path}" >&2
+    exit 2
+  fi
+  if be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-fixture-delta" '0000000000000000000000000000000000000000'; then
+    printf 'F13 oracle bug: changed BE-255 blob was accepted: %s\n' "${path}" >&2
+    exit 2
+  fi
+done
+for near_match_path in \
+  src/backend/role/Dockerfile.near-match \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go.near-match \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go.near-match \
+  src/backend/voice/internal/spacemedia/outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/postgres_admission.go.near-match; do
+  printf '%s\n' "${near_match_path}" >"${TMP_DIR}/be255-near-match-delta"
+  if be255_checkpoint_path_authorized_in_delta "${near_match_path}" "${TMP_DIR}/be255-near-match-delta" 'a8810b9df3e6ee09b250ce1e0b9b052b2853ad32'; then
+    printf 'F13 oracle bug: near-match BE-255 path was accepted: %s\n' "${near_match_path}" >&2
+    exit 2
+  fi
+done
 for unrelated_space_media_path in \
+  src/backend/role/Dockerfile.near-match \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go.near-match \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go.near-match \
+  src/backend/voice/internal/spacemedia/outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/postgres_admission.go.near-match \
   src/backend/role/internal/outboxdelivery/unrelated.go \
   src/backend/space/internal/store/voice_access_invalidation_outbox.go.near-match \
   src/backend/voice/internal/spacemedia/unrelated.go \
@@ -954,7 +1037,9 @@ fi
 
 source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
 while IFS= read -r file; do
-  game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || printf '%s\n' "${file}"
+  game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || \
+    be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)" || \
+    printf '%s\n' "${file}"
 done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
 r22_runtime_delta=false
 if voice_r22_runtime_changed <"${TMP_DIR}/unapproved-runtime-delta"; then
@@ -963,6 +1048,10 @@ fi
 
 while IFS= read -r file; do
   if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
+    continue
+  fi
+  actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
+  if be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "${actual_blob}"; then
     continue
   fi
   if r23_contract_path_allowed "${file}"; then

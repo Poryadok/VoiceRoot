@@ -48,12 +48,12 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
 	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 	joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
-	joined, err := svc.JoinVoiceRoom(verifiedVoiceUserContext(t, &callsv1.GetJoinTokenRequest{}, account, profile, 5), joinRequest)
+	joined, err := joinSpaceVoiceUser(t, svc, profile, joinRequest)
 	require.NoError(t, err)
 	edge := &routedMediaFixture{}
 	svc.FederatedMedia = edge
 	request := &callsv1.GetJoinTokenRequest{RoomId: joined.VoiceSession.RoomId}
-	ctx := verifiedVoiceUserContext(t, request, account, profile, 5)
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, account, profile, 5)
 	for _, failedAdmission := range []readySpaceMediaAdmission{
 		{projectionErr: fmt.Errorf("projection not confirmed")},
 		{headErr: fmt.Errorf("room generation is closing")},
@@ -199,7 +199,7 @@ func TestGetJoinTokenFederationRequiresCurrentAuthFloorBeforeHandler(t *testing.
 			svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
 			svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 			joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
-			joined, err := svc.JoinVoiceRoom(verifiedVoiceUserContext(t, &callsv1.GetJoinTokenRequest{}, account, profile, 5), joinRequest)
+			joined, err := joinSpaceVoiceUser(t, svc, profile, joinRequest)
 			require.NoError(t, err)
 			edge := &routedMediaFixture{}
 			svc.FederatedMedia = edge

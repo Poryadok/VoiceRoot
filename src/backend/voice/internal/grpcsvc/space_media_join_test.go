@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -14,14 +15,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/pkg/principal"
-	"voice/backend/voice/internal/authctx"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
+	"voice/backend/voice/internal/voiceuserprincipalruntime"
 
 	callsv1 "voice.app/voice/calls/v1"
 )
@@ -135,7 +138,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 		return nil
 	})
 	request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
-	ctx := verifiedVoiceUserContext(t, request, accountID, profileID, 9)
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, accountID, profileID, 9)
 	response, err := svc.GetJoinToken(ctx, request)
 	require.NoError(t, err)
 	require.NotEmpty(t, response.GetJwt())
@@ -168,7 +171,7 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	require.Equal(t, voicestore.SpaceMediaEpochFloors{AccessEpoch: 11, PolicyEpoch: 7}, floors)
 }
 
-func verifiedVoiceUserContext(t *testing.T, request *callsv1.GetJoinTokenRequest, accountID, profileID string, epoch int64) context.Context {
+func verifiedVoiceUserContext(t *testing.T, method string, request proto.Message, accountID, profileID string, epoch int64) context.Context {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -177,36 +180,95 @@ func verifiedVoiceUserContext(t *testing.T, request *callsv1.GetJoinTokenRequest
 	hash, err := principal.RequestHash(request)
 	require.NoError(t, err)
 	requestID := uuid.NewString()
-	expiresAt := time.Now().Add(45 * time.Second)
 	token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{
-		Audience: "voice", RPC: callsv1.VoiceService_GetJoinToken_FullMethodName,
-		RequestID: requestID, RequestHash: hash, AccountID: accountID, ProfileID: profileID,
-		SessionEpoch: epoch, ClientExpiresAt: expiresAt,
-	})
-	require.NoError(t, err)
-	verified, err := principal.VerifyDelegatedUser(context.Background(), token, principal.VerifyConfig{
-		ExpectedIssuer: "gateway", ExpectedAudience: "voice",
-		ExpectedRPC:       callsv1.VoiceService_GetJoinToken_FullMethodName,
-		ExpectedRequestID: requestID, ExpectedRequestHash: hash,
-		KeyResolver: func(_ context.Context, issuerName, keyID string) (*rsa.PublicKey, error) {
-			require.Equal(t, "gateway", issuerName)
-			require.Equal(t, "test", keyID)
-			return &key.PublicKey, nil
-		},
-		ReplayGuard: func(context.Context, string, string, time.Time) error { return nil },
-		SessionEpochChecker: func(_ context.Context, gotAccount string, gotEpoch int64) error {
-			require.Equal(t, accountID, gotAccount)
-			require.Equal(t, epoch, gotEpoch)
-			return nil
-		},
+		Audience: "voice", RPC: method, RequestID: requestID, RequestHash: hash,
+		AccountID: accountID, ProfileID: profileID, SessionEpoch: epoch,
+		ClientExpiresAt: time.Now().Add(45 * time.Second),
 	})
 	require.NoError(t, err)
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		authctx.HeaderAccountID, accountID,
-		authctx.HeaderProfileID, profileID,
-		authctx.HeaderSessionEpoch, fmt.Sprint(epoch),
+		"authorization", "Bearer "+token, "x-request-id", requestID,
 	))
-	return principal.WithVerified(ctx, verified)
+	var verifiedContext context.Context
+	interceptor := voiceuserprincipalruntime.StrictUnaryInterceptor(strictTestVoiceUserVerifier{
+		key: &key.PublicKey, accountID: accountID, epoch: epoch,
+	})
+	_, err = interceptor(ctx, request, &grpc.UnaryServerInfo{FullMethod: method}, func(ctx context.Context, _ any) (any, error) {
+		verifiedContext = ctx
+		return nil, nil
+	})
+	require.NoError(t, err)
+	require.NotNil(t, verifiedContext)
+	return verifiedContext
+}
+
+type strictTestVoiceUserVerifier struct {
+	key       *rsa.PublicKey
+	accountID string
+	epoch     int64
+}
+
+func (v strictTestVoiceUserVerifier) Verify(ctx context.Context, token, method, requestID, requestHash string) (principal.Principal, error) {
+	return principal.VerifyDelegatedUser(ctx, token, principal.VerifyConfig{
+		ExpectedIssuer: "gateway", ExpectedAudience: "voice", ExpectedRPC: method,
+		ExpectedRequestID: requestID, ExpectedRequestHash: requestHash,
+		KeyResolver: func(_ context.Context, issuerName, keyID string) (*rsa.PublicKey, error) {
+			if issuerName != "gateway" || keyID != "test" {
+				return nil, errors.New("unexpected test signing key")
+			}
+			return v.key, nil
+		},
+		ReplayGuard: func(context.Context, string, string, time.Time) error { return nil },
+		SessionEpochChecker: func(_ context.Context, accountID string, epoch int64) error {
+			if accountID != v.accountID || epoch != v.epoch {
+				return errors.New("unexpected test session epoch")
+			}
+			return nil
+		},
+	})
+}
+
+func joinSpaceVoiceUser(t *testing.T, svc *VoiceGRPC, profileID string, request *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
+	t.Helper()
+	return svc.JoinVoiceRoom(verifiedVoiceUserContext(t, callsv1.VoiceService_JoinVoiceRoom_FullMethodName, request, uuid.NewString(), profileID, 9), request)
+}
+
+func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testing.T) {
+	spaceID, voiceRoomID, accountID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	events := &recordingEvents{}
+	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	svc.SpaceMediaReady = true
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+	svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+	}}
+	svc.Roles = &canonicalRolePermissions{}
+	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
+		PolicyEpoch: 7, CanJoin: true, CanPublishAudio: false, CanSubscribe: true,
+	}}
+	svc.SessionEpochChecker = currentSessionCheckerFunc(func(_ context.Context, gotAccount string, gotEpoch int64) error {
+		if gotAccount != accountID || gotEpoch != 9 {
+			return errors.New("unexpected test session")
+		}
+		return nil
+	})
+	request := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: spaceID}}
+	ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_JoinVoiceRoom_FullMethodName, request, accountID, profileID, 9)
+	response, err := svc.JoinVoiceRoom(ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, voiceRoomID, response.GetVoiceSession().GetVoiceRoomId())
+	require.Equal(t, spaceID, response.GetVoiceSession().GetSpaceId())
+	call, err := svc.Calls.GetCall(t.Context(), response.GetVoiceSession().GetRoomId())
+	require.NoError(t, err)
+	require.Equal(t, callsv1.CallStatus_CALL_STATUS_ACTIVE, call.Status)
+	participant, ok := call.SpaceMedia[profileID]
+	require.True(t, ok)
+	require.Equal(t, accountID, participant.AccountID)
+	require.True(t, participant.Issued.CanJoin)
+	require.True(t, participant.Issued.CanSubscribe)
+	require.Equal(t, uint64(9), participant.Issued.SessionEpoch)
+	require.Len(t, events.startedCall, 1)
+	require.Len(t, events.memberJoined, 1)
 }
 
 func TestGetJoinToken_SpaceMediaReadinessFailsClosed(t *testing.T) {

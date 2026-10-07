@@ -2,6 +2,7 @@ package voiceuserprincipalruntime
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 	callsv1 "voice.app/voice/calls/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/voice/internal/principalgrpc"
 )
 
 type fakeVerifier struct {
@@ -53,4 +55,21 @@ func TestStrictUnaryInterceptorRejectsMissingMetadataAndSiblingRPC(t *testing.T)
 	_, err = intercept(metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", "request-2")), request, &grpc.UnaryServerInfo{FullMethod: callsv1.VoiceService_StartCall_FullMethodName}, func(context.Context, any) (any, error) { t.Fatal("unlisted method reached handler"); return nil, nil })
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Zero(t, verifier.calls)
+}
+
+type unavailableVerifier struct{}
+
+func (unavailableVerifier) Verify(context.Context, string, string, string, string) (principal.Principal, error) {
+	return principal.Principal{}, principalgrpc.Unavailable(errors.New("fixture dependency unavailable"))
+}
+
+func TestStrictUnaryInterceptorMapsUnavailableVerifierAndDoesNotCallHandler(t *testing.T) {
+	request := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: "room"}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", "request-unavailable"))
+	handlerCalled := false
+	_, err := StrictUnaryInterceptor(unavailableVerifier{})(ctx, request,
+		&grpc.UnaryServerInfo{FullMethod: callsv1.VoiceService_JoinVoiceRoom_FullMethodName},
+		func(context.Context, any) (any, error) { handlerCalled = true; return nil, nil })
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.False(t, handlerCalled)
 }
