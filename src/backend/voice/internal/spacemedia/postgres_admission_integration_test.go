@@ -582,6 +582,7 @@ func admissionFixture() Admission {
 	return Admission{
 		OperationID: uuid.New(), Generation: uuid.NewString(), AccountID: uuid.New(), ProfileID: uuid.New(),
 		SpaceID: uuid.New(), RoomID: uuid.NewString(), VoiceRoomID: uuid.NewString(), RoomGeneration: 1, CreatedRoom: true, Identity: "space-media-test-identity",
+		CallStartedAt: time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC), MaxParticipants: store.MaxVoiceRoomParticipants,
 		SessionEpoch: 3, AccessEpoch: 4, PolicyEpoch: 5, CanJoin: true, CanSubscribe: true,
 		Events: []AdmissionEvent{
 			{ID: uuid.New(), Subject: "voice.call_started", Payload: []byte("fixed call event")},

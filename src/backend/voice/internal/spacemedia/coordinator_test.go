@@ -303,6 +303,10 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 	spaceID, roomID, voiceRoomID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	profileA, profileB := uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileA, profileB)
+	_, floorErr := calls.RaiseSpaceMediaEpochFloor(ctx, spaceID, store.SpaceAccessEpoch, 4)
+	require.NoError(t, floorErr)
+	_, floorErr = calls.RaiseSpaceMediaEpochFloor(ctx, spaceID, store.RolePolicyEpoch, 7)
+	require.NoError(t, floorErr)
 	initial, err := calls.GetCall(ctx, roomID)
 	require.NoError(t, err)
 	identityB := initial.SpaceMedia[profileB].Identity
@@ -337,9 +341,10 @@ func TestDelayedInvalidationUsesCurrentRestoredRights(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile)
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{}
 	c := &Coordinator{
-		Store: calls,
+		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profile: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 9},
 		}},
@@ -363,9 +368,10 @@ func TestFailedTargetRemovalLeavesReconciliationIncomplete(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profile := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profile)
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{err: errors.New("injected ejection failure")}
 	c := &Coordinator{
-		Store: calls,
+		Store: calls, Admissions: admissions,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profile: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 2},
 		}},
@@ -389,6 +395,10 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
+	_, floorErr := calls.RaiseSpaceMediaEpochFloor(ctx, spaceID, store.SpaceAccessEpoch, 1)
+	require.NoError(t, floorErr)
+	_, floorErr = calls.RaiseSpaceMediaEpochFloor(ctx, spaceID, store.RolePolicyEpoch, 1)
+	require.NoError(t, floorErr)
 	media := &fakeMedia{}
 	readiness := []bool{}
 	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
@@ -527,7 +537,7 @@ func TestSpaceMediaLeaveEjectionFailureRetainsRevocationTarget(t *testing.T) {
 	require.NoError(t, err)
 	participant := call.SpaceMedia[profile]
 	media := &fakeMedia{err: errors.New("injected ejection failure")}
-	c := &Coordinator{Store: calls, Media: media}
+	c := &Coordinator{Store: calls, Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID), Media: media}
 
 	_, removed, err := c.RevokeSpaceMediaParticipant(ctx, call, participant)
 	require.Error(t, err)

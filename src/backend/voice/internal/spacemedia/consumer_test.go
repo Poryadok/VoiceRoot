@@ -75,13 +75,18 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 	ctx := context.Background()
 	spaceID, roomID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
+	call, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	participant := call.SpaceMedia[profileID]
+	media := &fakeMedia{err: errors.New("remove failed")}
 	coordinator := &Coordinator{
-		Store: calls,
+		Store:      calls,
+		Admissions: fakeRecoveryForCommittedCall(t, ctx, calls, roomID),
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profileID: {SpaceID: spaceID, Member: false, Active: true, AccessEpoch: 4},
 		}},
 		Grants: fakeGrants{byProfile: map[string]s2s.VoiceRoomGrants{}},
-		Media:  &fakeMedia{err: errors.New("remove failed")},
+		Media:  media,
 	}
 	envelope := &eventsv1.ChatStreamEvent{
 		EventId: uuid.NewString(),
@@ -96,6 +101,14 @@ func TestSpaceAccessMessageNAKsUntilEveryEjectionIsComplete(t *testing.T) {
 	err = handleSpaceAccessInvalidation(ctx, spaceAccessSubject, data, msg, coordinator)
 
 	require.Error(t, err)
+	require.Equal(t, []string{participant.Identity}, media.removed)
+	current, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	retained, ok := current.SpaceMedia[profileID]
+	require.True(t, ok, "failed media ejection must retain the roster target")
+	require.Equal(t, participant.Identity, retained.Identity)
+	require.Equal(t, participant.Generation, retained.Generation)
+	require.True(t, retained.Revoking, "failed media ejection must retain the exact revocation target")
 	require.Zero(t, msg.acked)
 	require.Equal(t, 1, msg.nacked)
 	require.Zero(t, msg.termed)
