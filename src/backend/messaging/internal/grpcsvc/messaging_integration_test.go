@@ -64,6 +64,7 @@ func applyBaseMessagingMigrations(t *testing.T, ctx context.Context, pool *pgxpo
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000011_last_delivered_message_id.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000012_messages_content_type.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000017_game_message_execution_permits.up.sql"))
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000018_t52_game_cards.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000019_t57_game_action_results.up.sql")
 	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000020_managed_chat_purge.up.sql")
