@@ -13,6 +13,7 @@ ROLLOUT+=('bootstrap_auth.py','bootstrap_enrollment.py','bootstrap_renewal.py','
 ROLLOUT+=('actor_auth.py','actor_root.py','actor_verification.py','actor_permissions.py','prebuild_disposition.py',
     'space_authority.py','space_backup.py','space_migration.py','space_restore.py','space_safeguards.py')
 ROLLOUT+=('renderer_transition.py','renderer_execution.py','renderer_root.py','bot_migration.py')
+ROLLOUT+=('prebuild_v5_disposition.py',)
 
 def build(kernel,output,renewer):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

@@ -18,6 +18,7 @@ from stage_runtime import Kube
 
 V2_BINDING='57457481c7af3148f501083f941dfac0f1c17e75d75b879e377d060a7f5fee77'
 V3_BINDING='b0742fec4732b769944e5b849e39229d5f614989c4a439050ec48dd2ed20ab26'
+V4_BINDING='426a6edf16ccb8aba30145cfde458c9b2ca5d468cdf4015ea8bdf525e049f47f'
 
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -37,6 +38,21 @@ def upgrade_code(code,installed,gid):
 
 def upgrade_code_v4(code,installed,gid):
     return _upgrade_code(code,installed,gid,V3_BINDING,'v4','v3')
+
+def upgrade_code_v5(code,installed,gid):
+    return _upgrade_code(code,installed,gid,V4_BINDING,'v5','v4')
+
+def disposition_predecessor_v5(code,installed):
+    installed=Path(installed);current=installed/'code';old=installed/'code-v4-preserved'
+    if current.exists() and binding_sha(current)==V4_BINDING:return V4_BINDING
+    wanted=binding_sha(code)
+    try:record=private_json(installed/'upgrade-v5.json')
+    except FileNotFoundError:raise Blocked('bridge_upgrade_predecessor_unapproved')
+    if (record!={'schema':'voice-nats-code-upgrade-v5','from':V4_BINDING,'to':wanted}
+        or not old.exists() or binding_sha(old)!=V4_BINDING
+        or current.exists() and binding_sha(current)!=wanted):
+        raise Blocked('bridge_upgrade_predecessor_unapproved')
+    return V4_BINDING
 
 def disposition_predecessor(code,installed):
     """Retain the exact predecessor identity through either owned rename."""
@@ -82,8 +98,9 @@ def _upgrade_code(code,installed,gid,predecessor,version,previous_version):
     os.rename(staged,current);sync_directory(installed)
     if binding_sha(current)!=wanted or binding_sha(old)!=predecessor:raise Blocked('bridge_upgrade_verification_failed')
 
-def upgrade(code):
+def upgrade(code,version='v4'):
     if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
+    if version not in ('v4','v5'):raise Blocked('bridge_upgrade_version_unapproved')
     root_cli.code_binding(Path(code));installed=guard.ROOT/'installed'
     with operation_lock():
         marker=Kube().get('configmap','voice-nats-generation')
@@ -101,16 +118,24 @@ def upgrade(code):
             if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
             for path in (installed/'journal').iterdir():
                 if private_json(path).get('phase')!='COMPLETE':
-                    from prebuild_disposition import enroll
-                    enroll(guard.ROOT,path,marker,disposition_predecessor(code,installed))
+                    if version=='v5':
+                        from prebuild_v5_disposition import enroll
+                        enroll(guard.ROOT,path,marker,disposition_predecessor_v5(code,installed))
+                    else:
+                        from prebuild_disposition import enroll
+                        enroll(guard.ROOT,path,marker,disposition_predecessor(code,installed))
             policy=private_json(installed/'policy.json')
             for name in ('recovery-key.pem','recovery-cert.pem'):
                 fd,_=encrypted_cut.regular(installed/'recovery'/name,private=name=='recovery-key.pem')
                 os.close(fd)
-            upgrade_code_v4(code,installed,grp.getgrnam('pmd').gr_gid)
+            if version=='v5':
+                if Kube().get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
+                upgrade_code_v5(code,installed,grp.getgrnam('pmd').gr_gid)
+                if Kube().get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
+            else:upgrade_code_v4(code,installed,grp.getgrnam('pmd').gr_gid)
             if private_json(installed/'policy.json')!=policy:raise Blocked('bridge_upgrade_policy_changed')
         finally:inbox.chmod(0o1730)
-    print('NATS_ROLLOUT_BRIDGE=UPGRADED_V4_KEYS_POLICY_PRESERVED')
+    print('NATS_ROLLOUT_BRIDGE=UPGRADED_'+version.upper()+'_KEYS_POLICY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -184,6 +209,7 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4')
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5')
     if sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-v5':upgrade(Path(__file__).resolve().parents[1],version='v5')
     else:install(Path(__file__).resolve().parents[1],sys.argv[1])
