@@ -721,7 +721,16 @@ for be255_path in \
 done
 # These five files were independently reviewed as part of the accepted BE-255
 # checkpoint. Keep their content exception narrower than the static path list.
-accepted_be255_checkpoint='19c86161506d16ec7d7507648ec4b2e87e1c99d2'
+accepted_be255_checkpoint='fe69dc1a93f8f0ef69744ba4b0ece7e8a9ddd774'
+be255_checkpoint_is_commit_ancestor() {
+  local repo="$1" checkpoint="$2" target="$3"
+  git -C "${repo}" rev-parse --verify "${checkpoint}^{commit}" >/dev/null 2>&1 &&
+    git -C "${repo}" merge-base --is-ancestor "${checkpoint}" "${target}"
+}
+if ! be255_checkpoint_is_commit_ancestor "${ROOT}" "${accepted_be255_checkpoint}" HEAD; then
+  printf '%s\n' 'F13: accepted BE-255 checkpoint must be an ancestor commit' >&2
+  exit 1
+fi
 git -C "${ROOT}" ls-tree -r "${accepted_be255_checkpoint}" >"${TMP_DIR}/be255-checkpoint-tree"
 be255_checkpoint_path_authorized_in_delta() {
   local path="$1" delta="$2" actual_blob="$3" expected_blob checkpoint_blob
@@ -735,13 +744,34 @@ be255_checkpoint_path_authorized_in_delta() {
     src/backend/voice/internal/spacemedia/outbox.go)
       expected_blob='e53dd810e2d769565dbfab77f2cecbe78b9cef2f' ;;
     src/backend/voice/internal/spacemedia/postgres_admission.go)
-      expected_blob='964af5a24a7df5dc7b1bb23c5aee7ba14c9237af' ;;
+      expected_blob='ebeaf7869e04dcb186d5f13cd4a67187228d3553' ;;
     *) return 1 ;;
   esac
   grep -Fxq -- "${path}" "${delta}" || return 1
   checkpoint_blob="$(awk -F '\t' -v path="${path}" '$2 == path { split($1, fields, " "); print fields[3] }' "${TMP_DIR}/be255-checkpoint-tree")"
   [[ "${checkpoint_blob}" == "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
 }
+
+be255_checkpoint_fixture_repo="${TMP_DIR}/be255-checkpoint-fixture.git"
+git init -q --bare "${be255_checkpoint_fixture_repo}"
+be255_checkpoint_fixture_tree="$(printf '' | git -C "${be255_checkpoint_fixture_repo}" mktree)"
+be255_ancestor_fixture="$(printf '%s\n' 'ancestor fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}")"
+be255_nonancestor_fixture="$(printf '%s\n' 'unrelated fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}")"
+be255_child_fixture="$(printf '%s\n' 'child fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}" -p "${be255_ancestor_fixture}")"
+git -C "${be255_checkpoint_fixture_repo}" update-ref refs/heads/main "${be255_child_fixture}"
+git -C "${be255_checkpoint_fixture_repo}" update-ref refs/heads/unrelated "${be255_nonancestor_fixture}"
+be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" "${be255_ancestor_fixture}" refs/heads/main || {
+  printf '%s\n' 'F13 oracle bug: accepted checkpoint ancestor fixture was rejected' >&2
+  exit 2
+}
+if be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" "${be255_nonancestor_fixture}" refs/heads/main; then
+  printf '%s\n' 'F13 oracle bug: non-ancestor checkpoint fixture was accepted' >&2
+  exit 2
+fi
+if be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" '0000000000000000000000000000000000000000' refs/heads/main; then
+  printf '%s\n' 'F13 oracle bug: missing checkpoint fixture was accepted' >&2
+  exit 2
+fi
 
 be255_fixture_paths=(
   'src/backend/role/Dockerfile'
@@ -755,7 +785,7 @@ be255_fixture_blobs=(
   '507374dffe11b1f1efac5cda6ad9f302fd34ba6c'
   '901fb1952369f1093fa23baed913c7648cdf11c8'
   'e53dd810e2d769565dbfab77f2cecbe78b9cef2f'
-  '964af5a24a7df5dc7b1bb23c5aee7ba14c9237af'
+  'ebeaf7869e04dcb186d5f13cd4a67187228d3553'
 )
 : >"${TMP_DIR}/be255-empty-delta"
 for index in "${!be255_fixture_paths[@]}"; do
