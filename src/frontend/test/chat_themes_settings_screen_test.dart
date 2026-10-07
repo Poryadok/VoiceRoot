@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -419,6 +421,141 @@ void main() {
       isNotNull,
     );
   });
+
+  testWidgets(
+    'a retained Plus value cannot enable another account chat theme',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final accountA = Completer<VoiceSubscription?>();
+      final accountBInitial = Completer<VoiceSubscription?>();
+      final accountBRetry = Completer<VoiceSubscription?>();
+      var accountBRequests = 0;
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('', 404)),
+          ),
+          subscriptionProvider.overrideWith((ref) {
+            final accountId = ref.watch(
+              authControllerProvider.select(
+                (state) => state.session?.accountId,
+              ),
+            );
+            if (accountId == 'acc-test') return accountA.future;
+            if (accountId == 'account-b') {
+              accountBRequests++;
+              return accountBRequests == 1
+                  ? accountBInitial.future
+                  : accountBRetry.future;
+            }
+            return Future.value(null);
+          }),
+          chatListControllerProvider.overrideWith(_ThemeChatListController.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const ChatThemesSettingsScreen(),
+          ),
+        ),
+      );
+      accountA.complete(
+        const VoiceSubscription(
+          id: 'subscription-a',
+          accountId: 'acc-test',
+          plan: 'premium',
+          billingPeriod: 'month',
+          status: 'active',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(ChatThemesSettingsScreen.applyKey))
+            .onPressed,
+        isNull,
+      );
+
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'account-b-access',
+          refreshToken: 'account-b-refresh',
+          accountId: 'account-b',
+          activeProfileId: 'profile-b',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final pendingB = container.read(subscriptionProvider);
+      expect(pendingB.isLoading, isTrue);
+      expect(pendingB.valueOrNull?.accountId, 'acc-test');
+      expect(accountBRequests, 1);
+      expect(
+        find.byKey(ChatThemesSettingsScreen.chatPickerKey),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('chat_themes_choose_chat-b')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ChatThemesSettingsScreen.themeKey(ChatTheme.violet)),
+      );
+      await tester.pump();
+
+      final applyWhileBPending = tester
+          .widget<FilledButton>(find.byKey(ChatThemesSettingsScreen.applyKey))
+          .onPressed;
+      if (applyWhileBPending != null) {
+        await tester.ensureVisible(
+          find.byKey(ChatThemesSettingsScreen.applyKey),
+        );
+        await tester.tap(find.byKey(ChatThemesSettingsScreen.applyKey));
+        await tester.pumpAndSettle();
+      }
+      expect(applyWhileBPending, isNull);
+      expect(await container.read(chatThemePreferenceProvider.future), isEmpty);
+
+      accountBInitial.completeError(StateError('private subscription detail'));
+      await tester.pumpAndSettle();
+      final failedB = container.read(subscriptionProvider);
+      expect(failedB.hasError, isTrue);
+      expect(failedB.valueOrNull?.accountId, 'acc-test');
+      expect(find.text('Could not load subscription'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(ChatThemesSettingsScreen.applyKey))
+            .onPressed,
+        isNull,
+      );
+      expect(await container.read(chatThemePreferenceProvider.future), isEmpty);
+
+      await tester.tap(find.text('Retry').first);
+      await tester.pump();
+      expect(accountBRequests, 2);
+      accountBRetry.complete(null);
+      await tester.pumpAndSettle();
+
+      final recoveredB = container.read(subscriptionProvider);
+      expect(recoveredB.hasValue, isTrue);
+      expect(recoveredB.valueOrNull, isNull);
+      expect(find.text('Could not load subscription'), findsNothing);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(ChatThemesSettingsScreen.applyKey))
+            .onPressed,
+        isNull,
+      );
+      expect(await container.read(chatThemePreferenceProvider.future), isEmpty);
+    },
+  );
 
   testWidgets('a lapsed Plus keeps a saved theme but disables changes', (
     tester,

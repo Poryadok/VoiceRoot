@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../backend/subscription_client.dart';
+import '../state/auth_providers.dart';
 import '../state/subscription_providers.dart';
 
 const chatThemePreferencePrefKey = 'voice_chat_theme_preferences';
@@ -73,11 +75,25 @@ final chatThemePreferenceProvider =
       ChatThemePreferenceNotifier.new,
     );
 
+bool hasCurrentAccountPremiumSubscription(
+  AsyncValue<VoiceSubscription?> subscription,
+  String? accountId,
+) {
+  final currentSubscription = subscription.asData?.value;
+  return accountId != null &&
+      currentSubscription?.accountId == accountId &&
+      currentSubscription?.isPremium == true;
+}
+
 final effectiveChatThemeProvider = Provider.family<ChatTheme?, String>((
   ref,
   chatId,
 ) {
-  if (ref.watch(subscriptionProvider).valueOrNull?.isPremium != true) {
+  final accountId = ref.watch(authControllerProvider).session?.accountId;
+  if (!hasCurrentAccountPremiumSubscription(
+    ref.watch(subscriptionProvider),
+    accountId,
+  )) {
     return null;
   }
   return ref.watch(chatThemePreferenceProvider).valueOrNull?[chatId];

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -10,11 +11,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/subscription_client.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/settings/chat_theme_preference.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/presence_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/subscription_providers.dart';
@@ -133,6 +136,154 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'a previous account Plus cannot color the room during account refresh',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        chatThemePreferencePrefKey: '{"chat-a":"violet","chat-b":"sunset"}',
+      });
+      final accountA = Completer<VoiceSubscription?>();
+      final accountBInitial = Completer<VoiceSubscription?>();
+      final accountBRetry = Completer<VoiceSubscription?>();
+      var accountBRequests = 0;
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 404)),
+          ),
+          subscriptionProvider.overrideWith((ref) {
+            final accountId = ref.watch(
+              authControllerProvider.select(
+                (state) => state.session?.accountId,
+              ),
+            );
+            if (accountId == 'acc-test') return accountA.future;
+            if (accountId == 'account-b') {
+              accountBRequests++;
+              return accountBRequests == 1
+                  ? accountBInitial.future
+                  : accountBRetry.future;
+            }
+            return Future.value(null);
+          }),
+          chatRoomControllerProvider(
+            'chat-a',
+          ).overrideWith((ref) => _ThemeRoomController(ref, 'chat-a')),
+          chatRoomControllerProvider('chat-b').overrideWith(
+            (ref) =>
+                _ThemeRoomController(ref, 'chat-b', profileId: 'profile-b'),
+          ),
+          presenceProvider('peer-1').overrideWith((ref) => null),
+          profileProvider('peer-1').overrideWith(
+            (ref) async => const VoiceProfile(
+              id: 'peer-1',
+              accountId: 'peer-account',
+              username: 'peer',
+              discriminator: '1234',
+              displayName: 'Theme Preview Peer',
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-a')),
+          ),
+        ),
+      );
+      accountA.complete(
+        const VoiceSubscription(
+          id: 'subscription-a',
+          accountId: 'acc-test',
+          plan: 'premium',
+          billingPeriod: 'month',
+          status: 'active',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<VoiceChatBubble>(find.byType(VoiceChatBubble).first)
+            .palette,
+        ChatThemePalette.forTheme(ChatTheme.violet),
+      );
+
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'account-b-access',
+          refreshToken: 'account-b-refresh',
+          accountId: 'account-b',
+          activeProfileId: 'profile-b',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pump();
+
+      final pendingB = container.read(subscriptionProvider);
+      expect(pendingB.isLoading, isTrue);
+      expect(pendingB.valueOrNull?.accountId, 'acc-test');
+      expect(accountBRequests, 1);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-b')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(effectiveChatThemeProvider('chat-a')), isNull);
+      expect(
+        tester
+            .widget<VoiceChatBubble>(find.byType(VoiceChatBubble).first)
+            .palette,
+        isNull,
+      );
+
+      accountBInitial.completeError(StateError('private subscription detail'));
+      await tester.pumpAndSettle();
+      final failedB = container.read(subscriptionProvider);
+      expect(failedB.hasError, isTrue);
+      expect(failedB.valueOrNull?.accountId, 'acc-test');
+      expect(container.read(effectiveChatThemeProvider('chat-a')), isNull);
+      expect(
+        tester
+            .widget<VoiceChatBubble>(find.byType(VoiceChatBubble).first)
+            .palette,
+        isNull,
+      );
+
+      container.invalidate(subscriptionProvider);
+      container.read(subscriptionProvider);
+      await tester.pump();
+      expect(accountBRequests, 2);
+      accountBRetry.complete(null);
+      await tester.pumpAndSettle();
+
+      expect(container.read(subscriptionProvider).hasValue, isTrue);
+      expect(container.read(subscriptionProvider).valueOrNull, isNull);
+      expect(container.read(effectiveChatThemeProvider('chat-a')), isNull);
+      expect(
+        tester
+            .widget<VoiceChatBubble>(find.byType(VoiceChatBubble).first)
+            .palette,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('captures production-font picker and conversation in H and V', (
     tester,
@@ -313,7 +464,8 @@ Future<ThemeData> _loadProductionTheme(WidgetTester tester) async {
 }
 
 class _ThemeRoomController extends ChatRoomController {
-  _ThemeRoomController(super.ref, super.chatId) : super() {
+  _ThemeRoomController(super.ref, super.chatId, {this.profileId = 'prof-test'})
+    : super() {
     state = ChatRoomState(
       messages: [
         VoiceMessage(
@@ -324,9 +476,11 @@ class _ThemeRoomController extends ChatRoomController {
           createdAt: DateTime.utc(2026, 10, 7),
         ),
       ],
-      historyProfileId: 'prof-test',
+      historyProfileId: profileId,
     );
   }
+
+  final String profileId;
 
   @override
   Future<void> loadInitial() async {}

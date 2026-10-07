@@ -45,7 +45,8 @@ class _ChatThemesSettingsScreenState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colors = VoiceColors.of(context);
-    final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final authState = ref.watch(authControllerProvider);
+    final activeProfileId = authState.activeProfileId;
     ref.listen(authControllerProvider, (previous, next) {
       if (previous?.activeProfileId != next.activeProfileId &&
           _ownerProfileId != next.activeProfileId) {
@@ -75,7 +76,10 @@ class _ChatThemesSettingsScreenState
         : null;
     final subscription = ref.watch(subscriptionProvider);
     final preferences = ref.watch(chatThemePreferenceProvider);
-    final isPlus = subscription.valueOrNull?.isPremium == true;
+    final isPlus = hasCurrentAccountPremiumSubscription(
+      subscription,
+      authState.session?.accountId,
+    );
     final saved = targetChatId == null
         ? null
         : preferences.valueOrNull?[targetChatId];
@@ -119,6 +123,7 @@ class _ChatThemesSettingsScreenState
                         saved: saved,
                         selected: selected,
                         subscription: subscription,
+                        isPlus: isPlus,
                         preferences: preferences,
                         canChange: canChange,
                         columns: constraints.maxWidth < 540 ? 2 : 4,
@@ -138,12 +143,11 @@ class _ChatThemesSettingsScreenState
     required ChatTheme? saved,
     required ChatTheme selected,
     required AsyncValue<dynamic> subscription,
+    required bool isPlus,
     required AsyncValue<Map<String, ChatTheme>> preferences,
     required bool canChange,
     required int columns,
   }) {
-    final isPlus =
-        ref.watch(subscriptionProvider).valueOrNull?.isPremium == true;
     final preview = isPlus ? selected : ChatTheme.ocean;
     final subscriptionFailure = subscription.hasError;
     final preferenceFailure = preferences.hasError;
@@ -253,7 +257,10 @@ class _ChatThemesSettingsScreenState
     if (theme == null ||
         !mounted ||
         ref.read(authControllerProvider).activeProfileId != profileId ||
-        ref.read(subscriptionProvider).valueOrNull?.isPremium != true) {
+        !hasCurrentAccountPremiumSubscription(
+          ref.read(subscriptionProvider),
+          ref.read(authControllerProvider).session?.accountId,
+        )) {
       return;
     }
     try {
