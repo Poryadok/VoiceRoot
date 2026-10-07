@@ -155,12 +155,6 @@ func (s *spyMessageEvents) reset() {
 	s.forwarded = nil
 }
 
-func (s *spyMessageEvents) snapshot() (sent [][4]string, mentions [][5]string, edited [][2]string, deleted [][2]string, read [][3]string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([][4]string(nil), s.sent...), append([][5]string(nil), s.mentions...), append([][2]string(nil), s.edited...), append([][2]string(nil), s.deleted...), append([][3]string(nil), s.read...)
-}
-
 func startMessagingJSTestServer(t *testing.T) *server.Server {
 	t.Helper()
 	opts := &server.Options{

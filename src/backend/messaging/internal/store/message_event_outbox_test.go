@@ -61,18 +61,21 @@ func TestPurgedOrDeletedMessageCannotRecreateSideTableState(t *testing.T) {
 	for _, table := range []string{"read_receipts", "read_positions", "message_hides", "reactions", "pins"} {
 		var rows int
 		query := "SELECT COUNT(*) FROM " + table + " WHERE "
-		if table == "read_receipts" || table == "read_positions" {
+		switch table {
+		case "read_receipts", "read_positions":
 			query += "chat_id=$1 AND profile_id=$2"
 			require.NoError(t, pool.QueryRow(ctx, query, chatID, viewer).Scan(&rows), table)
-		} else if table == "message_hides" {
+		case "message_hides":
 			query += "message_id=$1 AND profile_id=$2"
 			require.NoError(t, pool.QueryRow(ctx, query, messageID, viewer).Scan(&rows), table)
-		} else if table == "reactions" {
+		case "reactions":
 			query += "message_id=$1 AND profile_id=$2"
 			require.NoError(t, pool.QueryRow(ctx, query, messageID, viewer).Scan(&rows), table)
-		} else {
+		case "pins":
 			query += "chat_id=$1 AND message_id=$2"
 			require.NoError(t, pool.QueryRow(ctx, query, chatID, messageID).Scan(&rows), table)
+		default:
+			t.Fatalf("unexpected side table %q", table)
 		}
 		require.Zero(t, rows, table+" must remain empty after stale mutation attempts")
 	}
@@ -168,7 +171,10 @@ VALUES($1,$2,'dm',$3,'payload','[]'::jsonb,'[]'::jsonb,clock_timestamp()-interva
 	require.NoError(t, err)
 	require.EqualValues(t, 1, work.EventCount)
 	var subject string
-	require.NoError(t, pool.QueryRow(ctx, `SELECT subject FROM managed_chat_purge_events WHERE operation_id=$1`, operationID).Scan(&subject))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT outbox.subject
+FROM managed_chat_purge_events AS purge_event
+JOIN message_event_outbox AS outbox USING (event_id)
+WHERE purge_event.operation_id=$1`, operationID).Scan(&subject))
 	require.Equal(t, "message.read_receipt_revoked", subject)
 	require.ErrorIs(t, store.RequireManagedChatPurgeEventsPublished(ctx, operationID), ErrMessageEventOutboxUnavailable)
 
