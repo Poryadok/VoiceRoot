@@ -40,7 +40,7 @@ func NewVoiceInvalidationDispatcher(source voiceInvalidationSource, publisher vo
 
 func (d *VoiceInvalidationDispatcher) DispatchOnce(ctx context.Context) error {
 	if d == nil || d.store == nil || d.publisher == nil {
-		return fmt.Errorf("Space Voice invalidation dispatcher is not configured")
+		return fmt.Errorf("space voice invalidation dispatcher is not configured")
 	}
 	cursor := uuid.Nil
 	for {
@@ -70,7 +70,7 @@ func (d *VoiceInvalidationDispatcher) DispatchOnce(ctx context.Context) error {
 					return err
 				}
 				if ack == nil || ack.Stream != "chat_events" || ack.Sequence == 0 {
-					return fmt.Errorf("Space Voice invalidation lacks chat_events PubAck")
+					return fmt.Errorf("space voice invalidation lacks chat_events PubAck")
 				}
 				d.acked[row.SpaceID] = row.Epoch
 			}
@@ -86,7 +86,7 @@ const storeVoiceInvalidationPageSize = 250
 
 func (d *VoiceInvalidationDispatcher) Run(ctx context.Context) error {
 	if d == nil {
-		return fmt.Errorf("Space Voice invalidation dispatcher is not configured")
+		return fmt.Errorf("space voice invalidation dispatcher is not configured")
 	}
 	dispatch := func() {
 		if err := d.DispatchOnce(ctx); err != nil && d.OnError != nil {

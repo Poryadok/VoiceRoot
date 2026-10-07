@@ -39,6 +39,7 @@ type MediaLifecycle interface {
 
 type AdmissionRecoveryStore interface {
 	RecoverOrphanRoomHeads(context.Context) error
+	ConfirmProjection(context.Context, uuid.UUID, string) error
 	ConfirmRoomHeadOpen(context.Context, store.SpaceMediaAdmission) error
 	BeginRoomLeave(context.Context, uuid.UUID, string) error
 	CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error

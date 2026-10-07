@@ -265,17 +265,15 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 			}}
 			f.svc.SpaceMembers = &mapSpaceMembers{members: members}
 			configureReadySpaceMediaFixture(f.svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{f.voiceRoomID: f.spaceID}, members: members, accessEpoch: 11})
-			f.svc.Roles = &mapRolePermissions{allowed: map[string]map[string]bool{f.spaceID: {
-				ownerProfileID:  true,
-				memberProfileID: true,
-			}}}
+			f.svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
+				PolicyEpoch: 7, CanJoin: true, CanPublishAudio: tc.wantPublish, CanSubscribe: true,
+			}}
+			f.svc.Roles = tc.roles
 			_, err := joinSpaceVoiceUser(t, f.svc, ownerProfileID, f.joinReq(ownerProfileID))
 			require.NoError(t, err)
 			joined, err := joinSpaceVoiceUser(t, f.svc, memberProfileID, f.joinReq(memberProfileID))
 			require.NoError(t, err)
 			roomID := joined.GetVoiceSession().GetRoomId()
-			f.svc.Roles = tc.roles
-
 			profileID := memberProfileID
 			if tc.profileID == fixtureProfileOwner {
 				profileID = ownerProfileID

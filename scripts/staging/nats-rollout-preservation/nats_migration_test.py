@@ -102,7 +102,15 @@ class Tests(unittest.TestCase):
                 self.run_with(Path(td),state,runtime,stage,actor,manifest,census,old)
             self.assertEqual(old.call_count,1)
             result=self.run_with(Path(td),state,runtime,stage,actor,manifest,census,old)
-        self.assertEqual(old.call_count,1);self.assertTrue(result['verified']);self.assertEqual(len(actor.calls),3)
+        expected_actions=[
+            '$JS.API.STREAM.UPDATE.chat_events',
+            '$JS.API.STREAM.UPDATE.social_events',
+            '$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',
+            '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
+            '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+        ]
+        self.assertEqual([action['api'] for action in state['nats_contract']['actions']],expected_actions)
+        self.assertEqual(old.call_count,1);self.assertTrue(result['verified']);self.assertEqual(actor.calls,expected_actions)
         self.assertEqual(result['proof']['old_consumers_preserved'],1)
         self.assertEqual(result['old_consumer_state_files_verified'],1)
 

@@ -47,6 +47,8 @@ type fakeAdmissionRecovery struct {
 	projectionReads int
 	projectionPages [][]store.SpaceMediaAdmission
 	roomCreator     store.SpaceMediaAdmission
+	confirmed       map[string]store.SpaceMediaAdmission
+	confirmCalls    int
 }
 
 func (f *fakeAdmissionRecovery) RecoveryRows(context.Context, int) ([]store.SpaceMediaAdmission, error) {
@@ -65,7 +67,26 @@ func (f *fakeAdmissionRecovery) ProjectionRows(context.Context, uuid.UUID, int, 
 	}
 	page := f.projectionPages[0]
 	f.projectionPages = f.projectionPages[1:]
+	for _, admission := range page {
+		if admission.State == AdmissionCommitted && admission.ProjectionApplied {
+			f.seedConfirmedProjection(admission)
+		}
+	}
 	return page, nil
+}
+func (f *fakeAdmissionRecovery) seedConfirmedProjection(admission store.SpaceMediaAdmission) {
+	if f.confirmed == nil {
+		f.confirmed = make(map[string]store.SpaceMediaAdmission)
+	}
+	f.confirmed[admission.OperationID.String()] = admission
+}
+func (f *fakeAdmissionRecovery) ConfirmProjection(_ context.Context, operationID uuid.UUID, generation string) error {
+	f.confirmCalls++
+	admission, ok := f.confirmed[operationID.String()]
+	if !ok || admission.Generation != generation || admission.State != AdmissionCommitted || !admission.ProjectionApplied {
+		return ErrAdmissionConflict
+	}
+	return nil
 }
 func (f *fakeAdmissionRecovery) RoomCreator(context.Context, string, uint64) (store.SpaceMediaAdmission, error) {
 	if f.roomCreator.OperationID == uuid.Nil {
@@ -94,6 +115,36 @@ func (f *fakeAdmissionRecovery) RecoverOrphanRoomHeads(context.Context) error { 
 func (f *fakeAdmissionRecovery) CompleteRoomLeave(context.Context, store.SpaceMediaAdmission) error {
 	f.released++
 	return nil
+}
+
+func fakeRecoveryForCommittedCall(t *testing.T, ctx context.Context, calls *store.MemoryCallStore, roomID string) *fakeAdmissionRecovery {
+	t.Helper()
+	call, err := calls.GetCall(ctx, roomID)
+	require.NoError(t, err)
+	fake := &fakeAdmissionRecovery{}
+	for _, participant := range call.SpaceMedia {
+		operationID, parseErr := uuid.Parse(participant.AdmissionOperationID)
+		require.NoError(t, parseErr)
+		fake.seedConfirmedProjection(store.SpaceMediaAdmission{
+			OperationID: operationID, Generation: participant.Generation,
+			State: AdmissionCommitted, ProjectionApplied: true,
+		})
+	}
+	return fake
+}
+
+func TestFakeAdmissionRecoveryConfirmProjectionRequiresExactCommittedBinding(t *testing.T) {
+	operationID, generation := uuid.New(), uuid.NewString()
+	fake := &fakeAdmissionRecovery{}
+	fake.seedConfirmedProjection(store.SpaceMediaAdmission{
+		OperationID: operationID, Generation: generation,
+		State: AdmissionCommitted, ProjectionApplied: true,
+	})
+
+	require.NoError(t, fake.ConfirmProjection(context.Background(), operationID, generation))
+	require.ErrorIs(t, fake.ConfirmProjection(context.Background(), operationID, generation+"-stale"), ErrAdmissionConflict)
+	require.ErrorIs(t, fake.ConfirmProjection(context.Background(), uuid.New(), generation), ErrAdmissionConflict)
+	require.Equal(t, 3, fake.confirmCalls)
 }
 
 func TestCoordinatorDrainsEveryAdmissionRecoveryPageBeforeReady(t *testing.T) {
@@ -162,7 +213,8 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 		profileB: {PolicyEpoch: 7, CanJoin: true, CanSubscribe: true, CanPublishAudio: true},
 	}}
 	media := &fakeMedia{}
-	c := &Coordinator{Store: calls, Access: access, Grants: grants, Media: media, Admissions: &fakeAdmissionRecovery{}, SessionEpochChecker: currentEpochChecker{}}
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
+	c := &Coordinator{Store: calls, Access: access, Grants: grants, Media: media, Admissions: admissions, SessionEpochChecker: currentEpochChecker{}}
 
 	err = c.Observe(ctx, AuthorityNotice{SpaceID: spaceID, Kind: store.SpaceAccessEpoch, Epoch: 4, ProfileID: profileA})
 
@@ -176,6 +228,7 @@ func TestObserveIgnoresNarrowHintAndReconcilesEveryParticipant(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, store.SpaceMediaEpochFloors{AccessEpoch: 4, PolicyEpoch: 7}, progress.Observed)
 	require.Equal(t, progress.Observed, progress.Reconciled)
+	require.Equal(t, 2, admissions.confirmCalls, "both committed participant bindings are confirmed before reconciliation")
 }
 
 func TestDelayedInvalidationUsesCurrentRestoredRights(t *testing.T) {
@@ -236,8 +289,9 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 	calls := newRoomStore(t, ctx, spaceID, roomID, voiceRoomID, profileID)
 	media := &fakeMedia{}
 	readiness := []bool{}
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	c := &Coordinator{
-		Store: calls, Calls: calls, Admissions: &fakeAdmissionRecovery{}, Media: media,
+		Store: calls, Calls: calls, Admissions: admissions, Media: media,
 		Access: fakeAccess{byProfile: map[string]grpcsvc.CanonicalVoiceRoomAccess{
 			profileID: {SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 1},
 		}},
@@ -249,6 +303,7 @@ func TestReconcileAllOpensReadinessOnlyAfterCompletePass(t *testing.T) {
 
 	require.NoError(t, c.ReconcileAll(ctx))
 	require.Equal(t, []bool{false, true}, readiness)
+	require.Equal(t, 1, admissions.confirmCalls, "the committed participant must be confirmed before readiness opens")
 
 	readiness = nil
 	media.err = errors.New("authority-driven ejection did not complete")
@@ -267,7 +322,7 @@ func TestAbortRetryDrainsExactCommittedProjectionBeforeReleasingFence(t *testing
 	call, err := calls.GetCall(ctx, roomID)
 	require.NoError(t, err)
 	participant := call.SpaceMedia[profileID]
-	admissions := &fakeAdmissionRecovery{}
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, roomID)
 	media := &fakeMedia{}
 	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Media: media}
 	operationID, err := uuid.Parse(participant.AdmissionOperationID)
@@ -321,7 +376,7 @@ func TestCommittedDuplicateRoomAdmissionRecoversByAbortingHiddenLoser(t *testing
 	grants := fakeGrants{byProfile: map[string]grpcsvc.CanonicalVoiceRoomGrants{
 		pendingProfile: {PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
 	}}
-	admissions := &fakeAdmissionRecovery{}
+	admissions := fakeRecoveryForCommittedCall(t, ctx, calls, activeRoomID)
 	c := &Coordinator{Store: calls, Calls: calls, Admissions: admissions, Access: access, Grants: grants,
 		SessionEpochChecker: currentEpochChecker{}, Media: &fakeMedia{}}
 	row := store.SpaceMediaAdmission{

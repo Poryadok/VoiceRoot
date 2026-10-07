@@ -27,6 +27,7 @@ import (
 	"voice/backend/voice/internal/voiceuserprincipalruntime"
 
 	callsv1 "voice.app/voice/calls/v1"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 type staticSpaceMediaGrants struct {
@@ -119,6 +120,7 @@ func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Contex
 func configureReadySpaceMediaFixture(svc *VoiceGRPC, resolver AuthoritativeVoiceRoomAccessResolver) {
 	svc.SpaceMediaReady = true
 	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "ws://livekit.test", time.Minute)
 	svc.VoiceRoomAccessResolver = resolver
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
 		PolicyEpoch: 7, CanJoin: true, CanPublishAudio: false, CanSubscribe: true,

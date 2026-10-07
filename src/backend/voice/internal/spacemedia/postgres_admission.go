@@ -219,7 +219,7 @@ func admissionFingerprint(a Admission) ([32]byte, error) {
 	return sha256.Sum256(encoded), nil
 }
 
-func (a Admission) validate() error {
+func validateAdmission(a Admission) error {
 	if a.OperationID == uuid.Nil || a.Generation == "" || a.AccountID == uuid.Nil || a.ProfileID == uuid.Nil ||
 		a.SpaceID == uuid.Nil || a.RoomID == "" || a.VoiceRoomID == "" || a.RoomGeneration == 0 || a.Identity == "" || a.CallStartedAt.IsZero() || a.MaxParticipants <= 0 || a.SessionEpoch == 0 || a.AccessEpoch == 0 || a.PolicyEpoch == 0 || !a.CanJoin || !a.CanSubscribe || len(a.Events) == 0 {
 		return ErrAdmissionConflict
@@ -248,7 +248,7 @@ func (a Admission) validate() error {
 // events cannot be claimed by the relay until the row is COMMITTED and the
 // Redis projection-applied marker is confirmed.
 func (s *PostgresAdmissionStore) Prepare(ctx context.Context, a Admission) error {
-	if !s.usable() || a.validate() != nil {
+	if !s.usable() || validateAdmission(a) != nil {
 		return ErrAdmissionUnavailable
 	}
 	fingerprint, err := admissionFingerprint(a)
