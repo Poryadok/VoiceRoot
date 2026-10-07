@@ -870,6 +870,19 @@
   "settingsTitle": "Настройки",
   "settingsTooltip": "Настройки",
   "settingsAppearance": "Оформление",
+  "settingsChatThemes": "Темы чатов",
+  "chatThemesPlusLabel": "Voice Plus",
+  "chatThemesPlusNotice": "Эксклюзивные темы доступны подписчикам Voice Plus.",
+  "chatThemesSelected": "Выбрана",
+  "chatThemesApply": "Применить {theme}",
+  "@chatThemesApply": {
+    "placeholders": {
+      "theme": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThemesReset": "Сбросить",
   "appIconTitle": "Значок приложения",
   "appIconDeviceNotice": "Этот выбор применяется только на этом устройстве.",
   "appIconPlusRequired": "Для применения этого значка нужна подписка Voice Plus.",

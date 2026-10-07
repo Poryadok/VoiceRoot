@@ -6,9 +6,50 @@ import 'voice_token_catalog.dart';
 
 enum VoiceThemeMode { light, dark, highContrast }
 
+/// Exact miniature swatches used by the Appearance theme selector.
+///
+/// These are previews only; the runtime app palettes continue to come from
+/// [VoiceTokenCatalog].
+@immutable
+class AppThemePreferenceSwatch {
+  const AppThemePreferenceSwatch({
+    required this.background,
+    required this.foreground,
+    required this.border,
+    this.secondBackground,
+  });
+
+  final Color background;
+  final Color? secondBackground;
+  final Color foreground;
+  final Color border;
+}
+
 /// Builds [ThemeData] from design tokens + [profileAccent] for the active profile.
 class VoiceTheme {
   VoiceTheme._();
+
+  static const preferenceSystemSwatch = AppThemePreferenceSwatch(
+    background: Color(0xFFF5F5F5),
+    secondBackground: Color(0xFF202020),
+    foreground: Color(0xFF1A1A1A),
+    border: Color(0xFF9E9E9E),
+  );
+  static const preferenceLightSwatch = AppThemePreferenceSwatch(
+    background: Color(0xFFF5F5F5),
+    foreground: Color(0xFF1A1A1A),
+    border: Color(0xFFF5F5F5),
+  );
+  static const preferenceDarkSwatch = AppThemePreferenceSwatch(
+    background: Color(0xFF202020),
+    foreground: Color(0xFFF0F0F0),
+    border: Color(0xFF202020),
+  );
+  static const preferenceHighContrastSwatch = AppThemePreferenceSwatch(
+    background: Color(0xFF000000),
+    foreground: Color(0xFFFFFFFF),
+    border: Color(0xFFFFFFFF),
+  );
 
   /// Bundled in [pubspec.yaml] — no runtime fonts.gstatic.com fetch (web/offline).
   static const String fontFamily = 'Noto Sans';

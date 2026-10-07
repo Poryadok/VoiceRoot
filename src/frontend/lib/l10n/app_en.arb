@@ -931,6 +931,19 @@
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
   "settingsAppearance": "Appearance",
+  "settingsChatThemes": "Chat themes",
+  "chatThemesPlusLabel": "Voice Plus",
+  "chatThemesPlusNotice": "Exclusive themes are available to Voice Plus subscribers.",
+  "chatThemesSelected": "Selected",
+  "chatThemesApply": "Apply {theme}",
+  "@chatThemesApply": {
+    "placeholders": {
+      "theme": {
+        "type": "String"
+      }
+    }
+  },
+  "chatThemesReset": "Reset",
   "appIconTitle": "App Icon",
   "appIconDeviceNotice": "This choice applies on this device only.",
   "appIconPlusRequired": "Voice Plus is required to apply this icon.",
