@@ -84,8 +84,8 @@ void main() {
         firstBytes,
         containsAllInOrder(<int>[137, 80, 78, 71, 13, 10, 26, 10]),
       );
-      expect(manifest.href, '/manifest.webmanifest');
-      expect(appleTouchIcon.href, '/apple-touch-icon.png');
+      expect(manifest.getAttribute('href'), '/manifest.webmanifest');
+      expect(appleTouchIcon.getAttribute('href'), '/apple-touch-icon.png');
 
       print('APP_ICON_WEB_STAGE apply_coral:start');
       await app_icon.apply(AppIconPreference.coral);
@@ -100,8 +100,8 @@ void main() {
       print('APP_ICON_WEB_STAGE fetch_revoked_png:start');
       await expectLater(_loadBytes(firstUrl), throwsA(anything));
       print('APP_ICON_WEB_STAGE fetch_revoked_png:done');
-      expect(manifest.href, '/manifest.webmanifest');
-      expect(appleTouchIcon.href, '/apple-touch-icon.png');
+      expect(manifest.getAttribute('href'), '/manifest.webmanifest');
+      expect(appleTouchIcon.getAttribute('href'), '/apple-touch-icon.png');
       expect(
         html.document.querySelectorAll('link[rel~="icon"]').length,
         originalIconLinks.length,
