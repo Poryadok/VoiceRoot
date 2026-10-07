@@ -84,7 +84,7 @@ func (d *VoicePolicyDispatcher) DispatchOnce(ctx context.Context) error {
 
 func (d *VoicePolicyDispatcher) Run(ctx context.Context) error {
 	if d == nil {
-		return fmt.Errorf("Role Voice policy dispatcher is not configured")
+		return fmt.Errorf("role Voice policy dispatcher is not configured")
 	}
 	dispatch := func() {
 		if err := d.DispatchOnce(ctx); err != nil && d.OnError != nil {

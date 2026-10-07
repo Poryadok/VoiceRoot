@@ -2,7 +2,6 @@ package grpcsvc
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -21,25 +20,29 @@ const freeVoiceRoomCap = 32
 func TestVoiceGRPCVoiceRoom_freeRejects33rdParticipant(t *testing.T) {
 	spaceID := uuid.New().String()
 	voiceRoomID := uuid.New().String()
-	members := map[string]map[string]bool{spaceID: {"profile-owner": true}}
+	owner := fixtureProfileOwner
+	members := map[string]map[string]bool{spaceID: {owner: true}}
+	profiles := make([]string, freeVoiceRoomCap+1)
 	for i := 1; i <= freeVoiceRoomCap; i++ {
-		members[spaceID][fmt.Sprintf("profile-%02d", i)] = true
+		profiles[i] = fixtureProfileOrdinal(i)
+		members[spaceID][profiles[i]] = true
 	}
 	svc := newTestVoiceService(fixedVoiceNow(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
-	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
+	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members, accessEpoch: 11})
+	svc.Roles = &canonicalRolePermissions{}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", join)
+	_, err := joinSpaceVoiceUser(t, svc, owner, join)
 	require.NoError(t, err)
 	for i := 1; i < freeVoiceRoomCap; i++ {
-		_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", i), join)
+		_, err = joinSpaceVoiceUser(t, svc, profiles[i], join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", freeVoiceRoomCap), join)
+	_, err = joinSpaceVoiceUser(t, svc, profiles[freeVoiceRoomCap], join)
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }
 
@@ -47,26 +50,30 @@ func TestVoiceGRPCVoiceRoom_freeRejects33rdParticipant(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_spaceProAllows33rdParticipant(t *testing.T) {
 	spaceID := uuid.New().String()
 	voiceRoomID := uuid.New().String()
-	members := map[string]map[string]bool{spaceID: {"profile-owner": true}}
+	owner := fixtureProfileOwner
+	members := map[string]map[string]bool{spaceID: {owner: true}}
+	profiles := make([]string, 33)
 	for i := 1; i <= 32; i++ {
-		members[spaceID][fmt.Sprintf("profile-%02d", i)] = true
+		profiles[i] = fixtureProfileOrdinal(i)
+		members[spaceID][profiles[i]] = true
 	}
 	svc := newTestVoiceService(fixedVoiceNow(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
-	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
+	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members, accessEpoch: 11})
+	svc.Roles = &canonicalRolePermissions{}
 	svc.SpacePro = staticSpacePro{spaces: map[string]bool{spaceID: true}}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := joinSpaceVoiceUser(t, svc, "profile-owner", join)
+	_, err := joinSpaceVoiceUser(t, svc, owner, join)
 	require.NoError(t, err)
 	for i := 1; i < 32; i++ {
-		_, err = joinSpaceVoiceUser(t, svc, fmt.Sprintf("profile-%02d", i), join)
+		_, err = joinSpaceVoiceUser(t, svc, profiles[i], join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = joinSpaceVoiceUser(t, svc, "profile-32", join)
+	_, err = joinSpaceVoiceUser(t, svc, profiles[32], join)
 	require.NoError(t, err)
 }
 

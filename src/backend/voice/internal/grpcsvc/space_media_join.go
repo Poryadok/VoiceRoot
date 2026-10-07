@@ -378,7 +378,7 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 	if err := s.ensureConfirmedSpaceMediaCall(ctx, current); err != nil {
 		return nil, err
 	}
-	var generation, identity string
+	var generation string
 	if exists {
 		if participant.Revoking {
 			return nil, status.Error(codes.FailedPrecondition, "Space media session is being revoked")
@@ -386,7 +386,7 @@ func (s *VoiceGRPC) getSpaceMediaJoinToken(ctx context.Context, call voicestore.
 		if participant.Issued.SessionEpoch != uint64(sessionEpoch) || participant.Issued.AccessEpoch != access.AccessEpoch || participant.Issued.PolicyEpoch != grants.PolicyEpoch {
 			return nil, status.Error(codes.FailedPrecondition, "Space media session must leave and rejoin after an authority change")
 		}
-		generation, identity = participant.Generation, participant.Identity
+		generation = participant.Generation
 	}
 	issued := participant.Issued
 	latestAccess, err := s.resolveCanonicalVoiceRoomAccess(ctx, current.VoiceRoomID, profileID)

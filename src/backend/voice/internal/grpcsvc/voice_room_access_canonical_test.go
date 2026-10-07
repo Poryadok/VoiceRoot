@@ -78,9 +78,10 @@ func TestJoinVoiceRoom_RequiresMatchingCanonicalSpaceAssertion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			events := &recordingEvents{}
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
-			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true}}
+			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11}}
 			roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
-			svc.VoiceRoomAccessResolver, svc.Roles, svc.SpaceMembers = resolver, roles, legacy
+			configureReadySpaceMediaFixture(svc, resolver)
+			svc.Roles, svc.SpaceMembers = roles, legacy
 			response, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: tc.assertion}})
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, []canonicalAccessCall{{voiceRoomID, profileID}}, resolver.calls)
@@ -113,7 +114,8 @@ func TestJoinVoiceRoom_CanonicalResolverFailuresHaveNoSideEffects(t *testing.T) 
 			events := &recordingEvents{}
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 			roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
-			svc.VoiceRoomAccessResolver, svc.Roles, svc.SpaceMembers = tc.resolver, roles, legacy
+			configureReadySpaceMediaFixture(svc, tc.resolver)
+			svc.Roles, svc.SpaceMembers = roles, legacy
 			got, err := joinSpaceVoiceUser(t, svc, profile, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: uuid.NewString()}})
 			require.Nil(t, got)
 			require.Equal(t, tc.want, status.Code(err))
@@ -133,7 +135,8 @@ func TestJoinVoiceRoom_CanonicalNotFoundHasNoSideEffects(t *testing.T) {
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	resolver := &canonicalAccessResolver{err: status.Error(codes.NotFound, "room")}
 	roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
-	svc.VoiceRoomAccessResolver, svc.Roles, svc.SpaceMembers = resolver, roles, legacy
+	configureReadySpaceMediaFixture(svc, resolver)
+	svc.Roles, svc.SpaceMembers = roles, legacy
 
 	response, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: spaceID}})
 	require.Nil(t, response)
@@ -151,9 +154,10 @@ func TestJoinVoiceRoom_RejectsStoredCallSpaceMismatchBeforeParticipantOrEvent(t 
 	canonicalSpaceID, staleSpaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true}}
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: canonicalSpaceID, Member: true, Active: true, AccessEpoch: 11}}
 	roles, legacy := &canonicalRolePermissions{}, &poisonLegacySpaceMembers{}
-	svc.VoiceRoomAccessResolver, svc.Roles, svc.SpaceMembers = resolver, roles, legacy
+	configureReadySpaceMediaFixture(svc, resolver)
+	svc.Roles, svc.SpaceMembers = roles, legacy
 	_, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{
 		RoomID:             uuid.NewString(),
 		LivekitRoomName:    "voice-room-" + voiceRoomID,
@@ -204,7 +208,9 @@ func TestJoinVoiceRoom_SpaceLifecycleAdmissionFailsClosed(t *testing.T) {
 			spaceID, roomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 			svc.SpaceLifecycle = tc.controller
-			svc.VoiceRoomAccessResolver = &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true}}
+			resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11}}
+			configureReadySpaceMediaFixture(svc, resolver)
+			svc.Roles = &canonicalRolePermissions{}
 			_, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: roomID, Space: &spacev1.SpaceRef{Id: spaceID}})
 			require.Equal(t, tc.want, status.Code(err))
 			_, callErr := svc.Calls.GetCallByVoiceRoomID(t.Context(), roomID)

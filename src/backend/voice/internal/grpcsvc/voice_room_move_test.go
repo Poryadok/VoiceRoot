@@ -33,7 +33,7 @@ func newVoiceRoomMoveFixture(t *testing.T) voiceRoomMoveFixture {
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	roles := &recordingVoiceRolePermissions{}
 	svc.Roles = roles
-	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{source: spaceID, dest: spaceID}, members: members}
+	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{source: spaceID, dest: spaceID}, members: members, accessEpoch: 11})
 	for _, profileID := range []string{actor, target} {
 		_, err := joinSpaceVoiceUser(t, svc, profileID, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: source, Space: &spacev1.SpaceRef{Id: spaceID}})
 		require.NoError(t, err)

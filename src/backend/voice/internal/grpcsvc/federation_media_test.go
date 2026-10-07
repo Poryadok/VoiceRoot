@@ -48,7 +48,7 @@ func TestGetJoinTokenUsesFederatedEdgeAfterCanonicalChecksAndNeverFallsBackOnFai
 	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
 	svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 	joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
-	joined, err := joinSpaceVoiceUser(t, svc, profile, joinRequest)
+	joined, err := joinSpaceVoiceUserAs(t, svc, account, profile, joinRequest)
 	require.NoError(t, err)
 	edge := &routedMediaFixture{}
 	svc.FederatedMedia = edge
@@ -199,7 +199,7 @@ func TestGetJoinTokenFederationRequiresCurrentAuthFloorBeforeHandler(t *testing.
 			svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{PolicyEpoch: 7, CanJoin: true, CanPublishAudio: true, CanSubscribe: true}}
 			svc.SpaceTokens = livekit.NewSpaceTokenIssuer("test-key", "test-secret", "wss://local.test", time.Minute)
 			joinRequest := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}}
-			joined, err := joinSpaceVoiceUser(t, svc, profile, joinRequest)
+			joined, err := joinSpaceVoiceUserAs(t, svc, account, profile, joinRequest)
 			require.NoError(t, err)
 			edge := &routedMediaFixture{}
 			svc.FederatedMedia = edge

@@ -103,6 +103,35 @@ func (r staticSpaceMediaGrants) ResolveVoiceRoomGrants(context.Context, string, 
 	return r.grants, r.err
 }
 
+type fixtureSpaceMediaAccessResolver struct {
+	rooms       map[string]string
+	members     map[string]map[string]bool
+	accessEpoch uint64
+}
+
+func (r fixtureSpaceMediaAccessResolver) ResolveVoiceRoomAccess(_ context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
+	spaceID, active := r.rooms[voiceRoomID]
+	return CanonicalVoiceRoomAccess{
+		SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID], AccessEpoch: r.accessEpoch,
+	}, nil
+}
+
+func configureReadySpaceMediaFixture(svc *VoiceGRPC, resolver AuthoritativeVoiceRoomAccessResolver) {
+	svc.SpaceMediaReady = true
+	svc.SpaceMediaAdmissions = readySpaceMediaAdmission{}
+	svc.VoiceRoomAccessResolver = resolver
+	svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
+		PolicyEpoch: 7, CanJoin: true, CanPublishAudio: false, CanSubscribe: true,
+	}}
+	svc.SessionEpochChecker = currentSessionCheckerFunc(func(_ context.Context, accountID string, epoch int64) error {
+		account, err := uuid.Parse(accountID)
+		if err != nil || account == uuid.Nil || account.String() != accountID || epoch != 9 {
+			return errors.New("unexpected test session authority")
+		}
+		return nil
+	})
+}
+
 func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.T) {
 	spaceID, roomID, profileID, accountID := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
@@ -230,7 +259,16 @@ func (v strictTestVoiceUserVerifier) Verify(ctx context.Context, token, method, 
 
 func joinSpaceVoiceUser(t *testing.T, svc *VoiceGRPC, profileID string, request *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
 	t.Helper()
-	return svc.JoinVoiceRoom(verifiedVoiceUserContext(t, callsv1.VoiceService_JoinVoiceRoom_FullMethodName, request, uuid.NewString(), profileID, 9), request)
+	return joinSpaceVoiceUserAs(t, svc, fixtureAccountID(profileID), profileID, request)
+}
+
+func fixtureAccountID(profileID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("voice-test-account:"+profileID)).String()
+}
+
+func joinSpaceVoiceUserAs(t *testing.T, svc *VoiceGRPC, accountID, profileID string, request *callsv1.JoinVoiceRoomRequest) (*callsv1.JoinVoiceRoomResponse, error) {
+	t.Helper()
+	return svc.JoinVoiceRoom(verifiedVoiceUserContext(t, callsv1.VoiceService_JoinVoiceRoom_FullMethodName, request, accountID, profileID, 9), request)
 }
 
 func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testing.T) {

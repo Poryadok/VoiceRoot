@@ -82,8 +82,10 @@ class Tests(unittest.TestCase):
                 if '.STREAM.UPDATE.' in action['api']:
                     next(s for s in row['streams'] if s['name']==action['object'])['config_sha256']=digest(config)
                 else:
-                    next(s for s in row['streams'] if s['name']=='social_events')['state']['consumer_count']+=1
-                    row['consumers'].append(copy.deepcopy(after['consumers'][-1]))
+                    _, _, _, _, stream, durable = action['api'].split('.')
+                    next(s for s in row['streams'] if s['name']==stream)['state']['consumer_count']+=1
+                    consumer=next(c for c in after['consumers'] if c['stream']==stream and c['name']==durable)
+                    row['consumers'].append(copy.deepcopy(consumer))
             return row
         return state,runtime,stage,actor,manifest,census
     def run_with(self,base,state,runtime,stage,actor,manifest,census,old_proof):

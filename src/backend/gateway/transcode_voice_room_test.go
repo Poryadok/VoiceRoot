@@ -108,7 +108,7 @@ func newRequestBoundVoiceRoomTranscoder(t *testing.T, server *recordingVoiceRoom
 	t.Cleanup(cleanup)
 	return &transcoder{
 		lifecycleIssuer: issuer,
-		clients:         grpcClients{voiceUser: callsv1.NewVoiceServiceClient(conn)},
+		clients:         grpcClients{voice: callsv1.NewVoiceServiceClient(conn), voiceUser: callsv1.NewVoiceServiceClient(conn)},
 	}
 }
 
