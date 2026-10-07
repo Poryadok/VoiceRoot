@@ -15,7 +15,7 @@ class BundleCaptureTest(unittest.TestCase):
         self.assertEqual(os.getuid(),0)
         if not Path('/usr/bin/python3').exists():Path('/usr/bin/python3').symlink_to(sys.executable)
         self.root=Path('/var/lib/voice-nats-preservation');self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
-        self.source=Path('/home/pmd/voice-nats-rollout-v4/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
+        self.source=Path('/home/pmd/voice-nats-rollout-v6/rollout-bundle.tar');self.source.parent.mkdir(parents=True,exist_ok=True)
         self.source.unlink(missing_ok=True)
         contents={'nats-rollout-preservation/root_cli.py':b"print('CAPTURED_ROOT_ENTRY')\n"}
         contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()}).encode()

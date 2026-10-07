@@ -55,18 +55,22 @@ def rollback_package(previous):
     selected=rollback_services(previous)
     backends=set(selected)-{'web','admin','developer-portal'}
     if backends:
-        import actor_root
+        import story_witness
         authority=previous.get('service_actor_authority') or {}
         candidate=authority.get('compatible_story_candidate') or {}
         image=previous.get('context',{}).get('old_images',{}).get('voice-story/story')
         schema=authority.get('story_schema')
         content=(candidate.get('child_sha256'),candidate.get('config_sha256'),candidate.get('component_source_sha'))
-        if (backends!={'story'} or not isinstance(image,str) or not __import__('re').fullmatch(r'ghcr\.io/poryadok/voiceroot/story@sha256:[a-f0-9]{64}',image) or content not in actor_root.STORY_IMAGES.values() or schema is None
+        try:selected_authority=story_witness.approve_content(content,candidate.get('root_witness_authority'))
+        except (Blocked,OSError):raise Blocked('rollout_rollback_backend_candidate_unproved') from None
+        expected={'schema':'voice-reviewed-story-compatible-pair-v1','image':image,
+            'child_sha256':content[0],'config_sha256':content[1],
+            'component_source_sha':content[2],'schema_sha256':canonical(schema),
+            'actor_sha256':canonical({'binding':authority.get('binding'),'mount':authority.get('mounts',{}).get('story'),'proof':authority.get('proofs',{}).get('story')})}
+        if selected_authority is not None:expected['root_witness_authority']=selected_authority
+        if (backends!={'story'} or not isinstance(image,str) or not __import__('re').fullmatch(r'ghcr\.io/poryadok/voiceroot/story@sha256:[a-f0-9]{64}',image) or schema is None
             or 'story' not in authority.get('roles',[]) or 'story' not in authority.get('proofs',{})
-            or candidate!={'schema':'voice-reviewed-story-compatible-pair-v1','image':image,
-                'child_sha256':content[0],'config_sha256':content[1],
-                'component_source_sha':content[2],'schema_sha256':canonical(schema),
-                'actor_sha256':canonical({'binding':authority.get('binding'),'mount':authority.get('mounts',{}).get('story'),'proof':authority.get('proofs',{}).get('story')})}):
+            or candidate!=expected):
             raise Blocked('rollout_rollback_backend_candidate_unproved')
     target=copy.deepcopy(previous['input_target']);rows=[];images={}
     for name in target['template_hashes']:

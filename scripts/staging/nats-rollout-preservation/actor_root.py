@@ -100,8 +100,11 @@ def story_content(image):
     child=chain.get('manifest_image','').removeprefix('ghcr.io/poryadok/voiceroot/story@sha256:')
     config=chain.get('config_sha256')
     matches={revision for a,b,revision in STORY_IMAGES.values() if (a,b)==(child,config)}
-    if len(matches)!=1:fail()
-    return child,config,matches.pop()
+    if len(matches)==1:return child,config,matches.pop()
+    if matches:fail()
+    import story_witness
+    authority=story_witness.lookup(child,config)
+    return child,config,authority['component_source_sha']
 
 def story_schema(kube,source,stage):
     """Fixed compatible candidate schema; isolated fixture PASS is not input."""
@@ -162,6 +165,9 @@ def preflight(kube,source,code,binding,stage,services,decoder):
         child,config,revision=story_content(image)
         candidate={'schema':'voice-reviewed-story-compatible-pair-v1','image':image,'child_sha256':child,
             'config_sha256':config,'component_source_sha':revision,'schema_sha256':hash_bytes(json.dumps(schema,sort_keys=True,separators=(',',':')).encode())}
+        import story_witness
+        selected=story_witness.approve_content((child,config,revision))
+        if selected is not None:candidate['root_witness_authority']=selected
     raw=(Path(source)/ACL).read_bytes()
     acl=source_grants(raw);generation=stage.expected['generation']
     secret_name='voice-nats-service-credentials-'+generation

@@ -5,6 +5,60 @@ from unittest.mock import Mock,patch
 import actor_root as root
 
 class Tests(unittest.TestCase):
+    def test_dynamic_root_witness_is_captured_before_real_fence_and_drift_vetoes_revalidation(self):
+        import runtime_stage,story_witness
+        from story_witness_test import witness
+        with tempfile.TemporaryDirectory() as td:
+            source=Path(td);kube,fixture,decoder,service,operator,account=self.fixture(source,'story')
+            original=Path(__file__).resolve().parents[3]
+            (source/root.ACL).write_bytes((original/root.ACL).read_bytes())
+            for path in (original/'src/backend/migrations/story_db').glob('*.up.sql'):
+                destination=source/path.relative_to(original);destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(path.read_bytes())
+            row=witness();raw=story_witness.encoded(row);sha=root.hash_bytes(raw)
+            key=row['content']['child_sha256']+':'+row['content']['config_sha256']
+            selected={'schema':'voice-story-witness-selector-v1','revision':1,'entries':{key:{'witness_sha256':sha,'enabled':True}}}
+            image='ghcr.io/poryadok/voiceroot/story@sha256:'+row['content']['child_sha256']
+            stage=runtime_stage.RolloutStage(kube,'a'*12,{**fixture.expected,'source_claim':'selected'},lambda event:None)
+            rows=copy.deepcopy(fixture.snapshots)
+            rows[runtime_stage.HUB]={'metadata':{'name':runtime_stage.HUB,'uid':'hub','resourceVersion':'1'},'spec':{'template':{'spec':{'containers':[]}}}}
+            stage.snapshots=copy.deepcopy(rows);stage.old_images={'voice-story/story':image};stage.service={}
+            marker={'metadata':{'name':runtime_stage.MARKER,'uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'generation','dataPVC':'selected'}}
+            stage.marker=copy.deepcopy(marker);original_get=kube.get.side_effect
+            def get(kind,name):
+                if kind=='deployment':return copy.deepcopy(rows[name])
+                if kind=='service':return {}
+                if name==runtime_stage.MARKER:return copy.deepcopy(marker)
+                return original_get(kind,name)
+            def cas(kind,current,changes):
+                result=copy.deepcopy(current)
+                for change in changes:
+                    parts=change['path'].strip('/').split('/');parent=result
+                    for part in parts[:-1]:parent=parent.setdefault(part,{})
+                    if change['op']=='test':self.assertEqual(parent.get(parts[-1]),change['value'])
+                    else:parent[parts[-1]]=change['value']
+                result['metadata']['resourceVersion']=str(int(current['metadata']['resourceVersion'])+1)
+                if kind=='configmap':marker.clear();marker.update(result)
+                else:
+                    rows[current['metadata']['name']]=copy.deepcopy(result)
+                    rows[current['metadata']['name']]['metadata']['resourceVersion']=str(int(result['metadata']['resourceVersion'])+1)
+                    rows[current['metadata']['name']]['status']={'replicas':0}
+                return result
+            kube.get.side_effect=get;kube.cas.side_effect=cas
+            kube.run.side_effect=lambda args,*a,**kw:{'items':[]} if args[0]=='get' else {'database':'story_db','version':4,'dirty':False,'username':'voice'}
+            chain={'requested_image':image,'manifest_image':image,'config_sha256':row['content']['config_sha256']}
+            def read(path):return story_witness.encoded(selected) if path.name=='selector.json' else raw
+            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch('space_authority.capture',return_value={'root-pg':'bound'}),\
+                 patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}),\
+                 patch.object(story_witness,'read',read),patch('source_authority.immutable_image_identity',return_value=chain):
+                before=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
+                self.assertEqual(before['compatible_story_candidate']['root_witness_authority']['witness_sha256'],sha)
+                stage.fence()
+                root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+                selected['revision']=2
+                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+                selected['revision']=1;selected['entries'][key]['enabled']=False
+                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+
     def test_story_promoted_alias_binds_reviewed_content_not_master_revision(self):
         alias='ghcr.io/poryadok/voiceroot/story@sha256:'+'d'*64
         child,config,component=next(iter(root.STORY_IMAGES.values()))
