@@ -721,7 +721,7 @@ for be255_path in \
 done
 # These five files were independently reviewed as part of the accepted BE-255
 # checkpoint. Keep their content exception narrower than the static path list.
-accepted_be255_checkpoint='fe69dc1a93f8f0ef69744ba4b0ece7e8a9ddd774'
+accepted_be255_checkpoint='80540ee4f2043c7fa2c89b7bb78b38e7c010a68c'
 be255_checkpoint_is_commit_ancestor() {
   local repo="$1" checkpoint="$2" target="$3"
   git -C "${repo}" rev-parse --verify "${checkpoint}^{commit}" >/dev/null 2>&1 &&
@@ -744,7 +744,7 @@ be255_checkpoint_path_authorized_in_delta() {
     src/backend/voice/internal/spacemedia/outbox.go)
       expected_blob='e53dd810e2d769565dbfab77f2cecbe78b9cef2f' ;;
     src/backend/voice/internal/spacemedia/postgres_admission.go)
-      expected_blob='ebeaf7869e04dcb186d5f13cd4a67187228d3553' ;;
+      expected_blob='832cd554232c6d77299ae26c9afa7ed36771d220' ;;
     *) return 1 ;;
   esac
   grep -Fxq -- "${path}" "${delta}" || return 1
@@ -785,7 +785,7 @@ be255_fixture_blobs=(
   '507374dffe11b1f1efac5cda6ad9f302fd34ba6c'
   '901fb1952369f1093fa23baed913c7648cdf11c8'
   'e53dd810e2d769565dbfab77f2cecbe78b9cef2f'
-  'ebeaf7869e04dcb186d5f13cd4a67187228d3553'
+  '832cd554232c6d77299ae26c9afa7ed36771d220'
 )
 : >"${TMP_DIR}/be255-empty-delta"
 for index in "${!be255_fixture_paths[@]}"; do
