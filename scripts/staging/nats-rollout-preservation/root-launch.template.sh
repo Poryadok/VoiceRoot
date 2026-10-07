@@ -6,7 +6,7 @@ import hashlib, io, json, os, pathlib, stat, sys, tarfile, uuid
 EXPECTED_SHA='__BUNDLE_SHA256__'
 EXPECTED_BYTES=__BUNDLE_BYTES__
 FILES=__BUNDLE_FILES__
-SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout-v4/rollout-bundle.tar')
+SOURCE=pathlib.Path('/home/pmd/voice-nats-rollout-v6/rollout-bundle.tar')
 ROOT=pathlib.Path('/var/lib/voice-nats-preservation')
 try:
     for parent in (*ROOT.parents[::-1],ROOT):
