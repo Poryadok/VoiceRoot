@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
