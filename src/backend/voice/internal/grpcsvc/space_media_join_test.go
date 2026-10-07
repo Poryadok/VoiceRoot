@@ -2,8 +2,11 @@ package grpcsvc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +17,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"voice/backend/pkg/principal"
 	"voice/backend/voice/internal/authctx"
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
@@ -49,12 +53,9 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: time.Unix(1700000000, 0).UTC(),
 	})
 	require.NoError(t, err)
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		authctx.HeaderAccountID, accountID,
-		authctx.HeaderProfileID, profileID,
-		authctx.HeaderSessionEpoch, "9",
-	))
-	response, err := svc.GetJoinToken(ctx, &callsv1.GetJoinTokenRequest{RoomId: call.RoomID})
+	request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
+	ctx := verifiedVoiceUserContext(t, request, accountID, profileID, 9)
+	response, err := svc.GetJoinToken(ctx, request)
 	require.NoError(t, err)
 	require.NotEmpty(t, response.GetJwt())
 	require.Equal(t, "ws://livekit.test", response.GetLivekitUrl())
@@ -84,6 +85,47 @@ func TestGetJoinToken_SpaceIssuesShortServerBoundIncarnationIdentity(t *testing.
 	floors, err := svc.Calls.GetSpaceMediaEpochFloors(t.Context(), spaceID)
 	require.NoError(t, err)
 	require.Equal(t, voicestore.SpaceMediaEpochFloors{AccessEpoch: 11, PolicyEpoch: 7}, floors)
+}
+
+func verifiedVoiceUserContext(t *testing.T, request *callsv1.GetJoinTokenRequest, accountID, profileID string, epoch int64) context.Context {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "test", PrivateKey: key})
+	require.NoError(t, err)
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	requestID := uuid.NewString()
+	expiresAt := time.Now().Add(45 * time.Second)
+	token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{
+		Audience: "voice", RPC: callsv1.VoiceService_GetJoinToken_FullMethodName,
+		RequestID: requestID, RequestHash: hash, AccountID: accountID, ProfileID: profileID,
+		SessionEpoch: epoch, ClientExpiresAt: expiresAt,
+	})
+	require.NoError(t, err)
+	verified, err := principal.VerifyDelegatedUser(context.Background(), token, principal.VerifyConfig{
+		ExpectedIssuer: "gateway", ExpectedAudience: "voice",
+		ExpectedRPC:       callsv1.VoiceService_GetJoinToken_FullMethodName,
+		ExpectedRequestID: requestID, ExpectedRequestHash: hash,
+		KeyResolver: func(_ context.Context, issuerName, keyID string) (*rsa.PublicKey, error) {
+			require.Equal(t, "gateway", issuerName)
+			require.Equal(t, "test", keyID)
+			return &key.PublicKey, nil
+		},
+		ReplayGuard: func(context.Context, string, string, time.Time) error { return nil },
+		SessionEpochChecker: func(_ context.Context, gotAccount string, gotEpoch int64) error {
+			require.Equal(t, accountID, gotAccount)
+			require.Equal(t, epoch, gotEpoch)
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		authctx.HeaderAccountID, accountID,
+		authctx.HeaderProfileID, profileID,
+		authctx.HeaderSessionEpoch, fmt.Sprint(epoch),
+	))
+	return principal.WithVerified(ctx, verified)
 }
 
 func TestGetJoinToken_SpaceMediaReadinessFailsClosed(t *testing.T) {

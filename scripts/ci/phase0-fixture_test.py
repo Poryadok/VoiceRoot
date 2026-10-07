@@ -625,6 +625,8 @@ class ComposeTests(unittest.TestCase):
                 "VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR", "VOICE_AUTH_SESSION_FLOOR_TLS_CA_FILE",
                 "VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME", "VOICE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE",
                 "VOICE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE",
+                "S2S_JWKS_URLS_JSON", "S2S_JWKS_CA_FILE",
+                "S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
             },
         }
         for service, expected in expected_environment.items():
@@ -648,6 +650,9 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_GRPC_ADDR"], "auth:9092")
         self.assertEqual(voice_env["VOICE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME"], "auth")
         self.assertEqual(voice_env["VOICE_USER_PRINCIPAL_GRPC_LISTEN"], ":9092")
+        self.assertEqual(voice_env["S2S_JWKS_CA_FILE"], "/run/phase0/ca.crt")
+        self.assertEqual(voice_env["S2S_JWKS_CLIENT_CERT_FILE"], "/run/phase0/voice-client.crt")
+        self.assertEqual(voice_env["S2S_JWKS_CLIENT_KEY_FILE"], "/run/phase0/voice-client.key")
         self.assertEqual(self.media_merged["gateway"]["depends_on"]["voice"]["condition"], "service_started",
                          "Gateway must serve its JWKS while Voice bootstraps the TLS JWKS proxy")
         self.assertIn("phase0-jwks", self.media_merged["voice"].get("depends_on", {}))
@@ -694,8 +699,15 @@ class ComposeTests(unittest.TestCase):
                     continue
                 source = Path(volume["source"])
                 if source.is_relative_to(self.fixture):
-                    self.assertIn(source.relative_to(self.fixture).as_posix(), sources,
-                                  f"unexpected fixture material mounted into {service}")
+                    relative = source.relative_to(self.fixture).as_posix()
+                    if service == "gateway" and relative == "gateway":
+                        self.assertTrue(source.is_dir() and not source.is_symlink())
+                        entries = list(source.iterdir())
+                        self.assertEqual({entry.name for entry in entries}, {"current.pem", "next.pem"})
+                        self.assertTrue(all(entry.is_file() and not entry.is_symlink() for entry in entries))
+                    else:
+                        self.assertIn(relative, sources,
+                                      f"unexpected fixture material mounted into {service}")
                     self.assertTrue(volume.get("read_only"), f"writable fixture mounted into {service}")
         config = re.sub(r"(?m)#.*$", "", (ROOT / "docker/phase0/nginx.conf").read_text(encoding="utf-8"))
         for directive, source in (("ssl_certificate", "tls/proxy.crt"),

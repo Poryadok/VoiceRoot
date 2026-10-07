@@ -11,7 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	authv1 "voice.app/voice/auth/v1"
 	"voice/backend/pkg/principal"
@@ -22,6 +24,7 @@ type floorServer struct {
 	floor int64
 	key   *rsa.PublicKey
 	seen  bool
+	err   error
 }
 
 func (s *floorServer) GetVoiceSessionEpochFloor(ctx context.Context,
@@ -44,6 +47,9 @@ func (s *floorServer) GetVoiceSessionEpochFloor(ctx context.Context,
 		return nil, io.ErrUnexpectedEOF
 	}
 	s.seen = true
+	if s.err != nil {
+		return nil, s.err
+	}
 	return &authv1.GetVoiceSessionEpochFloorResponse{SessionEpochFloor: s.floor}, nil
 }
 
@@ -69,6 +75,8 @@ func TestRequireCurrentUsesRequestBoundVoiceServicePrincipalAndRejectsStaleFloor
 	require.True(t, serverImpl.seen)
 	require.Error(t, client.RequireCurrent(context.Background(), accountID, 4))
 	require.Error(t, client.RequireCurrent(context.Background(), "not-an-account", 5))
+	serverImpl.err = status.Error(codes.Unavailable, "floor lookup unavailable")
+	require.Equal(t, codes.Unavailable, status.Code(client.RequireCurrent(context.Background(), accountID, 5)))
 }
 
 func TestCanonicalAccountIDRequiresLowercaseCanonicalUUID(t *testing.T) {

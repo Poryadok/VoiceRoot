@@ -71,11 +71,19 @@ func (c voiceUserMediaClientConfig) dial() (*grpc.ClientConn, error) {
 }
 
 func (t *transcoder) voiceUserContext(r *http.Request, req proto.Message, method string) (context.Context, error) {
+	return t.voiceUserContextWithAccountPolicy(r, req, method, true)
+}
+
+func (t *transcoder) voiceUserCallTokenContext(r *http.Request, req proto.Message, method string) (context.Context, error) {
+	return t.voiceUserContextWithAccountPolicy(r, req, method, false)
+}
+
+func (t *transcoder) voiceUserContextWithAccountPolicy(r *http.Request, req proto.Message, method string, regularOnly bool) (context.Context, error) {
 	claims, ok := r.Context().Value(verifiedUserClaimsKey{}).(tokenClaims)
 	if !ok || !canonicalLifecycleUUID(claims.UserID) || !canonicalLifecycleUUID(claims.ProfileID) || claims.SessionEpoch <= 0 || claims.ExpiresAt.IsZero() {
 		return nil, status.Error(codes.Unauthenticated, "verified voice actor required")
 	}
-	if effectiveAccountType(claims) != "regular" {
+	if regularOnly && effectiveAccountType(claims) != "regular" {
 		return nil, status.Error(codes.PermissionDenied, "regular account required")
 	}
 	if t.lifecycleIssuer == nil || t.clients.voiceUser == nil {

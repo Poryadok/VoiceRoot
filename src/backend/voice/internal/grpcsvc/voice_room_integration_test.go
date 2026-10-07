@@ -247,14 +247,35 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			f := startVoiceRoomFixture(t)
-			roomID := f.joinParticipants(t)
+			ownerProfileID, memberProfileID := uuid.NewString(), uuid.NewString()
+			members := map[string]map[string]bool{f.spaceID: {
+				ownerProfileID:  true,
+				memberProfileID: true,
+			}}
+			f.svc.SpaceMembers = &mapSpaceMembers{members: members}
+			f.svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{f.voiceRoomID: f.spaceID}, members: members}
+			f.svc.Roles = &mapRolePermissions{allowed: map[string]map[string]bool{f.spaceID: {
+				ownerProfileID:  true,
+				memberProfileID: true,
+			}}}
+			_, err := f.svc.JoinVoiceRoom(voiceTestCtx(ownerProfileID), f.joinReq(ownerProfileID))
+			require.NoError(t, err)
+			joined, err := f.svc.JoinVoiceRoom(voiceTestCtx(memberProfileID), f.joinReq(memberProfileID))
+			require.NoError(t, err)
+			roomID := joined.GetVoiceSession().GetRoomId()
 			f.svc.Roles = tc.roles
 
-			response, err := f.svc.GetJoinToken(voiceTestCtx(tc.profileID), &callsv1.GetJoinTokenRequest{RoomId: roomID})
+			profileID := memberProfileID
+			if tc.profileID == "profile-owner" {
+				profileID = ownerProfileID
+			}
+			request := &callsv1.GetJoinTokenRequest{RoomId: roomID}
+			ctx := verifiedVoiceUserContext(t, request, uuid.NewString(), profileID, 9)
+			response, err := f.svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.wantCode, status.Code(err))
 			if tc.wantRoleCall {
 				roles := tc.roles.(*recordingVoiceRolePermissions)
-				requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, tc.profileID, f.voiceRoomID)
+				requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, profileID, f.voiceRoomID)
 			}
 			if tc.wantCode != codes.OK {
 				require.Nil(t, response)

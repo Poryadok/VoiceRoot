@@ -353,7 +353,7 @@ func (s *VoiceGRPC) ensureSpaceMember(ctx context.Context, spaceID, profileID st
 
 func (s *VoiceGRPC) ensureVoiceJoinPermission(ctx context.Context, spaceID, profileID, voiceRoomID string) error {
 	if s.Roles == nil {
-		return nil
+		return status.Error(codes.Unavailable, "voice join permission check unavailable")
 	}
 	if err := s.Roles.EnsureVoiceJoin(ctx, spaceID, profileID, voiceRoomID); err != nil {
 		if errors.Is(err, ErrVoiceJoinDenied) {

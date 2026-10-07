@@ -492,9 +492,6 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
-		return nil, err
-	}
 	call, err := s.requireCall(ctx, req.GetRoomId(), profileID)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
@@ -513,13 +510,19 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 			return nil, err
 		}
 	}
-	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
-		return nil, status.Error(codes.FailedPrecondition, "call is not active")
-	}
-	if call.IsVoiceRoom() && (delegatedAccountID == "" || delegatedEpoch <= 0) {
-		return nil, status.Error(codes.Unauthenticated, "verified Space media identity required")
-	}
-	if call.IsVoiceRoom() && call.SpaceID != "" {
+	if callHasSpaceMediaMarker(call) {
+		if !validSpaceMediaCallBinding(call) {
+			return nil, status.Error(codes.FailedPrecondition, "stored Space media call binding is incomplete")
+		}
+		if delegatedAccountID == "" || delegatedEpoch <= 0 {
+			return nil, status.Error(codes.Unauthenticated, "verified Space media identity required")
+		}
+		if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+			return nil, status.Error(codes.FailedPrecondition, "call is not active")
+		}
+		if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+			return nil, err
+		}
 		access, accessErr := s.resolveCanonicalVoiceRoomAccess(ctx, call.VoiceRoomID, profileID)
 		if accessErr != nil {
 			return nil, accessErr
@@ -530,7 +533,36 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		if err := s.ensureVoiceJoinPermission(ctx, access.SpaceID, profileID, call.VoiceRoomID); err != nil {
 			return nil, err
 		}
+		canPublish, err := s.voicePublishGrant(ctx, call, profileID)
+		if err != nil {
+			return nil, err
+		}
+		if s.FederatedMedia != nil {
+			result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{
+				AccountID: delegatedAccountID, ProfileID: profileID, SpaceID: call.SpaceID,
+				ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName,
+				SessionEpoch: delegatedEpoch, CanPublish: canPublish != nil && *canPublish,
+			})
+			if mediaErr == nil {
+				return &callsv1.GetJoinTokenResponse{
+					Jwt: result.JWT, LivekitUrl: result.LivekitURL,
+					ExpiresAt: timestamppb.New(time.UnixMilli(result.ExpiresAt)),
+				}, nil
+			}
+			if mediaErr != federationmedia.ErrNotHosted {
+				if errors.Is(mediaErr, federationmedia.ErrDenied) {
+					return nil, status.Error(codes.PermissionDenied, "federated media denied")
+				}
+				return nil, status.Error(codes.Unavailable, "federated media unavailable")
+			}
+		}
 		return s.getSpaceMediaJoinToken(ctx, call, profileID, access)
+	}
+	if call.Status != callsv1.CallStatus_CALL_STATUS_ACTIVE {
+		return nil, status.Error(codes.FailedPrecondition, "call is not active")
+	}
+	if err := s.ensureSdkConversionAdmission(ctx, profileID); err != nil {
+		return nil, err
 	}
 	fences, err := s.reserveAccountVoiceProfiles(ctx, call.RoomID, []string{profileID}, profileID)
 	if err != nil {
@@ -544,18 +576,6 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 	if err != nil {
 		return nil, err
 	}
-	if call.IsVoiceRoom() && s.FederatedMedia != nil {
-		result, mediaErr := s.FederatedMedia.JoinToken(ctx, mediaauthority.RouteRequest{AccountID: delegatedAccountID, ProfileID: profileID, SpaceID: call.SpaceID, ResourceID: call.VoiceRoomID, RoomName: call.LivekitRoomName, SessionEpoch: delegatedEpoch, CanPublish: canPublish != nil && *canPublish})
-		if mediaErr == nil {
-			return &callsv1.GetJoinTokenResponse{Jwt: result.JWT, LivekitUrl: result.LivekitURL, ExpiresAt: timestamppb.New(time.UnixMilli(result.ExpiresAt))}, nil
-		}
-		if !errors.Is(mediaErr, federationmedia.ErrNotHosted) {
-			if errors.Is(mediaErr, federationmedia.ErrDenied) {
-				return nil, status.Error(codes.PermissionDenied, "federated media denied")
-			}
-			return nil, status.Error(codes.Unavailable, "federated media unavailable")
-		}
-	}
 	if s.Tokens == nil {
 		return nil, status.Error(codes.FailedPrecondition, "livekit token issuer not configured")
 	}
@@ -568,6 +588,19 @@ func (s *VoiceGRPC) GetJoinToken(ctx context.Context, req *callsv1.GetJoinTokenR
 		ExpiresAt:  timestamppb.New(expiresAt),
 		LivekitUrl: s.Tokens.LivekitURL(),
 	}, nil
+}
+
+func callHasSpaceMediaMarker(call voicestore.Call) bool {
+	return call.IsVoiceRoom() || strings.TrimSpace(call.VoiceRoomID) != "" || strings.TrimSpace(call.SpaceID) != "" || len(call.SpaceMedia) != 0
+}
+
+func validSpaceMediaCallBinding(call voicestore.Call) bool {
+	if !call.IsVoiceRoom() || strings.TrimSpace(call.VoiceRoomID) != call.VoiceRoomID || strings.TrimSpace(call.SpaceID) != call.SpaceID {
+		return false
+	}
+	voiceRoomID, voiceRoomErr := uuid.Parse(call.VoiceRoomID)
+	spaceID, spaceErr := uuid.Parse(call.SpaceID)
+	return voiceRoomErr == nil && spaceErr == nil && voiceRoomID != uuid.Nil && spaceID != uuid.Nil && voiceRoomID.String() == call.VoiceRoomID && spaceID.String() == call.SpaceID
 }
 
 func (s *VoiceGRPC) UpdateVoiceState(ctx context.Context, req *callsv1.UpdateVoiceStateRequest) (*callsv1.UpdateVoiceStateResponse, error) {

@@ -368,9 +368,13 @@ projection, complete bundle and qualified capacity acceptance remain open.
 R22.3 PostgreSQL evidence/classification остается source-disabled. Отдельный
 BE255 implementation slice добавляет Space-room join/leave admission, короткий
 LiveKit grant, durable Space/Role invalidation delivery и Voice reconciliation
-с точным удалением LiveKit incarnation. Это не завершает Phase-0: Auth epoch
-сейчас сохраняется в grant, но Voice не re-resolve текущий Auth epoch; eligibility
-повторного подключения после его смены остается release gate. Roster projection,
+с точным удалением LiveKit incarnation. Каждый подписанный Voice-user RPC до
+вызова handler сверяет epoch делегированного principal с текущим Auth floor;
+epoch также сохраняется в grant. Это не завершает Phase-0: Voice пока не
+проверяет текущий Auth epoch для уже подключённых участников или LiveKit-only
+reconnect, поэтому eligibility повторного подключения после его смены остается
+release gate. SLA удаления 2 s p95 / 5 s max остается ограниченным потерей
+membership/Role rights и не распространяется на Auth-only epoch change. Roster projection,
 move handlers, Redis v2 encoding и replay deadline bridge semantics (D2/D3)
 также остаются отдельными gates. Hosted Linux proof относится только к явно
 выбранному BE255 media consumer и не означает завершение R22.3/BE255 целиком.

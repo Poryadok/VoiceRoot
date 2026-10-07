@@ -47,6 +47,7 @@ type grpcClients struct {
 	voice              callsv1.VoiceServiceClient
 	voiceUser          callsv1.VoiceServiceClient
 	voiceUserConn      *grpc.ClientConn
+	voiceUserRequired  bool
 	voiceUserErr       error
 	file               filev1.FileServiceClient
 	space              spacev1.SpaceServiceClient
@@ -94,8 +95,10 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		}
 	}
 	if cfg, enabled, err := voiceUserMediaClientConfigFromEnv(); err != nil {
+		clients.voiceUserRequired = true
 		clients.voiceUserErr = err
 	} else if enabled {
+		clients.voiceUserRequired = true
 		conn, err := cfg.dial()
 		clients.voiceUserErr = err
 		if err == nil {
@@ -220,6 +223,15 @@ func (c *grpcClients) waitForRequiredUserReady(ctx context.Context) error {
 	if c != nil {
 		if c.voiceUserErr != nil {
 			return c.voiceUserErr
+		}
+		if c.voiceUserRequired {
+			if c.voiceUserConn == nil {
+				return fmt.Errorf("Voice user-principal connection is not configured")
+			}
+			c.voiceUserConn.Connect()
+			if err := grpcclient.WaitForReady(ctx, c.voiceUserConn); err != nil {
+				return fmt.Errorf("Voice user-principal readiness: %w", err)
+			}
 		}
 		if c.spaceLifecycleErr != nil {
 			return c.spaceLifecycleErr

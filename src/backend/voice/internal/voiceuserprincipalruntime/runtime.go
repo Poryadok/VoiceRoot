@@ -148,7 +148,14 @@ func (r *Runtime) Verify(ctx context.Context, token, method, requestID, requestH
 	verified, err := principal.VerifyDelegatedUser(ctx, token, principal.VerifyConfig{
 		ExpectedIssuer: "gateway", ExpectedAudience: "voice", ExpectedRPC: method,
 		ExpectedRequestID: requestID, ExpectedRequestHash: requestHash,
-		KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay, SessionEpochChecker: r.epochs.RequireCurrent,
+		KeyResolver: r.resolver.Resolve, ReplayGuard: r.recordReplay,
+		SessionEpochChecker: func(ctx context.Context, accountID string, sessionEpoch int64) error {
+			err := r.epochs.RequireCurrent(ctx, accountID, sessionEpoch)
+			if status.Code(err) == codes.Unavailable {
+				return principalgrpc.Unavailable(err)
+			}
+			return err
+		},
 	})
 	if err != nil {
 		return principal.Principal{}, principalgrpc.VerificationStatus(err)

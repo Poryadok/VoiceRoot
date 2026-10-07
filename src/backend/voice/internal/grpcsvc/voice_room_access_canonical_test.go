@@ -228,7 +228,9 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 			svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens, svc.SpaceMembers = resolver, roles, tokens, legacy
 			call, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{RoomID: uuid.NewString(), LivekitRoomName: "voice-room-" + room, VoiceRoomID: room, SpaceID: tc.stored, SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM, InitiatorProfileID: profile, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO, Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: time.Now()})
 			require.NoError(t, err)
-			response, err := svc.GetJoinToken(voiceTestCtx(profile), &callsv1.GetJoinTokenRequest{RoomId: call.RoomID})
+			request := &callsv1.GetJoinTokenRequest{RoomId: call.RoomID}
+			ctx := verifiedVoiceUserContext(t, request, uuid.NewString(), profile, 5)
+			response, err := svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, []canonicalAccessCall{{room, profile}}, resolver.calls)
 			require.Zero(t, legacy.calls)
@@ -239,6 +241,73 @@ func TestGetJoinToken_SpaceMediaDoesNotUseLegacyIssuerOrMintBeforeReadiness(t *t
 			require.Nil(t, response)
 			require.Empty(t, roles.speakChecks)
 			require.Zero(t, tokens.joinCalls)
+		})
+	}
+}
+
+func TestGetJoinToken_ServicePrincipalCannotIssueSpaceMediaOrMutateState(t *testing.T) {
+	spaceID, roomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	events := &recordingEvents{}
+	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+	resolver, roles, tokens := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 2}}, &canonicalRolePermissions{}, &canonicalTokenIssuer{}
+	svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens = resolver, roles, tokens
+	call, err := svc.Calls.CreateCall(t.Context(), voicestore.Call{
+		RoomID: uuid.NewString(), LivekitRoomName: "space-room-" + roomID,
+		VoiceRoomID: roomID, SpaceID: spaceID,
+		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
+		InitiatorProfileID: profileID, MediaKind: callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
+		Status: callsv1.CallStatus_CALL_STATUS_ACTIVE, StartedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	response, err := svc.GetJoinToken(voiceTestCtx(profileID), &callsv1.GetJoinTokenRequest{RoomId: call.RoomID})
+	require.Nil(t, response)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Empty(t, resolver.calls)
+	require.Empty(t, roles.joinChecks)
+	require.Empty(t, events.startedCall)
+	require.Zero(t, tokens.joinCalls)
+	stored, err := svc.Calls.GetCall(t.Context(), call.RoomID)
+	require.NoError(t, err)
+	require.Empty(t, stored.SpaceMedia)
+}
+
+func TestGetJoinToken_InconsistentSpaceMarkersFailBeforeAuthorizationOrEffects(t *testing.T) {
+	profileID := uuid.NewString()
+	spaceMarkers := []struct {
+		name string
+		call voicestore.Call
+	}{
+		{name: "voice room kind without IDs", call: voicestore.Call{SessionKind: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM}},
+		{name: "voice room ID on non-room call", call: voicestore.Call{VoiceRoomID: uuid.NewString()}},
+		{name: "Space ID on non-room call", call: voicestore.Call{SpaceID: uuid.NewString()}},
+		{name: "media participant on non-room call", call: voicestore.Call{SpaceMedia: map[string]voicestore.SpaceMediaParticipant{profileID: {ProfileID: profileID}}}},
+	}
+	for _, tc := range spaceMarkers {
+		t.Run(tc.name, func(t *testing.T) {
+			events := &recordingEvents{}
+			svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
+			resolver, roles, tokens := &canonicalAccessResolver{}, &canonicalRolePermissions{}, &canonicalTokenIssuer{}
+			svc.VoiceRoomAccessResolver, svc.Roles, svc.Tokens = resolver, roles, tokens
+			call := tc.call
+			call.RoomID, call.LivekitRoomName = uuid.NewString(), "marked-room"
+			call.InitiatorProfileID = profileID
+			call.MediaKind = callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO
+			call.Status = callsv1.CallStatus_CALL_STATUS_ACTIVE
+			call.StartedAt = time.Now()
+			stored, err := svc.Calls.CreateCall(t.Context(), call)
+			require.NoError(t, err)
+
+			response, err := svc.GetJoinToken(voiceTestCtx(profileID), &callsv1.GetJoinTokenRequest{RoomId: stored.RoomID})
+			require.Nil(t, response)
+			require.Equal(t, codes.FailedPrecondition, status.Code(err))
+			require.Empty(t, resolver.calls)
+			require.Empty(t, roles.joinChecks)
+			require.Empty(t, events.startedCall)
+			require.Zero(t, tokens.joinCalls)
+			unchanged, err := svc.Calls.GetCall(t.Context(), stored.RoomID)
+			require.NoError(t, err)
+			require.Equal(t, stored, unchanged)
 		})
 	}
 }
