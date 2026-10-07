@@ -152,6 +152,12 @@ func TestGroupRoles_PublishesRoleAndOwnershipChangesOnlyAfterSuccess(t *testing.
 	client, cleanup := startChatGRPCTestServer(t, pool, profiles, nil, nil, WithChatEventsPublisher(spy))
 	t.Cleanup(cleanup)
 	chat := createStandaloneGroup(t, client, profiles, owner, "Lifecycle changes", successor, ordinary)
+	_, setupChanges := spy.snapshot()
+	require.ElementsMatch(t, [][3]string{
+		{chat.GetId(), owner.String(), "joined"},
+		{chat.GetId(), successor.String(), "joined"},
+		{chat.GetId(), ordinary.String(), "joined"},
+	}, setupChanges)
 
 	_, err := client.SetGroupMemberRole(ctxFor(t, profiles, owner), &chatv1.SetGroupMemberRoleRequest{
 		ChatId: chat.GetId(), ProfileId: successor.String(), Role: "admin",
@@ -193,8 +199,9 @@ func TestGroupRoles_PublishesRoleAndOwnershipChangesOnlyAfterSuccess(t *testing.
 	require.Equal(t, "member", roles[ordinary.String()])
 
 	_, changes := spy.snapshot()
+	require.Len(t, changes, len(setupChanges)+2)
 	require.Equal(t, [][3]string{
 		{chat.GetId(), successor.String(), "role_changed"},
 		{chat.GetId(), successor.String(), "owner_transferred"},
-	}, changes)
+	}, changes[len(setupChanges):])
 }
