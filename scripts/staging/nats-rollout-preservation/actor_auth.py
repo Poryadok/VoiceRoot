@@ -10,7 +10,7 @@ def prove(credentials,operator,binary,unchanged):
     unchanged()
     with tempfile.TemporaryDirectory(prefix='service-actor-auth-',dir=guard.ROOT) as td:
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
-        inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532)
+        inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532);inputs.chmod(0o750)
         p=inputs/'actor.creds';p.write_bytes(credentials);p.chmod(0o440);os.chown(p,0,65532)
         helper=base/'actor-helper';shutil.copyfile(binary,helper);helper.chmod(0o550);os.chown(helper,0,65532)
         tokens={k:secret_bytes(operator,k).decode().strip() for k in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
