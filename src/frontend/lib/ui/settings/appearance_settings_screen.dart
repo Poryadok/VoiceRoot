@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../l10n/app_localizations.dart';
 import '../../settings/theme_preference.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme.dart';
 import '../../theme/voice_theme_providers.dart';
 import 'profile_language_picker.dart';
 import 'app_icon_settings_screen.dart';
@@ -210,29 +211,28 @@ class _ThemePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const light = Color(0xFFF5F5F5);
-    const dark = Color(0xFF202020);
-    const contrast = Color(0xFF000000);
-    final (background, foreground, border) = switch (preference) {
-      AppThemePreference.system => (light, dark, const Color(0xFF9E9E9E)),
-      AppThemePreference.light => (light, const Color(0xFF1A1A1A), light),
-      AppThemePreference.dark => (dark, const Color(0xFFF0F0F0), dark),
-      AppThemePreference.highContrast => (
-        contrast,
-        const Color(0xFFFFFFFF),
-        const Color(0xFFFFFFFF),
-      ),
+    final swatch = switch (preference) {
+      AppThemePreference.system => VoiceTheme.preferenceSystemSwatch,
+      AppThemePreference.light => VoiceTheme.preferenceLightSwatch,
+      AppThemePreference.dark => VoiceTheme.preferenceDarkSwatch,
+      AppThemePreference.highContrast =>
+        VoiceTheme.preferenceHighContrastSwatch,
     };
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: border),
+          border: Border.all(color: swatch.border),
           gradient: preference == AppThemePreference.system
-              ? const LinearGradient(colors: [light, dark], stops: [0.5, 0.5])
+              ? LinearGradient(
+                  colors: [swatch.background, swatch.secondBackground!],
+                  stops: const [0.5, 0.5],
+                )
               : null,
-          color: preference == AppThemePreference.system ? null : background,
+          color: preference == AppThemePreference.system
+              ? null
+              : swatch.background,
         ),
         child: Align(
           alignment: Alignment.bottomLeft,
@@ -241,7 +241,7 @@ class _ThemePreview extends StatelessWidget {
             height: 18,
             margin: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: foreground,
+              color: swatch.foreground,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
