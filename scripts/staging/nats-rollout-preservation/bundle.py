@@ -10,6 +10,12 @@ KNOWN=('root_main.py','controller.py','commands.py','docker_runtime.py','stage_r
 ROLLOUT=('apply.py','bridge.py','bridge_client.py','bridge_root.py','compiler.py','encrypted_cut.py','errors.py','github_custody.py','guard.py','installer.py','migrations.py','native_store.py','normalize.py','nonnats_plan.py','nonnats_runtime.py','source_authority.py','source_plan.py','rollout_census.py','preserve.py','root_cli.py','runner.py','runtime_stage.py','transaction.py','workflow_entry.py')
 ROLLOUT+=('bootstrap_auth.py','bootstrap_enrollment.py','bootstrap_renewal.py','bootstrap_root.py','bootstrap_selection.py',
     'nats_contract_actor.py','nats_contract_plan.py','nats_contract_custody.py','nats_migration.py','nats_root_plan.py')
+ROLLOUT+=('actor_auth.py','actor_root.py','actor_verification.py','actor_permissions.py','prebuild_disposition.py',
+    'space_authority.py','space_backup.py','space_migration.py','space_restore.py','space_safeguards.py')
+ROLLOUT+=('renderer_transition.py','renderer_execution.py','renderer_root.py','bot_migration.py')
+ROLLOUT+=('prebuild_v5_disposition.py',)
+ROLLOUT+=('story_witness.py',)
+ROLLOUT+=('paused_recovery.py',)
 
 def build(kernel,output,renewer):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

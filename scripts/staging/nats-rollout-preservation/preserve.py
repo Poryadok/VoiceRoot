@@ -29,7 +29,8 @@ def native_inventory(manifest):
     return {key:manifest[key] for key in ('mechanism','file_count','bytes','dirs','files')}
 
 
-def isolated_census(runtime, archive, manifest, label, recovery=None):
+def isolated_census(runtime, archive, manifest, label, recovery=None,validate=None):
+    if validate is not None:return closed_copy_census(runtime,archive,manifest,label,validate)
     if not verify_archive(archive,manifest):raise Blocked('rollout_archive_changed')
     parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
     target=parent/'store'
@@ -40,7 +41,16 @@ def isolated_census(runtime, archive, manifest, label, recovery=None):
         owned=runtime.inspect(broker)
         if owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none':raise Blocked('rollout_recovery_broker_unbound')
         ready(runtime,broker)
-        return census(runtime,broker,runtime.account_id())
+        if validate is None:return census(runtime,broker,runtime.account_id())
+        # One actual monitoring snapshot feeds both census and root plan proof.
+        tree=runtime.monitor_jsz(broker)
+        class Snapshot:
+            def monitor_jsz(self,name):
+                if name!=broker:raise Blocked('rollout_recovery_snapshot_unbound')
+                return tree
+        row=census(Snapshot(),broker,runtime.account_id())
+        validate(runtime,broker,tree,row,manifest)
+        return row
     finally:
         runtime.stop(broker)
         cid=runtime.owned[broker]['id']
@@ -50,6 +60,44 @@ def isolated_census(runtime, archive, manifest, label, recovery=None):
         runtime.run(['rm','-f',cid])
         if runtime.run(['ps','-a','--filter','id='+cid,'--format','{{.ID}}']):raise Blocked('rollout_recovery_copy_cleanup_failed')
         del runtime.owned[broker]
+        if validate is not None:
+            import shutil
+            shutil.rmtree(parent)
+
+def closed_copy_census(runtime,archive,manifest,label,validate):
+    """Rejecting proof/startup still removes only the exact owned copy."""
+    import shutil
+    if not verify_archive(archive,manifest):raise Blocked('rollout_archive_changed')
+    parent=Path(tempfile.mkdtemp(prefix=label+'-',dir=runtime.base))
+    broker='voice-known-'+runtime.operation+'-'+label
+    try:
+        runtime.restore(archive,parent/'store',manifest)
+        actual=runtime.start_broker(label,parent/'store')
+        if actual!=broker:raise Blocked('rollout_recovery_broker_unbound')
+        owned=runtime.inspect(broker)
+        if owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none':
+            raise Blocked('rollout_recovery_broker_unbound')
+        ready(runtime,broker)
+        tree=runtime.monitor_jsz(broker)
+        class Snapshot:
+            def monitor_jsz(self,name):
+                if name!=broker:raise Blocked('rollout_recovery_snapshot_unbound')
+                return tree
+        row=census(Snapshot(),broker,runtime.account_id())
+        validate(runtime,broker,tree,row,manifest)
+        return row
+    finally:
+        # A create/start error may already have entered the owned ledger.
+        # Inspect immutable identity before removal; never remove by name.
+        if broker in runtime.owned:
+            cid=runtime.inspect(broker)['Id']
+            runtime.run(['rm','-f',cid])
+            if runtime.run(['ps','-a','--filter','id='+cid,'--format','{{.ID}}']):
+                raise Blocked('rollout_recovery_copy_cleanup_failed')
+            del runtime.owned[broker]
+        else:
+            runtime.no_operation_containers(running_only=False)
+        shutil.rmtree(parent)
 
 def recovered_census(before,after,recovery,manifest):
     """Normalize only a proved pinned ephemeral recovery timestamp rewrite.
@@ -96,13 +144,14 @@ def recovered_census(before,after,recovery,manifest):
     return adjusted,observations
 
 
-def capture_cut(runtime, source, verify_fence):
+def capture_cut(runtime, source, verify_fence,validate=None):
     verify_fence()
     runtime.no_operation_containers(running_only=True)
     archive=runtime.base/'rollout-before.tar'
     manifest=archive_closed_store(source,archive)
     verify_fence()
-    row=isolated_census(runtime,archive,manifest,'rollout-before')
+    row=isolated_census(runtime,archive,manifest,'rollout-before',validate=validate)
+    if validate is not None:verify_fence()
     return {'manifest':manifest,'census':row,'census_sha256':canonical(row)}
 
 

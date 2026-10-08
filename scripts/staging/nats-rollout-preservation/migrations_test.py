@@ -2,7 +2,7 @@ import copy
 import base64
 import hashlib
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 import migrations
 from controller import Blocked
 
@@ -53,6 +53,22 @@ class MigrationPlanTest(unittest.TestCase):
         with self.assertRaises(Blocked):
             migrations.execute(kube,stage,plan(),'full',{'uid':'old','resourceVersion':'99'},lambda e:None)
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
+
+    def test_bot_forward_collision_recheck_precedes_any_migration_create(self):
+        import bot_migration
+        sql='CREATE UNIQUE INDEX example ON bot_event_log(bot_id,interaction_token);'
+        row={'database':'bot','image':migrations.IMAGE,'secret_key':'BOT_DATABASE_URL',
+             'files':{'000004_slash_interaction_outbox.up.sql':sql},
+             'hashes':{'000004_slash_interaction_outbox.up.sql':hashlib.sha256(sql.encode()).hexdigest()}}
+        kube=Mock();kube.secret_meta.return_value={'uid':'old','resourceVersion':'100'}
+        kube.run.return_value=True
+        kube.get.return_value={'metadata':{'uid':'config','resourceVersion':'200'},'data':{'POSTGRES_USER':'voice'}}
+        stage=Mock();stage.operation='123456abcdef'
+        with patch('bot_migration.capture',side_effect=bot_migration.PrerequisiteError('collision')):
+            with self.assertRaisesRegex(Blocked,'bot_forward_constraint_prerequisite_failed'):
+                migrations.execute(kube,stage,[row],'full',{},lambda e:None)
+        self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
+        stage.verify_final_storage.assert_not_called()
 
     def test_owned_fence_loss_precedes_any_job_create(self):
         kube=Mock();meta={'uid':'old','resourceVersion':'100'};kube.secret_meta.return_value=meta
