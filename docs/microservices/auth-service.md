@@ -346,6 +346,12 @@ revokes all account sessions, clears the TOTP enrollment, and invalidates every
 backup code from that enrollment. The user must sign in again. The protobuf
 request and response remain the wire-contract source of truth.
 
+`Enable2FA` verifies the current password. If TOTP is already enabled, it returns
+`totp_already_enabled` (HTTP `409` or gRPC `ALREADY_EXISTS`) before generating or
+persisting a replacement secret or backup codes. To change the authenticator,
+disable the existing factor with its current TOTP code, sign in again after the
+session revocation, then enroll the new factor.
+
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is
 selected by Auth using the User-owned profile contract described in
