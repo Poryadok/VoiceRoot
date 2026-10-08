@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -69,6 +70,69 @@ void main() {
 
     expect(harness.connection(1).resumeLastSequences, [42]);
   });
+
+  test(
+    'pre-hello failures retain exponential backoff until accepted hello',
+    () {
+      late _ResumeReconnectHarness harness;
+      fakeAsync((clock) {
+        harness = _ResumeReconnectHarness();
+        try {
+          unawaited(harness.hub.ensureConnected());
+          clock.flushMicrotasks();
+          expect(harness.transport.connections, hasLength(1));
+
+          const delays = [1, 2, 4, 8, 16, 30, 30];
+          var elapsedSeconds = 0;
+          for (var attempt = 0; attempt < delays.length; attempt++) {
+            unawaited(harness.connection(attempt).closeFrames());
+            clock.flushMicrotasks();
+
+            final delay = delays[attempt];
+            clock.elapse(Duration(seconds: delay - 1));
+            clock.flushMicrotasks();
+            expect(
+              harness.transport.connections,
+              hasLength(attempt + 1),
+              reason: 'attempt ${attempt + 1} must wait ${delay}s',
+            );
+
+            clock.elapse(const Duration(seconds: 1));
+            clock.flushMicrotasks();
+            elapsedSeconds += delay;
+            expect(
+              harness.transport.connections,
+              hasLength(attempt + 2),
+              reason: 'attempt ${attempt + 2} starts at t=$elapsedSeconds',
+            );
+          }
+
+          final recovered = harness.connection(delays.length);
+          recovered.addHello();
+          clock.flushMicrotasks();
+          unawaited(recovered.closeFrames());
+          clock.flushMicrotasks();
+
+          clock.elapse(const Duration(milliseconds: 999));
+          clock.flushMicrotasks();
+          expect(harness.transport.connections, hasLength(delays.length + 1));
+          clock.elapse(const Duration(milliseconds: 1));
+          clock.flushMicrotasks();
+          expect(
+            harness.transport.connections,
+            hasLength(delays.length + 2),
+            reason: 'the first disconnect after accepted hello starts at 1s',
+          );
+        } finally {
+          harness.container.dispose();
+          for (final connection in harness.transport.connections) {
+            unawaited(connection.closeFrames());
+          }
+          clock.flushMicrotasks();
+        }
+      });
+    },
+  );
 
   test('manual retry is single-flight and uses the current session', () async {
     final harness = _ResumeReconnectHarness();
