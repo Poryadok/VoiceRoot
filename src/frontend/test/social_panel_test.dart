@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -25,7 +26,11 @@ import 'support/voice_test_theme.dart';
 const _backendUnavailableSnippet = 'Start the full API stack';
 
 void main() {
-  Widget socialTestApp({required Widget home, required http.Client client}) {
+  Widget socialTestApp({
+    required Widget home,
+    required http.Client client,
+    AuthController Function(Ref ref)? authControllerFactory,
+  }) {
     return ProviderScope(
       overrides: [
         ...voiceThemeTestOverrides(),
@@ -35,7 +40,9 @@ void main() {
         authSessionStorageProvider.overrideWithValue(
           InMemoryAuthSessionStorage(),
         ),
-        authControllerProvider.overrideWith(authenticatedAuthController),
+        authControllerProvider.overrideWith(
+          authControllerFactory ?? authenticatedAuthController,
+        ),
         discoverHintStorageProvider.overrideWithValue(testDiscoverHintStorage),
         gatewayConfigProvider.overrideWithValue(
           const GatewayConfig(baseUrl: 'http://api.test'),
@@ -768,6 +775,254 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(accepted, isTrue);
+  });
+
+  testWidgets('incoming request actions are disabled during profile switch', (
+    tester,
+  ) async {
+    var acceptCalls = 0;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [
+                    {'profile_id': 'p-in'},
+                  ],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/invitations/p-in/accept') {
+            acceptCalls++;
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final pendingSwitchAccept = tester
+        .widget<IconButton>(find.byKey(SocialPanel.requestAcceptKey('p-in')))
+        .onPressed;
+    expect(pendingSwitchAccept, isNotNull);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(SocialPanel.panelKey)),
+    );
+    expect(
+      container.read(authControllerProvider.notifier).gatewayRequestIdentity,
+      isNotNull,
+    );
+    container.read(profileSwitchInProgressProvider.notifier).state = true;
+    await tester.pump();
+
+    final acceptButton = tester.widget<IconButton>(
+      find.byKey(SocialPanel.requestAcceptKey('p-in')),
+    );
+    final declineButton = tester.widget<IconButton>(
+      find.byKey(SocialPanel.requestDeclineKey('p-in')),
+    );
+    expect(acceptButton.onPressed, isNull);
+    expect(declineButton.onPressed, isNull);
+
+    // Exercise the callback captured before the switch began as well as the
+    // now-disabled controls: the controller identity can still be the old one.
+    pendingSwitchAccept!();
+    await tester.pump();
+    expect(acceptCalls, 0);
+  });
+
+  testWidgets('incoming request action stays retryable after a safe failure', (
+    tester,
+  ) async {
+    final firstAccept = Completer<http.Response>();
+    var acceptCalls = 0;
+    var accepted = false;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': accepted
+                      ? []
+                      : [
+                          {'profile_id': 'p-in'},
+                        ],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/users/profiles/p-in') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'p-in',
+                  'account_id': 'a-in',
+                  'username': 'incoming',
+                  'discriminator': '0001',
+                  'display_name': 'Incoming User',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/invitations/p-in/accept') {
+            acceptCalls++;
+            if (acceptCalls == 1) return firstAccept.future;
+            accepted = true;
+            return http.Response('{}', 200);
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.requestAcceptKey('p-in')));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(SocialPanel.requestAcceptKey('p-in')))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(SocialPanel.requestDeclineKey('p-in')))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.byKey(SocialPanel.requestActionProgressKey('p-in')),
+      findsOneWidget,
+    );
+    expect(acceptCalls, 1);
+
+    firstAccept.complete(
+      http.Response(jsonEncode({'message': 'private backend diagnostic'}), 503),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not complete this action.'), findsOneWidget);
+    expect(find.textContaining('private backend diagnostic'), findsNothing);
+    expect(find.byKey(SocialPanel.requestAcceptKey('p-in')), findsOneWidget);
+    expect(find.byKey(SocialPanel.requestDeclineKey('p-in')), findsOneWidget);
+    expect(
+      find.byKey(SocialPanel.requestActionProgressKey('p-in')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(SocialPanel.requestAcceptKey('p-in')));
+    await tester.pumpAndSettle();
+
+    expect(acceptCalls, 2);
+    expect(find.byKey(SocialPanel.requestAcceptKey('p-in')), findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
+  });
+
+  testWidgets('pending request result is ignored after actor changes', (
+    tester,
+  ) async {
+    final firstAccept = Completer<http.Response>();
+    AuthController? testAuthController;
+    var oldActorAcceptCalls = 0;
+    await tester.pumpWidget(
+      socialTestApp(
+        home: const SocialPanel(initialTabIndex: 4),
+        authControllerFactory: (ref) {
+          final controller = authenticatedAuthController(ref);
+          testAuthController = controller;
+          return controller;
+        },
+        client: MockClient((req) async {
+          if (req.url.path == '/api/v1/friends/requests') {
+            if (req.headers['authorization'] == 'Bearer account-b-token') {
+              return http.Response(
+                jsonEncode({
+                  'friend_request_list': {'incoming': [], 'outgoing': []},
+                }),
+                200,
+              );
+            }
+            return http.Response(
+              jsonEncode({
+                'friend_request_list': {
+                  'incoming': [
+                    {'profile_id': 'p-in'},
+                  ],
+                  'outgoing': [],
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/users/profiles/p-in') {
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'p-in',
+                  'account_id': 'a-in',
+                  'username': 'incoming',
+                  'discriminator': '0001',
+                  'display_name': 'Incoming User',
+                  'locale': 'en',
+                  'theme': 'dark',
+                  'is_primary': true,
+                  'verification_type': 'none',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.url.path == '/api/v1/friends/invitations/p-in/accept') {
+            oldActorAcceptCalls++;
+            return firstAccept.future;
+          }
+          return http.Response('{}', 200);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(SocialPanel.requestAcceptKey('p-in')));
+    await tester.pump();
+    expect(oldActorAcceptCalls, 1);
+
+    testAuthController!.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'account-b-token',
+        refreshToken: 'account-b-refresh',
+        accountId: 'account-b',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(SocialPanel.requestAcceptKey('p-in')), findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
+
+    firstAccept.complete(http.Response('{}', 503));
+    await tester.pumpAndSettle();
+
+    expect(oldActorAcceptCalls, 1);
+    expect(find.text('Could not complete this action.'), findsNothing);
+    expect(find.text('No friend requests'), findsOneWidget);
   });
 
   testWidgets('blocked tab shows empty state when no blocks', (tester) async {
