@@ -192,6 +192,20 @@ type readResult struct {
 	err error
 }
 
+func readWSMessages(ctx context.Context, read func() (wsInbound, error), readCh chan<- readResult) {
+	for {
+		in, err := read()
+		select {
+		case readCh <- readResult{in: in, err: err}:
+		case <-ctx.Done():
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func closeFanoutOverflow(c *websocket.Conn, reg *connReg, writeMu *sync.Mutex) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
@@ -243,6 +257,8 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		}
 		_ = c.Close()
 	}()
+	readerCtx, cancelReader := context.WithCancel(context.Background())
+	defer cancelReader()
 
 	if rf != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -308,17 +324,12 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 
 	readCh := make(chan readResult, 1)
 	go func() {
-		for {
+		readWSMessages(readerCtx, func() (wsInbound, error) {
 			_ = c.SetReadDeadline(time.Now().Add(90 * time.Second))
 			var in wsInbound
 			err := c.ReadJSON(&in)
-			// Always deliver to the main loop (blocking). A non-blocking send would
-			// drop disconnect errors when the buffer is full and leave the conn hung.
-			readCh <- readResult{in: in, err: err}
-			if err != nil {
-				return
-			}
-		}
+			return in, err
+		}, readCh)
 	}()
 
 	for {

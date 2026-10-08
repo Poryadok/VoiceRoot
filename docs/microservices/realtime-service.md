@@ -73,6 +73,11 @@ replay. Compose strict proof не завершает rollout во всех ок�
 
 ### Read / delivery dual path
 
+The WebSocket reader hands frames and the final disconnect error to the handler
+through a bounded channel. Handler teardown cancels that handoff so a reader
+blocked behind a full channel exits; while the handler is live, disconnect
+errors remain observable by the main loop.
+
 | Action | Persist (source of truth) | WS fan-out (Realtime) |
 |--------|---------------------------|------------------------|
 | Mark read | `Messaging.MarkRead` REST/gRPC → `read_receipts` + `message.read` NATS | NATS → `message_read`; client `mark_read` → same-profile + chat subscribers (**no persist**) |
