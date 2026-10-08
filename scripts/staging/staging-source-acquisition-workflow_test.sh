@@ -27,6 +27,17 @@ awk '
 [ -s "$DOWNLOAD_SCRIPT" ] || { echo 'FAIL: source bootstrap missing from workflow' >&2; exit 1; }
 bash -n "$DOWNLOAD_SCRIPT"
 
+probe_minutes="$(awk '/^  nats-search-jetstream-probe:/ { probe = 1; next }
+  probe && /^  [a-z]/ { exit }
+  probe && /timeout-minutes:/ { print $2; exit }' "$WORKFLOW")"
+archive_seconds="$(sed -n 's/.*--max-time \([0-9]*\).*--max-filesize.*/\1/p' "$DOWNLOAD_SCRIPT")"
+[[ "$probe_minutes" =~ ^[0-9]+$ && "$archive_seconds" =~ ^[0-9]+$ ]] || {
+  echo 'FAIL: shared source/probe deadlines missing' >&2; exit 1;
+}
+((probe_minutes * 60 >= archive_seconds + 300 && probe_minutes <= 15)) || {
+  echo 'FAIL: shared probe deadline must include archive plus bounded remaining checks' >&2; exit 1;
+}
+
 printf '*.ignored\n' >"$FIXTURE_DIR/base/.gitignore"
 printf 'config.ignored filter=sentinel\n' >"$FIXTURE_DIR/base/.gitattributes"
 printf 'tracked despite ignore\n' >"$FIXTURE_DIR/base/config.ignored"
@@ -69,9 +80,21 @@ cat >"$TEST_ROOT/curl" <<'CURL_STUB'
 set -euo pipefail
 output=''
 url=''
+max_time=0
+max_bytes=0
+connect_time=0
+protocol=''
+speed_limit=0
+speed_time=0
 while (($#)); do
   case "$1" in
     --output) output="$2"; shift 2 ;;
+    --max-time) max_time="$2"; shift 2 ;;
+    --max-filesize) max_bytes="$2"; shift 2 ;;
+    --connect-timeout) connect_time="$2"; shift 2 ;;
+    --proto) protocol="$2"; shift 2 ;;
+    --speed-limit) speed_limit="$2"; shift 2 ;;
+    --speed-time) speed_time="$2"; shift 2 ;;
     https://*) url="$1"; shift ;;
     *) shift ;;
   esac
@@ -79,7 +102,15 @@ done
 [[ -n "$output" && -n "$url" ]]
 case "$url" in
   */commits/*) cp -- "$FIXTURE_COMMIT" "$output" ;;
-  *codeload.github.com/Poryadok/VoiceRoot/tar.gz/*) cp -- "$FIXTURE_ARCHIVE" "$output" ;;
+  *codeload.github.com/Poryadok/VoiceRoot/tar.gz/*)
+    [[ "$protocol" == '=https' && "$connect_time" == 5 && "$max_bytes" == 104857600 ]]
+    [[ "$speed_limit" == 1024 && "$speed_time" == 30 ]]
+    # Model elapsed transfer time without sleeping: the actual public archive
+    # measurement is retained separately; this tests the extracted workflow.
+    ((max_time >= ${FIXTURE_TRANSFER_SECONDS:-0})) || exit 28
+    ((max_time > 0 && max_time <= 600)) || exit 28
+    [[ "${FIXTURE_TRANSPORT_ERROR:-0}" == 0 ]] || exit "$FIXTURE_TRANSPORT_ERROR"
+    cp -- "$FIXTURE_ARCHIVE" "$output" ;;
   *) exit 22 ;;
 esac
 CURL_STUB
@@ -123,6 +154,10 @@ else
   echo 'SKIP: executable-mode fixtures require a POSIX runner'
 fi
 [[ ! -e "$WORKSPACE/stale-marker" ]] || { echo 'FAIL: stale workspace content was not removed' >&2; exit 1; }
+
+FIXTURE_TRANSFER_SECONDS=300 run_case progressing-slow-transfer PASS "$FIXTURE_DIR/base.tar.gz"
+FIXTURE_TRANSPORT_ERROR=28 run_case stalled-transfer FAIL_DOWNLOAD "$FIXTURE_DIR/base.tar.gz"
+FIXTURE_TRANSPORT_ERROR=63 run_case oversized-transfer FAIL_DOWNLOAD "$FIXTURE_DIR/base.tar.gz"
 
 mkdir -p "$FIXTURE_DIR/content/bin" "$FIXTURE_DIR/mode/bin" "$FIXTURE_DIR/symlink/bin"
 cp -a "$FIXTURE_DIR/base/." "$FIXTURE_DIR/content/"

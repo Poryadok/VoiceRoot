@@ -177,7 +177,7 @@ jobs:
             exit 1
           fi
           if ! curl --fail --silent --show-error --proto '=https' \
-            --connect-timeout 5 --max-time 120 --max-filesize 104857600 \
+            --connect-timeout 5 --max-time 600 --speed-limit 1024 --speed-time 30 --max-filesize 104857600 \
             --output "$tmp/source.tar.gz" "https://codeload.github.com/Poryadok/VoiceRoot/tar.gz/$source_sha"; then
             echo 'STAGING_SOURCE_ARCHIVE=FAIL_DOWNLOAD'
             exit 1
@@ -496,7 +496,7 @@ jobs:
   nats-search-jetstream-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true && inputs.validate_app_secret_only != true && inputs.mail_only != true
     runs-on: ${{ vars.STAGING_RUNNER_LABELS != '' && fromJson(vars.STAGING_RUNNER_LABELS) || 'ubuntu-latest' }}
-    timeout-minutes: 8
+    timeout-minutes: 15
     environment: staging
     steps:
       - name: Check staging runner can reach GitHub before checkout
