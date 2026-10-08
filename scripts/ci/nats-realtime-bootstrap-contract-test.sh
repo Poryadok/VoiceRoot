@@ -33,7 +33,7 @@ cmp <(sed -n '/^    #!\/bin\/sh$/,$p' "$K8S_BOOTSTRAP" | sed '/^---$/,$d' | sed 
 
 for stream in \
   'stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack' \
-  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored' \
+  'stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted space.deletion_scheduled space.restored space.voice_room_access_invalidated' \
   'stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded' \
   'stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted' \
   'stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed' \
@@ -42,7 +42,7 @@ for stream in \
   'stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response' \
   'stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed' \
   'stream_with_duplicate_window social_events 86400000000000 social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced' \
-  'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed' \
+  'stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed role.voice_policy_invalidated' \
   'stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined' \
   'stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned'; do
   require "$stream" "$BOOTSTRAP"
@@ -66,6 +66,8 @@ for consumer in \
   'consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social' \
   'consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request' \
   "consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role" \
+  'consumer chat_events voice_space_media_chat space.voice_room_access_invalidated _INBOX.voice.voice.space_media_chat' \
+  'consumer role_events voice_space_media_role role.voice_policy_invalidated _INBOX.voice.voice.space_media_role' \
   "consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice" \
   "consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking"; do
   require "$consumer" "$BOOTSTRAP"
@@ -77,6 +79,8 @@ require '      REALTIME_INSTANCE_ID: ${REALTIME_INSTANCE_ID:-realtime-1}' "$COMP
 require '  - name: voice_events' "$MANIFEST"
 require '    subjects: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined]' "$MANIFEST"
 require_stream_contract analytics_events '[analytics.>]' 168h
+require_stream_contract chat_events '[chat.created, chat.member_changed, chat.dm_peer_deleted, space.tree_changed, space.created, voice.room_created, voice.room_deleted, space.invite_created, space.member_joined, space.member_left, space.updated, space.deleted, space.deletion_scheduled, space.restored, space.voice_room_access_invalidated]' 168h
+require_stream_contract role_events '[role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated]' 168h
 require_stream_contract user_profile_projection '[user.search_profile_projection]' 0s
 require "stream analytics_events 'analytics.>'" "$BOOTSTRAP"
 require 'stream_with_max_age user_profile_projection 0 user.search_profile_projection' "$BOOTSTRAP"

@@ -1408,8 +1408,12 @@ jobs:
         run: bash scripts/ci/wait-postgres-steady.sh "$GITHUB_WORKSPACE"
       - name: Migrate Go-owned databases
         run: make compose-migrate-all
+      - name: Generate disposable media principal and TLS fixture
+        run: |
+          echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
+          python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
       - name: Start app stack
-        run: make compose-app-up
+        run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build
       - name: Wait for gateway health
         run: |
           for i in $(seq 1 72); do
@@ -1434,7 +1438,10 @@ jobs:
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
-        run: bash scripts/ci/compose-e2e-smoke.sh
+        run: |
+          bash scripts/ci/compose-e2e-smoke.sh
+          cd src/backend/gateway
+          CGO_ENABLED=1 go test -tags=live -count=1 -parallel 1 -timeout 3m -run '^TestComposeSpaceVoiceRoomBidirectionalAudio_live$' ./...
 
   a1-e2e:
     needs: changes

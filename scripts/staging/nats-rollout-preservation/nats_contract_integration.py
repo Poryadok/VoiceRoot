@@ -17,7 +17,7 @@ def inner(base):
     import nats_migration
     from preserve import verify_post_apply,canonical,capture_cut
     from nats_contract_actor import Actor
-    from nats_contract_plan import compile_plan,execute,verify_census,DECLARATION
+    from nats_contract_plan import compile_plan,execute,verify_census,DECLARATIONS
     from rollout_census import census
     from bootstrap_renewal import invoke
     import bootstrap_auth,guard
@@ -71,14 +71,19 @@ def inner(base):
         scratch=base/'auth-store';scratch.mkdir(mode=0o700);os.chown(scratch,65532,65532)
         normalizer=runtime.start_broker('normalizer',scratch);ready(runtime,normalizer)
         actor=Actor(runtime,normalizer,runtime.owned[normalizer]['id'],scratch,fenced)
-        actor._request('$JS.API.STREAM.CREATE.social_events',copy.deepcopy(infos['social_events']['config']))
-        actor.mutate('$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',{'stream_name':'social_events','action':'create','config':copy.deepcopy(DECLARATION)})
-        normalized=actor.info_config('social_events/rt_realtime1_friend_removed')
-        assert normalized['deliver_policy']=='new' and normalized['ack_policy']=='explicit'
-        assert len(normalized)>len(DECLARATION)
+        for stream in ('chat_events','social_events','role_events'):
+            actor._request('$JS.API.STREAM.CREATE.'+stream,copy.deepcopy(infos[stream]['config']))
+        normalized_consumers={}
+        for stream,declaration in DECLARATIONS:
+            durable=declaration['durable_name']
+            actor.mutate('$JS.API.CONSUMER.CREATE.'+stream+'.'+durable,{'stream_name':stream,'action':'create','config':copy.deepcopy(declaration)})
+            normalized=actor.info_config(stream+'/'+durable)
+            assert normalized['deliver_policy']=='new' and normalized['ack_policy']=='explicit'
+            assert len(normalized)>len(declaration)
+            normalized_consumers[(stream,durable)]=normalized
         runtime.stop(normalizer)
-        plan=compile_plan('/source',infos,None,normalized)
-        assert len(plan['actions'])==3
+        plan=compile_plan('/source',infos,{},normalized_consumers)
+        assert len(plan['actions'])==5
         from nats_contract_plan import digest
         enrollment={'fixture_authenticated_existing_actor':auth}
         state={'operation':operation,'events':[],'custody':{'verified':True,'scope':'same-host-fixture-only'},
@@ -91,10 +96,13 @@ def inner(base):
             def verify_final_storage(self):fenced()
         original_verify=nats_migration.verify_census
         def diagnostic(plan,before,after):
-            new=next((c for c in after['consumers'] if c['stream']=='social_events' and c['name']=='rt_realtime1_friend_removed'),None)
-            if new is not None:
-                last=next(s for s in before['streams'] if s['name']=='social_events')['state']['last_seq']
-                print('FIXTURE_NEW_DURABLE_INITIAL_FLOORS='+json.dumps({'delivered':new['delivered'],'ack_floor':new['ack_floor'],'old_last_seq':last}),file=sys.stderr,flush=True)
+            new=[c for c in after['consumers'] if (c['stream'],c.get('durable') or c['name']) not in {(c['stream'],c['name']) for c in before['consumers']}]
+            if new:
+                floors=[]
+                for row in new:
+                    last=next(s for s in before['streams'] if s['name']==row['stream'])['state']['last_seq']
+                    floors.append({'stream':row['stream'],'durable':row.get('durable') or row['name'],'delivered':row['delivered'],'ack_floor':row['ack_floor'],'old_last_seq':last})
+                print('FIXTURE_NEW_DURABLE_INITIAL_FLOORS='+json.dumps(floors,sort_keys=True),file=sys.stderr,flush=True)
             try:return original_verify(plan,before,after)
             except Exception:
                 from rollout_census import semantic
@@ -119,7 +127,7 @@ def inner(base):
                     expected=copy.deepcopy(original_row)
                     for action in plan['actions']:
                         if action['object']==expected['name'] and '.STREAM.UPDATE.' in action['api']:expected['config_sha256']=digest(action['after'])
-                        if expected['name']=='social_events' and '.CONSUMER.CREATE.' in action['api']:expected['state']['consumer_count']+=1
+                        if action['api'].startswith('$JS.API.CONSUMER.CREATE.') and action['object'].startswith(expected['name']+'/'):expected['state']['consumer_count']+=1
                     observed=stream_rows[expected['name']]
                     fields=sorted(k for k in set(expected)|set(observed) if expected.get(k)!=observed.get(k))
                     states=sorted(k for k in set(expected['state'])|set(observed['state']) if expected['state'].get(k)!=observed['state'].get(k))
@@ -154,9 +162,11 @@ def inner(base):
         publish=runtime.create('post-release-record',NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel','post'],broker)
         runtime.run(['start',publish]);assert runtime.run(['wait',publish])=='0'
         current_actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,lambda:None)
-        current_infos={name:{'config':current_actor.info_config(name)} for name in ('chat_events','social_events')}
-        retained=current_actor.info_config('social_events/rt_realtime1_friend_removed')
-        rollback_plan=compile_plan('/source',current_infos,{'config':retained},normalized)
+        current_tree=runtime.monitor_jsz(broker)
+        current_details=next(a for a in current_tree['account_details'] if a['id']==account)['stream_detail']
+        current_infos={row['name']:{'config':current_actor.info_config(row['name']),'state':row['state'],'consumer_detail':row.get('consumer_detail',[])} for row in current_details}
+        current_consumers={(stream['name'],consumer.get('durable') or consumer['name']):consumer for stream in current_details for consumer in stream.get('consumer_detail',[])}
+        rollback_plan=compile_plan('/source',current_infos,current_consumers,normalized_consumers)
         assert rollback_plan['actions']==[]
         runtime.stop(broker)
         fresh_base=base/'fresh-operation';fresh_base.mkdir(mode=0o750);os.chown(fresh_base,0,65532)

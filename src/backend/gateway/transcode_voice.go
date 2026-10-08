@@ -134,7 +134,17 @@ func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, res
 			w.WriteHeader(http.StatusNoContent)
 			return true
 		case r.Method == http.MethodGet && action == "token":
-			resp, err := t.clients.voice.GetJoinToken(ctx, &callsv1.GetJoinTokenRequest{RoomId: roomID})
+			req := &callsv1.GetJoinTokenRequest{RoomId: roomID}
+			if t.clients.voiceUserErr != nil || t.clients.voiceUser == nil || t.lifecycleIssuer == nil {
+				writeGRPCError(w, status.Error(codes.Unavailable, "Voice user-principal transport unavailable"))
+				return true
+			}
+			userCtx, contextErr := t.voiceUserCallTokenContext(r, req, callsv1.VoiceService_GetJoinToken_FullMethodName)
+			if contextErr != nil {
+				writeGRPCError(w, contextErr)
+				return true
+			}
+			resp, err := t.clients.voiceUser.GetJoinToken(userCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true

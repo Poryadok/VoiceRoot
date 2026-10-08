@@ -12,6 +12,16 @@ VERIFY='bash scripts/ci/verify-compose-minio-images.sh'
 VERIFY_SCRIPT="$ROOT/scripts/ci/verify-compose-minio-images.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
+compose_invocation_is_valid() {
+  local block="$1" target="$2" login_line verify_line compose_line
+  grep -Fq "run: $target" <<<"$block" || return 1
+  login_line="$(grep -nF 'uses: docker/login-action@v4' <<<"$block" | head -n1 | cut -d: -f1)"
+  verify_line="$(grep -nF "run: $VERIFY" <<<"$block" | head -n1 | cut -d: -f1)"
+  compose_line="$(grep -nE 'run: (COMPOSE_PARALLEL_LIMIT=[0-9]+ )?(docker compose|make compose-)' <<<"$block" | head -n1 | cut -d: -f1)"
+  [[ -n "$compose_line" ]] || return 1
+  (( login_line < verify_line && verify_line < compose_line ))
+}
+
 job_block() {
   local name="$1"
   awk -v name="$name" '
@@ -22,7 +32,7 @@ job_block() {
 }
 
 assert_job() {
-  local name="$1" target="$2" filter="$3" block login_line verify_line compose_line
+  local name="$1" target="$2" filter="$3" block
   block="$(job_block "$name")"
   [[ -n "$block" ]] || fail "workflow job missing: $name"
   grep -Fq "VOICE_MINIO_IMAGE: $SERVER_REF" <<<"$block" || fail "$name lacks the exact immutable MinIO server ref"
@@ -35,19 +45,31 @@ assert_job() {
   grep -Fq 'username: ${{ github.actor }}' <<<"$block" || fail "$name GHCR login must use the workflow actor"
   grep -Fq 'password: ${{ secrets.GITHUB_TOKEN }}' <<<"$block" || fail "$name GHCR login must use the existing workflow token"
   grep -Fq "run: $VERIFY" <<<"$block" || fail "$name must validate effective Compose image refs before running"
-  grep -Fq "run: $target" <<<"$block" || fail "$name must invoke its expected Compose target"
-  login_line="$(grep -nF 'uses: docker/login-action@v4' <<<"$block" | head -n1 | cut -d: -f1)"
-  verify_line="$(grep -nF "run: $VERIFY" <<<"$block" | head -n1 | cut -d: -f1)"
-  compose_line="$(grep -nE 'run: (docker compose|make compose-)' <<<"$block" | head -n1 | cut -d: -f1)"
-  [[ -n "$compose_line" ]] || fail "$name has no Compose command to protect"
-  (( login_line < verify_line && verify_line < compose_line )) || fail "$name must login and validate before Compose runs"
+  compose_invocation_is_valid "$block" "$target" \
+    || fail "$name must invoke its exact Compose target after login and image verification"
   grep -Fq "github.event_name == 'pull_request'" <<<"$block" || fail "$name must run on the affected pull request"
   grep -Fq "$filter" <<<"$block" || fail "$name pull request gate must follow its scoped path filter"
 }
 
-assert_job compose-e2e 'make compose-app-up' "needs.changes.outputs.global == 'true'"
+assert_job compose-e2e 'COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build' "needs.changes.outputs.global == 'true'"
 assert_job a1-e2e 'make compose-a1-multi-account-proof' "needs.changes.outputs.global == 'true'"
 assert_job a1-flutter-profile-handoff 'make compose-a1-flutter-profile-handoff' "needs.changes.outputs.global == 'true'"
+expected_compose='COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml --profile app up -d --build'
+valid_compose_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" "run: $expected_compose")"
+compose_invocation_is_valid "$valid_compose_fixture" "$expected_compose" \
+  || fail 'Compose contract rejected the expected verified app invocation'
+wrong_app_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: make compose-app-up')"
+if compose_invocation_is_valid "$wrong_app_fixture" "$expected_compose"; then
+  fail 'Compose contract accepted the obsolete app target'
+fi
+wrong_overlay_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml --profile app up -d --build')"
+if compose_invocation_is_valid "$wrong_overlay_fixture" "$expected_compose"; then
+  fail 'Compose contract accepted an app invocation without the voice media overlay'
+fi
+wrong_order_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $expected_compose" "run: $VERIFY")"
+if compose_invocation_is_valid "$wrong_order_fixture" "$expected_compose"; then
+  fail 'Compose contract accepted image verification after Compose started'
+fi
 grep -Fq '.github/workflows/**' "$FILTERS" \
   || fail 'global path filter must exercise the Compose E2E PR gate for workflow changes'
 grep -Fq '.github/workflows/ci.yml' "$FILTERS" \

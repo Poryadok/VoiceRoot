@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +25,7 @@ import (
 	messagingv1 "voice.app/voice/messaging/v1"
 	socialv1 "voice.app/voice/social/v1"
 	userv1 "voice.app/voice/user/v1"
+	"voice/backend/pkg/principal"
 )
 
 type recordingUserGRPC struct {
@@ -969,11 +973,17 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "voice-token-test", PrivateKey: key})
+	require.NoError(t, err)
+	voiceClient := callsv1.NewVoiceServiceClient(conn)
+
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {UserID: "15e3a7e9-25f3-42e2-bb65-aad47828458c", ProfileID: "5cf2992f-4195-44c1-9d0c-14e5db8b458a", SessionEpoch: 8, ExpiresAt: time.Now().Add(time.Minute)},
 		},
-		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+		transcoder: &transcoder{clients: grpcClients{voice: voiceClient, voiceUser: voiceClient, voiceUserRequired: true}},
 	})
 
 	resp := performRequest(h, http.MethodPost, "/api/v1/voice/calls/room-1/accept", "", map[string]string{
@@ -1003,4 +1013,104 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	require.Equal(t, "room-1", grpcRec.state.GetRoomId())
 	require.True(t, grpcRec.state.GetIsMuted())
 	require.False(t, grpcRec.state.GetIsVideoOn())
+}
+
+func TestTranscodeVoiceTokenPreservesLegacyDMAndNeverDowngradesConfiguredPrincipalTransport(t *testing.T) {
+	accountID, profileID := "15e3a7e9-25f3-42e2-bb65-aad47828458c", "5cf2992f-4195-44c1-9d0c-14e5db8b458a"
+	newHandler := func(options gatewayTestOptions) (*recordingVoiceCalls, *recordingVoiceCalls, http.Handler) {
+		legacy := &recordingVoiceCalls{}
+		legacyConn, cleanupLegacy := startBufconnVoiceConn(t, legacy)
+		t.Cleanup(cleanupLegacy)
+		delegated := &recordingVoiceCalls{}
+		delegatedConn, cleanupDelegated := startBufconnVoiceConn(t, delegated)
+		t.Cleanup(cleanupDelegated)
+		if options.transcoder == nil {
+			options.transcoder = &transcoder{}
+		}
+		options.transcoder.clients.voice = callsv1.NewVoiceServiceClient(legacyConn)
+		if options.transcoder.clients.voiceUserRequired || options.transcoder.clients.voiceUserErr != nil || options.transcoder.lifecycleIssuer != nil {
+			options.transcoder.clients.voiceUser = callsv1.NewVoiceServiceClient(delegatedConn)
+		}
+		return legacy, delegated, newGatewayForContract(t, options)
+	}
+
+	t.Run("unconfigured transport fails closed without calling either Voice client", func(t *testing.T) {
+		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
+			"user": {UserID: accountID, ProfileID: profileID, AccountType: "guest"},
+		}})
+		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
+		require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+		require.Empty(t, legacy.tokenRoom)
+		require.Empty(t, delegated.tokenRoom)
+	})
+
+	t.Run("configured transport without a signer fails closed", func(t *testing.T) {
+		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
+			"user": {UserID: accountID, ProfileID: profileID, SessionEpoch: 8, ExpiresAt: time.Now().Add(time.Minute)},
+		}, transcoder: &transcoder{clients: grpcClients{voiceUserRequired: true}}})
+		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+		require.Empty(t, legacy.tokenRoom)
+		require.Empty(t, delegated.tokenRoom)
+	})
+
+	t.Run("configured delegated transport preserves generic guest policy", func(t *testing.T) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "test", PrivateKey: key})
+		require.NoError(t, err)
+		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
+			"user": {UserID: accountID, ProfileID: profileID, SessionEpoch: 8, AccountType: "guest", ExpiresAt: time.Now().Add(time.Minute)},
+		}, transcoder: &transcoder{lifecycleIssuer: issuer, clients: grpcClients{voiceUserRequired: true}}})
+		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		require.Empty(t, legacy.tokenRoom)
+		require.Equal(t, "dm-room", delegated.tokenRoom)
+		require.Len(t, delegated.lastMD.Get("authorization"), 1)
+		require.Len(t, delegated.lastMD.Get("x-request-id"), 1)
+		requestID := delegated.lastMD.Get("x-request-id")[0]
+		require.NotEmpty(t, requestID)
+		require.True(t, strings.HasPrefix(delegated.lastMD.Get("authorization")[0], "Bearer "))
+		request := &callsv1.GetJoinTokenRequest{RoomId: "dm-room"}
+		hash, err := principal.RequestHash(request)
+		require.NoError(t, err)
+		verified, err := principal.VerifyDelegatedUser(context.Background(), strings.TrimPrefix(delegated.lastMD.Get("authorization")[0], "Bearer "), principal.VerifyConfig{
+			ExpectedIssuer: "gateway", ExpectedAudience: "voice", ExpectedRPC: callsv1.VoiceService_GetJoinToken_FullMethodName,
+			ExpectedRequestID: requestID, ExpectedRequestHash: hash,
+			KeyResolver:         func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+			ReplayGuard:         func(context.Context, string, string, time.Time) error { return nil },
+			SessionEpochChecker: func(context.Context, string, int64) error { return nil },
+		})
+		require.NoError(t, err)
+		require.Equal(t, accountID, verified.AccountID)
+		require.Equal(t, profileID, verified.ProfileID)
+		require.EqualValues(t, 8, verified.SessionEpoch)
+		require.Equal(t, callsv1.VoiceService_GetJoinToken_FullMethodName, verified.RPC)
+		require.Equal(t, requestID, verified.RequestID)
+		require.Equal(t, hash, verified.RequestHash)
+	})
+
+	t.Run("invalid delegated binding cannot fall back", func(t *testing.T) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "test", PrivateKey: key})
+		require.NoError(t, err)
+		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
+			"user": {UserID: accountID, ProfileID: profileID, AccountType: "guest", ExpiresAt: time.Now().Add(time.Minute)},
+		}, transcoder: &transcoder{lifecycleIssuer: issuer, clients: grpcClients{voiceUserRequired: true}}})
+		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
+		require.Equal(t, http.StatusUnauthorized, response.Code)
+		require.Empty(t, legacy.tokenRoom)
+		require.Empty(t, delegated.tokenRoom)
+	})
+
+	t.Run("configured broken transport cannot fall back", func(t *testing.T) {
+		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
+			"user": {UserID: accountID, ProfileID: profileID, SessionEpoch: 8, ExpiresAt: time.Now().Add(time.Minute)},
+		}, transcoder: &transcoder{clients: grpcClients{voiceUserRequired: true, voiceUserErr: errors.New("fixture transport unavailable")}}})
+		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
+		require.Equal(t, http.StatusServiceUnavailable, response.Code)
+		require.Empty(t, legacy.tokenRoom)
+		require.Empty(t, delegated.tokenRoom)
+	})
 }

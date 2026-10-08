@@ -12,6 +12,8 @@ import app.voice.auth.v1.GetE2EKeyBackupRequest;
 import app.voice.auth.v1.GetE2EKeyBackupResponse;
 import app.voice.auth.v1.GetGuestReminderRequest;
 import app.voice.auth.v1.GetGuestReminderResponse;
+import app.voice.auth.v1.GetVoiceSessionEpochFloorRequest;
+import app.voice.auth.v1.GetVoiceSessionEpochFloorResponse;
 import app.voice.auth.v1.GetEmailVerificationStatusRequest;
 import app.voice.auth.v1.GetEmailVerificationStatusResponse;
 import app.voice.auth.v1.EmailVerificationState;
@@ -70,12 +72,16 @@ import voice.backend.auth.service.RefreshCommand;
 import voice.backend.auth.service.RegisterCommand;
 import voice.backend.auth.service.OtpService;
 import voice.backend.auth.service.VerifyOtpCommand;
+import voice.backend.auth.repository.AccountRepository;
+import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 
 @Component
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
   private final AuthService authService;
   private final OtpService otpService;
   private final EmailVerificationStatusService emailVerificationStatus;
+  private AccountRepository accountRepository;
+  private SessionEpochFloorStore sessionEpochFloorStore;
 
   public AuthGrpcService(AuthService authService, OtpService otpService) {
     this(authService, otpService, null);
@@ -89,6 +95,38 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     this.authService = authService;
     this.otpService = otpService;
     this.emailVerificationStatus = emailVerificationStatus;
+  }
+
+  @Autowired(required = false)
+  public void setVoiceSessionFloorSources(
+      AccountRepository accountRepository, SessionEpochFloorStore sessionEpochFloorStore) {
+    this.accountRepository = accountRepository;
+    this.sessionEpochFloorStore = sessionEpochFloorStore;
+  }
+
+  @Override
+  public void getVoiceSessionEpochFloor(
+      GetVoiceSessionEpochFloorRequest request,
+      StreamObserver<GetVoiceSessionEpochFloorResponse> responseObserver) {
+    runProof(responseObserver, () -> {
+      requireProofPrincipal("service", "voice");
+      rejectUnknownFields(request);
+      java.util.UUID accountId = deletionUuid(request.getAccountId());
+      if (accountRepository == null || sessionEpochFloorStore == null) {
+        throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
+      }
+      var account = accountRepository.findById(accountId.toString())
+          .orElseThrow(() -> Status.NOT_FOUND.withDescription("account not found").asRuntimeException());
+      long durableEpoch = account.sessionEpoch();
+      long floorEpoch = sessionEpochFloorStore.requireFloor(accountId);
+      long currentEpoch = Math.max(durableEpoch, floorEpoch);
+      if (durableEpoch <= 0 || floorEpoch <= 0 || currentEpoch <= 0) {
+        throw Status.UNAVAILABLE.withDescription("session epoch floor unavailable").asRuntimeException();
+      }
+      return GetVoiceSessionEpochFloorResponse.newBuilder()
+          .setSessionEpochFloor(currentEpoch)
+          .build();
+    });
   }
 
   @Override

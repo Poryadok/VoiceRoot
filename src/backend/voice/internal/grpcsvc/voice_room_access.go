@@ -12,13 +12,25 @@ import (
 )
 
 type CanonicalVoiceRoomAccess struct {
-	SpaceID string
-	Member  bool
-	Active  bool
+	SpaceID     string
+	Member      bool
+	Active      bool
+	AccessEpoch uint64
 }
 
 type AuthoritativeVoiceRoomAccessResolver interface {
 	ResolveVoiceRoomAccess(context.Context, string, string) (CanonicalVoiceRoomAccess, error)
+}
+
+type CanonicalVoiceRoomGrants struct {
+	PolicyEpoch     uint64
+	CanJoin         bool
+	CanPublishAudio bool
+	CanSubscribe    bool
+}
+
+type SpaceVoiceRoomGrantResolver interface {
+	ResolveVoiceRoomGrants(context.Context, string, string, string) (CanonicalVoiceRoomGrants, error)
 }
 
 func (s *VoiceGRPC) resolveCanonicalVoiceRoomAccess(ctx context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {

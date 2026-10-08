@@ -88,8 +88,10 @@ class Tests(unittest.TestCase):
                 if '.STREAM.UPDATE.' in action['api']:
                     next(s for s in row['streams'] if s['name']==action['object'])['config_sha256']=digest(config)
                 else:
-                    next(s for s in row['streams'] if s['name']=='social_events')['state']['consumer_count']+=1
-                    row['consumers'].append(copy.deepcopy(after['consumers'][-1]))
+                    _, _, _, _, stream, durable = action['api'].split('.')
+                    next(s for s in row['streams'] if s['name']==stream)['state']['consumer_count']+=1
+                    consumer=next(c for c in after['consumers'] if c['stream']==stream and c['name']==durable)
+                    row['consumers'].append(copy.deepcopy(consumer))
             return row
         return state,runtime,stage,actor,manifest,census
     def run_with(self,base,state,runtime,stage,actor,manifest,census,old_proof):
@@ -106,7 +108,15 @@ class Tests(unittest.TestCase):
                 self.run_with(Path(td),state,runtime,stage,actor,manifest,census,old)
             self.assertEqual(old.call_count,1)
             result=self.run_with(Path(td),state,runtime,stage,actor,manifest,census,old)
-        self.assertEqual(old.call_count,1);self.assertTrue(result['verified']);self.assertEqual(len(actor.calls),3)
+        expected_actions=[
+            '$JS.API.STREAM.UPDATE.chat_events',
+            '$JS.API.STREAM.UPDATE.social_events',
+            '$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',
+            '$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat',
+            '$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role',
+        ]
+        self.assertEqual([action['api'] for action in state['nats_contract']['actions']],expected_actions)
+        self.assertEqual(old.call_count,1);self.assertTrue(result['verified']);self.assertEqual(actor.calls,expected_actions)
         self.assertEqual(result['proof']['old_consumers_preserved'],1)
         self.assertEqual(result['old_consumer_state_files_verified'],1)
 

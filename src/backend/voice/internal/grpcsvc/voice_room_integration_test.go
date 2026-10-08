@@ -26,12 +26,30 @@ type voiceRoomFixture struct {
 	svc         *VoiceGRPC
 	spaceID     string
 	voiceRoomID string
+	events      *recordingEvents
+}
+
+const (
+	fixtureProfileOwner    = "00000000-0000-4000-8000-000000000001"
+	fixtureProfileMember   = "00000000-0000-4000-8000-000000000002"
+	fixtureProfileStranger = "00000000-0000-4000-8000-000000000003"
+	fixtureProfileOutsider = "00000000-0000-4000-8000-000000000004"
+)
+
+func fixtureProfileOrdinal(index int) string {
+	return fmt.Sprintf("00000000-0000-4000-8000-%012d", index+100)
 }
 
 type voiceRolePermissionCheck struct {
 	spaceID     string
 	profileID   string
 	voiceRoomID string
+}
+
+type failingSpaceMediaRevoker struct{ err error }
+
+func (r failingSpaceMediaRevoker) RevokeSpaceMediaParticipant(_ context.Context, call voicestore.Call, _ voicestore.SpaceMediaParticipant) (voicestore.Call, bool, error) {
+	return call, false, r.err
 }
 
 // recordingVoiceRolePermissions is a test double for the complete Space voice
@@ -86,14 +104,18 @@ func startVoiceRoomFixture(t *testing.T) voiceRoomFixture {
 	voiceRoomID := uuid.New().String()
 	members := map[string]map[string]bool{
 		spaceID: {
-			"profile-owner":  true,
-			"profile-member": true,
+			fixtureProfileOwner:  true,
+			fixtureProfileMember: true,
 		},
 	}
-	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
+	events := &recordingEvents{}
+	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), events)
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
-	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
-	return voiceRoomFixture{svc: svc, spaceID: spaceID, voiceRoomID: voiceRoomID}
+	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members, accessEpoch: 11})
+	svc.Roles = &mapRolePermissions{allowed: map[string]map[string]bool{
+		spaceID: {fixtureProfileOwner: true, fixtureProfileMember: true},
+	}}
+	return voiceRoomFixture{svc: svc, spaceID: spaceID, voiceRoomID: voiceRoomID, events: events}
 }
 
 func (f voiceRoomFixture) joinReq(profileID string) *callsv1.JoinVoiceRoomRequest {
@@ -105,16 +127,16 @@ func (f voiceRoomFixture) joinReq(profileID string) *callsv1.JoinVoiceRoomReques
 
 func (f voiceRoomFixture) joinParticipants(t *testing.T) string {
 	t.Helper()
-	joined, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	joined, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
 	require.NoError(t, err)
 	return joined.GetVoiceSession().GetRoomId()
 }
 
 func (f voiceRoomFixture) participantState(t *testing.T, roomID, profileID string) *callsv1.VoiceParticipantState {
 	t.Helper()
-	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-owner"), &callsv1.GetVoiceStatesRequest{RoomId: roomID})
+	states, err := f.svc.GetVoiceStates(voiceTestCtx(fixtureProfileOwner), &callsv1.GetVoiceStatesRequest{RoomId: roomID})
 	require.NoError(t, err)
 	for _, state := range states.GetParticipants() {
 		if state.GetProfileId() == profileID {
@@ -162,7 +184,7 @@ func liveKitCanPublish(t *testing.T, token string) (allowed, present bool) {
 func TestVoiceGRPCJoinVoiceRoom_createsActiveSession(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	joined, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	joined, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
 	session := joined.GetVoiceSession()
 	require.NotEmpty(t, session.GetRoomId())
@@ -173,13 +195,13 @@ func TestVoiceGRPCJoinVoiceRoom_createsActiveSession(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_memberJoinsExistingRoom(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
 	require.NoError(t, err)
 
-	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-member"), &callsv1.GetVoiceStatesRequest{
+	states, err := f.svc.GetVoiceStates(voiceTestCtx(fixtureProfileMember), &callsv1.GetVoiceStatesRequest{
 		VoiceRoomId: &f.voiceRoomID,
 	})
 	require.NoError(t, err)
@@ -197,7 +219,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 	}{
 		{
 			name:         "denied member receives listen-only token",
-			profileID:    "profile-member",
+			profileID:    fixtureProfileMember,
 			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: ErrVoiceSpeakDenied},
 			wantCode:     codes.OK,
 			wantPublish:  false,
@@ -205,7 +227,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 		},
 		{
 			name:         "allowed member receives publish token",
-			profileID:    "profile-member",
+			profileID:    fixtureProfileMember,
 			roles:        &recordingVoiceRolePermissions{},
 			wantCode:     codes.OK,
 			wantPublish:  true,
@@ -213,7 +235,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 		},
 		{
 			name:         "owner-shaped role allow receives publish token",
-			profileID:    "profile-owner",
+			profileID:    fixtureProfileOwner,
 			roles:        &recordingVoiceRolePermissions{},
 			wantCode:     codes.OK,
 			wantPublish:  true,
@@ -221,14 +243,14 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 		},
 		{
 			name:         "role unavailable fails closed",
-			profileID:    "profile-member",
+			profileID:    fixtureProfileMember,
 			roles:        &recordingVoiceRolePermissions{voiceSpeakErr: errors.New("role service unavailable")},
 			wantCode:     codes.PermissionDenied,
 			wantRoleCall: true,
 		},
 		{
 			name:      "role checker missing fails closed",
-			profileID: "profile-member",
+			profileID: fixtureProfileMember,
 			wantCode:  codes.PermissionDenied,
 		},
 	}
@@ -236,14 +258,40 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			f := startVoiceRoomFixture(t)
-			roomID := f.joinParticipants(t)
-			f.svc.Roles = tc.roles
-
-			response, err := f.svc.GetJoinToken(voiceTestCtx(tc.profileID), &callsv1.GetJoinTokenRequest{RoomId: roomID})
+			ownerProfileID, memberProfileID := uuid.NewString(), uuid.NewString()
+			members := map[string]map[string]bool{f.spaceID: {
+				ownerProfileID:  true,
+				memberProfileID: true,
+			}}
+			f.svc.SpaceMembers = &mapSpaceMembers{members: members}
+			configureReadySpaceMediaFixture(f.svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{f.voiceRoomID: f.spaceID}, members: members, accessEpoch: 11})
+			f.svc.SpaceVoiceRoomGrants = staticSpaceMediaGrants{grants: CanonicalVoiceRoomGrants{
+				PolicyEpoch: 7, CanJoin: true, CanPublishAudio: tc.wantPublish, CanSubscribe: true,
+			}}
+			joinRoles := tc.roles
+			if joinRoles == nil {
+				joinRoles = &recordingVoiceRolePermissions{}
+			}
+			f.svc.Roles = joinRoles
+			_, err := joinSpaceVoiceUser(t, f.svc, ownerProfileID, f.joinReq(ownerProfileID))
+			require.NoError(t, err)
+			joined, err := joinSpaceVoiceUser(t, f.svc, memberProfileID, f.joinReq(memberProfileID))
+			require.NoError(t, err)
+			roomID := joined.GetVoiceSession().GetRoomId()
+			profileID := memberProfileID
+			if tc.profileID == fixtureProfileOwner {
+				profileID = ownerProfileID
+			}
+			request := &callsv1.GetJoinTokenRequest{RoomId: roomID}
+			ctx := verifiedVoiceUserContext(t, callsv1.VoiceService_GetJoinToken_FullMethodName, request, fixtureAccountID(profileID), profileID, 9)
+			if tc.roles == nil {
+				f.svc.Roles = nil
+			}
+			response, err := f.svc.GetJoinToken(ctx, request)
 			require.Equal(t, tc.wantCode, status.Code(err))
 			if tc.wantRoleCall {
 				roles := tc.roles.(*recordingVoiceRolePermissions)
-				requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, tc.profileID, f.voiceRoomID)
+				requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, profileID, f.voiceRoomID)
 			}
 			if tc.wantCode != codes.OK {
 				require.Nil(t, response)
@@ -260,7 +308,7 @@ func TestVoiceGRPCVoiceRoom_joinTokenPublishGrantFollowsVoiceSpeakPermission(t *
 func TestVoiceGRPCVoiceRoom_nonMemberDenied(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-stranger"), f.joinReq("profile-stranger"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileStranger, f.joinReq(fixtureProfileStranger))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
@@ -270,15 +318,43 @@ func TestVoiceGRPCJoinVoiceRoom_roleDenyPermissionDenied(t *testing.T) {
 	t.Parallel()
 	f := startVoiceRoomFixture(t)
 	f.svc.Roles = &mapRolePermissions{allowed: map[string]map[string]bool{
-		f.spaceID: {"profile-owner": true},
+		f.spaceID: {fixtureProfileOwner: true},
 	}}
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err = joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
+}
+
+func TestVoiceGRPCJoinVoiceRoom_roleDependencyFailsClosedBeforeSideEffects(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		role RolePermissionChecker
+		want codes.Code
+	}{
+		{name: "missing Role dependency", role: nil, want: codes.Unavailable},
+		{name: "unavailable Role dependency", role: &recordingVoiceRolePermissions{voiceJoinErr: status.Error(codes.Unavailable, "Role unavailable")}, want: codes.Unavailable},
+		{name: "denied by Role", role: &recordingVoiceRolePermissions{voiceJoinErr: ErrVoiceJoinDenied}, want: codes.PermissionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := startVoiceRoomFixture(t)
+			calls := &createCountingCallStore{CallStore: f.svc.Calls}
+			f.svc.Calls = calls
+			f.svc.Roles = tc.role
+
+			_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
+			require.Equal(t, tc.want, status.Code(err))
+			require.Zero(t, calls.createCalls, "denial must precede call/session persistence")
+			_, err = calls.GetCallByVoiceRoomID(t.Context(), f.voiceRoomID)
+			require.ErrorIs(t, err, voicestore.ErrNotFound, "denial must leave no room roster")
+			require.Empty(t, f.events.startedCall, "denial must publish no call-start event")
+			require.Empty(t, f.events.memberJoined, "denial must publish no participant event")
+		})
+	}
 }
 
 // TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny documents roles.md room overrides:
@@ -289,19 +365,19 @@ func TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny(t *testing.T) {
 	f.svc.Roles = &mapRolePermissions{
 		allowed: map[string]map[string]bool{
 			f.spaceID: {
-				"profile-owner":  true,
-				"profile-member": true,
+				fixtureProfileOwner:  true,
+				fixtureProfileMember: true,
 			},
 		},
 		deniedRooms: map[string]map[string]bool{
-			f.voiceRoomID: {"profile-member": true},
+			f.voiceRoomID: {fixtureProfileMember: true},
 		},
 	}
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
 
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	require.Contains(t, status.Convert(err).Message(), "voice join not permitted")
 }
@@ -309,58 +385,92 @@ func TestVoiceGRPCJoinVoiceRoom_voiceRoomOverrideDeny(t *testing.T) {
 func TestVoiceGRPCVoiceRoom_spaceMemberViewsRosterWithoutJoining(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
 
-	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-member"), &callsv1.GetVoiceStatesRequest{
+	states, err := f.svc.GetVoiceStates(voiceTestCtx(fixtureProfileMember), &callsv1.GetVoiceStatesRequest{
 		VoiceRoomId: &f.voiceRoomID,
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 1)
 }
 
-func TestVoiceGRPCVoiceRoom_leaveRemovesParticipant(t *testing.T) {
+func TestVoiceGRPCVoiceRoom_revokedMemberCanLeaveAndOtherProfileCannotRemoveParticipant(t *testing.T) {
 	f := startVoiceRoomFixture(t)
 
-	_, err := f.svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), f.joinReq("profile-owner"))
+	_, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
 	require.NoError(t, err)
-	_, err = f.svc.JoinVoiceRoom(voiceTestCtx("profile-member"), f.joinReq("profile-member"))
+	_, err = joinSpaceVoiceUser(t, f.svc, fixtureProfileMember, f.joinReq(fixtureProfileMember))
 	require.NoError(t, err)
+	spaceMembers := f.svc.SpaceMembers.(*mapSpaceMembers)
+	delete(spaceMembers.members[f.spaceID], fixtureProfileMember)
 
-	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx("profile-member"), &callsv1.LeaveVoiceRoomRequest{
+	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileMember), &callsv1.LeaveVoiceRoomRequest{
 		VoiceRoomId: f.voiceRoomID,
 	})
 	require.NoError(t, err)
 
-	states, err := f.svc.GetVoiceStates(voiceTestCtx("profile-owner"), &callsv1.GetVoiceStatesRequest{
+	states, err := f.svc.GetVoiceStates(voiceTestCtx(fixtureProfileOwner), &callsv1.GetVoiceStatesRequest{
 		VoiceRoomId: &f.voiceRoomID,
 	})
 	require.NoError(t, err)
 	require.Len(t, states.GetParticipants(), 1)
+
+	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileOutsider), &callsv1.LeaveVoiceRoomRequest{
+		VoiceRoomId: f.voiceRoomID,
+	})
+	require.NoError(t, err)
+	states, err = f.svc.GetVoiceStates(voiceTestCtx(fixtureProfileOwner), &callsv1.GetVoiceStatesRequest{
+		VoiceRoomId: &f.voiceRoomID,
+	})
+	require.NoError(t, err)
+	require.Len(t, states.GetParticipants(), 1, "a different profile's leave cannot remove the remaining participant")
+}
+
+func TestVoiceGRPCVoiceRoom_leaveEjectionFailureKeepsMediaTargetAndRoster(t *testing.T) {
+	f := startVoiceRoomFixture(t)
+	joined, err := joinSpaceVoiceUser(t, f.svc, fixtureProfileOwner, f.joinReq(fixtureProfileOwner))
+	require.NoError(t, err)
+	call, err := f.svc.Calls.GetCall(t.Context(), joined.GetVoiceSession().GetRoomId())
+	require.NoError(t, err)
+	call, err = f.svc.Calls.AdmitSpaceMediaParticipant(t.Context(), call.RoomID, voicestore.SpaceMediaParticipant{
+		ProfileID: fixtureProfileOwner, Identity: "space-media-owner", Generation: uuid.NewString(),
+		Issued: voicestore.SpaceMediaGrant{SessionEpoch: 1, AccessEpoch: 1, PolicyEpoch: 1, CanJoin: true, CanSubscribe: true},
+	}, voicestore.MaxSpaceProVoiceParticipants)
+	require.NoError(t, err)
+	f.svc.SpaceMediaRevoker = failingSpaceMediaRevoker{err: errors.New("ejection unavailable")}
+
+	_, err = f.svc.LeaveVoiceRoom(voiceTestCtx(fixtureProfileOwner), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: f.voiceRoomID})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	current, err := f.svc.Calls.GetCall(t.Context(), call.RoomID)
+	require.NoError(t, err)
+	require.True(t, current.IsParticipant(fixtureProfileOwner), "failed ejection must not remove the Voice roster entry")
+	require.Equal(t, "space-media-owner", current.SpaceMedia[fixtureProfileOwner].Identity, "failed ejection must retain the exact media target")
 }
 
 func TestVoiceGRPCVoiceRoom_max32Participants(t *testing.T) {
 	spaceID := uuid.New().String()
 	voiceRoomID := uuid.New().String()
-	members := map[string]map[string]bool{spaceID: {"profile-owner": true}}
+	members := map[string]map[string]bool{spaceID: {fixtureProfileOwner: true}}
 	for i := 1; i <= 32; i++ {
-		members[spaceID][fmt.Sprintf("profile-%02d", i)] = true
+		members[spaceID][fixtureProfileOrdinal(i)] = true
 	}
 	svc := newTestVoiceService(time.Unix(1700000000, 0).UTC(), &recordingEvents{})
 	svc.SpaceMembers = &mapSpaceMembers{members: members}
-	svc.VoiceRoomAccessResolver = fixtureCanonicalVoiceRoomResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members}
+	configureReadySpaceMediaFixture(svc, fixtureSpaceMediaAccessResolver{rooms: map[string]string{voiceRoomID: spaceID}, members: members, accessEpoch: 11})
+	svc.Roles = &canonicalRolePermissions{}
 	join := &callsv1.JoinVoiceRoomRequest{
 		VoiceRoomId: voiceRoomID,
 		Space:       &spacev1.SpaceRef{Id: spaceID},
 	}
 
-	_, err := svc.JoinVoiceRoom(voiceTestCtx("profile-owner"), join)
+	_, err := joinSpaceVoiceUser(t, svc, fixtureProfileOwner, join)
 	require.NoError(t, err)
 	for i := 1; i < 32; i++ {
-		_, err = svc.JoinVoiceRoom(voiceTestCtx(fmt.Sprintf("profile-%02d", i)), join)
+		_, err = joinSpaceVoiceUser(t, svc, fixtureProfileOrdinal(i), join)
 		require.NoError(t, err, "participant %d", i)
 	}
-	_, err = svc.JoinVoiceRoom(voiceTestCtx("profile-32"), join)
+	_, err = joinSpaceVoiceUser(t, svc, fixtureProfileOrdinal(32), join)
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }
 
@@ -371,22 +481,22 @@ func TestVoiceGRPCVoiceRoom_voiceSpeakDenialBlocksUnmuteButAllowsSelfMute(t *tes
 	roomID := f.joinParticipants(t)
 
 	muted := true
-	_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+	_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 		RoomId:  roomID,
 		IsMuted: &muted,
 	})
 	require.NoError(t, err, "self-mute must not require VOICE_SPEAK")
 	require.Empty(t, roles.voiceSpeakChecks, "self-mute must not call Role Service")
-	require.True(t, f.participantState(t, roomID, "profile-owner").GetIsMuted())
+	require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted())
 
 	unmuted := false
-	_, err = f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+	_, err = f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 		RoomId:  roomID,
 		IsMuted: &unmuted,
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, "profile-owner", f.voiceRoomID)
-	require.True(t, f.participantState(t, roomID, "profile-owner").GetIsMuted(), "denied unmute must not mutate state")
+	requireVoiceRoleCheck(t, roles.voiceSpeakChecks, f.spaceID, fixtureProfileOwner, f.voiceRoomID)
+	require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted(), "denied unmute must not mutate state")
 }
 
 func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker(t *testing.T) {
@@ -403,19 +513,19 @@ func TestVoiceGRPCVoiceRoom_unmuteFailsClosedWithoutOrWithUnavailableRoleChecker
 			f.svc.Roles = tc.roles
 			roomID := f.joinParticipants(t)
 			muted := true
-			_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+			_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 				RoomId:  roomID,
 				IsMuted: &muted,
 			})
 			require.NoError(t, err, "self-mute remains available during Role outage")
 
 			unmuted := false
-			_, err = f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+			_, err = f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 				RoomId:  roomID,
 				IsMuted: &unmuted,
 			})
 			require.Equal(t, codes.PermissionDenied, status.Code(err))
-			require.True(t, f.participantState(t, roomID, "profile-owner").GetIsMuted(), "failed-closed unmute must not mutate state")
+			require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted(), "failed-closed unmute must not mutate state")
 		})
 	}
 }
@@ -427,12 +537,12 @@ func TestVoiceGRPCVoiceRoom_nonMutePatchDoesNotRequireVoiceSpeak(t *testing.T) {
 	roomID := f.joinParticipants(t)
 	deafened := true
 
-	_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+	_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 		RoomId:     roomID,
 		IsDeafened: &deafened,
 	})
 	require.NoError(t, err, "an absent is_muted patch is not an unmute")
-	require.True(t, f.participantState(t, roomID, "profile-owner").GetIsDeafened())
+	require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsDeafened())
 	require.Empty(t, roles.voiceSpeakChecks, "a non-mute patch must not call VOICE_SPEAK")
 }
 
@@ -441,7 +551,7 @@ func TestVoiceGRPCUpdateVoiceState_groupNonMutePatchAllowsMissingRoleChecker(t *
 	var noRoles RolePermissionChecker
 	svc.Roles = noRoles
 	group := chatv1.ChatType_CHAT_TYPE_GROUP
-	started, err := svc.StartCall(voiceTestCtx("profile-owner"), &callsv1.StartCallRequest{
+	started, err := svc.StartCall(voiceTestCtx(fixtureProfileOwner), &callsv1.StartCallRequest{
 		RoomTypeEnum: callsv1.VoiceSessionKind_VOICE_SESSION_KIND_GROUP_VOICE.Enum(),
 		LinkedChat:   &chatv1.ChatRef{Id: "group-chat-1", Type: &group},
 		MediaKind:    mediaPtr(callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO),
@@ -450,14 +560,14 @@ func TestVoiceGRPCUpdateVoiceState_groupNonMutePatchAllowsMissingRoleChecker(t *
 	roomID := started.GetCallSession().GetRoomId()
 	deafened := true
 
-	_, err = svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{
+	_, err = svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{
 		RoomId:     roomID,
 		IsDeafened: &deafened,
 	})
 	require.NoError(t, err, "group voice has no Space Role scope")
-	states, err := svc.GetVoiceStates(voiceTestCtx("profile-owner"), &callsv1.GetVoiceStatesRequest{RoomId: roomID})
+	states, err := svc.GetVoiceStates(voiceTestCtx(fixtureProfileOwner), &callsv1.GetVoiceStatesRequest{RoomId: roomID})
 	require.NoError(t, err)
-	require.True(t, findParticipantState(states.GetParticipants(), "profile-owner").GetIsDeafened())
+	require.True(t, findParticipantState(states.GetParticipants(), fixtureProfileOwner).GetIsDeafened())
 }
 
 func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *testing.T) {
@@ -465,47 +575,47 @@ func TestVoiceGRPCVoiceRoom_protectedActionsFailClosedWithoutRoleChecker(t *test
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
 		muted := true
-		_, err := f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &muted})
+		_, err := f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &muted})
 		require.NoError(t, err)
 		unmuted := false
-		_, err = f.svc.UpdateVoiceState(voiceTestCtx("profile-owner"), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &unmuted})
+		_, err = f.svc.UpdateVoiceState(voiceTestCtx(fixtureProfileOwner), &callsv1.UpdateVoiceStateRequest{RoomId: roomID, IsMuted: &unmuted})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		require.True(t, f.participantState(t, roomID, "profile-owner").GetIsMuted())
+		require.True(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsMuted())
 	})
 
 	t.Run("enable commander mode", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
-		_, err := f.svc.SetCommanderMode(voiceTestCtx("profile-owner"), &callsv1.SetCommanderModeRequest{RoomId: roomID, Enabled: true})
+		_, err := f.svc.SetCommanderMode(voiceTestCtx(fixtureProfileOwner), &callsv1.SetCommanderModeRequest{RoomId: roomID, Enabled: true})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		require.False(t, f.participantState(t, roomID, "profile-owner").GetIsCommander())
+		require.False(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsCommander())
 	})
 
 	t.Run("begin broadcasting", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
 		commander := true
-		f.setParticipantState(t, roomID, "profile-owner", voicestore.VoiceStatePatch{IsCommander: &commander})
-		_, err := f.svc.SetBroadcasting(voiceTestCtx("profile-owner"), &callsv1.SetBroadcastingRequest{RoomId: roomID, Enabled: true})
+		f.setParticipantState(t, roomID, fixtureProfileOwner, voicestore.VoiceStatePatch{IsCommander: &commander})
+		_, err := f.svc.SetBroadcasting(voiceTestCtx(fixtureProfileOwner), &callsv1.SetBroadcastingRequest{RoomId: roomID, Enabled: true})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		require.False(t, f.participantState(t, roomID, "profile-owner").GetIsBroadcasting())
+		require.False(t, f.participantState(t, roomID, fixtureProfileOwner).GetIsBroadcasting())
 	})
 
 	t.Run("grant floor", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
-		_, err := f.svc.GrantFloor(voiceTestCtx("profile-owner"), &callsv1.GrantFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+		_, err := f.svc.GrantFloor(voiceTestCtx(fixtureProfileOwner), &callsv1.GrantFloorRequest{RoomId: roomID, ProfileId: fixtureProfileMember})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		require.False(t, f.participantState(t, roomID, "profile-member").GetHasFloor())
+		require.False(t, f.participantState(t, roomID, fixtureProfileMember).GetHasFloor())
 	})
 
 	t.Run("revoke floor", func(t *testing.T) {
 		f := startVoiceRoomFixture(t)
 		roomID := f.joinParticipants(t)
 		hasFloor := true
-		f.setParticipantState(t, roomID, "profile-member", voicestore.VoiceStatePatch{HasFloor: &hasFloor})
-		_, err := f.svc.RevokeFloor(voiceTestCtx("profile-owner"), &callsv1.RevokeFloorRequest{RoomId: roomID, ProfileId: "profile-member"})
+		f.setParticipantState(t, roomID, fixtureProfileMember, voicestore.VoiceStatePatch{HasFloor: &hasFloor})
+		_, err := f.svc.RevokeFloor(voiceTestCtx(fixtureProfileOwner), &callsv1.RevokeFloorRequest{RoomId: roomID, ProfileId: fixtureProfileMember})
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		require.True(t, f.participantState(t, roomID, "profile-member").GetHasFloor())
+		require.True(t, f.participantState(t, roomID, fixtureProfileMember).GetHasFloor())
 	})
 }
