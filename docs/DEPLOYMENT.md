@@ -490,6 +490,36 @@ but ownership transfer stays unavailable. A configured Space Role integration
 with an absent signer or dedicated client denies transfer before its database
 mutation. Public Auth proof confirmation remains a separate activation gate.
 
+## Notification-to-User routing-presence principal
+
+The Notification presence client is a dedicated internal capability, separate
+from User's public viewer-filtered presence RPCs. User serves only
+`GetNotificationRoutingPresence` on its signed-principal TLS listener. For
+User, configure `USER_NOTIFICATION_PRINCIPAL_TLS_CERT_FILE`,
+`USER_NOTIFICATION_PRINCIPAL_TLS_KEY_FILE`,
+`USER_NOTIFICATION_PRINCIPAL_REPLAY_REDIS_ADDR`, and optionally
+`USER_NOTIFICATION_PRINCIPAL_GRPC_LISTEN` (default `:9095`). Its trusted
+`S2S_JWKS_URLS_JSON` map must include the `notification` issuer's HTTPS JWKS
+endpoint; use `S2S_JWKS_CA_FILE` when that endpoint uses a private CA.
+
+Notification's signer uses
+`NOTIFICATION_PRINCIPAL_SIGNING_KEYS_DIR` (the current and next private-key
+PEM files), `NOTIFICATION_PRINCIPAL_ACTIVE_KID`,
+`NOTIFICATION_PRINCIPAL_JWKS_LISTEN`,
+`NOTIFICATION_PRINCIPAL_JWKS_TLS_CERT_FILE`, and
+`NOTIFICATION_PRINCIPAL_JWKS_TLS_KEY_FILE`. Its User client uses
+`USER_NOTIFICATION_PRINCIPAL_GRPC_ADDR`,
+`USER_NOTIFICATION_PRINCIPAL_TLS_CA_FILE`, and
+`USER_NOTIFICATION_PRINCIPAL_TLS_SERVER_NAME`. Keep private keys and
+certificates in the service's existing secret mounts; do not reuse another
+issuer's signing key. Partial Notification client/listener configuration is a
+startup error. With no Notification authority configured, message delivery
+fails closed and the event is retried rather than routed as offline.
+
+This configuration documents source requirements only. A rollout still
+requires the normal operator-managed certificates, trusted issuer entry, key
+rotation and deployment procedure.
+
 ## Auth-to-User SDK profile principal
 
 Auth's T14 RS256 signer and request-bound `GetSdkProfileEligibility` client are

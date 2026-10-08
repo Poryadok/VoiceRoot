@@ -19,43 +19,44 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_EnsurePrimaryProfile_FullMethodName          = "/voice.user.v1.UserService/EnsurePrimaryProfile"
-	UserService_ListProfileIDsForAccount_FullMethodName      = "/voice.user.v1.UserService/ListProfileIDsForAccount"
-	UserService_ResolveAccountIDForProfile_FullMethodName    = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
-	UserService_GetDMPeerDisplayNames_FullMethodName         = "/voice.user.v1.UserService/GetDMPeerDisplayNames"
-	UserService_ResolvePrimaryProfileIDs_FullMethodName      = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
-	UserService_MarkAccountRegular_FullMethodName            = "/voice.user.v1.UserService/MarkAccountRegular"
-	UserService_GetSdkProfileEligibility_FullMethodName      = "/voice.user.v1.UserService/GetSdkProfileEligibility"
-	UserService_RecordSdkAuthorTombstone_FullMethodName      = "/voice.user.v1.UserService/RecordSdkAuthorTombstone"
-	UserService_GetProfile_FullMethodName                    = "/voice.user.v1.UserService/GetProfile"
-	UserService_GetProfiles_FullMethodName                   = "/voice.user.v1.UserService/GetProfiles"
-	UserService_UpdateProfile_FullMethodName                 = "/voice.user.v1.UserService/UpdateProfile"
-	UserService_CreateProfile_FullMethodName                 = "/voice.user.v1.UserService/CreateProfile"
-	UserService_DeleteProfile_FullMethodName                 = "/voice.user.v1.UserService/DeleteProfile"
-	UserService_SwitchProfile_FullMethodName                 = "/voice.user.v1.UserService/SwitchProfile"
-	UserService_ListMyProfiles_FullMethodName                = "/voice.user.v1.UserService/ListMyProfiles"
-	UserService_SearchProfiles_FullMethodName                = "/voice.user.v1.UserService/SearchProfiles"
-	UserService_GetPrivacySettings_FullMethodName            = "/voice.user.v1.UserService/GetPrivacySettings"
-	UserService_UpdatePrivacySettings_FullMethodName         = "/voice.user.v1.UserService/UpdatePrivacySettings"
-	UserService_UpdatePresence_FullMethodName                = "/voice.user.v1.UserService/UpdatePresence"
-	UserService_GetPresence_FullMethodName                   = "/voice.user.v1.UserService/GetPresence"
-	UserService_GetBulkPresence_FullMethodName               = "/voice.user.v1.UserService/GetBulkPresence"
-	UserService_GetSettings_FullMethodName                   = "/voice.user.v1.UserService/GetSettings"
-	UserService_UpdateSettings_FullMethodName                = "/voice.user.v1.UserService/UpdateSettings"
-	UserService_GetOnboardingState_FullMethodName            = "/voice.user.v1.UserService/GetOnboardingState"
-	UserService_CompleteOnboardingStep_FullMethodName        = "/voice.user.v1.UserService/CompleteOnboardingStep"
-	UserService_GetVerificationStatus_FullMethodName         = "/voice.user.v1.UserService/GetVerificationStatus"
-	UserService_SetVerification_FullMethodName               = "/voice.user.v1.UserService/SetVerification"
-	UserService_ClearVerification_FullMethodName             = "/voice.user.v1.UserService/ClearVerification"
-	UserService_ApplyVerificationSourceState_FullMethodName  = "/voice.user.v1.UserService/ApplyVerificationSourceState"
-	UserService_StartOrganizationVerification_FullMethodName = "/voice.user.v1.UserService/StartOrganizationVerification"
-	UserService_CheckOrganizationVerification_FullMethodName = "/voice.user.v1.UserService/CheckOrganizationVerification"
-	UserService_ApplyDowngradeProfiles_FullMethodName        = "/voice.user.v1.UserService/ApplyDowngradeProfiles"
-	UserService_CreateAvatarPresignedUpload_FullMethodName   = "/voice.user.v1.UserService/CreateAvatarPresignedUpload"
-	UserService_BeginSearchProfileSnapshot_FullMethodName    = "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
-	UserService_ListSearchProfileSnapshot_FullMethodName     = "/voice.user.v1.UserService/ListSearchProfileSnapshot"
-	UserService_ListSearchProfileJournal_FullMethodName      = "/voice.user.v1.UserService/ListSearchProfileJournal"
-	UserService_GetSearchProfileCheckpoint_FullMethodName    = "/voice.user.v1.UserService/GetSearchProfileCheckpoint"
+	UserService_EnsurePrimaryProfile_FullMethodName           = "/voice.user.v1.UserService/EnsurePrimaryProfile"
+	UserService_ListProfileIDsForAccount_FullMethodName       = "/voice.user.v1.UserService/ListProfileIDsForAccount"
+	UserService_ResolveAccountIDForProfile_FullMethodName     = "/voice.user.v1.UserService/ResolveAccountIDForProfile"
+	UserService_GetDMPeerDisplayNames_FullMethodName          = "/voice.user.v1.UserService/GetDMPeerDisplayNames"
+	UserService_ResolvePrimaryProfileIDs_FullMethodName       = "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
+	UserService_MarkAccountRegular_FullMethodName             = "/voice.user.v1.UserService/MarkAccountRegular"
+	UserService_GetSdkProfileEligibility_FullMethodName       = "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	UserService_RecordSdkAuthorTombstone_FullMethodName       = "/voice.user.v1.UserService/RecordSdkAuthorTombstone"
+	UserService_GetProfile_FullMethodName                     = "/voice.user.v1.UserService/GetProfile"
+	UserService_GetProfiles_FullMethodName                    = "/voice.user.v1.UserService/GetProfiles"
+	UserService_UpdateProfile_FullMethodName                  = "/voice.user.v1.UserService/UpdateProfile"
+	UserService_CreateProfile_FullMethodName                  = "/voice.user.v1.UserService/CreateProfile"
+	UserService_DeleteProfile_FullMethodName                  = "/voice.user.v1.UserService/DeleteProfile"
+	UserService_SwitchProfile_FullMethodName                  = "/voice.user.v1.UserService/SwitchProfile"
+	UserService_ListMyProfiles_FullMethodName                 = "/voice.user.v1.UserService/ListMyProfiles"
+	UserService_SearchProfiles_FullMethodName                 = "/voice.user.v1.UserService/SearchProfiles"
+	UserService_GetPrivacySettings_FullMethodName             = "/voice.user.v1.UserService/GetPrivacySettings"
+	UserService_UpdatePrivacySettings_FullMethodName          = "/voice.user.v1.UserService/UpdatePrivacySettings"
+	UserService_UpdatePresence_FullMethodName                 = "/voice.user.v1.UserService/UpdatePresence"
+	UserService_GetPresence_FullMethodName                    = "/voice.user.v1.UserService/GetPresence"
+	UserService_GetBulkPresence_FullMethodName                = "/voice.user.v1.UserService/GetBulkPresence"
+	UserService_GetNotificationRoutingPresence_FullMethodName = "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	UserService_GetSettings_FullMethodName                    = "/voice.user.v1.UserService/GetSettings"
+	UserService_UpdateSettings_FullMethodName                 = "/voice.user.v1.UserService/UpdateSettings"
+	UserService_GetOnboardingState_FullMethodName             = "/voice.user.v1.UserService/GetOnboardingState"
+	UserService_CompleteOnboardingStep_FullMethodName         = "/voice.user.v1.UserService/CompleteOnboardingStep"
+	UserService_GetVerificationStatus_FullMethodName          = "/voice.user.v1.UserService/GetVerificationStatus"
+	UserService_SetVerification_FullMethodName                = "/voice.user.v1.UserService/SetVerification"
+	UserService_ClearVerification_FullMethodName              = "/voice.user.v1.UserService/ClearVerification"
+	UserService_ApplyVerificationSourceState_FullMethodName   = "/voice.user.v1.UserService/ApplyVerificationSourceState"
+	UserService_StartOrganizationVerification_FullMethodName  = "/voice.user.v1.UserService/StartOrganizationVerification"
+	UserService_CheckOrganizationVerification_FullMethodName  = "/voice.user.v1.UserService/CheckOrganizationVerification"
+	UserService_ApplyDowngradeProfiles_FullMethodName         = "/voice.user.v1.UserService/ApplyDowngradeProfiles"
+	UserService_CreateAvatarPresignedUpload_FullMethodName    = "/voice.user.v1.UserService/CreateAvatarPresignedUpload"
+	UserService_BeginSearchProfileSnapshot_FullMethodName     = "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
+	UserService_ListSearchProfileSnapshot_FullMethodName      = "/voice.user.v1.UserService/ListSearchProfileSnapshot"
+	UserService_ListSearchProfileJournal_FullMethodName       = "/voice.user.v1.UserService/ListSearchProfileJournal"
+	UserService_GetSearchProfileCheckpoint_FullMethodName     = "/voice.user.v1.UserService/GetSearchProfileCheckpoint"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -99,6 +100,9 @@ type UserServiceClient interface {
 	UpdatePresence(ctx context.Context, in *UpdatePresenceRequest, opts ...grpc.CallOption) (*UpdatePresenceResponse, error)
 	GetPresence(ctx context.Context, in *GetPresenceRequest, opts ...grpc.CallOption) (*GetPresenceResponse, error)
 	GetBulkPresence(ctx context.Context, in *GetBulkPresenceRequest, opts ...grpc.CallOption) (*GetBulkPresenceResponse, error)
+	// Internal Notification routing signal. This method is exposed only on the
+	// dedicated authenticated Notification principal listener.
+	GetNotificationRoutingPresence(ctx context.Context, in *GetNotificationRoutingPresenceRequest, opts ...grpc.CallOption) (*GetNotificationRoutingPresenceResponse, error)
 	GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error)
 	UpdateSettings(ctx context.Context, in *UpdateSettingsRequest, opts ...grpc.CallOption) (*UpdateSettingsResponse, error)
 	GetOnboardingState(ctx context.Context, in *GetOnboardingStateRequest, opts ...grpc.CallOption) (*GetOnboardingStateResponse, error)
@@ -341,6 +345,16 @@ func (c *userServiceClient) GetBulkPresence(ctx context.Context, in *GetBulkPres
 	return out, nil
 }
 
+func (c *userServiceClient) GetNotificationRoutingPresence(ctx context.Context, in *GetNotificationRoutingPresenceRequest, opts ...grpc.CallOption) (*GetNotificationRoutingPresenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetNotificationRoutingPresenceResponse)
+	err := c.cc.Invoke(ctx, UserService_GetNotificationRoutingPresence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSettingsResponse)
@@ -542,6 +556,9 @@ type UserServiceServer interface {
 	UpdatePresence(context.Context, *UpdatePresenceRequest) (*UpdatePresenceResponse, error)
 	GetPresence(context.Context, *GetPresenceRequest) (*GetPresenceResponse, error)
 	GetBulkPresence(context.Context, *GetBulkPresenceRequest) (*GetBulkPresenceResponse, error)
+	// Internal Notification routing signal. This method is exposed only on the
+	// dedicated authenticated Notification principal listener.
+	GetNotificationRoutingPresence(context.Context, *GetNotificationRoutingPresenceRequest) (*GetNotificationRoutingPresenceResponse, error)
 	GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error)
 	UpdateSettings(context.Context, *UpdateSettingsRequest) (*UpdateSettingsResponse, error)
 	GetOnboardingState(context.Context, *GetOnboardingStateRequest) (*GetOnboardingStateResponse, error)
@@ -636,6 +653,9 @@ func (UnimplementedUserServiceServer) GetPresence(context.Context, *GetPresenceR
 }
 func (UnimplementedUserServiceServer) GetBulkPresence(context.Context, *GetBulkPresenceRequest) (*GetBulkPresenceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkPresence not implemented")
+}
+func (UnimplementedUserServiceServer) GetNotificationRoutingPresence(context.Context, *GetNotificationRoutingPresenceRequest) (*GetNotificationRoutingPresenceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNotificationRoutingPresence not implemented")
 }
 func (UnimplementedUserServiceServer) GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSettings not implemented")
@@ -1084,6 +1104,24 @@ func _UserService_GetBulkPresence_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_GetNotificationRoutingPresence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetNotificationRoutingPresenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetNotificationRoutingPresence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetNotificationRoutingPresence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetNotificationRoutingPresence(ctx, req.(*GetNotificationRoutingPresenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_GetSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSettingsRequest)
 	if err := dec(in); err != nil {
@@ -1462,6 +1500,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBulkPresence",
 			Handler:    _UserService_GetBulkPresence_Handler,
+		},
+		{
+			MethodName: "GetNotificationRoutingPresence",
+			Handler:    _UserService_GetNotificationRoutingPresence_Handler,
 		},
 		{
 			MethodName: "GetSettings",

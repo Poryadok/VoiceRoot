@@ -28,6 +28,8 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/BeginSearchProfileSnapshot"
 	case "auth":
 		return "/voice.user.v1.UserService/GetSdkProfileEligibility"
+	case "notification":
+		return "/voice.user.v1.UserService/GetNotificationRoutingPresence"
 	}
 	return ""
 }
@@ -62,6 +64,8 @@ func AllowsMethod(target, method string) bool {
 			"/voice.user.v1.UserService/RecordSdkAuthorTombstone":
 			return true
 		}
+	case "notification":
+		return method == "/voice.user.v1.UserService/GetNotificationRoutingPresence"
 	}
 	return false
 }
@@ -219,6 +223,20 @@ func RequireSearchProjection(ctx context.Context, method string, req proto.Messa
 	return nil
 }
 
+// RequireNotificationPresence binds the narrow routing-only capability to the
+// exact User RPC. It never accepts a viewer or user identity.
+func RequireNotificationPresence(ctx context.Context, method string, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "notification" || verified.Subject != "service:notification" {
+		return status.Error(codes.PermissionDenied, "Notification principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || !AllowsMethod("notification", method) || verified.Audience != "user" || verified.RPC != method || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
+}
+
 // RequireSocial is the domain defense for a protected listener. Its context
 // value is server-owned and its request binding is checked again before storage.
 func RequireSocial(ctx context.Context, target string, req proto.Message) error {
@@ -252,6 +270,9 @@ func expectedIssuer(target string) string {
 	}
 	if target == "auth" {
 		return "auth"
+	}
+	if target == "notification" {
+		return "notification"
 	}
 	return "social"
 }

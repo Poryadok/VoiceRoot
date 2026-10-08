@@ -75,6 +75,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user SDK conversion principal config: %v", err)
 	}
+	notificationPresenceConfig, notificationPresenceEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "notification", "USER_NOTIFICATION_PRINCIPAL_", ":9095")
+	if err != nil {
+		log.Fatalf("user Notification presence principal config: %v", err)
+	}
 	searchProjectionCursorKey, err := searchprojection.CursorKeyFromEnv(searchPrincipalEnabled, os.Getenv)
 	if err != nil {
 		log.Fatalf("user search projection cursor config: %v", err)
@@ -126,6 +130,17 @@ func main() {
 			log.Fatalf("user SDK conversion principal: %v", err)
 		}
 		defer func() { _ = authSdkRuntime.Close() }()
+	}
+	var notificationPresenceRuntime *socialprincipal.Runtime
+	if notificationPresenceEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user Notification presence principal listener requires DATABASE_URL")
+		}
+		notificationPresenceRuntime, err = socialprincipal.New(context.Background(), notificationPresenceConfig)
+		if err != nil {
+			log.Fatalf("user Notification presence principal: %v", err)
+		}
+		defer func() { _ = notificationPresenceRuntime.Close() }()
 	}
 	metricsReg := prometheus.NewRegistry()
 	httpAddr := ":8080"
@@ -410,6 +425,22 @@ func main() {
 			go func() {
 				if err := authSDKServer.Serve(authSDKListener); err != nil {
 					log.Fatalf("user SDK conversion principal serve: %v", err)
+				}
+			}()
+		}
+		if notificationPresenceRuntime != nil {
+			notificationPresenceListener, err := net.Listen("tcp", notificationPresenceConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user Notification presence principal listen: %v", err)
+			}
+			notificationPresenceOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			notificationPresenceOptions = append(notificationPresenceOptions, notificationPresenceRuntime.ServerOptions()...)
+			notificationPresenceServer := grpc.NewServer(notificationPresenceOptions...)
+			grpcsvc.RegisterNotificationPresenceServer(notificationPresenceServer, userSvc)
+			defer notificationPresenceServer.Stop()
+			go func() {
+				if err := notificationPresenceServer.Serve(notificationPresenceListener); err != nil {
+					log.Fatalf("user Notification presence principal serve: %v", err)
 				}
 			}()
 		}

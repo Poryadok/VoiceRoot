@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"testing"
@@ -25,4 +26,43 @@ func TestProtectedPrivacyDomainRequiresVerifiedSocial(t *testing.T) {
 	p.Subject = "service:chat"
 	_, err = svc.GetPrivacySettings(principal.WithVerified(context.Background(), p), req)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestNotificationRoutingPresenceRequiresDedicatedPrincipal(t *testing.T) {
+	req := &userv1.GetNotificationRoutingPresenceRequest{ProfileId: "77e391a9-6fb2-48b8-ad2e-cbc6d33a8eaf"}
+	svc := &NotificationPresenceGRPC{User: &UserGRPC{}}
+	_, err := svc.GetNotificationRoutingPresence(context.Background(), req)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	valid := principal.Principal{Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: userv1.UserService_GetNotificationRoutingPresence_FullMethodName, RequestHash: hash}
+	_, err = svc.GetNotificationRoutingPresence(principal.WithVerified(context.Background(), valid), req)
+	require.Equal(t, codes.Unavailable, status.Code(err), "a correctly bound internal principal reaches the service dependency")
+
+	wrong := valid
+	wrong.Issuer, wrong.Subject = "social", "service:social"
+	_, err = svc.GetNotificationRoutingPresence(principal.WithVerified(context.Background(), wrong), req)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = (&UserGRPC{}).GetNotificationRoutingPresence(context.Background(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err), "the public User registration does not expose this internal method")
+}
+
+type serviceDescriptorRecorder struct {
+	desc *grpc.ServiceDesc
+	impl any
+}
+
+func (r *serviceDescriptorRecorder) RegisterService(desc *grpc.ServiceDesc, impl any) {
+	r.desc, r.impl = desc, impl
+}
+
+func TestRegisterNotificationPresenceServerExposesOnlyRoutingRPC(t *testing.T) {
+	var registrar serviceDescriptorRecorder
+	RegisterNotificationPresenceServer(&registrar, &UserGRPC{})
+	require.NotNil(t, registrar.desc)
+	require.Len(t, registrar.desc.Methods, 1)
+	require.Equal(t, "GetNotificationRoutingPresence", registrar.desc.Methods[0].MethodName)
+	require.Empty(t, registrar.desc.Streams)
 }

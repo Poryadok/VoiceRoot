@@ -55,6 +55,29 @@ func TestLoadFromEnvWithPrefix_IsolatesUserFileListener(t *testing.T) {
 	require.Equal(t, map[string]string{"file": "https://file:8443/.well-known/jwks.json"}, cfg.JWKSURLs)
 }
 
+func TestLoadFromEnvWithAudience_ConfiguresNotificationOnlyCapability(t *testing.T) {
+	const prefix = "USER_NOTIFICATION_PRINCIPAL_"
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"notification":"https://notification:8443/.well-known/jwks.json"}`)
+	_, enabled, err := LoadFromEnvWithAudience("user", "notification", prefix, ":9095")
+	require.NoError(t, err)
+	require.False(t, enabled, "shared JWKS configuration must not enable the dedicated listener")
+
+	t.Setenv(prefix+"TLS_CERT_FILE", "cert.pem")
+	_, enabled, err = LoadFromEnvWithAudience("user", "notification", prefix, ":9095")
+	require.Error(t, err, "partial listener config must fail closed")
+	require.True(t, enabled)
+
+	t.Setenv(prefix+"TLS_KEY_FILE", "key.pem")
+	t.Setenv(prefix+"REPLAY_REDIS_ADDR", "redis:6379")
+	cfg, enabled, err := LoadFromEnvWithAudience("user", "notification", prefix, ":9095")
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, "user", cfg.Target)
+	require.Equal(t, "notification", cfg.Capability)
+	require.Equal(t, ":9095", cfg.ListenAddr)
+	require.Equal(t, map[string]string{"notification": "https://notification:8443/.well-known/jwks.json"}, cfg.JWKSURLs)
+}
+
 func TestConfigRejectsUnsafeEndpoint(t *testing.T) {
 	for _, endpoint := range []string{"http://social/jwks", "https://user:pass@social/jwks", "https://social/jwks#fragment"} {
 		cfg := Config{Target: "user", JWKSURLs: map[string]string{"social": endpoint}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: 5 * time.Second, ReplayAddr: "redis:6379", TLSCertFile: "cert", TLSKeyFile: "key", ListenAddr: ":9091"}

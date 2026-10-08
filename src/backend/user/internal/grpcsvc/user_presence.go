@@ -237,6 +237,64 @@ func isInvisiblePresence(status string) bool {
 	return strings.EqualFold(strings.TrimSpace(status), "invisible")
 }
 
+func (s *UserGRPC) notificationRoutingPresence(ctx context.Context, req *userv1.GetNotificationRoutingPresenceRequest) (*userv1.GetNotificationRoutingPresenceResponse, error) {
+	if s.Presence == nil || s.Profiles == nil {
+		return nil, status.Error(codes.Unavailable, "presence routing dependencies not configured")
+	}
+	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
+	if err != nil || profileID == uuid.Nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid profile_id")
+	}
+	profiles, err := s.Profiles.GetByIDs(ctx, []uuid.UUID{profileID})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	profiles, err = s.filterDeletedAccountProfiles(ctx, profiles)
+	if err != nil {
+		return nil, deletedAccountCheckUnavailable(err)
+	}
+	if len(profiles) == 0 {
+		return &userv1.GetNotificationRoutingPresenceResponse{}, nil
+	}
+	snapshot, err := s.Presence.Get(ctx, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	hasActiveSession, err := hasNotificationRoutingSession(snapshot)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "presence routing state unavailable")
+	}
+	return &userv1.GetNotificationRoutingPresenceResponse{HasActiveSession: hasActiveSession}, nil
+}
+
+func hasNotificationRoutingSession(snapshot *store.PresenceSnapshot) (bool, error) {
+	if snapshot == nil || !snapshot.Live {
+		return false, nil
+	}
+	if snapshot.StatusEnum != 0 {
+		switch userv1.PresenceOnlineStatus(snapshot.StatusEnum) {
+		case userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE,
+			userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_IDLE,
+			userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND:
+			return true, nil
+		case userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE:
+			return false, nil
+		case userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_UNSPECIFIED:
+			return false, errors.New("unspecified live presence status")
+		default:
+			return false, errors.New("unknown live presence status")
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(snapshot.Status)) {
+	case "online", "idle", "dnd":
+		return true, nil
+	case "offline", "invisible":
+		return false, nil
+	default:
+		return false, errors.New("unknown live presence status")
+	}
+}
+
 func (s *UserGRPC) GetBulkPresence(ctx context.Context, req *userv1.GetBulkPresenceRequest) (*userv1.GetBulkPresenceResponse, error) {
 	if s.Presence == nil {
 		return nil, status.Error(codes.Unavailable, "presence store not configured")
