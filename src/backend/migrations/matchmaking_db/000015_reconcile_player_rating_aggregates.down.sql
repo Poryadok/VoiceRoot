@@ -1,0 +1,2 @@
+-- This migration reconciles a derived projection from the retained raw vote
+-- ledger. Reversing it would restore known-wrong data and cannot be done safely.
