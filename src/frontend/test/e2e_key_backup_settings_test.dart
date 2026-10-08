@@ -128,10 +128,14 @@ Widget _keyBackupCaptureApp(_SettingsClient client, ThemeData theme) =>
         theme: theme,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: RepaintBoundary(
-          key: _captureBoundaryKey,
-          child: const E2eKeyBackupScreen(),
-        ),
+        initialRoute: '/key-backup',
+        home: const SizedBox.shrink(),
+        routes: {
+          '/key-backup': (_) => RepaintBoundary(
+            key: _captureBoundaryKey,
+            child: const E2eKeyBackupScreen(),
+          ),
+        },
       ),
     );
 
@@ -252,6 +256,7 @@ void main() {
           _keyBackupCaptureApp(_keyBackupCaptureClient(), theme),
         );
         await tester.pumpAndSettle();
+        expect(find.byType(BackButton), findsOneWidget);
         await _writeKeyBackupCaptureIfRequested(tester, capture.label);
         await expectLater(
           find.byKey(_captureBoundaryKey),
