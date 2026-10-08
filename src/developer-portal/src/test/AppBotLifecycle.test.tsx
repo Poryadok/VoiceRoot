@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from '../App';
 
 const BOT_ID = '00000000-0000-0000-0000-000000000001';
@@ -20,6 +20,14 @@ function botDetailResponse(id: string, name: string, description: string) {
 
 function empty204() {
   return new Response(null, { status: 204 });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 function setupLoggedInWithBot(fetchMock: ReturnType<typeof vi.fn>) {
@@ -45,6 +53,7 @@ describe('App bot lifecycle UI', () => {
   });
 
   it('PATCHes bot when update form is saved', async () => {
+    const refreshedDetail = deferred<Response>();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -69,7 +78,7 @@ describe('App bot lifecycle UI', () => {
           },
         }),
       )
-      .mockResolvedValueOnce(botDetailResponse(BOT_ID, 'New Name', 'New desc'))
+      .mockReturnValueOnce(refreshedDetail.promise)
       .mockResolvedValueOnce(jsonResponse({ command_list: { commands_json: '[]' } }))
       .mockResolvedValueOnce(jsonResponse({ manifest_yaml: '' }));
 
@@ -89,7 +98,15 @@ describe('App bot lifecycle UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save bot changes' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Bot updated')).toBeInTheDocument();
+      const detailCalls = fetchMock.mock.calls.filter(([url, init]) =>
+        hasPath(url, `/api/v1/bots/${BOT_ID}`) && !(init as RequestInit | undefined)?.method,
+      );
+      expect(detailCalls).toHaveLength(2);
+    });
+    expect(screen.getByText('Bot updated')).toBeInTheDocument();
+    await act(async () => {
+      refreshedDetail.resolve(botDetailResponse(BOT_ID, 'New Name', 'New desc'));
+      await refreshedDetail.promise;
     });
 
     const patchCall = fetchMock.mock.calls.find(
