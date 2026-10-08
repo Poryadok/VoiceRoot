@@ -32,6 +32,9 @@ public interface RefreshTokenRepository {
 
   RefreshTokenRecord revoke(String tokenHash, Instant now);
 
+  /** Atomically consumes a currently live refresh token; returns true only for the winning caller. */
+  boolean consumeIfActive(String tokenHash, Instant now);
+
   RefreshTokenRecord revokeById(UUID id, Instant now);
 
   void revokeAllForAccount(UUID accountId, Instant now);

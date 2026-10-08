@@ -13,6 +13,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,6 +35,8 @@ import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.mail.NoopMailSender;
 import voice.backend.auth.repository.JdbcAccountRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
+import voice.backend.auth.repository.RefreshTokenRecord;
+import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
 import voice.backend.auth.security.JwtService;
@@ -128,6 +135,106 @@ class RegistrationSessionEpochJdbcIntegrationTest {
   }
 
   @Test
+  void concurrentRefreshAcrossAuthInstancesConsumesOnlyOnceBeforeIssuing() throws Exception {
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService registrationService = service(new HealthyFloors(), profiles, new JdbcRefreshTokenRepository(jdbc()));
+    var session = registrationService.register(command("refresh-race@example.test", false));
+    CyclicBarrier bothReadTheLiveCredential = new CyclicBarrier(2);
+    AuthService first = service(
+        new HealthyFloors(), profiles,
+        new BarrierRefreshTokenRepository(new JdbcRefreshTokenRepository(jdbc()), bothReadTheLiveCredential));
+    AuthService second = service(
+        new HealthyFloors(), profiles,
+        new BarrierRefreshTokenRepository(new JdbcRefreshTokenRepository(jdbc()), bothReadTheLiveCredential));
+
+    var workers = Executors.newFixedThreadPool(2);
+    try {
+      var firstRefresh = workers.submit(() -> first.refresh(new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")));
+      var secondRefresh = workers.submit(() -> second.refresh(new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")));
+      int successes = 0;
+      int revoked = 0;
+      for (var result : java.util.List.of(firstRefresh, secondRefresh)) {
+        try {
+          result.get();
+          successes++;
+        } catch (ExecutionException ex) {
+          if (ex.getCause() instanceof voice.backend.auth.service.AuthException auth
+              && "token_revoked".equals(auth.getMessage())) {
+            revoked++;
+          } else {
+            throw ex;
+          }
+        }
+      }
+
+      assertThat(successes).isEqualTo(1);
+      assertThat(revoked).isEqualTo(1);
+      assertThat(countRefreshTokens()).isEqualTo(2);
+      assertThat(countActiveRefreshTokens()).isEqualTo(1);
+      assertThat(jdbc().getJdbcTemplate().queryForObject(
+          "SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = ?",
+          Boolean.class,
+          new RefreshTokenCodec().hash(session.refreshToken()))).isTrue();
+    } finally {
+      workers.shutdownNow();
+    }
+  }
+
+  @Test
+  void refreshDependencyFailureDoesNotIssueReplacement() {
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService registrationService = service(new HealthyFloors(), profiles, new JdbcRefreshTokenRepository(jdbc()));
+    var session = registrationService.register(command("refresh-failure@example.test", false));
+    RefreshTokenRepository failingConsume = new DelegatingRefreshTokenRepository(new JdbcRefreshTokenRepository(jdbc())) {
+      @Override
+      public boolean consumeIfActive(String tokenHash, Instant now) {
+        throw new IllegalStateException("refresh store unavailable");
+      }
+    };
+    AuthService refreshService = service(new HealthyFloors(), profiles, failingConsume);
+
+    assertThatThrownBy(() -> refreshService.refresh(
+        new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("refresh store unavailable");
+    assertThat(countRefreshTokens()).isEqualTo(1);
+    assertThat(countActiveRefreshTokens()).isEqualTo(1);
+  }
+
+  @Test
+  void concurrentLogoutAfterRefreshReadPreventsReplacementIssuance() throws Exception {
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService registrationService = service(new HealthyFloors(), profiles, new JdbcRefreshTokenRepository(jdbc()));
+    var session = registrationService.register(command("refresh-logout-race@example.test", false));
+    CountDownLatch refreshReadCompleted = new CountDownLatch(1);
+    CountDownLatch allowRefreshConsume = new CountDownLatch(1);
+    RefreshTokenRepository pausedRefreshTokens = new PausingRefreshTokenRepository(
+        new JdbcRefreshTokenRepository(jdbc()), refreshReadCompleted, allowRefreshConsume);
+    AuthService refreshService = service(new HealthyFloors(), profiles, pausedRefreshTokens);
+    AuthService logoutService = service(new HealthyFloors(), profiles, new JdbcRefreshTokenRepository(jdbc()));
+
+    var worker = Executors.newSingleThreadExecutor();
+    try {
+      var refresh = worker.submit(
+          () -> refreshService.refresh(new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")));
+      assertThat(refreshReadCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+      logoutService.logout(new voice.backend.auth.service.LogoutCommand(session.accessToken(), session.refreshToken()));
+      allowRefreshConsume.countDown();
+
+      assertThatThrownBy(() -> refresh.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasRootCauseMessage("token_revoked");
+      assertThat(countRefreshTokens()).isEqualTo(1);
+      assertThat(countActiveRefreshTokens()).isZero();
+    } finally {
+      allowRefreshConsume.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  @Test
   void userFailureKeepsCommittedAccountAndCreatesNoRefreshToken() {
     RecordingProfiles profiles = new RecordingProfiles(true);
     AuthService service = service(new HealthyFloors(), profiles);
@@ -139,6 +246,13 @@ class RegistrationSessionEpochJdbcIntegrationTest {
   }
 
   private AuthService service(SessionEpochFloorStore floors, RecordingProfiles profiles) {
+    return service(floors, profiles, new JdbcRefreshTokenRepository(jdbc()));
+  }
+
+  private AuthService service(
+      SessionEpochFloorStore floors,
+      RecordingProfiles profiles,
+      voice.backend.auth.repository.RefreshTokenRepository refreshTokens) {
     DriverManagerDataSource dataSource =
         new DriverManagerDataSource(
             POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -146,7 +260,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
     AuthService service =
         new AuthService(
-            accounts, new JdbcRefreshTokenRepository(jdbc), new RefreshTokenCodec(),
+            accounts, refreshTokens, new RefreshTokenCodec(),
             new BCryptPasswordHasher(),
             JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK),
             new InMemoryTokenBlacklist(CLOCK), new TotpService(jdbcTotpProperties()),
@@ -189,6 +303,98 @@ class RegistrationSessionEpochJdbcIntegrationTest {
 
   private long countRefreshTokens() {
     return jdbc().getJdbcTemplate().queryForObject("SELECT count(*) FROM refresh_tokens", Long.class);
+  }
+
+  private long countActiveRefreshTokens() {
+    return jdbc().getJdbcTemplate().queryForObject(
+        "SELECT count(*) FROM refresh_tokens WHERE revoked_at IS NULL AND expires_at > ?",
+        Long.class,
+        java.sql.Timestamp.from(CLOCK.instant()));
+  }
+
+  private static class DelegatingRefreshTokenRepository implements RefreshTokenRepository {
+    private final RefreshTokenRepository delegate;
+
+    DelegatingRefreshTokenRepository(RefreshTokenRepository delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override public voice.backend.auth.repository.RefreshTokenRecord create(
+        UUID accountId, UUID profileId, String tokenHash, String deviceInfoJson, String accessJti,
+        Instant expiresAt, Instant now) {
+      return delegate.create(accountId, profileId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+    }
+    @Override public java.util.Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+      return delegate.findByHash(tokenHash);
+    }
+    @Override public java.util.Optional<RefreshTokenRecord> findById(UUID id) { return delegate.findById(id); }
+    @Override public java.util.List<RefreshTokenRecord> listActiveByAccount(UUID accountId) {
+      return delegate.listActiveByAccount(accountId);
+    }
+    @Override public RefreshTokenRecord revoke(String tokenHash, Instant now) { return delegate.revoke(tokenHash, now); }
+    @Override public boolean consumeIfActive(String tokenHash, Instant now) {
+      return delegate.consumeIfActive(tokenHash, now);
+    }
+    @Override public RefreshTokenRecord revokeById(UUID id, Instant now) { return delegate.revokeById(id, now); }
+    @Override public void revokeAllForAccount(UUID accountId, Instant now) { delegate.revokeAllForAccount(accountId, now); }
+  }
+
+  private static final class BarrierRefreshTokenRepository extends DelegatingRefreshTokenRepository {
+    private final CyclicBarrier reads;
+    private boolean firstRead = true;
+
+    BarrierRefreshTokenRepository(RefreshTokenRepository delegate, CyclicBarrier reads) {
+      super(delegate);
+      this.reads = reads;
+    }
+
+    @Override
+    public synchronized java.util.Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+      var found = super.findByHash(tokenHash);
+      if (firstRead) {
+        firstRead = false;
+        try {
+          reads.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException("refresh read barrier interrupted", ex);
+        } catch (Exception ex) {
+          throw new IllegalStateException("refresh read barrier failed", ex);
+        }
+      }
+      return found;
+    }
+  }
+
+  private static final class PausingRefreshTokenRepository extends DelegatingRefreshTokenRepository {
+    private final CountDownLatch readCompleted;
+    private final CountDownLatch allowConsume;
+    private boolean firstRead = true;
+
+    PausingRefreshTokenRepository(
+        RefreshTokenRepository delegate, CountDownLatch readCompleted, CountDownLatch allowConsume) {
+      super(delegate);
+      this.readCompleted = readCompleted;
+      this.allowConsume = allowConsume;
+    }
+
+    @Override
+    public synchronized java.util.Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+      var found = super.findByHash(tokenHash);
+      if (firstRead) {
+        firstRead = false;
+        readCompleted.countDown();
+        try {
+          if (!allowConsume.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("refresh consume barrier timed out");
+          }
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException("refresh consume barrier interrupted", ex);
+        }
+      }
+      return found;
+    }
   }
 
   private long epochForEmail(String email) {

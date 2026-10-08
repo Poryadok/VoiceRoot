@@ -249,7 +249,9 @@ public class AuthService {
       Account account = accounts.findById(current.accountId().toString()).orElseThrow(() -> new AuthException("invalid_token"));
       ensureActive(account);
       PreparedSessionEpoch prepared = sessionEpochIssuanceGate.prepare(account.id(), account.sessionEpoch());
-      refreshTokens.revoke(current.tokenHash(), Instant.now(clock));
+      if (!refreshTokens.consumeIfActive(current.tokenHash(), Instant.now(clock))) {
+        throw new AuthException("token_revoked");
+      }
       tokenBlacklist.revoke(current.accessJti(), jwtService.accessTtl());
       touchLastOnline(account);
       String profileId = current.profileId() == null
