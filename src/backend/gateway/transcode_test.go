@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -1027,13 +1028,13 @@ func TestTranscodeVoiceTokenPreservesLegacyDMAndNeverDowngradesConfiguredPrincip
 		return legacy, delegated, newGatewayForContract(t, options)
 	}
 
-	t.Run("unconfigured transport retains generic guest DM route", func(t *testing.T) {
+	t.Run("unconfigured transport fails closed without calling either Voice client", func(t *testing.T) {
 		legacy, delegated, h := newHandler(gatewayTestOptions{tokenClaims: map[string]tokenClaims{
 			"user": {UserID: accountID, ProfileID: profileID, AccountType: "guest"},
 		}})
 		response := performRequest(h, http.MethodGet, "/api/v1/voice/calls/dm-room/token", "", map[string]string{"Authorization": "Bearer user"})
-		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-		require.Equal(t, "dm-room", legacy.tokenRoom)
+		require.Equal(t, http.StatusServiceUnavailable, response.Code, response.Body.String())
+		require.Empty(t, legacy.tokenRoom)
 		require.Empty(t, delegated.tokenRoom)
 	})
 
@@ -1059,6 +1060,28 @@ func TestTranscodeVoiceTokenPreservesLegacyDMAndNeverDowngradesConfiguredPrincip
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 		require.Empty(t, legacy.tokenRoom)
 		require.Equal(t, "dm-room", delegated.tokenRoom)
+		require.Len(t, delegated.lastMD.Get("authorization"), 1)
+		require.Len(t, delegated.lastMD.Get("x-request-id"), 1)
+		requestID := delegated.lastMD.Get("x-request-id")[0]
+		require.NotEmpty(t, requestID)
+		require.True(t, strings.HasPrefix(delegated.lastMD.Get("authorization")[0], "Bearer "))
+		request := &callsv1.GetJoinTokenRequest{RoomId: "dm-room"}
+		hash, err := principal.RequestHash(request)
+		require.NoError(t, err)
+		verified, err := principal.VerifyDelegatedUser(context.Background(), strings.TrimPrefix(delegated.lastMD.Get("authorization")[0], "Bearer "), principal.VerifyConfig{
+			ExpectedIssuer: "gateway", ExpectedAudience: "voice", ExpectedRPC: callsv1.VoiceService_GetJoinToken_FullMethodName,
+			ExpectedRequestID: requestID, ExpectedRequestHash: hash,
+			KeyResolver:         func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil },
+			ReplayGuard:         func(context.Context, string, string, time.Time) error { return nil },
+			SessionEpochChecker: func(context.Context, string, int64) error { return nil },
+		})
+		require.NoError(t, err)
+		require.Equal(t, accountID, verified.AccountID)
+		require.Equal(t, profileID, verified.ProfileID)
+		require.EqualValues(t, 8, verified.SessionEpoch)
+		require.Equal(t, callsv1.VoiceService_GetJoinToken_FullMethodName, verified.RPC)
+		require.Equal(t, requestID, verified.RequestID)
+		require.Equal(t, hash, verified.RequestHash)
 	})
 
 	t.Run("invalid delegated binding cannot fall back", func(t *testing.T) {

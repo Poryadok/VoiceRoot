@@ -135,22 +135,16 @@ func (t *transcoder) serveVoiceCalls(w http.ResponseWriter, r *http.Request, res
 			return true
 		case r.Method == http.MethodGet && action == "token":
 			req := &callsv1.GetJoinTokenRequest{RoomId: roomID}
-			var resp *callsv1.GetJoinTokenResponse
-			var err error
-			if t.clients.voiceUserRequired || t.clients.voiceUser != nil || t.clients.voiceUserErr != nil {
-				if t.clients.voiceUserErr != nil || t.clients.voiceUser == nil || t.lifecycleIssuer == nil {
-					writeGRPCError(w, status.Error(codes.Unavailable, "Voice user-principal transport unavailable"))
-					return true
-				}
-				userCtx, contextErr := t.voiceUserCallTokenContext(r, req, callsv1.VoiceService_GetJoinToken_FullMethodName)
-				if contextErr != nil {
-					writeGRPCError(w, contextErr)
-					return true
-				}
-				resp, err = t.clients.voiceUser.GetJoinToken(userCtx, req)
-			} else {
-				resp, err = t.clients.voice.GetJoinToken(ctx, req)
+			if t.clients.voiceUserErr != nil || t.clients.voiceUser == nil || t.lifecycleIssuer == nil {
+				writeGRPCError(w, status.Error(codes.Unavailable, "Voice user-principal transport unavailable"))
+				return true
 			}
+			userCtx, contextErr := t.voiceUserCallTokenContext(r, req, callsv1.VoiceService_GetJoinToken_FullMethodName)
+			if contextErr != nil {
+				writeGRPCError(w, contextErr)
+				return true
+			}
+			resp, err := t.clients.voiceUser.GetJoinToken(userCtx, req)
 			if err != nil {
 				writeGRPCError(w, err)
 				return true

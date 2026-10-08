@@ -46,6 +46,34 @@ func TestStrictUnaryInterceptorBindsUserAndAllowsOnlyNamedMethod(t *testing.T) {
 	require.Equal(t, "8a78bd68-75e9-4f21-9387-3bdc2f6116ab", got.AccountID)
 }
 
+func TestStrictUnaryInterceptorBindsGetJoinToken(t *testing.T) {
+	verifier := &fakeVerifier{}
+	request := &callsv1.GetJoinTokenRequest{RoomId: "dm-room"}
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer signed", "x-request-id", "token-request"))
+	var got principal.Principal
+	handlerCalled := false
+	response, err := StrictUnaryInterceptor(verifier)(ctx, request, &grpc.UnaryServerInfo{FullMethod: callsv1.VoiceService_GetJoinToken_FullMethodName}, func(ctx context.Context, req any) (any, error) {
+		handlerCalled = true
+		var ok bool
+		got, ok = principal.FromContext(ctx)
+		require.True(t, ok)
+		require.Same(t, request, req)
+		return "ok", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", response)
+	require.True(t, handlerCalled)
+	require.Equal(t, 1, verifier.calls)
+	require.Equal(t, callsv1.VoiceService_GetJoinToken_FullMethodName, verifier.method)
+	require.Equal(t, "token-request", verifier.requestID)
+	expectedHash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	require.Equal(t, expectedHash, verifier.hash)
+	require.Equal(t, "8a78bd68-75e9-4f21-9387-3bdc2f6116ab", got.AccountID)
+	require.Equal(t, "6e155399-76a3-4f78-9d28-1274e9b48585", got.ProfileID)
+	require.EqualValues(t, 5, got.SessionEpoch)
+}
+
 func TestStrictUnaryInterceptorRejectsMissingMetadataAndSiblingRPC(t *testing.T) {
 	verifier := &fakeVerifier{}
 	intercept := StrictUnaryInterceptor(verifier)
