@@ -24,6 +24,8 @@ echo "${global_paths}" | grep -Fxq "  - ${GO_DOWNLOAD_HELPER}" \
 pr_trigger="$(sed -n '/^  pull_request:$/,/^  push:$/p' "${WORKFLOW}" | sed '$d')"
 echo "${pr_trigger}" | grep -Fq 'master' \
   || fail "CI must run for PRs targeting master"
+echo "${pr_trigger}" | grep -Fq 'develop' \
+  || fail "CI must run for PRs targeting develop"
 echo "${pr_trigger}" | grep -Fq 'codex/game-sdk-federation-docs' \
   || fail "CI must run for PRs targeting the game SDK feature base"
 echo "${pr_trigger}" | grep -Fq 'codex/appearance-settings-view' \
@@ -33,6 +35,26 @@ echo "${pr_trigger}" | grep -Fq 'codex/settings-app-icon' \
 pr_branches="$(echo "${pr_trigger}" | sed -n 's/.*branches: \[\(.*\)\].*/\1/p')"
 [[ -n "${pr_branches}" && "${pr_branches}" != *'*'* && "${pr_branches}" != *'?'* ]] \
   || fail "CI pull-request branch filter must remain exact, without wildcard widening"
+key_backup_job_block="$(sed -n '/^  flutter-key-backup-goldens:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+[[ -n "${key_backup_job_block}" ]] || fail "CI must define the cross-platform key-backup golden job"
+echo "${key_backup_job_block}" | grep -Fq 'os: ubuntu-latest' \
+  || fail "key-backup golden job must run on Linux"
+echo "${key_backup_job_block}" | grep -Fq 'os: windows-latest' \
+  || fail "key-backup golden job must run on Windows"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-version: ${{ env.FLUTTER_VERSION }}' \
+  || fail "key-backup golden job must use the pinned Flutter version"
+echo "${key_backup_job_block}" | grep -Fq 'flutter test test/e2e_key_backup_settings_test.dart' \
+  || fail "key-backup golden job must run the targeted golden test"
+echo "${key_backup_job_block}" | grep -Fq 'VOICE_E2E_KEY_BACKUP_CAPTURE_DIR' \
+  || fail "key-backup golden job must preserve actual platform captures"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-linux-prefetch-sqlite3.sh host' \
+  || fail "Linux key-backup golden job must prefetch SQLite native assets"
+echo "${key_backup_job_block}" | grep -Fq 'flutter-windows-prefetch-sqlite3.ps1' \
+  || fail "Windows key-backup golden job must prefetch SQLite native assets"
+echo "${key_backup_job_block}" | grep -Fq 'e2e-key-backup-golden-${{ matrix.platform }}-${{ github.sha }}' \
+  || fail "golden evidence artifact must identify platform and source SHA"
+echo "${key_backup_job_block}" | grep -Fq 'if: always()' \
+  || fail "golden evidence must be collected on success and failure"
 push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
 echo "${push_trigger}" | grep -Fq 'branches: [master, develop]' \
   || fail "CI push trigger must target only master and develop"

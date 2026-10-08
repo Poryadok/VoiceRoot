@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [master, codex/game-sdk-federation-docs, codex/appearance-settings-view, codex/settings-app-icon]
+    branches: [master, develop, codex/game-sdk-federation-docs, codex/appearance-settings-view, codex/settings-app-icon]
   push:
     branches: [master, develop]
   schedule:
@@ -1240,6 +1240,115 @@ jobs:
           bash ../../scripts/ci/patch-livekit-webrtc-podspec.sh ../..
           flutter build ios --simulator --debug --no-codesign --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080
 
+  flutter-key-backup-goldens:
+    name: Key-backup golden (${{ matrix.platform }})
+    needs: changes
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/cache@v5
+        with:
+          path: src/frontend/.dart_tool/hooks_runner
+          key: flutter-sqlite3-hooks-${{ matrix.platform }}-${{ hashFiles('src/frontend/pubspec.lock') }}
+      - name: Prefetch SQLite native assets (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Prefetch SQLite native assets (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/flutter-windows-prefetch-sqlite3.ps1
+      - name: Prepare key-backup capture directory
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+        run: New-Item -ItemType Directory -Force -Path $env:VOICE_E2E_KEY_BACKUP_CAPTURE_DIR | Out-Null
+      - name: Resolve frontend dependencies
+        working-directory: src/frontend
+        run: flutter pub get
+      - name: Run key-backup golden test
+        working-directory: src/frontend
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+        run: flutter test test/e2e_key_backup_settings_test.dart
+      - name: Record key-backup golden provenance
+        if: always()
+        working-directory: src/frontend
+        shell: pwsh
+        env:
+          VOICE_E2E_KEY_BACKUP_CAPTURE_DIR: ${{ runner.temp }}/e2e-key-backup-goldens
+          VOICE_KEY_BACKUP_PLATFORM: ${{ matrix.platform }}
+        run: |
+          $manifest = Join-Path $env:RUNNER_TEMP 'e2e-key-backup-provenance.txt'
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add("source_sha=$(git rev-parse HEAD)")
+          $lines.Add("runner_os=$env:RUNNER_OS")
+          $lines.Add("runner_platform=$env:VOICE_KEY_BACKUP_PLATFORM")
+          $lines.Add('command=flutter test test/e2e_key_backup_settings_test.dart')
+          $lines.Add('flutter_version:')
+          $lines.Add((flutter --version 2>&1 | Out-String).Trim())
+          $lines.Add('dart_version:')
+          $lines.Add((dart --version 2>&1 | Out-String).Trim())
+          $goldenDirectory = "test/goldens/$env:VOICE_KEY_BACKUP_PLATFORM"
+          foreach ($orientation in @('h', 'v')) {
+            $reference = Join-Path $goldenDirectory "e2e_key_backup_$orientation.png"
+            if (Test-Path -LiteralPath $reference) {
+              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reference).Hash.ToLowerInvariant()
+              $lines.Add("reference_$orientation=$reference sha256=$hash")
+            } else {
+              $lines.Add("reference_$orientation=missing")
+            }
+            $actual = Join-Path $env:VOICE_E2E_KEY_BACKUP_CAPTURE_DIR "e2e_key_backup_$orientation.png"
+            if (Test-Path -LiteralPath $actual) {
+              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $actual).Hash.ToLowerInvariant()
+              $lines.Add("actual_$orientation=$actual sha256=$hash")
+            } else {
+              $lines.Add("actual_$orientation=missing")
+            }
+          }
+          $failureDirectory = 'test/failures'
+          foreach ($image in @(Get-ChildItem -LiteralPath $failureDirectory -Filter 'e2e_key_backup_*.png' -File -ErrorAction SilentlyContinue)) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $image.FullName).Hash.ToLowerInvariant()
+            $lines.Add("failure_image=$($image.Name) sha256=$hash")
+          }
+          [System.IO.File]::WriteAllLines($manifest, $lines, [System.Text.UTF8Encoding]::new($false))
+      - name: Upload key-backup golden evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-key-backup-golden-${{ matrix.platform }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/e2e-key-backup-provenance.txt
+            ${{ runner.temp }}/e2e-key-backup-goldens/e2e_key_backup_h.png
+            ${{ runner.temp }}/e2e-key-backup-goldens/e2e_key_backup_v.png
+            src/frontend/test/goldens/${{ matrix.platform }}/e2e_key_backup_h.png
+            src/frontend/test/goldens/${{ matrix.platform }}/e2e_key_backup_v.png
+            src/frontend/test/failures/e2e_key_backup_h_*.png
+            src/frontend/test/failures/e2e_key_backup_v_*.png
+          if-no-files-found: warn
+          retention-days: 7
   flutter-windows:
     needs: [changes, flutter]
     if: >-
