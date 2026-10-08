@@ -576,6 +576,9 @@ public class AuthService {
       if (!passwordHasher.matches(password, account.passwordHash())) {
         throw new AuthException("invalid_credentials");
       }
+      if (account.totpEnabled()) {
+        throw new AuthException("totp_already_enabled");
+      }
       String secret = totpService.generateSecret();
       byte[] encrypted = totpService.encryptSecret(secret);
       accounts.saveTotpSecret(account.id(), encrypted, false);

@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import voice.backend.auth.repository.AccountRepository;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.MvcResult;
 class TwoFactorAuthTest {
   @Autowired MockMvc mockMvc;
   @Autowired ObjectMapper objectMapper;
+  @Autowired AccountRepository accounts;
 
   @Test
   void enable2FAReturnsTotpUriAndBackupCodes() throws Exception {
@@ -115,6 +117,55 @@ class TwoFactorAuthTest {
     mockMvc.perform(post("/api/v1/auth/login")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\",\"totp_code\":\"" + backupCode + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.session.access_token").isNotEmpty());
+  }
+
+  @Test
+  void repeatedEnable2FAIsRejectedWithoutReplacingConfirmedFactorOrBackupCodes() throws Exception {
+    String email = "2fa-reenroll@voice-qa.test";
+    String password = "Correct horse battery staple";
+    JsonNode registered = register(email, password);
+    String access = registered.get("access_token").asText();
+
+    MvcResult enrollment = mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String accountId = registered.get("account_id").asText();
+    byte[] storedSecret = accounts.findById(accountId).orElseThrow().totpSecret();
+    String backupCode = objectMapper.readTree(enrollment.getResponse().getContentAsString())
+        .get("backup_codes").get(0).asText();
+    mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk());
+
+    mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error").value("totp_already_enabled"));
+
+    assertThat(accounts.findById(accountId).orElseThrow().totpSecret()).containsExactly(storedSecret);
+
+    mockMvc.perform(post("/api/v1/auth/validate")
+            .header("Authorization", "Bearer " + access))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password
+                + "\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("totp_required"));
+    mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password
+                + "\",\"totp_code\":\"" + backupCode + "\",\"device_info_json\":\"{}\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.session.access_token").isNotEmpty());
   }

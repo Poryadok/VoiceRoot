@@ -354,6 +354,12 @@ request and response remain the wire-contract source of truth.
 
 Success returns `204 No Content` and creates no replacement `AuthSession`. Auth serializes the password mutation, refresh rotation, and authenticated replacement-session paths on the account row; those paths reload and revalidate the current session epoch while holding the lock. The password operation advances the durable session epoch to a checked value strictly greater than both the durable epoch and the authoritative floor, revokes every refresh row, and publishes that epoch floor before the SQL transaction commits. If a still-current session has a floor ahead of its durable row, Auth preserves the existing reconciliation behavior and advances beyond that floor; a racing higher floor is retried a bounded number of times. Missing, invalid, unavailable, or exhausted epoch state fails closed without changing the password. A floor-store failure rolls back SQL changes; a later SQL commit failure fails closed and does not return success, although the caller may not know whether the database committed. A successful client request therefore requires the user to sign in again.
 
+`Enable2FA` verifies the current password. If TOTP is already enabled, it returns
+`totp_already_enabled` (HTTP `409` or gRPC `ALREADY_EXISTS`) before generating or
+persisting a replacement secret or backup codes. To change the authenticator,
+disable the existing factor with its current TOTP code, sign in again after the
+session revocation, then enroll the new factor.
+
 `SwitchActiveProfile` takes `access_token`, `profile_id`, and `device_info_json`;
 the response contains the replacement `AuthSession`. The active profile claim is
 selected by Auth using the User-owned profile contract described in
