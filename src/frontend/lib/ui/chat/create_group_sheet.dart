@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -60,6 +61,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   final _searchController = TextEditingController();
   final _selected = <String>{};
   var _submitting = false;
+  _CreateGroupCreateAttempt? _createAttempt;
   String? _inviteRetryChatId;
   List<String>? _inviteRetryProfileIds;
 
@@ -95,11 +97,16 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     final l10n = AppLocalizations.of(context)!;
     final session = ref.read(authControllerProvider).session;
     final authorization = ref.read(authorizationHeaderProvider);
-    if (session == null || authorization == null) {
+    final authController = ref.read(authControllerProvider.notifier);
+    final requestIdentity = authController.gatewayRequestIdentity;
+    if (session == null || authorization == null || requestIdentity == null) {
       _finishWithError(l10n, 'not_authenticated');
       return;
     }
+    final accountId = session.accountId;
     final activeProfileId = session.activeProfileId;
+    final profileGeneration = requestIdentity.generation;
+    final sessionInstallGeneration = authController.sessionInstallGeneration;
     final client = ref.read(voiceChatsClientProvider);
 
     try {
@@ -109,12 +116,41 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
       late final List<String> profileIds;
       if (pendingChatId == null || pendingProfileIds == null) {
         final selectedProfileIds = _selected.toList(growable: false);
+        final name = _nameController.text.trim();
+        var createAttempt = _createAttempt;
+        if (createAttempt == null ||
+            !createAttempt.matches(
+              name: name,
+              accountId: accountId,
+              profileId: activeProfileId,
+              profileGeneration: profileGeneration,
+              sessionInstallGeneration: sessionInstallGeneration,
+              selectedProfileIds: _selected,
+            )) {
+          createAttempt = _CreateGroupCreateAttempt(
+            name: name,
+            accountId: accountId,
+            profileId: activeProfileId,
+            profileGeneration: profileGeneration,
+            sessionInstallGeneration: sessionInstallGeneration,
+            selectedProfileIds: Set.unmodifiable(_selected),
+            requestId: const Uuid().v4(),
+          );
+          _createAttempt = createAttempt;
+        }
         final createResult = await client.createGroup(
           authorization: authorization,
-          name: _nameController.text.trim(),
+          name: createAttempt.name,
+          requestId: createAttempt.requestId,
         );
         if (!mounted) return;
-        if (!_isCurrentSubmission(activeProfileId, authorization)) {
+        if (!_isCurrentSubmission(
+          accountId,
+          activeProfileId,
+          profileGeneration,
+          sessionInstallGeneration,
+        )) {
+          _createAttempt = null;
           _finishWithError(l10n, kChatActionStaleContext);
           return;
         }
@@ -126,6 +162,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
             chatId = data.id;
             profileIds = List.unmodifiable(selectedProfileIds);
             setState(() {
+              _createAttempt = null;
               _inviteRetryChatId = chatId;
               _inviteRetryProfileIds = profileIds;
             });
@@ -136,12 +173,17 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
       }
 
       final inviteResult = await client.addGroupMembers(
-        authorization: authorization,
+        authorization: ref.read(authorizationHeaderProvider),
         chatId: chatId,
         profileIds: profileIds,
       );
       if (!mounted) return;
-      if (!_isCurrentSubmission(activeProfileId, authorization)) {
+      if (!_isCurrentSubmission(
+        accountId,
+        activeProfileId,
+        profileGeneration,
+        sessionInstallGeneration,
+      )) {
         setState(() {
           _submitting = false;
           _inviteRetryChatId = null;
@@ -164,10 +206,21 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     }
   }
 
-  bool _isCurrentSubmission(String activeProfileId, String authorization) {
+  bool _isCurrentSubmission(
+    String accountId,
+    String activeProfileId,
+    int profileGeneration,
+    int sessionInstallGeneration,
+  ) {
+    final authController = ref.read(authControllerProvider.notifier);
     final current = ref.read(authControllerProvider).session;
-    return current?.activeProfileId == activeProfileId &&
-        ref.read(authorizationHeaderProvider) == authorization;
+    final identity = authController.gatewayRequestIdentity;
+    return current?.accountId == accountId &&
+        current?.activeProfileId == activeProfileId &&
+        identity?.accountId == accountId &&
+        identity?.profileId == activeProfileId &&
+        identity?.generation == profileGeneration &&
+        authController.sessionInstallGeneration == sessionInstallGeneration;
   }
 
   void _finishWithError(AppLocalizations l10n, String error) {
@@ -213,7 +266,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               ),
               textCapitalization: TextCapitalization.sentences,
               enabled: !_submitting && _inviteRetryChatId == null,
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) => setState(() => _createAttempt = null),
             ),
             const SizedBox(height: 16),
             Text(
@@ -337,6 +390,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                             ? null
                             : (next) {
                                 setState(() {
+                                  _createAttempt = null;
                                   if (next ?? false) {
                                     _selected.add(profileId);
                                   } else {
@@ -388,6 +442,42 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
       ),
     );
   }
+}
+
+class _CreateGroupCreateAttempt {
+  const _CreateGroupCreateAttempt({
+    required this.name,
+    required this.accountId,
+    required this.profileId,
+    required this.profileGeneration,
+    required this.sessionInstallGeneration,
+    required this.selectedProfileIds,
+    required this.requestId,
+  });
+
+  final String name;
+  final String accountId;
+  final String profileId;
+  final int profileGeneration;
+  final int sessionInstallGeneration;
+  final Set<String> selectedProfileIds;
+  final String requestId;
+
+  bool matches({
+    required String name,
+    required String accountId,
+    required String profileId,
+    required int profileGeneration,
+    required int sessionInstallGeneration,
+    required Set<String> selectedProfileIds,
+  }) =>
+      this.name == name &&
+      this.accountId == accountId &&
+      this.profileId == profileId &&
+      this.profileGeneration == profileGeneration &&
+      this.sessionInstallGeneration == sessionInstallGeneration &&
+      this.selectedProfileIds.length == selectedProfileIds.length &&
+      this.selectedProfileIds.containsAll(selectedProfileIds);
 }
 
 Widget _createGroupStatePanel(
