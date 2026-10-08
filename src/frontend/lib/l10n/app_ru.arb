@@ -207,6 +207,17 @@
   "chatListEmpty": "Пока нет диалогов",
   "chatListEmptyHint": "Найдите людей в поиске, чтобы начать личный диалог.",
   "chatListLoadMore": "Загрузить ещё чаты",
+  "chatScheduleMessage": "Запланировать сообщение",
+  "chatSendWhenOnline": "Отправить, когда будет в сети",
+  "chatSchedulePickerTitle": "Запланировать сообщение",
+  "chatSchedulePending": "Ожидает отправки",
+  "chatScheduleEdit": "Изменить запланированное сообщение",
+  "chatScheduleCancel": "Отменить запланированное сообщение",
+  "chatScheduleSendNow": "Отправить сейчас",
+  "chatScheduleRetry": "Повторить",
+  "chatScheduleDateInvalid": "Выберите время в пределах следующих 365 дней",
+  "chatScheduleFailure": "Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.",
+  "chatScheduleLoadMore": "Загрузить ещё запланированные сообщения",
   "chatListUnreadCount": "Непрочитанных: {count}",
   "@chatListUnreadCount": {
     "placeholders": {

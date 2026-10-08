@@ -6,6 +6,7 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/folder_pin_providers.dart';
 import 'package:voice_frontend/ui/shell/mobile_shell_drawer.dart';
 
 import 'support/fake_voice_api_clients.dart';
@@ -61,6 +62,76 @@ void main() {
     await tester.tap(find.byKey(const Key('mobile_drawer_settings')));
     await tester.pumpAndSettle();
     expect(settingsOpened, isTrue);
+  });
+
+  testWidgets('MobileShellDrawer retries a failed Quick Access load', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chatFoldersProvider.overrideWith(
+            (_) async => const FolderListData(folders: []),
+          ),
+          quickAccessListProvider.overrideWith((_) async {
+            attempts++;
+            if (attempts == 1) throw Exception('private quick access detail');
+            return const QuickAccessListData(
+              items: [
+                VoiceQuickAccessItem(
+                  chatId: 'chat-qa-1',
+                  chat: VoiceChat(
+                    id: 'chat-qa-1',
+                    type: 'CHAT_TYPE_DM',
+                    creatorProfileId: 'profile-1',
+                    name: 'Favorite DM',
+                  ),
+                ),
+              ],
+            );
+          }),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Consumer(
+            builder: (context, ref, _) => Scaffold(
+              drawer: const MobileShellDrawer(onOpenSettings: _ignore),
+              body: Column(
+                children: [
+                  Text(ref.watch(selectedChatIdProvider) ?? 'none'),
+                  Builder(
+                    builder: (context) => ElevatedButton(
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                      child: const Text('open'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(MobileShellDrawer.drawerKey)),
+    )!;
+    expect(attempts, 1);
+    expect(find.text(l10n.chatListLoadError), findsOneWidget);
+    expect(find.text('private quick access detail'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('mobile_drawer_quick_access_retry')));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(find.text('Favorite DM'), findsOneWidget);
+    await tester.tap(find.text('Favorite DM'));
+    await tester.pumpAndSettle();
+    expect(find.text('chat-qa-1'), findsOneWidget);
   });
 
   testWidgets(

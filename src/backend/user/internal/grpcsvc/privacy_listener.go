@@ -87,3 +87,33 @@ func RegisterNotificationPresenceServer(server grpc.ServiceRegistrar, service *U
 	desc.Metadata = "voice/user/v1/user.proto"
 	server.RegisterService(&desc, &NotificationPresenceGRPC{User: service})
 }
+
+// MessagingScheduledPresenceGRPC exposes only the scheduled-delivery
+// visibility decision to an authenticated Messaging service principal.
+type MessagingScheduledPresenceGRPC struct {
+	userv1.UnimplementedUserServiceServer
+	User *UserGRPC
+}
+
+func (s *MessagingScheduledPresenceGRPC) GetScheduledMessageDispatchPresence(ctx context.Context, req *userv1.GetScheduledMessageDispatchPresenceRequest) (*userv1.GetScheduledMessageDispatchPresenceResponse, error) {
+	if err := socialprincipal.RequireMessagingPresence(ctx, userv1.UserService_GetScheduledMessageDispatchPresence_FullMethodName, req); err != nil {
+		return nil, err
+	}
+	if s.User == nil {
+		return nil, status.Error(codes.Unavailable, "scheduled presence service unavailable")
+	}
+	return s.User.scheduledMessageDispatchPresence(ctx, req)
+}
+
+func RegisterMessagingScheduledPresenceServer(server grpc.ServiceRegistrar, service *UserGRPC) {
+	desc := userv1.UserService_ServiceDesc
+	desc.Methods = nil
+	desc.Streams = nil
+	for _, method := range userv1.UserService_ServiceDesc.Methods {
+		if method.MethodName == "GetScheduledMessageDispatchPresence" {
+			desc.Methods = append(desc.Methods, method)
+		}
+	}
+	desc.Metadata = "voice/user/v1/user.proto"
+	server.RegisterService(&desc, &MessagingScheduledPresenceGRPC{User: service})
+}

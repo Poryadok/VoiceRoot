@@ -61,32 +61,53 @@ type resourceMappingRequest struct {
 // CreateResourceMapping stores the mapping and immutable operation receipt in
 // one GIS transaction. Callers must pass the persisted Chat RPC receipt.
 func (s *Store) CreateResourceMapping(ctx context.Context, in ResourceMappingInput) (ResourceMappingReceipt, error) {
-	if in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.OperationID == uuid.Nil ||
-		(in.ResourceKind != "chat" && in.ResourceKind != "voice" && in.ResourceKind != "space") ||
-		strings.TrimSpace(in.ExternalKey) == "" || !utf8.ValidString(in.ExternalKey) || utf8.RuneCountInString(in.ExternalKey) > 512 || in.ResourceID == uuid.Nil {
-		return ResourceMappingReceipt{}, ErrInvalidResourceMapping
-	}
-	if in.ResourceKind == "space" {
-		if in.ChatID != uuid.Nil || in.ChatOperationID != uuid.Nil || in.ChatRequestHash != "" {
-			return ResourceMappingReceipt{}, ErrInvalidResourceMapping
-		}
-	} else if in.ChatID == uuid.Nil || in.ChatOperationID == uuid.Nil || !canonicalChatRequestHash(in.ChatRequestHash) ||
-		(in.ResourceKind == "chat" && in.ResourceID != in.ChatID) {
-		return ResourceMappingReceipt{}, ErrInvalidResourceMapping
+	if err := validateResourceMappingInput(in); err != nil {
+		return ResourceMappingReceipt{}, err
 	}
 	if s == nil || s.Pool == nil {
 		return ResourceMappingReceipt{}, ErrRegistryUnavailable
+	}
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return ResourceMappingReceipt{}, fmt.Errorf("begin resource mapping: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	receipt, err := s.createResourceMappingTx(ctx, tx, in)
+	if err != nil {
+		return ResourceMappingReceipt{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ResourceMappingReceipt{}, fmt.Errorf("commit resource mapping: %w", err)
+	}
+	return receipt, nil
+}
+
+func validateResourceMappingInput(in ResourceMappingInput) error {
+	if in.ApplicationID == uuid.Nil || in.EnvironmentID == uuid.Nil || in.OperationID == uuid.Nil ||
+		(in.ResourceKind != "chat" && in.ResourceKind != "voice" && in.ResourceKind != "space") ||
+		strings.TrimSpace(in.ExternalKey) == "" || !utf8.ValidString(in.ExternalKey) || utf8.RuneCountInString(in.ExternalKey) > 512 || in.ResourceID == uuid.Nil {
+		return ErrInvalidResourceMapping
+	}
+	if in.ResourceKind == "space" {
+		if in.ChatID != uuid.Nil || in.ChatOperationID != uuid.Nil || in.ChatRequestHash != "" {
+			return ErrInvalidResourceMapping
+		}
+	} else if in.ChatID == uuid.Nil || in.ChatOperationID == uuid.Nil || !canonicalChatRequestHash(in.ChatRequestHash) ||
+		(in.ResourceKind == "chat" && in.ResourceID != in.ChatID) {
+		return ErrInvalidResourceMapping
+	}
+	return nil
+}
+
+func (s *Store) createResourceMappingTx(ctx context.Context, tx pgx.Tx, in ResourceMappingInput) (ResourceMappingReceipt, error) {
+	if err := validateResourceMappingInput(in); err != nil {
+		return ResourceMappingReceipt{}, err
 	}
 	canonical, err := json.Marshal(resourceMappingRequest(in))
 	if err != nil {
 		return ResourceMappingReceipt{}, fmt.Errorf("encode resource mapping request: %w", err)
 	}
 	hash := sha256.Sum256(canonical)
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return ResourceMappingReceipt{}, fmt.Errorf("begin resource mapping: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	// The operation row may not exist yet, so FOR UPDATE cannot serialize the
 	// first concurrent insert. Lock the operation scope before reading it; exact
 	// retries then see and replay the winner's committed receipt.
@@ -107,9 +128,6 @@ func (s *Store) CreateResourceMapping(ctx context.Context, in ResourceMappingInp
 		var receipt ResourceMappingReceipt
 		if err := json.Unmarshal(savedReceipt, &receipt); err != nil || receipt.OperationID != in.OperationID || receipt.MappingID == uuid.Nil {
 			return ResourceMappingReceipt{}, ErrRegistryUnavailable
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return ResourceMappingReceipt{}, fmt.Errorf("commit resource mapping replay: %w", err)
 		}
 		return receipt, nil
 	}
@@ -199,9 +217,6 @@ func (s *Store) CreateResourceMapping(ctx context.Context, in ResourceMappingInp
 		in.ApplicationID, in.EnvironmentID, in.OperationID, receiptBytes)
 	if err != nil {
 		return ResourceMappingReceipt{}, fmt.Errorf("persist resource mapping receipt: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ResourceMappingReceipt{}, fmt.Errorf("commit resource mapping: %w", err)
 	}
 	return receipt, nil
 }

@@ -1,7 +1,10 @@
 package socialprincipal
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -19,6 +22,9 @@ type Config struct {
 	RefreshAfter, HardExpiry, UnknownKIDCooldown time.Duration
 	ReplayAddr, ReplayPassword, JWKSCAFile       string
 	TLSCertFile, TLSKeyFile, ListenAddr          string
+	ClientCAFile                                 string
+	ClientCAs                                    *x509.CertPool
+	JWKSClientCertFile, JWKSClientKeyFile        string
 }
 
 var issuerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -47,6 +53,9 @@ func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (
 		return Config{}, false, errors.New("principal listener prefix and default address required")
 	}
 	names := []string{prefix + "REPLAY_REDIS_ADDR", prefix + "REPLAY_REDIS_PASSWORD", prefix + "TLS_CERT_FILE", prefix + "TLS_KEY_FILE", prefix + "GRPC_LISTEN"}
+	if capability == "messaging" {
+		names = append(names, prefix+"CLIENT_CA_FILE")
+	}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
@@ -57,6 +66,16 @@ func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (
 		return Config{}, false, nil
 	}
 	cfg := Config{Target: target, Capability: capability, ReplayAddr: strings.TrimSpace(os.Getenv(prefix + "REPLAY_REDIS_ADDR")), ReplayPassword: os.Getenv(prefix + "REPLAY_REDIS_PASSWORD"), JWKSCAFile: strings.TrimSpace(os.Getenv("S2S_JWKS_CA_FILE")), TLSCertFile: strings.TrimSpace(os.Getenv(prefix + "TLS_CERT_FILE")), TLSKeyFile: strings.TrimSpace(os.Getenv(prefix + "TLS_KEY_FILE")), ListenAddr: defaultListen}
+	if capability == "messaging" {
+		cfg.ClientCAFile = strings.TrimSpace(os.Getenv(prefix + "CLIENT_CA_FILE"))
+		cfg.JWKSClientCertFile = strings.TrimSpace(os.Getenv("USER_PRINCIPAL_JWKS_CLIENT_CERT_FILE"))
+		cfg.JWKSClientKeyFile = strings.TrimSpace(os.Getenv("USER_PRINCIPAL_JWKS_CLIENT_KEY_FILE"))
+		var err error
+		cfg.ClientCAs, err = loadClientCAs(cfg.ClientCAFile)
+		if err != nil {
+			return Config{}, true, err
+		}
+	}
 	if value, ok := os.LookupEnv(prefix + "GRPC_LISTEN"); ok {
 		cfg.ListenAddr = strings.TrimSpace(value)
 	}
@@ -105,6 +124,12 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.ReplayAddr) == "" || strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" {
 		return errors.New("principal Redis and TLS certificate/key required")
 	}
+	if c.Capability == "messaging" && (strings.TrimSpace(c.ClientCAFile) == "" || c.ClientCAs == nil) {
+		return errors.New("Messaging principal client CA required")
+	}
+	if c.Capability == "messaging" && (strings.TrimSpace(c.JWKSClientCertFile) == "" || strings.TrimSpace(c.JWKSClientKeyFile) == "") {
+		return errors.New("Messaging principal JWKS client certificate/key required")
+	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
 	}
@@ -118,4 +143,34 @@ func (c Config) validate() error {
 		}
 	}
 	return nil
+}
+
+func loadClientCAs(path string) (*x509.CertPool, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, errors.New("Messaging principal client CA required")
+	}
+	pemBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.New("Messaging principal client CA unavailable")
+	}
+	pool := x509.NewCertPool()
+	remaining := pemBytes
+	count := 0
+	for len(bytes.TrimSpace(remaining)) > 0 {
+		block, rest := pem.Decode(remaining)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return nil, errors.New("invalid Messaging principal client CA bundle")
+		}
+		certificate, err := x509.ParseCertificate(block.Bytes)
+		if err != nil || !certificate.IsCA || !certificate.BasicConstraintsValid || certificate.KeyUsage != 0 && certificate.KeyUsage&x509.KeyUsageCertSign == 0 {
+			return nil, errors.New("invalid Messaging principal client CA certificate")
+		}
+		pool.AddCert(certificate)
+		count++
+		remaining = rest
+	}
+	if count == 0 {
+		return nil, errors.New("invalid Messaging principal client CA bundle")
+	}
+	return pool, nil
 }

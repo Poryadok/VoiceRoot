@@ -1060,50 +1060,450 @@ if python3 "${TMP_DIR}/r23-allowlist.py" \
   exit 2
 fi
 
+source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
+
+f13_develop_aggregate_enabled() {
+  [[ "${1:-}" == 'push' && "${2:-}" == 'refs/heads/develop' ]]
+}
+
+f13_path_is_guarded() {
+  case "$1" in
+    protos/*|*/pb/*|*.pb.go|src/backend/space/*|src/backend/role/*|\
+    src/backend/voice/pb/*|src/backend/voice/*_test.go|\
+    src/backend/voice/*.go|src/backend/voice/go.mod|src/backend/voice/go.sum|\
+    src/backend/voice/Dockerfile|src/backend/migrations/voice_db/*|\
+    src/backend/voice/internal/grpcsvc/*.go|src/backend/voice/internal/store/*.go|\
+    src/backend/voice/internal/livekit/*.go|src/backend/voice/internal/s2s/*.go|\
+    src/backend/voice/internal/voiceevents/*.go|src/backend/voice/internal/roomlifecycle/*.go)
+      return 0 ;;
+  esac
+  return 1
+}
+
+f13_cross_scope_path_allowed() {
+  local path="$1" runtime_trigger="$2"
+  [[ "${runtime_trigger}" == true ]] || return 0
+  case "${path}" in
+    protos/*|*/pb/*|*.pb.go)
+      return 1 ;;
+    src/backend/space/*|src/backend/role/*)
+      identity_publisher_path_allowed "${path}" ;;
+    *)
+      return 0 ;;
+  esac
+}
+
+# Build an exact per-contribution map for an aggregate develop push. For merge
+# commits, only source-base-to-source-head paths belong to the contribution;
+# verify the merge tree retained each source path's full tree entry.
+f13_collect_develop_contributions() {
+  local repo="$1" base="$2" target="$3" output="$4"
+  local commit parent_count first_parent source_head source_base delta
+  local path source_entry result_entry target_entry blob trigger
+  local -a commit_line
+  local -A owners=()
+  : >"${output}"
+  git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" rev-parse --verify "${target}^{commit}" >/dev/null 2>&1 || return 1
+  git -C "${repo}" merge-base --is-ancestor "${base}" "${target}" || return 1
+  git -C "${repo}" rev-list --first-parent "${target}" | grep -Fxq -- "${base}" || return 1
+
+  while IFS= read -r commit; do
+    [[ -n "${commit}" ]] || continue
+    read -r -a commit_line <<<"$(git -C "${repo}" rev-list --parents -n 1 "${commit}")"
+    parent_count=$((${#commit_line[@]} - 1))
+    ((parent_count == 1 || parent_count == 2)) || return 1
+    first_parent="${commit_line[1]}"
+    if ((parent_count == 2)); then
+      source_head="${commit_line[2]}"
+      source_base="$(git -C "${repo}" merge-base "${first_parent}" "${source_head}")" || return 1
+      [[ -n "${source_base}" ]] || return 1
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-source-delta" || return 1
+    else
+      source_head="${commit}"
+      source_base="${first_parent}"
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-source-delta" || return 1
+    fi
+    delta="${TMP_DIR}/f13-source-delta"
+
+    : >"${TMP_DIR}/f13-unapproved-delta"
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}")" || return 1
+      if ((parent_count == 2)); then
+        result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}")" || return 1
+        [[ "${source_entry}" == "${result_entry}" ]] || return 1
+      fi
+      if f13_path_is_guarded "${path}"; then
+        target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}")" || return 1
+        [[ "${source_entry}" == "${target_entry}" ]] || return 1
+      fi
+      blob="$(awk '{print $3}' <<<"${source_entry}")"
+      if game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}" || \
+        be255_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}"; then
+        continue
+      fi
+      printf '%s\n' "${path}" >>"${TMP_DIR}/f13-unapproved-delta"
+    done <"${delta}"
+
+    trigger=false
+    if voice_r22_runtime_changed <"${TMP_DIR}/f13-unapproved-delta"; then
+      trigger=true
+    fi
+    while IFS= read -r path; do
+      [[ -n "${path}" ]] || continue
+      if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
+        return 1
+      fi
+      owners["${path}"]="${commit}"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${path}" "${trigger}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" >>"${output}"
+    done <"${delta}"
+  done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}")
+}
+
+f13_fixture_repo="${TMP_DIR}/f13-contribution-fixture"
+mkdir -p "${f13_fixture_repo}"
+git -C "${f13_fixture_repo}" init -q
+git -C "${f13_fixture_repo}" config user.name 'Voice CI fixture'
+git -C "${f13_fixture_repo}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_fixture_repo}" config commit.gpgsign false
+printf '%s\n' 'fixture base' >"${f13_fixture_repo}/README.md"
+git -C "${f13_fixture_repo}" add README.md
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture base'
+f13_fixture_base="$(git -C "${f13_fixture_repo}" rev-parse HEAD)"
+git -C "${f13_fixture_repo}" checkout -qb f13-r22-source
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/main.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/main.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture R22 contribution'
+git -C "${f13_fixture_repo}" checkout -qb f13-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture merge R22' f13-r22-source
+git -C "${f13_fixture_repo}" checkout -qb f13-bot-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/protos/voice/bot/v1"
+printf '%s\n' 'syntax = "proto3";' >"${f13_fixture_repo}/protos/voice/bot/v1/bot.proto"
+git -C "${f13_fixture_repo}" add protos/voice/bot/v1/bot.proto
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture unrelated Bot contribution'
+git -C "${f13_fixture_repo}" checkout -q f13-integration
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture merge Bot' f13-bot-source
+f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-fixture-map" || {
+  printf '%s\n' 'F13 oracle bug: separate contribution fixture was rejected' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/main.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-fixture-map") || {
+  printf '%s\n' 'F13 oracle bug: R22 contribution lost its own runtime trigger' >&2
+  exit 2
+}
+grep -Fqx $'protos/voice/bot/v1/bot.proto\tfalse' <(cut -f1-2 "${TMP_DIR}/f13-fixture-map") || {
+  printf '%s\n' 'F13 oracle bug: unrelated Bot contribution inherited the R22 trigger' >&2
+  exit 2
+}
+f13_cross_scope_path_allowed 'protos/voice/bot/v1/bot.proto' false || {
+  printf '%s\n' 'F13 oracle bug: unrelated-only proto contribution was rejected' >&2
+  exit 2
+}
+
+git -C "${f13_fixture_repo}" checkout -qb f13-mixed-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice" "${f13_fixture_repo}/protos/voice/bot/v1"
+printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/main.go"
+printf '%s\n' 'syntax = "proto3";' >"${f13_fixture_repo}/protos/voice/bot/v1/bot.proto"
+git -C "${f13_fixture_repo}" add src/backend/voice/main.go protos/voice/bot/v1/bot.proto
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture mixed contribution'
+git -C "${f13_fixture_repo}" checkout -qb f13-mixed-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture merge mixed contribution' f13-mixed-source
+f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-mixed-map" || {
+  printf '%s\n' 'F13 oracle bug: mixed contribution fixture was rejected before path checks' >&2
+  exit 2
+}
+grep -Fqx $'protos/voice/bot/v1/bot.proto\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-mixed-map") || {
+  printf '%s\n' 'F13 oracle bug: same-contribution proto change escaped its R22 trigger' >&2
+  exit 2
+}
+if f13_cross_scope_path_allowed 'protos/voice/bot/v1/bot.proto' true; then
+  printf '%s\n' 'F13 oracle bug: proto change in the R22 contribution escaped the guard' >&2
+  exit 2
+fi
+
+git -C "${f13_fixture_repo}" checkout -qb f13-conflict-source "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/protos/voice/bot/v1"
+printf '%s\n' 'source version' >"${f13_fixture_repo}/protos/voice/bot/v1/conflict.proto"
+git -C "${f13_fixture_repo}" add protos/voice/bot/v1/conflict.proto
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture conflicting source'
+git -C "${f13_fixture_repo}" checkout -qb f13-conflict-integration "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/protos/voice/bot/v1"
+printf '%s\n' 'target version' >"${f13_fixture_repo}/protos/voice/bot/v1/conflict.proto"
+git -C "${f13_fixture_repo}" add protos/voice/bot/v1/conflict.proto
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture conflicting target'
+if git -C "${f13_fixture_repo}" merge --no-ff -m 'F13 fixture conflict merge' f13-conflict-source >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle bug: conflicting fixture unexpectedly merged cleanly' >&2
+  exit 2
+fi
+printf '%s\n' 'target version' >"${f13_fixture_repo}/protos/voice/bot/v1/conflict.proto"
+git -C "${f13_fixture_repo}" add protos/voice/bot/v1/conflict.proto
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture resolved conflict'
+if f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-conflict-map"; then
+  printf '%s\n' 'F13 oracle bug: source/merge blob mismatch was accepted' >&2
+  exit 2
+fi
+
+# A merge can restore an activation line absent from its first parent when a
+# conflict is resolved with the source tree. Provenance uses the source delta;
+# activation scanning must use the first-parent-to-result delta.
+f13_activation_fixture="${TMP_DIR}/f13-activation-fixture"
+mkdir -p "${f13_activation_fixture}"
+git -C "${f13_activation_fixture}" init -q
+git -C "${f13_activation_fixture}" config user.name 'Voice CI fixture'
+git -C "${f13_activation_fixture}" config user.email 'voice-ci@example.invalid'
+git -C "${f13_activation_fixture}" config commit.gpgsign false
+mkdir -p "${f13_activation_fixture}/src/backend/voice"
+cat >"${f13_activation_fixture}/src/backend/voice/main.go" <<'EOF'
+package main
+
+func main() {
+	NewLifecycleWorker()
+
+	label := "base"
+	_ = label
+}
+EOF
+git -C "${f13_activation_fixture}" add src/backend/voice/main.go
+git -C "${f13_activation_fixture}" commit -qm 'F13 activation fixture source base'
+f13_activation_source_base="$(git -C "${f13_activation_fixture}" rev-parse HEAD)"
+git -C "${f13_activation_fixture}" checkout -qb f13-activation-source
+python3 - "${f13_activation_fixture}/src/backend/voice/main.go" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace('label := "base"', 'label := "source benign edit"'))
+PY
+git -C "${f13_activation_fixture}" add src/backend/voice/main.go
+git -C "${f13_activation_fixture}" commit -qm 'F13 source benign edit preserves activation'
+git -C "${f13_activation_fixture}" checkout -qb f13-activation-integration "${f13_activation_source_base}"
+python3 - "${f13_activation_fixture}/src/backend/voice/main.go" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text().replace('\tNewLifecycleWorker()\n\n', '').replace('label := "base"', 'label := "target edit"')
+path.write_text(source)
+PY
+git -C "${f13_activation_fixture}" add src/backend/voice/main.go
+git -C "${f13_activation_fixture}" commit -qm 'F13 first parent removes activation'
+f13_activation_base="$(git -C "${f13_activation_fixture}" rev-parse HEAD)"
+if git -C "${f13_activation_fixture}" merge --no-ff -m 'F13 activation conflict merge' f13-activation-source >/dev/null 2>&1; then
+  printf '%s\n' 'F13 oracle bug: activation fixture unexpectedly merged without conflict' >&2
+  exit 2
+fi
+git -C "${f13_activation_fixture}" show f13-activation-source:src/backend/voice/main.go >"${f13_activation_fixture}/src/backend/voice/main.go"
+git -C "${f13_activation_fixture}" add src/backend/voice/main.go
+git -C "${f13_activation_fixture}" commit -qm 'F13 resolve conflict with source tree'
+f13_collect_develop_contributions \
+  "${f13_activation_fixture}" "${f13_activation_base}" HEAD "${TMP_DIR}/f13-activation-map" || {
+  printf '%s\n' 'F13 oracle bug: source-tree conflict resolution lost contribution provenance' >&2
+  exit 2
+}
+f13_changed_content() {
+  local repo="$1" map="$2" path="$3" commit first_parent source_base source_head row
+  if [[ -s "${map}" ]]; then
+    row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    IFS=$'\t' read -r _ _ commit first_parent source_base source_head <<<"${row}"
+    [[ -n "${commit}" && -n "${first_parent}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
+    git -C "${repo}" diff --unified=0 "${first_parent}" "${commit}" -- "${path}" | sed -n '/^+++ /d; /^+/s/^+//p'
+  else
+    changed_content "${base_sha}" "${path}"
+  fi
+}
+
+f13_changed_content \
+  "${f13_activation_fixture}" "${TMP_DIR}/f13-activation-map" 'src/backend/voice/main.go' \
+  >"${TMP_DIR}/f13-activation-content"
+if ! grep -Fq 'NewLifecycleWorker()' "${TMP_DIR}/f13-activation-content" || \
+  ! forbidden_activation_content "${TMP_DIR}/f13-activation-content"; then
+  printf '%s\n' 'F13 oracle bug: first-parent activation restoration was not detected' >&2
+  exit 2
+fi
+
+git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-one "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package voice' >"${f13_fixture_repo}/src/backend/voice/repeated.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/repeated.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture first repeated guarded path'
+git -C "${f13_fixture_repo}" checkout -qb f13-repeat-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture first repeated merge' f13-repeat-source-one
+git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-two "${f13_fixture_base}"
+printf '%s\n' 'package voice' >"${f13_fixture_repo}/src/backend/voice/repeated.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/repeated.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture second repeated guarded path'
+git -C "${f13_fixture_repo}" checkout -q f13-repeat-integration
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture second repeated merge' f13-repeat-source-two
+if f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-repeat-map"; then
+  printf '%s\n' 'F13 oracle bug: guarded path with multiple contribution owners was accepted' >&2
+  exit 2
+fi
+
+git -C "${f13_fixture_repo}" checkout -q --orphan f13-unrelated-source
+git -C "${f13_fixture_repo}" rm -rf -q .
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/orphan.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/orphan.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture unrelated root'
+git -C "${f13_fixture_repo}" checkout -qb f13-unrelated-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --allow-unrelated-histories --no-ff -qm 'F13 fixture unrelated merge' f13-unrelated-source
+if f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-unrelated-map"; then
+  printf '%s\n' 'F13 oracle bug: non-ancestor contribution source was accepted' >&2
+  exit 2
+fi
+
+if f13_collect_develop_contributions \
+  "${f13_fixture_repo}" '0000000000000000000000000000000000000000' HEAD "${TMP_DIR}/f13-invalid-map"; then
+  printf '%s\n' 'F13 oracle bug: missing aggregate baseline was accepted' >&2
+  exit 2
+fi
+if f13_develop_aggregate_enabled push refs/heads/feature/example || \
+  f13_develop_aggregate_enabled push refs/heads/master || \
+  f13_develop_aggregate_enabled pull_request refs/heads/develop; then
+  printf '%s\n' 'F13 oracle bug: contribution partition activated outside develop push' >&2
+  exit 2
+fi
+f13_develop_aggregate_enabled push refs/heads/develop || {
+  printf '%s\n' 'F13 oracle bug: develop push did not enable contribution partition' >&2
+  exit 2
+}
+
+if f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
+  if ! f13_collect_develop_contributions "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions"; then
+    printf '%s\n' 'F13: develop contribution provenance is missing or ambiguous' >&2
+    exit 1
+  fi
+fi
+
 {
   git -C "${ROOT}" diff --name-only "${base_sha}" --
   git -C "${ROOT}" ls-files --others --exclude-standard
 } | sed '/^[[:space:]]*$/d' | LC_ALL=C sort -u >"${TMP_DIR}/changed-files"
 
-source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
 while IFS= read -r file; do
+  if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+    continue
+  fi
   game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || \
     be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)" || \
     printf '%s\n' "${file}"
 done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
+if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+  awk -F '\t' '$2 == "true" { print $1 }' "${TMP_DIR}/f13-contributions" \
+    | LC_ALL=C sort -u >"${TMP_DIR}/unapproved-runtime-delta"
+fi
 r22_runtime_delta=false
 if voice_r22_runtime_changed <"${TMP_DIR}/unapproved-runtime-delta"; then
   r22_runtime_delta=true
 fi
 
+f13_runtime_for_path() {
+  local path="$1"
+  if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+    awk -F '\t' -v path="${path}" '$1 == path { value=$2; found=1 } END { if (!found) exit 1; print value }' \
+      "${TMP_DIR}/f13-contributions"
+  else
+    printf '%s\n' "${r22_runtime_delta}"
+  fi
+}
+
+f13_delta_for_path() {
+  local repo="$1" map="$2" path="$3" row commit source_base source_head
+  if [[ -s "${map}" ]]; then
+    row="$(awk -F '\t' -v path="${path}" '$1 == path { value=$0 } END { if (value != "") print value }' "${map}")"
+    IFS=$'\t' read -r _ _ commit _ source_base source_head <<<"${row}"
+    [[ -n "${commit}" && -n "${source_base}" && -n "${source_head}" ]] || return 1
+    git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-current-delta" || return 1
+    grep -Fxq -- "${path}" "${TMP_DIR}/f13-current-delta" || return 1
+    printf '%s\n' "${TMP_DIR}/f13-current-delta"
+  else
+    printf '%s\n' "${TMP_DIR}/changed-files"
+  fi
+}
+
+git -C "${f13_fixture_repo}" checkout -qb f13-bot-only-integration "${f13_fixture_base}"
+git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture unrelated-only merge' f13-bot-source
+f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-bot-only-map" || {
+  printf '%s\n' 'F13 oracle bug: unrelated-only contribution fixture was rejected' >&2
+  exit 2
+}
+f13_bot_only_delta="$(f13_delta_for_path \
+  "${f13_fixture_repo}" "${TMP_DIR}/f13-bot-only-map" 'protos/voice/bot/v1/bot.proto')" || {
+  printf '%s\n' 'F13 oracle bug: unrelated contribution lost its own delta' >&2
+  exit 2
+}
+[[ "$(cat "${f13_bot_only_delta}")" == 'protos/voice/bot/v1/bot.proto' ]] || {
+  printf '%s\n' 'F13 oracle bug: contribution delta included paths from another contribution' >&2
+  exit 2
+}
+git -C "${f13_fixture_repo}" checkout -qb f13-direct-contribution "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
+printf '%s\n' 'package main' >"${f13_fixture_repo}/src/backend/voice/direct.go"
+git -C "${f13_fixture_repo}" add src/backend/voice/direct.go
+git -C "${f13_fixture_repo}" commit -qm 'F13 fixture direct contribution'
+f13_collect_develop_contributions \
+  "${f13_fixture_repo}" "${f13_fixture_base}" HEAD "${TMP_DIR}/f13-direct-map" || {
+  printf '%s\n' 'F13 oracle bug: direct commit contribution fixture was rejected' >&2
+  exit 2
+}
+grep -Fqx $'src/backend/voice/direct.go\ttrue' <(cut -f1-2 "${TMP_DIR}/f13-direct-map") || {
+  printf '%s\n' 'F13 oracle bug: direct commit delta lost its runtime trigger' >&2
+  exit 2
+}
+
 while IFS= read -r file; do
-  if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
+  f13_path_delta="${TMP_DIR}/changed-files"
+  if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+    f13_path_delta="$(f13_delta_for_path "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}")" || {
+      if f13_path_is_guarded "${file}"; then
+        fail "F13: changed guarded path is absent from its contribution delta: ${file}"
+      fi
+      f13_path_delta="${TMP_DIR}/changed-files"
+    }
+  fi
+  file_r22_runtime_delta="${r22_runtime_delta}"
+  if [[ -s "${TMP_DIR}/f13-contributions" ]]; then
+    file_r22_runtime_delta="$(f13_runtime_for_path "${file}")" || {
+      if f13_path_is_guarded "${file}"; then
+        fail "F13: changed guarded path has no unique contribution provenance: ${file}"
+      fi
+      file_r22_runtime_delta=false
+    }
+  fi
+  if game_checkpoint_path_allowed "${file}" "${f13_path_delta}"; then
     continue
   fi
   actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
-  if be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "${actual_blob}"; then
+  if be255_checkpoint_path_authorized_in_delta "${file}" "${f13_path_delta}" "${actual_blob}"; then
     continue
   fi
-  if r23_contract_path_allowed "${file}"; then
+  if r23_contract_path_allowed_for_window "${r23_allowlist_enabled}" "${file}" "${f13_path_delta}"; then
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
     continue
   fi
-  if [[ "${r22_runtime_delta}" == true ]] && space_media_path_allowed "${file}"; then
+  if [[ "${file_r22_runtime_delta}" == true ]] && space_media_path_allowed "${file}"; then
     continue
   fi
+  if ! f13_cross_scope_path_allowed "${file}" "${file_r22_runtime_delta}"; then
+    case "${file}" in
+      protos/*|*/pb/*|*.pb.go)
+        fail "F13: proto/generated change is outside R22.2: ${file}" ;;
+      src/backend/space/*|src/backend/role/*)
+        fail "F13: Space/Role change is outside R22.2: ${file}" ;;
+    esac
+  fi
   case "${file}" in
-    protos/*|*/pb/*|*.pb.go)
-      if [[ "${r22_runtime_delta}" == true ]]; then
-        fail "F13: proto/generated change is outside R22.2: ${file}"
-      fi
-      ;;
-    src/backend/space/*|src/backend/role/*)
-      if [[ "${r22_runtime_delta}" == true ]] && ! identity_publisher_path_allowed "${file}"; then
-        fail "F13: Space/Role change is outside R22.2: ${file}"
-      fi
-      ;;
     src/backend/voice/internal/grpcsvc/*.go|src/backend/voice/internal/store/*.go|src/backend/voice/internal/livekit/*.go|src/backend/voice/internal/s2s/*.go|src/backend/voice/internal/voiceevents/*.go)
       [[ "${file}" == *_test.go ]] || identity_publisher_path_allowed "${file}" || \
         fail "F13: handler/Redis/external adapter change activates forbidden scope: ${file}"
@@ -1137,7 +1537,7 @@ while IFS= read -r file; do
   case "${file}" in
     src/backend/voice/main.go|src/backend/voice/health.go|src/backend/voice/database.go|src/backend/voice/internal/roomlifecycle/*.go)
       [[ "${file}" == *_test.go ]] && continue
-      changed_content "${base_sha}" "${file}" >"${TMP_DIR}/changed-content"
+      f13_changed_content "${ROOT}" "${TMP_DIR}/f13-contributions" "${file}" >"${TMP_DIR}/changed-content"
       if forbidden_activation_content "${TMP_DIR}/changed-content"; then
         fail "F13: coordinator/bridge/publisher/handler activation added in ${file}"
       fi

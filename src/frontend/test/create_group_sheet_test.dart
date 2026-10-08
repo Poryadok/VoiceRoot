@@ -673,6 +673,111 @@ void main() {
     expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
   });
 
+  testWidgets(
+    'CreateGroupSheet retries failed member invite on the created group',
+    (tester) async {
+      final requests = <http.Request>[];
+      var inviteAttempts = 0;
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) {
+              container = ProviderScope.containerOf(context);
+              return TextButton(
+                onPressed: () => CreateGroupSheet.show(context),
+                child: const Text('open'),
+              );
+            },
+          ),
+          client: MockClient((request) async {
+            requests.add(request);
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'group-retry',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Squad',
+                    'creator_profile_id': 'profile-me',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-retry/members') {
+              inviteAttempts++;
+              if (inviteAttempts == 1) {
+                return http.Response(
+                  jsonEncode({'message': 'private_member_diagnostic'}),
+                  503,
+                );
+              }
+              return http.Response('', 204);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Squad',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        requests.where(
+          (request) =>
+              request.method == 'POST' && request.url.path == '/api/v1/chats',
+        ),
+        hasLength(1),
+      );
+      expect(inviteAttempts, 1);
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(find.text('private_member_diagnostic'), findsNothing);
+      expect(find.text('Try again'), findsOneWidget);
+
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      final createRequests = requests
+          .where(
+            (request) =>
+                request.method == 'POST' && request.url.path == '/api/v1/chats',
+          )
+          .toList(growable: false);
+      final inviteRequests = requests
+          .where(
+            (request) =>
+                request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-retry/members',
+          )
+          .toList(growable: false);
+      expect(createRequests, hasLength(1));
+      expect(inviteRequests, hasLength(2));
+      expect(
+        (jsonDecode(inviteRequests[0].body)
+            as Map<String, dynamic>)['profile_ids'],
+        ['friend-a', 'friend-b'],
+      );
+      expect(inviteRequests[1].body, inviteRequests[0].body);
+      expect(container.read(selectedChatIdProvider), 'group-retry');
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    },
+  );
+
   testWidgets('CreateGroupSheet hides upstream failure details', (
     tester,
   ) async {

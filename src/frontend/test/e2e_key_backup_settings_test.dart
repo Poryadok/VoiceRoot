@@ -128,10 +128,14 @@ Widget _keyBackupCaptureApp(_SettingsClient client, ThemeData theme) =>
         theme: theme,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: RepaintBoundary(
-          key: _captureBoundaryKey,
-          child: const E2eKeyBackupScreen(),
-        ),
+        initialRoute: '/key-backup',
+        home: const SizedBox.shrink(),
+        routes: {
+          '/key-backup': (_) => RepaintBoundary(
+            key: _captureBoundaryKey,
+            child: const E2eKeyBackupScreen(),
+          ),
+        },
       ),
     );
 
@@ -163,21 +167,29 @@ Future<void> _writeKeyBackupCaptureIfRequested(
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(_captureBoundaryKey),
   );
-  final image = await boundary.toImage(pixelRatio: 1);
-  try {
-    final png = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (png == null) fail('could not encode key-backup golden capture');
-    final directory = Directory(captureDirectory);
-    await directory.create(recursive: true);
-    final path =
-        '${directory.path}${Platform.pathSeparator}'
-        'e2e_key_backup_$orientation.png';
-    await File(path).writeAsBytes(
-      png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
-      flush: true,
-    );
-  } finally {
-    image.dispose();
+  final captured = await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 1);
+    try {
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (png == null) {
+        throw StateError('could not encode key-backup golden capture');
+      }
+      final directory = Directory(captureDirectory);
+      await directory.create(recursive: true);
+      final path =
+          '${directory.path}${Platform.pathSeparator}'
+          'e2e_key_backup_$orientation.png';
+      await File(path).writeAsBytes(
+        png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+        flush: true,
+      );
+      return true;
+    } finally {
+      image.dispose();
+    }
+  });
+  if (captured != true) {
+    throw StateError('key-backup golden capture did not complete');
   }
 }
 
@@ -244,6 +256,7 @@ void main() {
           _keyBackupCaptureApp(_keyBackupCaptureClient(), theme),
         );
         await tester.pumpAndSettle();
+        expect(find.byType(BackButton), findsOneWidget);
         await _writeKeyBackupCaptureIfRequested(tester, capture.label);
         await expectLater(
           find.byKey(_captureBoundaryKey),
@@ -279,9 +292,14 @@ void main() {
       final boundary = tester.renderObject<RenderRepaintBoundary>(
         find.byKey(_captureBoundaryKey),
       );
-      final image = await boundary.toImage(pixelRatio: 1);
-      addTearDown(image.dispose);
-      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      final png = await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        try {
+          return await image.toByteData(format: ui.ImageByteFormat.png);
+        } finally {
+          image.dispose();
+        }
+      });
       expect(png, isNotNull);
 
       final path = _keyBackupGoldenPath('h');

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -378,11 +379,11 @@ func TestListSpaceMembersForBot_returnsProfileIDs(t *testing.T) {
 	require.Len(t, resp.GetProfileIds(), 1)
 }
 
-func TestCreateBotChat_failedCreateDoesNotConsumeQuota(t *testing.T) {
+func TestCreateBotChat_definiteValidationRejectionDoesNotConsumeQuota(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	chatFake := &fakeChatClient{createErr: status.Error(codes.Internal, "chat service down")}
+	chatFake := &fakeChatClient{createErr: status.Error(codes.InvalidArgument, "invalid chat name")}
 	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
 	defer cleanup()
 
@@ -397,7 +398,7 @@ func TestCreateBotChat_failedCreateDoesNotConsumeQuota(t *testing.T) {
 		ChatType: "channel",
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.Internal, status.Code(err))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, 1, chatFake.createChatCalls)
 
 	count, err := st.DailyChatCreateCount(ctx, botUUID)
@@ -1033,6 +1034,272 @@ func TestCreateBotChat_concurrentDailyLimit(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, 10, successes, "multi-replica race must allow at most 10 successful creates")
 	require.Equal(t, workers-10, exhausted)
+	require.Equal(t, 10, chatFake.createCalls(), "quota must be reserved before any extra Chat creates")
+}
+
+func TestCreateBotChat_reservesBeforeChatIOAtDailyLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{
+		createStarted: make(chan struct{}, 2),
+	}
+	allowCreate := make(chan struct{})
+	chatFake.allowCreate = allowCreate
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	_, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	for range 9 {
+		_, err := st.IncrementDailyChatCreates(context.Background(), uuid.MustParse(botID))
+		if err == nil {
+			continue
+		}
+		t.Fatalf("seed quota count: %v", err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for i := range 2 {
+		go func(i int) {
+			<-start
+			_, err := client.CreateBotChat(botCtx, &botv1.CreateBotChatRequest{
+				SpaceId: spaceID.String(), Name: fmt.Sprintf("concurrent-%d", i), ChatType: "channel",
+			})
+			results <- err
+		}(i)
+	}
+	close(start)
+
+	select {
+	case <-chatFake.createStarted:
+	case <-time.After(5 * time.Second):
+		close(allowCreate)
+		t.Fatal("no request reached Chat.CreateChat")
+	}
+
+	var early error
+	earlyReceived := false
+	secondCreate := false
+	select {
+	case early = <-results:
+		earlyReceived = true
+	case <-chatFake.createStarted:
+		secondCreate = true
+	case <-time.After(5 * time.Second):
+	}
+	close(allowCreate)
+	var outcomes []error
+	if earlyReceived {
+		outcomes = append(outcomes, early)
+	}
+	for len(outcomes) < 2 {
+		outcomes = append(outcomes, <-results)
+	}
+
+	require.False(t, secondCreate, "only one of two requests may reach Chat at count 9")
+	var successes, exhausted int
+	for _, err := range outcomes {
+		if err == nil {
+			successes++
+			continue
+		}
+		if status.Code(err) == codes.ResourceExhausted {
+			exhausted++
+			continue
+		}
+		t.Errorf("unexpected CreateBotChat error: %v", err)
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, exhausted)
+	require.Equal(t, 1, chatFake.createCalls())
+	count, err := st.DailyChatCreateCount(context.Background(), uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 10, count)
+}
+
+func TestCreateBotChat_releasesOnlyDefiniteChatRejection(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{createErr: status.Error(codes.InvalidArgument, "invalid chat name")}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	_, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	_, err := client.CreateBotChat(withBotToken(context.Background(), botToken), &botv1.CreateBotChatRequest{
+		SpaceId: spaceID.String(), Name: "invalid", ChatType: "channel",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	count, err := st.DailyChatCreateCount(context.Background(), uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Zero(t, count, "a definite pre-insert rejection releases its reservation")
+}
+
+func TestCreateBotChat_keepsReservationForUnknownChatOutcome(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{createErr: status.Error(codes.Unavailable, "connection lost")}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	_, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	_, err := client.CreateBotChat(withBotToken(context.Background(), botToken), &botv1.CreateBotChatRequest{
+		SpaceId: spaceID.String(), Name: "maybe-created", ChatType: "channel",
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	count, err := st.DailyChatCreateCount(context.Background(), uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "unknown external outcomes stay reserved to fail closed")
+}
+
+func TestCreateBotChat_stableRequestIDReusesReservationAndRejectsChangedPayload(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	ctx, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	requestID := uuid.NewString()
+	request := &botv1.CreateBotChatRequest{SpaceId: spaceID.String(), Name: "retryable", ChatType: "channel", RequestId: requestID}
+	first, err := client.CreateBotChat(botCtx, request)
+	require.NoError(t, err)
+	second, err := client.CreateBotChat(botCtx, request)
+	require.NoError(t, err)
+	require.Equal(t, first.GetChat().GetId(), second.GetChat().GetId(), "Chat owns stable-key result replay")
+	require.Equal(t, []string{requestID, requestID}, chatFake.createIDs(), "Bot must forward the same key on every attempt")
+
+	changed := *request
+	changed.Name = "different payload"
+	_, err = client.CreateBotChat(botCtx, &changed)
+	require.Equal(t, codes.AlreadyExists, status.Code(err))
+	require.Equal(t, 2, chatFake.createCalls(), "changed request must fail before a second Chat call")
+
+	count, err := st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "same-key retries reserve one daily slot")
+}
+
+func TestCreateBotChat_ambiguousChatResponseReconcilesWithSameRequestID(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{createErr: status.Error(codes.Unavailable, "response lost after commit"), createErrAfterPersist: true}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	ctx, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	requestID := uuid.NewString()
+	request := &botv1.CreateBotChatRequest{SpaceId: spaceID.String(), Name: "ambiguous create", ChatType: "channel", RequestId: requestID}
+	_, err := client.CreateBotChat(botCtx, request)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	firstCount, err := st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, firstCount, "ambiguous result keeps the original reservation")
+
+	response, err := client.CreateBotChat(botCtx, request)
+	require.NoError(t, err)
+	require.NotEmpty(t, response.GetChat().GetId())
+	require.Equal(t, 2, chatFake.createCalls(), "retry must reconcile through Chat with the same key")
+	secondCount, err := st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, firstCount, secondCount, "reconciliation must not reserve a second daily slot")
+}
+
+func TestCreateBotChat_sameKeyFailureCannotReleaseConcurrentWinnerReservation(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	firstGate, secondGate := make(chan struct{}), make(chan struct{})
+	chatFake := &fakeChatClient{
+		createStarted: make(chan struct{}, 2),
+		createGates:   []<-chan struct{}{firstGate, secondGate},
+		createErrs:    []error{status.Error(codes.InvalidArgument, "definite rejection"), nil},
+	}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	ctx, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	requestID := uuid.NewString()
+	request := &botv1.CreateBotChatRequest{SpaceId: spaceID.String(), Name: "overlapping retry", ChatType: "channel", RequestId: requestID}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-start
+			_, err := client.CreateBotChat(withBotToken(context.Background(), botToken), request)
+			results <- err
+		}()
+	}
+	close(start)
+	for range 2 {
+		select {
+		case <-chatFake.createStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("both same-key Chat calls must be admitted before either finishes")
+		}
+	}
+
+	close(firstGate)
+	select {
+	case err := <-results:
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	case <-time.After(5 * time.Second):
+		t.Fatal("definite failure did not return")
+	}
+	count, err := st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "the first rejection must not free a slot while the second Chat call is pending")
+
+	close(secondGate)
+	select {
+	case err := <-results:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent winning create did not return")
+	}
+	count, err = st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "the successful same-key create must retain exactly one reservation")
+}
+
+func TestCreateBotChat_definiteRejectionKeepsHashTombstone(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	chatFake := &fakeChatClient{createErrs: []error{status.Error(codes.InvalidArgument, "definite rejection"), nil}}
+	client, st, _, cleanup := startBotGRPCWithBotCDeps(t, &botCDeps{chat: chatFake})
+	defer cleanup()
+
+	ctx, botID, botToken, _, spaceID := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_CREATE_IN_SPACE"]`)
+	botCtx := withBotToken(context.Background(), botToken)
+	requestID := uuid.NewString()
+	request := &botv1.CreateBotChatRequest{SpaceId: spaceID.String(), Name: "definite retry", ChatType: "channel", RequestId: requestID}
+	_, err := client.CreateBotChat(botCtx, request)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	count, err := st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "definite rejection releases its quota count")
+
+	changed := *request
+	changed.Name = "changed after rejection"
+	_, err = client.CreateBotChat(botCtx, &changed)
+	require.Equal(t, codes.AlreadyExists, status.Code(err))
+	require.Equal(t, 1, chatFake.createCalls(), "changed payload must fail before Chat even after a released reservation")
+
+	response, err := client.CreateBotChat(botCtx, request)
+	require.NoError(t, err, "same-hash retry may reserve again after a definite pre-persistence rejection")
+	require.NotEmpty(t, response.GetChat().GetId())
+	require.Equal(t, 2, chatFake.createCalls())
+	count, err = st.DailyChatCreateCount(ctx, uuid.MustParse(botID))
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
 }
 
 func TestRegisterBot_rejectsInvalidScopesJSON(t *testing.T) {
