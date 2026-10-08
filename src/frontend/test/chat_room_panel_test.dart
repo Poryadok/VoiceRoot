@@ -10,12 +10,16 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/backend/space_permissions.dart';
+import 'package:voice_frontend/e2e/e2e_message_service.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
+import 'package:voice_frontend/state/e2e_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
@@ -548,6 +552,445 @@ void main() {
     expect(find.byType(ChatMessageBubbleTile), findsNothing);
     expect(find.byKey(ChatRoomPanel.messagesKey), findsNothing);
   });
+
+  testWidgets(
+    'Send when online retries the same draft and id without an immediate send',
+    (tester) async {
+      final firstAttemptResult = Completer<String?>();
+      var immediateSendRequests = 0;
+      late _ScheduledRoomController room;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            profileAccentStorageProvider.overrideWithValue(
+              testProfileAccentStorage,
+            ),
+            authSessionStorageProvider.overrideWithValue(
+              InMemoryAuthSessionStorage(),
+            ),
+            authControllerProvider.overrideWith(authenticatedAuthController),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            httpClientProvider.overrideWithValue(
+              MockClient((request) async {
+                if (request.url.path == '/api/v1/messages/send') {
+                  immediateSendRequests++;
+                }
+                return http.Response('{}', 404);
+              }),
+            ),
+            realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+            selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+            chatListControllerProvider.overrideWith(_DmChatListController.new),
+            chatListProvider.overrideWith(
+              (ref) async => const ChatListData(
+                items: [
+                  ChatListItem(
+                    chat: VoiceChat(
+                      id: 'chat-abc',
+                      type: 'CHAT_TYPE_DM',
+                      creatorProfileId: 'prof-test',
+                    ),
+                    dmPeerProfileId: 'peer-1',
+                  ),
+                ],
+              ),
+            ),
+            chatRoomControllerProvider('chat-abc').overrideWith((ref) {
+              return room = _ScheduledRoomController(
+                ref,
+                'chat-abc',
+                firstAttemptResult: firstAttemptResult,
+              );
+            }),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final composer = find.descendant(
+        of: find.byKey(ChatRoomPanel.inputKey),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(composer, 'Keep this scheduled draft');
+      await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Send when online'));
+      await tester.pumpAndSettle();
+
+      expect(room.scheduledAttempts, hasLength(1));
+      expect(room.state.isSending, isTrue);
+      expect(find.text('Retry'), findsNothing);
+      firstAttemptResult.complete('unavailable');
+      await tester.pumpAndSettle();
+
+      expect(
+        room.scheduledAttempts.single.content,
+        'Keep this scheduled draft',
+      );
+      expect(room.scheduledAttempts.single.sendWhenOnline, isTrue);
+      expect(room.scheduledAttempts.single.scheduledAt, isNull);
+      expect(
+        find.text(
+          'Could not complete the scheduled-message request. Try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(immediateSendRequests, 0);
+      expect(find.text('Keep this scheduled draft'), findsWidgets);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ChatRoomPanel.scheduledCreateRetryKey),
+          matching: find.text('Retry'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(room.scheduledAttempts, hasLength(2));
+      expect(
+        room.scheduledAttempts[1].clientMessageId,
+        room.scheduledAttempts[0].clientMessageId,
+      );
+      expect(
+        room.scheduledAttempts[1].content,
+        room.scheduledAttempts[0].content,
+      );
+      expect(room.scheduledAttempts[1].sendWhenOnline, isTrue);
+      expect(immediateSendRequests, 0);
+      expect(
+        find.text(
+          'Could not complete the scheduled-message request. Try again.',
+        ),
+        findsNothing,
+      );
+      expect(find.text('Keep this scheduled draft'), findsNothing);
+    },
+  );
+
+  test('scheduled list drops a response after auth context changes', () async {
+    final requestStarted = Completer<void>();
+    final deferredResponse = Completer<http.Response>();
+    late AuthController auth;
+    final container = ProviderContainer(
+      overrides: [
+        authSessionStorageProvider.overrideWithValue(
+          InMemoryAuthSessionStorage(),
+        ),
+        authControllerProvider.overrideWith((ref) {
+          return auth = authenticatedAuthController(ref);
+        }),
+        gatewayConfigProvider.overrideWithValue(
+          const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+        httpClientProvider.overrideWithValue(
+          MockClient((request) async {
+            if (request.url.path == '/api/v1/messages/scheduled') {
+              if (!requestStarted.isCompleted) requestStarted.complete();
+              return deferredResponse.future;
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+        realtimeAutoConnectProvider.overrideWithValue(false),
+        realtimeEventProvider.overrideWith(
+          (ref) => const Stream<RealtimeFrame>.empty(),
+        ),
+        realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+        selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
+      ],
+    );
+    addTearDown(container.dispose);
+    final roomProvider = chatRoomControllerProvider('chat-abc');
+    final roomSubscription = container.listen(roomProvider, (_, _) {});
+    addTearDown(roomSubscription.close);
+    final room = container.read(roomProvider.notifier);
+
+    final load = room.loadScheduledMessages();
+    await requestStarted.future;
+    auth.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'replacement-access',
+        refreshToken: 'replacement-refresh',
+        accountId: 'account-b',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    deferredResponse.complete(
+      http.Response(
+        jsonEncode({
+          'scheduled_messages': [
+            {
+              'id': 'old-account-schedule',
+              'chat': {'id': 'chat-abc'},
+              'sender_profile_id': 'profile-a',
+              'send_when_online': true,
+              'status': 'SCHEDULED_MESSAGE_STATUS_PENDING',
+            },
+          ],
+          'page': {'has_more': false},
+        }),
+        200,
+      ),
+    );
+    await load;
+
+    expect(room.state.scheduledMessages, isEmpty);
+    expect(room.state.isLoadingScheduledMessages, isFalse);
+    expect(room.state.scheduledMessagesError, isNull);
+  });
+
+  test(
+    'scheduled E2E retry replays the exact encrypted request after an ambiguous failure',
+    () async {
+      var encryptionCalls = 0;
+      var scheduleCalls = 0;
+      String? committedRequestBody;
+      final requestBodies = <String>[];
+      final client = MockClient((request) async {
+        if (request.url.path != '/api/v1/messages/send') {
+          return http.Response('{}', 404);
+        }
+        scheduleCalls++;
+        requestBodies.add(request.body);
+        if (scheduleCalls == 1) {
+          // Model an accepted request whose response was lost. The server's
+          // idempotency key can replay only the exact original request body.
+          committedRequestBody = request.body;
+          return http.Response('{}', 503);
+        }
+        if (request.body != committedRequestBody) {
+          return http.Response('{}', 409);
+        }
+        return http.Response(
+          jsonEncode({
+            'scheduled_message': {
+              'id': 'scheduled-e2e-1',
+              'chat': {'id': 'chat-abc'},
+              'sender_profile_id': 'prof-test',
+              'client_message_id': 'e2e-scheduled-attempt-1',
+              'send_when_online': true,
+              'is_e2e': true,
+              'status': 'SCHEDULED_MESSAGE_STATUS_PENDING',
+              'payload': {'content': 'wire-ciphertext-1'},
+            },
+          }),
+          200,
+        );
+      });
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(client),
+          isDeviceOfflineProvider.overrideWith((ref) => false),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeEventProvider.overrideWith(
+            (ref) => const Stream<RealtimeFrame>.empty(),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          selectedChatIdProvider.overrideWith((ref) => 'another-chat'),
+          chatListControllerProvider.overrideWith((ref) {
+            return _E2eDmChatListController(ref);
+          }),
+          e2eMessageServiceProvider.overrideWithValue(
+            _CountingE2eMessageService(() => ++encryptionCalls),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final roomProvider = chatRoomControllerProvider('chat-abc');
+      final roomSubscription = container.listen(roomProvider, (_, _) {});
+      addTearDown(roomSubscription.close);
+      final room = container.read(roomProvider.notifier);
+
+      final firstResult = await room.createScheduledMessage(
+        content: 'Encrypted later',
+        clientMessageId: 'e2e-scheduled-attempt-1',
+        scheduledAt: null,
+        sendWhenOnline: true,
+      );
+      expect(firstResult, isNotNull);
+      expect(room.state.scheduledMessages, isEmpty);
+
+      final retryResult = await room.createScheduledMessage(
+        content: 'Encrypted later',
+        clientMessageId: 'e2e-scheduled-attempt-1',
+        scheduledAt: null,
+        sendWhenOnline: true,
+      );
+
+      expect(retryResult, isNull);
+      expect(encryptionCalls, 1);
+      expect(scheduleCalls, 2);
+      expect(requestBodies, hasLength(2));
+      expect(requestBodies[1], requestBodies[0]);
+      final sentBody = jsonDecode(requestBodies.first) as Map<String, dynamic>;
+      expect(sentBody['content'], 'wire-ciphertext-1');
+      expect(sentBody['is_e2e'], isTrue);
+      expect(sentBody['client_message_id'], 'e2e-scheduled-attempt-1');
+      expect(room.state.scheduledMessages.single.id, 'scheduled-e2e-1');
+    },
+  );
+
+  test(
+    'scheduled E2E create is single-flight while its response is pending',
+    () async {
+      final requestStarted = Completer<void>();
+      final deferredResponse = Completer<http.Response>();
+      var encryptionCalls = 0;
+      var scheduleCalls = 0;
+      final requestBodies = <String>[];
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path != '/api/v1/messages/send') {
+                return http.Response('{}', 404);
+              }
+              scheduleCalls++;
+              requestBodies.add(request.body);
+              if (!requestStarted.isCompleted) requestStarted.complete();
+              return deferredResponse.future;
+            }),
+          ),
+          isDeviceOfflineProvider.overrideWith((ref) => false),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeEventProvider.overrideWith(
+            (ref) => const Stream<RealtimeFrame>.empty(),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+          selectedChatIdProvider.overrideWith((ref) => 'another-chat'),
+          chatListControllerProvider.overrideWith((ref) {
+            return _E2eDmChatListController(ref);
+          }),
+          e2eMessageServiceProvider.overrideWithValue(
+            _CountingE2eMessageService(() => ++encryptionCalls),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final roomProvider = chatRoomControllerProvider('chat-abc');
+      final roomSubscription = container.listen(roomProvider, (_, _) {});
+      addTearDown(roomSubscription.close);
+      final room = container.read(roomProvider.notifier);
+
+      final firstRequest = room.createScheduledMessage(
+        content: 'Encrypted later',
+        clientMessageId: 'e2e-scheduled-attempt-2',
+        scheduledAt: null,
+        sendWhenOnline: true,
+      );
+      await requestStarted.future;
+      expect(room.state.isSending, isTrue);
+
+      final concurrentAttempt = await room.createScheduledMessage(
+        content: 'Encrypted later',
+        clientMessageId: 'e2e-scheduled-attempt-2',
+        scheduledAt: null,
+        sendWhenOnline: true,
+      );
+      expect(concurrentAttempt, 'scheduled_send_in_progress');
+      expect(scheduleCalls, 1);
+      expect(encryptionCalls, 1);
+      expect(requestBodies, hasLength(1));
+
+      deferredResponse.complete(
+        http.Response(
+          jsonEncode({
+            'scheduled_message': {
+              'id': 'scheduled-e2e-2',
+              'chat': {'id': 'chat-abc'},
+              'sender_profile_id': 'prof-test',
+              'client_message_id': 'e2e-scheduled-attempt-2',
+              'send_when_online': true,
+              'is_e2e': true,
+              'status': 'SCHEDULED_MESSAGE_STATUS_PENDING',
+              'payload': {'content': 'wire-ciphertext-1'},
+            },
+          }),
+          200,
+        ),
+      );
+      expect(await firstRequest, isNull);
+
+      expect(room.state.isSending, isFalse);
+      expect(room.state.scheduledMessages.single.id, 'scheduled-e2e-2');
+      expect(scheduleCalls, 1);
+      expect(encryptionCalls, 1);
+    },
+  );
+
+  test(
+    'scheduled list completion after controller disposal is ignored',
+    () async {
+      final requestStarted = Completer<void>();
+      final deferredResponse = Completer<http.Response>();
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          authControllerProvider.overrideWith(authenticatedAuthController),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          httpClientProvider.overrideWithValue(
+            MockClient((request) async {
+              if (request.url.path == '/api/v1/messages/scheduled') {
+                if (!requestStarted.isCompleted) requestStarted.complete();
+                return deferredResponse.future;
+              }
+              return http.Response('{}', 404);
+            }),
+          ),
+          realtimeAutoConnectProvider.overrideWithValue(false),
+          realtimeEventProvider.overrideWith(
+            (ref) => const Stream<RealtimeFrame>.empty(),
+          ),
+          realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
+        ],
+      );
+      final roomProvider = chatRoomControllerProvider('chat-abc');
+      final roomSubscription = container.listen(roomProvider, (_, _) {});
+      final room = container.read(roomProvider.notifier);
+      final load = room.loadScheduledMessages();
+      await requestStarted.future;
+
+      roomSubscription.close();
+      container.dispose();
+      deferredResponse.complete(http.Response('{}', 200));
+      await expectLater(load, completes);
+    },
+  );
 }
 
 class _EmptyRoomController extends ChatRoomController {
@@ -557,6 +1000,87 @@ class _EmptyRoomController extends ChatRoomController {
 
   @override
   Future<void> loadInitial() async {}
+}
+
+class _DmChatListController extends ChatListController {
+  _DmChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-abc',
+            type: 'CHAT_TYPE_DM',
+            creatorProfileId: 'prof-test',
+          ),
+          dmPeerProfileId: 'peer-1',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _ScheduledRoomController extends ChatRoomController {
+  _ScheduledRoomController(super.ref, super.chatId, {this.firstAttemptResult})
+    : super() {
+    state = const ChatRoomState(messages: []);
+  }
+
+  final Completer<String?>? firstAttemptResult;
+
+  final scheduledAttempts =
+      <
+        ({
+          String content,
+          String clientMessageId,
+          DateTime? scheduledAt,
+          bool sendWhenOnline,
+        })
+      >[];
+
+  @override
+  Future<void> loadInitial() async {}
+
+  @override
+  Future<void> loadScheduledMessages({bool loadMore = false}) async {}
+
+  @override
+  Future<String?> createScheduledMessage({
+    required String content,
+    required String clientMessageId,
+    required DateTime? scheduledAt,
+    required bool sendWhenOnline,
+    List<MessageAttachment> attachments = const [],
+    List<MessageMention> mentions = const [],
+    String? threadParentId,
+  }) async {
+    scheduledAttempts.add((
+      content: content,
+      clientMessageId: clientMessageId,
+      scheduledAt: scheduledAt,
+      sendWhenOnline: sendWhenOnline,
+    ));
+    if (scheduledAttempts.length == 1 && firstAttemptResult != null) {
+      state = state.copyWith(isSending: true, clearScheduledActionError: true);
+      final error = await firstAttemptResult!.future;
+      state = state.copyWith(
+        isSending: false,
+        scheduledActionError: error,
+        clearScheduledActionError: error == null,
+      );
+      return error;
+    }
+    final error = scheduledAttempts.length == 1 ? 'unavailable' : null;
+    state = state.copyWith(
+      isSending: false,
+      scheduledActionError: error,
+      clearScheduledActionError: error == null,
+    );
+    return error;
+  }
 }
 
 class _LoadingRoomController extends ChatRoomController {
@@ -751,4 +1275,41 @@ class _NoopRealtimeHub extends RealtimeHub {
 
   @override
   void ensureSubscribed(String chatId) {}
+}
+
+class _E2eDmChatListController extends ChatListController {
+  _E2eDmChatListController(super.ref) : super() {
+    state = const ChatListState(
+      profileId: 'prof-test',
+      items: [
+        ChatListItem(
+          chat: VoiceChat(
+            id: 'chat-abc',
+            type: 'CHAT_TYPE_DM',
+            creatorProfileId: 'prof-test',
+            e2eEnabled: true,
+          ),
+          dmPeerProfileId: 'peer-1',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadInitial() async {}
+}
+
+class _CountingE2eMessageService extends E2eMessageService {
+  _CountingE2eMessageService(this._nextCall);
+
+  final int Function() _nextCall;
+
+  @override
+  Future<String> encryptOutgoing({
+    required String localProfileId,
+    required String peerProfileId,
+    required String plaintext,
+    String? authorization,
+    String? chatId,
+  }) async => 'wire-ciphertext-${_nextCall()}';
 }

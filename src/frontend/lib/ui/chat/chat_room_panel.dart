@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../backend/chats_client.dart';
@@ -13,6 +14,9 @@ import '../../e2e/e2e_file_crypto.dart';
 import '../../backend/files_client.dart';
 import '../../backend/mention_parser.dart';
 import '../../backend/messages_client.dart';
+import '../../backend/proto_mappers.dart' show protoTimestampToDateTime;
+import '../../gen/voice/messaging/v1/messaging.pb.dart' as messaging_pb;
+import '../../gen/voice/messaging/v1/messaging.pbenum.dart' as messaging_enums;
 import '../../backend/space_permissions.dart';
 import '../../backend/voice_client.dart';
 import '../../state/bot_providers.dart';
@@ -97,6 +101,11 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key attachmentUploadCancelKey = Key(
     'chat_attachment_upload_cancel',
   );
+  static const Key scheduledMessagesKey = Key('chat_scheduled_messages');
+  static const Key scheduledCreateRetryKey = Key('chat_scheduled_create_retry');
+  static const Key scheduledCreateCancelKey = Key(
+    'chat_scheduled_create_cancel',
+  );
   static const Key peerPresenceKey = Key('chat_room_peer_presence');
   static const Key loadOlderKey = Key('chat_room_load_older');
   static const Key audioCallKey = Key('chat_room_audio_call');
@@ -129,6 +138,115 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
 }
 
 typedef ChatAttachmentPicker = Future<ChatAttachmentFile?> Function();
+
+class _ScheduledSendAttempt {
+  const _ScheduledSendAttempt({
+    required this.chatId,
+    required this.profileId,
+    required this.authorization,
+    required this.clientMessageId,
+    required this.content,
+    required this.scheduledAt,
+    required this.sendWhenOnline,
+    required this.mentions,
+    this.threadParentId,
+  });
+
+  final String chatId;
+  final String profileId;
+  final String authorization;
+  final String clientMessageId;
+  final String content;
+  final DateTime? scheduledAt;
+  final bool sendWhenOnline;
+  final List<MessageMention> mentions;
+  final String? threadParentId;
+}
+
+class _ScheduledMessageRow extends StatelessWidget {
+  const _ScheduledMessageRow({
+    required this.item,
+    required this.l10n,
+    required this.busy,
+    required this.onEdit,
+    required this.onCancel,
+    required this.onSendNow,
+  });
+
+  final messaging_pb.ScheduledMessage item;
+  final AppLocalizations l10n;
+  final bool busy;
+  final VoidCallback onEdit;
+  final VoidCallback onCancel;
+  final VoidCallback onSendNow;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduledAt = protoTimestampToDateTime(
+      item.hasScheduledAt() ? item.scheduledAt : null,
+    );
+    final scheduleLabel = item.sendWhenOnline
+        ? l10n.chatSendWhenOnline
+        : scheduledAt == null
+        ? l10n.chatSchedulePending
+        : '${MaterialLocalizations.of(context).formatMediumDate(scheduledAt.toLocal())} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(scheduledAt.toLocal()))}';
+    final isEncrypted = item.hasPayload() && item.payload.isE2e;
+    final content = item.hasPayload() && !isEncrypted
+        ? item.payload.content
+        : '';
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.schedule_send_outlined, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    scheduleLabel,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  if (content.isNotEmpty)
+                    Text(content, maxLines: 2, overflow: TextOverflow.ellipsis)
+                  else if (isEncrypted)
+                    const SizedBox.shrink(),
+                ],
+              ),
+            ),
+            if (busy)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else ...[
+              if (!isEncrypted && item.hasPayload())
+                IconButton(
+                  tooltip: l10n.chatScheduleEdit,
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              IconButton(
+                tooltip: l10n.chatScheduleSendNow,
+                onPressed: onSendNow,
+                icon: const Icon(Icons.send_outlined),
+              ),
+              IconButton(
+                tooltip: l10n.chatScheduleCancel,
+                onPressed: onCancel,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class ChatAttachmentFile {
   const ChatAttachmentFile({
@@ -205,6 +323,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _inChatSearchOpen = false;
   var _chatInfoSearchHandoffGeneration = 0;
   var _pinnedBarHidden = false;
+  var _scheduledMessagesRequested = false;
+  _ScheduledSendAttempt? _pendingScheduledSend;
+  var _scheduledAttemptInFlight = false;
+  var _scheduledAttemptSubmissionGeneration = 0;
+  Future<void> Function()? _scheduledActionRetry;
+  final Set<String> _scheduledActionBusyIds = <String>{};
   var _pinnedJumpGeneration = 0;
   String? _shownPinnedMessageId;
   var _highlightedMessageId = null as String?;
@@ -222,6 +346,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void dispose() {
     _pinnedJumpGeneration++;
     _attachmentOperation++;
+    _scheduledAttemptSubmissionGeneration++;
     _pendingAttachmentUpload = null;
     _attachmentUploadFailure = null;
     _composer.dispose();
@@ -247,6 +372,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pinnedJumpGeneration++;
       _pinnedBarHidden = false;
       _shownPinnedMessageId = null;
+      _scheduledMessagesRequested = false;
+      _scheduledAttemptSubmissionGeneration++;
+      _scheduledAttemptInFlight = false;
+      _pendingScheduledSend = null;
+      _scheduledActionRetry = null;
+      _scheduledActionBusyIds.clear();
       _attachmentOperation++;
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
@@ -409,6 +540,52 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final activeId = ref.watch(authControllerProvider).activeProfileId;
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      final changed =
+          previous?.activeProfileId != next.activeProfileId ||
+          previous?.session?.accessToken != next.session?.accessToken;
+      if (!changed) return;
+      if (mounted) {
+        setState(() {
+          _scheduledAttemptSubmissionGeneration++;
+          _scheduledAttemptInFlight = false;
+          _pendingScheduledSend = null;
+          _scheduledActionRetry = null;
+        });
+      }
+      _scheduledMessagesRequested = false;
+      if (next.activeProfileId != null &&
+          ref.read(selectedChatIdProvider) == widget.chatId) {
+        _scheduledMessagesRequested = true;
+        unawaited(
+          ref
+              .read(chatRoomControllerProvider(widget.chatId).notifier)
+              .loadScheduledMessages(),
+        );
+      }
+    });
+    ref.listen<String?>(selectedChatIdProvider, (_, next) {
+      if (next != widget.chatId || _scheduledMessagesRequested) return;
+      _scheduledMessagesRequested = true;
+      unawaited(
+        ref
+            .read(chatRoomControllerProvider(widget.chatId).notifier)
+            .loadScheduledMessages(),
+      );
+    });
+    if (!_scheduledMessagesRequested &&
+        activeId != null &&
+        ref.read(selectedChatIdProvider) == widget.chatId) {
+      _scheduledMessagesRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(
+          ref
+              .read(chatRoomControllerProvider(widget.chatId).notifier)
+              .loadScheduledMessages(),
+        );
+      });
+    }
     final draftKey = activeId == null
         ? null
         : ChatDraftKey(profileId: activeId, chatId: widget.chatId);
@@ -1281,6 +1458,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     ),
                   ),
                 ),
+              _buildScheduledMessagesSection(room, l10n),
               if (_attachmentUploadFailure case final failure?)
                 Padding(
                   key: ChatRoomPanel.attachmentUploadFailureKey,
@@ -1421,6 +1599,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         onPressed: room.isSending || composerBlocked
                             ? null
                             : _send,
+                        onLongPress:
+                            room.isSending ||
+                                _uploadingAttachment ||
+                                composerBlocked
+                            ? null
+                            : _openScheduledSendMenu,
                         isLoading: room.isSending,
                         tooltip: l10n.chatSendMessage,
                       ),
@@ -1529,6 +1713,516 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         }
         _refocusComposer();
       },
+    );
+  }
+
+  Future<void> _openScheduledSendMenu() async {
+    final chatId = widget.chatId;
+    if (_composer.text.trim().isEmpty ||
+        _isDmPeerDeleted() ||
+        !_isCurrentChat(chatId)) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final authorization = ref.read(authorizationHeaderProvider);
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    if (authorization == null || profileId == null) return;
+    final chatType = ref
+        .read(chatListProvider)
+        .valueOrNull
+        ?.items
+        .where((item) => item.chatId == chatId)
+        .map((item) => item.chat.type)
+        .firstOrNull;
+    final isDm = chatType == 'CHAT_TYPE_DM';
+    final mode = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: Text(l10n.chatScheduleMessage),
+              onTap: () => Navigator.pop(sheetContext, 'scheduled'),
+            ),
+            if (isDm)
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: Text(l10n.chatSendWhenOnline),
+                onTap: () => Navigator.pop(sheetContext, 'online'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted ||
+        mode == null ||
+        widget.chatId != chatId ||
+        !_isCurrentChat(chatId) ||
+        profileId != ref.read(authControllerProvider).activeProfileId ||
+        authorization != ref.read(authorizationHeaderProvider)) {
+      return;
+    }
+    DateTime? scheduledAt;
+    if (mode == 'scheduled') {
+      scheduledAt = await _pickScheduledDateTime();
+      if (!mounted ||
+          scheduledAt == null ||
+          widget.chatId != chatId ||
+          !_isCurrentChat(chatId) ||
+          profileId != ref.read(authControllerProvider).activeProfileId ||
+          authorization != ref.read(authorizationHeaderProvider)) {
+        return;
+      }
+    }
+    final text = _composer.text;
+    final mentions = _mentionsForComposer(text);
+    final replyTarget = ref.read(chatReplyTargetProvider(chatId));
+    final attempt = _ScheduledSendAttempt(
+      chatId: chatId,
+      profileId: profileId,
+      authorization: authorization,
+      clientMessageId: const Uuid().v4(),
+      content: text,
+      scheduledAt: scheduledAt,
+      sendWhenOnline: mode == 'online',
+      mentions: mentions,
+      threadParentId: replyTarget?.id,
+    );
+    setState(() {
+      _pendingScheduledSend = attempt;
+      _scheduledActionRetry = null;
+    });
+    await _submitScheduledAttempt(attempt);
+  }
+
+  Future<DateTime?> _pickScheduledDateTime() async {
+    final now = DateTime.now();
+    final latest = now.add(const Duration(days: 365));
+    var date = DateUtils.dateOnly(now);
+    var time = TimeOfDay.fromDateTime(now.add(const Duration(minutes: 1)));
+    String? validationError;
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final localizations = AppLocalizations.of(context)!;
+          return AlertDialog(
+            title: Text(localizations.chatSchedulePickerTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(
+                    MaterialLocalizations.of(context).formatMediumDate(date),
+                  ),
+                  onPressed: () async {
+                    final selected = await showDatePicker(
+                      context: context,
+                      initialDate: date,
+                      firstDate: DateUtils.dateOnly(now),
+                      lastDate: DateUtils.dateOnly(latest),
+                    );
+                    if (selected != null) {
+                      setDialogState(() {
+                        date = selected;
+                        validationError = null;
+                      });
+                    }
+                  },
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.access_time),
+                  label: Text(
+                    MaterialLocalizations.of(context).formatTimeOfDay(time),
+                  ),
+                  onPressed: () async {
+                    final selected = await showTimePicker(
+                      context: context,
+                      initialTime: time,
+                    );
+                    if (selected != null) {
+                      setDialogState(() {
+                        time = selected;
+                        validationError = null;
+                      });
+                    }
+                  },
+                ),
+                if (validationError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      validationError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(localizations.commonCancel),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final selected = DateTime(
+                    date.year,
+                    date.month,
+                    date.day,
+                    time.hour,
+                    time.minute,
+                  );
+                  if (!selected.isAfter(now) || selected.isAfter(latest)) {
+                    setDialogState(() {
+                      validationError = localizations.chatScheduleDateInvalid;
+                    });
+                    return;
+                  }
+                  Navigator.pop(dialogContext, selected.toUtc());
+                },
+                child: Text(localizations.chatScheduleMessage),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  List<MessageMention> _mentionsForComposer(String text) {
+    final memberIds = ref
+        .read(groupMembersProvider(widget.chatId))
+        .maybeWhen(
+          data: (data) => data.members.map((member) => member.profileId),
+          orElse: () => const <String>[],
+        );
+    final handles = <String, String>{};
+    for (final id in memberIds) {
+      final handle = ref.read(profileProvider(id)).valueOrNull?.handle;
+      if (handle != null && handle.isNotEmpty) handles[handle] = id;
+    }
+    final mentions = parseMentionsFromContent(
+      text,
+      memberProfileIds: memberIds,
+      handleToProfileId: handles,
+    );
+    final chatType = ref
+        .read(chatListProvider)
+        .valueOrNull
+        ?.items
+        .where((item) => item.chatId == widget.chatId)
+        .map((item) => item.chat.type)
+        .firstOrNull;
+    return chatType == 'CHAT_TYPE_DM'
+        ? mentions.where((mention) => mention.type == 'user').toList()
+        : mentions;
+  }
+
+  Future<void> _submitScheduledAttempt(_ScheduledSendAttempt attempt) async {
+    if (!mounted ||
+        _scheduledAttemptInFlight ||
+        attempt.chatId != widget.chatId ||
+        attempt.profileId != ref.read(authControllerProvider).activeProfileId ||
+        attempt.authorization != ref.read(authorizationHeaderProvider) ||
+        !_isCurrentChat(attempt.chatId)) {
+      if (mounted) setState(() => _pendingScheduledSend = null);
+      return;
+    }
+    final submissionGeneration = ++_scheduledAttemptSubmissionGeneration;
+    setState(() => _scheduledAttemptInFlight = true);
+    ref.read(realtimeHubProvider).typingStop(widget.chatId);
+    final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
+    try {
+      final error = await ref
+          .read(chatRoomControllerProvider(widget.chatId).notifier)
+          .createScheduledMessage(
+            content: attempt.content,
+            clientMessageId: attempt.clientMessageId,
+            scheduledAt: attempt.scheduledAt,
+            sendWhenOnline: attempt.sendWhenOnline,
+            mentions: attempt.mentions,
+            threadParentId: attempt.threadParentId,
+          );
+      if (!mounted ||
+          submissionGeneration != _scheduledAttemptSubmissionGeneration ||
+          !_isCurrentChat(attempt.chatId)) {
+        return;
+      }
+      if (attempt.profileId !=
+              ref.read(authControllerProvider).activeProfileId ||
+          attempt.authorization != ref.read(authorizationHeaderProvider)) {
+        setState(() => _pendingScheduledSend = null);
+        return;
+      }
+      if (error != null) {
+        if (identical(_pendingScheduledSend, attempt)) {
+          setState(() => _pendingScheduledSend = attempt);
+        }
+        return;
+      }
+      if (!identical(_pendingScheduledSend, attempt)) return;
+      setState(() => _pendingScheduledSend = null);
+      if (_composer.text == attempt.content) {
+        _composer.clear();
+        final key = _draftKey;
+        if (key != null) {
+          await ref.read(chatDraftProvider(key).notifier).clear();
+        }
+      }
+      if (replyTarget != null && replyTarget.id == attempt.threadParentId) {
+        ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
+      }
+      _refocusComposer();
+    } finally {
+      if (mounted &&
+          submissionGeneration == _scheduledAttemptSubmissionGeneration) {
+        setState(() => _scheduledAttemptInFlight = false);
+      }
+    }
+  }
+
+  void _retryScheduledAttempt() {
+    final attempt = _pendingScheduledSend;
+    if (attempt == null || _scheduledAttemptInFlight) return;
+    unawaited(_submitScheduledAttempt(attempt));
+  }
+
+  void _cancelScheduledRetry() {
+    if (_pendingScheduledSend == null || _scheduledAttemptInFlight) return;
+    setState(() => _pendingScheduledSend = null);
+    unawaited(
+      ref
+          .read(chatRoomControllerProvider(widget.chatId).notifier)
+          .loadScheduledMessages(),
+    );
+  }
+
+  Widget _buildScheduledMessagesSection(
+    ChatRoomState room,
+    AppLocalizations l10n,
+  ) {
+    final pending = room.scheduledMessages
+        .where(
+          (item) =>
+              item.status ==
+              messaging_enums
+                  .ScheduledMessageStatus
+                  .SCHEDULED_MESSAGE_STATUS_PENDING,
+        )
+        .toList(growable: false);
+    if (pending.isEmpty &&
+        !room.isLoadingScheduledMessages &&
+        room.scheduledMessagesError == null &&
+        room.scheduledActionError == null &&
+        _pendingScheduledSend == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      key: ChatRoomPanel.scheduledMessagesKey,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_pendingScheduledSend != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (room.isSending || _scheduledAttemptInFlight)
+                  const LinearProgressIndicator(minHeight: 2),
+                VoiceCompactBanner(
+                  key: ChatRoomPanel.scheduledCreateRetryKey,
+                  message: l10n.chatScheduleFailure,
+                  icon: Icons.schedule_send_outlined,
+                  actionLabel: room.isSending || _scheduledAttemptInFlight
+                      ? null
+                      : l10n.chatScheduleRetry,
+                  onAction: room.isSending || _scheduledAttemptInFlight
+                      ? null
+                      : _retryScheduledAttempt,
+                  tone: VoiceBannerTone.error,
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    key: ChatRoomPanel.scheduledCreateCancelKey,
+                    onPressed: room.isSending || _scheduledAttemptInFlight
+                        ? null
+                        : _cancelScheduledRetry,
+                    icon: const Icon(Icons.close),
+                    label: Text(l10n.commonCancel),
+                  ),
+                ),
+              ],
+            ),
+          if (room.scheduledMessagesError != null)
+            VoiceCompactBanner(
+              message: l10n.chatScheduleFailure,
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => unawaited(
+                ref
+                    .read(chatRoomControllerProvider(widget.chatId).notifier)
+                    .loadScheduledMessages(
+                      loadMore: room.scheduledMessagesFailedLoadMore,
+                    ),
+              ),
+              tone: VoiceBannerTone.error,
+            ),
+          if (_scheduledActionRetry != null)
+            VoiceCompactBanner(
+              message: l10n.chatScheduleFailure,
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () => unawaited(_scheduledActionRetry?.call()),
+              tone: VoiceBannerTone.error,
+            ),
+          for (final item in pending)
+            _ScheduledMessageRow(
+              item: item,
+              l10n: l10n,
+              busy: _scheduledActionBusyIds.contains(item.id),
+              onEdit: () => _editScheduledMessage(item),
+              onCancel: () => _runScheduledRowAction(
+                item.id,
+                () => ref
+                    .read(chatRoomControllerProvider(widget.chatId).notifier)
+                    .cancelScheduledMessage(item.id),
+              ),
+              onSendNow: () => _runScheduledRowAction(
+                item.id,
+                () => ref
+                    .read(chatRoomControllerProvider(widget.chatId).notifier)
+                    .sendScheduledMessageNow(item.id),
+              ),
+            ),
+          if (room.isLoadingScheduledMessages && pending.isEmpty)
+            const LinearProgressIndicator(minHeight: 2),
+          if (room.hasMoreScheduledMessages)
+            TextButton(
+              onPressed: room.isLoadingScheduledMessages
+                  ? null
+                  : () => unawaited(
+                      ref
+                          .read(
+                            chatRoomControllerProvider(widget.chatId).notifier,
+                          )
+                          .loadScheduledMessages(loadMore: true),
+                    ),
+              child: Text(l10n.chatScheduleLoadMore),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runScheduledRowAction(
+    String scheduledMessageId,
+    Future<String?> Function() action,
+  ) async {
+    if (_scheduledActionBusyIds.contains(scheduledMessageId)) return;
+    setState(() {
+      _scheduledActionBusyIds.add(scheduledMessageId);
+      _scheduledActionRetry = () async {
+        await _runScheduledRowAction(scheduledMessageId, action);
+      };
+    });
+    final error = await action();
+    if (!mounted) return;
+    setState(() {
+      _scheduledActionBusyIds.remove(scheduledMessageId);
+      if (error == null) {
+        _scheduledActionRetry = null;
+      }
+    });
+  }
+
+  Future<void> _editScheduledMessage(messaging_pb.ScheduledMessage item) async {
+    final chatId = widget.chatId;
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final authorization = ref.read(authorizationHeaderProvider);
+    if (profileId == null || authorization == null || !_isCurrentChat(chatId)) {
+      return;
+    }
+    final textController = TextEditingController(
+      text: item.hasPayload() ? item.payload.content : '',
+    );
+    var editedAt = item.hasScheduledAt()
+        ? protoTimestampToDateTime(item.scheduledAt)?.toLocal()
+        : null;
+    final edit = await showDialog<(String, DateTime?)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(AppLocalizations.of(context)!.chatScheduleEdit),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textController,
+                autofocus: true,
+                maxLines: 4,
+                minLines: 1,
+              ),
+              if (item.hasScheduledAt())
+                TextButton.icon(
+                  icon: const Icon(Icons.schedule),
+                  label: Text(
+                    editedAt == null
+                        ? AppLocalizations.of(context)!.chatSchedulePickerTitle
+                        : '${MaterialLocalizations.of(context).formatMediumDate(editedAt!)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(editedAt!))}',
+                  ),
+                  onPressed: () async {
+                    final selected = await _pickScheduledDateTime();
+                    if (selected != null) {
+                      setDialogState(() => editedAt = selected.toLocal());
+                    }
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(AppLocalizations.of(context)!.commonCancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, (textController.text, editedAt)),
+              child: Text(AppLocalizations.of(context)!.chatScheduleEdit),
+            ),
+          ],
+        ),
+      ),
+    );
+    textController.dispose();
+    if (!mounted ||
+        edit == null ||
+        widget.chatId != chatId ||
+        profileId != ref.read(authControllerProvider).activeProfileId ||
+        authorization != ref.read(authorizationHeaderProvider) ||
+        !_isCurrentChat(chatId)) {
+      return;
+    }
+    final payload =
+        item.payload.deepCopy() as messaging_pb.ScheduledMessagePayload;
+    payload.content = edit.$1;
+    await _runScheduledRowAction(
+      item.id,
+      () => ref
+          .read(chatRoomControllerProvider(chatId).notifier)
+          .updateScheduledMessage(
+            scheduledMessageId: item.id,
+            payload: payload,
+            scheduledAt: item.hasScheduledAt() ? edit.$2?.toUtc() : null,
+            sendWhenOnline: item.sendWhenOnline ? true : null,
+          ),
     );
   }
 
