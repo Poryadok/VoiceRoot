@@ -973,11 +973,17 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "voice-token-test", PrivateKey: key})
+	require.NoError(t, err)
+	voiceClient := callsv1.NewVoiceServiceClient(conn)
+
 	h := newGatewayForContract(t, gatewayTestOptions{
 		tokenClaims: map[string]tokenClaims{
-			"valid-user-token": {UserID: "account-1", ProfileID: "profile-1"},
+			"valid-user-token": {UserID: "15e3a7e9-25f3-42e2-bb65-aad47828458c", ProfileID: "5cf2992f-4195-44c1-9d0c-14e5db8b458a", SessionEpoch: 8, ExpiresAt: time.Now().Add(time.Minute)},
 		},
-		transcoder: &transcoder{clients: grpcClients{voice: callsv1.NewVoiceServiceClient(conn)}},
+		transcoder: &transcoder{clients: grpcClients{voice: voiceClient, voiceUser: voiceClient, voiceUserRequired: true}},
 	})
 
 	resp := performRequest(h, http.MethodPost, "/api/v1/voice/calls/room-1/accept", "", map[string]string{
