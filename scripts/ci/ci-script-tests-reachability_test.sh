@@ -35,7 +35,7 @@ echo "${pr_trigger}" | grep -Fq 'codex/settings-app-icon' \
 pr_branches="$(echo "${pr_trigger}" | sed -n 's/.*branches: \[\(.*\)\].*/\1/p')"
 [[ -n "${pr_branches}" && "${pr_branches}" != *'*'* && "${pr_branches}" != *'?'* ]] \
   || fail "CI pull-request branch filter must remain exact, without wildcard widening"
-key_backup_job_block="$(sed -n '/^  flutter-key-backup-goldens:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+key_backup_job_block="$(tr -d '\r' < "${WORKFLOW}" | sed -n '/^  flutter-key-backup-goldens:$/,/^  [[:alnum:]_-]*:$/p')"
 [[ -n "${key_backup_job_block}" ]] || fail "CI must define the cross-platform key-backup golden job"
 echo "${key_backup_job_block}" | grep -Fq 'os: ubuntu-latest' \
   || fail "key-backup golden job must run on Linux"
