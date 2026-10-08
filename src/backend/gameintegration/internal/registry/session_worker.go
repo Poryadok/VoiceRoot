@@ -17,13 +17,13 @@ func RunSessionWorker(ctx context.Context, orchestrator *SessionOrchestrator, in
 		if ctx.Err() != nil {
 			return
 		}
-		ids, err := orchestrator.Store.due(ctx)
+		keys, err := orchestrator.Store.due(ctx)
 		if err == nil {
-			for _, id := range ids {
+			for _, key := range keys {
 				if ctx.Err() != nil {
 					return
 				}
-				_, _ = orchestrator.AdvanceOne(ctx, id)
+				_, _ = orchestrator.AdvanceScoped(ctx, key)
 			}
 		}
 		select {

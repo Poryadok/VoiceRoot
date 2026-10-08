@@ -91,6 +91,11 @@ func startT31SessionStore(t *testing.T) (*Store, context.Context) {
 	require.NoError(t, err, "T31 session persistence migration must be installed")
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
+	scopeMigrationPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000014_t31_operation_scope_identity.up.sql")
+	scopeMigration, err := os.ReadFile(scopeMigrationPath)
+	require.NoError(t, err, "T31 scoped operation identity migration must be installed")
+	_, err = pool.Exec(ctx, string(scopeMigration))
+	require.NoError(t, err)
 	return &Store{Pool: pool}, ctx
 }
 
@@ -102,6 +107,150 @@ func newT31TestSessionPrincipal(t *testing.T, ctx context.Context, store *Store)
 		EnvironmentID: environmentID,
 		Scopes:        []string{"game.sessions.manage"},
 	}
+}
+
+func TestSessionOperationIdentityIsScopedByApplicationAndEnvironment(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	owners := newSessionOwnerScript()
+	orchestrator := NewSessionOrchestrator(store, owners.adapters())
+	firstPrincipal := newT31TestSessionPrincipal(t, ctx, store)
+	secondPrincipal := newT31TestSessionPrincipal(t, ctx, store)
+	operationID := uuid.New()
+	input := func(externalKey string) CreateSessionInput {
+		return CreateSessionInput{
+			OperationID: operationID, Kind: "match", ExternalKey: externalKey,
+			DisplayName: "Scoped", RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+		}
+	}
+
+	first, err := orchestrator.CreateSession(ctx, firstPrincipal, input("same-operation"))
+	require.NoError(t, err)
+	second, err := orchestrator.CreateSession(ctx, secondPrincipal, input("same-operation"))
+	require.NoError(t, err)
+	require.NotEqual(t, first.SessionID, second.SessionID)
+
+	firstReplay, err := orchestrator.CreateSession(ctx, firstPrincipal, input("same-operation"))
+	require.NoError(t, err)
+	secondReplay, err := orchestrator.CreateSession(ctx, secondPrincipal, input("same-operation"))
+	require.NoError(t, err)
+	require.Equal(t, first.SessionID, firstReplay.SessionID)
+	require.Equal(t, second.SessionID, secondReplay.SessionID)
+
+	foreignOnlyID := uuid.New()
+	foreign, err := orchestrator.CreateSession(ctx, secondPrincipal, inputWithOperation(input("foreign-only"), foreignOnlyID))
+	require.NoError(t, err)
+	_, err = orchestrator.GetOperation(ctx, firstPrincipal, foreignOnlyID)
+	require.ErrorIs(t, err, ErrSessionNotFound)
+	require.Equal(t, foreignOnlyID, foreign.OperationID)
+	_, err = orchestrator.AdvanceOne(ctx, operationID)
+	require.ErrorIs(t, err, ErrSessionOperationAmbiguous,
+		"UUID-only advancement must refuse an ID that exists in multiple tenant namespaces")
+
+	for _, principal := range []SessionPrincipal{firstPrincipal, secondPrincipal} {
+		advanced, advanceErr := orchestrator.AdvanceScoped(ctx, SessionOperationKey{
+			ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OperationID: operationID,
+		})
+		require.NoError(t, advanceErr)
+		require.Equal(t, "chat_ready", advanced.Stage)
+		var receipts int
+		require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts
+			WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND stage='chat_create'`,
+			principal.ApplicationID, principal.EnvironmentID, operationID).Scan(&receipts))
+		require.Equal(t, 1, receipts)
+	}
+	require.Len(t, owners.calls["chat_create"], 2)
+	require.NotEqual(t, owners.calls["chat_create"][0].OperationID, owners.calls["chat_create"][1].OperationID)
+
+	downPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000014_t31_operation_scope_identity.down.sql")
+	down, err := os.ReadFile(downPath)
+	require.NoError(t, err)
+	_, err = store.Pool.Exec(ctx, string(down))
+	require.Error(t, err, "rollback must refuse to recreate global operation-ID uniqueness after scoped duplicates exist")
+	var duplicates int
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_operations WHERE operation_id=$1`, operationID).Scan(&duplicates))
+	require.Equal(t, 2, duplicates, "a refused rollback must leave both scoped operations intact")
+}
+
+func inputWithOperation(input CreateSessionInput, operationID uuid.UUID) CreateSessionInput {
+	input.OperationID = operationID
+	return input
+}
+
+func TestT31OperationScopeMigrationBackfillsReceiptNamespaceFromItsParent(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000012_t31_sessions.up.sql")
+	migration, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
+	require.NoError(t, err)
+
+	appID, envID, sessionID, operationID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO gis_sessions
+		(id,application_id,environment_id,kind,external_key,session_status,stage,roster_revision,roster_complete,members,chat_owner_session_id)
+		VALUES($1,$2,$3,'party','legacy-session','provisioning','accepted',1,true,'{}',$1)`,
+		sessionID, appID, envID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO gis_session_operations
+		(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage)
+		VALUES($1,$2,$3,$4,'create',decode(repeat('11',32),'hex'),'pending','accepted')`,
+		operationID, sessionID, appID, envID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO gis_session_owner_receipts
+		(operation_id,stage,owner_operation_id,owner_request_hash,resource_id,receipt_id,receipt_bytes)
+		VALUES($1,'chat_create',$2,decode(repeat('22',32),'hex'),$3,$4,$5)`,
+		operationID, uuid.New(), uuid.New(), uuid.New(), []byte("receipt"))
+	require.NoError(t, err)
+
+	scopeMigrationPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000014_t31_operation_scope_identity.up.sql")
+	scopeMigration, err := os.ReadFile(scopeMigrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(scopeMigration))
+	require.NoError(t, err)
+	var gotApp, gotEnv uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id,environment_id FROM gis_session_owner_receipts
+		WHERE operation_id=$1 AND stage='chat_create'`, operationID).Scan(&gotApp, &gotEnv))
+	require.Equal(t, appID, gotApp)
+	require.Equal(t, envID, gotEnv)
+}
+
+func TestT31OperationScopeMigrationRefusesMismatchedParentWithoutChangingLegacyRows(t *testing.T) {
+	ctx := context.Background()
+	pool := startT12Postgres(t, ctx)
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000012_t31_sessions.up.sql")
+	migration, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(migration))
+	require.NoError(t, err)
+
+	appID, mismatchedAppID, envID, sessionID, operationID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO gis_sessions
+		(id,application_id,environment_id,kind,external_key,session_status,stage,roster_revision,roster_complete,members,chat_owner_session_id)
+		VALUES($1,$2,$3,'party','mismatched-session','provisioning','accepted',1,true,'{}',$1)`,
+		sessionID, appID, envID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO gis_session_operations
+		(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage)
+		VALUES($1,$2,$3,$4,'create',decode(repeat('33',32),'hex'),'pending','accepted')`,
+		operationID, sessionID, mismatchedAppID, envID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO gis_session_owner_receipts
+		(operation_id,stage,owner_operation_id,owner_request_hash,resource_id,receipt_id,receipt_bytes)
+		VALUES($1,'chat_create',$2,decode(repeat('44',32),'hex'),$3,$4,$5)`,
+		operationID, uuid.New(), uuid.New(), uuid.New(), []byte("receipt"))
+	require.NoError(t, err)
+
+	scopeMigrationPath := filepath.Join("..", "..", "..", "migrations", "game_integration_db", "000014_t31_operation_scope_identity.up.sql")
+	scopeMigration, err := os.ReadFile(scopeMigrationPath)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(scopeMigration))
+	require.ErrorContains(t, err, "operation/session scope mismatch")
+	var storedAppID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT application_id FROM gis_session_operations WHERE operation_id=$1`, operationID).Scan(&storedAppID))
+	require.Equal(t, mismatchedAppID, storedAppID, "a rejected preflight must preserve the legacy operation")
+	var receipts int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts WHERE operation_id=$1`, operationID).Scan(&receipts))
+	require.Equal(t, 1, receipts, "a rejected preflight must preserve the legacy receipt")
 }
 
 func TestSessionOrchestratorWaitsForEveryOwnerReceiptBeforeAtomicActiveOutbox(t *testing.T) {

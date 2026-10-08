@@ -257,7 +257,24 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 	if o == nil || o.Store == nil {
 		return SessionOperation{}, errors.New("session store unavailable")
 	}
-	sessionID, kind, stage, leaseOwner, err := o.Store.claim(ctx, operationID)
+	key, err := o.Store.operationKeyForID(ctx, operationID)
+	if err != nil {
+		return SessionOperation{}, err
+	}
+	return o.AdvanceScoped(ctx, key)
+}
+
+// AdvanceScoped advances an operation using its complete application and
+// environment namespace. UUID-only lookup is retained for compatibility, but
+// rejects ambiguous IDs rather than selecting an arbitrary tenant.
+func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOperationKey) (SessionOperation, error) {
+	if o == nil || o.Store == nil {
+		return SessionOperation{}, errors.New("session store unavailable")
+	}
+	if key.ApplicationID == uuid.Nil || key.EnvironmentID == uuid.Nil || key.OperationID == uuid.Nil {
+		return SessionOperation{}, errors.New("invalid session operation key")
+	}
+	sessionID, kind, stage, leaseOwner, err := o.Store.claimScoped(ctx, key)
 	if err != nil {
 		return SessionOperation{}, err
 	}
@@ -267,25 +284,25 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 	var app, env, chat, chatOwner, chatReceipt, voice uuid.UUID
 	var revision int64
 	var members []uuid.UUID
-	err = o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,kind,external_key,COALESCE(display_name,''),COALESCE(chat_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_owner_session_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_create_receipt_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(voice_room_id,'00000000-0000-0000-0000-000000000000'::uuid),roster_revision,members FROM gis_sessions WHERE id=$1`, sessionID).Scan(&app, &env, &sessionKind, &external, &display, &chat, &chatOwner, &chatReceipt, &voice, &revision, &members)
+	err = o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,kind,external_key,COALESCE(display_name,''),COALESCE(chat_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_owner_session_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_create_receipt_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(voice_room_id,'00000000-0000-0000-0000-000000000000'::uuid),roster_revision,members FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, sessionID, key.ApplicationID, key.EnvironmentID).Scan(&app, &env, &sessionKind, &external, &display, &chat, &chatOwner, &chatReceipt, &voice, &revision, &members)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	p = SessionPrincipal{ApplicationID: app, EnvironmentID: env}
 	var createInput CreateSessionInput
-	err = o.Store.Pool.QueryRow(ctx, `SELECT operation_id FROM gis_session_operations WHERE session_id=$1 AND operation_kind='create' ORDER BY created_at LIMIT 1`, sessionID).Scan(&createInput.OperationID)
+	err = o.Store.Pool.QueryRow(ctx, `SELECT operation_id FROM gis_session_operations WHERE session_id=$1 AND application_id=$2 AND environment_id=$3 AND operation_kind='create' ORDER BY created_at LIMIT 1`, sessionID, key.ApplicationID, key.EnvironmentID).Scan(&createInput.OperationID)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	req = SessionOwnerRequest{ApplicationID: app, EnvironmentID: env, SessionID: sessionID, Kind: sessionKind, ExternalKey: external, DisplayName: display, ChatID: chat, ChatOwnerSessionID: chatOwner, ChatCreateReceiptID: chatReceipt, RosterRevision: revision, Members: members, VoiceRoomID: voice}
 	if stage == "active" {
-		return o.finishActive(ctx, operationID, sessionID, p)
+		return o.finishActive(ctx, key, sessionID, p)
 	}
 	if strings.Contains(stage, "close") || strings.Contains(stage, "revoke") {
-		return o.advanceTerminal(ctx, operationID, sessionID, stage, leaseOwner, req)
+		return o.advanceTerminal(ctx, key, sessionID, stage, leaseOwner, req)
 	}
 	if stage == "coalesced" {
-		return o.coalesceOperation(ctx, operationID, sessionID)
+		return o.coalesceOperation(ctx, key, sessionID)
 	}
 	if kind == "close" {
 		return SessionOperation{}, errors.New("close operation stage mismatch")
@@ -299,13 +316,13 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 	switch stage {
 	case "accepted":
 		if chatOwner != sessionID {
-			return o.advanceNoOwner(ctx, operationID, sessionID, stage, "chat_ready")
+			return o.advanceNoOwner(ctx, key, sessionID, stage, "chat_ready")
 		}
 		ownerStage = "chat_create"
 		call = o.Owners.CreateChat
 	case "chat_ready":
 		if chatOwner != sessionID {
-			return o.advanceNoOwner(ctx, operationID, sessionID, stage, "roster_ready")
+			return o.advanceNoOwner(ctx, key, sessionID, stage, "roster_ready")
 		}
 		ownerStage = "chat_roster"
 		call = o.Owners.SyncChatRoster
@@ -316,7 +333,7 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 		ownerStage = "role_apply"
 		call = o.Owners.ApplyRoleGrants
 	case "grants_ready":
-		return o.finishActive(ctx, operationID, sessionID, p)
+		return o.finishActive(ctx, key, sessionID, p)
 	default:
 		return SessionOperation{}, fmt.Errorf("unknown session stage %q", stage)
 	}
@@ -344,7 +361,7 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 				(ownerStage == "chat_create" && receipt.ReceiptID != req.OperationID) {
 				err = errors.New("invalid owner receipt")
 			} else {
-				if err = o.Store.saveOwnerReceipt(ctx, operationID, req.OperationID, ownerStage, requestHashBytes, receipt); err == nil {
+				if err = o.Store.saveOwnerReceipt(ctx, key, req.OperationID, ownerStage, requestHashBytes, receipt); err == nil {
 					if ownerStage == "chat_create" {
 						_, err = o.Store.CreateResourceMapping(ctx, ResourceMappingInput{
 							ApplicationID:   app,
@@ -359,20 +376,20 @@ func (o *SessionOrchestrator) AdvanceOne(ctx context.Context, operationID uuid.U
 						})
 					}
 					if err == nil {
-						err = o.recordResource(ctx, operationID, sessionID, ownerStage, leaseOwner, receipt)
+						err = o.recordResource(ctx, key, sessionID, ownerStage, leaseOwner, receipt)
 					}
 				}
 			}
 		}
 	}
 	if err != nil {
-		_ = o.Store.scheduleRetry(ctx, operationID, leaseOwner, err)
+		_ = o.Store.scheduleRetry(ctx, key, leaseOwner, err)
 		return SessionOperation{}, err
 	}
-	return o.Store.getOperation(ctx, p, operationID)
+	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
-func (o *SessionOrchestrator) recordResource(ctx context.Context, op, session uuid.UUID, stage string, owner uuid.UUID, r SessionOwnerReceipt) error {
+func (o *SessionOrchestrator) recordResource(ctx context.Context, key SessionOperationKey, session uuid.UUID, stage string, owner uuid.UUID, r SessionOwnerReceipt) error {
 	tx, err := o.Store.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -382,42 +399,42 @@ func (o *SessionOrchestrator) recordResource(ctx context.Context, op, session uu
 	switch stage {
 	case "chat_create":
 		next = "chat_ready"
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET chat_id=$2,chat_create_receipt_id=$3,updated_at=now() WHERE id=$1`, session, r.ResourceID, r.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET chat_id=$4,chat_create_receipt_id=$5,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, r.ResourceID, r.ReceiptID)
 	case "chat_roster":
 		next = "roster_ready"
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET chat_roster_receipt_id=$2,updated_at=now() WHERE id=$1`, session, r.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET chat_roster_receipt_id=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, r.ReceiptID)
 	case "voice_provision":
 		next = "voice_ready"
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET voice_room_id=$2,voice_provision_receipt_id=$3,updated_at=now() WHERE id=$1`, session, r.ResourceID, r.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET voice_room_id=$4,voice_provision_receipt_id=$5,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, r.ResourceID, r.ReceiptID)
 	case "role_apply":
 		next = "grants_ready"
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET role_grant_receipt_id=$2,updated_at=now() WHERE id=$1`, session, r.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET role_grant_receipt_id=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, r.ReceiptID)
 	}
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$3,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE operation_id=$1 AND lease_owner=$2`, op, owner, next)
+	_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$5,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND lease_owner=$4`, key.ApplicationID, key.EnvironmentID, key.OperationID, owner, next)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE gis_sessions SET stage=$2,updated_at=now() WHERE id=$1`, session, next)
+	_, err = tx.Exec(ctx, `UPDATE gis_sessions SET stage=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, next)
 	if err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func (o *SessionOrchestrator) advanceNoOwner(ctx context.Context, op, session uuid.UUID, stage, next string) (SessionOperation, error) {
+func (o *SessionOrchestrator) advanceNoOwner(ctx context.Context, key SessionOperationKey, session uuid.UUID, stage, next string) (SessionOperation, error) {
 	tx, err := o.Store.Pool.Begin(ctx)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$2,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE operation_id=$1`, op, next)
+	_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$4,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,next_attempt_at=now(),updated_at=now() WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID, next)
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE gis_sessions SET stage=$2,updated_at=now() WHERE id=$1`, session, next)
+	_, err = tx.Exec(ctx, `UPDATE gis_sessions SET stage=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID, next)
 	if err != nil {
 		return SessionOperation{}, err
 	}
@@ -425,25 +442,25 @@ func (o *SessionOrchestrator) advanceNoOwner(ctx context.Context, op, session uu
 		return SessionOperation{}, err
 	}
 	var p SessionPrincipal
-	_ = o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id FROM gis_sessions WHERE id=$1`, session).Scan(&p.ApplicationID, &p.EnvironmentID)
-	return o.Store.getOperation(ctx, p, op)
+	p = SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}
+	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
-func (o *SessionOrchestrator) finishActive(ctx context.Context, op, session uuid.UUID, p SessionPrincipal) (SessionOperation, error) {
+func (o *SessionOrchestrator) finishActive(ctx context.Context, key SessionOperationKey, session uuid.UUID, p SessionPrincipal) (SessionOperation, error) {
 	tx, err := o.Store.Pool.Begin(ctx)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	event := uuid.New()
-	tag, err := tx.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage='active',active_event_id=$2,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE operation_id=$1 AND status='pending'`, op, event)
+	tag, err := tx.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage='active',active_event_id=$4,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND status='pending'`, key.ApplicationID, key.EnvironmentID, key.OperationID, event)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	if tag.RowsAffected() != 1 {
 		return SessionOperation{}, ErrIdempotencyConflict
 	}
-	tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET session_status='active',stage='active',updated_at=now() WHERE id=$1 AND session_status='provisioning'`, session)
+	tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET session_status='active',stage='active',updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID)
 	if err != nil {
 		return SessionOperation{}, err
 	}
@@ -452,12 +469,12 @@ func (o *SessionOrchestrator) finishActive(ctx context.Context, op, session uuid
 	}
 	var activeAt time.Time
 	var kind string
-	if err = tx.QueryRow(ctx, `SELECT kind,clock_timestamp() FROM gis_sessions WHERE id=$1`, session).Scan(&kind, &activeAt); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT kind,clock_timestamp() FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID).Scan(&kind, &activeAt); err != nil {
 		return SessionOperation{}, err
 	}
 	payload, marshalErr := json.Marshal(SessionActiveEvent{
 		EventID: event, ApplicationID: p.ApplicationID, EnvironmentID: p.EnvironmentID,
-		SessionID: session, OperationID: op, Kind: kind, ActiveAt: activeAt.UTC(),
+		SessionID: session, OperationID: key.OperationID, Kind: kind, ActiveAt: activeAt.UTC(),
 	})
 	if marshalErr != nil {
 		return SessionOperation{}, marshalErr
@@ -471,21 +488,21 @@ func (o *SessionOrchestrator) finishActive(ctx context.Context, op, session uuid
 	if err = tx.Commit(ctx); err != nil {
 		return SessionOperation{}, err
 	}
-	return o.Store.getOperation(ctx, p, op)
+	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
-func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session uuid.UUID, stage string, leaseOwner uuid.UUID, req SessionOwnerRequest) (SessionOperation, error) {
+func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, key SessionOperationKey, session uuid.UUID, stage string, leaseOwner uuid.UUID, req SessionOwnerRequest) (SessionOperation, error) {
 	var p SessionPrincipal
 	var app, env uuid.UUID
 	var sessionStage, terminalKind string
 	var terminal uuid.UUID
-	err := o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,terminalization_operation_id,terminalization_kind,terminalization_stage FROM gis_sessions WHERE id=$1`, session).Scan(&app, &env, &terminal, &terminalKind, &sessionStage)
+	err := o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,terminalization_operation_id,terminalization_kind,terminalization_stage FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID).Scan(&app, &env, &terminal, &terminalKind, &sessionStage)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	p = SessionPrincipal{ApplicationID: app, EnvironmentID: env}
-	if terminal != op {
-		return o.coalesceOperation(ctx, op, session)
+	if terminal != key.OperationID {
+		return o.coalesceOperation(ctx, key, session)
 	}
 	var adapter func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	var ownerStage, next string
@@ -525,13 +542,13 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 	}
 	receipt, err := adapter(ctx, req)
 	if err != nil {
-		_ = o.Store.scheduleRetry(ctx, op, leaseOwner, err)
+		_ = o.Store.scheduleRetry(ctx, key, leaseOwner, err)
 		return SessionOperation{}, err
 	}
 	if receipt.ReceiptID == uuid.Nil || receipt.ResourceID == uuid.Nil || receipt.RequestHash != req.RequestHash {
 		return SessionOperation{}, errors.New("invalid terminal owner receipt")
 	}
-	if err = o.Store.saveOwnerReceipt(ctx, op, req.OperationID, ownerStage, requestHashBytes, receipt); err != nil {
+	if err = o.Store.saveOwnerReceipt(ctx, key, req.OperationID, ownerStage, requestHashBytes, receipt); err != nil {
 		return SessionOperation{}, err
 	}
 	tx, err := o.Store.Pool.Begin(ctx)
@@ -540,9 +557,9 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if baseStage == "voice_close_pending" {
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$3,voice_close_receipt_id=$4,updated_at=now() WHERE id=$1 AND terminalization_operation_id=$2`, session, op, next, receipt.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$4,voice_close_receipt_id=$5,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$6`, session, key.ApplicationID, key.EnvironmentID, next, receipt.ReceiptID, key.OperationID)
 		if err == nil {
-			_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$2,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE operation_id=$1 AND lease_owner=$3`, op, next, leaseOwner)
+			_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET stage=$5,stage_retry_count=0,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND lease_owner=$4`, key.ApplicationID, key.EnvironmentID, key.OperationID, leaseOwner, next)
 		}
 		if err != nil {
 			return SessionOperation{}, err
@@ -552,12 +569,12 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 		if terminalKind == "failure" {
 			finalStage = "failed"
 		}
-		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$3,session_status=$3,stage=$3,role_revoke_receipt_id=$4,updated_at=now() WHERE id=$1 AND terminalization_operation_id=$2`, session, op, finalStage, receipt.ReceiptID)
+		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$4,session_status=$4,stage=$4,role_revoke_receipt_id=$5,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$6`, session, key.ApplicationID, key.EnvironmentID, finalStage, receipt.ReceiptID, key.OperationID)
 		if err == nil {
 			status := "succeeded"
-			_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET status=$2,stage=$3,stage_retry_count=0,voice_close_receipt_id=(SELECT receipt_id FROM gis_session_owner_receipts WHERE operation_id=$1 AND stage='terminalize_voice_close'),role_revoke_receipt_id=$4,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE operation_id=$1 AND lease_owner=$5`, op, status, finalStage, receipt.ReceiptID, leaseOwner)
+			_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET status=$4,stage=$5,stage_retry_count=0,voice_close_receipt_id=(SELECT receipt_id FROM gis_session_owner_receipts WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND stage='terminalize_voice_close'),role_revoke_receipt_id=$6,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND lease_owner=$7`, key.ApplicationID, key.EnvironmentID, key.OperationID, status, finalStage, receipt.ReceiptID, leaseOwner)
 			if err == nil && terminalKind == "failure" {
-				_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET status='failed',stage='failed',voice_close_receipt_id=(SELECT voice_close_receipt_id FROM gis_sessions WHERE id=$1),role_revoke_receipt_id=(SELECT role_revoke_receipt_id FROM gis_sessions WHERE id=$1),updated_at=now() WHERE session_id=$1 AND operation_kind='create'`, session)
+				_, err = tx.Exec(ctx, `UPDATE gis_session_operations SET status='failed',stage='failed',voice_close_receipt_id=(SELECT voice_close_receipt_id FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3),role_revoke_receipt_id=(SELECT role_revoke_receipt_id FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3),updated_at=now() WHERE session_id=$1 AND application_id=$2 AND environment_id=$3 AND operation_kind='create'`, session, key.ApplicationID, key.EnvironmentID)
 			}
 		}
 		if err != nil {
@@ -567,14 +584,14 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, op, session u
 	if err = tx.Commit(ctx); err != nil {
 		return SessionOperation{}, err
 	}
-	return o.Store.getOperation(ctx, p, op)
+	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
-func (o *SessionOrchestrator) coalesceOperation(ctx context.Context, op, session uuid.UUID) (SessionOperation, error) {
+func (o *SessionOrchestrator) coalesceOperation(ctx context.Context, key SessionOperationKey, session uuid.UUID) (SessionOperation, error) {
 	var p SessionPrincipal
 	var winner uuid.UUID
 	var sessionStatus string
-	err := o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,terminalization_operation_id,session_status FROM gis_sessions WHERE id=$1`, session).Scan(&p.ApplicationID, &p.EnvironmentID, &winner, &sessionStatus)
+	err := o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,terminalization_operation_id,session_status FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, session, key.ApplicationID, key.EnvironmentID).Scan(&p.ApplicationID, &p.EnvironmentID, &winner, &sessionStatus)
 	if err != nil {
 		return SessionOperation{}, err
 	}
@@ -582,17 +599,17 @@ func (o *SessionOrchestrator) coalesceOperation(ctx context.Context, op, session
 		return SessionOperation{}, errors.New("terminalization winner missing")
 	}
 	if sessionStatus == "closed" || sessionStatus == "failed" {
-		_, err = o.Store.Pool.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage=$2,voice_close_receipt_id=(SELECT voice_close_receipt_id FROM gis_sessions WHERE id=$3),role_revoke_receipt_id=(SELECT role_revoke_receipt_id FROM gis_sessions WHERE id=$3),lease_owner=NULL,lease_until=NULL WHERE operation_id=$1`, op, sessionStatus, session)
+		_, err = o.Store.Pool.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage=$4,voice_close_receipt_id=(SELECT voice_close_receipt_id FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3),role_revoke_receipt_id=(SELECT role_revoke_receipt_id FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3),lease_owner=NULL,lease_until=NULL WHERE application_id=$2 AND environment_id=$3 AND operation_id=$5`, session, key.ApplicationID, key.EnvironmentID, sessionStatus, key.OperationID)
 		if err != nil {
 			return SessionOperation{}, err
 		}
 	} else {
-		_, err = o.Store.Pool.Exec(ctx, `UPDATE gis_session_operations SET stage='coalesced',lease_owner=NULL,lease_until=NULL,next_attempt_at=now()+interval '1 second' WHERE operation_id=$1`, op)
+		_, err = o.Store.Pool.Exec(ctx, `UPDATE gis_session_operations SET stage='coalesced',lease_owner=NULL,lease_until=NULL,next_attempt_at=now()+interval '1 second' WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID)
 		if err != nil {
 			return SessionOperation{}, err
 		}
 	}
-	return o.Store.getOperation(ctx, p, op)
+	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
 func validateCreate(in CreateSessionInput) error {
