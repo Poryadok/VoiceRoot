@@ -95,6 +95,80 @@ void main() {
     );
   });
 
+  testWidgets('desktop CreateGroup is a dialog with close and cancel actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final triggerFocus = FocusNode();
+    addTearDown(triggerFocus.dispose);
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            focusNode: triggerFocus,
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((request) async => http.Response('{}', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    triggerFocus.requestFocus();
+    await tester.pump();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(CreateGroupSheet.closeKey), findsOneWidget);
+    expect(find.byKey(CreateGroupSheet.cancelKey), findsOneWidget);
+
+    await tester.tap(find.byKey(CreateGroupSheet.cancelKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    expect(triggerFocus.hasFocus, isTrue);
+  });
+
+  testWidgets('mobile CreateGroup fills the viewport and exposes close', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((request) async => http.Response('{}', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.getSize(find.byType(BottomSheet)).height, greaterThan(800));
+    expect(find.byKey(CreateGroupSheet.closeKey), findsOneWidget);
+    expect(find.byKey(CreateGroupSheet.cancelKey), findsNothing);
+
+    await tester.tap(find.byKey(CreateGroupSheet.closeKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+  });
+
   testWidgets(
     'DM group creation keeps the original peer and invites a friend',
     (tester) async {
