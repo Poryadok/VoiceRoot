@@ -209,8 +209,44 @@ func TestNotificationPresenceCapabilityIsNarrowAndRequestBound(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := RequireNotificationPresence(principal.WithVerified(context.Background(), wrong), method, req)
-			require.Equal(t, codes.Unauthenticated, status.Code(err))
+			want := codes.Unauthenticated
+			if name == "wrong issuer" {
+				want = codes.PermissionDenied
+			}
+			require.Equal(t, want, status.Code(err))
 		})
 	}
 	require.Equal(t, codes.PermissionDenied, status.Code(RequireNotificationPresence(context.Background(), method, req)))
+}
+
+func TestMessagingScheduledPresenceCapabilityIsNarrowAndRequestBound(t *testing.T) {
+	const method = "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
+	req := wrapperspb.String("scheduled request")
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	require.Equal(t, method, Method("messaging"))
+	require.True(t, AllowsMethod("messaging", method))
+	require.False(t, AllowsMethod("messaging", "/voice.user.v1.UserService/GetBulkPresence"))
+	require.False(t, AllowsMethod("messaging", "/voice.user.v1.UserService/GetNotificationRoutingPresence"))
+
+	valid := principal.Principal{Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: hash}
+	require.NoError(t, RequireMessagingPresence(principal.WithVerified(context.Background(), valid), method, req))
+
+	for name, wrong := range map[string]principal.Principal{
+		"wrong issuer":   {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: hash},
+		"wrong audience": {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "social", RPC: method, RequestHash: hash},
+		"wrong method":   {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: "/voice.user.v1.UserService/GetBulkPresence", RequestHash: hash},
+		"wrong hash":     {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: "different"},
+		"user authority": {Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: method, RequestHash: hash, AccountID: "account"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := RequireMessagingPresence(principal.WithVerified(context.Background(), wrong), method, req)
+			want := codes.Unauthenticated
+			if name == "wrong issuer" {
+				want = codes.PermissionDenied
+			}
+			require.Equal(t, want, status.Code(err))
+		})
+	}
+	require.Equal(t, codes.PermissionDenied, status.Code(RequireMessagingPresence(context.Background(), method, req)))
 }

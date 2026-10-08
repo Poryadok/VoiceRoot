@@ -204,6 +204,28 @@ class UserServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getBulkPresence, request, options: options);
   }
 
+  /// Internal Notification routing signal. This method is exposed only on the
+  /// dedicated authenticated Notification principal listener.
+  $grpc.ResponseFuture<$0.GetNotificationRoutingPresenceResponse>
+      getNotificationRoutingPresence(
+    $0.GetNotificationRoutingPresenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getNotificationRoutingPresence, request,
+        options: options);
+  }
+
+  /// Internal Messaging decision for an owned scheduled DM dispatch.
+  /// Exposed only on the dedicated authenticated Messaging principal listener.
+  $grpc.ResponseFuture<$0.GetScheduledMessageDispatchPresenceResponse>
+      getScheduledMessageDispatchPresence(
+    $0.GetScheduledMessageDispatchPresenceRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getScheduledMessageDispatchPresence, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetSettingsResponse> getSettings(
     $0.GetSettingsRequest request, {
     $grpc.CallOptions? options,
@@ -454,6 +476,19 @@ class UserServiceClient extends $grpc.Client {
           '/voice.user.v1.UserService/GetBulkPresence',
           ($0.GetBulkPresenceRequest value) => value.writeToBuffer(),
           $0.GetBulkPresenceResponse.fromBuffer);
+  static final _$getNotificationRoutingPresence = $grpc.ClientMethod<
+          $0.GetNotificationRoutingPresenceRequest,
+          $0.GetNotificationRoutingPresenceResponse>(
+      '/voice.user.v1.UserService/GetNotificationRoutingPresence',
+      ($0.GetNotificationRoutingPresenceRequest value) => value.writeToBuffer(),
+      $0.GetNotificationRoutingPresenceResponse.fromBuffer);
+  static final _$getScheduledMessageDispatchPresence = $grpc.ClientMethod<
+          $0.GetScheduledMessageDispatchPresenceRequest,
+          $0.GetScheduledMessageDispatchPresenceResponse>(
+      '/voice.user.v1.UserService/GetScheduledMessageDispatchPresence',
+      ($0.GetScheduledMessageDispatchPresenceRequest value) =>
+          value.writeToBuffer(),
+      $0.GetScheduledMessageDispatchPresenceResponse.fromBuffer);
   static final _$getSettings =
       $grpc.ClientMethod<$0.GetSettingsRequest, $0.GetSettingsResponse>(
           '/voice.user.v1.UserService/GetSettings',
@@ -737,6 +772,27 @@ abstract class UserServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetBulkPresenceRequest.fromBuffer(value),
         ($0.GetBulkPresenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetNotificationRoutingPresenceRequest,
+            $0.GetNotificationRoutingPresenceResponse>(
+        'GetNotificationRoutingPresence',
+        getNotificationRoutingPresence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetNotificationRoutingPresenceRequest.fromBuffer(value),
+        ($0.GetNotificationRoutingPresenceResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<
+            $0.GetScheduledMessageDispatchPresenceRequest,
+            $0.GetScheduledMessageDispatchPresenceResponse>(
+        'GetScheduledMessageDispatchPresence',
+        getScheduledMessageDispatchPresence_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetScheduledMessageDispatchPresenceRequest.fromBuffer(value),
+        ($0.GetScheduledMessageDispatchPresenceResponse value) =>
+            value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.GetSettingsRequest, $0.GetSettingsResponse>(
             'GetSettings',
@@ -1075,6 +1131,30 @@ abstract class UserServiceBase extends $grpc.Service {
 
   $async.Future<$0.GetBulkPresenceResponse> getBulkPresence(
       $grpc.ServiceCall call, $0.GetBulkPresenceRequest request);
+
+  $async.Future<$0.GetNotificationRoutingPresenceResponse>
+      getNotificationRoutingPresence_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.GetNotificationRoutingPresenceRequest>
+              $request) async {
+    return getNotificationRoutingPresence($call, await $request);
+  }
+
+  $async.Future<$0.GetNotificationRoutingPresenceResponse>
+      getNotificationRoutingPresence($grpc.ServiceCall call,
+          $0.GetNotificationRoutingPresenceRequest request);
+
+  $async.Future<$0.GetScheduledMessageDispatchPresenceResponse>
+      getScheduledMessageDispatchPresence_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.GetScheduledMessageDispatchPresenceRequest>
+              $request) async {
+    return getScheduledMessageDispatchPresence($call, await $request);
+  }
+
+  $async.Future<$0.GetScheduledMessageDispatchPresenceResponse>
+      getScheduledMessageDispatchPresence($grpc.ServiceCall call,
+          $0.GetScheduledMessageDispatchPresenceRequest request);
 
   $async.Future<$0.GetSettingsResponse> getSettings_Pre($grpc.ServiceCall $call,
       $async.Future<$0.GetSettingsRequest> $request) async {

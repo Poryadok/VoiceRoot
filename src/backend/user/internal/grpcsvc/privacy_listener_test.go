@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"testing"
+	chatv1 "voice.app/voice/chat/v1"
 	userv1 "voice.app/voice/user/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/pkg/socialprincipal"
@@ -65,6 +66,49 @@ func TestRegisterNotificationPresenceServerExposesOnlyRoutingRPC(t *testing.T) {
 	require.NotNil(t, registrar.desc)
 	require.Len(t, registrar.desc.Methods, 1)
 	require.Equal(t, "GetNotificationRoutingPresence", registrar.desc.Methods[0].MethodName)
+	require.Empty(t, registrar.desc.Streams)
+}
+
+func TestMessagingScheduledPresenceRequiresDedicatedPrincipal(t *testing.T) {
+	req := &userv1.GetScheduledMessageDispatchPresenceRequest{
+		ScheduledMessageId: uuid.NewString(), SenderAccountId: uuid.NewString(), SenderProfileId: uuid.NewString(),
+		ChatId: uuid.NewString(), ScheduleGeneration: 1,
+		Mode:     userv1.ScheduledMessageDispatchMode_SCHEDULED_MESSAGE_DISPATCH_MODE_AT,
+		ChatType: chatv1.ChatType_CHAT_TYPE_GROUP,
+	}
+	svc := &MessagingScheduledPresenceGRPC{User: &UserGRPC{}}
+	_, err := svc.GetScheduledMessageDispatchPresence(context.Background(), req)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	valid := principal.Principal{Kind: "service", Issuer: "messaging", Subject: "service:messaging", Audience: "user", RPC: userv1.UserService_GetScheduledMessageDispatchPresence_FullMethodName, RequestHash: hash}
+	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), req)
+	require.Equal(t, codes.Unavailable, status.Code(err), "a valid principal and body reach the service dependency")
+
+	invalidBody := *req
+	invalidBody.Mode = userv1.ScheduledMessageDispatchMode_SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED
+	invalidHash, err := principal.RequestHash(&invalidBody)
+	require.NoError(t, err)
+	valid.RequestHash = invalidHash
+	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), &invalidBody)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "a valid principal cannot make an open-ended mode valid")
+
+	valid.Issuer, valid.Subject = "notification", "service:notification"
+	valid.RequestHash = hash
+	_, err = svc.GetScheduledMessageDispatchPresence(principal.WithVerified(context.Background(), valid), req)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = (&UserGRPC{}).GetScheduledMessageDispatchPresence(context.Background(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err), "the ordinary User listener must not implement this RPC")
+}
+
+func TestRegisterMessagingScheduledPresenceExposesOnlyScheduledDecision(t *testing.T) {
+	var registrar serviceDescriptorRecorder
+	RegisterMessagingScheduledPresenceServer(&registrar, &UserGRPC{})
+	require.NotNil(t, registrar.desc)
+	require.Len(t, registrar.desc.Methods, 1)
+	require.Equal(t, "GetScheduledMessageDispatchPresence", registrar.desc.Methods[0].MethodName)
 	require.Empty(t, registrar.desc.Streams)
 }
 
