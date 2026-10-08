@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	chatv1 "voice.app/voice/chat/v1"
 	"voice/backend/chat/internal/store"
+	"voice/backend/pkg/gisowner"
 	"voice/backend/pkg/principal"
 )
 
@@ -40,7 +41,7 @@ func (s *GameIntegrationChatGRPC) ProvisionManagedChat(ctx context.Context, req 
 	}
 	result, err := s.Store.ProvisionManagedChat(ctx, store.ManagedChatCreate{ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID, ExternalKey: req.GetExternalChatKey(), RequestHash: mustGISHash(req), Name: req.GetName(), Topic: req.Topic})
 	if err != nil {
-		return nil, managedChatStatus(err)
+		return nil, managedChatOwnerStatus(err, req)
 	}
 	return &chatv1.ProvisionManagedChatResponse{ChatId: result.ChatID.String(), Replayed: result.Replayed,
 		ReceiptId: result.ReceiptID.String(), RequestHash: result.RequestHash}, nil
@@ -77,7 +78,7 @@ func (s *GameIntegrationChatGRPC) SyncManagedChatMembers(ctx context.Context, re
 		result, err = s.Store.SyncManagedChatMembers(ctx, store.ManagedChatMemberSync{ApplicationID: applicationID, EnvironmentID: environmentID, OperationID: operationID, ChatID: chatID, RequestHash: requestHash, ProfileIDs: profileIDs})
 	}
 	if err != nil {
-		return nil, managedChatStatus(err)
+		return nil, managedChatOwnerStatus(err, req)
 	}
 	response := &chatv1.SyncManagedChatMembersResponse{Replayed: result.Replayed, ReceiptId: result.ReceiptID.String(),
 		RequestHash: result.RequestHash, ProfileIds: make([]string, len(result.ProfileIDs))}
@@ -160,4 +161,44 @@ func managedChatStatus(err error) error {
 	default:
 		return status.Error(codes.Internal, "managed chat operation failed")
 	}
+}
+
+type managedChatOwnerRequest interface {
+	proto.Message
+	GetOperationId() string
+}
+
+func managedChatOwnerStatus(err error, request managedChatOwnerRequest) error {
+	publicErr := managedChatStatus(err)
+	if request == nil {
+		return publicErr
+	}
+	category := ""
+	switch {
+	case errors.Is(err, store.ErrManagedOperationConflict):
+		category = gisowner.CategoryOperationConflict
+	case errors.Is(err, store.ErrManagedResourceConflict):
+		category = gisowner.CategoryResourceConflict
+	case errors.Is(err, store.ErrManagedChatNotFound):
+		if _, ok := request.(*chatv1.SyncManagedChatMembersRequest); ok {
+			category = gisowner.CategoryResourceMissing
+		}
+	}
+	if category == "" {
+		return publicErr
+	}
+	rpc := ""
+	switch request.(type) {
+	case *chatv1.ProvisionManagedChatRequest:
+		rpc = gisowner.ChatProvisionRPC
+	case *chatv1.SyncManagedChatMembersRequest:
+		rpc = gisowner.ChatRosterRPC
+	default:
+		return publicErr
+	}
+	hash, hashErr := principal.RequestHash(request)
+	if hashErr != nil {
+		return publicErr
+	}
+	return gisowner.Annotate(publicErr, gisowner.ChatDomain, rpc, category, request.GetOperationId(), hash)
 }

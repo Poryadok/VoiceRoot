@@ -17,6 +17,8 @@ import (
 type sessionOwnerScript struct {
 	blocked       map[string]bool
 	loseNextReply map[string]bool
+	committed     map[string]chan struct{}
+	release       map[string]<-chan struct{}
 	calls         map[string][]SessionOwnerRequest
 	receipts      map[sessionOwnerEffectKey]SessionOwnerReceipt
 	sideEffects   map[sessionOwnerEffectKey]int
@@ -30,6 +32,7 @@ type sessionOwnerEffectKey struct {
 func newSessionOwnerScript() *sessionOwnerScript {
 	return &sessionOwnerScript{
 		blocked: make(map[string]bool), loseNextReply: make(map[string]bool),
+		committed: make(map[string]chan struct{}), release: make(map[string]<-chan struct{}),
 		calls: make(map[string][]SessionOwnerRequest), receipts: make(map[sessionOwnerEffectKey]SessionOwnerReceipt),
 		sideEffects: make(map[sessionOwnerEffectKey]int),
 	}
@@ -52,6 +55,12 @@ func (s *sessionOwnerScript) result(stage string, request SessionOwnerRequest) (
 	receipt := SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: receiptID, RequestHash: request.RequestHash}
 	s.receipts[key] = receipt
 	s.sideEffects[key]++
+	if committed := s.committed[stage]; committed != nil {
+		close(committed)
+	}
+	if release := s.release[stage]; release != nil {
+		<-release
+	}
 	if s.loseNextReply[stage] {
 		s.loseNextReply[stage] = false
 		return SessionOwnerReceipt{}, errors.New("simulated transport loss after owner commit")
