@@ -163,6 +163,47 @@ The boolean is true for live `online`, `idle` and `dnd` sessions. Explicit
 an unknown status is unavailable, not offline, so Notification does not send a
 push from an unrecognized state.
 
+### Messaging scheduled-delivery presence principal boundary
+
+Messaging reaches `GetScheduledMessageDispatchPresence` only through the
+separate signed-principal mTLS listener configured by
+`USER_MESSAGING_PRINCIPAL_TLS_CERT_FILE`,
+`USER_MESSAGING_PRINCIPAL_TLS_KEY_FILE`, and
+`USER_MESSAGING_PRINCIPAL_CLIENT_CA_FILE` (the trusted client certificate
+authority bundle), and `USER_MESSAGING_PRINCIPAL_REPLAY_REDIS_ADDR`; the optional listener address is
+`USER_MESSAGING_PRINCIPAL_GRPC_LISTEN` (default `:9096`). The listener admits
+only issuer `messaging`, audience `user`, and this exact method. Its signed
+request binds the claimed schedule ID and positive persisted dispatch
+generation, sender account/profile, authoritative Chat type, and closed `at`
+or `when_online` mode. A recipient profile is present only for a DM and is
+derived by Messaging from current authoritative membership. The request cannot
+be used as a general presence or profile lookup. The ordinary User listener
+does not implement this method.
+
+The User `messaging` principal runtime also fetches Messaging's principal JWKS
+over mTLS. Its outbound identity is the separate pair
+`USER_PRINCIPAL_JWKS_CLIENT_CERT_FILE` and
+`USER_PRINCIPAL_JWKS_CLIENT_KEY_FILE`; these are not the inbound User listener
+certificate/key above. The Messaging JWKS listener's client-CA configuration
+must trust this User client identity. User continues to verify the JWKS server
+using the configured `S2S_JWKS_CA_FILE` and the HTTPS endpoint hostname.
+
+User verifies that the sender profile still belongs to the bound account and
+is active, then returns its persisted `sender_is_guest` fact. For non-DM `at`
+dispatch, `user_policy_allows_dispatch` means only this sender check passed;
+Messaging remains responsible for Chat, Space, Role, moderation, and all
+other delivery guards. For a DM, both modes additionally apply current DM
+audience, guest-DM, and block policy. `at` does not consult presence or
+`show_online`; `when_online` additionally checks current `show_online`
+visibility and the peer's live status, with `recipient_online` true only for
+exact `online`. `idle`, `dnd`, offline, invisible, or hidden peers are not
+reported online. A missing/deleted peer or denied DM policy returns a false
+User policy result. An unknown live state or unavailable authority, privacy,
+block, or presence dependency returns an error so Messaging retains and
+retries the durable schedule rather than interpreting uncertainty as
+offline or eligible. Neither mode replaces Messaging's ordinary send-time
+guards.
+
 ```
 profiles
 ├── id (UUID)

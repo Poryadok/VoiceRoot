@@ -3,6 +3,7 @@ syntax = "proto3";
 package voice.user.v1;
 
 import "google/protobuf/timestamp.proto";
+import "voice/chat/v1/chat.proto";
 import "voice/common/v1/common.proto";
 
 option go_package = "voice.app/voice/user/v1;userv1";
@@ -69,6 +70,9 @@ service UserService {
   // Internal Notification routing signal. This method is exposed only on the
   // dedicated authenticated Notification principal listener.
   rpc GetNotificationRoutingPresence(GetNotificationRoutingPresenceRequest) returns (GetNotificationRoutingPresenceResponse);
+  // Internal Messaging decision for an owned scheduled dispatch.
+  // Exposed only on the dedicated authenticated Messaging principal listener.
+  rpc GetScheduledMessageDispatchPresence(GetScheduledMessageDispatchPresenceRequest) returns (GetScheduledMessageDispatchPresenceResponse);
 
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
@@ -389,6 +393,33 @@ message GetNotificationRoutingPresenceRequest {
 // This intentionally exposes no presence status, last-seen, or call metadata.
 message GetNotificationRoutingPresenceResponse {
   bool has_active_session = 1;
+}
+
+enum ScheduledMessageDispatchMode {
+  SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED = 0;
+  SCHEDULED_MESSAGE_DISPATCH_MODE_AT = 1;
+  SCHEDULED_MESSAGE_DISPATCH_MODE_WHEN_ONLINE = 2;
+}
+
+message GetScheduledMessageDispatchPresenceRequest {
+  // The request is bound to one claimed durable schedule and the persisted
+  // sender. DM modes additionally bind the authoritative DM peer.
+  string scheduled_message_id = 1;
+  string sender_account_id = 2;
+  string sender_profile_id = 3;
+  string chat_id = 4;
+  optional string recipient_profile_id = 5;
+  uint64 schedule_generation = 6; // positive persisted dispatch generation
+  ScheduledMessageDispatchMode mode = 7;
+  voice.chat.v1.ChatType chat_type = 8;
+}
+
+// user_policy_allows_dispatch is only User's scoped policy result; Messaging
+// still performs its other chat, role, moderation, and delivery guards.
+message GetScheduledMessageDispatchPresenceResponse {
+  bool user_policy_allows_dispatch = 1;
+  bool recipient_online = 2;
+  bool sender_is_guest = 3;
 }
 message GetSettingsResponse {
   UserSettings user_settings = 1;

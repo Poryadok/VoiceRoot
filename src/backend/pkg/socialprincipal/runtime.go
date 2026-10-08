@@ -61,8 +61,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			return nil, errors.New("principal JWKS CA has no certificates")
 		}
 	}
+	jwksTLS, err := jwksHTTPClientTLSConfig(cfg, roots)
+	if err != nil {
+		return nil, err
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	transport.TLSClientConfig = jwksTLS
 	client := &http.Client{Transport: transport, Timeout: dependencyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("principal JWKS redirects forbidden") }}
 	endpoints := make(map[string]string, len(cfg.JWKSURLs))
 	issuers := make(map[string]bool, len(cfg.JWKSURLs))
@@ -108,7 +112,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, err
 	}
 	replay := redis.NewClient(&redis.Options{Addr: cfg.ReplayAddr, Password: cfg.ReplayPassword, DialTimeout: dependencyTimeout, ReadTimeout: dependencyTimeout, WriteTimeout: dependencyTimeout, MaxRetries: -1, ContextTimeoutEnabled: true})
-	r := &Runtime{target: cfg.Target, capability: cfg.Capability, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})}
+	serverTLS, err := listenerTLSConfig(cfg, cert)
+	if err != nil {
+		transport.CloseIdleConnections()
+		return nil, err
+	}
+	r := &Runtime{target: cfg.Target, capability: cfg.Capability, resolver: resolver, replay: replay, transport: transport, credentials: credentials.NewTLS(serverTLS)}
 	r.verifier = &Verifier{Target: cfg.Target, Capability: cfg.Capability, Issuers: issuers, Resolve: resolver.Resolve, Replay: r.recordReplay, Diagnostic: func(reason VerificationReason) {
 		log.Printf("principal verification rejected target=%s reason=%s", cfg.Target, reason)
 	}}
@@ -123,6 +132,35 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	r.done = make(chan struct{})
 	go r.refreshLoop(refreshContext, cfg.RefreshAfter, issuers)
 	return r, nil
+}
+
+func listenerTLSConfig(cfg Config, cert tls.Certificate) (*tls.Config, error) {
+	serverTLS := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+	if cfg.Capability != "messaging" {
+		return serverTLS, nil
+	}
+	if cfg.ClientCAs == nil {
+		return nil, errors.New("Messaging principal client CA required")
+	}
+	serverTLS.ClientAuth = tls.RequireAndVerifyClientCert
+	serverTLS.ClientCAs = cfg.ClientCAs
+	return serverTLS, nil
+}
+
+func jwksHTTPClientTLSConfig(cfg Config, roots *x509.CertPool) (*tls.Config, error) {
+	clientTLS := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	if cfg.Capability != "messaging" {
+		return clientTLS, nil
+	}
+	if cfg.JWKSClientCertFile == "" || cfg.JWKSClientKeyFile == "" {
+		return nil, errors.New("Messaging principal JWKS client certificate/key required")
+	}
+	cert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
+	if err != nil {
+		return nil, errors.New("Messaging principal JWKS client identity unavailable")
+	}
+	clientTLS.Certificates = []tls.Certificate{cert}
+	return clientTLS, nil
 }
 
 func validateJWKS(document []byte) error {

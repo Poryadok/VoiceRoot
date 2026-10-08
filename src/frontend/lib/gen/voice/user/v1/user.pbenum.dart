@@ -74,5 +74,33 @@ class PrivacyPreset extends $pb.ProtobufEnum {
   const PrivacyPreset._(super.value, super.name);
 }
 
+class ScheduledMessageDispatchMode extends $pb.ProtobufEnum {
+  static const ScheduledMessageDispatchMode
+      SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED =
+      ScheduledMessageDispatchMode._(0,
+          _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED');
+  static const ScheduledMessageDispatchMode SCHEDULED_MESSAGE_DISPATCH_MODE_AT =
+      ScheduledMessageDispatchMode._(
+          1, _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_DISPATCH_MODE_AT');
+  static const ScheduledMessageDispatchMode
+      SCHEDULED_MESSAGE_DISPATCH_MODE_WHEN_ONLINE =
+      ScheduledMessageDispatchMode._(2,
+          _omitEnumNames ? '' : 'SCHEDULED_MESSAGE_DISPATCH_MODE_WHEN_ONLINE');
+
+  static const $core.List<ScheduledMessageDispatchMode> values =
+      <ScheduledMessageDispatchMode>[
+    SCHEDULED_MESSAGE_DISPATCH_MODE_UNSPECIFIED,
+    SCHEDULED_MESSAGE_DISPATCH_MODE_AT,
+    SCHEDULED_MESSAGE_DISPATCH_MODE_WHEN_ONLINE,
+  ];
+
+  static final $core.List<ScheduledMessageDispatchMode?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static ScheduledMessageDispatchMode? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ScheduledMessageDispatchMode._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');

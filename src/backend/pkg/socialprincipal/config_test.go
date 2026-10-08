@@ -2,6 +2,8 @@ package socialprincipal
 
 import (
 	"github.com/stretchr/testify/require"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -76,6 +78,57 @@ func TestLoadFromEnvWithAudience_ConfiguresNotificationOnlyCapability(t *testing
 	require.Equal(t, "notification", cfg.Capability)
 	require.Equal(t, ":9095", cfg.ListenAddr)
 	require.Equal(t, map[string]string{"notification": "https://notification:8443/.well-known/jwks.json"}, cfg.JWKSURLs)
+}
+
+func TestLoadFromEnvWithAudience_ConfiguresMessagingOnlyCapability(t *testing.T) {
+	const prefix = "USER_MESSAGING_PRINCIPAL_"
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"messaging":"https://messaging:8443/.well-known/jwks.json","notification":"https://notification:8443/.well-known/jwks.json"}`)
+	_, enabled, err := LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.NoError(t, err)
+	require.False(t, enabled, "shared JWKS configuration must not enable the dedicated listener")
+
+	t.Setenv(prefix+"TLS_CERT_FILE", "cert.pem")
+	_, enabled, err = LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.Error(t, err, "partial listener config must fail closed")
+	require.True(t, enabled)
+
+	t.Setenv(prefix+"TLS_KEY_FILE", "key.pem")
+	t.Setenv(prefix+"REPLAY_REDIS_ADDR", "redis:6379")
+	_, enabled, err = LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.Error(t, err, "the Messaging listener must not enable without a client CA")
+	require.True(t, enabled)
+	invalidCAFile := filepath.Join(t.TempDir(), "invalid-client-ca.pem")
+	require.NoError(t, os.WriteFile(invalidCAFile, []byte("not a certificate bundle"), 0600))
+	t.Setenv(prefix+"CLIENT_CA_FILE", invalidCAFile)
+	_, enabled, err = LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.Error(t, err, "an unreadable CA bundle must fail closed")
+	require.True(t, enabled)
+	_, clientCAPEM, _ := ephemeralTLS(t)
+	clientCAFile := filepath.Join(t.TempDir(), "client-ca.pem")
+	require.NoError(t, os.WriteFile(clientCAFile, clientCAPEM, 0600))
+	t.Setenv(prefix+"CLIENT_CA_FILE", clientCAFile)
+	_, enabled, err = LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.Error(t, err, "the Messaging capability must require a separate outbound JWKS client identity")
+	require.True(t, enabled)
+
+	_, jwksClientCertPEM, jwksClientKeyPEM := ephemeralTLS(t)
+	clientCertFile := filepath.Join(t.TempDir(), "jwks-client.crt")
+	clientKeyFile := filepath.Join(t.TempDir(), "jwks-client.key")
+	require.NoError(t, os.WriteFile(clientCertFile, jwksClientCertPEM, 0600))
+	require.NoError(t, os.WriteFile(clientKeyFile, jwksClientKeyPEM, 0600))
+	t.Setenv("USER_PRINCIPAL_JWKS_CLIENT_CERT_FILE", clientCertFile)
+	t.Setenv("USER_PRINCIPAL_JWKS_CLIENT_KEY_FILE", clientKeyFile)
+	cfg, enabled, err := LoadFromEnvWithAudience("user", "messaging", prefix, ":9096")
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, "user", cfg.Target)
+	require.Equal(t, "messaging", cfg.Capability)
+	require.Equal(t, ":9096", cfg.ListenAddr)
+	require.Equal(t, clientCAFile, cfg.ClientCAFile)
+	require.NotNil(t, cfg.ClientCAs)
+	require.Equal(t, clientCertFile, cfg.JWKSClientCertFile)
+	require.Equal(t, clientKeyFile, cfg.JWKSClientKeyFile)
+	require.Equal(t, map[string]string{"messaging": "https://messaging:8443/.well-known/jwks.json"}, cfg.JWKSURLs)
 }
 
 func TestConfigRejectsUnsafeEndpoint(t *testing.T) {
