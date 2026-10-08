@@ -237,6 +237,17 @@
   "chatListEmpty": "No conversations yet",
   "chatListEmptyHint": "Find people in Search to start a direct message.",
   "chatListLoadMore": "Load more chats",
+  "chatScheduleMessage": "Schedule message",
+  "chatSendWhenOnline": "Send when online",
+  "chatSchedulePickerTitle": "Schedule message",
+  "chatSchedulePending": "Pending",
+  "chatScheduleEdit": "Edit scheduled message",
+  "chatScheduleCancel": "Cancel scheduled message",
+  "chatScheduleSendNow": "Send now",
+  "chatScheduleRetry": "Retry",
+  "chatScheduleDateInvalid": "Choose a time within the next 365 days",
+  "chatScheduleFailure": "Could not complete the scheduled-message request. Try again.",
+  "chatScheduleLoadMore": "Load more scheduled messages",
   "chatListUnreadCount": "{count} unread",
   "@chatListUnreadCount": {
     "placeholders": {

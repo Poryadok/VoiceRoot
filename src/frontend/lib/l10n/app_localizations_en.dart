@@ -547,6 +547,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatListLoadMore => 'Load more chats';
 
   @override
+  String get chatScheduleMessage => 'Schedule message';
+
+  @override
+  String get chatSendWhenOnline => 'Send when online';
+
+  @override
+  String get chatSchedulePickerTitle => 'Schedule message';
+
+  @override
+  String get chatSchedulePending => 'Pending';
+
+  @override
+  String get chatScheduleEdit => 'Edit scheduled message';
+
+  @override
+  String get chatScheduleCancel => 'Cancel scheduled message';
+
+  @override
+  String get chatScheduleSendNow => 'Send now';
+
+  @override
+  String get chatScheduleRetry => 'Retry';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Choose a time within the next 365 days';
+
+  @override
+  String get chatScheduleFailure =>
+      'Could not complete the scheduled-message request. Try again.';
+
+  @override
+  String get chatScheduleLoadMore => 'Load more scheduled messages';
+
+  @override
   String chatListUnreadCount(int count) {
     return '$count unread';
   }

@@ -1046,6 +1046,72 @@ abstract class AppLocalizations {
   /// **'Load more chats'**
   String get chatListLoadMore;
 
+  /// No description provided for @chatScheduleMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatScheduleMessage;
+
+  /// No description provided for @chatSendWhenOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get chatSendWhenOnline;
+
+  /// No description provided for @chatSchedulePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get chatSchedulePickerTitle;
+
+  /// No description provided for @chatSchedulePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get chatSchedulePending;
+
+  /// No description provided for @chatScheduleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit scheduled message'**
+  String get chatScheduleEdit;
+
+  /// No description provided for @chatScheduleCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel scheduled message'**
+  String get chatScheduleCancel;
+
+  /// No description provided for @chatScheduleSendNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Send now'**
+  String get chatScheduleSendNow;
+
+  /// No description provided for @chatScheduleRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatScheduleRetry;
+
+  /// No description provided for @chatScheduleDateInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a time within the next 365 days'**
+  String get chatScheduleDateInvalid;
+
+  /// No description provided for @chatScheduleFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the scheduled-message request. Try again.'**
+  String get chatScheduleFailure;
+
+  /// No description provided for @chatScheduleLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more scheduled messages'**
+  String get chatScheduleLoadMore;
+
   /// No description provided for @chatListUnreadCount.
   ///
   /// In en, this message translates to:
