@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/routing/app_router.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -248,6 +249,92 @@ void main() {
 
     expect(container.read(selectedChatIdProvider), isNull);
     expect(find.byKey(const ValueKey('deep-link-error-screen')), findsNothing);
+  });
+
+  testWidgets(
+    'a resolve result is ignored after the active profile changes within the account',
+    (tester) async {
+      final pendingResponse = Completer<http.Response>();
+      final mockClient = MockClient((_) => pendingResponse.future);
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(client: mockClient),
+      );
+      addTearDown(container.dispose);
+      final router = _createResolverRouter();
+      await tester.pumpWidget(
+        _resolverApp(container: container, router: router),
+      );
+
+      await tester.tap(find.text('resolve'));
+      await tester.pump();
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'next-profile-access',
+          refreshToken: 'next-profile-refresh',
+          accountId: 'acc-test',
+          activeProfileId: 'prof-next',
+          expiresInSeconds: 900,
+        ),
+      );
+      pendingResponse.complete(
+        http.Response(
+          '{"code":"PRIVATE_DETAIL","message":"private resolver detail"}',
+          403,
+          headers: const {'content-type': 'application/json'},
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(authControllerProvider).session?.accountId,
+        'acc-test',
+      );
+      expect(
+        container.read(authControllerProvider).session?.activeProfileId,
+        'prof-next',
+      );
+      expect(container.read(selectedChatIdProvider), isNull);
+      expect(
+        find.byKey(const ValueKey('deep-link-error-screen')),
+        findsNothing,
+      );
+      expect(find.text('private resolver detail'), findsNothing);
+    },
+  );
+
+  testWidgets('the Home CTA is reachable and activatable from the keyboard', (
+    tester,
+  ) async {
+    final mockClient = MockClient(
+      (_) async => http.Response(
+        '{"code":"PRIVATE_DETAIL","message":"private resolver detail"}',
+        404,
+        headers: const {'content-type': 'application/json'},
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: voiceAppTestOverrides(client: mockClient),
+    );
+    addTearDown(container.dispose);
+    final router = _createResolverRouter();
+    await tester.pumpWidget(_resolverApp(container: container, router: router));
+
+    await tester.tap(find.text('resolve'));
+    await tester.pumpAndSettle();
+    expect(find.text('Not found'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('deep-link-error-home')), findsOneWidget);
+    expect(find.text('Go to Home'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('home shell'), findsOneWidget);
+    expect(find.byKey(const ValueKey('deep-link-error-screen')), findsNothing);
+    expect(find.text('Not found'), findsNothing);
+    expect(find.text('private resolver detail'), findsNothing);
   });
 
   testWidgets('a newer resolve supersedes an older pending result', (
