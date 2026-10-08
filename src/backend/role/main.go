@@ -20,6 +20,7 @@ import (
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
 	grpcsvc "voice/backend/role/internal/grpcsvc"
+	"voice/backend/role/internal/outboxdelivery"
 	"voice/backend/role/internal/principalruntime"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
@@ -30,6 +31,8 @@ const serviceName = "role"
 func main() {
 	logger := httpserver.NewLogger(serviceName)
 	metricsReg := prometheus.NewRegistry()
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
 	httpAddr := ":8080"
 	if v := os.Getenv("LISTEN_ADDR"); v != "" {
 		httpAddr = v
@@ -72,6 +75,15 @@ func main() {
 			defer func() { _ = jsPub.Close() }()
 			jsPub.Logger = logger
 			events = jsPub
+			voicePolicy := outboxdelivery.NewVoicePolicyDispatcher(roleStore, jsPub)
+			voicePolicy.OnError = func(err error) {
+				logger.Warn("Role Voice policy invalidation delivery failed", slog.String("error", err.Error()))
+			}
+			go func() {
+				if err := voicePolicy.Run(runCtx); err != nil && runCtx.Err() == nil {
+					logger.Error("Role Voice policy invalidation delivery stopped", slog.String("error", err.Error()))
+				}
+			}()
 		}
 
 		lis, err := net.Listen("tcp", grpcListen)
@@ -128,10 +140,12 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errCh:
+		runCancel()
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	case <-stop:
+		runCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
 		shutdownRoleServers(ctx, grpcSrv, principalSrv)

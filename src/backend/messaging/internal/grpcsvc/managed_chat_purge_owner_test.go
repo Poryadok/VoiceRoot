@@ -39,6 +39,10 @@ func (s *purgeStoreStub) StartManagedChatPurge(_ context.Context, operationID, c
 	return s.work, nil
 }
 
+func (s *purgeStoreStub) RequireManagedChatPurgeEventsPublished(context.Context, uuid.UUID) error {
+	return nil
+}
+
 func (s *purgeStoreStub) CompleteManagedChatPurge(_ context.Context, operationID uuid.UUID, fileHash, searchHash []byte) (*store.ManagedChatPurgeWork, error) {
 	s.completeN++
 	s.completed = &store.ManagedChatPurgeWork{OperationID: operationID, ChatID: s.work.ChatID, PurgeAfter: s.work.PurgeAfter, RequestSHA256: append([]byte(nil), s.work.RequestSHA256...), State: "COMPLETED", FileReceiptSHA256: append([]byte(nil), fileHash...), SearchReceiptSHA256: append([]byte(nil), searchHash...), CompletedAt: ptrTime(time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)), MessageIDs: s.work.MessageIDs, MessageAttachments: s.work.MessageAttachments}

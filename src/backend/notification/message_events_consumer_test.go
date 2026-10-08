@@ -46,12 +46,51 @@ func (s stubChatMembers) ListMembers(_ context.Context, _ string) ([]chatmembers
 }
 
 type recordingMessageFCM struct {
-	sent []push.Payload
+	sent   []push.Payload
+	sentTo []uuid.UUID
 }
 
-func (r *recordingMessageFCM) Send(_ context.Context, _ uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
+func (r *recordingMessageFCM) Send(_ context.Context, recipient uuid.UUID, _ store.DeviceToken, payload fcm.PushPayload) error {
 	r.sent = append(r.sent, push.Payload(payload))
+	r.sentTo = append(r.sentTo, recipient)
 	return nil
+}
+
+type failOnceMessagePolicy struct {
+	calls atomic.Int32
+	err   error
+}
+
+type failOnMessagePolicyCall struct {
+	calls  atomic.Int32
+	failAt int32
+	err    error
+}
+
+type failOnceMessagePresence struct {
+	calls atomic.Int32
+	err   error
+}
+
+func (p *failOnceMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, error) {
+	if p.calls.Add(1) == 1 {
+		return false, p.err
+	}
+	return false, nil
+}
+
+func (p *failOnceMessagePolicy) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
+	if p.calls.Add(1) == 1 {
+		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
+	}
+	return delivery.PermissivePolicyLoader{}.LoadPolicy(ctx, profileID, chatID, typ, at)
+}
+
+func (p *failOnMessagePolicyCall) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
+	if p.calls.Add(1) == p.failAt {
+		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
+	}
+	return delivery.PermissivePolicyLoader{}.LoadPolicy(ctx, profileID, chatID, typ, at)
 }
 
 type channelMessageFCM struct {
@@ -76,10 +115,10 @@ type recordingGameConsent struct {
 
 type recordingGameChatScope struct {
 	profileID, chatID uuid.UUID
-	category         string
-	gameScoped       bool
-	allowed          bool
-	calls            int
+	category          string
+	gameScoped        bool
+	allowed           bool
+	calls             int
 }
 
 func (r *recordingGameChatScope) ResolveGamePushChat(_ context.Context, profileID, chatID uuid.UUID, category string) (bool, bool, error) {
@@ -154,6 +193,98 @@ func TestRouteMessageNotification_MessageSent(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	policyErr := errors.New("recipient policy unavailable")
+	policy := &failOnMessagePolicyCall{failAt: 2, err: policyErr}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.ErrorIs(t, err, policyErr, "a transient recipient policy error must fail the durable attempt")
+	require.EqualValues(t, 2, policy.calls.Load(), "the second recipient's policy must fail after the first recipient was prepared")
+	require.Empty(t, recorder.sentTo, "resolve every recipient before dispatch so retry cannot duplicate an earlier recipient")
+
+	err = routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err)
+	require.EqualValues(t, 4, policy.calls.Load(), "retry should preflight both recipients")
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
+func TestRouteMessageNotificationDoesNotReloadPoliciesDuringDispatch(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	policyErr := errors.New("unexpected second policy read")
+	policy := &failOnMessagePolicyCall{failAt: 3, err: policyErr}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Grouping: grouping.NewMemoryStore(), Policy: policy,
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err, "the event should use the policies already preflighted for all recipients")
+	require.EqualValues(t, 2, policy.calls.Load(), "dispatch must not reload a policy after sending starts")
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
+func TestRouteMessageNotificationPresenceOutageDoesNotBecomeOfflinePushAndRetries(t *testing.T) {
+	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
+	recorder := &recordingMessageFCM{}
+	presenceErr := errors.New("presence authority unavailable")
+	presence := &failOnceMessagePresence{err: presenceErr}
+	pusher := &dispatch.MessagePusher{
+		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
+			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
+			secondRecipientID: {{Token: "second-token", PushService: "fcm"}},
+		}},
+		Pusher: &dispatch.PushDispatcher{FCM: recorder}, Presence: presence, Grouping: grouping.NewMemoryStore(),
+	}
+	handler := &consumer.MessageEventHandler{Router: delivery.DecideRouting}
+	members := stubChatMembers{rows: []chatmembers.Member{
+		{ProfileID: senderID.String(), InboxBucket: "main"},
+		{ProfileID: firstRecipientID.String(), InboxBucket: "main"},
+		{ProfileID: secondRecipientID.String(), InboxBucket: "main"},
+	}}
+	event := &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{
+		MessageSent: &eventsv1.MessageSent{MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: senderID.String()},
+	}}
+
+	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.ErrorIs(t, err, presenceErr, "authority failure must NAK rather than route the recipient as offline")
+	require.Empty(t, recorder.sentTo)
+
+	err = routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
+}
+
 func TestRouteMessageNotificationCarriesGameScopeAndUsesPrivatePushCopy(t *testing.T) {
 	senderID, recipientID, appID, envID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	recorder := &recordingMessageFCM{}
@@ -188,14 +319,14 @@ func TestRouteMessageNotificationResolvesChatScopeForPush(t *testing.T) {
 		payload        *eventsv1.MessageStreamEvent
 	}{
 		{
-			name: "message",
+			name:     "message",
 			category: "game_activity",
 			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MessageSent{MessageSent: &eventsv1.MessageSent{
 				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(),
 			}}},
 		},
 		{
-			name: "mention",
+			name:     "mention",
 			category: "game_social",
 			payload: &eventsv1.MessageStreamEvent{Payload: &eventsv1.MessageStreamEvent_MentionAdded{MentionAdded: &eventsv1.MentionAdded{
 				MessageId: uuid.NewString(), ChatId: uuid.NewString(), SenderProfileId: uuid.NewString(), MentionedProfileIds: []string{uuid.NewString()},

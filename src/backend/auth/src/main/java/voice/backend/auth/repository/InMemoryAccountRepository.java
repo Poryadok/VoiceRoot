@@ -90,6 +90,11 @@ public class InMemoryAccountRepository implements AccountRepository {
   }
 
   @Override
+  public synchronized void lockForSecurityMutation(UUID accountId) {
+    // AuthService holds this repository monitor for the full in-memory operation.
+  }
+
+  @Override
   public synchronized void saveTotpSecret(UUID accountId, byte[] encryptedSecret, boolean enabled) {
     Account existing = byId.get(accountId);
     if (existing == null) {

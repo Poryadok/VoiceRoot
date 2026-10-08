@@ -20,13 +20,9 @@ const privacySettingsStreamName = "user_events"
 const privacySettingsDurable = "messaging_receipt_privacy"
 const privacySettingsSubject = "user.settings_changed"
 
-type readReceiptRevocationPublisher interface {
-	PublishReadReceiptRevoked(ctx context.Context, messageID, chatID, profileID, recipientProfileID string) error
-}
-
-type publicReceiptStore interface {
+type publicReceiptOutboxStore interface {
 	ReadReceiptChatIDsForProfile(ctx context.Context, profileID uuid.UUID) ([]uuid.UUID, error)
-	ClearPublicReadReceiptsForProfile(ctx context.Context, profileID uuid.UUID, chatIDs []uuid.UUID) ([]store.PublicReadReceipt, error)
+	ClearPublicReadReceiptsWithOutbox(ctx context.Context, profileID uuid.UUID, dmTargets map[uuid.UUID]uuid.UUID) ([]store.PublicReadReceipt, error)
 }
 
 type dmReceiptVisibilityResolver interface {
@@ -75,8 +71,8 @@ func receiptOptOutProfileID(data []byte) (uuid.UUID, bool) {
 	return id, err == nil
 }
 
-func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, receipts publicReceiptStore, targets dmReceiptVisibilityResolver, events readReceiptRevocationPublisher, logger *slog.Logger) (*nats.Subscription, error) {
-	if receipts == nil || targets == nil || events == nil {
+func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, receipts publicReceiptOutboxStore, targets dmReceiptVisibilityResolver, logger *slog.Logger) (*nats.Subscription, error) {
+	if receipts == nil || targets == nil {
 		return nil, fmt.Errorf("receipt privacy consumer dependencies not configured")
 	}
 	handler := func(msg *nats.Msg) {
@@ -91,32 +87,11 @@ func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, rece
 			_ = msg.Nak()
 			return
 		}
-		dmChats := make([]uuid.UUID, 0, len(dmTargets))
-		for chatID := range dmTargets {
-			dmChats = append(dmChats, chatID)
-		}
-		rows, err := receipts.ClearPublicReadReceiptsForProfile(ctx, profileID, dmChats)
+		_, err = receipts.ClearPublicReadReceiptsWithOutbox(ctx, profileID, dmTargets)
 		if err != nil {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy revoke failed", slog.String("error", err.Error()))
 			_ = msg.Nak()
 			return
-		}
-		for _, row := range rows {
-			peerID, ok := dmTargets[row.ChatID]
-			if !ok {
-				natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy target missing")
-				_ = msg.Nak()
-				return
-			}
-			recipientID := profileID
-			if row.ProfileID == profileID {
-				recipientID = peerID
-			}
-			if err := events.PublishReadReceiptRevoked(ctx, row.MessageID.String(), row.ChatID.String(), row.ProfileID.String(), recipientID.String()); err != nil {
-				natslog.LogConsume(logger, msg, slog.LevelWarn, "receipt privacy revoke publish failed", slog.String("error", err.Error()))
-				_ = msg.Nak()
-				return
-			}
 		}
 		natslog.LogConsume(logger, msg, slog.LevelInfo, "receipt privacy revoked", slog.String("profile_id", profileID.String()))
 		_ = msg.Ack()
@@ -132,12 +107,12 @@ func subscribeReceiptPrivacy(ctx context.Context, js nats.JetStreamContext, rece
 	return sub, nil
 }
 
-func runReceiptPrivacyConsumer(ctx context.Context, natsURL string, receipts publicReceiptStore, targets dmReceiptVisibilityResolver, events readReceiptRevocationPublisher, logger *slog.Logger) error {
+func runReceiptPrivacyConsumer(ctx context.Context, natsURL string, receipts publicReceiptOutboxStore, targets dmReceiptVisibilityResolver, logger *slog.Logger) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("receipt privacy consumer: missing NATS URL")
 	}
 	for {
-		err := runReceiptPrivacyConsumerOnce(ctx, natsURL, receipts, targets, events, logger)
+		err := runReceiptPrivacyConsumerOnce(ctx, natsURL, receipts, targets, logger)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -152,7 +127,7 @@ func runReceiptPrivacyConsumer(ctx context.Context, natsURL string, receipts pub
 	}
 }
 
-func runReceiptPrivacyConsumerOnce(ctx context.Context, natsURL string, receipts publicReceiptStore, targets dmReceiptVisibilityResolver, events readReceiptRevocationPublisher, logger *slog.Logger) error {
+func runReceiptPrivacyConsumerOnce(ctx context.Context, natsURL string, receipts publicReceiptOutboxStore, targets dmReceiptVisibilityResolver, logger *slog.Logger) error {
 	nc, err := nats.Connect(natsURL, nats.Name("voice-messaging-receipt-privacy"), nats.CustomInboxPrefix("_INBOX.voice.messaging"), nats.Timeout(10*time.Second), nats.RetryOnFailedConnect(true), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
@@ -166,7 +141,7 @@ func runReceiptPrivacyConsumerOnce(ctx context.Context, natsURL string, receipts
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)
 	}
-	sub, err := subscribeReceiptPrivacy(ctx, js, receipts, targets, events, logger)
+	sub, err := subscribeReceiptPrivacy(ctx, js, receipts, targets, logger)
 	if err != nil {
 		return err
 	}

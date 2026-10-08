@@ -188,3 +188,29 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 		})
 	}
 }
+
+func TestNotificationPresenceCapabilityIsNarrowAndRequestBound(t *testing.T) {
+	const method = "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	req := wrapperspb.String("profile")
+	hash, err := principal.RequestHash(req)
+	require.NoError(t, err)
+	require.Equal(t, method, Method("notification"))
+	require.True(t, AllowsMethod("notification", method))
+	require.False(t, AllowsMethod("notification", "/voice.user.v1.UserService/GetBulkPresence"))
+
+	valid := principal.Principal{Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: hash}
+	require.NoError(t, RequireNotificationPresence(principal.WithVerified(context.Background(), valid), method, req))
+
+	for name, wrong := range map[string]principal.Principal{
+		"wrong issuer":   {Kind: "service", Issuer: "social", Subject: "service:social", Audience: "user", RPC: method, RequestHash: hash},
+		"wrong audience": {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "social", RPC: method, RequestHash: hash},
+		"wrong method":   {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: "/voice.user.v1.UserService/GetBulkPresence", RequestHash: hash},
+		"wrong hash":     {Kind: "service", Issuer: "notification", Subject: "service:notification", Audience: "user", RPC: method, RequestHash: "different"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := RequireNotificationPresence(principal.WithVerified(context.Background(), wrong), method, req)
+			require.Equal(t, codes.Unauthenticated, status.Code(err))
+		})
+	}
+	require.Equal(t, codes.PermissionDenied, status.Code(RequireNotificationPresence(context.Background(), method, req)))
+}

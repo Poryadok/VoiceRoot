@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	eventsv1 "voice.app/voice/events/v1"
 	filev1 "voice.app/voice/file/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 	"voice/backend/pkg/spacemutationlock"
@@ -481,6 +482,27 @@ func (s *SpaceLifecycleStore) PurgeSpace(ctx context.Context, req *chatv1.PurgeS
 	var completedAt time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&completedAt); err != nil {
 		return nil, err
+	}
+	completedAt = completedAt.UTC()
+	for _, chatID := range ids {
+		eventID := uuid.NewSHA1(operationID, []byte(fmt.Sprintf("voice.chat.events.v1.ChatDeleted/%s/%d/%s", spaceID, purge.GetGeneration(), chatID)))
+		envelope := &eventsv1.ChatStreamEvent{
+			EventId:    eventID.String(),
+			OccurredAt: timestamppb.New(completedAt),
+			Payload: &eventsv1.ChatStreamEvent_ChatDeleted{ChatDeleted: &eventsv1.ChatDeleted{
+				ChatId: chatID.String(), SpaceId: spaceID.String(), DeletionOperationId: operationID.String(),
+				Generation: purge.GetGeneration(), ManifestId: sourceManifestID.String(), ManifestSha256: append([]byte(nil), sourceHash...),
+			}},
+		}
+		eventBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(envelope)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO chat_deleted_event_outbox(
+			event_id,chat_id,space_id,deletion_operation_id,generation,manifest_id,manifest_sha256,event_bytes,occurred_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, eventID, chatID, spaceID, operationID, purge.GetGeneration(), sourceManifestID, sourceHash, eventBytes, completedAt); err != nil {
+			return nil, err
+		}
 	}
 	response := &chatv1.PurgeSpaceResponse{Receipt: &commonv1.SpacePurgeReceipt{ProtocolVersion: 1, ReceiptId: uuid.NewString(), SpaceId: spaceID.String(), DeletionOperationId: operationID.String(), Generation: purge.GetGeneration(), ParticipantId: commonv1.ParticipantId_PARTICIPANT_ID_CHAT, State: commonv1.PurgeReceiptState_PURGE_RECEIPT_STATE_COMPLETED, RequestSha256: requestHash[:], CompletedAt: timestamppb.New(completedAt)}}
 	responseBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(response)

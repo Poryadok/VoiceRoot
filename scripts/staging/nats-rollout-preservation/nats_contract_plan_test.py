@@ -1,26 +1,30 @@
 import copy
 import unittest
 from pathlib import Path
-from nats_contract_plan import compile_plan, execute, verify_census, ContractError, DECLARATION
+from nats_contract_plan import compile_plan, execute, verify_census, ContractError, DECLARATIONS
 
 SOURCE=Path(__file__).parents[3]
 def live():
-    chat=['chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted']
+    chat=['chat.created','chat.member_changed','chat.dm_peer_deleted','space.tree_changed','space.created','voice.room_created','voice.room_deleted','space.invite_created','space.member_joined','space.member_left','space.updated','space.deleted','space.voice_room_access_invalidated']
     social=['social.friend_request','social.friend_accepted','social.friend_removed','social.user_blocked','social.contacts_synced']
+    role=['role.created','role.updated','role.deleted','role.assigned','role.revoked','role.chat_override_set','role.chat_override_removed','role.voice_override_set','role.voice_override_removed','role.voice_policy_invalidated']
     def info(name,subjects):
         return {'config':{'name':name,'subjects':subjects,'storage':'file','retention':'limits','max_age':604800000000000,'duplicate_window':120000000000,'max_msgs':-1,'metadata':{'preserve':'yes'}},'state':{'messages':7,'first_seq':11,'last_seq':17,'consumer_count':4}}
-    return {'chat_events':info('chat_events',chat),'social_events':info('social_events',social)}
+    return {'chat_events':info('chat_events',chat),'social_events':info('social_events',social),'role_events':info('role_events',role)}
 class Tests(unittest.TestCase):
-    def plan(self,streams=None,consumer=None): return compile_plan(SOURCE,streams or live(),consumer,copy.deepcopy(DECLARATION))
-    def test_exact_three_actions_preserve_other_config(self):
-        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed'])
+    def normalized(self): return {(stream,config['durable_name']):copy.deepcopy(config) for stream,config in DECLARATIONS}
+    def plan(self,streams=None,consumers=None): return compile_plan(SOURCE,streams or live(),consumers or {},self.normalized())
+    def test_exact_five_actions_preserve_other_config(self):
+        p=self.plan();self.assertEqual([a['api'] for a in p['actions']],['$JS.API.STREAM.UPDATE.chat_events','$JS.API.STREAM.UPDATE.social_events','$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed','$JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat','$JS.API.CONSUMER.CREATE.role_events.voice_space_media_role'])
         for action in p['actions'][:2]:
             self.assertEqual(action['after']['metadata'],{'preserve':'yes'});self.assertEqual(action['after']['max_msgs'],-1)
         self.assertEqual(p['actions'][2]['after']['config']['deliver_policy'],'new')
+        self.assertEqual(len(p['consumer_targets']),3)
     def test_exact_desired_retry_is_preserve(self):
         p=self.plan();s=live()
         for action in p['actions'][:2]: s[action['object']]['config']=action['after']
-        self.assertEqual(self.plan(s,{'config':copy.deepcopy(DECLARATION)})['actions'],[])
+        consumers={(stream,config['durable_name']):{'config':copy.deepcopy(config)} for stream,config in DECLARATIONS}
+        self.assertEqual(self.plan(s,consumers)['actions'],[])
     def test_unrelated_subject_drift_rejected(self):
         s=live();s['chat_events']['config']['subjects'].append('unknown.subject')
         with self.assertRaises(ContractError):self.plan(s)
@@ -28,8 +32,8 @@ class Tests(unittest.TestCase):
         s=live();s['social_events']['config']['duplicate_window']=300000000000
         with self.assertRaises(ContractError):self.plan(s)
     def test_existing_durable_default_drift_rejected(self):
-        c={'config':dict(DECLARATION,max_ack_pending=5)}
-        with self.assertRaises(ContractError):self.plan(consumer=c)
+        stream,config=DECLARATIONS[0];consumers={(stream,config['durable_name']):{'config':dict(config,max_ack_pending=5)}}
+        with self.assertRaises(ContractError):self.plan(consumers=consumers)
     def test_no_existing_record_state_in_mutation_payload(self):
         p=self.plan();self.assertTrue(all('state' not in a['after'] for a in p['actions']))
     def test_dynamic_stream_overlap_refused_before_plan(self):
@@ -38,7 +42,7 @@ class Tests(unittest.TestCase):
             with self.assertRaises(ContractError):self.plan(s)
     def test_nonoverlapping_dynamic_stream_preserved(self):
         s=live();s['dynamic_extra']={'config':{'name':'dynamic_extra','subjects':['space.other','other.>']}}
-        self.assertEqual(len(self.plan(s)['actions']),3)
+        self.assertEqual(len(self.plan(s)['actions']),5)
 class Actor:
     def __init__(self,p):self.current={a['object']:copy.deepcopy(a['before']) for a in p['actions']};self.calls=[];self.safe=True;self.crash=False
     def assert_closed_isolation(self):
@@ -46,7 +50,7 @@ class Actor:
     def info_config(self,obj):return copy.deepcopy(self.current[obj])
     def mutate(self,api,payload):
         self.calls.append(api)
-        obj=api.split('.UPDATE.')[-1] if '.UPDATE.' in api else 'social_events/rt_realtime1_friend_removed'
+        obj=api.split('.UPDATE.')[-1] if '.UPDATE.' in api else api.split('.CREATE.',1)[1].replace('.', '/',1)
         self.current[obj]=copy.deepcopy(payload.get('config',payload))
         if self.crash:self.crash=False;raise RuntimeError('process_interrupted_after_mutation')
 class ExecuteTests(Tests):
@@ -62,11 +66,11 @@ class ExecuteTests(Tests):
             self.assertEqual(j[-1]['api'],api);self.assertEqual(j[-1]['target_sha256'],j[-2]['target_sha256'])
             original(api,payload)
         a.mutate=mutate;execute(p,a,j.append)
-        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*3)
+        self.assertEqual([x['kind'] for x in j],['nats_contract_intent','nats_contract_mutation_issued','nats_contract_applied']*5)
     def test_interrupted_after_update_retries_only_remaining_actions(self):
         p=self.plan();a=Actor(p);a.crash=True;j=[]
         with self.assertRaises(RuntimeError):execute(p,a,j.append)
-        execute(p,a,j.append);self.assertEqual(len(a.calls),3)
+        execute(p,a,j.append);self.assertEqual(len(a.calls),5)
     def test_unrelated_config_drift_never_adopted(self):
         p=self.plan();a=Actor(p);a.current['chat_events']['max_msgs']=1
         with self.assertRaises(ContractError):execute(p,a,lambda event:None)
@@ -80,13 +84,15 @@ class CensusTests(Tests):
         after=copy.deepcopy(before)
         from nats_contract_plan import digest
         for a in p['actions'][:2]:next(s for s in after['streams'] if s['name']==a['object'])['config_sha256']=digest(a['after'])
-        next(s for s in after['streams'] if s['name']=='social_events')['state']['consumer_count']+=1
-        last=next(s for s in before['streams'] if s['name']=='social_events')['state']['last_seq']
-        after['consumers'].append({'stream':'social_events','name':DECLARATION['name'],'durable':DECLARATION['name'],'config_sha256':p['normalized_consumer_sha256'],'num_ack_pending':0,'num_redelivered':0,'num_pending':0,
-            'delivered':{'consumer_seq':0,'stream_seq':last},'ack_floor':{'consumer_seq':0,'stream_seq':0}})
+        targets={(row['stream'],row['name']):row['config_sha256'] for row in p['consumer_targets']}
+        for stream,config in DECLARATIONS:
+            durable=config['durable_name'];last=next(s for s in before['streams'] if s['name']==stream)['state']['last_seq']
+            next(s for s in after['streams'] if s['name']==stream)['state']['consumer_count']+=1
+            after['consumers'].append({'stream':stream,'name':durable,'durable':durable,'config_sha256':targets[(stream,durable)],'num_ack_pending':0,'num_redelivered':0,'num_pending':0,
+                'delivered':{'consumer_seq':0,'stream_seq':last},'ack_floor':{'consumer_seq':0,'stream_seq':0}})
         return p,before,after
     def test_exact_config_delta_preserves_old_records_and_ack(self):
-        p,b,a=self.proof();self.assertEqual(verify_census(p,b,a)['messages'],14)
+        p,b,a=self.proof();self.assertEqual(verify_census(p,b,a)['messages'],21)
     def test_new_durable_wrong_initial_delivery_or_ack_floor_refused(self):
         for field in ('delivered','ack_floor'):
             for seq in ('consumer_seq','stream_seq'):

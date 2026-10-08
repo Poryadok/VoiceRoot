@@ -59,3 +59,31 @@ func RegisterSocialPrivacyServer(server grpc.ServiceRegistrar, service *UserGRPC
 	}
 	server.RegisterService(&desc, &SocialPrivacyGRPC{User: service})
 }
+
+// NotificationPresenceGRPC is a separate authenticated User entrypoint with a
+// single routing-only method. It is never registered on the public or Social
+// listener.
+type NotificationPresenceGRPC struct {
+	userv1.UnimplementedUserServiceServer
+	User *UserGRPC
+}
+
+func (s *NotificationPresenceGRPC) GetNotificationRoutingPresence(ctx context.Context, req *userv1.GetNotificationRoutingPresenceRequest) (*userv1.GetNotificationRoutingPresenceResponse, error) {
+	if err := socialprincipal.RequireNotificationPresence(ctx, userv1.UserService_GetNotificationRoutingPresence_FullMethodName, req); err != nil {
+		return nil, err
+	}
+	return s.User.notificationRoutingPresence(ctx, req)
+}
+
+func RegisterNotificationPresenceServer(server grpc.ServiceRegistrar, service *UserGRPC) {
+	desc := userv1.UserService_ServiceDesc
+	desc.Methods = nil
+	desc.Streams = nil
+	for _, method := range userv1.UserService_ServiceDesc.Methods {
+		if method.MethodName == "GetNotificationRoutingPresence" {
+			desc.Methods = append(desc.Methods, method)
+		}
+	}
+	desc.Metadata = "voice/user/v1/user.proto"
+	server.RegisterService(&desc, &NotificationPresenceGRPC{User: service})
+}

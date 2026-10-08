@@ -200,7 +200,7 @@ services:
       - _INBOX.voice.realtime1.matchmaking
   role:
     no_response: true
-    publish: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, $JS.API.STREAM.INFO.role_events]
+    publish: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated, $JS.API.STREAM.INFO.role_events]
     subscribe: [_INBOX.voice.role.>]
   search:
     no_response: true
@@ -237,6 +237,7 @@ services:
       - space.deleted
       - space.deletion_scheduled
       - space.restored
+      - space.voice_room_access_invalidated
       - voice.room_created
       - voice.room_deleted
       - $JS.API.STREAM.INFO.chat_events
@@ -271,8 +272,26 @@ services:
     subscribe: [_INBOX.voice.user.>]
   voice:
     no_response: true
-    publish: [voice.call_incoming, voice.call_accepted, voice.call_declined, voice.call_missed, voice.call_ended, voice.state_changed, voice.screen_share_started, voice.screen_share_stopped, voice.call_started, voice.member_joined, $JS.API.STREAM.INFO.voice_events]
-    subscribe: [_INBOX.voice.voice.>]
+    publish:
+      - voice.call_incoming
+      - voice.call_accepted
+      - voice.call_declined
+      - voice.call_missed
+      - voice.call_ended
+      - voice.state_changed
+      - voice.screen_share_started
+      - voice.screen_share_stopped
+      - voice.call_started
+      - voice.member_joined
+      - $JS.API.STREAM.INFO.voice_events
+      - $JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat
+      - $JS.ACK.chat_events.voice_space_media_chat.>
+      - $JS.API.CONSUMER.INFO.role_events.voice_space_media_role
+      - $JS.ACK.role_events.voice_space_media_role.>
+    subscribe:
+      - _INBOX.voice.voice.>
+      - _INBOX.voice.voice.space_media_chat
+      - _INBOX.voice.voice.space_media_role
 bootstrap:
   no_response: true
   publish:
@@ -325,6 +344,10 @@ bootstrap:
     - $JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed
     - $JS.API.CONSUMER.INFO.role_events.rt_realtime1_role
     - $JS.API.CONSUMER.CREATE.role_events.rt_realtime1_role
+    - $JS.API.CONSUMER.INFO.chat_events.voice_space_media_chat
+    - $JS.API.CONSUMER.CREATE.chat_events.voice_space_media_chat
+    - $JS.API.CONSUMER.INFO.role_events.voice_space_media_role
+    - $JS.API.CONSUMER.CREATE.role_events.voice_space_media_role
     - $JS.API.CONSUMER.INFO.voice_events.rt_realtime1_voice
     - $JS.API.CONSUMER.CREATE.voice_events.rt_realtime1_voice
     - $JS.API.CONSUMER.INFO.matchmaking_events.rt_realtime1_matchmaking

@@ -1215,6 +1215,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageUnpin => 'Unpin message';
 
   @override
+  String get chatPinnedLimitReached => 'You can pin up to 5 messages.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -1891,6 +1894,70 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTooltip => 'Settings';
 
   @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
+  String get settingsChatThemes => 'Chat themes';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Exclusive themes are available to Voice Plus subscribers.';
+
+  @override
+  String get chatThemesSelected => 'Selected';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Apply $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Reset';
+
+  @override
+  String get appIconTitle => 'App Icon';
+
+  @override
+  String get appIconDeviceNotice => 'This choice applies on this device only.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Voice Plus is required to apply this icon.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Your saved icon will return when Voice Plus is active again.';
+
+  @override
+  String get appIconUnavailable =>
+      'Runtime app icons are unavailable on this device.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Voice Plus status could not be checked. Retry or choose Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking => 'Checking Voice Plus status…';
+
+  @override
+  String get appIconApplyFailure =>
+      'The app icon could not be applied. Your saved choice is kept; retry to apply it.';
+
+  @override
+  String get appIconRetry => 'Retry';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Apply $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Selected';
+
+  @override
   String get settingsTheme => 'Theme';
 
   @override
@@ -1940,6 +2007,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHelpTitle => 'Help';
+
+  @override
+  String get settingsHelpSubtitle =>
+      'Find an answer or contact the Voice team.';
+
+  @override
+  String get settingsHelpHeading => 'How can we help?';
+
+  @override
+  String get settingsHelpBackLabel => 'Back';
+
+  @override
+  String get settingsHelpSearchHint => 'Search help (e.g. voice rooms)';
+
+  @override
+  String get settingsHelpDocsLabel => 'Project documentation';
+
+  @override
+  String get settingsHelpSupportLabel => 'Contact support';
+
+  @override
+  String get settingsHelpNoResults => 'No help topics match your search.';
+
+  @override
+  String get settingsHelpLaunchError => 'Could not open link.';
 
   @override
   String get settingsHelpChatsTitle => 'Chats';
@@ -2129,6 +2221,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get securitySettingsTitle => 'Security';
+
+  @override
+  String get securityChangePasswordAction => 'Change password';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Password changed. Sign in with your new password.';
 
   @override
   String get appealSettingsTitle => 'Appeal a sanction';

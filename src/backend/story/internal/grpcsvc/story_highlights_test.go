@@ -285,6 +285,97 @@ func TestGetHighlights_filtersByHighlightVisibility(t *testing.T) {
 		"GetHighlights must filter by highlight visibility independent of story visibility")
 }
 
+func TestGetStory_expiredDirectIDRequiresCurrentHighlightVisibility(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	client, st, cleanup := startStoryGRPC(t)
+	defer cleanup()
+
+	author := uuid.New()
+	stranger := uuid.New()
+	ctxAuthor := withProfile(context.Background(), uuid.New(), author)
+	ctxStranger := withProfile(context.Background(), uuid.New(), stranger)
+	text := "archived story"
+	create := func(visibility string) *storyv1.Story {
+		created, err := client.CreateStory(ctxAuthor, &storyv1.CreateStoryRequest{
+			Type: "text", TextContent: &text, Visibility: visibility,
+		})
+		require.NoError(t, err)
+		return created.GetStory()
+	}
+
+	withoutHighlight := create("nobody")
+	publicHighlightStory := create("nobody")
+	privateHighlightStory := create("nobody")
+	hiddenStory := create("nobody")
+	deletedStory := create("everyone")
+	activeStory := create("everyone")
+	for _, story := range []*storyv1.Story{withoutHighlight, publicHighlightStory, privateHighlightStory, hiddenStory} {
+		id, err := uuid.Parse(story.GetId())
+		require.NoError(t, err)
+		_, err = st.Pool.Exec(context.Background(),
+			`UPDATE stories SET expires_at = clock_timestamp() - interval '1 minute', expired_at = clock_timestamp() WHERE id = $1`, id)
+		require.NoError(t, err)
+	}
+
+	createHighlight := func(name, visibility string, story *storyv1.Story) *storyv1.Highlight {
+		hl, err := client.CreateHighlight(ctxAuthor, &storyv1.CreateHighlightRequest{Name: name})
+		require.NoError(t, err)
+		hlID, err := uuid.Parse(hl.GetHighlight().GetId())
+		require.NoError(t, err)
+		storyID, err := uuid.Parse(story.GetId())
+		require.NoError(t, err)
+		require.NoError(t, st.AddToHighlight(context.Background(), hlID, author, storyID))
+		_, err = st.Pool.Exec(context.Background(), `UPDATE highlights SET visibility = $2 WHERE id = $1`, hlID, visibility)
+		require.NoError(t, err)
+		return hl.GetHighlight()
+	}
+	publicHighlight := createHighlight("Public", "everyone", publicHighlightStory)
+	createHighlight("Private", "friends", privateHighlightStory)
+	createHighlight("Hidden", "everyone", hiddenStory)
+	hiddenID, err := uuid.Parse(hiddenStory.GetId())
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(context.Background(), "UPDATE stories SET hidden_from_feed_at = clock_timestamp() WHERE id = $1", hiddenID)
+	require.NoError(t, err)
+	_, err = client.DeleteStory(ctxAuthor, &storyv1.DeleteStoryRequest{StoryId: deletedStory.GetId()})
+	require.NoError(t, err)
+
+	_, err := client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: activeStory.GetId()})
+	require.NoError(t, err, "active Story ID remains available under its current audience")
+	activeID, err := uuid.Parse(activeStory.GetId())
+	require.NoError(t, err)
+	_, err = st.Pool.Exec(context.Background(), "UPDATE stories SET expires_at = clock_timestamp() WHERE id = $1", activeID)
+	require.NoError(t, err)
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: activeStory.GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "expiry at database wall clock closes direct access before the marker")
+
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: withoutHighlight.GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "expired Story outside a Highlight is private")
+	got, err := client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: publicHighlightStory.GetId()})
+	require.NoError(t, err, "public Highlight visibility independently authorizes its archived Story")
+	require.Equal(t, publicHighlightStory.GetId(), got.GetStory().GetId())
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: privateHighlightStory.GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "original Story visibility cannot override private Highlight visibility")
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: hiddenStory.GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "moderation-hidden Story stays unavailable through a Highlight")
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: deletedStory.GetId()})
+	require.Equal(t, codes.NotFound, status.Code(err), "deleted Story IDs remain unavailable")
+
+	publicHighlightID, err := uuid.Parse(publicHighlight.GetId())
+	require.NoError(t, err)
+	publicStoryID, err := uuid.Parse(publicHighlightStory.GetId())
+	require.NoError(t, err)
+	require.NoError(t, st.RemoveFromHighlight(context.Background(), publicHighlightID, author, publicStoryID))
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: publicHighlightStory.GetId()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "removing the final Highlight membership removes access")
+	for _, story := range []*storyv1.Story{withoutHighlight, publicHighlightStory, privateHighlightStory, hiddenStory} {
+		got, err := client.GetStory(ctxAuthor, &storyv1.GetStoryRequest{StoryId: story.GetId()})
+		require.NoError(t, err, "author retains archive access")
+		require.Equal(t, story.GetId(), got.GetStory().GetId())
+	}
+}
+
 func TestCreateLookingForParty_enforcesVisibilityFloor(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

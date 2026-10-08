@@ -183,6 +183,21 @@ final e2eDecryptedAttachmentThumbProvider =
 /// Active DM chat id in the main column, or null.
 final selectedChatIdProvider = StateProvider<String?>((ref) => null);
 
+/// One-shot handoff from Chat Info to the mounted room's existing search UI.
+/// Auto-dispose ensures an unconsumed request cannot survive room teardown.
+class ChatInfoSearchRequest {
+  const ChatInfoSearchRequest({
+    required this.chatId,
+    required this.viewerProfileId,
+  });
+
+  final String chatId;
+  final String? viewerProfileId;
+}
+
+final chatInfoSearchRequestProvider =
+    StateProvider.autoDispose<ChatInfoSearchRequest?>((ref) => null);
+
 /// Changes when a successful block/unblock may change the visible DM history.
 final socialBlockVisibilityRevisionProvider = StateProvider<int>((ref) => 0);
 
@@ -1100,6 +1115,41 @@ class ChatRoomState {
 }
 
 enum PinnedMessagesLoadStatus { idle, loading, loaded, failed }
+
+class PinMutationResult {
+  const PinMutationResult.success()
+    : succeeded = true,
+      stale = false,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  const PinMutationResult.failure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  }) : succeeded = false,
+       stale = false;
+
+  const PinMutationResult.stale()
+    : succeeded = false,
+      stale = true,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  final bool succeeded;
+  final bool stale;
+  final String? message;
+  final String? errorCode;
+  final int? statusCode;
+
+  bool get permissionDenied =>
+      statusCode == 403 || errorCode == 'permission_denied';
+
+  bool get pinLimitReached =>
+      statusCode == 429 && errorCode == 'resource_exhausted';
+}
 
 class PendingPinnedMessageJump {
   PendingPinnedMessageJump(this.messageId);
@@ -2301,11 +2351,27 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String messageId, {
     required bool currentlyPinned,
   }) async {
+    final result = await togglePinWithResult(
+      messageId,
+      currentlyPinned: currentlyPinned,
+    );
+    return result.message;
+  }
+
+  Future<PinMutationResult> togglePinWithResult(
+    String messageId, {
+    required bool currentlyPinned,
+  }) async {
+    final initialSession = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    final refreshToken = initialSession?.refreshToken;
+    if (auth == null || profileId == null) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
+    final optimisticPinnedMessages = state.pinnedMessages;
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
         ? await client.unpinMessage(
@@ -2323,7 +2389,49 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: generation,
     )) {
-      return null;
+      final currentSession = _ref.read(authControllerProvider).session;
+      final currentProfileId = _activeProfileId();
+      final currentAuth = _ref.read(authorizationHeaderProvider);
+      final sameProfileRefreshed =
+          mounted &&
+          currentProfileId == profileId &&
+          currentAuth != null &&
+          (currentAuth != auth || currentSession?.refreshToken != refreshToken);
+      if (sameProfileRefreshed) {
+        // The old mutation result is no longer authoritative after token
+        // rotation. Roll back only our own optimistic snapshot; if a newer
+        // same-viewer pin update already replaced it, preserve that update
+        // while a post-mutation read reconciles the current server state.
+        if (identical(state.pinnedMessages, optimisticPinnedMessages)) {
+          _applyPinDelta(messageId: messageId, pinned: currentlyPinned);
+        }
+        final refreshedAuth = currentAuth;
+        final refreshedProfileId = currentProfileId!;
+        final currentGeneration = _loadGeneration;
+        await _refreshPinnedMessages(
+          refreshedAuth,
+          profileId: refreshedProfileId,
+          generation: currentGeneration,
+        );
+        if (!_isCurrentMutation(
+          profileId: refreshedProfileId,
+          authorization: refreshedAuth,
+          generation: currentGeneration,
+        )) {
+          return const PinMutationResult.stale();
+        }
+        if (state.pinnedMessagesStatus == PinnedMessagesLoadStatus.loaded) {
+          final authoritativePinned = state.pinnedMessages.any(
+            (message) => message.id == messageId,
+          );
+          _applyPinDelta(messageId: messageId, pinned: authoritativePinned);
+          if (authoritativePinned == !currentlyPinned) {
+            return const PinMutationResult.success();
+          }
+          return const PinMutationResult.failure(message: 'unknown_error');
+        }
+      }
+      return const PinMutationResult.stale();
     }
     switch (result) {
       case MessagesApiOk<void>():
@@ -2334,11 +2442,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             generation: generation,
           ),
         );
-        return null;
-      case MessagesApiFailure(:final message):
+        return const PinMutationResult.success();
+      case MessagesApiFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         unawaited(loadInitial());
         state = state.copyWith(errorMessage: message);
-        return message;
+        return PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        );
     }
   }
 
@@ -2702,7 +2818,6 @@ class RealtimeHub {
       }
       _connection = connection;
       _frameSub = frameSub;
-      _reconnectAttempt = 0;
       for (final chatId in _subscribedChats) {
         if (!_isActive(binding, connection)) return;
         connection.sendSubscribe(chatId);
@@ -2774,6 +2889,7 @@ class RealtimeHub {
       if (identical(_helloAcceptedConnection, connection)) return;
       _helloAcceptedConnection = connection;
       _helloAcceptedBinding = binding;
+      _reconnectAttempt = 0;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
       final helloBinding = RealtimeHelloBinding(
         generation: ++_nextHelloGeneration,
@@ -3217,14 +3333,19 @@ class ChatActions {
     required String name,
     required List<String> memberProfileIds,
   }) async {
+    final session = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    if (session == null || auth == null) return 'not_authenticated';
     final createResult = await _ref
         .read(voiceChatsClientProvider)
         .createGroup(authorization: auth, name: name);
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (createResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk(:final data) => _inviteGroupMembers(
+        session: session,
         auth: auth,
         chatId: data.id,
         memberProfileIds: memberProfileIds,
@@ -3233,10 +3354,14 @@ class ChatActions {
   }
 
   Future<String?> _inviteGroupMembers({
+    required AuthSession session,
     required String auth,
     required String chatId,
     required List<String> memberProfileIds,
   }) async {
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     final inviteResult = await _ref
         .read(voiceChatsClientProvider)
         .addGroupMembers(
@@ -3244,10 +3369,19 @@ class ChatActions {
           chatId: chatId,
           profileIds: memberProfileIds,
         );
+    if (!_isCurrentGroupActionSession(session)) {
+      return kChatActionStaleContext;
+    }
     return switch (inviteResult) {
       ChatsApiFailure(:final message) => message,
       ChatsApiOk() => _selectGroupChat(chatId),
     };
+  }
+
+  bool _isCurrentGroupActionSession(AuthSession expected) {
+    final current = _ref.read(authControllerProvider).session;
+    return current?.activeProfileId == expected.activeProfileId &&
+        current?.authorizationHeader == expected.authorizationHeader;
   }
 
   String? _selectGroupChat(String chatId) {

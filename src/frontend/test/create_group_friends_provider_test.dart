@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/create_group_friends_provider.dart';
@@ -13,6 +14,9 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 void main() {
   ProviderContainer containerFor(http.Client client) => ProviderContainer(
     overrides: [
+      authSessionStorageProvider.overrideWithValue(
+        InMemoryAuthSessionStorage(),
+      ),
       authorizationHeaderProvider.overrideWithValue('Bearer test'),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
@@ -69,6 +73,9 @@ void main() {
       final requests = <http.Request>[];
       final container = ProviderContainer(
         overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
           authorizationHeaderProvider.overrideWith(
             (ref) => ref.watch(authorization),
           ),

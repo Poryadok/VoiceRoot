@@ -480,6 +480,14 @@ message UnpinTreeNodeRequest {
 | `space.tree_node_removed`    | space_id, node_id               |
 | `space.invite_created`  | space_id, invite_code           |
 
+The separate `space.voice_room_access_invalidated` subject carries an
+immutable `ChatStreamEvent` with `event_id`, `space_id`, `access_epoch` and
+optional room/profile hints. Space writes its snapshot to its transactional
+outbox with the authority mutation. Voice's durable `voice_space_media_chat`
+consumer ACKs after current Space/Role authority is reconciled across the
+active Space room index; optional hints never narrow that full pass. This typed
+arm does not change the legacy Chat stream envelope or `space.updated` payload.
+
 ## Зависимости
 
 - **Chat Service** — создание/удаление строки текстового чата (`chats`, `group` \| `channel`); Space ведёт **`space_tree_nodes`** (`kind = text_chat`)

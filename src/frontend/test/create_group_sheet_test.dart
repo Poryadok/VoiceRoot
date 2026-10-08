@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/users_client.dart';
@@ -90,6 +91,201 @@ void main() {
       find.widgetWithText(TextField, 'Search by name or @username'),
       findsOneWidget,
     );
+  });
+
+  testWidgets(
+    'DM group creation keeps the original peer and invites a friend',
+    (tester) async {
+      final requests = <http.Request>[];
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(
+                context,
+                requiredMemberProfileId: 'dm-peer',
+              ),
+              child: const Text('open'),
+            ),
+          ),
+          client: MockClient((request) async {
+            requests.add(request);
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'group-from-dm',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Weekend plans',
+                    'creator_profile_id': 'profile-me',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-from-dm/members') {
+              return http.Response('', 204);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('dm-peer')),
+        findsOneWidget,
+      );
+      final requiredPeer = tester.widget<CheckboxListTile>(
+        find.byKey(CreateGroupSheet.memberTileKey('dm-peer')),
+      );
+      expect(requiredPeer.value, isTrue);
+      expect(requiredPeer.onChanged, isNull);
+      expect(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+            .onPressed,
+        isNull,
+      );
+
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Weekend plans',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      expect(
+        find.byKey(CreateGroupSheet.submitKey).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      final inviteRequest = requests.singleWhere(
+        (request) =>
+            request.method == 'POST' &&
+            request.url.path == '/api/v1/chats/group-from-dm/members',
+      );
+      final profileIds =
+          (jsonDecode(inviteRequest.body)
+                  as Map<String, dynamic>)['profile_ids']
+              as List<dynamic>;
+      expect(profileIds, containsAll(['dm-peer', 'friend-a']));
+      expect(profileIds, hasLength(2));
+      expect(
+        requests.where(
+          (request) =>
+              request.method == 'POST' && request.url.path == '/api/v1/chats',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  testWidgets('DM group invalid form and dismissal make no requests', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(
+              context,
+              requiredMemberProfileId: 'dm-peer',
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Plans');
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+          .onPressed,
+      isNull,
+    );
+    expect(requests, isEmpty);
+
+    Navigator.of(tester.element(find.byKey(CreateGroupSheet.sheetKey))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    expect(requests, isEmpty);
+  });
+
+  testWidgets('DM group sheet blocks submission after viewer profile changes', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return TextButton(
+              onPressed: () => CreateGroupSheet.show(
+                context,
+                requiredMemberProfileId: 'dm-peer',
+                expectedViewerProfileId: 'prof-test',
+              ),
+              child: const Text('open'),
+            );
+          },
+        ),
+        client: MockClient((request) async {
+          calls.add('${request.method} ${request.url.path}');
+          return http.Response('{}', 500);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'profile-b-token',
+        refreshToken: 'profile-b-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      calls.where((call) => call.startsWith('POST /api/v1/chats')),
+      isEmpty,
+    );
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
   });
 
   testWidgets(

@@ -50,6 +50,18 @@ service NotificationService {
 
 Актуальный gRPC-контракт: [protos/voice/notification/v1/notification.proto](../../protos/voice/notification/v1/notification.proto). В **`NotificationSettings`** время отложенного mute — **`mute_until`** (`google.protobuf.Timestamp`, UTC, поле 7); номер поля **5** зарезервирован под прежнее строковое представление (wire name `mute_until_rfc3339`). В **`RegisterDeviceRequest`** опционально **`platform_enum`** (`DevicePlatform`); при установке предпочтительно использовать его вместе со строкой `platform` для обратной совместимости.
 
+## Debug push capture (Compose/dev only)
+
+`GET /debug/recorded-pushes?profile_id=<uuid>` is registered only when
+`NOTIFICATION_RECORD_PUSHES=true` (case-insensitive, surrounding whitespace is
+ignored). With recording disabled, the route returns 404. When enabled, it
+returns the latest recorded FCM attempt for that profile, including the device
+token and push payload. The endpoint is unauthenticated and is intended only
+for isolated Compose/development test environments; do not enable it in
+production. The checked-in production ConfigMap currently sets the recording
+flag to `true`, so this source-level opt-in gate alone does not close the
+production exposure tracked by [backend TODO](../todo/backend.md).
+
 ## Модель данных
 
 ```
@@ -174,7 +186,8 @@ Event (NATS) ──► Notification Service
 
 ### Presence routing
 
-Нормативное правило (`DecideRouting` + User `GetBulkPresence` enrichment):
+Нормативное правило (`DecideRouting` + authenticated User
+`GetNotificationRoutingPresence` enrichment):
 
 | Recipient `GetPresence` | In-app | Push |
 |-------------------------|--------|------|
@@ -185,6 +198,13 @@ Event (NATS) ──► Notification Service
 `call_info_json` — ортогональные metadata звонка: без live status они не делают
 сессию активной. Явные `offline` / `invisible` всегда имеют приоритет над
 устаревшими call metadata.
+
+Notification calls User's dedicated `:9095` principal listener with a
+request-bound `service:notification` credential. The method returns only a
+boolean session signal; it does not expose the public viewer-filtered presence
+projection, status text, last-seen, or call metadata. An unavailable or
+misconfigured authority fails the message attempt so JetStream can retry; it
+must never become an offline decision.
 
 **Exceptions — skip presence check** (always evaluate push policy):
 

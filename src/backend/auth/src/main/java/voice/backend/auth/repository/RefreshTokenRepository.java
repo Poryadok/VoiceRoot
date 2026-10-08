@@ -32,6 +32,17 @@ public interface RefreshTokenRepository {
 
   RefreshTokenRecord revoke(String tokenHash, Instant now);
 
+  /** Consumes a token only if it remains unrevoked and unexpired at the supplied instant. */
+  /** Production repositories override this with an atomic active/unexpired compare-and-set. */
+  default boolean revokeIfActive(String tokenHash, Instant now) {
+    RefreshTokenRecord current = findByHash(tokenHash).orElse(null);
+    if (current == null || current.revoked() || !current.expiresAt().isAfter(now)) {
+      return false;
+    }
+    revoke(tokenHash, now);
+    return true;
+  }
+
   RefreshTokenRecord revokeById(UUID id, Instant now);
 
   void revokeAllForAccount(UUID accountId, Instant now);

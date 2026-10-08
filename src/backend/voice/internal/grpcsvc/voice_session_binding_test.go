@@ -80,9 +80,10 @@ func TestVoiceSessionBinding_CanonicalJoinAndActiveResponse(t *testing.T) {
 	room, space, profile := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	events := &recordingEvents{}
 	svc := newTestVoiceService(time.Now(), events)
-	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true}}
-	svc.VoiceRoomAccessResolver = resolver
-	joined, err := svc.JoinVoiceRoom(voiceTestCtx(profile), &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
+	resolver := &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{SpaceID: space, Member: true, Active: true, AccessEpoch: 11}}
+	configureReadySpaceMediaFixture(svc, resolver)
+	svc.Roles = &canonicalRolePermissions{}
+	joined, err := joinSpaceVoiceUser(t, svc, profile, &callsv1.JoinVoiceRoomRequest{VoiceRoomId: room, Space: &spacev1.SpaceRef{Id: space}})
 	require.NoError(t, err)
 	require.Equal(t, space, joined.GetVoiceSession().GetSpaceId())
 	require.Equal(t, room, joined.GetVoiceSession().GetVoiceRoomId())

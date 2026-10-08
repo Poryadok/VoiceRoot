@@ -10,6 +10,7 @@ public final class AuthPrincipalServices {
 
   public static ServerServiceDefinition legacyService(ServerServiceDefinition all) {
     Set<String> protectedDeletion = Set.of(
+        AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_CONSUME_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_LOOKUP_RPC.substring(1),
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC.substring(1));
@@ -55,5 +56,16 @@ public final class AuthPrincipalServices {
     int expected = ownership.size() + (hasDeletionSurface ? deletion.size() : 0);
     if (methods != expected) throw new IllegalArgumentException("Auth proof RPC implementation is incomplete");
     return ServerInterceptors.intercept(proof.build(), verifier);
+  }
+
+  public static ServerServiceDefinition sessionFloorService(
+      ServerServiceDefinition all, AuthPrincipalServerInterceptor verifier) {
+    String methodName = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.substring(1);
+    var method = all.getMethods().stream()
+        .filter(candidate -> candidate.getMethodDescriptor().getFullMethodName().equals(methodName))
+        .findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("Auth session-floor RPC implementation is incomplete"));
+    var floor = ServerServiceDefinition.builder(all.getServiceDescriptor().getName()).addMethod(method).build();
+    return ServerInterceptors.intercept(floor, verifier);
   }
 }

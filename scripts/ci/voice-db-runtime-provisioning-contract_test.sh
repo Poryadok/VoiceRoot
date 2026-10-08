@@ -605,6 +605,243 @@ identity_publisher_path_allowed() {
   return 1
 }
 
+# BE-255 adds the bounded Space voice-room media vertical while R22.2 room
+# lifecycle remains source-disabled. Keep this admission file-by-file: it must
+# not grant neighboring Voice runtime, lifecycle, MatchFound, proto, or data
+# store work.
+space_media_path_allowed() {
+  case "$1" in
+    src/backend/role/go.mod|\
+    src/backend/role/internal/outboxdelivery/voice_policy.go|\
+    src/backend/role/internal/outboxdelivery/voice_policy_test.go|\
+    src/backend/role/internal/roleevents/jetstream.go|\
+    src/backend/role/internal/roleevents/jetstream_test.go|\
+    src/backend/role/internal/store/voice_policy_invalidation_outbox.go|\
+    src/backend/role/main.go|\
+    src/backend/space/internal/outboxdelivery/voice_invalidation.go|\
+    src/backend/space/internal/outboxdelivery/voice_invalidation_test.go|\
+    src/backend/space/internal/spaceevents/jetstream.go|\
+    src/backend/space/internal/spaceevents/jetstream_test.go|\
+    src/backend/space/internal/spaceevents/jetstream_transport_test.go|\
+    src/backend/space/internal/store/voice_access_invalidation_outbox.go|\
+    src/backend/space/main.go|\
+    src/backend/voice/internal/grpcsvc/space_media_join.go|\
+    src/backend/voice/internal/grpcsvc/space_media_join_test.go|\
+    src/backend/voice/internal/grpcsvc/voice_grpc.go|\
+    src/backend/voice/internal/grpcsvc/voice_room.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_access.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go|\
+    src/backend/voice/internal/grpcsvc/voice_room_integration_test.go|\
+    src/backend/voice/internal/livekit/space_token.go|\
+    src/backend/voice/internal/livekit/space_token_test.go|\
+    src/backend/voice/internal/s2s/role_voice_room_grants.go|\
+    src/backend/voice/internal/s2s/voice_room_access.go|\
+    src/backend/voice/internal/spacemedia/consumer.go|\
+    src/backend/voice/internal/spacemedia/consumer_test.go|\
+    src/backend/voice/internal/spacemedia/coordinator.go|\
+    src/backend/voice/internal/spacemedia/coordinator_test.go|\
+    src/backend/voice/internal/store/call_store.go|\
+    src/backend/voice/internal/store/redis_store.go|\
+    src/backend/voice/internal/store/redis_store_test.go|\
+    src/backend/voice/main.go|\
+    src/backend/user/pb/voice/auth/v1/auth.pb.go|\
+  src/backend/user/pb/voice/auth/v1/auth_grpc.pb.go|\
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go|\
+    src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go|\
+    protos/voice/auth/v1/auth.proto|\
+    src/backend/voice/internal/principalgrpc/interceptor.go|\
+    src/backend/voice/internal/sessionfloor/client.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/config.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go|\
+    src/backend/voice/internal/voiceuserprincipalruntime/runtime.go|\
+    src/backend/role/Dockerfile|\
+    src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go|\
+    src/backend/voice/internal/gameprovision/account_voice_fence.go|\
+    src/backend/voice/internal/spacemedia/outbox.go|\
+    src/backend/voice/internal/spacemedia/postgres_admission.go)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+for be255_path in \
+  src/backend/role/Dockerfile \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go \
+  src/backend/voice/internal/spacemedia/outbox.go \
+  src/backend/voice/internal/spacemedia/postgres_admission.go \
+  src/backend/role/go.mod \
+  src/backend/role/internal/outboxdelivery/voice_policy.go \
+  src/backend/role/internal/outboxdelivery/voice_policy_test.go \
+  src/backend/role/internal/roleevents/jetstream.go \
+  src/backend/role/internal/roleevents/jetstream_test.go \
+  src/backend/role/internal/store/voice_policy_invalidation_outbox.go \
+  src/backend/role/main.go \
+  src/backend/space/internal/outboxdelivery/voice_invalidation.go \
+  src/backend/space/internal/outboxdelivery/voice_invalidation_test.go \
+  src/backend/space/internal/spaceevents/jetstream.go \
+  src/backend/space/internal/spaceevents/jetstream_test.go \
+  src/backend/space/internal/spaceevents/jetstream_transport_test.go \
+  src/backend/space/internal/store/voice_access_invalidation_outbox.go \
+  src/backend/space/main.go \
+  src/backend/voice/internal/grpcsvc/space_media_join.go \
+  src/backend/voice/internal/grpcsvc/space_media_join_test.go \
+  src/backend/voice/internal/grpcsvc/voice_grpc.go \
+  src/backend/voice/internal/grpcsvc/voice_room.go \
+  src/backend/voice/internal/grpcsvc/voice_room_access.go \
+  src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go \
+  src/backend/voice/internal/grpcsvc/voice_room_integration_test.go \
+  src/backend/voice/internal/livekit/space_token.go \
+  src/backend/voice/internal/livekit/space_token_test.go \
+  src/backend/voice/internal/s2s/role_voice_room_grants.go \
+  src/backend/voice/internal/s2s/voice_room_access.go \
+  src/backend/voice/internal/spacemedia/consumer.go \
+  src/backend/voice/internal/spacemedia/consumer_test.go \
+  src/backend/voice/internal/spacemedia/coordinator.go \
+  src/backend/voice/internal/spacemedia/coordinator_test.go \
+  src/backend/voice/internal/store/call_store.go \
+  src/backend/voice/internal/store/redis_store.go \
+  src/backend/voice/internal/store/redis_store_test.go \
+  src/backend/voice/main.go \
+  src/backend/user/pb/voice/auth/v1/auth.pb.go \
+  src/backend/user/pb/voice/auth/v1/auth_grpc.pb.go \
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go \
+  src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go \
+  protos/voice/auth/v1/auth.proto \
+  src/backend/voice/internal/principalgrpc/interceptor.go \
+  src/backend/voice/internal/sessionfloor/client.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/config.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/runtime.go; do
+  space_media_path_allowed "${be255_path}" || {
+    printf 'F13 oracle bug: approved BE-255 path was rejected: %s\n' "${be255_path}" >&2
+    exit 2
+  }
+done
+# These five files were independently reviewed as part of the accepted BE-255
+# checkpoint. Keep their content exception narrower than the static path list.
+accepted_be255_checkpoint='80540ee4f2043c7fa2c89b7bb78b38e7c010a68c'
+be255_checkpoint_is_commit_ancestor() {
+  local repo="$1" checkpoint="$2" target="$3"
+  git -C "${repo}" rev-parse --verify "${checkpoint}^{commit}" >/dev/null 2>&1 &&
+    git -C "${repo}" merge-base --is-ancestor "${checkpoint}" "${target}"
+}
+if ! be255_checkpoint_is_commit_ancestor "${ROOT}" "${accepted_be255_checkpoint}" HEAD; then
+  printf '%s\n' 'F13: accepted BE-255 checkpoint must be an ancestor commit' >&2
+  exit 1
+fi
+git -C "${ROOT}" ls-tree -r "${accepted_be255_checkpoint}" >"${TMP_DIR}/be255-checkpoint-tree"
+be255_checkpoint_path_authorized_in_delta() {
+  local path="$1" delta="$2" actual_blob="$3" expected_blob checkpoint_blob
+  case "${path}" in
+    src/backend/role/Dockerfile)
+      expected_blob='a8810b9df3e6ee09b250ce1e0b9b052b2853ad32' ;;
+    src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go)
+      expected_blob='507374dffe11b1f1efac5cda6ad9f302fd34ba6c' ;;
+    src/backend/voice/internal/gameprovision/account_voice_fence.go)
+      expected_blob='901fb1952369f1093fa23baed913c7648cdf11c8' ;;
+    src/backend/voice/internal/spacemedia/outbox.go)
+      expected_blob='e53dd810e2d769565dbfab77f2cecbe78b9cef2f' ;;
+    src/backend/voice/internal/spacemedia/postgres_admission.go)
+      expected_blob='832cd554232c6d77299ae26c9afa7ed36771d220' ;;
+    *) return 1 ;;
+  esac
+  grep -Fxq -- "${path}" "${delta}" || return 1
+  checkpoint_blob="$(awk -F '\t' -v path="${path}" '$2 == path { split($1, fields, " "); print fields[3] }' "${TMP_DIR}/be255-checkpoint-tree")"
+  [[ "${checkpoint_blob}" == "${expected_blob}" && "${actual_blob}" == "${expected_blob}" ]]
+}
+
+be255_checkpoint_fixture_repo="${TMP_DIR}/be255-checkpoint-fixture.git"
+git init -q --bare "${be255_checkpoint_fixture_repo}"
+be255_checkpoint_fixture_tree="$(printf '' | git -C "${be255_checkpoint_fixture_repo}" mktree)"
+be255_ancestor_fixture="$(printf '%s\n' 'ancestor fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}")"
+be255_nonancestor_fixture="$(printf '%s\n' 'unrelated fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}")"
+be255_child_fixture="$(printf '%s\n' 'child fixture' | git -C "${be255_checkpoint_fixture_repo}" -c user.name=fixture -c user.email=fixture@example.invalid commit-tree "${be255_checkpoint_fixture_tree}" -p "${be255_ancestor_fixture}")"
+git -C "${be255_checkpoint_fixture_repo}" update-ref refs/heads/main "${be255_child_fixture}"
+git -C "${be255_checkpoint_fixture_repo}" update-ref refs/heads/unrelated "${be255_nonancestor_fixture}"
+be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" "${be255_ancestor_fixture}" refs/heads/main || {
+  printf '%s\n' 'F13 oracle bug: accepted checkpoint ancestor fixture was rejected' >&2
+  exit 2
+}
+if be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" "${be255_nonancestor_fixture}" refs/heads/main; then
+  printf '%s\n' 'F13 oracle bug: non-ancestor checkpoint fixture was accepted' >&2
+  exit 2
+fi
+if be255_checkpoint_is_commit_ancestor "${be255_checkpoint_fixture_repo}" '0000000000000000000000000000000000000000' refs/heads/main; then
+  printf '%s\n' 'F13 oracle bug: missing checkpoint fixture was accepted' >&2
+  exit 2
+fi
+
+be255_fixture_paths=(
+  'src/backend/role/Dockerfile'
+  'src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go'
+  'src/backend/voice/internal/gameprovision/account_voice_fence.go'
+  'src/backend/voice/internal/spacemedia/outbox.go'
+  'src/backend/voice/internal/spacemedia/postgres_admission.go'
+)
+be255_fixture_blobs=(
+  'a8810b9df3e6ee09b250ce1e0b9b052b2853ad32'
+  '507374dffe11b1f1efac5cda6ad9f302fd34ba6c'
+  '901fb1952369f1093fa23baed913c7648cdf11c8'
+  'e53dd810e2d769565dbfab77f2cecbe78b9cef2f'
+  '832cd554232c6d77299ae26c9afa7ed36771d220'
+)
+: >"${TMP_DIR}/be255-empty-delta"
+for index in "${!be255_fixture_paths[@]}"; do
+  path="${be255_fixture_paths[${index}]}"
+  blob="${be255_fixture_blobs[${index}]}"
+  printf '%s\n' "${path}" >"${TMP_DIR}/be255-fixture-delta"
+  be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-fixture-delta" "${blob}" || {
+    printf 'F13 oracle bug: exact approved BE-255 path/blob was rejected: %s\n' "${path}" >&2
+    exit 2
+  }
+  if be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-empty-delta" "${blob}"; then
+    printf 'F13 oracle bug: BE-255 path absent from delta was accepted: %s\n' "${path}" >&2
+    exit 2
+  fi
+  if be255_checkpoint_path_authorized_in_delta "${path}" "${TMP_DIR}/be255-fixture-delta" '0000000000000000000000000000000000000000'; then
+    printf 'F13 oracle bug: changed BE-255 blob was accepted: %s\n' "${path}" >&2
+    exit 2
+  fi
+done
+for near_match_path in \
+  src/backend/role/Dockerfile.near-match \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go.near-match \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go.near-match \
+  src/backend/voice/internal/spacemedia/outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/postgres_admission.go.near-match; do
+  printf '%s\n' "${near_match_path}" >"${TMP_DIR}/be255-near-match-delta"
+  if be255_checkpoint_path_authorized_in_delta "${near_match_path}" "${TMP_DIR}/be255-near-match-delta" 'a8810b9df3e6ee09b250ce1e0b9b052b2853ad32'; then
+    printf 'F13 oracle bug: near-match BE-255 path was accepted: %s\n' "${near_match_path}" >&2
+    exit 2
+  fi
+done
+for unrelated_space_media_path in \
+  src/backend/role/Dockerfile.near-match \
+  src/backend/space/internal/spaceevents/jetstream_bootstrap_test.go.near-match \
+  src/backend/voice/internal/gameprovision/account_voice_fence.go.near-match \
+  src/backend/voice/internal/spacemedia/outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/postgres_admission.go.near-match \
+  src/backend/role/internal/outboxdelivery/unrelated.go \
+  src/backend/space/internal/store/voice_access_invalidation_outbox.go.near-match \
+  src/backend/voice/internal/spacemedia/unrelated.go \
+  src/backend/voice/internal/roomlifecycle/lifecycle_worker.go \
+  src/backend/voice/internal/livekit/match_found.go \
+  src/backend/voice/pb/voice/auth/v1/auth.pb.go.near-match \
+  src/backend/user/pb/voice/auth/v1/unrelated.pb.go \
+  src/backend/voice/internal/sessionfloor/unrelated.go \
+  src/backend/voice/internal/voiceuserprincipalruntime/unrelated.go \
+  src/backend/voice/internal/principalgrpc/interceptor.go.near-match \
+  protos/voice/auth/v1/unrelated.proto \
+  src/backend/voice/pb/voice/events/v1/events.pb.go \
+  deploy/nats/operator-owned-stream.yaml; do
+  if space_media_path_allowed "${unrelated_space_media_path}"; then
+    printf 'F13 oracle bug: unrelated or forbidden BE-255 near-match was accepted: %s\n' "${unrelated_space_media_path}" >&2
+    exit 2
+  fi
+done
+
 t31_runtime_path_allowed() {
   local path="$1"
   grep -Fxq -- "${path}" "${ROOT}/scripts/ci/t31-r22-scope-allowlist.txt"
@@ -830,7 +1067,9 @@ fi
 
 source "${ROOT}/scripts/ci/voice-r22-runtime-scope.sh"
 while IFS= read -r file; do
-  game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || printf '%s\n' "${file}"
+  game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files" || \
+    be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)" || \
+    printf '%s\n' "${file}"
 done <"${TMP_DIR}/changed-files" >"${TMP_DIR}/unapproved-runtime-delta"
 r22_runtime_delta=false
 if voice_r22_runtime_changed <"${TMP_DIR}/unapproved-runtime-delta"; then
@@ -841,10 +1080,17 @@ while IFS= read -r file; do
   if game_checkpoint_path_allowed "${file}" "${TMP_DIR}/changed-files"; then
     continue
   fi
+  actual_blob="$(git -C "${ROOT}" hash-object --path="${file}" "${ROOT}/${file}" 2>/dev/null || true)"
+  if be255_checkpoint_path_authorized_in_delta "${file}" "${TMP_DIR}/changed-files" "${actual_blob}"; then
+    continue
+  fi
   if r23_contract_path_allowed "${file}"; then
     continue
   fi
   if t31_runtime_path_allowed "${file}"; then
+    continue
+  fi
+  if [[ "${r22_runtime_delta}" == true ]] && space_media_path_allowed "${file}"; then
     continue
   fi
   case "${file}" in

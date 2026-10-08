@@ -1220,6 +1220,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageUnpin => 'Открепить сообщение';
 
   @override
+  String get chatPinnedLimitReached => 'Можно закрепить не более 5 сообщений.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -1899,6 +1902,72 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTooltip => 'Настройки';
 
   @override
+  String get settingsAppearance => 'Оформление';
+
+  @override
+  String get settingsChatThemes => 'Темы чатов';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Эксклюзивные темы доступны подписчикам Voice Plus.';
+
+  @override
+  String get chatThemesSelected => 'Выбрана';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Применить $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Сбросить';
+
+  @override
+  String get appIconTitle => 'Значок приложения';
+
+  @override
+  String get appIconDeviceNotice =>
+      'Этот выбор применяется только на этом устройстве.';
+
+  @override
+  String get appIconPlusRequired =>
+      'Для применения этого значка нужна подписка Voice Plus.';
+
+  @override
+  String get appIconSavedChoiceNotice =>
+      'Сохранённый значок вернётся, когда Voice Plus снова будет активен.';
+
+  @override
+  String get appIconUnavailable =>
+      'На этом устройстве нельзя изменить значок работающего приложения.';
+
+  @override
+  String get appIconSubscriptionStatusError =>
+      'Не удалось проверить статус Voice Plus. Повторите попытку или выберите Voice Sky.';
+
+  @override
+  String get appIconSubscriptionStatusChecking =>
+      'Проверяем статус Voice Plus…';
+
+  @override
+  String get appIconApplyFailure =>
+      'Не удалось применить значок. Выбор сохранён; попробуйте применить его ещё раз.';
+
+  @override
+  String get appIconRetry => 'Повторить';
+
+  @override
+  String appIconApply(String iconName) {
+    return 'Применить: $iconName';
+  }
+
+  @override
+  String get appIconSelected => 'Выбран';
+
+  @override
   String get settingsTheme => 'Тема';
 
   @override
@@ -1948,6 +2017,31 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsHelpTitle => 'Помощь';
+
+  @override
+  String get settingsHelpSubtitle =>
+      'Найдите ответ или свяжитесь с командой Voice.';
+
+  @override
+  String get settingsHelpHeading => 'Чем помочь?';
+
+  @override
+  String get settingsHelpBackLabel => 'Назад';
+
+  @override
+  String get settingsHelpSearchHint => 'Например, войс-комнаты';
+
+  @override
+  String get settingsHelpDocsLabel => 'Документация проекта';
+
+  @override
+  String get settingsHelpSupportLabel => 'Связаться с поддержкой';
+
+  @override
+  String get settingsHelpNoResults => 'По запросу ничего не найдено.';
+
+  @override
+  String get settingsHelpLaunchError => 'Не удалось открыть ссылку.';
 
   @override
   String get settingsHelpChatsTitle => 'Чаты';
@@ -2142,6 +2236,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get securitySettingsTitle => 'Безопасность';
+
+  @override
+  String get securityChangePasswordAction => 'Изменить пароль';
+
+  @override
+  String get securityChangePasswordSuccess =>
+      'Пароль изменён. Войдите с новым паролем.';
 
   @override
   String get appealSettingsTitle => 'Апелляция на санкцию';

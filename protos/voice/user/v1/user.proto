@@ -66,6 +66,9 @@ service UserService {
   rpc UpdatePresence(UpdatePresenceRequest) returns (UpdatePresenceResponse);
   rpc GetPresence(GetPresenceRequest) returns (GetPresenceResponse);
   rpc GetBulkPresence(GetBulkPresenceRequest) returns (GetBulkPresenceResponse);
+  // Internal Notification routing signal. This method is exposed only on the
+  // dedicated authenticated Notification principal listener.
+  rpc GetNotificationRoutingPresence(GetNotificationRoutingPresenceRequest) returns (GetNotificationRoutingPresenceResponse);
 
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
@@ -377,6 +380,15 @@ message GetPresenceResponse {
 }
 message GetBulkPresenceResponse {
   map<string, PresenceStatus> by_profile_id = 1;
+}
+
+message GetNotificationRoutingPresenceRequest {
+  string profile_id = 1;
+}
+
+// This intentionally exposes no presence status, last-seen, or call metadata.
+message GetNotificationRoutingPresenceResponse {
+  bool has_active_session = 1;
 }
 message GetSettingsResponse {
   UserSettings user_settings = 1;

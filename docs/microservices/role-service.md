@@ -376,6 +376,14 @@ idempotent по `operation_id`. Unknown caller/RPC, caller с неправиль
 | `role.chat_override_removed` | space_id, chat_id, role_id |
 | `role.voice_override_set` | space_id, voice_room_id, role_id |
 | `role.voice_override_removed` | space_id, voice_room_id, role_id |
+| `role.voice_policy_invalidated` | event_id, space_id, policy_epoch, optional voice_room_id/profile_id; typed `RoleStreamEvent` |
+
+Role persists the immutable policy epoch snapshot in its own transactional
+outbox. Voice consumes the dedicated `role_events` subject with durable
+`voice_space_media_role` delivery and ACKs only after the active Space room
+reconciliation succeeds. Optional room/profile IDs are hints; they do not
+replace the full current-authority scan. Existing Role subjects and their
+payloads are unchanged.
 
 ## Публикуемые события (→ NATS)
 

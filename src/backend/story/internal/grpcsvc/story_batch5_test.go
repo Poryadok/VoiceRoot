@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	grpcsvc "voice/backend/story/internal/grpcsvc"
-	"voice/backend/story/internal/store"
 	"voice/backend/pkg/integrationtest"
 	"voice/backend/pkg/privacy"
+	grpcsvc "voice/backend/story/internal/grpcsvc"
+	"voice/backend/story/internal/store"
 
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -130,6 +130,7 @@ func TestGetStory_closeFriendsVisibleToFoF(t *testing.T) {
 	author := uuid.New()
 	fof := uuid.New()
 	svc := grpcsvc.NewStoryGRPC(st)
+	svc.Privacy = mockStoryPrivacy{audience: privacy.EveryoneWithGuests()}
 	social := mockSocialGraph{
 		friendsFoF: map[string]bool{fof.String() + "|" + author.String(): true},
 	}
@@ -163,6 +164,7 @@ func TestGetStoryFeed_prefiltersNonFriendAuthor(t *testing.T) {
 	stranger := uuid.New()
 
 	svc := grpcsvc.NewStoryGRPC(st)
+	svc.Privacy = mockStoryPrivacy{audience: privacy.EveryoneWithGuests()}
 	social := mockSocialGraph{
 		friends: map[string]bool{viewer.String() + "|" + author.String(): true},
 	}

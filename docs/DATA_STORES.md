@@ -14,8 +14,8 @@
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
 | User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
-| Chat Service         | `chat_db`         | —                         | —                                |
-| Messaging Service    | `messaging_db`    | —                         | NATS JetStream (publish)         |
+| Chat Service         | `chat_db`         | —                         | NATS JetStream (publish); transactional `chat.deleted` outbox |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; JetStream dispatcher retries exact bytes until positive PubAck |
 | Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
 | Space Service        | `space_db`        | Social principal replay   | —                                |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
@@ -121,6 +121,7 @@ proof receipts. Runtime configuration is documented in
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
 | `stickers` | Rows per asset; `file_id` → File `intent=sticker` |
 | `profile_installed_packs` | Per-profile install + composer rail `sort_order` |
+| `chat_deleted_event_outbox` | Migration `000021`; immutable exact P3 `chat.deleted` envelope bytes and stable event ID. Pending/uncertain rows retry without expiry; confirmed rows are removable only after the joined parent PURGE receipt retention horizon. Parent receipt/manifest cleanup remains separate. |
 
 Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
 
@@ -251,7 +252,7 @@ business idempotency independently of per-attempt JWT replay rejection.
 | `messaging_db` | lifecycle fence, imported Chat pages, Messaging File-reference producer pages, purge/release operation evidence and compact PURGED fence |
 | `file_db` | `file_blobs`, exact `file_references`, subject-bound access capabilities, Space lifecycle fences, reference operations, producer declarations/chunks/seals and GC operations |
 | `voice_db` | lifecycle fence/operation receipts and compact terminal fence; Redis remains a projection, never the durable deletion authority |
-| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence |
+| Matchmaking/Search/Bot/Notification DBs | service-owned lifecycle fence, exact imported Chat pages where required, cleanup operation/receipt evidence and compact terminal fence; Search retains the non-payload operation/generation/manifest/hash binding needed to validate terminal Chat deletion after manifest retention expires |
 | `subscription_db` | lifecycle fence/receipts, purged Space billing detail and permanent provider-event HMAC dedup fences |
 | Moderation DB | atomic `TARGET_DELETED` resolution, sanction snapshot/detached report relation and deletion of Space report evidence |
 | Analytics ClickHouse | existing 90-day raw HMAC events and de-identified aggregates; no raw deleted Space key |

@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile,uuid
 from bootstrap_root import secret_bytes,ACCOUNT_SHA,hash_bytes
 from nats_contract_actor import Actor
-from nats_contract_plan import DECLARATION,digest
+from nats_contract_plan import DECLARATIONS,digest
 from controller import Blocked
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from scenario import ready
@@ -31,24 +31,28 @@ def prove(credentials,operator,unchanged):
         try:
             broker=runtime.start_broker('proof',store);ready(runtime,broker)
             actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged)
-            for name,subjects in [('chat_events',['space.created']),('social_events',['social.friend_removed'])]:
+            stream_subjects={}
+            for stream,declaration in DECLARATIONS:
+                stream_subjects.setdefault(stream,[]).append(declaration['filter_subject'])
+            for name,subjects in stream_subjects.items():
                 cfg={'name':name,'subjects':subjects,'storage':'file','retention':'limits','max_age':604800000000000,'duplicate_window':120000000000}
                 actor._request('$JS.API.STREAM.CREATE.'+name,cfg)
-                before=actor.info_config(name);target=copy.deepcopy(before)
-                if name=='chat_events':target['subjects']+=['space.deletion_scheduled','space.restored']
-                else:target['duplicate_window']=86400000000000
-                actor.mutate('$JS.API.STREAM.UPDATE.'+name,target)
-                if actor.info_config(name)!=target:raise Blocked('bootstrap_auth_update_not_exact')
-            actor.mutate('$JS.API.CONSUMER.CREATE.social_events.rt_realtime1_friend_removed',{'stream_name':'social_events','action':'create','config':copy.deepcopy(DECLARATION)})
-            normalized=actor.info_config('social_events/rt_realtime1_friend_removed')
-            if any(normalized.get(k)!=v for k,v in DECLARATION.items()):raise Blocked('bootstrap_auth_consumer_not_exact')
+            normalized_consumers=[]
+            for stream,declaration in DECLARATIONS:
+                durable=declaration['durable_name']
+                actor.mutate('$JS.API.CONSUMER.CREATE.'+stream+'.'+durable,{'stream_name':stream,'action':'create','config':copy.deepcopy(declaration)})
+                normalized=actor.info_config(stream+'/'+durable)
+                if any(normalized.get(k)!=v for k,v in declaration.items()):raise Blocked('bootstrap_auth_consumer_not_exact')
+                normalized_consumers.append({'stream':stream,'durable':durable,'config':normalized})
             tree=runtime.monitor_jsz(broker)
-            if tree['messages']!=0 or tree['streams']!=2 or tree['consumers']!=1:raise Blocked('bootstrap_auth_scratch_not_empty')
+            if tree['messages']!=0 or tree['streams']!=len(stream_subjects) or tree['consumers']!=len(DECLARATIONS):raise Blocked('bootstrap_auth_scratch_not_empty')
             if [a['id'] for a in tree['account_details'] if a.get('stream_detail')]!=[tokens['account.public']]:raise Blocked('bootstrap_auth_account_not_exact')
             runtime.stop(broker);unchanged()
+            legacy=next(row['config'] for row in normalized_consumers if row['stream']=='social_events')
             return {'verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
-                'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':normalized,
-                'normalized_consumer_sha256':digest(normalized)}
+                'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':legacy,
+                'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
+                'normalized_consumers_sha256':digest(normalized_consumers)}
         finally:
             for name in reversed(list(runtime.owned)):
                 row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])

@@ -9,7 +9,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/space/internal/outboxdelivery"
 )
 
@@ -116,4 +118,46 @@ func TestJetStreamPublisher_PublishPreparedPreservesFailureAndCancellation(t *te
 	contextOption, ok := capture.options[0].(nats.ContextOpt)
 	require.True(t, ok)
 	require.ErrorIs(t, contextOption.Err(), context.Canceled)
+}
+
+func TestJetStreamPublisher_VoiceInvalidationUsesDedicatedSubjectStableIDAndPubAck(t *testing.T) {
+	wantAck := &nats.PubAck{Stream: streamName, Sequence: 42}
+	capture := &preparedMessageJetStream{ack: wantAck}
+	publisher := &JetStreamPublisher{js: capture}
+	publisher.ensureOnce.Do(func() {})
+	event := &eventsv1.ChatStreamEvent{
+		EventId: "00000000-0000-0000-0000-000000000041",
+		Payload: &eventsv1.ChatStreamEvent_VoiceRoomAccessInvalidated{
+			VoiceRoomAccessInvalidated: &eventsv1.VoiceRoomAccessInvalidated{
+				SpaceId: "00000000-0000-0000-0000-000000000042", AccessEpoch: 9,
+			},
+		},
+	}
+
+	ack, err := publisher.PublishVoiceRoomAccessInvalidated(context.Background(), event)
+	require.NoError(t, err)
+	require.Same(t, wantAck, ack)
+	require.Equal(t, subjectVoiceAccessInvalid, capture.message.Subject)
+	require.Equal(t, event.GetEventId(), capture.message.Header.Get(nats.MsgIdHdr))
+	var decoded eventsv1.ChatStreamEvent
+	require.NoError(t, proto.Unmarshal(capture.message.Data, &decoded))
+	require.Equal(t, event.GetEventId(), decoded.GetEventId())
+	require.Equal(t, uint64(9), decoded.GetVoiceRoomAccessInvalidated().GetAccessEpoch())
+}
+
+func TestJetStreamPublisher_VoiceInvalidationRejectsMissingAuthorityEpoch(t *testing.T) {
+	capture := &preparedMessageJetStream{}
+	publisher := &JetStreamPublisher{js: capture}
+	_, err := publisher.PublishVoiceRoomAccessInvalidated(context.Background(), &eventsv1.ChatStreamEvent{
+		EventId: "event",
+		Payload: &eventsv1.ChatStreamEvent_VoiceRoomAccessInvalidated{
+			VoiceRoomAccessInvalidated: &eventsv1.VoiceRoomAccessInvalidated{SpaceId: "space"},
+		},
+	})
+	require.Error(t, err)
+	require.Nil(t, capture.message)
+}
+
+func TestSpaceEventStreamSubjectsIncludesDedicatedVoiceInvalidation(t *testing.T) {
+	require.Contains(t, spaceEventStreamSubjects(), subjectVoiceAccessInvalid)
 }

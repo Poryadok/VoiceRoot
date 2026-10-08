@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +22,7 @@ import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/chat_draft_providers.dart';
 import '../../backend/chat_draft_storage.dart';
+import '../../settings/chat_theme_preference.dart';
 import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
@@ -188,6 +188,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _attachFocus = FocusNode();
   final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
+  final _inChatSearchTriggerFocus = FocusNode(
+    debugLabel: 'chat-room-search-trigger',
+  );
+  final _inChatSearchFocus = FocusNode(debugLabel: 'chat-room-search-field');
   var _uploadingAttachment = false;
   var _attachmentOperation = 0;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
@@ -199,6 +203,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
+  var _chatInfoSearchHandoffGeneration = 0;
   var _pinnedBarHidden = false;
   var _pinnedJumpGeneration = 0;
   String? _shownPinnedMessageId;
@@ -224,6 +229,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _selectedMessageFocus.dispose();
     _attachFocus.dispose();
     _emojiFocus.dispose();
+    _inChatSearchTriggerFocus.dispose();
+    _inChatSearchFocus.dispose();
     _scrollController.dispose();
     _inChatSearchController.dispose();
     super.dispose();
@@ -233,6 +240,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _chatInfoSearchHandoffGeneration++;
+      _inChatSearchOpen = false;
+      _inChatSearchController.clear();
+      _inChatSearchTriggerFocus.unfocus();
       _pinnedJumpGeneration++;
       _pinnedBarHidden = false;
       _shownPinnedMessageId = null;
@@ -257,6 +268,43 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _composerFocus.requestFocus();
     });
   }
+
+  void _closeInChatSearch() {
+    _chatInfoSearchHandoffGeneration++;
+    if (!_inChatSearchOpen) return;
+    setState(() {
+      _inChatSearchOpen = false;
+      _inChatSearchController.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_inChatSearchOpen) {
+        _inChatSearchTriggerFocus.requestFocus();
+      }
+    });
+  }
+
+  void _openInChatSearch() {
+    _chatInfoSearchHandoffGeneration++;
+    setState(() => _inChatSearchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _inChatSearchOpen &&
+          ref.read(selectedChatIdProvider) == widget.chatId) {
+        _inChatSearchFocus.requestFocus();
+      }
+    });
+  }
+
+  bool _isCurrentChatInfoSearchHandoff(
+    ChatInfoSearchRequest request,
+    int generation,
+  ) =>
+      mounted &&
+      _chatInfoSearchHandoffGeneration == generation &&
+      widget.chatId == request.chatId &&
+      ref.read(selectedChatIdProvider) == request.chatId &&
+      ref.read(authControllerProvider).activeProfileId ==
+          request.viewerProfileId;
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -440,14 +488,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         isOffline ||
         room.isDmPeerDeleted ||
         (blockChannelMainFeed && replyTarget == null);
+    final chatListState = ref.watch(chatListControllerProvider);
+    final roomBelongsToViewer =
+        activeId != null && room.historyProfileId == activeId;
+    final listBelongsToViewer =
+        activeId != null && chatListState.profileId == activeId;
     final peerId = isGroup
         ? null
         : resolveDmPeerForChatId(
             chatId: widget.chatId,
-            knownPeers: ref.watch(dmPeerProfileByChatIdProvider),
-            listItems: ref.watch(chatListControllerProvider).items,
+            knownPeers: const {},
+            listItems: listBelongsToViewer ? chatListState.items : const [],
             activeProfileId: activeId,
-            messages: room.messages,
+            messages: roomBelongsToViewer ? room.messages : const [],
           );
     final peerProfile = peerId != null
         ? ref.watch(profileProvider(peerId)).valueOrNull
@@ -493,6 +546,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             child: TextField(
               key: InChatSearch.searchFieldKey,
               controller: _inChatSearchController,
+              focusNode: _inChatSearchFocus,
               autofocus: true,
               decoration: InputDecoration(
                 hintText: l10n.inChatSearchHint,
@@ -545,12 +599,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final headerActions = <Widget>[
       IconButton(
         key: ChatRoomPanel.inChatSearchKey,
+        focusNode: _inChatSearchTriggerFocus,
         tooltip: l10n.inChatSearchOpen,
         onPressed: () {
-          setState(() {
-            _inChatSearchOpen = !_inChatSearchOpen;
-            if (!_inChatSearchOpen) _inChatSearchController.clear();
-          });
+          if (_inChatSearchOpen) {
+            _closeInChatSearch();
+          } else {
+            _openInChatSearch();
+          }
         },
         icon: Icon(_inChatSearchOpen ? Icons.close : Icons.search),
       ),
@@ -702,6 +758,40 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (next != (prev ?? 0)) {
         _refocusComposer();
       }
+    });
+
+    ref.listen<ChatInfoSearchRequest?>(chatInfoSearchRequestProvider, (
+      previous,
+      request,
+    ) {
+      if (request == null) return;
+      final isCurrentContext =
+          ref.read(selectedChatIdProvider) == request.chatId &&
+          ref.read(authControllerProvider).activeProfileId ==
+              request.viewerProfileId;
+      if (!isCurrentContext) {
+        if (identical(ref.read(chatInfoSearchRequestProvider), request)) {
+          ref.read(chatInfoSearchRequestProvider.notifier).state = null;
+        }
+        return;
+      }
+      if (widget.chatId != request.chatId || !mounted) return;
+      if (identical(ref.read(chatInfoSearchRequestProvider), request)) {
+        ref.read(chatInfoSearchRequestProvider.notifier).state = null;
+      }
+      final handoffGeneration = ++_chatInfoSearchHandoffGeneration;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isCurrentChatInfoSearchHandoff(request, handoffGeneration)) {
+          return;
+        }
+        setState(() => _inChatSearchOpen = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_isCurrentChatInfoSearchHandoff(request, handoffGeneration) &&
+              _inChatSearchOpen) {
+            _inChatSearchFocus.requestFocus();
+          }
+        });
+      });
     });
 
     ref.listen<String?>(chatMessageKeyboardProvider, (previous, next) {
@@ -1032,8 +1122,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   },
                   onOpenAll: () => PinnedMessagesPanel.show(
                     context,
+                    chatId: widget.chatId,
+                    spaceId: spaceId,
+                    isGroup: isGroup,
                     messages: pinnedMessages,
                     onOpenMessage: _scrollToMessage,
+                    onUnpin: (messageId) => ref
+                        .read(
+                          chatRoomControllerProvider(widget.chatId).notifier,
+                        )
+                        .togglePinWithResult(messageId, currentlyPinned: true),
                     onCancel: () => _pinnedJumpGeneration++,
                   ),
                   onHide: () => setState(() => _pinnedBarHidden = true),
@@ -1119,6 +1217,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               keyboardSelectedMessageId: ref.watch(
                                 chatMessageKeyboardProvider,
                               ),
+                              chatTheme: ref.watch(
+                                effectiveChatThemeProvider(widget.chatId),
+                              ),
                               onLongPress: (msg, isMine) =>
                                   _showMessageActions(msg, isMine),
                             ),
@@ -1136,10 +1237,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             controller: _inChatSearchController,
                             showSearchField: false,
                             onActiveMessageChanged: _scrollToMessage,
-                            onDismiss: () => setState(() {
-                              _inChatSearchOpen = false;
-                              _inChatSearchController.clear();
-                            }),
+                            onDismiss: _closeInChatSearch,
                           ),
                         ),
                       ),
@@ -1895,7 +1993,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         await controller.addReaction(message.id, emoji);
       }
     } else if (action == 'pin' || action == 'unpin') {
-      await controller.togglePin(message.id, currentlyPinned: message.isPinned);
+      final result = await controller.togglePinWithResult(
+        message.id,
+        currentlyPinned: message.isPinned,
+      );
+      if (mounted && !result.succeeded && !result.stale) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(pinMutationErrorText(l10n, result))),
+        );
+      }
     } else if (action == 'reply') {
       ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = message;
       ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =
@@ -2100,6 +2207,7 @@ class _MessageListView extends ConsumerWidget {
     required this.isGroup,
     required this.l10n,
     required this.initialUnreadCount,
+    required this.chatTheme,
     this.highlightedMessageId,
     this.keyboardSelectedMessageId,
     required this.onLongPress,
@@ -2114,6 +2222,7 @@ class _MessageListView extends ConsumerWidget {
   final bool isGroup;
   final AppLocalizations l10n;
   final int initialUnreadCount;
+  final ChatTheme? chatTheme;
   final String? highlightedMessageId;
   final String? keyboardSelectedMessageId;
   final void Function(VoiceMessage message, bool isMine) onLongPress;
@@ -2203,6 +2312,7 @@ class _MessageListView extends ConsumerWidget {
                         )
                       : null,
                   content: _MessageBubbleContent(message: msg, l10n: l10n),
+                  theme: chatTheme,
                 ),
               ),
             ),

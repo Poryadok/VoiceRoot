@@ -60,6 +60,7 @@ service UserService {
   rpc UpdatePresence(UpdatePresenceRequest) returns (Empty);
   rpc GetPresence(GetPresenceRequest) returns (PresenceStatus);
   rpc GetBulkPresence(GetBulkPresenceRequest) returns (GetBulkPresenceResponse); // map profile_id -> PresenceStatus
+  rpc GetNotificationRoutingPresence(GetNotificationRoutingPresenceRequest) returns (GetNotificationRoutingPresenceResponse); // Notification-only active-session boolean
 
   // Настройки
   rpc GetSettings(GetSettingsRequest) returns (UserSettings);
@@ -144,6 +145,23 @@ the complete `USER_FILE_PRINCIPAL_TLS_CERT_FILE`,
 `USER_FILE_PRINCIPAL_TLS_KEY_FILE`, and
 `USER_FILE_PRINCIPAL_REPLAY_REDIS_ADDR` set plus the `file` HTTPS entry in
 `S2S_JWKS_URLS_JSON`; any explicit partial File configuration fails startup.
+
+### Notification routing-presence principal boundary
+
+Notification reaches `GetNotificationRoutingPresence` only on the separate
+TLS listener at `:9095`. The listener accepts the exact request-bound
+`service:notification` principal with audience `user`; the RPC request hash
+binds the full deterministic protobuf request and a unique request ID. It
+returns only `has_active_session`, never status text, last-seen, game or call
+metadata. The ordinary User gRPC service and public/viewer-filtered presence
+methods do not register this internal RPC. With no listener configuration it
+remains absent; a partial configuration fails startup. A presence/store error
+is returned to Notification rather than converted into an offline result.
+
+The boolean is true for live `online`, `idle` and `dnd` sessions. Explicit
+`offline` and `invisible` are false for routing purposes. A live snapshot with
+an unknown status is unavailable, not offline, so Notification does not send a
+push from an unrecognized state.
 
 ```
 profiles

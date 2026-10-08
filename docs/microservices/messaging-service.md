@@ -23,6 +23,27 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
+### Durable message-event publication (BE-188 A1)
+
+Enabled Messaging mutations persist their immutable `MessageStreamEvent` bytes,
+stable event ID, contract headers, and SHA-256 in `message_event_outbox` in the
+same PostgreSQL transaction as the message/edit/delete/reaction/pin/read or
+receipt-revocation change. A Messaging-owned dispatcher claims rows with an
+expiring lease, publishes the stored bytes with the stable NATS message ID,
+and records only a positive JetStream PubAck. Uncertain publishes retain the
+same bytes and retry; PubAck prunes event bytes while retaining the bounded
+receipt/hash evidence. Private read-position changes do not create public read
+events. Scheduled-send handlers remain fail-closed/inactive and are not
+included as enabled producers.
+
+For managed Space-chat purge, the same chat/Space mutation lock freezes the
+eligible message rows and their exact outbox event ID/hash set. File/Search
+purge side effects wait until every frozen event has a matching positive
+PubAck, and final payload cleanup rechecks that set under row locks. This is a
+Messaging-to-broker barrier only: PubAck does not prove Realtime consumer
+commit. End-to-end P3 privacy closure remains pending the separate A2 Realtime
+durable generation fence/participant and Space coordinator integration.
+
 ### Идемпотентность отправки
 
 `SendMessage` принимает опциональный **`client_message_id`** (UUID), уникальный в разрезе **`(chat_id, sender_profile_id)`** (в proto — пара `chat` + идентичность отправителя из контекста запроса). Это одна namespace и для immediate `Message`, и для pending `ScheduledMessage`: повтор запроса с тем же ключом не создаёт ни вторую строку в `messages`, ни вторую scheduled row. Повтор **того же нормализованного тела** возвращает gRPC `OK` и тот же вариант `SendMessageResponse` с тем же ID; pending replay возвращает current `ScheduledMessage`, включая связанный `sent_message_id` после dispatch. Тот же ключ с другим payload, `send_silent`, schedule mode/time или immediate-vs-scheduled режимом — `ALREADY_EXISTS`; сервер не меняет уже созданный объект и не публикует новый event. Нормализация игнорирует порядок ключей JSON object, но сохраняет порядок array и включает defaults/derived type в fingerprint. Проверка immediate и scheduled путей атомарна (общий idempotency ledger либо transaction advisory lock), а не две независимые unique indexes. Поэтому запрет `ALREADY_EXISTS` относится только к корректному retry. Без ключа при сетевых ретраях возможны дубликаты.
@@ -762,6 +783,17 @@ bounded FK order, then waits for File reference-release and Search purge
 receipts. Space-level Messaging completion follows only after every manifest
 chat returns both owner receipts. Full request/receipt bytes retain 30 days from
 this participant's completion and the compact `PURGED` fence is permanent.
+
+Public read-receipt opt-out is serialized against the same per-chat purge lock.
+If any receipt the operation would revoke points to a message already included
+in a `PENDING` purge manifest, `ClearPublicReadReceiptsWithOutbox` rejects the
+whole transaction with the retryable `ErrMessageMutationPurging` result before
+changing receipts or inserting revocation events. The consumer retries after
+the purge completes; revocations committed before the freeze are part of the
+immutable event set and must receive PubAck before purge side effects. Existing
+`PENDING` operations whose event-set hash is null remain fail-closed and need
+explicit operator recovery; Messaging does not backfill their event set or
+silently resume them.
 
 The child uses the existing T33 `PurgeManagedChatContent` protocol:
 `request_sha256` is SHA-256 of its deterministic protobuf request bytes, matching

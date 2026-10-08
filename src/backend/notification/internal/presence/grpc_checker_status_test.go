@@ -2,211 +2,170 @@ package presence
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/grpc/metadata"
 
 	userv1 "voice.app/voice/user/v1"
+	"voice/backend/pkg/principal"
 )
 
 type fakeUserServiceClient struct {
 	userv1.UserServiceClient
-	response *userv1.GetBulkPresenceResponse
+	response *userv1.GetNotificationRoutingPresenceResponse
 	err      error
+	request  *userv1.GetNotificationRoutingPresenceRequest
+	ctx      context.Context
 }
 
-func (f fakeUserServiceClient) GetBulkPresence(context.Context, *userv1.GetBulkPresenceRequest, ...grpc.CallOption) (*userv1.GetBulkPresenceResponse, error) {
+func (f *fakeUserServiceClient) GetNotificationRoutingPresence(ctx context.Context, request *userv1.GetNotificationRoutingPresenceRequest, _ ...grpc.CallOption) (*userv1.GetNotificationRoutingPresenceResponse, error) {
+	f.ctx = ctx
+	f.request = request
 	return f.response, f.err
 }
 
-func TestIsActiveSessionPresence(t *testing.T) {
-	tests := []struct {
-		name   string
-		status *userv1.PresenceStatus
-		want   bool
-	}{
-		{
-			name: "online enum",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE.Enum(),
-			},
-			want: true,
-		},
-		{
-			name: "idle enum remains an active session",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_IDLE.Enum(),
-			},
-			want: true,
-		},
-		{
-			name: "legacy online string remains an active session",
-			status: &userv1.PresenceStatus{
-				Status: "online",
-			},
-			want: true,
-		},
-		{
-			name: "legacy idle string remains an active session",
-			status: &userv1.PresenceStatus{
-				Status: "IDLE",
-			},
-			want: true,
-		},
-		{
-			name: "legacy offline string stays push eligible",
-			status: &userv1.PresenceStatus{
-				Status: "offline",
-			},
-			want: false,
-		},
-		{
-			name: "legacy unknown string stays push eligible",
-			status: &userv1.PresenceStatus{
-				Status: "away",
-			},
-			want: false,
-		},
-		{
-			name: "dnd enum remains an active session",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_DND.Enum(),
-			},
-			want: true,
-		},
-		{
-			name: "call metadata keeps a live session active",
-			status: &userv1.PresenceStatus{
-				StatusEnum:   userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_IDLE.Enum(),
-				CallInfoJson: proto.String(`{"room_id":"room-1"}`),
-			},
-			want: true,
-		},
-		{
-			name: "call metadata without a live status is stale",
-			status: &userv1.PresenceStatus{
-				CallInfoJson: proto.String(`{"room_id":"room-1"}`),
-			},
-			want: false,
-		},
-		{
-			name: "invisible stays push-eligible even with call metadata",
-			status: &userv1.PresenceStatus{
-				StatusEnum:   userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE.Enum(),
-				CallInfoJson: proto.String(`{"room_id":"room-1"}`),
-			},
-			want: false,
-		},
-		{
-			name: "explicit online enum wins over contradictory legacy invisible string",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE.Enum(),
-				Status:     "invisible",
-			},
-			want: true,
-		},
-		{
-			name: "explicit unspecified enum fails closed despite legacy online string",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_UNSPECIFIED.Enum(),
-				Status:     "online",
-			},
-			want: false,
-		},
-		{
-			name: "explicit unknown enum fails closed despite legacy online string",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus(99).Enum(),
-				Status:     "online",
-			},
-			want: false,
-		},
-		{
-			name: "explicit invisible enum wins over contradictory legacy online string",
-			status: &userv1.PresenceStatus{
-				StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_INVISIBLE.Enum(),
-				Status:     "online",
-			},
-			want: false,
-		},
-		{
-			name:   "missing presence is offline",
-			status: nil,
-			want:   false,
-		},
-	}
+func TestGRPCCheckerIsOnlineUsesBoundAuthenticatedRoutingRPC(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "notification", KeyID: "test-key", PrivateKey: key})
+	require.NoError(t, err)
+	profileID := uuid.New()
+	client := &fakeUserServiceClient{response: &userv1.GetNotificationRoutingPresenceResponse{HasActiveSession: true}}
+	checker := &GRPCChecker{client: client, issuer: issuer}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, isActiveSessionPresence(tt.status))
-		})
-	}
+	active, err := checker.IsOnline(context.Background(), profileID)
+	require.NoError(t, err)
+	require.True(t, active)
+	require.Equal(t, profileID.String(), client.request.GetProfileId())
+
+	md, ok := metadata.FromOutgoingContext(client.ctx)
+	require.True(t, ok)
+	require.Len(t, md.Get("authorization"), 1)
+	require.Len(t, md.Get("x-request-id"), 1)
+	requestID := md.Get("x-request-id")[0]
+	authorization := md.Get("authorization")[0]
+	require.True(t, len(authorization) > len("Bearer "))
+	require.Equal(t, "Bearer ", authorization[:len("Bearer ")])
+
+	hash, err := principal.RequestHash(client.request)
+	require.NoError(t, err)
+	verified, err := principal.VerifyService(context.Background(), authorization[len("Bearer "):], principal.VerifyConfig{
+		ExpectedIssuer:      "notification",
+		ExpectedAudience:    "user",
+		ExpectedRPC:         notificationPresenceMethod,
+		ExpectedRequestID:   requestID,
+		ExpectedRequestHash: hash,
+		KeyResolver: func(_ context.Context, issuer, keyID string) (*rsa.PublicKey, error) {
+			if issuer != "notification" || keyID != "test-key" {
+				return nil, errors.New("unexpected signer")
+			}
+			return &key.PublicKey, nil
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "service:notification", verified.Subject)
+	require.Empty(t, verified.AccountID)
+	require.Empty(t, verified.ProfileID)
+	require.Zero(t, verified.SessionEpoch)
 }
 
-func TestGRPCCheckerIsOnlineFailsClosedAtPresenceBoundary(t *testing.T) {
+func TestGRPCCheckerFailsClosedAtPresenceBoundary(t *testing.T) {
 	profileID := uuid.New()
-	otherProfileID := uuid.New()
-	active := func(profile string) *userv1.PresenceStatus {
-		return &userv1.PresenceStatus{
-			ProfileId:  profile,
-			StatusEnum: userv1.PresenceOnlineStatus_PRESENCE_ONLINE_STATUS_ONLINE.Enum(),
-		}
-	}
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "notification", KeyID: "test-key", PrivateKey: testSigningKey(t)})
+	require.NoError(t, err)
 
 	tests := []struct {
 		name     string
-		response *userv1.GetBulkPresenceResponse
+		response *userv1.GetNotificationRoutingPresenceResponse
 		want     bool
+		wantErr  bool
 	}{
-		{
-			name: "exact requested profile active",
-			response: &userv1.GetBulkPresenceResponse{ByProfileId: map[string]*userv1.PresenceStatus{
-				profileID.String(): active(profileID.String()),
-			}},
-			want: true,
-		},
-		{
-			name:     "requested map key missing",
-			response: &userv1.GetBulkPresenceResponse{ByProfileId: map[string]*userv1.PresenceStatus{}},
-		},
-		{
-			name: "requested status nil",
-			response: &userv1.GetBulkPresenceResponse{ByProfileId: map[string]*userv1.PresenceStatus{
-				profileID.String(): nil,
-			}},
-		},
-		{
-			name: "embedded profile missing",
-			response: &userv1.GetBulkPresenceResponse{ByProfileId: map[string]*userv1.PresenceStatus{
-				profileID.String(): active(""),
-			}},
-		},
-		{
-			name: "embedded profile mismatches requested key",
-			response: &userv1.GetBulkPresenceResponse{ByProfileId: map[string]*userv1.PresenceStatus{
-				profileID.String(): active(otherProfileID.String()),
-			}},
-		},
+		{name: "active session", response: &userv1.GetNotificationRoutingPresenceResponse{HasActiveSession: true}, want: true},
+		{name: "offline is push eligible", response: &userv1.GetNotificationRoutingPresenceResponse{HasActiveSession: false}},
+		{name: "nil response is unavailable", wantErr: true},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			checker := &GRPCChecker{client: fakeUserServiceClient{response: tt.response}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			checker := &GRPCChecker{client: &fakeUserServiceClient{response: test.response}, issuer: issuer}
 			got, err := checker.IsOnline(context.Background(), profileID)
+			if test.wantErr {
+				require.Error(t, err)
+				require.False(t, got)
+				return
+			}
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			require.Equal(t, test.want, got)
 		})
 	}
 
-	t.Run("rpc error propagates", func(t *testing.T) {
-		expected := errors.New("user service unavailable")
-		checker := &GRPCChecker{client: fakeUserServiceClient{err: expected}}
+	t.Run("RPC error propagates", func(t *testing.T) {
+		expected := errors.New("User service unavailable")
+		checker := &GRPCChecker{client: &fakeUserServiceClient{err: expected}, issuer: issuer}
 		got, err := checker.IsOnline(context.Background(), profileID)
 		require.False(t, got)
 		require.ErrorIs(t, err, expected)
 	})
+
+	t.Run("missing signer does not fall back to offline", func(t *testing.T) {
+		checker := &GRPCChecker{client: &fakeUserServiceClient{response: &userv1.GetNotificationRoutingPresenceResponse{}}}
+		got, err := checker.IsOnline(context.Background(), profileID)
+		require.False(t, got)
+		require.Error(t, err)
+	})
+}
+
+func TestAuthenticatedCheckerConfigurationIsAllOrNothing(t *testing.T) {
+	values := map[string]string{}
+	lookupEnv := func(name string) (string, bool) {
+		value, ok := values[name]
+		return value, ok
+	}
+
+	checker, server, err := LoadAuthenticatedGRPCCheckerFromEnv(lookupEnv)
+	require.NoError(t, err)
+	require.Nil(t, checker)
+	require.Nil(t, server)
+
+	values["NOTIFICATION_PRINCIPAL_ACTIVE_KID"] = "current"
+	checker, server, err = LoadAuthenticatedGRPCCheckerFromEnv(lookupEnv)
+	require.Error(t, err)
+	require.Nil(t, checker)
+	require.Nil(t, server)
+
+	values["NOTIFICATION_PRINCIPAL_ACTIVE_KID"] = ""
+	checker, server, err = LoadAuthenticatedGRPCCheckerFromEnv(lookupEnv)
+	require.Error(t, err, "an explicitly present but empty setting is a partial configuration")
+	require.Nil(t, checker)
+	require.Nil(t, server)
+}
+
+func TestNotificationJWKSPublishesOnlyPublicKeyMaterial(t *testing.T) {
+	key := testSigningKey(t)
+	document, err := marshalNotificationJWKS(map[string]*rsa.PrivateKey{"current": key})
+	require.NoError(t, err)
+	var decoded struct {
+		Keys []map[string]json.RawMessage `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(document, &decoded))
+	require.Len(t, decoded.Keys, 1)
+	require.JSONEq(t, `{"alg":"RS256","e":"AQAB","kid":"current","kty":"RSA","n":"`+base64.RawURLEncoding.EncodeToString(key.N.Bytes())+`","use":"sig"}`, string(document))
+	for _, privateField := range []string{"d", "p", "q", "dp", "dq", "qi"} {
+		_, exists := decoded.Keys[0][privateField]
+		require.False(t, exists, "JWKS must never publish private RSA key field %q", privateField)
+	}
+}
+
+func testSigningKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	return key
 }

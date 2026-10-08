@@ -11,7 +11,7 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
-import 'package:voice_frontend/ui/settings/settings_sheet.dart';
+import 'package:voice_frontend/ui/settings/appearance_settings_screen.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
@@ -57,12 +57,14 @@ void main() {
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: SettingsSheet()),
+          home: const Scaffold(body: AppearanceSettingsScreen()),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     await tester.tap(find.text('Russian'));
     await tester.pumpAndSettle();
 
@@ -105,12 +107,14 @@ void main() {
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: SettingsSheet()),
+          home: const Scaffold(body: AppearanceSettingsScreen()),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     expect(find.bySemanticsLabel('System default'), findsOneWidget);
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
@@ -146,7 +150,9 @@ void main() {
     await tester.pumpWidget(_settingsApp(container));
     await tester.pumpAndSettle();
     expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
     expect(container.read(appLocalePreferenceProvider), isNull);
@@ -179,7 +185,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(appLocalePreferenceProvider), const Locale('ru'));
 
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
     expect(container.read(appLocalePreferenceProvider), isNull);
@@ -229,7 +237,9 @@ void main() {
     addTearDown(container.dispose);
     await tester.pumpWidget(_settingsApp(container));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     await tester.tap(find.text('Russian'));
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
@@ -270,7 +280,9 @@ void main() {
     addTearDown(container.dispose);
     await tester.pumpWidget(_settingsApp(container));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(SettingsSheet.languageKey));
+    await tester.ensureVisible(
+      find.byKey(AppearanceSettingsScreen.languageKey),
+    );
     await tester.tap(find.text('English'));
     await tester.pump();
     await tester.runAsync(() async {
@@ -300,7 +312,7 @@ Widget _settingsApp(ProviderContainer container) => UncontrolledProviderScope(
     theme: voiceTestTheme(),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
-    home: const Scaffold(body: SettingsSheet()),
+    home: const Scaffold(body: AppearanceSettingsScreen()),
   ),
 );
 

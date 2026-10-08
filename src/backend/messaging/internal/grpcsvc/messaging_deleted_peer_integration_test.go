@@ -406,7 +406,7 @@ func TestMessagingDeletedPeer_IdempotentReplayDeniedAfterDeletion(t *testing.T) 
 	original := sendDeletedPeerTestMessage(t, ctx, client, acctA, profA, chatDMRef(chatID), "before deletion", &clientMessageID)
 	require.NotEmpty(t, original.GetId())
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, chatID))
-	require.Equal(t, 1, events.eventCount())
+	require.Equal(t, 1, outboxCountForChat(t, pool, "message.sent", chatID))
 
 	deleted.mu.Lock()
 	deleted.deleted[acctB] = struct{}{}
@@ -416,7 +416,7 @@ func TestMessagingDeletedPeer_IdempotentReplayDeniedAfterDeletion(t *testing.T) 
 	})
 	requireDeletedPeerPermissionDenied(t, err, acctA, acctB)
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, chatID), "replay may not create another row")
-	require.Equal(t, 1, events.eventCount(), "replay after deletion may not publish another event")
+	require.Equal(t, 1, outboxCountForChat(t, pool, "message.sent", chatID), "replay after deletion may not enqueue another event")
 	require.Equal(t, [][]uuid.UUID{{acctA, acctB}, {acctA, acctB}}, deleted.calls(), "both initial send and replay must query Auth in sender-then-peer account order before returning")
 }
 
@@ -455,7 +455,7 @@ func TestMessagingDeletedPeer_GroupAndChannelDoNotConsultChecker(t *testing.T) {
 	require.Empty(t, deleted.calls(), "non-DM sends must not invoke the deleted-account checker")
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, groupID))
 	require.Equal(t, 1, messageCountForDeletedPeerTest(t, ctx, pool, channelID))
-	require.Equal(t, 2, events.eventCount())
+	require.Equal(t, 2, outboxCountForChat(t, pool, "message.sent", groupID)+outboxCountForChat(t, pool, "message.sent", channelID))
 }
 
 func TestMessagingDeletedPeer_NilMapCheckerResponseFailsClosedBeforeSendAndForwardWrites(t *testing.T) {

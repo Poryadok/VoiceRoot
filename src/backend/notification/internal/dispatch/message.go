@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"voice/backend/notification/internal/push"
 	"voice/backend/notification/internal/store"
 )
+
+var errPresenceAuthorityUnavailable = errors.New("notification presence authority unavailable")
 
 // TokenRepository lists and deletes device tokens for push delivery.
 type TokenRepository interface {
@@ -74,9 +77,30 @@ func (p *MessagePusher) SendPush(
 	previewBody string,
 ) error {
 	if p != nil && p.LifecycleDelivery != nil {
-		return p.LifecycleDelivery.WithChatDelivery(ctx, in.ChatID, func(guarded context.Context) error { return p.sendPush(guarded, decisions, in, payload, previewBody) })
+		return p.LifecycleDelivery.WithChatDelivery(ctx, in.ChatID, func(guarded context.Context) error {
+			return p.sendPush(guarded, decisions, in, payload, previewBody, false)
+		})
 	}
-	return p.sendPush(ctx, decisions, in, payload, previewBody)
+	return p.sendPush(ctx, decisions, in, payload, previewBody, false)
+}
+
+// SendPreparedPush sends decisions whose presence and policy inputs were
+// resolved for every recipient before dispatch began. It avoids a second
+// policy read that could fail after another recipient has already received a
+// push.
+func (p *MessagePusher) SendPreparedPush(
+	ctx context.Context,
+	decisions map[string]delivery.DeliveryDecision,
+	in delivery.DeliveryInput,
+	payload push.Payload,
+	previewBody string,
+) error {
+	if p != nil && p.LifecycleDelivery != nil {
+		return p.LifecycleDelivery.WithChatDelivery(ctx, in.ChatID, func(guarded context.Context) error {
+			return p.sendPush(guarded, decisions, in, payload, previewBody, true)
+		})
+	}
+	return p.sendPush(ctx, decisions, in, payload, previewBody, true)
 }
 
 func (p *MessagePusher) sendPush(
@@ -85,6 +109,7 @@ func (p *MessagePusher) sendPush(
 	in delivery.DeliveryInput,
 	payload push.Payload,
 	previewBody string,
+	prepared bool,
 ) error {
 	if p == nil || p.Tokens == nil || p.Pusher == nil || len(decisions) == 0 {
 		return nil
@@ -93,6 +118,7 @@ func (p *MessagePusher) sendPush(
 	if notificationType == "" && payload.Data != nil {
 		notificationType = payload.Data["type"]
 	}
+	resolved := make(map[string]delivery.DeliveryDecision, len(decisions))
 	for profileID, decision := range decisions {
 		if !decision.Push {
 			continue
@@ -101,21 +127,26 @@ func (p *MessagePusher) sendPush(
 		if err != nil {
 			continue
 		}
-		settings, quiet, err := p.policy().LoadPolicy(ctx, recipient, in.ChatID, in.Type, time.Now())
-		if err != nil {
-			return err
+		if !prepared {
+			settings, quiet, err := p.policy().LoadPolicy(ctx, recipient, in.ChatID, in.Type, time.Now())
+			if err != nil {
+				return err
+			}
+			decision = delivery.FinalizeDecision(decision, delivery.DeliveryInput{
+				RecipientProfileID: recipient,
+				SenderProfileID:    in.SenderProfileID,
+				ChatID:             in.ChatID,
+				Type:               in.Type,
+				IsOnline:           in.IsOnline,
+				At:                 in.At,
+			}, settings, quiet)
 		}
-		perRecipient := delivery.FinalizeDecision(decision, delivery.DeliveryInput{
-			RecipientProfileID: recipient,
-			SenderProfileID:    in.SenderProfileID,
-			ChatID:             in.ChatID,
-			Type:               in.Type,
-			IsOnline:           in.IsOnline,
-			At:                 in.At,
-		}, settings, quiet)
-		if !perRecipient.Push {
-			continue
+		if decision.Push {
+			resolved[profileID] = decision
 		}
+	}
+	for profileID, decision := range resolved {
+		recipient, _ := uuid.Parse(profileID)
 		out := payload
 		groupingPreview := previewBody
 		if p.GameChatScope != nil && in.GameCategory != "" && in.GameApplicationID == uuid.Nil && in.GameEnvironmentID == uuid.Nil {
@@ -224,10 +255,13 @@ func (p *MessagePusher) enrichDecision(
 		return delivery.DeliveryDecision{}, err
 	}
 	isOnline := false
-	if p != nil && p.Presence != nil && !delivery.SkipsPresenceCheck(typ) {
+	if !delivery.SkipsPresenceCheck(typ) {
+		if p == nil || p.Presence == nil {
+			return delivery.DeliveryDecision{}, errPresenceAuthorityUnavailable
+		}
 		isOnline, err = p.Presence.IsOnline(ctx, recipient)
 		if err != nil {
-			isOnline = false
+			return delivery.DeliveryDecision{}, fmt.Errorf("check notification presence: %w", err)
 		}
 	}
 	in := delivery.DeliveryInput{

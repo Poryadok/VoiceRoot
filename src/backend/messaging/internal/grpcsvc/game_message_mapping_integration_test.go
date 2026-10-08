@@ -50,8 +50,6 @@ func TestApplyGameMessageUsesGISMappingClientBeforePermitAndCommit(t *testing.T)
 			ctx := context.Background()
 			pool := startPostgresForTest(t, ctx)
 			applyBaseMessagingMigrations(t, ctx, pool)
-			applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000016_game_message_revisions.up.sql"))
-			applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000017_game_message_execution_permits.up.sql"))
 
 			now := time.Now().UTC().Truncate(time.Millisecond)
 			compact, message, assertion, authPrivate := freshSignedCreate(t, now, allow)

@@ -25,7 +25,9 @@ import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'channel_settings_panel.dart';
 import 'pinned_messages_panel.dart';
+import 'create_group_sheet.dart';
 import '../settings/notification_settings_screen.dart';
+import '../settings/chat_themes_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../../state/channel_settings_provider.dart';
@@ -48,6 +50,8 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key voiceTabKey = Key('chat_info_tab_voice');
   static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
   static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
+  static const Key chatThemesKey = Key('chat_info_chat_themes');
+  static const Key createGroupKey = Key('chat_info_create_group');
 
   final String chatId;
   final String? groupName;
@@ -96,9 +100,27 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final roomExists = ref.exists(roomProvider);
     final auth = ref.watch(authControllerProvider);
     final authorization = ref.watch(authorizationHeaderProvider);
+    final chatList = ref.watch(chatListControllerProvider);
     final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
     PendingPinnedMessageJump? pendingPinnedJump;
     final roomState = roomExists ? ref.watch(roomProvider) : null;
+    final viewerProfileId = auth.activeProfileId;
+    final listBelongsToViewer =
+        viewerProfileId != null && chatList.profileId == viewerProfileId;
+    final roomBelongsToViewer =
+        viewerProfileId != null &&
+        roomState?.historyProfileId == viewerProfileId;
+    final dmPeerProfileId = widget.isGroup
+        ? null
+        : viewerProfileId == null
+        ? null
+        : resolveDmPeerForChatId(
+            chatId: widget.chatId,
+            knownPeers: const {},
+            listItems: listBelongsToViewer ? chatList.items : const [],
+            activeProfileId: viewerProfileId,
+            messages: roomBelongsToViewer ? roomState!.messages : const [],
+          );
     final pinnedMessages = roomExists
         ? roomState!.pinnedMessages
         : _standaloneMessagesFor(pinsKey);
@@ -132,7 +154,19 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             trailing: const Icon(Icons.chevron_right),
             onTap: () => PinnedMessagesPanel.show(
               context,
+              chatId: widget.chatId,
+              spaceId: spaceId,
+              isGroup: widget.isGroup,
               messages: pinnedMessages,
+              onUnpin: (messageId) => roomExists
+                  ? ref
+                        .read(roomProvider.notifier)
+                        .togglePinWithResult(messageId, currentlyPinned: true)
+                  : _unpinStandalonePinnedMessage(
+                      messageId,
+                      pinsKey,
+                      authorization: authorization,
+                    ),
               onOpenMessage: (messageId) {
                 // A standalone Chat Info panel can be opened without mounting
                 // the room. Initialize it only when the user explicitly jumps
@@ -160,6 +194,31 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
                 ref.read(shellNavigationProvider).closeSidePanel();
                 if (context.mounted) Navigator.of(context).maybePop();
               },
+            ),
+          ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(l10n.inChatSearchOpen),
+          onTap: () {
+            ref
+                .read(chatInfoSearchRequestProvider.notifier)
+                .state = ChatInfoSearchRequest(
+              chatId: widget.chatId,
+              viewerProfileId: ref.read(authControllerProvider).activeProfileId,
+            );
+            ref.read(shellNavigationProvider).closeSidePanel();
+            if (context.mounted) Navigator.of(context).maybePop();
+          },
+        ),
+        if (dmPeerProfileId != null && dmPeerProfileId.isNotEmpty)
+          ListTile(
+            key: ChatInfoPanel.createGroupKey,
+            leading: const Icon(Icons.group_add_outlined),
+            title: Text(l10n.chatCreateGroupTitle),
+            onTap: () => CreateGroupSheet.show(
+              context,
+              requiredMemberProfileId: dmPeerProfileId,
+              expectedViewerProfileId: viewerProfileId!,
             ),
           ),
         if ((roomExists &&
@@ -217,6 +276,17 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               setState(() => _showChannelSettings = true);
             }
           },
+        ),
+        ListTile(
+          key: ChatInfoPanel.chatThemesKey,
+          leading: const Icon(Icons.palette_outlined),
+          title: Text(l10n.settingsChatThemes),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ChatThemesSettingsScreen(chatId: widget.chatId),
+            ),
+          ),
         ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
@@ -376,6 +446,44 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         widget.chatId == key.$1 &&
         currentAuth.activeProfileId == key.$2 &&
         currentAuth.session?.authorizationHeader == authorization;
+  }
+
+  Future<PinMutationResult> _unpinStandalonePinnedMessage(
+    String messageId,
+    (String, String?, String?) key, {
+    required String? authorization,
+  }) async {
+    final profileId = key.$2;
+    if (authorization == null || profileId == null || profileId.isEmpty) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
+    final generation = _standalonePinsGeneration;
+    final result = await ref
+        .read(voiceMessagesClientProvider)
+        .unpinMessage(
+          authorization: authorization,
+          chatId: key.$1,
+          messageId: messageId,
+        );
+    if (!_isCurrentStandalonePinsRequest(key, generation, authorization)) {
+      return const PinMutationResult.stale();
+    }
+    return switch (result) {
+      MessagesApiOk<void>() => () {
+        setState(() {
+          _standalonePinnedMessages = _standalonePinnedMessages
+              .where((message) => message.id != messageId)
+              .toList(growable: false);
+        });
+        return const PinMutationResult.success();
+      }(),
+      MessagesApiFailure(:final message, :final errorCode, :final statusCode) =>
+        PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        ),
+    };
   }
 }
 

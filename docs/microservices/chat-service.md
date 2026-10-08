@@ -545,15 +545,12 @@ Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/
 | Событие               | Данные                             |
 |-----------------------|------------------------------------|
 | `chat.created`        | chat_id, type, creator_id, members |
-| `chat.updated`        | chat_id, changed_fields            |
-| `chat.deleted`        | chat_id                            |
-| `chat.member_added`   | chat_id, profile_id, added_by      |
-| `chat.member_removed` | chat_id, profile_id, removed_by    |
-| `chat.member_left`    | chat_id, profile_id                |
+| `chat.updated`        | chat_id, changed_fields — поля успешного `UpdateChat` |
+| `chat.deleted`        | chat_id, space_id, deletion_operation_id, generation, manifest_id, manifest_sha256 — только Chat participant exact P3 purge после commit |
 | `chat.member_changed` | chat_id, profile_id, change (`added` \| `removed` \| `left` \| `owner_transferred` \| `inbox_bucket_changed` \| `role_changed`) |
 | `chat.dm_peer_deleted` | chat_id, recipient_profile_id; только surviving участнику, без deleted identity |
 
-**Note:** JetStream payload for `chat.member_changed` may emit `removed`, `owner_transferred`, and inbox transitions beyond minimal proto comment — consumers must tolerate unknown `change` values.
+`chat.member_changed` is the single membership-change subject; producers do not emit parallel `chat.member_added`, `chat.member_removed`, or `chat.member_left` subjects. Consumers must tolerate unknown `change` values. Caller-relative DM `DeleteChat` is a `left` membership change and is never a permanent `chat.deleted` event. P3 `chat.deleted` envelopes retain a stable event ID, occurrence time, exact Space/operation/generation/manifest binding, and immutable bytes in `chat_db` until JetStream confirms publication; retries publish those same bytes and deduplication ID.
 
 ## Зависимости
 
@@ -623,6 +620,18 @@ waits for Messaging completion and File acceptance of Chat-owned reference
 releases, then removes chats/navigation and returns an immutable completion
 receipt. Full request/receipt bytes retain 30 days from this participant's
 completion; compact terminal fence is permanent.
+
+The same successful local PURGE transaction writes one immutable
+`chat.deleted` envelope to `chat_deleted_event_outbox` for each manifest chat.
+Each envelope binds the Space, operation, purge generation and Chat manifest
+ID/hash. A deterministic event UUID is both the envelope ID and JetStream
+`Nats-Msg-Id`; replay during retained evidence never mints different bytes.
+The worker leases rows with a fresh token, publishes outside the transaction,
+and records PubAck only if that token is still current. Failures persist a
+bounded backoff and continue retrying without dropping the event. Pending rows
+are never cleaned up. A confirmed row can be removed only after the parent
+PURGE receipt's `retain_until`; the parent receipt/manifest have no cleaner in
+this change. Migration DOWN refuses while any outbox evidence remains.
 
 ### P3 terminal purge prerequisite proof contract (accepted)
 

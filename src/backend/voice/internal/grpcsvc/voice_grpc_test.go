@@ -168,16 +168,6 @@ func newTestVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 	}
 }
 
-type fixtureCanonicalVoiceRoomResolver struct {
-	rooms   map[string]string
-	members map[string]map[string]bool
-}
-
-func (r fixtureCanonicalVoiceRoomResolver) ResolveVoiceRoomAccess(_ context.Context, voiceRoomID, profileID string) (CanonicalVoiceRoomAccess, error) {
-	spaceID, active := r.rooms[voiceRoomID]
-	return CanonicalVoiceRoomAccess{SpaceID: spaceID, Active: active, Member: r.members[spaceID][profileID]}, nil
-}
-
 func newTestGroupVoiceService(now time.Time, events *recordingEvents) *VoiceGRPC {
 	members := map[string]map[string]bool{
 		"group-chat-1": {
