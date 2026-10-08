@@ -37,6 +37,10 @@ const (
 	maxPageSize                = 100
 	fallbackSize               = 50
 	historyBlockScanMultiplier = 4
+	profilePairBlockBatchSize  = 500
+	metadataChatRefBudget      = 100
+	metadataProfilePairBudget  = 5000
+	metadataPreviewRowBudget   = 5000
 )
 
 // MessagingGRPC implements MessagingService (app stack: DM send, history, read receipts).
@@ -1041,7 +1045,14 @@ func historyBlockScanLimit(pageLimit int) int {
 }
 
 func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProfileID uuid.UUID, rows []store.MessageRow) ([]store.MessageRow, error) {
-	if isNilDependency(s.ProfilePairBlocks) {
+	needSocial := false
+	for _, row := range rows {
+		if row.SenderProfileID != viewerProfileID {
+			needSocial = true
+			break
+		}
+	}
+	if needSocial && isNilDependency(s.ProfilePairBlocks) {
 		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 	}
 	blockedByProfile := make(map[uuid.UUID]bool)
@@ -1069,6 +1080,74 @@ func (s *MessagingGRPC) filterBlockedHistoryRows(ctx context.Context, viewerProf
 		}
 	}
 	return visible, nil
+}
+
+func (s *MessagingGRPC) resolveProfilePairBlocks(ctx context.Context, viewerProfileID uuid.UUID, profileIDs []uuid.UUID, cache map[uuid.UUID]bool) error {
+	if cache == nil {
+		return status.Error(codes.Internal, "message visibility cache unavailable")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(profileIDs))
+	missing := make([]uuid.UUID, 0, len(profileIDs))
+	for _, profileID := range profileIDs {
+		if profileID == uuid.Nil {
+			return status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		if profileID == viewerProfileID {
+			cache[profileID] = false
+			continue
+		}
+		if _, ok := cache[profileID]; ok {
+			continue
+		}
+		if _, ok := seen[profileID]; ok {
+			continue
+		}
+		seen[profileID] = struct{}{}
+		missing = append(missing, profileID)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	resolvedCount := len(cache)
+	if _, hasViewer := cache[viewerProfileID]; hasViewer {
+		resolvedCount--
+	}
+	if resolvedCount+len(missing) > metadataProfilePairBudget {
+		return status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	checker, ok := s.ProfilePairBlocks.(ProfilePairBatchBlockChecker)
+	if !ok || isNilDependency(checker) {
+		return status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	for start := 0; start < len(missing); start += profilePairBlockBatchSize {
+		end := start + profilePairBlockBatchSize
+		if end > len(missing) {
+			end = len(missing)
+		}
+		batch := missing[start:end]
+		results, err := checker.ProfilePairsBlocked(ctx, viewerProfileID, batch)
+		if err != nil || len(results) != len(batch) {
+			return status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		for _, profileID := range batch {
+			blocked, ok := results[profileID]
+			if !ok {
+				return status.Error(codes.Unavailable, "message visibility policy unavailable")
+			}
+			cache[profileID] = blocked
+		}
+	}
+	return nil
+}
+
+func blockedProfilePairIDs(decisions map[uuid.UUID]bool) []uuid.UUID {
+	blocked := make([]uuid.UUID, 0)
+	for profileID, isBlocked := range decisions {
+		if isBlocked {
+			blocked = append(blocked, profileID)
+		}
+	}
+	return blocked
 }
 
 // dmPeerStateForHistory resolves only the other participant's Auth state for a
@@ -1131,18 +1210,36 @@ func (s *MessagingGRPC) GetMessage(ctx context.Context, req *messagingv1.GetMess
 		return nil, status.Error(codes.NotFound, "message not found")
 	}
 	if profileID, ok := authctx.ProfileID(ctx); ok {
-		if s.ChatGuard != nil {
-			if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
-				if errors.Is(err, store.ErrNotChatMember) {
-					return nil, status.Error(codes.PermissionDenied, "not a chat member")
-				}
-				return nil, status.Error(codes.Internal, err.Error())
+		if isNilDependency(s.ChatGuard) {
+			return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+		}
+		if err := s.ChatGuard.EnsureMember(ctx, row.ChatID, profileID); err != nil {
+			if errors.Is(err, store.ErrNotChatMember) {
+				return nil, status.Error(codes.PermissionDenied, "not a chat member")
 			}
+			return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 		}
 		if err := s.requireMessageReadEntitlement(ctx, row.ChatID, profileID, row.CreatedAt); err != nil {
 			return nil, err
 		}
 		if row.GhostOnly && row.SenderProfileID != profileID {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		hidden, err := s.Messages.IsHiddenForProfile(ctx, row.ID, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if hidden {
+			return nil, status.Error(codes.NotFound, "message not found")
+		}
+		if _, err := s.resolveAuthoritativeChatType(ctx, row.ChatID, profileID); err != nil {
+			return nil, err
+		}
+		visible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*row})
+		if err != nil {
+			return nil, err
+		}
+		if len(visible) == 0 {
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 	}
@@ -1210,13 +1307,14 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
 	parent, err := s.Messages.GetMessageByID(ctx, parentID)
 	if err != nil {
@@ -1226,6 +1324,26 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if parent.DeletedAt != nil || parent.ChatID != chatID || parent.ThreadParentID != nil {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	if parent.GhostOnly && parent.SenderProfileID != profileID {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	hidden, err := s.Messages.IsHiddenForProfile(ctx, parent.ID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if hidden {
+		return nil, status.Error(codes.NotFound, "thread parent not found")
+	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
+	parentVisible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*parent})
+	if err != nil {
+		return nil, err
+	}
+	if len(parentVisible) == 0 {
 		return nil, status.Error(codes.NotFound, "thread parent not found")
 	}
 	if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, parent.CreatedAt); err != nil {
@@ -1266,6 +1384,10 @@ func (s *MessagingGRPC) GetThreadMessages(ctx context.Context, req *messagingv1.
 		rows = rows[:pageSize]
 	}
 	paginationRows := append([]store.MessageRow(nil), rows...)
+	rows, err = s.filterBlockedHistoryRows(ctx, profileID, rows)
+	if err != nil {
+		return nil, err
+	}
 	visibleRows := rows[:0]
 	for i := range rows {
 		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, rows[i].CreatedAt); err != nil {
@@ -1706,13 +1828,17 @@ func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.
 	if err := validateChatRefMessaging(req.GetChat()); err != nil {
 		return nil, err
 	}
-	if s.ChatGuard != nil {
-		if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
-			if errors.Is(err, store.ErrNotChatMember) {
-				return nil, status.Error(codes.PermissionDenied, "not a chat member")
-			}
-			return nil, status.Error(codes.Internal, err.Error())
+	if isNilDependency(s.ChatGuard) {
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if err := s.ChatGuard.EnsureMember(ctx, chatID, profileID); err != nil {
+		if errors.Is(err, store.ErrNotChatMember) {
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
 		}
+		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
+	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
 	}
 	pins, err := s.Pins.ListPins(ctx, chatID)
 	if err != nil {
@@ -1728,6 +1854,23 @@ func (s *MessagingGRPC) GetPinnedMessages(ctx context.Context, req *messagingv1.
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		if row.DeletedAt != nil || row.ChatID != chatID {
+			continue
+		}
+		if row.GhostOnly && row.SenderProfileID != profileID {
+			continue
+		}
+		hidden, err := s.Messages.IsHiddenForProfile(ctx, row.ID, profileID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if hidden {
+			continue
+		}
+		visible, err := s.filterBlockedHistoryRows(ctx, profileID, []store.MessageRow{*row})
+		if err != nil {
+			return nil, err
+		}
+		if len(visible) == 0 {
 			continue
 		}
 		if err := s.requireMessageReadEntitlement(ctx, chatID, profileID, row.CreatedAt); err != nil {
@@ -2046,11 +2189,83 @@ func (s *MessagingGRPC) GetChatListMetadata(ctx context.Context, req *messagingv
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
+	if len(req.GetChats()) > metadataChatRefBudget {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
 	chatIDs, refByID, err := s.authorizedChatRefs(ctx, profileID, req.GetChats())
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Messages.GetChatListMetadata(ctx, profileID, chatIDs)
+	blockedProfiles := make(map[uuid.UUID]bool)
+	for _, chatID := range chatIDs {
+		if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+			return nil, err
+		}
+	}
+	unreadCandidateIDs, err := s.Messages.UnreadMessageSenders(ctx, profileID, chatIDs, metadataProfilePairBudget)
+	if err != nil {
+		if errors.Is(err, store.ErrVisibilityCandidateBudgetExceeded) {
+			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := s.resolveProfilePairBlocks(ctx, profileID, unreadCandidateIDs, blockedProfiles); err != nil {
+		return nil, err
+	}
+
+	previewDone := make(map[uuid.UUID]bool, len(chatIDs))
+	remainingChats := len(chatIDs)
+	previewRowsRead := 0
+	for remainingChats > 0 {
+		candidatesByChat := make(map[uuid.UUID][]store.LatestPreviewMessageCandidate)
+		var candidateProfileIDs []uuid.UUID
+		blockedSenderIDs := blockedProfilePairIDs(blockedProfiles)
+		for _, chatID := range chatIDs {
+			if previewDone[chatID] {
+				continue
+			}
+			remainingRows := metadataPreviewRowBudget - previewRowsRead
+			pageSize := profilePairBlockBatchSize
+			if remainingRows < pageSize {
+				pageSize = remainingRows + 1
+			}
+			candidates, err := s.Messages.LatestPreviewMessageCandidates(ctx, chatID, profileID, blockedSenderIDs, pageSize)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			if len(candidates) > remainingRows {
+				return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+			}
+			previewRowsRead += len(candidates)
+			if len(candidates) == 0 {
+				previewDone[chatID] = true
+				remainingChats--
+				continue
+			}
+			candidatesByChat[chatID] = candidates
+			for _, candidate := range candidates {
+				candidateProfileIDs = append(candidateProfileIDs, candidate.SenderProfileID)
+			}
+		}
+		if err := s.resolveProfilePairBlocks(ctx, profileID, candidateProfileIDs, blockedProfiles); err != nil {
+			return nil, err
+		}
+		for chatID, candidates := range candidatesByChat {
+			foundVisiblePreview := false
+			for _, candidate := range candidates {
+				if blockedProfiles[candidate.SenderProfileID] {
+					continue
+				}
+				foundVisiblePreview = true
+				break
+			}
+			if foundVisiblePreview || len(candidates) < profilePairBlockBatchSize {
+				previewDone[chatID] = true
+				remainingChats--
+			}
+		}
+	}
+	rows, err := s.Messages.GetChatListMetadataWithVisibility(ctx, profileID, chatIDs, blockedProfilePairIDs(blockedProfiles))
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -2306,6 +2521,9 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	if _, err := s.resolveAuthoritativeChatType(ctx, chatID, profileID); err != nil {
+		return nil, err
+	}
 	kind, err := protoSharedMediaKind(req.GetKind())
 	if err != nil {
 		return nil, err
@@ -2322,13 +2540,33 @@ func (s *MessagingGRPC) ListSharedMedia(ctx context.Context, req *messagingv1.Li
 		pageSize = maxPageSize
 	}
 
-	rows, nextCursor, hasMore, err := s.SharedMedia.List(ctx, chatID, kind, cursor, pageSize)
+	rows, nextCursor, hasMore, err := s.SharedMedia.List(ctx, chatID, kind, cursor, pageSize, profileID)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid shared media cursor") {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	mediaAsMessages := make([]store.MessageRow, len(rows))
+	for i := range rows {
+		mediaAsMessages[i] = store.MessageRow{ChatID: chatID, SenderProfileID: rows[i].SenderProfileID}
+	}
+	visibleBlockRows, err := s.filterBlockedHistoryRows(ctx, profileID, mediaAsMessages)
+	if err != nil {
+		return nil, err
+	}
+	visibleSenders := make(map[uuid.UUID]int, len(visibleBlockRows))
+	for _, row := range visibleBlockRows {
+		visibleSenders[row.SenderProfileID]++
+	}
+	filteredRows := rows[:0]
+	for _, row := range rows {
+		if visibleSenders[row.SenderProfileID] > 0 {
+			filteredRows = append(filteredRows, row)
+			visibleSenders[row.SenderProfileID]--
+		}
+	}
+	rows = filteredRows
 	visibleRows := rows[:0]
 	for i := range rows {
 		allowed, err := s.messageReadEntitled(ctx, chatID, profileID, rows[i].CreatedAt)

@@ -126,6 +126,9 @@ func startMessagingServerWired(t *testing.T, pool *pgxpool.Pool, w messagingWire
 	if w.Privacy == nil {
 		w.Privacy = dmPrivacyStub{}
 	}
+	if w.ProfilePairBlocks == nil {
+		w.ProfilePairBlocks = allowProfilePairBlocks{}
+	}
 	if w.ChatTypeResolver == nil && !w.RequireChatTypeResolver {
 		w.ChatTypeResolver = sqlTestAuthoritativeChatTypeResolver{pool: pool}
 	}
@@ -539,16 +542,375 @@ func (b directionalProfilePairBlocks) ProfilePairBlocked(_ context.Context, view
 	return b[[2]uuid.UUID{viewerProfileID, senderProfileID}], nil
 }
 
+func (b directionalProfilePairBlocks) ProfilePairsBlocked(_ context.Context, viewerProfileID uuid.UUID, senderProfileIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	out := make(map[uuid.UUID]bool, len(senderProfileIDs))
+	for _, senderProfileID := range senderProfileIDs {
+		out[senderProfileID] = b[[2]uuid.UUID{viewerProfileID, senderProfileID}]
+	}
+	return out, nil
+}
+
 type allowProfilePairBlocks struct{}
 
 func (allowProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
 
+func (allowProfilePairBlocks) ProfilePairsBlocked(_ context.Context, _ uuid.UUID, senderProfileIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	out := make(map[uuid.UUID]bool, len(senderProfileIDs))
+	for _, senderProfileID := range senderProfileIDs {
+		out[senderProfileID] = false
+	}
+	return out, nil
+}
+
 type failingProfilePairBlocks struct{}
 
 func (failingProfilePairBlocks) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, errors.New("social unavailable")
+}
+
+func (failingProfilePairBlocks) ProfilePairsBlocked(context.Context, uuid.UUID, []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return nil, errors.New("social unavailable")
+}
+
+type profilePairBatchProbe struct{ batches [][]uuid.UUID }
+
+func (*profilePairBatchProbe) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+
+func (p *profilePairBatchProbe) ProfilePairsBlocked(_ context.Context, _ uuid.UUID, profileIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	p.batches = append(p.batches, append([]uuid.UUID(nil), profileIDs...))
+	results := make(map[uuid.UUID]bool, len(profileIDs))
+	for _, profileID := range profileIDs {
+		results[profileID] = false
+	}
+	return results, nil
+}
+
+type blockAllProfilePairsProbe struct {
+	batches   int
+	decisions int
+}
+
+func (p *blockAllProfilePairsProbe) ProfilePairBlocked(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (p *blockAllProfilePairsProbe) ProfilePairsBlocked(_ context.Context, _ uuid.UUID, profileIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
+	p.batches++
+	p.decisions += len(profileIDs)
+	results := make(map[uuid.UUID]bool, len(profileIDs))
+	for _, profileID := range profileIDs {
+		results[profileID] = true
+	}
+	return results, nil
+}
+
+func TestResolveProfilePairBlocksDeduplicatesAndCapsEachSocialBatch(t *testing.T) {
+	probe := &profilePairBatchProbe{}
+	svc := &MessagingGRPC{ProfilePairBlocks: probe}
+	viewer := uuid.New()
+	ids := make([]uuid.UUID, 1001)
+	for i := range ids {
+		ids[i] = uuid.New()
+	}
+	withDuplicates := append(append([]uuid.UUID(nil), ids...), ids[0], ids[1], viewer)
+	cache := make(map[uuid.UUID]bool)
+	require.NoError(t, svc.resolveProfilePairBlocks(context.Background(), viewer, withDuplicates, cache))
+	require.Equal(t, []int{500, 500, 1}, []int{len(probe.batches[0]), len(probe.batches[1]), len(probe.batches[2])})
+	require.Len(t, cache, len(ids)+1)
+	for _, batch := range probe.batches {
+		require.LessOrEqual(t, len(batch), profilePairBlockBatchSize)
+	}
+}
+
+func TestResolveProfilePairBlocksEnforcesRequestWideDecisionBudget(t *testing.T) {
+	probe := &profilePairBatchProbe{}
+	svc := &MessagingGRPC{ProfilePairBlocks: probe}
+	viewer := uuid.New()
+	ids := make([]uuid.UUID, metadataProfilePairBudget+1)
+	for i := range ids {
+		ids[i] = uuid.New()
+	}
+	cache := make(map[uuid.UUID]bool)
+	require.NoError(t, svc.resolveProfilePairBlocks(context.Background(), viewer, ids[:metadataProfilePairBudget], cache))
+	require.Len(t, probe.batches, metadataProfilePairBudget/profilePairBlockBatchSize)
+	decisionCount := len(cache)
+	if _, ok := cache[viewer]; ok {
+		decisionCount--
+	}
+	require.Equal(t, metadataProfilePairBudget, decisionCount)
+	require.NoError(t, svc.resolveProfilePairBlocks(context.Background(), viewer, ids[:metadataProfilePairBudget], cache), "cached decisions do not consume the request budget twice")
+	require.Len(t, probe.batches, metadataProfilePairBudget/profilePairBlockBatchSize)
+	err := svc.resolveProfilePairBlocks(context.Background(), viewer, ids, cache)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Len(t, probe.batches, metadataProfilePairBudget/profilePairBlockBatchSize, "over-budget requests fail before another Social RPC")
+}
+
+func TestMessagingDerivedReadsRespectViewerVisibility(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	viewer, blocked, neutral, blockedSibling := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	viewerAccount, blockedAccount, neutralAccount := uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, viewer, blocked)
+	_, err := pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')`, chatID, neutral, blockedSibling)
+	require.NoError(t, err)
+	setChatThreadSettings(t, ctx, pool, chatID, true, true)
+
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{
+		ProfilePairBlocks: directionalProfilePairBlocks{
+			{viewer, blocked}:        true,
+			{viewer, blockedSibling}: true,
+		},
+	})
+	t.Cleanup(cleanup)
+	regular := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	send := func(profileID, accountID uuid.UUID, content string, parentID *string) string {
+		t.Helper()
+		resp, err := client.SendMessage(withProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{
+			Chat: chatGroupRef(chatID), Content: content, AttachmentsJson: "[]", MentionsJson: "[]",
+			MessageKind: &regular, ThreadParentId: parentID,
+		})
+		require.NoError(t, err)
+		return resp.GetMessage().GetId()
+	}
+
+	visibleID := send(neutral, neutralAccount, "visible https://visible.example", nil)
+	hiddenID := send(neutral, neutralAccount, "hidden https://hidden.example", nil)
+	ghostID := send(blocked, blockedAccount, "ghost https://ghost.example", nil)
+	blockedID := send(blocked, blockedAccount, "blocked https://blocked.example", nil)
+	blockedSiblingID := send(blockedSibling, neutralAccount, "blocked sibling https://sibling.example", nil)
+	_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(ghostID))
+	require.NoError(t, err)
+	_, err = client.DeleteMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.DeleteMessageRequest{
+		MessageId: hiddenID, Scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME,
+	})
+	require.NoError(t, err)
+
+	for _, messageID := range []string{visibleID, hiddenID, ghostID, blockedID, blockedSiblingID} {
+		_, err = client.PinMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.PinMessageRequest{
+			Chat: chatGroupRef(chatID), MessageId: messageID,
+		})
+		require.NoError(t, err)
+	}
+
+	for _, messageID := range []string{hiddenID, ghostID, blockedID, blockedSiblingID} {
+		_, err = client.GetMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.GetMessageRequest{MessageId: messageID})
+		require.Equal(t, codes.NotFound, status.Code(err), "viewer must not retrieve a message hidden by FOR_ME, ghost_only, or directional block")
+	}
+	for _, messageID := range []string{ghostID, blockedID} {
+		_, err = client.GetMessage(withProfileCtx(ctx, blockedAccount, blocked), &messagingv1.GetMessageRequest{MessageId: messageID})
+		require.NoError(t, err, "sender and reverse-direction viewer retain their own authorized view")
+	}
+	_, err = client.GetMessage(withProfileCtx(ctx, neutralAccount, neutral), &messagingv1.GetMessageRequest{MessageId: hiddenID})
+	require.NoError(t, err, "FOR_ME is scoped to the profile that hid the message")
+
+	pins, err := client.GetPinnedMessages(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.GetPinnedMessagesRequest{Chat: chatGroupRef(chatID)})
+	require.NoError(t, err)
+	require.Equal(t, []string{visibleID}, messageIDs(pins.GetMessageList().GetMessages()))
+
+	cursor := ""
+	var sharedURLs []string
+	for pageNo := 0; pageNo < 8; pageNo++ {
+		media, err := client.ListSharedMedia(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.ListSharedMediaRequest{
+			Chat: chatGroupRef(chatID), Kind: messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_LINKS,
+			Page: &commonv1.CursorPageRequest{PageSize: 1, Cursor: cursor},
+		})
+		require.NoError(t, err)
+		for _, item := range media.GetSharedMediaList().GetItems() {
+			sharedURLs = append(sharedURLs, item.GetExternalUrl())
+		}
+		if !media.GetSharedMediaList().GetHasMore() {
+			break
+		}
+		require.NotEmpty(t, media.GetSharedMediaList().GetNextCursor(), "filtered page must retain a cursor to continue past hidden rows")
+		require.NotEqual(t, cursor, media.GetSharedMediaList().GetNextCursor(), "filtered page cursor must advance")
+		cursor = media.GetSharedMediaList().GetNextCursor()
+	}
+	require.Equal(t, []string{"https://visible.example"}, sharedURLs)
+
+	rootID := send(neutral, neutralAccount, "thread root", nil)
+	blockedReplyID := send(blocked, blockedAccount, "blocked reply", &rootID)
+	visibleReplyID := send(neutral, neutralAccount, "visible reply", &rootID)
+	thread, err := client.GetThreadMessages(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.GetThreadMessagesRequest{
+		Chat: chatGroupRef(chatID), ThreadParentId: rootID, Page: &commonv1.CursorPageRequest{PageSize: 10},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{visibleReplyID}, messageIDs(thread.GetMessageList().GetMessages()))
+	require.NotContains(t, messageIDs(thread.GetMessageList().GetMessages()), blockedReplyID)
+}
+
+func TestMessagingGetChatListMetadataRespectsViewerVisibility(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID := uuid.New()
+	viewer, blocked, neutral, blockedSibling := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	viewerAccount, blockedAccount, neutralAccount := uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, viewer, blocked)
+	_, err := pool.Exec(ctx, `INSERT INTO chat_members (chat_id, profile_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')`, chatID, neutral, blockedSibling)
+	require.NoError(t, err)
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{
+		ProfilePairBlocks: directionalProfilePairBlocks{{viewer, blocked}: true, {viewer, blockedSibling}: true},
+	})
+	t.Cleanup(cleanup)
+	regular := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	send := func(profileID, accountID uuid.UUID, content string) string {
+		t.Helper()
+		resp, err := client.SendMessage(withProfileCtx(ctx, accountID, profileID), &messagingv1.SendMessageRequest{
+			Chat: chatGroupRef(chatID), Content: content, AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &regular,
+		})
+		require.NoError(t, err)
+		return resp.GetMessage().GetId()
+	}
+
+	visibleID := send(neutral, neutralAccount, "visible preview")
+	hiddenID := send(neutral, neutralAccount, "hidden preview")
+	ghostID := send(blocked, blockedAccount, "ghost preview")
+	blockedID := send(blocked, blockedAccount, "blocked preview")
+	blockedSiblingID := send(blockedSibling, neutralAccount, "blocked sibling preview")
+	_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(ghostID))
+	require.NoError(t, err)
+	_, err = client.DeleteMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.DeleteMessageRequest{
+		MessageId: hiddenID, Scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME,
+	})
+	require.NoError(t, err)
+	for _, id := range []string{blockedID, blockedSiblingID} {
+		_, err = client.GetMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.GetMessageRequest{MessageId: id})
+		require.Equal(t, codes.NotFound, status.Code(err))
+	}
+	_, err = pool.Exec(ctx, `DELETE FROM chat_members WHERE chat_id = $1 AND profile_id = ANY($2::uuid[])`, chatID, []uuid.UUID{blocked, blockedSibling})
+	require.NoError(t, err, "former senders remain subject to directional block filtering")
+
+	meta, err := client.GetChatListMetadata(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.GetChatListMetadataRequest{
+		Chats: []*chatv1.ChatRef{chatGroupRef(chatID)},
+	})
+	require.NoError(t, err)
+	item := meta.GetByChatId()[chatID.String()]
+	require.NotNil(t, item)
+	require.Equal(t, "visible preview", item.GetLastMessagePreview())
+	require.Equal(t, int64(1), item.GetUnreadCount(), "only the unhidden and unblocked peer message contributes to unread")
+
+	require.NotEmpty(t, visibleID)
+}
+
+func TestMessagingGetChatListMetadataFailsClosedAtCandidateBudgets(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID, viewer, accountID := uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, viewer, uuid.New())
+	_, err := pool.Exec(ctx, `
+INSERT INTO messages (id, chat_id, chat_type, sender_profile_id, content, attachments, mentions)
+SELECT md5('msg-' || n::text)::uuid, $1, 'group', md5('sender-' || n::text)::uuid, 'blocked history', '[]'::jsonb, '[]'::jsonb
+FROM generate_series(1, $2) AS n
+`, chatID, metadataPreviewRowBudget+1)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
+INSERT INTO read_positions (chat_id, profile_id, last_read_message_id)
+VALUES ($1, $2, 'ffffffff-ffff-7fff-bfff-ffffffffffff'::uuid)
+`, chatID, viewer)
+	require.NoError(t, err)
+
+	probe := &blockAllProfilePairsProbe{}
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{ProfilePairBlocks: probe})
+	t.Cleanup(cleanup)
+	request := &messagingv1.GetChatListMetadataRequest{Chats: []*chatv1.ChatRef{chatGroupRef(chatID)}}
+	callMetadata := func() (*messagingv1.GetChatListMetadataResponse, error) {
+		return client.GetChatListMetadata(withProfileCtx(ctx, accountID, viewer), request)
+	}
+	_, err = pool.Exec(ctx, `
+DELETE FROM messages
+WHERE id IN (SELECT id FROM messages WHERE chat_id = $1 ORDER BY id DESC LIMIT 2)
+`, chatID)
+	require.NoError(t, err)
+	below, err := callMetadata()
+	require.NoError(t, err, "candidate volume below the request budget returns exact metadata")
+	require.Nil(t, below.GetByChatId()[chatID.String()].LastMessagePreview)
+	require.Equal(t, metadataPreviewRowBudget-1, probe.decisions)
+
+	_, err = pool.Exec(ctx, `
+INSERT INTO messages (id, chat_id, chat_type, sender_profile_id, content, attachments, mentions)
+VALUES (md5('msg-extra-at-limit')::uuid, $1, 'group', md5('sender-extra-at-limit')::uuid, 'blocked history', '[]'::jsonb, '[]'::jsonb)
+`, chatID)
+	require.NoError(t, err)
+	atLimit, err := callMetadata()
+	require.NoError(t, err, "exactly the request-wide candidate budget remains serviceable")
+	require.Nil(t, atLimit.GetByChatId()[chatID.String()].LastMessagePreview)
+	require.Equal(t, 2*metadataPreviewRowBudget-1, probe.decisions)
+
+	_, err = pool.Exec(ctx, `
+INSERT INTO messages (id, chat_id, chat_type, sender_profile_id, content, attachments, mentions)
+VALUES (md5('msg-extra-over-limit')::uuid, $1, 'group', md5('sender-extra-over-limit')::uuid, 'blocked history', '[]'::jsonb, '[]'::jsonb)
+`, chatID)
+	require.NoError(t, err)
+	over, err := callMetadata()
+	require.Equal(t, codes.Unavailable, status.Code(err), "history beyond the exact metadata candidate budget must fail closed")
+	require.Nil(t, over, "budget overflow must not return partial metadata")
+	require.Equal(t, 3*metadataPreviewRowBudget-1, probe.decisions, "the overflow sentinel must not trigger an extra block decision")
+	require.Equal(t, 3*(metadataPreviewRowBudget/profilePairBlockBatchSize), probe.batches)
+
+	_, err = pool.Exec(ctx, `DELETE FROM read_positions WHERE chat_id = $1 AND profile_id = $2`, chatID, viewer)
+	require.NoError(t, err)
+	previousBatches, previousDecisions := probe.batches, probe.decisions
+	tooManyUnread, err := callMetadata()
+	require.Equal(t, codes.Unavailable, status.Code(err), "too many distinct unread authors must fail closed")
+	require.Nil(t, tooManyUnread, "unread-budget overflow must not return partial metadata")
+	require.Equal(t, previousBatches, probe.batches, "unread candidate overflow must be detected before Social calls")
+	require.Equal(t, previousDecisions, probe.decisions)
+}
+
+func TestMessagingDerivedReadsFailClosedWhenSocialPolicyUnavailable(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000001_init.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000003_groups.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "chat_db", "000005_thread_settings.up.sql"))
+	applyBaseMessagingMigrations(t, ctx, pool)
+
+	chatID, viewer, sender, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chatID, viewer, sender)
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{ProfilePairBlocks: failingProfilePairBlocks{}})
+	t.Cleanup(cleanup)
+	regular := messagingv1.MessageKind_MESSAGE_KIND_REGULAR
+	sent, err := client.SendMessage(withProfileCtx(ctx, account, sender), &messagingv1.SendMessageRequest{
+		Chat: chatGroupRef(chatID), Content: "policy check https://policy.example", AttachmentsJson: "[]", MentionsJson: "[]", MessageKind: &regular,
+	})
+	require.NoError(t, err)
+	_, err = client.PinMessage(withProfileCtx(ctx, account, viewer), &messagingv1.PinMessageRequest{Chat: chatGroupRef(chatID), MessageId: sent.GetMessage().GetId()})
+	require.NoError(t, err)
+
+	_, err = client.GetMessage(withProfileCtx(ctx, account, viewer), &messagingv1.GetMessageRequest{MessageId: sent.GetMessage().GetId()})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	_, err = client.GetPinnedMessages(withProfileCtx(ctx, account, viewer), &messagingv1.GetPinnedMessagesRequest{Chat: chatGroupRef(chatID)})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	_, err = client.ListSharedMedia(withProfileCtx(ctx, account, viewer), &messagingv1.ListSharedMediaRequest{
+		Chat: chatGroupRef(chatID), Kind: messagingv1.SharedMediaKind_SHARED_MEDIA_KIND_LINKS,
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	meta, err := client.GetChatListMetadata(withProfileCtx(ctx, account, viewer), &messagingv1.GetChatListMetadataRequest{Chats: []*chatv1.ChatRef{chatGroupRef(chatID)}})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Nil(t, meta, "a Social policy error must not return partial metadata")
+	_, err = client.GetThreadMessages(withProfileCtx(ctx, account, viewer), &messagingv1.GetThreadMessagesRequest{
+		Chat: chatGroupRef(chatID), ThreadParentId: sent.GetMessage().GetId(),
+	})
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 type allowAccountBlocks struct{}

@@ -90,3 +90,35 @@ func (c *GRPCProfileAccounts) AccountIDByProfileID(ctx context.Context, profileI
 	}
 	return out, nil
 }
+
+func (c *GRPCProfileAccounts) AccountIDsByProfileIDs(ctx context.Context, profileIDs []uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
+	if c == nil || c.Client == nil {
+		return nil, status.Error(codes.FailedPrecondition, "user service not configured")
+	}
+	ids := make([]string, len(profileIDs))
+	for i := range profileIDs {
+		ids[i] = profileIDs[i].String()
+	}
+	req := &userv1.GetProfilesRequest{ProfileIds: ids}
+	ctx, err := privacyS2SContext(ctx, c.Issuer, "user", userv1.UserService_GetProfiles_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.Client.GetProfiles(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]uuid.UUID, len(resp.GetProfileList().GetProfiles()))
+	for _, profile := range resp.GetProfileList().GetProfiles() {
+		profileID, parseErr := uuid.Parse(strings.TrimSpace(profile.GetId()))
+		if parseErr != nil || profileID == uuid.Nil {
+			return nil, status.Error(codes.Internal, "invalid profile_id in profile batch")
+		}
+		accountID, parseErr := uuid.Parse(strings.TrimSpace(profile.GetAccountId()))
+		if parseErr != nil || accountID == uuid.Nil {
+			return nil, status.Error(codes.Internal, "invalid account_id in profile batch")
+		}
+		out[profileID] = accountID
+	}
+	return out, nil
+}

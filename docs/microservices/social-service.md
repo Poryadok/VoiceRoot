@@ -48,6 +48,7 @@ service SocialService {
   rpc ListBlocked(ListBlockedRequest) returns (ListBlockedResponse);
   rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse); // internal account-pair policy
   rpc IsProfilePairBlocked(IsProfilePairBlockedRequest) returns (IsProfilePairBlockedResponse); // internal directional history visibility; account IDs stay in Social
+  rpc IsProfilePairsBlocked(IsProfilePairsBlockedRequest) returns (IsProfilePairsBlockedResponse); // same decision, max 500 profiles, batched User ownership + Social block lookup
 
   // Граф
   rpc AreFriends(AreFriendsRequest) returns (AreFriendsResponse); // internal
@@ -165,10 +166,12 @@ fresh request ID and JWT ID; incoming identity metadata is never forwarded.
 User/Space verify the signature, exact RPC/request hash/audience, expiry and
 shared Redis replay admission before accessing their stores.
 
-Social's `GetPrivacySettings`, `GetProfile` and `ListProfileIDsForAccount`
+Social's `GetPrivacySettings`, `GetProfile`, `GetProfiles` and `ListProfileIDsForAccount`
 lookups use the User protected TLS listener with a fresh request-bound RS256
-service credential. The protected listener exposes exactly these three User
-methods to `service:social`; Social has no ordinary User 9090 lookup path.
+service credential. The protected listener exposes exactly these four User
+methods to `service:social`; `GetProfiles` accepts at most 500 profile IDs per
+request for batched ownership resolution. Social has no ordinary User 9090
+lookup path.
 Friends, phone contacts and account-level block cascades therefore fail closed
 when signing, TLS, verification, replay admission, or the lookup response is
 unavailable or malformed. This does not authorize raw metadata on either

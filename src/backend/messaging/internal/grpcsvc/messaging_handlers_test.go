@@ -17,11 +17,22 @@ import (
 
 	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
+	messagingv1 "voice.app/voice/messaging/v1"
 )
 
 type stubChatGuard struct {
 	peer uuid.UUID
 	err  error
+}
+
+type countingChatGuard struct {
+	stubChatGuard
+	memberCalls int
+}
+
+func (s *countingChatGuard) EnsureMember(context.Context, uuid.UUID, uuid.UUID) error {
+	s.memberCalls++
+	return nil
 }
 
 func (s stubChatGuard) EnsureMember(context.Context, uuid.UUID, uuid.UUID) error { return nil }
@@ -40,6 +51,20 @@ func (s stubChatGuard) OtherMemberProfileIDs(context.Context, uuid.UUID, uuid.UU
 		return nil, nil
 	}
 	return []uuid.UUID{s.peer}, nil
+}
+
+func TestGetChatListMetadataRejectsOversizedChatRefBatchBeforeLookups(t *testing.T) {
+	guard := &countingChatGuard{}
+	svc := &MessagingGRPC{Messages: &store.MessagesStore{}, ChatGuard: guard}
+	chatID := uuid.NewString()
+	refs := make([]*chatv1.ChatRef, metadataChatRefBudget+1)
+	for i := range refs {
+		refs[i] = &chatv1.ChatRef{Id: chatID, Type: chatv1.ChatType_CHAT_TYPE_GROUP}
+	}
+	resp, err := svc.GetChatListMetadata(withProfileCtx(context.Background(), uuid.New(), uuid.New()), &messagingv1.GetChatListMetadataRequest{Chats: refs})
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Nil(t, resp, "over-budget requests cannot return partial metadata")
+	require.Zero(t, guard.memberCalls, "the cap is checked before per-chat membership/type/store work")
 }
 func (s stubChatGuard) MemberRole(context.Context, uuid.UUID, uuid.UUID) (string, error) {
 	return "owner", nil

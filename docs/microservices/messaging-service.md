@@ -279,6 +279,10 @@ message UpdateScheduledMessageRequest {
 
 S2S enrichment для Chat `ListChats`. Код возвращает per-member unread state и preview metadata для DM/group/channel.
 
+**Viewer visibility applies to every derived read.** A profile-scoped `GetMessage`, `GetPinnedMessages`, `GetThreadMessages`, `ListSharedMedia`, and `GetChatListMetadata` must apply the same message visibility boundary as history: deleted rows are absent; `ghost_only` is visible only to its sender; `FOR_ME` hides the row only for the profile that hid it; and a directional Social profile block hides that sender's rows from the viewer. Metadata preview selects the latest remaining visible row and unread count excludes hidden rows. A missing or unavailable Chat/Social authority fails closed; clients and trusted internal callers must not use the no-profile `GetMessage` path as a viewer read.
+
+Metadata evaluates block decisions through Social's bounded `IsProfilePairsBlocked` S2S call (at most 500 profiles per request). The canonical Chat `ListChats` page supplies at most 100 chat refs; Messaging enforces that same limit before any per-chat lookup. One request can therefore make at most 100 membership checks, 100 authoritative chat-type checks, and 100 final metadata queries. Across those chats, the unread-sender query examines at most 5,000 unread message rows plus one overflow sentinel, and preview selection reads at most 5,000 candidate rows plus one sentinel. Messaging reuses each unique profile decision across the request and caps them at 5,000; duplicate senders across chats use one decision, so at most 10 Social batch calls are needed. If an exact result would exceed a request-wide budget, `GetChatListMetadata` returns `UNAVAILABLE` without partial or approximate metadata. This explicit availability budget follows the existing fail-closed visibility-dependency contract and does not change block semantics for former senders within budget.
+
 **Shipped fields** на `ChatListMetadata` (per `chat_id`):
 
 | Поле | Тип | Назначение |

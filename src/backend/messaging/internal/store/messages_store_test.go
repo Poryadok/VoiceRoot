@@ -367,3 +367,35 @@ func TestMessagesStore_GetChatListMetadata_stripsMarkdownPreview(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "hello", meta[chatID].LastMessagePreview)
 }
+
+func TestMessagesStore_UnreadMessageSendersDeduplicatesAcrossChatsAndFailsClosedAtLimit(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForStoreTest(t, ctx)
+	seedMessagingSchema(t, ctx, pool)
+	s := &MessagesStore{Pool: pool}
+
+	viewer, repeatedSender, otherSender := uuid.New(), uuid.New(), uuid.New()
+	chatA, chatB := uuid.New(), uuid.New()
+	for _, chat := range []uuid.UUID{chatA, chatB} {
+		msgID, err := messageid.NewMessageID()
+		require.NoError(t, err)
+		_, err = s.InsertMessage(ctx, MessageRow{
+			ID: msgID, ChatID: chat, SenderProfileID: repeatedSender,
+			Content: "unread", Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]",
+		})
+		require.NoError(t, err)
+	}
+	got, err := s.UnreadMessageSenders(ctx, viewer, []uuid.UUID{chatA, chatB}, 2)
+	require.NoError(t, err, "the same profile in multiple chats consumes one request-wide decision")
+	require.Equal(t, []uuid.UUID{repeatedSender}, got)
+
+	msgID, err := messageid.NewMessageID()
+	require.NoError(t, err)
+	_, err = s.InsertMessage(ctx, MessageRow{
+		ID: msgID, ChatID: chatB, SenderProfileID: otherSender,
+		Content: "unread", Type: "regular", AttachmentsJSON: "[]", MentionsJSON: "[]",
+	})
+	require.NoError(t, err)
+	_, err = s.UnreadMessageSenders(ctx, viewer, []uuid.UUID{chatA, chatB}, 2)
+	require.ErrorIs(t, err, ErrVisibilityCandidateBudgetExceeded)
+}
