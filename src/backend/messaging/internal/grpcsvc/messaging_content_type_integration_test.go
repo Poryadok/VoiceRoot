@@ -13,11 +13,12 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	eventsv1 "voice.app/voice/events/v1"
 	chatv1 "voice.app/voice/chat/v1"
+	eventsv1 "voice.app/voice/events/v1"
 	messagingv1 "voice.app/voice/messaging/v1"
 
 	"voice/backend/messaging/internal/messageevents"
+	"voice/backend/messaging/internal/store"
 )
 
 func TestMessagingSendMessage_persistsContentTypeColumn(t *testing.T) {
@@ -102,7 +103,7 @@ func TestMessagingSendMessage_messageSentIncludesContentType(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = jsPub.Close() })
 
-	client, cleanup := startMessagingServerWired(t, pool, messagingWire{MessageEvents: jsPub})
+	client, cleanup := startMessagingServerWired(t, pool, messagingWire{})
 	defer cleanup()
 
 	ct := messagingv1.MessageContentType_MESSAGE_CONTENT_TYPE_TEXT
@@ -113,6 +114,7 @@ func TestMessagingSendMessage_messageSentIncludesContentType(t *testing.T) {
 		ContentType:  &ct,
 	})
 	require.NoError(t, err)
+	require.NoError(t, (&messageevents.OutboxDispatcher{Store: &store.MessagesStore{Pool: pool}, Publisher: jsPub}).DispatchBatch(ctx))
 
 	msg, err := sub.NextMsg(5 * time.Second)
 	require.NoError(t, err)

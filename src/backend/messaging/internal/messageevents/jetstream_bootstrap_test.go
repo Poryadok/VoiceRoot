@@ -41,7 +41,7 @@ func TestJetStreamPublisher_RejectsUnbootstrappedOrMismatchedStream(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			publisher := &JetStreamPublisher{js: tc.js}
 
-			err := publisher.PublishMessageSent(context.Background(), "message", "chat", "sender", false, "", false, "", false)
+			err := publisher.PublishMessageSent(context.Background(), "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333", false, "", false, "", false)
 
 			if tc.name == "exact" {
 				require.NoError(t, err)

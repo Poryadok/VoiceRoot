@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"voice/backend/messaging/internal/markdown"
+	"voice/backend/messaging/internal/messageevents"
 )
 
 // MessageRow is a persisted messaging_db.messages row (v1 DM).
@@ -64,6 +65,14 @@ var ErrGameEventMessageConflict = errors.New("game event message idempotency con
 // live. A retry with the same key returns the exact existing message; a changed
 // normalized payload under that key is a conflict.
 func (s *MessagesStore) InsertGameEventMessage(ctx context.Context, row MessageRow, expiresAt *time.Time) (*MessageRow, bool, bool, error) {
+	return s.insertGameEventMessage(ctx, row, expiresAt, nil, nil)
+}
+
+func (s *MessagesStore) InsertGameEventMessageWithOutbox(ctx context.Context, row MessageRow, expiresAt *time.Time, spaceID *uuid.UUID, event messageevents.OutboxEvent) (*MessageRow, bool, bool, error) {
+	return s.insertGameEventMessage(ctx, row, expiresAt, spaceID, &event)
+}
+
+func (s *MessagesStore) insertGameEventMessage(ctx context.Context, row MessageRow, expiresAt *time.Time, spaceID *uuid.UUID, outboxEvent *messageevents.OutboxEvent) (*MessageRow, bool, bool, error) {
 	if s == nil || s.Pool == nil || row.ChatID == uuid.Nil || row.SenderProfileID == uuid.Nil ||
 		row.ClientMessageID == nil || *row.ClientMessageID == uuid.Nil || row.ID == uuid.Nil {
 		return nil, false, false, errors.New("game event message has invalid identity")
@@ -73,6 +82,9 @@ func (s *MessagesStore) InsertGameEventMessage(ctx context.Context, row MessageR
 		return nil, false, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := lockMessageMutation(ctx, tx, row.ChatID, spaceID, &row.ID); err != nil {
+		return nil, false, false, err
+	}
 	saved, err := scanMessageRow(tx.QueryRow(ctx, messageSelectSQL+`
 FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3 FOR UPDATE`,
 		row.ChatID, row.SenderProfileID, *row.ClientMessageID))
@@ -145,6 +157,14 @@ FROM messages WHERE chat_id=$1 AND sender_profile_id=$2 AND client_message_id=$3
 	}
 	if row.GameCardJSON != nil {
 		if err := insertGameCardTx(ctx, tx, row); err != nil {
+			return nil, false, false, err
+		}
+	}
+	if outboxEvent != nil {
+		if outboxEvent.MessageID != saved.ID || outboxEvent.ChatID != saved.ChatID {
+			return nil, false, false, errors.New("game event outbox does not match inserted message")
+		}
+		if err := enqueueMessageEvent(ctx, tx, *outboxEvent); err != nil {
 			return nil, false, false, err
 		}
 	}
