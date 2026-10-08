@@ -97,6 +97,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key attachmentUploadCancelKey = Key(
     'chat_attachment_upload_cancel',
   );
+  static const Key sendFailureBannerKey = Key('chat_send_failure_banner');
   static const Key peerPresenceKey = Key('chat_room_peer_presence');
   static const Key loadOlderKey = Key('chat_room_load_older');
   static const Key audioCallKey = Key('chat_room_audio_call');
@@ -179,6 +180,30 @@ class _PendingAttachmentUpload {
       );
 }
 
+class _FailedMessageSend {
+  const _FailedMessageSend({
+    required this.content,
+    required this.mentions,
+    required this.threadParentId,
+    required this.error,
+    this.retryAvailable = true,
+  });
+
+  final String content;
+  final List<MessageMention> mentions;
+  final String? threadParentId;
+  final String error;
+  final bool retryAvailable;
+
+  _FailedMessageSend withoutRetry() => _FailedMessageSend(
+    content: content,
+    mentions: mentions,
+    threadParentId: threadParentId,
+    error: error,
+    retryAvailable: false,
+  );
+}
+
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
   final _composerFocus = FocusNode();
@@ -196,6 +221,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _attachmentOperation = 0;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
   FilesApiFailure? _attachmentUploadFailure;
+  _FailedMessageSend? _failedMessageSend;
   var _initialUnreadCount = 0;
   var _unreadCaptured = false;
   var _pendingNewMessages = 0;
@@ -224,6 +250,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _attachmentOperation++;
     _pendingAttachmentUpload = null;
     _attachmentUploadFailure = null;
+    _failedMessageSend = null;
     _composer.dispose();
     _composerFocus.dispose();
     _selectedMessageFocus.dispose();
@@ -250,6 +277,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _attachmentOperation++;
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
+      _failedMessageSend = null;
       _uploadingAttachment = false;
       _draftKey = null;
       _composer.clear();
@@ -414,6 +442,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         : ChatDraftKey(profileId: activeId, chatId: widget.chatId);
     if (_draftKey != draftKey) {
       _draftKey = draftKey;
+      _failedMessageSend = null;
       _composer.clear();
     }
     if (draftKey != null) {
@@ -438,6 +467,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             errorMessage: controllerRoom.errorMessage,
             realtimeStatus: controllerRoom.realtimeStatus,
           );
+    final sendFailure = _failedMessageSend;
+    final roomErrorIsSendFailure =
+        sendFailure != null && room.errorMessage == sendFailure.error;
     final pinnedMessages = room.pinnedMessages;
     final shownPinIndex = pinnedMessages.indexWhere(
       (message) => message.id == _shownPinnedMessageId,
@@ -1155,7 +1187,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         : room.messages.isEmpty &&
                               ephemeralMessages.isEmpty &&
                               !room.isLoading
-                        ? room.errorMessage != null
+                        ? room.errorMessage != null && !roomErrorIsSendFailure
                               ? VoiceStatePanel(
                                   title: _roomErrorText(
                                     l10n,
@@ -1244,7 +1276,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   ],
                 ),
               ),
-              if (room.errorMessage != null && room.messages.isNotEmpty)
+              if (room.errorMessage != null &&
+                  room.messages.isNotEmpty &&
+                  !roomErrorIsSendFailure)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
@@ -1317,6 +1351,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     ],
                   ),
                 ),
+              if (sendFailure case final failure?)
+                Padding(
+                  key: ChatRoomPanel.sendFailureBannerKey,
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                  child: VoiceCompactBanner(
+                    message: chatRoomErrorMessage(
+                      AppLocalizations.of(context)!,
+                      failure.error,
+                    ),
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: failure.retryAvailable && !room.isSending
+                        ? AppLocalizations.of(context)!.commonRetry
+                        : null,
+                    onAction: !failure.retryAvailable || room.isSending
+                        ? null
+                        : () => unawaited(_send(retry: failure)),
+                    tone: VoiceBannerTone.error,
+                  ),
+                ),
               SafeArea(
                 top: false,
                 child: Padding(
@@ -1360,6 +1413,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             isDense: true,
                           ),
                           onChanged: (value) {
+                            final failedSend = _failedMessageSend;
+                            if (failedSend != null &&
+                                failedSend.retryAvailable &&
+                                value != failedSend.content) {
+                              setState(() {
+                                _failedMessageSend = failedSend.withoutRetry();
+                              });
+                            }
                             final key = _draftKey;
                             if (key != null) {
                               ref
@@ -1532,7 +1593,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     );
   }
 
-  Future<void> _send() async {
+  Future<void> _send({_FailedMessageSend? retry}) async {
+    if (retry != null &&
+        (!retry.retryAvailable || !identical(_failedMessageSend, retry))) {
+      return;
+    }
     if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
       return;
     }
@@ -1546,7 +1611,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       );
       return;
     }
-    final text = _composer.text;
+    final attemptChatId = widget.chatId;
+    final attemptDraftKey = _draftKey;
+    final attemptSession = ref.read(authControllerProvider).session;
+    final text = retry?.content ?? _composer.text;
     ref.read(realtimeHubProvider).typingStop(widget.chatId);
     final memberIds = ref
         .read(groupMembersProvider(widget.chatId))
@@ -1575,18 +1643,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         .map((item) => item.chat.type)
         .firstOrNull;
     final isDm = chatType == 'CHAT_TYPE_DM';
-    final filteredMentions = isDm
-        ? mentions.where((m) => m.type == 'user').toList()
-        : mentions;
+    final filteredMentions =
+        retry?.mentions ??
+        (isDm ? mentions.where((m) => m.type == 'user').toList() : mentions);
     final replyTarget = ref.read(chatReplyTargetProvider(widget.chatId));
     final err = await ref
         .read(chatRoomControllerProvider(widget.chatId).notifier)
         .sendMessage(
           text,
           mentions: filteredMentions,
-          threadParentId: replyTarget?.id,
+          threadParentId: retry == null
+              ? replyTarget?.id
+              : retry.threadParentId,
         );
-    if (!mounted) return;
+    if (!mounted ||
+        widget.chatId != attemptChatId ||
+        _draftKey != attemptDraftKey ||
+        ref.read(authControllerProvider).session != attemptSession) {
+      return;
+    }
     if (err == kChatOfflineBlockedError) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1595,6 +1670,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         ),
       );
     } else if (err == null) {
+      setState(() => _failedMessageSend = null);
       _composer.clear();
       final key = _draftKey;
       if (key != null) {
@@ -1603,6 +1679,18 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (replyTarget != null) {
         ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = null;
       }
+    } else {
+      setState(() {
+        _failedMessageSend = _FailedMessageSend(
+          content: text,
+          mentions: List<MessageMention>.unmodifiable(filteredMentions),
+          threadParentId: retry == null
+              ? replyTarget?.id
+              : retry.threadParentId,
+          error: err,
+          retryAvailable: _composer.text == text,
+        );
+      });
     }
     _refocusComposer();
   }
