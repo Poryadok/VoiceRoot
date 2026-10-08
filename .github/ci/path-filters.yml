@@ -22,6 +22,9 @@ ci_global:
   - .github/ci/**
   - scripts/ci/**
 
+a1_t106_live:
+  - src/frontend/test/t106_account_soft_delete_e2e_live_test.dart
+
 a1_e2e:
   - Makefile
   - .github/workflows/ci.yml

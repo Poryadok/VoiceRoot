@@ -46,18 +46,28 @@ target_count="$(grep -Ec 'make[[:space:]]+compose-a1-flutter-profile-handoff([^[
 [[ "$target_count" -eq 1 ]] || fail "${JOB} must contain exactly one profile-handoff target occurrence, got ${target_count}"
 grep -Eq "VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:[[:space:]]*[\"']?true[\"']?[[:space:]]*$" "$job_file" || fail "${JOB} must set cleanup=true"
 
-trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|global)" "$job_file" | sed -E 's/^[[:space:]]*//')"
+trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|a1_t106_live|global)" "$job_file" | sed -E 's/^[[:space:]]*//')"
 expected_trigger_terms="$(printf '%s\n' \
   "github.event_name == 'schedule' ||" \
   "(github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||" \
   "github.event_name == 'pull_request' &&" \
-  "needs.changes.outputs.global == 'true'" \
+  "needs.changes.outputs.global == 'true' ||" \
+  "needs.changes.outputs.a1_t106_live == 'true'" \
   "github.event_name == 'push' &&" \
   "github.ref == 'refs/heads/master' &&" \
   "needs.changes.outputs.a1_e2e == 'true'")"
 [[ "$trigger_terms" == "$expected_trigger_terms" ]] || \
   fail "${JOB} trigger terms must be exactly schedule, full dispatch, or filtered master push"
 grep -Fq "needs.changes.result == 'success' || needs.changes.result == 'skipped'" "$job_file" || fail "${JOB} must tolerate skipped changes on schedule/manual runs"
+
+grep -Fq 'a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}' "$WORKFLOW" || \
+  fail "changes must expose the scoped T106 live path filter"
+awk '/^a1_t106_live:[[:space:]]*$/ { inside = 1; next } inside && /^[^[:space:]][^:]*:/ { exit } inside { print }' "$FILTERS" >"$filter_block_file"
+[[ -s "$filter_block_file" ]] || fail "path-filters.yml must define a1_t106_live"
+sed -E -e 's/\r$//' -e 's/^[[:space:]]*-[[:space:]]*//' -e "s/^['\"]//; s/['\"][[:space:]]*$//" -e 's/[[:space:]]+#.*$//' "$filter_block_file" >"$filter_entries_file"
+[[ "$(grep -cve '^[[:space:]]*$' "$filter_entries_file")" -eq 1 ]] || fail "a1_t106_live must contain exactly one T106 test path"
+grep -Fxq 'src/frontend/test/t106_account_soft_delete_e2e_live_test.dart' "$filter_entries_file" || \
+  fail "a1_t106_live must match the T106 live test path"
 
 job_block ci-gate >"$gate_file"
 [[ -s "$gate_file" ]] || fail "missing ci-gate workflow block"
