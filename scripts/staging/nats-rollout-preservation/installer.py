@@ -115,9 +115,14 @@ def _upgrade_code(code,installed,gid,predecessor,version,previous_version):
 
 def upgrade(code,version='v4'):
     if os.geteuid()!=0 or sys.platform!='linux':raise Blocked('bridge_install_human_root_required')
-    if version not in ('v4','v5','v6'):raise Blocked('bridge_upgrade_version_unapproved')
+    if version not in ('v4','v5','v6','v7'):raise Blocked('bridge_upgrade_version_unapproved')
     root_cli.code_binding(Path(code));installed=guard.ROOT/'installed'
     with operation_lock():
+        if version=='v7':
+            import paused_recovery
+            paused_recovery.install_repair(code,installed,Kube())
+            print('NATS_ROLLOUT_BRIDGE=UPGRADED_V7_KEYS_POLICY_PRESERVED')
+            return
         marker=Kube().get('configmap','voice-nats-generation')
         if marker['data'].get('phase')!='active':raise Blocked('bridge_upgrade_live_operation_present')
         for base in guard.ROOT.glob('rollout-*'):
@@ -239,8 +244,9 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6')
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7')
     if sys.argv[1]=='--upgrade-v4':upgrade(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-v5':upgrade(Path(__file__).resolve().parents[1],version='v5')
     elif sys.argv[1]=='--upgrade-v6':upgrade(Path(__file__).resolve().parents[1],version='v6')
+    elif sys.argv[1]=='--upgrade-v7':upgrade(Path(__file__).resolve().parents[1],version='v7')
     else:install(Path(__file__).resolve().parents[1],sys.argv[1])

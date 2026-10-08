@@ -101,6 +101,59 @@ class PreservationTest(unittest.TestCase):
         self.assertEqual(runtime.stop.call_count,3)
         self.assertEqual(sum(call.args[0][0]=='rm' for call in runtime.run.call_args_list),3)
 
+    def test_closed_snapshot_plan_validation_precedes_cut_acceptance_and_cleans_on_reject(self):
+        runtime=Mock();runtime.base=self.base;runtime.operation='fixture123';runtime.owned={};runtime.run.return_value=''
+        runtime.account_id.return_value=ACCOUNT;tree=fixture();runtime.monitor_jsz.return_value=tree
+        runtime.inspect.return_value={'Id':'a'*64,'Config':{'Image':preserve.NATS_IMAGE},'HostConfig':{'NetworkMode':'none'}}
+        def start(label,path):
+            name='voice-known-'+runtime.operation+'-'+label
+            runtime.owned[name]={'id':'a'*64};return name
+        runtime.start_broker.side_effect=start
+        seen=[]
+        def validate(actual,broker,snapshot,row,manifest):
+            self.assertIs(actual,runtime);self.assertIs(snapshot,tree)
+            self.assertEqual(row,self.row);self.assertIn(broker,runtime.owned)
+            seen.append('validated')
+        with patch.object(preserve,'verify_archive',return_value=True),patch.object(preserve,'ready'):
+            self.assertEqual(preserve.isolated_census(runtime,self.base/'archive',{},'validated-copy',validate=validate),self.row)
+            self.assertEqual(seen,['validated']);self.assertEqual(runtime.owned,{})
+            def reject(*args):raise preserve.Blocked('original_plan_changed')
+            with self.assertRaisesRegex(preserve.Blocked,'original_plan_changed'):
+                preserve.isolated_census(runtime,self.base/'archive',{},'validated-copy',validate=reject)
+        self.assertEqual(runtime.monitor_jsz.call_count,2)
+        self.assertEqual(runtime.owned,{})
+        self.assertEqual(list(self.base.glob('validated-copy-*')),[])
+
+    def test_closed_copy_restore_start_readiness_and_cleanup_failures_cannot_return_a_cut(self):
+        for failure in ('restore','start','ready','remove','absence'):
+            with self.subTest(failure=failure):
+                runtime=Mock();runtime.base=self.base;runtime.operation='fixture123';runtime.owned={}
+                name='voice-known-fixture123-checked';cid='a'*64
+                runtime.inspect.return_value={'Id':cid,'Config':{'Image':preserve.NATS_IMAGE},'HostConfig':{'NetworkMode':'none'}}
+                def reject(*args,**kwargs):raise preserve.Blocked('fixture_'+failure)
+                def start(*args):
+                    runtime.owned[name]={'id':cid}
+                    if failure=='start':reject()
+                    return name
+                runtime.start_broker.side_effect=start
+                if failure=='restore':runtime.restore.side_effect=reject
+                def command(args):
+                    if args[0]=='rm' and failure=='remove':reject()
+                    return cid if args[0]=='ps' and failure=='absence' else ''
+                runtime.run.side_effect=command;runtime.monitor_jsz.return_value=fixture();runtime.account_id.return_value=ACCOUNT
+                with patch.object(preserve,'verify_archive',return_value=True),patch.object(preserve,'ready',side_effect=reject if failure=='ready' else None):
+                    with self.assertRaises(preserve.Blocked):preserve.closed_copy_census(runtime,self.base/'archive',{},'checked',lambda *a:None)
+                if failure in ('remove','absence'):
+                    # Keep owned ledger/copy on unverifiable cleanup. A caller
+                    # cannot receive an accepted cut or retry as output-free.
+                    self.assertIn(name,runtime.owned)
+                    for path in self.base.glob('checked-*'):
+                        import shutil
+                        shutil.rmtree(path)
+                else:
+                    self.assertEqual(runtime.owned,{})
+                    self.assertEqual(list(self.base.glob('checked-*')),[])
+
     def test_fixed_updated_stream_creation_requires_native_target_and_original_attempt(self):
         for bad in (None,'untouched','missing','image','interval','native','config'):
             before=copy.deepcopy(self.row);old=before['streams'][0]

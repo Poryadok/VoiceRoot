@@ -13,6 +13,7 @@ class BridgeError(RuntimeError):pass
 FIELDS={
     'prepare':{'source_sha','run_id','mode','changed_services','token'},
     'prepare-rollback':{'operation','run_id','token'},
+    'resume-cold-backup':{'operation','run_id','token'},
     'authorize':{'operation','artifact_id','token'},
     'finish':{'operation','claim_rv'},
     'status':{'operation'},

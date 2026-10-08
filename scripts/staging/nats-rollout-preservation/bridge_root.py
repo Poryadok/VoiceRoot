@@ -44,7 +44,9 @@ class Actions:
     def state(self,operation):
         base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)))
         state=private_json(base/'checkpoint.json')
-        if state.get('operation')!=operation or state.get('code_capture')!=self.binding:raise Blocked('bridge_operation_custody_invalid')
+        if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
+        import paused_recovery
+        paused_recovery.verify_adopted_binding(base,state,self.binding)
         return base,state
 
     def recover(self,request):
@@ -57,7 +59,14 @@ class Actions:
             return summary(state)
         if request['action']=='authorize' and state.get('phase')=='PAUSED_APPLY' and state.get('custody',{}).get('artifact_id')==request['artifact_id']:
             return summary(state)|{'authorization':str(base/'apply-authorization.json')}
-        if request['action'] in ('prepare','prepare-rollback') and state.get('phase')=='AWAITING_OFF_NODE' and state.get('cipher_binding'):
+        if request['action'] in ('prepare','prepare-rollback','resume-cold-backup') and state.get('phase')=='AWAITING_OFF_NODE' and state.get('cipher_binding'):
+            if request['action']=='resume-cold-backup':
+                execution=state.get('execution_authority',{})
+                cipher=state['cipher_binding']
+                if (execution.get('nonce')!=request['nonce'] or execution.get('dispatcher_run_id')!=request['run_id']
+                    or cipher.get('operation')!=operation or cipher.get('run_id')!=request['run_id']
+                    or cipher.get('head_sha')!=execution.get('head_sha')):
+                    raise Blocked('paused_recovery_cipher_execution_changed')
             return self.copy_result(base,state)
         return None
 
@@ -218,8 +227,39 @@ class Actions:
         save(base/'checkpoint.json',state)
         return self.copy_result(base,state)
 
+    def _resume_cold_backup(self,request):
+        import paused_recovery
+        if (request['operation']!=paused_recovery.OPERATION or request['nonce']==paused_recovery.NONCE
+            or request['nonce'][:12]==paused_recovery.OPERATION):
+            raise Blocked('paused_recovery_execution_identity_invalid')
+        base,state=self.state(request['operation'])
+        rows=list(guard.ROOT.glob('rollout-*'))
+        if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
+        for path in rows:
+            if root_cli.rollout_directory_kind(path)=='capture' or path==base:continue
+            if private_json(path/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):
+                raise Blocked('paused_recovery_other_operation_present')
+        source_run,execution=self._dispatcher(request)
+        workspace=INSTALLED/'sources'/('recovery-'+request['nonce'])
+        workspace.mkdir(mode=0o700)
+        current=source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace)
+        for relative,wanted in self.binding.items():
+            if Path(relative).name in ('kernel','bootstrap-renewer'):continue
+            if current['source_files'].get('scripts/staging/'+relative)!=wanted:
+                raise Blocked('paused_recovery_current_helper_source_changed')
+        approved=paused_recovery.reconstruct_source(request['token'],base,state,self.binding)
+        source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
+        execution['helper_source_authority']={k:v for k,v in current.items() if k!='source_files'}
+        execution['nonce']=request['nonce']
+        def verify_execution():
+            source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
+        state=paused_recovery.resume_capture(Kube(),base,state,self.code,self.binding,approved,execution,verify_execution=verify_execution)
+        verify_execution()
+        return self._encrypt(base,state,execution)
+
     def execute(self,request):
         if request['action']=='prepare':return self._prepare(request)
+        if request['action']=='resume-cold-backup':return self._resume_cold_backup(request)
         if request['action']=='prepare-rollback':
             base,previous=self.state(request['operation'])
             active=private_json(INSTALLED/'active-release.json')

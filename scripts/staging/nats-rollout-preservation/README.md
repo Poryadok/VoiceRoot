@@ -407,3 +407,47 @@ the active-release chain are required; a failed attempt is not a PASS receipt.
 A frontend-only proof establishes that concrete version transition. It does not
 close a remaining durable/ACL migration prerequisite or establish
 acceptance of backend releases that the pre-fence compatibility gate rejects.
+
+Selected Kubernetes store custody retains the root-safe ancestor and exact
+PVC/PV/path checks. Its live leaf is UID65532, GID10000, mode2770, bound to the
+captured HUB fsGroup10000/OnRootMismatch and broker UID/GID10000. Both stage and
+native migration registration consume the same closed descriptor. This reflects
+Kubernetes group ownership; the operator never chmods/chowns the live store.
+Private proof stores and reset-baseline custody remain separate. A failed fenced
+operation is not an ordinary upgrade or retry authority: continuation requires
+an explicitly reviewed exact-operation adoption and preserved original evidence.
+
+Native migration on that selected store runs as the descriptor-bound HUB broker
+UID/GID10000, with no supplementary groups and all capabilities dropped. This
+permits access to legitimate owner-only descendants created by the live HUB;
+leaf ownership alone does not establish descendant access. The original private
+server configuration stays root:G65532/0440. Root creates an exact-byte copy
+inside an owned0700 directory, root:G10000/0440, for the selected broker mount.
+Create and inspect bind its identity, configuration bytes and exact mounts to
+the registered descriptor; generic selected-store launches are rejected.
+Restored proof brokers, clients and reset stores retain their65532 isolation.
+
+V7 adopts only paused operation `3340764a7d24`, its exact V6 checkpoint and
+STARTED journal, captured marker/PVC/PV and named selected-custody failure.
+Installation preserves original checkpoint bytes, V6 code, keys, policy and
+all witness registry records. Unknown unfinished operations, partial backup
+outputs and changed originals veto adoption; installation does not release the
+fence or replay the old request.
+
+The separately journaled `resume-cold-backup` workflow action uses a fresh full
+execution nonce and approved current V7 helper source. The preserved Story
+target remains historical approved source `73ca52699ddf6a9182e3407d5bbdedbc29c06dee`.
+Root reconstructs its retained canonical Git files and exact successful CI
+stack-lock artifact, recompiles retained parameters and compares compiled,
+image-only and server-normalized targets with the original checkpoint. Current
+helper approval does not replace historical target approval.
+
+Before accepting a cut, a pinned isolated broker restores the closed native
+archive; one actual account monitoring snapshot feeds both census and contract
+compilation. Original plan, binding and selected scripts must match, and root
+rechecks actor/credential, PostgreSQL, non-NATS, kernel, target and current
+execution authority. Rejected startup or proof removes only its owned copy;
+unverified cleanup cannot return an accepted cut. Interrupted capture or partial
+outputs cannot be replayed. Completed encrypted output recovery requires the
+same fresh execution nonce/run/head and operation binding. Ordinary encrypted
+off-node readback, paused authorization, apply and release guards remain required.

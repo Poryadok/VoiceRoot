@@ -96,7 +96,8 @@ def apply_contract(base,state,stage,journal):
         return {'verified':True,'applied':[],'proof':verify_census(plan,state['cut']['census'],state['cut']['census']),
             'old_record_files_verified':True,'cut':copy.deepcopy(state['cut'])}
     runtime.no_operation_containers(running_only=True);stage.verify_final_storage()
-    runtime.allow_bound_store(stage.final_path,stage.final_claim,stage.final_pv,stage.verify_final_storage)
+    runtime.allow_bound_store(stage.final_path,stage.final_claim,stage.final_pv,stage.verify_final_storage,
+                             descriptor=stage.selected_store_descriptor())
     broker=None;attempt=None;closed=False
     try:
         started=dt.datetime.now(dt.timezone.utc).isoformat()
