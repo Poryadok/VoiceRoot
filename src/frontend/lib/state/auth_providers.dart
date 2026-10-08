@@ -146,7 +146,7 @@ class AuthController extends StateNotifier<AuthState> {
   final GuestCredentialsStorage _guestCredentialsStorage;
   final Future<void> Function()? onAuthenticated;
   Timer? _refreshTimer;
-  Future<bool>? _refreshInFlight;
+  final Map<GatewayRequestIdentity, Future<bool>> _refreshInFlight = {};
   final Map<String, Future<AuthSessionResult>> _sessionRefreshes = {};
   Future<String?>? _emailPromotionInFlight;
   var _profileSwitchGeneration = 0;
@@ -155,6 +155,19 @@ class AuthController extends StateNotifier<AuthState> {
   int? _terminatedProfileSessionGeneration;
   var _convertingGuest = false;
   static final _random = Random.secure();
+
+  GatewayRequestIdentity? get gatewayRequestIdentity {
+    if (_terminatedProfileSessionGeneration == _profileSwitchGeneration) {
+      return null;
+    }
+    final session = state.session;
+    if (session == null) return null;
+    return GatewayRequestIdentity(
+      generation: _profileSwitchGeneration,
+      accountId: session.accountId,
+      profileId: session.activeProfileId,
+    );
+  }
 
   bool _isDefinitiveAuthRejection(AuthSessionFailure failure) {
     final code = failure.errorCode?.trim();
@@ -927,6 +940,7 @@ class AuthController extends StateNotifier<AuthState> {
   );
 
   Future<void> applySession(AuthSession session) async {
+    _profileSwitchGeneration++;
     await _persist(session);
     state = state.copyWith(
       session: session,
@@ -991,6 +1005,7 @@ class AuthController extends StateNotifier<AuthState> {
     bool recoverEmailVerification = false,
     bool sendPendingVerificationOtp = false,
   }) async {
+    _profileSwitchGeneration++;
     state = state.copyWith(isSubmitting: true, clearError: true);
     final result = await call();
     switch (result) {
@@ -1191,37 +1206,42 @@ class AuthController extends StateNotifier<AuthState> {
     await callback();
   }
 
-  /// Called by [GatewayHttpClient] on 401; returns true when session was refreshed.
+  /// Refreshes the current session for non-Gateway callers.
   Future<bool> refreshOn401() {
-    final inFlight = _refreshInFlight;
+    final identity = gatewayRequestIdentity;
+    if (identity == null) return Future.value(false);
+    return refreshOn401ForIdentity(identity);
+  }
+
+  /// Called by [GatewayHttpClient] on 401 for the identity captured at request start.
+  Future<bool> refreshOn401ForIdentity(GatewayRequestIdentity identity) {
+    if (gatewayRequestIdentity != identity) return Future.value(false);
+    final inFlight = _refreshInFlight[identity];
     if (inFlight != null) return inFlight;
-    final future = _refreshOn401Once(_profileSwitchGeneration);
-    _refreshInFlight = future;
+    final future = _refreshOn401Once(identity);
+    _refreshInFlight[identity] = future;
     return future.whenComplete(() {
-      if (identical(_refreshInFlight, future)) {
-        _refreshInFlight = null;
+      if (identical(_refreshInFlight[identity], future)) {
+        _refreshInFlight.remove(identity);
       }
     });
   }
 
-  Future<bool> _refreshOn401Once(int generation) async {
+  Future<bool> _refreshOn401Once(GatewayRequestIdentity identity) async {
+    if (gatewayRequestIdentity != identity) return false;
     final current = state.session;
     if (current == null) return false;
     final refreshed = await _refreshSession(current.refreshToken);
     switch (refreshed) {
       case AuthSessionOk(:final session):
-        if (generation != _profileSwitchGeneration ||
-            state.session?.refreshToken != current.refreshToken) {
-          return true;
-        }
+        if (gatewayRequestIdentity != identity) return false;
+        if (state.session?.refreshToken != current.refreshToken) return true;
         final isGuest = await _resolveIsGuest(session);
-        if (generation != _profileSwitchGeneration ||
-            state.session?.refreshToken != current.refreshToken) {
-          return true;
-        }
+        if (gatewayRequestIdentity != identity) return false;
+        if (state.session?.refreshToken != current.refreshToken) return true;
         await _commitProfileSession(
           session: session,
-          generation: generation,
+          generation: identity.generation,
           nextState: (currentState) => currentState.copyWith(
             session: session,
             clearError: true,
@@ -1235,7 +1255,7 @@ class AuthController extends StateNotifier<AuthState> {
         :final statusCode,
       ):
         if (_convertingGuest) return false;
-        if (generation != _profileSwitchGeneration) return false;
+        if (gatewayRequestIdentity != identity) return false;
         if (_isDefinitiveAuthRejection(
           AuthSessionFailure(
             message: message,
@@ -1243,10 +1263,10 @@ class AuthController extends StateNotifier<AuthState> {
             statusCode: statusCode,
           ),
         )) {
-          if (await _adoptNewerPersistedSession(current, generation)) {
+          if (await _adoptNewerPersistedSession(current, identity.generation)) {
             return true;
           }
-          if (generation != _profileSwitchGeneration ||
+          if (gatewayRequestIdentity != identity ||
               state.session?.refreshToken != current.refreshToken) {
             return false;
           }
@@ -1350,8 +1370,11 @@ final Provider<GatewayHttpClient> gatewayHttpClientProvider =
         config: ref.watch(gatewayConfigProvider),
         authorizationProvider: () =>
             ref.read(authControllerProvider).session?.authorizationHeader,
-        onUnauthorized: () =>
-            ref.read(authControllerProvider.notifier).refreshOn401(),
+        requestIdentityProvider: () =>
+            ref.read(authControllerProvider.notifier).gatewayRequestIdentity,
+        onUnauthorized: (identity) => ref
+            .read(authControllerProvider.notifier)
+            .refreshOn401ForIdentity(identity),
         onUpgradeRequired: (error) => ref
             .read(versionPolicyProvider.notifier)
             .onGatewayUpgradeRequired(error),
