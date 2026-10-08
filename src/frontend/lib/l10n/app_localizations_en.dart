@@ -1903,6 +1903,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'You will no longer receive messages from this group.';
 
   @override
+  String get chatChannelLeave => 'Leave channel';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Leave channel?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'You will no longer receive messages from this channel.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Transfer ownership to another member before leaving.';
 

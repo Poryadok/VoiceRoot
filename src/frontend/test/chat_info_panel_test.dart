@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -63,6 +64,7 @@ void main() {
     required Widget home,
     required http.Client client,
     List<Override> extraOverrides = const [],
+    void Function(ProviderContainer container)? onContainer,
   }) {
     return ProviderScope(
       overrides: [
@@ -80,15 +82,36 @@ void main() {
         httpClientProvider.overrideWithValue(client),
         ...extraOverrides,
       ],
-      child: MaterialApp(
-        theme: voiceTestTheme(),
-        locale: const Locale('en'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: home),
+      child: Builder(
+        builder: (context) {
+          onContainer?.call(ProviderScope.containerOf(context));
+          return MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: home),
+          );
+        },
       ),
     );
   }
+
+  Map<String, Object?> channelListResponse(String chatId, {String? spaceId}) =>
+      {
+        'chat_list': {
+          'items': [
+            {
+              'chat': {
+                'id': chatId,
+                'type': 'CHAT_TYPE_CHANNEL',
+                'creator_profile_id': 'profile-owner',
+                if (spaceId != null) 'space_id': spaceId,
+              },
+            },
+          ],
+        },
+      };
 
   testWidgets('DM Chat Info offers the documented create-group action', (
     tester,
@@ -159,6 +182,177 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatInfoPanel.createGroupKey), findsNothing);
+  });
+
+  testWidgets(
+    'standalone channel Chat Info confirms leave and handles failure',
+    (tester) async {
+      const chatId = 'standalone-channel';
+      var leaveCalls = 0;
+      await tester.pumpWidget(
+        testApp(
+          home: const ChatInfoPanel(chatId: chatId),
+          client: MockClient((request) async {
+            if (request.method == 'GET' &&
+                request.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode(channelListResponse(chatId)),
+                200,
+              );
+            }
+            if (request.url.path == '/api/v1/chats/$chatId/leave') {
+              leaveCalls++;
+              return http.Response(
+                '{"message":"private upstream detail"}',
+                412,
+              );
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ChatInfoPanel.leaveChannelKey), findsOneWidget);
+      await tester.tap(find.byKey(ChatInfoPanel.leaveChannelKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave channel?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(leaveCalls, 0);
+
+      await tester.tap(find.byKey(ChatInfoPanel.leaveChannelKey));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('chat_info_leave_channel_confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(leaveCalls, 1);
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      expect(find.textContaining('private upstream detail'), findsNothing);
+      expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('channel leave completion cannot change another active profile', (
+    tester,
+  ) async {
+    const chatId = 'channel-profile-switch';
+    final pendingLeave = Completer<http.Response>();
+    var leaveCalls = 0;
+    ProviderContainer? container;
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatInfoPanel(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            return http.Response(jsonEncode(channelListResponse(chatId)), 200);
+          }
+          if (request.url.path == '/api/v1/chats/$chatId/leave') {
+            leaveCalls++;
+            return pendingLeave.future;
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [selectedChatIdProvider.overrideWith((ref) => chatId)],
+        onContainer: (value) => container = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatInfoPanel.leaveChannelKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat_info_leave_channel_confirm')));
+    await tester.pump();
+    expect(leaveCalls, 1);
+
+    container!.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'other-access',
+        refreshToken: 'other-refresh',
+        accountId: 'other-account',
+        activeProfileId: 'other-profile',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(ChatInfoPanel.leaveChannelKey), findsNothing);
+    pendingLeave.complete(http.Response('{}', 204));
+    await tester.pumpAndSettle();
+
+    expect(container!.read(selectedChatIdProvider), chatId);
+    expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    expect(find.text('Could not complete this action.'), findsNothing);
+  });
+
+  testWidgets('channel leave success clears only the selected channel', (
+    tester,
+  ) async {
+    const chatId = 'channel-leave-success';
+    var chatReads = 0;
+    var leaveCalls = 0;
+    ProviderContainer? container;
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatInfoPanel(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            chatReads++;
+            return http.Response(
+              jsonEncode(
+                chatReads == 1
+                    ? channelListResponse(chatId)
+                    : {
+                        'chat_list': {'items': []},
+                      },
+              ),
+              200,
+            );
+          }
+          if (request.url.path == '/api/v1/chats/$chatId/leave') {
+            leaveCalls++;
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 404);
+        }),
+        extraOverrides: [selectedChatIdProvider.overrideWith((ref) => chatId)],
+        onContainer: (value) => container = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(ChatInfoPanel.leaveChannelKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chat_info_leave_channel_confirm')));
+    await tester.pumpAndSettle();
+
+    expect(leaveCalls, 1);
+    expect(container!.read(selectedChatIdProvider), isNull);
+    expect(chatReads, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('space-owned channel does not expose standalone leave', (
+    tester,
+  ) async {
+    const chatId = 'space-channel';
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatInfoPanel(chatId: chatId),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode(channelListResponse(chatId, spaceId: 'space-1')),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatInfoPanel.leaveChannelKey), findsNothing);
   });
 
   Future<void> verifyWideSettingsCanReturn(

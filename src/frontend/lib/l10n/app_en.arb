@@ -925,6 +925,9 @@
   "chatGroupLeave": "Leave group",
   "chatGroupLeaveConfirmTitle": "Leave group?",
   "chatGroupLeaveConfirmMessage": "You will no longer receive messages from this group.",
+  "chatChannelLeave": "Leave channel",
+  "chatChannelLeaveConfirmTitle": "Leave channel?",
+  "chatChannelLeaveConfirmMessage": "You will no longer receive messages from this channel.",
   "chatGroupOwnerLeaveHint": "Transfer ownership to another member before leaving.",
   "chatGroupTransferOwnershipTo": "Transfer ownership to {name}",
   "@chatGroupTransferOwnershipTo": {
