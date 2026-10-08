@@ -68,6 +68,12 @@ frontend:
   - design/**
   - scripts/design/**
 
+# Changes that alter the built Windows desktop target or bundled app-icon resources.
+windows_desktop:
+  - src/frontend/windows/**
+  - src/frontend/pubspec.yaml
+  - src/frontend/assets/app_icons/**
+
 auth:
   - src/backend/auth/**
   - src/backend/migrations/auth_db/**
