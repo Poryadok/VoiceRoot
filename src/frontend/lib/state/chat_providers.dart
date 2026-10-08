@@ -2818,7 +2818,6 @@ class RealtimeHub {
       }
       _connection = connection;
       _frameSub = frameSub;
-      _reconnectAttempt = 0;
       for (final chatId in _subscribedChats) {
         if (!_isActive(binding, connection)) return;
         connection.sendSubscribe(chatId);
@@ -2890,6 +2889,7 @@ class RealtimeHub {
       if (identical(_helloAcceptedConnection, connection)) return;
       _helloAcceptedConnection = connection;
       _helloAcceptedBinding = binding;
+      _reconnectAttempt = 0;
       _setStatus(RealtimeLinkStatus.connected, binding: binding);
       final helloBinding = RealtimeHelloBinding(
         generation: ++_nextHelloGeneration,
