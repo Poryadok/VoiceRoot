@@ -3644,6 +3644,54 @@ abstract class AppLocalizations {
   /// **'Help'**
   String get settingsHelpTitle;
 
+  /// No description provided for @settingsHelpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find an answer or contact the Voice team.'**
+  String get settingsHelpSubtitle;
+
+  /// No description provided for @settingsHelpHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'How can we help?'**
+  String get settingsHelpHeading;
+
+  /// No description provided for @settingsHelpBackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsHelpBackLabel;
+
+  /// No description provided for @settingsHelpSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search help (e.g. voice rooms)'**
+  String get settingsHelpSearchHint;
+
+  /// No description provided for @settingsHelpDocsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Project documentation'**
+  String get settingsHelpDocsLabel;
+
+  /// No description provided for @settingsHelpSupportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact support'**
+  String get settingsHelpSupportLabel;
+
+  /// No description provided for @settingsHelpNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No help topics match your search.'**
+  String get settingsHelpNoResults;
+
+  /// No description provided for @settingsHelpLaunchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open link.'**
+  String get settingsHelpLaunchError;
+
   /// No description provided for @settingsHelpChatsTitle.
   ///
   /// In en, this message translates to:

@@ -2019,6 +2019,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHelpTitle => 'Помощь';
 
   @override
+  String get settingsHelpSubtitle =>
+      'Найдите ответ или свяжитесь с командой Voice.';
+
+  @override
+  String get settingsHelpHeading => 'Чем помочь?';
+
+  @override
+  String get settingsHelpBackLabel => 'Назад';
+
+  @override
+  String get settingsHelpSearchHint => 'Например, войс-комнаты';
+
+  @override
+  String get settingsHelpDocsLabel => 'Документация проекта';
+
+  @override
+  String get settingsHelpSupportLabel => 'Связаться с поддержкой';
+
+  @override
+  String get settingsHelpNoResults => 'По запросу ничего не найдено.';
+
+  @override
+  String get settingsHelpLaunchError => 'Не удалось открыть ссылку.';
+
+  @override
   String get settingsHelpChatsTitle => 'Чаты';
 
   @override
