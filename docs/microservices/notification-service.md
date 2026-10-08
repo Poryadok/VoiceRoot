@@ -50,6 +50,18 @@ service NotificationService {
 
 Актуальный gRPC-контракт: [protos/voice/notification/v1/notification.proto](../../protos/voice/notification/v1/notification.proto). В **`NotificationSettings`** время отложенного mute — **`mute_until`** (`google.protobuf.Timestamp`, UTC, поле 7); номер поля **5** зарезервирован под прежнее строковое представление (wire name `mute_until_rfc3339`). В **`RegisterDeviceRequest`** опционально **`platform_enum`** (`DevicePlatform`); при установке предпочтительно использовать его вместе со строкой `platform` для обратной совместимости.
 
+## Debug push capture (Compose/dev only)
+
+`GET /debug/recorded-pushes?profile_id=<uuid>` is registered only when
+`NOTIFICATION_RECORD_PUSHES=true` (case-insensitive, surrounding whitespace is
+ignored). With recording disabled, the route returns 404. When enabled, it
+returns the latest recorded FCM attempt for that profile, including the device
+token and push payload. The endpoint is unauthenticated and is intended only
+for isolated Compose/development test environments; do not enable it in
+production. The checked-in production ConfigMap currently sets the recording
+flag to `true`, so this source-level opt-in gate alone does not close the
+production exposure tracked by [backend TODO](../todo/backend.md).
+
 ## Модель данных
 
 ```
