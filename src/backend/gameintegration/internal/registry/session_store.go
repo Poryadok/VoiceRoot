@@ -10,6 +10,7 @@ import (
 
 var ErrSessionNotFound = errors.New("session not found")
 var ErrSessionOperationAmbiguous = errors.New("session operation ID is ambiguous without app/environment scope")
+var ErrSessionLeaseLost = errors.New("session operation lease was lost or expired")
 
 type SessionOperationKey struct {
 	ApplicationID uuid.UUID
@@ -185,8 +186,8 @@ func (s *Store) claimScoped(ctx context.Context, key SessionOperationKey) (uuid.
 	return session, kind, stage, owner, err
 }
 
-func (s *Store) saveOwnerReceipt(ctx context.Context, key SessionOperationKey, ownerOp uuid.UUID, stage string, reqHash []byte, r SessionOwnerReceipt) error {
-	_, err := s.Pool.Exec(ctx, `INSERT INTO gis_session_owner_receipts
+func saveOwnerReceiptTx(ctx context.Context, tx pgx.Tx, key SessionOperationKey, ownerOp uuid.UUID, stage string, reqHash []byte, r SessionOwnerReceipt) error {
+	_, err := tx.Exec(ctx, `INSERT INTO gis_session_owner_receipts
 		(application_id,environment_id,operation_id,stage,owner_operation_id,owner_request_hash,resource_id,receipt_id,receipt_bytes)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT(application_id,environment_id,operation_id,stage) DO NOTHING`,
@@ -218,7 +219,7 @@ func (s *Store) scheduleRetry(ctx context.Context, key SessionOperationKey, owne
 		stage_retry_count=stage_retry_count+1,
 		next_attempt_at=now()+LEAST(30, (1 << LEAST(stage_retry_count,5))) * interval '1 second',
 		error_code=$4,updated_at=now() WHERE application_id=$1 AND environment_id=$2
-		AND operation_id=$3 AND lease_owner=$5`,
+		AND operation_id=$3 AND status='pending' AND lease_owner=$5 AND lease_until>clock_timestamp()`,
 		key.ApplicationID, key.EnvironmentID, key.OperationID, safeOwnerError(err), owner)
 	return e
 }

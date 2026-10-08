@@ -519,6 +519,191 @@ func TestSessionOrchestratorPersistsChatMappingOnlyAfterUncertainCreateRetry(t *
 	require.Zero(t, outboxEvents, "the active event remains fenced until every owner receipt is persisted")
 }
 
+func TestSessionOrchestratorRollsBackEveryGISWriteWhenLeaseWasTakenOver(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	principal := newT31TestSessionPrincipal(t, ctx, store)
+	operationID := uuid.New()
+	request := CreateSessionInput{
+		OperationID: operationID, Kind: "match", ExternalKey: "lease-takeover-chat", DisplayName: "Lease takeover",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+	}
+	orchestrator := NewSessionOrchestrator(store, SessionOwnerAdapters{})
+	accepted, err := orchestrator.CreateSession(ctx, principal, request)
+	require.NoError(t, err)
+	newOwner := uuid.New()
+	var ownerCalls int
+	orchestrator.Owners.CreateChat = func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
+		ownerCalls++
+		_, takeoverErr := store.Pool.Exec(ctx, `UPDATE gis_session_operations
+			SET lease_until=now()-interval '1 second' WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`,
+			principal.ApplicationID, principal.EnvironmentID, operationID)
+		require.NoError(t, takeoverErr)
+		_, takeoverErr = store.Pool.Exec(ctx, `UPDATE gis_session_operations
+			SET lease_owner=$4,lease_until=now()+interval '5 seconds'
+			WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`,
+			principal.ApplicationID, principal.EnvironmentID, operationID, newOwner)
+		require.NoError(t, takeoverErr)
+		return SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: in.OperationID, RequestHash: in.RequestHash}, nil
+	}
+
+	_, err = orchestrator.AdvanceScoped(ctx, SessionOperationKey{
+		ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OperationID: operationID,
+	})
+	require.ErrorIs(t, err, ErrSessionLeaseLost)
+	require.Equal(t, 1, ownerCalls)
+	var stage, status string
+	var storedOwner uuid.UUID
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT stage,status,lease_owner FROM gis_session_operations
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, operationID).
+		Scan(&stage, &status, &storedOwner))
+	require.Equal(t, "accepted", stage)
+	require.Equal(t, "pending", status)
+	require.Equal(t, newOwner, storedOwner)
+	var chatIsNull bool
+	var sessionStage string
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT chat_id IS NULL,stage FROM gis_sessions WHERE id=$1`, accepted.SessionID).
+		Scan(&chatIsNull, &sessionStage))
+	require.True(t, chatIsNull)
+	require.Equal(t, "accepted", sessionStage)
+	var receipts, mappings, mappingOperations, outbox int
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, operationID).Scan(&receipts))
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_mappings
+		WHERE application_id=$1 AND environment_id=$2 AND external_key=$3`, principal.ApplicationID, principal.EnvironmentID, request.ExternalKey).Scan(&mappings))
+	mappingOperationID := deterministicOwnerID(principal.ApplicationID, principal.EnvironmentID, accepted.SessionID, "chat_mapping", "")
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM game_resource_operations
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, mappingOperationID).Scan(&mappingOperations))
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_outbox WHERE session_id=$1`, accepted.SessionID).Scan(&outbox))
+	require.Zero(t, receipts)
+	require.Zero(t, mappings)
+	require.Zero(t, mappingOperations)
+	require.Zero(t, outbox)
+}
+
+func TestSessionOrchestratorDoesNotActivateOrEmitOutboxAfterLeaseExpiry(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	principal := newT31TestSessionPrincipal(t, ctx, store)
+	owners := newSessionOwnerScript()
+	orchestrator := NewSessionOrchestrator(store, owners.adapters())
+	accepted, err := orchestrator.CreateSession(ctx, principal, CreateSessionInput{
+		OperationID: uuid.New(), Kind: "match", ExternalKey: "expired-active-lease", DisplayName: "Expired lease",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+	})
+	require.NoError(t, err)
+	var ready SessionOperation
+	for attempt := 0; attempt < 5; attempt++ {
+		ready, err = orchestrator.AdvanceOne(ctx, accepted.OperationID)
+		require.NoError(t, err)
+		if ready.Stage == "grants_ready" {
+			break
+		}
+	}
+	require.Equal(t, "grants_ready", ready.Stage)
+	key := SessionOperationKey{ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OperationID: accepted.OperationID}
+	_, _, claimedStage, oldOwner, err := store.claimScoped(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, "grants_ready", claimedStage)
+	_, err = store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_until=now()-interval '1 second'
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID)
+	require.NoError(t, err)
+	newOwner := uuid.New()
+	_, err = store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_owner=$4,lease_until=now()+interval '5 seconds'
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID, newOwner)
+	require.NoError(t, err)
+	_, err = orchestrator.finishActive(ctx, key, accepted.SessionID, claimedStage, oldOwner, principal)
+	require.ErrorIs(t, err, ErrSessionLeaseLost)
+	current, err := orchestrator.GetOperation(ctx, principal, accepted.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", current.Status)
+	require.Equal(t, "grants_ready", current.Stage)
+	require.Empty(t, current.ActiveEventID)
+	require.Equal(t, "provisioning", current.SessionStatus)
+	outbox, err := orchestrator.GetActiveOutboxEvent(ctx, accepted.SessionID)
+	require.NoError(t, err)
+	require.Nil(t, outbox)
+}
+
+func TestSessionOrchestratorNoOwnerStageRequiresCurrentLease(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	principal := newT31TestSessionPrincipal(t, ctx, store)
+	owners := newSessionOwnerScript()
+	orchestrator := NewSessionOrchestrator(store, owners.adapters())
+	party, err := orchestrator.CreateSession(ctx, principal, CreateSessionInput{
+		OperationID: uuid.New(), Kind: "party", ExternalKey: "lease-no-owner-party", DisplayName: "Lease party",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+	})
+	require.NoError(t, err)
+	advanceSessionUntil(t, ctx, orchestrator, principal, party.OperationID, "active")
+	child, err := orchestrator.CreateSession(ctx, principal, CreateSessionInput{
+		OperationID: uuid.New(), Kind: "match", ExternalKey: "lease-no-owner-child", ParentPartyKey: "lease-no-owner-party",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+	})
+	require.NoError(t, err)
+	key := SessionOperationKey{ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OperationID: child.OperationID}
+	_, _, stage, oldOwner, err := store.claimScoped(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", stage)
+	_, err = store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_until=now()-interval '1 second'
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID)
+	require.NoError(t, err)
+	newOwner := uuid.New()
+	_, err = store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_owner=$4,lease_until=now()+interval '5 seconds'
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, key.ApplicationID, key.EnvironmentID, key.OperationID, newOwner)
+	require.NoError(t, err)
+	_, err = orchestrator.advanceNoOwner(ctx, key, child.SessionID, stage, "chat_ready", oldOwner)
+	require.ErrorIs(t, err, ErrSessionLeaseLost)
+	current, err := orchestrator.GetOperation(ctx, principal, child.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", current.Status)
+	require.Equal(t, "accepted", current.Stage)
+	var sessionStage string
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT stage FROM gis_sessions WHERE id=$1`, child.SessionID).Scan(&sessionStage))
+	require.Equal(t, "accepted", sessionStage)
+	require.Empty(t, owners.calls["chat_create"], "children do not make their own owner Chat calls")
+}
+
+func TestSessionOrchestratorDoesNotPersistTerminalReceiptAfterLeaseTakeover(t *testing.T) {
+	store, ctx := startT31SessionStore(t)
+	principal := newT31TestSessionPrincipal(t, ctx, store)
+	owners := newSessionOwnerScript()
+	orchestrator := NewSessionOrchestrator(store, owners.adapters())
+	created, err := orchestrator.CreateSession(ctx, principal, CreateSessionInput{
+		OperationID: uuid.New(), Kind: "match", ExternalKey: "terminal-lease-takeover", DisplayName: "Terminal lease",
+		RosterRevision: 1, RosterComplete: true, Members: []uuid.UUID{},
+	})
+	require.NoError(t, err)
+	advanceSessionUntil(t, ctx, orchestrator, principal, created.OperationID, "active")
+	active, err := orchestrator.GetOperation(ctx, principal, created.OperationID)
+	require.NoError(t, err)
+	closeOperation, err := orchestrator.CloseSession(ctx, principal, active.SessionID, uuid.New())
+	require.NoError(t, err)
+	newOwner := uuid.New()
+	orchestrator.Owners.CloseVoice = func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
+		_, takeoverErr := store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_until=now()-interval '1 second'
+			WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, closeOperation.OperationID)
+		require.NoError(t, takeoverErr)
+		_, takeoverErr = store.Pool.Exec(ctx, `UPDATE gis_session_operations SET lease_owner=$4,lease_until=now()+interval '5 seconds'
+			WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3`, principal.ApplicationID, principal.EnvironmentID, closeOperation.OperationID, newOwner)
+		require.NoError(t, takeoverErr)
+		return SessionOwnerReceipt{ResourceID: *active.VoiceRoomID, ReceiptID: uuid.New(), RequestHash: in.RequestHash}, nil
+	}
+	_, err = orchestrator.AdvanceScoped(ctx, SessionOperationKey{
+		ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OperationID: closeOperation.OperationID,
+	})
+	require.ErrorIs(t, err, ErrSessionLeaseLost)
+	current, err := orchestrator.GetOperation(ctx, principal, closeOperation.OperationID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", current.Status)
+	require.Equal(t, "voice_close_pending", current.Stage)
+	require.Equal(t, "closing", current.SessionStatus)
+	require.Empty(t, current.VoiceCloseReceiptID)
+	var receipts int
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT count(*) FROM gis_session_owner_receipts
+		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND stage='terminalize_voice_close'`,
+		principal.ApplicationID, principal.EnvironmentID, closeOperation.OperationID).Scan(&receipts))
+	require.Zero(t, receipts)
+}
+
 func TestSessionOrchestratorRejectsUnprovenChatReceiptBeforeMapping(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
