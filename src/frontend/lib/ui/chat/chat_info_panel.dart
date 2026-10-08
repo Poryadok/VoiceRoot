@@ -26,6 +26,7 @@ import 'e2e_chat_settings.dart';
 import 'channel_settings_panel.dart';
 import 'pinned_messages_panel.dart';
 import '../settings/notification_settings_screen.dart';
+import '../settings/chat_themes_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../../state/channel_settings_provider.dart';
@@ -48,6 +49,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key voiceTabKey = Key('chat_info_tab_voice');
   static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
   static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
+  static const Key chatThemesKey = Key('chat_info_chat_themes');
 
   final String chatId;
   final String? groupName;
@@ -217,6 +219,17 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               setState(() => _showChannelSettings = true);
             }
           },
+        ),
+        ListTile(
+          key: ChatInfoPanel.chatThemesKey,
+          leading: const Icon(Icons.palette_outlined),
+          title: Text(l10n.settingsChatThemes),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ChatThemesSettingsScreen(chatId: widget.chatId),
+            ),
+          ),
         ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),

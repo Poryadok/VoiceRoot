@@ -3434,6 +3434,42 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearance;
 
+  /// No description provided for @settingsChatThemes.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat themes'**
+  String get settingsChatThemes;
+
+  /// No description provided for @chatThemesPlusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus'**
+  String get chatThemesPlusLabel;
+
+  /// No description provided for @chatThemesPlusNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusive themes are available to Voice Plus subscribers.'**
+  String get chatThemesPlusNotice;
+
+  /// No description provided for @chatThemesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get chatThemesSelected;
+
+  /// No description provided for @chatThemesApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply {theme}'**
+  String chatThemesApply(String theme);
+
+  /// No description provided for @chatThemesReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get chatThemesReset;
+
   /// No description provided for @appIconTitle.
   ///
   /// In en, this message translates to:

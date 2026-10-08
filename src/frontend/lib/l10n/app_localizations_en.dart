@@ -1894,6 +1894,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearance => 'Appearance';
 
   @override
+  String get settingsChatThemes => 'Chat themes';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Exclusive themes are available to Voice Plus subscribers.';
+
+  @override
+  String get chatThemesSelected => 'Selected';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Apply $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Reset';
+
+  @override
   String get appIconTitle => 'App Icon';
 
   @override

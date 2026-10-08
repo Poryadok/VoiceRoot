@@ -8,7 +8,7 @@ enum VoiceThemeMode { light, dark, highContrast }
 
 /// Exact miniature swatches used by the Appearance theme selector.
 ///
-/// These are previews only; runtime app palettes continue to come from
+/// These are previews only; the runtime app palettes continue to come from
 /// [VoiceTokenCatalog].
 @immutable
 class AppThemePreferenceSwatch {

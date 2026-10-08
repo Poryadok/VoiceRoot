@@ -1902,6 +1902,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAppearance => 'Оформление';
 
   @override
+  String get settingsChatThemes => 'Темы чатов';
+
+  @override
+  String get chatThemesPlusLabel => 'Voice Plus';
+
+  @override
+  String get chatThemesPlusNotice =>
+      'Эксклюзивные темы доступны подписчикам Voice Plus.';
+
+  @override
+  String get chatThemesSelected => 'Выбрана';
+
+  @override
+  String chatThemesApply(String theme) {
+    return 'Применить $theme';
+  }
+
+  @override
+  String get chatThemesReset => 'Сбросить';
+
+  @override
   String get appIconTitle => 'Значок приложения';
 
   @override

@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../settings/theme_preference.dart';
+import '../../state/chat_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme.dart';
 import '../../theme/voice_theme_providers.dart';
 import 'profile_language_picker.dart';
 import 'app_icon_settings_screen.dart';
+import 'chat_themes_settings_screen.dart';
 
 /// Dedicated, responsive Appearance destination reached from Settings.
 class AppearanceSettingsScreen extends ConsumerWidget {
@@ -18,6 +20,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
   static const Key themeKey = Key('appearance_theme_picker');
   static const Key languageKey = ProfileLanguagePicker.controlKey;
   static const Key appIconKey = Key('appearance_app_icon');
+  static const Key chatThemesKey = Key('appearance_chat_themes');
   static const Key backKey = Key('appearance_back');
 
   static Key themeOptionKey(AppThemePreference preference) =>
@@ -88,6 +91,19 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       const ProfileLanguagePicker(),
                       const SizedBox(height: 24),
+                      ListTile(
+                        key: chatThemesKey,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(l10n.settingsChatThemes),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => ChatThemesSettingsScreen(
+                              chatId: ref.read(selectedChatIdProvider),
+                            ),
+                          ),
+                        ),
+                      ),
                       ListTile(
                         key: appIconKey,
                         contentPadding: EdgeInsets.zero,

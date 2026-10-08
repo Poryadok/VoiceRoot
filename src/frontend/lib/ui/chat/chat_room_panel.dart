@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +22,7 @@ import '../../state/call_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/chat_draft_providers.dart';
 import '../../backend/chat_draft_storage.dart';
+import '../../settings/chat_theme_preference.dart';
 import '../../state/connectivity_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/presence_providers.dart';
@@ -1119,6 +1119,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               keyboardSelectedMessageId: ref.watch(
                                 chatMessageKeyboardProvider,
                               ),
+                              chatTheme: ref.watch(
+                                effectiveChatThemeProvider(widget.chatId),
+                              ),
                               onLongPress: (msg, isMine) =>
                                   _showMessageActions(msg, isMine),
                             ),
@@ -2100,6 +2103,7 @@ class _MessageListView extends ConsumerWidget {
     required this.isGroup,
     required this.l10n,
     required this.initialUnreadCount,
+    required this.chatTheme,
     this.highlightedMessageId,
     this.keyboardSelectedMessageId,
     required this.onLongPress,
@@ -2114,6 +2118,7 @@ class _MessageListView extends ConsumerWidget {
   final bool isGroup;
   final AppLocalizations l10n;
   final int initialUnreadCount;
+  final ChatTheme? chatTheme;
   final String? highlightedMessageId;
   final String? keyboardSelectedMessageId;
   final void Function(VoiceMessage message, bool isMine) onLongPress;
@@ -2203,6 +2208,7 @@ class _MessageListView extends ConsumerWidget {
                         )
                       : null,
                   content: _MessageBubbleContent(message: msg, l10n: l10n),
+                  theme: chatTheme,
                 ),
               ),
             ),
