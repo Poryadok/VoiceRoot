@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File, Platform;
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -111,6 +114,81 @@ Widget _settingsApp(_SettingsClient client, {ThemeData? theme}) =>
       ),
     );
 
+const _captureBoundaryKey = ValueKey('e2e-backup-capture');
+
+Widget _keyBackupCaptureApp(_SettingsClient client, ThemeData theme) =>
+    ProviderScope(
+      overrides: [
+        voiceE2eClientProvider.overrideWithValue(client),
+        authorizationHeaderProvider.overrideWith(
+          (ref) => _authorization('profile'),
+        ),
+      ],
+      child: MaterialApp(
+        theme: theme,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: RepaintBoundary(
+          key: _captureBoundaryKey,
+          child: const E2eKeyBackupScreen(),
+        ),
+      ),
+    );
+
+String _keyBackupGoldenPath(String orientation) {
+  // The bundled fonts and Flutter pin are shared, but text rasterization still
+  // differs between the supported Windows host and Linux CI engine.
+  final platformDirectory = Platform.isLinux
+      ? 'linux/'
+      : Platform.isWindows
+      ? 'windows/'
+      : '';
+  return 'goldens/${platformDirectory}e2e_key_backup_$orientation.png';
+}
+
+Future<ThemeData> _keyBackupCaptureTheme() => VoiceTheme.build(
+  catalog: testVoiceTokenCatalog,
+  mode: VoiceThemeMode.dark,
+  profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
+);
+
+Future<void> _writeKeyBackupCaptureIfRequested(
+  WidgetTester tester,
+  String orientation,
+) async {
+  final captureDirectory =
+      Platform.environment['VOICE_E2E_KEY_BACKUP_CAPTURE_DIR'];
+  if (captureDirectory == null || captureDirectory.isEmpty) return;
+
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(_captureBoundaryKey),
+  );
+  final image = await boundary.toImage(pixelRatio: 1);
+  try {
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) fail('could not encode key-backup golden capture');
+    final directory = Directory(captureDirectory);
+    await directory.create(recursive: true);
+    final path =
+        '${directory.path}${Platform.pathSeparator}'
+        'e2e_key_backup_$orientation.png';
+    await File(path).writeAsBytes(
+      png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+      flush: true,
+    );
+  } finally {
+    image.dispose();
+  }
+}
+
+_SettingsClient _keyBackupCaptureClient({
+  String passwordHint = 'Use your backup password',
+}) => _SettingsClient()
+  ..backup = E2eKeyBackupData(
+    encryptedBlob: 'opaque-visual-fixture',
+    passwordHint: passwordHint,
+  );
+
 String _authorization(String profileId) {
   final claims = base64Url
       .encode(utf8.encode(jsonEncode({'profile_id': profileId})))
@@ -161,42 +239,66 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
-        final theme = await VoiceTheme.build(
-          catalog: testVoiceTokenCatalog,
-          mode: VoiceThemeMode.dark,
-          profileAccent: testVoiceTokenCatalog.profileAccentAt(0),
-        );
-        final client = _SettingsClient()
-          ..backup = const E2eKeyBackupData(
-            encryptedBlob: 'opaque-visual-fixture',
-            passwordHint: 'Use your backup password',
-          );
+        final theme = await _keyBackupCaptureTheme();
         await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              voiceE2eClientProvider.overrideWithValue(client),
-              authorizationHeaderProvider.overrideWith(
-                (ref) => _authorization('profile'),
-              ),
-            ],
-            child: MaterialApp(
-              theme: theme,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: RepaintBoundary(
-                key: const ValueKey('e2e-backup-capture'),
-                child: const E2eKeyBackupScreen(),
-              ),
-            ),
-          ),
+          _keyBackupCaptureApp(_keyBackupCaptureClient(), theme),
         );
         await tester.pumpAndSettle();
+        await _writeKeyBackupCaptureIfRequested(tester, capture.label);
         await expectLater(
-          find.byKey(const ValueKey('e2e-backup-capture')),
-          matchesGoldenFile('goldens/e2e_key_backup_${capture.label}.png'),
+          find.byKey(_captureBoundaryKey),
+          matchesGoldenFile(_keyBackupGoldenPath(capture.label)),
         );
       });
     }
+
+    testWidgets('exact golden comparison rejects changed backup-hint text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final theme = await _keyBackupCaptureTheme();
+      await tester.pumpWidget(
+        _keyBackupCaptureApp(
+          _keyBackupCaptureClient(passwordHint: 'Use a changed backup hint'),
+          theme,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(E2eKeyBackupScreen.hintKey))
+            .controller!
+            .text,
+        'Use a changed backup hint',
+      );
+
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(_captureBoundaryKey),
+      );
+      final image = await boundary.toImage(pixelRatio: 1);
+      addTearDown(image.dispose);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      expect(png, isNotNull);
+
+      final path = _keyBackupGoldenPath('h');
+      final goldenUri = goldenFileComparator.getTestUri(Uri.parse(path), null);
+
+      var matches = false;
+      try {
+        matches = await goldenFileComparator.compare(
+          png!.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+          goldenUri,
+        );
+      } on FlutterError {
+        // LocalFileComparator reports a pixel mismatch as FlutterError. A
+        // missing fixture raises TestFailure and still fails this test.
+      }
+      expect(matches, isFalse);
+    });
 
     testWidgets('disposal during status fetch ignores the late response', (
       tester,
