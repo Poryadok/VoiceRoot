@@ -973,10 +973,6 @@ func TestTranscodeVoiceAcceptTokenAndState(t *testing.T) {
 	conn, cleanup := startBufconnVoiceConn(t, grpcRec)
 	t.Cleanup(cleanup)
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "voice-token-test", PrivateKey: key})
-	require.NoError(t, err)
 	voiceClient := callsv1.NewVoiceServiceClient(conn)
 
 	h := newGatewayForContract(t, gatewayTestOptions{
