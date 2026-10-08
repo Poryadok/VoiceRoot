@@ -536,36 +536,6 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				if hub.deliveryAckReader == nil {
-					errD, _ := json.Marshal(map[string]any{
-						"code":    "invalid_delivery_ack",
-						"message": "message visibility could not be verified",
-					})
-					if err := write("error", errD); err != nil {
-						return
-					}
-					continue
-				}
-				message, err := hub.deliveryAckReader.GetMessage(context.Background(), mid, claims.ProfileID)
-				if err != nil || canonicalUUID(message.ID) != canonicalUUID(mid) ||
-					canonicalUUID(message.ChatID) != canonicalUUID(cid) ||
-					canonicalUUID(message.SenderProfileID) != canonicalUUID(senderID) ||
-					canonicalUUID(message.SenderProfileID) == canonicalUUID(claims.ProfileID) ||
-					!validRFC4122ChatID(message.ID) || !validRFC4122ChatID(message.ChatID) ||
-					!validRFC4122ChatID(message.SenderProfileID) {
-					errD, _ := json.Marshal(map[string]any{
-						"code":    "invalid_delivery_ack",
-						"message": "message visibility could not be verified",
-					})
-					if err := write("error", errD); err != nil {
-						return
-					}
-					continue
-				}
-				// Use the authoritative message binding for every downstream effect.
-				cid = canonicalUUID(message.ChatID)
-				mid = canonicalUUID(message.ID)
-				senderID = canonicalUUID(message.SenderProfileID)
 				d, _ := json.Marshal(map[string]any{
 					"chat_id":    cid,
 					"message_id": mid,
@@ -607,6 +577,36 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
+				if hub.deliveryAckReader == nil {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "message visibility could not be verified",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				message, err := hub.deliveryAckReader.GetMessage(context.Background(), mid, claims.ProfileID)
+				if err != nil || canonicalUUID(message.ID) != canonicalUUID(mid) ||
+					canonicalUUID(message.ChatID) != canonicalUUID(cid) ||
+					canonicalUUID(message.SenderProfileID) != canonicalUUID(senderID) ||
+					canonicalUUID(message.SenderProfileID) == canonicalUUID(claims.ProfileID) ||
+					!validRFC4122ChatID(message.ID) || !validRFC4122ChatID(message.ChatID) ||
+					!validRFC4122ChatID(message.SenderProfileID) {
+					errD, _ := json.Marshal(map[string]any{
+						"code":    "invalid_delivery_ack",
+						"message": "message visibility could not be verified",
+					})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				// Use the authoritative message binding for every downstream effect.
+				cid = canonicalUUID(message.ChatID)
+				mid = canonicalUUID(message.ID)
+				senderID = canonicalUUID(message.SenderProfileID)
 				d, _ := json.Marshal(map[string]any{
 					"chat_id":              cid,
 					"message_id":           mid,

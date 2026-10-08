@@ -192,6 +192,37 @@ func TestDeliveryAckValidMessagePublishesRepeatableRecipientVisibleCursor(t *tes
 	}
 }
 
+func TestMarkReadRemainsIndependentOfDeliveryAckValidation(t *testing.T) {
+	accountID, viewerID := uuid.NewString(), uuid.NewString()
+	chatID, messageID := uuid.NewString(), uuid.NewString()
+	reader := &stubDeliveryAckMessageReader{calls: make(chan deliveryAckLookup, 1)}
+	hub := permitAllTestSubscriptions(newWSHub())
+	hub.deliveryAckReader = reader
+	server := httptest.NewServer(newServiceHandler(serviceName, staticTokenValidator{
+		"desktop": {UserID: accountID, ProfileID: viewerID},
+		"mobile":  {UserID: accountID, ProfileID: viewerID},
+	}, perProfileBootstrapLister{viewerID: {chatID}}, hub, nil, "mark-read-independent-test", readinessDeps{}))
+	t.Cleanup(server.Close)
+	desktop := dialACLTestConn(t, server, "desktop", viewerID)
+	mobile := dialACLTestConn(t, server, "mobile", viewerID)
+	t.Cleanup(func() { _ = desktop.Close(); _ = mobile.Close() })
+	_ = readACLEnvelope(t, desktop)
+	_ = readACLEnvelope(t, mobile)
+	if err := desktop.WriteJSON(map[string]any{"op": "mark_read", "d": map[string]any{
+		"chat_id": chatID, "message_id": messageID,
+	}}); err != nil {
+		t.Fatalf("write mark_read: %v", err)
+	}
+	if got := readACLEnvelope(t, mobile); got.Op != "mark_read" {
+		t.Fatalf("mobile sync op = %q, want mark_read", got.Op)
+	}
+	select {
+	case call := <-reader.calls:
+		t.Fatalf("mark_read incorrectly queried delivery-ack reader: %+v", call)
+	default:
+	}
+}
+
 type deliveryAckMessagingServer struct {
 	messagingv1.UnimplementedMessagingServiceServer
 	profileID      string
