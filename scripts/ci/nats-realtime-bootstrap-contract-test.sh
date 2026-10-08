@@ -21,10 +21,10 @@ require_stream_contract() {
     found && /^  - name:/ { exit }
     found { print }
   ' "$MANIFEST")"
-  printf '%s\n' "$block" | grep -Fqx "    subjects: $subjects" || fail "${name} subjects must match its central contract"
-  printf '%s\n' "$block" | grep -Fqx '    retention: limits' || fail "${name} retention must be limits"
-  printf '%s\n' "$block" | grep -Fqx "    max_age: $max_age" || fail "${name} max age must match its central contract"
-  printf '%s\n' "$block" | grep -Fqx '    storage: file' || fail "${name} storage must be file"
+  printf '%s\n' "$block" | grep -Fx "    subjects: $subjects" >/dev/null || fail "${name} subjects must match its central contract"
+  printf '%s\n' "$block" | grep -Fx '    retention: limits' >/dev/null || fail "${name} retention must be limits"
+  printf '%s\n' "$block" | grep -Fx "    max_age: $max_age" >/dev/null || fail "${name} max age must match its central contract"
+  printf '%s\n' "$block" | grep -Fx '    storage: file' >/dev/null || fail "${name} storage must be file"
 }
 
 [[ -x "$BOOTSTRAP" ]] || fail "Compose bootstrap script must be executable"
@@ -57,7 +57,7 @@ social_stream_contract="$(awk -v name=social_events '
   found && /^  - name:/ { exit }
   found { print }
 ' "$MANIFEST")"
-printf '%s\n' "$social_stream_contract" | grep -Fqx '    duplicate_window: 24h' || fail 'social_events must keep a 24h publisher deduplication window'
+printf '%s\n' "$social_stream_contract" | grep -Fx '    duplicate_window: 24h' >/dev/null || fail 'social_events must keep a 24h publisher deduplication window'
 
 for consumer in \
   "consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message" \
@@ -111,8 +111,8 @@ if ! awk '
 fi
 for service in social user matchmaking role voice analytics; do
   section="$(sed -n "/^  ${service}:$/,/^  [^ ]/p" "$COMPOSE")"
-  printf '%s\n' "$section" | grep -Fqx '      nats-realtime-bootstrap:' || fail "${service} must wait for central NATS bootstrap"
-  printf '%s\n' "$section" | grep -Fqx '        condition: service_completed_successfully' || fail "${service} bootstrap dependency must require success"
+  printf '%s\n' "$section" | grep -Fx '      nats-realtime-bootstrap:' >/dev/null || fail "${service} must wait for central NATS bootstrap"
+  printf '%s\n' "$section" | grep -Fx '        condition: service_completed_successfully' >/dev/null || fail "${service} bootstrap dependency must require success"
 done
 grep -Fq 'deploy/templates/nats-realtime-bootstrap.yaml' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must apply central bootstrap"
 grep -Fq 'kubectl wait --for=condition=complete job/voice-nats-realtime-bootstrap' "$PROD_INFRA" || fail "${PROD_INFRA#"${ROOT}/"} must wait for central bootstrap"
@@ -137,7 +137,8 @@ done
 
 notification_deployment="$(awk '$0 == "  name: voice-notification" {found=1} found {print} found && /^---$/ {exit}' \
   "${ROOT}/deploy/staging/services.yaml")"
-printf '%s\n' "$notification_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+# Piped grep must drain the block: -q can close early and SIGPIPE printf under pipefail.
+printf '%s\n' "$notification_deployment" | grep -Fx '  strategy: {type: Recreate}' >/dev/null \
   || fail "staging Notification must not overlap subscriptions to its fixed push durables"
 grep -Fq 'kubectl patch deployment voice-notification' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
   || fail "staging app apply must transition existing Notification deployments before applying Recreate"
@@ -147,16 +148,16 @@ grep -Fq '$retainKeys' "${ROOT}/scripts/staging/apply-app-manifests.sh" \
 for deployment in voice-bot voice-chat voice-matchmaking voice-space; do
   singleton_deployment="$(awk -v name="$deployment" '$0 == "  name: " name {found=1} found {print} found && /^---$/ {exit}' \
     "${ROOT}/deploy/staging/services.yaml")"
-  printf '%s\n' "$singleton_deployment" | grep -Fqx '  strategy: {type: Recreate}' \
+  printf '%s\n' "$singleton_deployment" | grep -Fx '  strategy: {type: Recreate}' >/dev/null \
     || fail "staging ${deployment} must not overlap its fixed push durable subscription"
 done
 singleton_transition="$(awk '/^prepare_singleton_nats_recreate_transitions\(\)/,/^}/' \
   "${ROOT}/scripts/staging/apply-app-manifests.sh")"
 [[ -n "$singleton_transition" ]] \
   || fail "staging apply must define singleton NATS consumer transitions"
-printf '%s\n' "$singleton_transition" | grep -Fqx '  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do' \
+printf '%s\n' "$singleton_transition" | grep -Fx '  for deployment in voice-bot voice-chat voice-matchmaking voice-space; do' >/dev/null \
   || fail "staging transition must be limited to the fixed push durable deployments"
-printf '%s\n' "$singleton_transition" | grep -Fq -- '"$retainKeys":["type"],"type":"Recreate"' \
+printf '%s\n' "$singleton_transition" | grep -F -- '"$retainKeys":["type"],"type":"Recreate"' >/dev/null \
   || fail "singleton transition must atomically clear rollingUpdate and select Recreate"
 transition_call_line="$(grep -n '^prepare_singleton_nats_recreate_transitions$' "${ROOT}/scripts/staging/apply-app-manifests.sh" | tail -n1 | cut -d: -f1)"
 services_apply_line="$(grep -n '^render .*deploy/staging/services.yaml.*kubectl apply -f -' "${ROOT}/scripts/staging/apply-app-manifests.sh" | cut -d: -f1)"
@@ -164,9 +165,9 @@ services_apply_line="$(grep -n '^render .*deploy/staging/services.yaml.*kubectl 
   || fail "singleton transition must run before the staging services manifest apply"
 gateway_deployment="$(awk '$0 == "  name: voice-gateway" {found=1} found {print} found && /^---$/ {exit}' \
   "${ROOT}/deploy/staging/gateway-deployment.yaml")"
-printf '%s\n' "$gateway_deployment" | grep -Fqx '          startupProbe:' \
+printf '%s\n' "$gateway_deployment" | grep -Fx '          startupProbe:' >/dev/null \
   || fail "Gateway startup must be protected while it waits for required User gRPC"
-printf '%s\n' "$gateway_deployment" | grep -Fqx '            failureThreshold: 30' \
+printf '%s\n' "$gateway_deployment" | grep -Fx '            failureThreshold: 30' >/dev/null \
   || fail "Gateway startup probe must cover the 120s staging gRPC dial deadline"
 
 # The hosted proof must wait for the Chat leaf's hub connection and a PubAck;
