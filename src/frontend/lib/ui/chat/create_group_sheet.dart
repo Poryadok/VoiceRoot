@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../backend/chats_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
@@ -59,6 +60,8 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   final _searchController = TextEditingController();
   final _selected = <String>{};
   var _submitting = false;
+  String? _inviteRetryChatId;
+  List<String>? _inviteRetryProfileIds;
 
   @override
   void initState() {
@@ -80,7 +83,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     final name = _nameController.text.trim();
     return !_submitting &&
         name.isNotEmpty &&
-        _selected.length >= kMinGroupInvitees &&
+        (_inviteRetryChatId != null || _selected.length >= kMinGroupInvitees) &&
         (widget.expectedViewerProfileId == null ||
             ref.read(authControllerProvider).activeProfileId ==
                 widget.expectedViewerProfileId);
@@ -90,24 +93,96 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
     final l10n = AppLocalizations.of(context)!;
-    final err = await ref
-        .read(chatActionsProvider)
-        .createGroupWithMembers(
-          name: _nameController.text.trim(),
-          memberProfileIds: _selected.toList(growable: false),
-        );
-    if (!mounted) return;
-    setState(() => _submitting = false);
-    if (err != null) {
-      final errorMessage = err == 'not_authenticated'
-          ? l10n.chatCreateGroupError(err)
-          : commonActionErrorMessage(l10n);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage)));
+    final session = ref.read(authControllerProvider).session;
+    final authorization = ref.read(authorizationHeaderProvider);
+    if (session == null || authorization == null) {
+      _finishWithError(l10n, 'not_authenticated');
       return;
     }
-    Navigator.of(context).pop();
+    final activeProfileId = session.activeProfileId;
+    final client = ref.read(voiceChatsClientProvider);
+
+    try {
+      final pendingChatId = _inviteRetryChatId;
+      final pendingProfileIds = _inviteRetryProfileIds;
+      late final String chatId;
+      late final List<String> profileIds;
+      if (pendingChatId == null || pendingProfileIds == null) {
+        final selectedProfileIds = _selected.toList(growable: false);
+        final createResult = await client.createGroup(
+          authorization: authorization,
+          name: _nameController.text.trim(),
+        );
+        if (!mounted) return;
+        if (!_isCurrentSubmission(activeProfileId, authorization)) {
+          _finishWithError(l10n, kChatActionStaleContext);
+          return;
+        }
+        switch (createResult) {
+          case ChatsApiFailure(:final message):
+            _finishWithError(l10n, message);
+            return;
+          case ChatsApiOk(:final data):
+            chatId = data.id;
+            profileIds = List.unmodifiable(selectedProfileIds);
+            setState(() {
+              _inviteRetryChatId = chatId;
+              _inviteRetryProfileIds = profileIds;
+            });
+        }
+      } else {
+        chatId = pendingChatId;
+        profileIds = pendingProfileIds;
+      }
+
+      final inviteResult = await client.addGroupMembers(
+        authorization: authorization,
+        chatId: chatId,
+        profileIds: profileIds,
+      );
+      if (!mounted) return;
+      if (!_isCurrentSubmission(activeProfileId, authorization)) {
+        setState(() {
+          _submitting = false;
+          _inviteRetryChatId = null;
+          _inviteRetryProfileIds = null;
+        });
+        _showSafeError(l10n, kChatActionStaleContext);
+        return;
+      }
+      switch (inviteResult) {
+        case ChatsApiFailure(:final message):
+          _finishWithError(l10n, message);
+          return;
+        case ChatsApiOk():
+          ref.read(chatActionsProvider).selectChat(chatId);
+          Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _finishWithError(l10n, 'group_action_failed');
+    }
+  }
+
+  bool _isCurrentSubmission(String activeProfileId, String authorization) {
+    final current = ref.read(authControllerProvider).session;
+    return current?.activeProfileId == activeProfileId &&
+        ref.read(authorizationHeaderProvider) == authorization;
+  }
+
+  void _finishWithError(AppLocalizations l10n, String error) {
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    _showSafeError(l10n, error);
+  }
+
+  void _showSafeError(AppLocalizations l10n, String error) {
+    final errorMessage = error == 'not_authenticated'
+        ? l10n.chatCreateGroupError(error)
+        : commonActionErrorMessage(l10n);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(errorMessage)));
   }
 
   @override
@@ -137,7 +212,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                 hintText: l10n.chatCreateGroupNameHint,
               ),
               textCapitalization: TextCapitalization.sentences,
-              enabled: !_submitting,
+              enabled: !_submitting && _inviteRetryChatId == null,
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
@@ -161,7 +236,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                 prefixIcon: const Icon(Icons.search),
               ),
               textInputAction: TextInputAction.search,
-              enabled: !_submitting,
+              enabled: !_submitting && _inviteRetryChatId == null,
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
@@ -258,7 +333,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                       return CheckboxListTile(
                         key: CreateGroupSheet.memberTileKey(profileId),
                         value: selected,
-                        onChanged: _submitting
+                        onChanged: _submitting || _inviteRetryChatId != null
                             ? null
                             : (next) {
                                 setState(() {
@@ -302,7 +377,11 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(l10n.chatCreateGroupSubmit),
+                  : Text(
+                      _inviteRetryChatId == null
+                          ? l10n.chatCreateGroupSubmit
+                          : l10n.commonRetry,
+                    ),
             ),
           ],
         ),
