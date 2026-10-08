@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -84,14 +85,73 @@ func pruneExpiredLifecycleSpace(ctx context.Context, pool *pgxpool.Pool, spaceID
 		return err
 	}
 	if expiredPurge {
-		if _, err = tx.Exec(ctx, `
-			INSERT INTO search_space_purged_chat_fences(space_id,chat_id)
-			SELECT DISTINCT i.space_id,i.chat_id
-			FROM search_space_chat_manifest_items i
-			JOIN search_space_purge_receipts p USING(space_id,deletion_operation_id)
-			WHERE i.space_id=$1 AND p.retain_until < clock_timestamp()
-			ON CONFLICT DO NOTHING`, spaceID); err != nil {
+		var sourceOperations, sourceItems int64
+		var sourceComplete bool
+		if err = tx.QueryRow(ctx, `
+			WITH expired AS (
+				SELECT p.space_id,p.deletion_operation_id,p.generation,
+				       f.deletion_operation_id AS fence_operation_id,f.generation AS fence_generation,
+				       f.state,m.manifest_id,m.manifest_sha256,m.item_count,
+				       count(i.chat_id) AS actual_item_count
+				FROM search_space_purge_receipts p
+				LEFT JOIN search_space_lifecycle_fences f ON f.space_id=p.space_id
+				LEFT JOIN search_space_chat_manifests m
+				  ON m.space_id=p.space_id AND m.deletion_operation_id=p.deletion_operation_id
+				 AND m.generation=p.generation-1
+				LEFT JOIN search_space_chat_manifest_items i
+				  ON i.space_id=m.space_id AND i.deletion_operation_id=m.deletion_operation_id
+			 AND i.generation=m.generation
+			WHERE p.space_id=$1 AND p.retain_until < clock_timestamp()
+			GROUP BY p.space_id,p.deletion_operation_id,p.generation,
+			         f.deletion_operation_id,f.generation,f.state,
+			         m.manifest_id,m.manifest_sha256,m.item_count
+			)
+			SELECT count(*),coalesce(sum(actual_item_count),0),coalesce(bool_and(
+				state='PURGED' AND fence_operation_id=deletion_operation_id
+				AND fence_generation=generation AND generation>=2
+				AND manifest_id IS NOT NULL AND manifest_id<>''
+				AND octet_length(manifest_sha256)=32 AND item_count=actual_item_count
+			),false)
+			FROM expired`, spaceID).Scan(&sourceOperations, &sourceItems, &sourceComplete); err != nil {
 			return err
+		}
+		if sourceOperations == 0 || !sourceComplete {
+			return errors.New("cannot compact incomplete Search Chat purge evidence")
+		}
+		var inserted pgconn.CommandTag
+		inserted, err = tx.Exec(ctx, `
+			INSERT INTO search_space_purged_chat_fences
+				(space_id,chat_id,deletion_operation_id,event_generation,manifest_id,manifest_sha256)
+			SELECT i.space_id,i.chat_id,p.deletion_operation_id,p.generation,m.manifest_id,m.manifest_sha256
+			FROM search_space_purge_receipts p
+			JOIN search_space_lifecycle_fences f
+			  ON f.space_id=p.space_id AND f.deletion_operation_id=p.deletion_operation_id
+			 AND f.generation=p.generation AND f.state='PURGED'
+			JOIN search_space_chat_manifests m
+			  ON m.space_id=p.space_id AND m.deletion_operation_id=p.deletion_operation_id
+			 AND m.generation=p.generation-1
+			JOIN search_space_chat_manifest_items i
+			  ON i.space_id=m.space_id AND i.deletion_operation_id=m.deletion_operation_id
+			 AND i.generation=m.generation
+			WHERE p.space_id=$1 AND p.retain_until < clock_timestamp()
+			ON CONFLICT (space_id,chat_id) DO UPDATE SET
+				deletion_operation_id=EXCLUDED.deletion_operation_id,
+				event_generation=EXCLUDED.event_generation,
+				manifest_id=EXCLUDED.manifest_id,
+				manifest_sha256=EXCLUDED.manifest_sha256
+			WHERE (search_space_purged_chat_fences.deletion_operation_id IS NULL
+			  AND search_space_purged_chat_fences.event_generation IS NULL
+			  AND search_space_purged_chat_fences.manifest_id IS NULL
+			  AND search_space_purged_chat_fences.manifest_sha256 IS NULL
+			   OR (search_space_purged_chat_fences.deletion_operation_id=EXCLUDED.deletion_operation_id
+			  AND search_space_purged_chat_fences.event_generation=EXCLUDED.event_generation
+			  AND search_space_purged_chat_fences.manifest_id=EXCLUDED.manifest_id
+			  AND search_space_purged_chat_fences.manifest_sha256=EXCLUDED.manifest_sha256))`, spaceID)
+		if err != nil {
+			return err
+		}
+		if inserted.RowsAffected() != sourceItems {
+			return errors.New("search chat purge evidence conflicts with compact terminal binding")
 		}
 		for _, statement := range []string{
 			`DELETE FROM search_space_chat_manifest_items i USING search_space_purge_receipts p WHERE i.space_id=$1 AND p.space_id=i.space_id AND p.deletion_operation_id=i.deletion_operation_id AND p.retain_until < clock_timestamp()`,

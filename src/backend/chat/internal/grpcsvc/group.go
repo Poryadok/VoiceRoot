@@ -147,6 +147,7 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 		v := req.GetAllowGuests()
 		allowGuests = &v
 	}
+	changedFields := updateChatChangedFields(req)
 
 	slowModeOnly := slowMode != nil && name == nil && avatar == nil && topic == nil && threadsEnabled == nil && allowUserMainFeed == nil && allowGuests == nil
 	if row.SpaceID != nil && slowModeOnly && s.Roles != nil {
@@ -169,7 +170,41 @@ func (s *ChatGRPC) UpdateChat(ctx context.Context, req *chatv1.UpdateChatRequest
 	if updated == nil {
 		return nil, status.Error(codes.NotFound, "chat not found")
 	}
+	if len(changedFields) > 0 && s.ChatEvents != nil {
+		if err := s.ChatEvents.PublishChatUpdated(ctx, chatID.String(), changedFields); err != nil {
+			s.logPublishError(ctx, "chat.updated", err, slog.String("chat_id", chatID.String()))
+		}
+	}
 	return &chatv1.UpdateChatResponse{Chat: chatRowToProto(updated)}, nil
+}
+
+func updateChatChangedFields(req *chatv1.UpdateChatRequest) []string {
+	if req == nil {
+		return nil
+	}
+	fields := make([]string, 0, 7)
+	if req.Name != nil {
+		fields = append(fields, "name")
+	}
+	if req.Topic != nil {
+		fields = append(fields, "topic")
+	}
+	if req.SlowModeSeconds != nil {
+		fields = append(fields, "slow_mode_seconds")
+	}
+	if req.AvatarUrl != nil {
+		fields = append(fields, "avatar_url")
+	}
+	if req.ThreadsEnabled != nil {
+		fields = append(fields, "threads_enabled")
+	}
+	if req.AllowUserMainFeed != nil {
+		fields = append(fields, "allow_user_main_feed")
+	}
+	if req.AllowGuests != nil {
+		fields = append(fields, "allow_guests")
+	}
+	return fields
 }
 
 func (s *ChatGRPC) AddMembers(ctx context.Context, req *chatv1.AddMembersRequest) (*chatv1.AddMembersResponse, error) {

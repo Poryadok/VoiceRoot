@@ -218,6 +218,9 @@ generation and exact root manifest; Role uses its stricter retirement wire.
 | `space.deletion_scheduled` / `SpaceDeletionScheduled` v1 | Space after full FROZEN barrier | generation-aware projections; notification only |
 | `space.restored` / `SpaceRestored` v1 | Space after full LIVE barrier | generation-aware projections; notification only |
 | `space.deleted` / additive `SpaceDeleted` v2 | Space after ten purge receipts plus tombstone/local purge | Realtime and projections; legacy field 1 remains `space_id` |
+| `chat.updated` / `ChatUpdated` v1 | Chat after successful metadata mutation | Realtime chat refresh and Search title projection; no new Analytics mapping |
+| `chat.deleted` / `ChatDeleted` v1 | Chat transactional outbox after exact P3 local purge commit | Realtime chat refresh and Search terminal projection removal after its matching permanent PURGED fence; Analytics safely ignores the unmapped fact |
+| `chat.member_changed` / `ChatMemberChanged` v1 | Chat after successful membership mutation | Realtime targeted refresh/revocation; Search/Analytics keep their established mappings and tolerate the complete change union |
 
 The events stay in `chat.events`; direct participant receipts prove convergence.
 `ChatStreamEvent` retains `event_id=1`, `occurred_at=2`. NATS delivery is

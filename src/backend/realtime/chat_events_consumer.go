@@ -46,6 +46,35 @@ func chatEventBytesToFanout(data []byte) (profileID string, env fanoutEnvelope, 
 		}
 		// No profile target on chat.created; fan-out via chat subscriptions when present.
 		return "", fanoutEnvelope{Op: "chat_update", D: d}, true
+	case *eventsv1.ChatStreamEvent_ChatUpdated:
+		updated := p.ChatUpdated
+		if updated == nil || updated.GetChatId() == "" {
+			return "", fanoutEnvelope{}, false
+		}
+		d, err := json.Marshal(struct {
+			ChatID        string   `json:"chat_id"`
+			ChangedFields []string `json:"changed_fields"`
+		}{ChatID: updated.GetChatId(), ChangedFields: updated.GetChangedFields()})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return "", fanoutEnvelope{Op: "chat_update", D: d}, true
+	case *eventsv1.ChatStreamEvent_ChatDeleted:
+		deleted := p.ChatDeleted
+		if deleted == nil || deleted.GetGeneration() == 0 || len(deleted.GetManifestSha256()) != 32 {
+			return "", fanoutEnvelope{}, false
+		}
+		for _, raw := range []string{deleted.GetChatId(), deleted.GetSpaceId(), deleted.GetDeletionOperationId(), deleted.GetManifestId()} {
+			id, err := uuid.Parse(raw)
+			if err != nil || id == uuid.Nil || id.String() != raw {
+				return "", fanoutEnvelope{}, false
+			}
+		}
+		d, err := json.Marshal(map[string]string{"chat_id": deleted.GetChatId()})
+		if err != nil {
+			return "", fanoutEnvelope{}, false
+		}
+		return "", fanoutEnvelope{Op: "chat_update", D: d}, true
 	case *eventsv1.ChatStreamEvent_ChatMemberChanged:
 		changed := p.ChatMemberChanged
 		if changed == nil || changed.GetChatId() == "" || changed.GetProfileId() == "" {
@@ -94,6 +123,12 @@ func chatEventLogAttrs(data []byte) []slog.Attr {
 	attrs := []slog.Attr{slog.String("event_id", env.GetEventId())}
 	if created := env.GetChatCreated(); created != nil {
 		attrs = append(attrs, slog.String("chat_id", created.GetChatId()))
+	}
+	if updated := env.GetChatUpdated(); updated != nil {
+		attrs = append(attrs, slog.String("chat_id", updated.GetChatId()))
+	}
+	if deleted := env.GetChatDeleted(); deleted != nil {
+		attrs = append(attrs, slog.String("chat_id", deleted.GetChatId()))
 	}
 	if changed := env.GetChatMemberChanged(); changed != nil {
 		attrs = append(attrs, slog.String("chat_id", changed.GetChatId()), slog.String("profile_id", changed.GetProfileId()))
