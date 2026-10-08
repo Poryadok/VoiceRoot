@@ -1220,6 +1220,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageUnpin => 'Открепить сообщение';
 
   @override
+  String get chatPinnedLimitReached => 'Можно закрепить не более 5 сообщений.';
+
+  @override
   String chatPinnedBar(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

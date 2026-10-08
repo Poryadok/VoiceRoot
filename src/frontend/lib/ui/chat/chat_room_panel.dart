@@ -1032,8 +1032,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   },
                   onOpenAll: () => PinnedMessagesPanel.show(
                     context,
+                    chatId: widget.chatId,
+                    spaceId: spaceId,
+                    isGroup: isGroup,
                     messages: pinnedMessages,
                     onOpenMessage: _scrollToMessage,
+                    onUnpin: (messageId) => ref
+                        .read(
+                          chatRoomControllerProvider(widget.chatId).notifier,
+                        )
+                        .togglePinWithResult(messageId, currentlyPinned: true),
                     onCancel: () => _pinnedJumpGeneration++,
                   ),
                   onHide: () => setState(() => _pinnedBarHidden = true),
@@ -1898,7 +1906,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         await controller.addReaction(message.id, emoji);
       }
     } else if (action == 'pin' || action == 'unpin') {
-      await controller.togglePin(message.id, currentlyPinned: message.isPinned);
+      final result = await controller.togglePinWithResult(
+        message.id,
+        currentlyPinned: message.isPinned,
+      );
+      if (mounted && !result.succeeded && !result.stale) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(pinMutationErrorText(l10n, result))),
+        );
+      }
     } else if (action == 'reply') {
       ref.read(chatReplyTargetProvider(widget.chatId).notifier).state = message;
       ref.read(chatActiveThreadProvider(widget.chatId).notifier).state =

@@ -1101,6 +1101,41 @@ class ChatRoomState {
 
 enum PinnedMessagesLoadStatus { idle, loading, loaded, failed }
 
+class PinMutationResult {
+  const PinMutationResult.success()
+    : succeeded = true,
+      stale = false,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  const PinMutationResult.failure({
+    required this.message,
+    this.errorCode,
+    this.statusCode,
+  }) : succeeded = false,
+       stale = false;
+
+  const PinMutationResult.stale()
+    : succeeded = false,
+      stale = true,
+      message = null,
+      errorCode = null,
+      statusCode = null;
+
+  final bool succeeded;
+  final bool stale;
+  final String? message;
+  final String? errorCode;
+  final int? statusCode;
+
+  bool get permissionDenied =>
+      statusCode == 403 || errorCode == 'permission_denied';
+
+  bool get pinLimitReached =>
+      statusCode == 429 && errorCode == 'resource_exhausted';
+}
+
 class PendingPinnedMessageJump {
   PendingPinnedMessageJump(this.messageId);
 
@@ -2301,11 +2336,27 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     String messageId, {
     required bool currentlyPinned,
   }) async {
+    final result = await togglePinWithResult(
+      messageId,
+      currentlyPinned: currentlyPinned,
+    );
+    return result.message;
+  }
+
+  Future<PinMutationResult> togglePinWithResult(
+    String messageId, {
+    required bool currentlyPinned,
+  }) async {
+    final initialSession = _ref.read(authControllerProvider).session;
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final generation = _loadGeneration;
-    if (auth == null || profileId == null) return 'not_authenticated';
+    final refreshToken = initialSession?.refreshToken;
+    if (auth == null || profileId == null) {
+      return const PinMutationResult.failure(message: 'not_authenticated');
+    }
     _applyPinDelta(messageId: messageId, pinned: !currentlyPinned);
+    final optimisticPinnedMessages = state.pinnedMessages;
     final client = _ref.read(voiceMessagesClientProvider);
     final result = currentlyPinned
         ? await client.unpinMessage(
@@ -2323,7 +2374,49 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       authorization: auth,
       generation: generation,
     )) {
-      return null;
+      final currentSession = _ref.read(authControllerProvider).session;
+      final currentProfileId = _activeProfileId();
+      final currentAuth = _ref.read(authorizationHeaderProvider);
+      final sameProfileRefreshed =
+          mounted &&
+          currentProfileId == profileId &&
+          currentAuth != null &&
+          (currentAuth != auth || currentSession?.refreshToken != refreshToken);
+      if (sameProfileRefreshed) {
+        // The old mutation result is no longer authoritative after token
+        // rotation. Roll back only our own optimistic snapshot; if a newer
+        // same-viewer pin update already replaced it, preserve that update
+        // while a post-mutation read reconciles the current server state.
+        if (identical(state.pinnedMessages, optimisticPinnedMessages)) {
+          _applyPinDelta(messageId: messageId, pinned: currentlyPinned);
+        }
+        final refreshedAuth = currentAuth;
+        final refreshedProfileId = currentProfileId!;
+        final currentGeneration = _loadGeneration;
+        await _refreshPinnedMessages(
+          refreshedAuth,
+          profileId: refreshedProfileId,
+          generation: currentGeneration,
+        );
+        if (!_isCurrentMutation(
+          profileId: refreshedProfileId,
+          authorization: refreshedAuth,
+          generation: currentGeneration,
+        )) {
+          return const PinMutationResult.stale();
+        }
+        if (state.pinnedMessagesStatus == PinnedMessagesLoadStatus.loaded) {
+          final authoritativePinned = state.pinnedMessages.any(
+            (message) => message.id == messageId,
+          );
+          _applyPinDelta(messageId: messageId, pinned: authoritativePinned);
+          if (authoritativePinned == !currentlyPinned) {
+            return const PinMutationResult.success();
+          }
+          return const PinMutationResult.failure(message: 'unknown_error');
+        }
+      }
+      return const PinMutationResult.stale();
     }
     switch (result) {
       case MessagesApiOk<void>():
@@ -2334,11 +2427,19 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             generation: generation,
           ),
         );
-        return null;
-      case MessagesApiFailure(:final message):
+        return const PinMutationResult.success();
+      case MessagesApiFailure(
+        :final message,
+        :final errorCode,
+        :final statusCode,
+      ):
         unawaited(loadInitial());
         state = state.copyWith(errorMessage: message);
-        return message;
+        return PinMutationResult.failure(
+          message: message,
+          errorCode: errorCode,
+          statusCode: statusCode,
+        );
     }
   }
 
