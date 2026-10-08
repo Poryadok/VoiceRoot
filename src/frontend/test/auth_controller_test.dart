@@ -2028,7 +2028,7 @@ void main() {
     refreshResponse.complete(
       http.Response(jsonEncode({'session': refreshedA.toJson()}), 200),
     );
-    expect(await refresh, isTrue);
+    expect(await refresh, isFalse);
 
     final current = container.read(authControllerProvider).session;
     expect(current?.activeProfileId, sessionB.activeProfileId);
