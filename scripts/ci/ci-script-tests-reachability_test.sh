@@ -34,8 +34,20 @@ pr_branches="$(echo "${pr_trigger}" | sed -n 's/.*branches: \[\(.*\)\].*/\1/p')"
 [[ -n "${pr_branches}" && "${pr_branches}" != *'*'* && "${pr_branches}" != *'?'* ]] \
   || fail "CI pull-request branch filter must remain exact, without wildcard widening"
 push_trigger="$(sed -n '/^  push:$/,/^  schedule:$/p' "${WORKFLOW}" | sed '$d')"
-echo "${push_trigger}" | grep -Fq 'branches: [master]' \
-  || fail "CI push trigger must remain limited to master"
+echo "${push_trigger}" | grep -Fq 'branches: [master, develop]' \
+  || fail "CI push trigger must target only master and develop"
+deploy_block="$(sed -n '/^  deploy-staging:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
+[[ -n "${deploy_block}" ]] || fail "CI workflow must define deploy-staging"
+echo "${deploy_block}" | grep -Fq "github.event_name == 'push'" \
+  || fail "staging deployment must remain push-only"
+echo "${deploy_block}" | grep -Fq "github.ref == 'refs/heads/master'" \
+  || fail "staging deployment must remain master-only"
+echo "${deploy_block}" | grep -Fq "vars.STAGING_DEPLOY_ENABLED == 'true'" \
+  || fail "staging deployment must retain its explicit enable gate"
+echo "${deploy_block}" | grep -Fq "needs.staging-stack-lock.result == 'success'" \
+  || fail "staging deployment must retain the successful stack-lock gate"
+echo "${deploy_block}" | grep -Fq '      - staging-stack-lock' \
+  || fail "staging deployment must depend on the stack-lock job"
 ! grep -Fq 'github.event.pull_request.draft' "${WORKFLOW}" \
   || fail "draft PRs must use the same path-filtered CI selection"
 changes_block="$(sed -n '/^  changes:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
