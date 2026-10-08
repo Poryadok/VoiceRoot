@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"voice/backend/gameintegration/internal/registry"
@@ -220,7 +221,7 @@ func decodeStrictSessionJSON(w http.ResponseWriter, r *http.Request, out any) er
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(bytes.TrimSpace(raw), raw) || !json.Valid(raw) {
+	if !utf8.Valid(raw) || !bytes.Equal(bytes.TrimSpace(raw), raw) || !json.Valid(raw) {
 		return errors.New("invalid JSON")
 	}
 	if err = rejectDuplicateJSONKeys(raw); err != nil {

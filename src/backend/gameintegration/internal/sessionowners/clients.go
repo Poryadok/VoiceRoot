@@ -21,6 +21,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/gameintegration/internal/registry"
+	"voice/backend/pkg/gisowner"
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/principal"
 )
@@ -149,7 +150,7 @@ func (c *Clients) createChat(ctx context.Context, owner registry.SessionOwnerReq
 	}
 	response, err := c.chat.ProvisionManagedChat(callCtx, request)
 	if err != nil {
-		return registry.SessionOwnerReceipt{}, err
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.ChatDomain, gisowner.ChatProvisionRPC)
 	}
 	chatID, err := parseUUID(response.GetChatId())
 	if err != nil {
@@ -178,7 +179,7 @@ func (c *Clients) syncChatRoster(ctx context.Context, owner registry.SessionOwne
 	}
 	response, err := c.chat.SyncManagedChatMembers(callCtx, request)
 	if err != nil {
-		return registry.SessionOwnerReceipt{}, err
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.ChatDomain, gisowner.ChatRosterRPC)
 	}
 	receiptID, err := parseUUID(response.GetReceiptId())
 	if err != nil {
@@ -207,7 +208,7 @@ func (c *Clients) provisionVoice(ctx context.Context, owner registry.SessionOwne
 	}
 	response, err := c.voice.ProvisionGameSessionRoom(callCtx, request)
 	if err != nil {
-		return registry.SessionOwnerReceipt{}, err
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.VoiceDomain, gisowner.VoiceProvisionRPC)
 	}
 	roomID, err := parseUUID(response.GetRoomId())
 	if err != nil {
@@ -236,7 +237,7 @@ func (c *Clients) applyRole(ctx context.Context, owner registry.SessionOwnerRequ
 	}
 	response, err := c.role.ApplyGameSessionGrants(callCtx, request)
 	if err != nil {
-		return registry.SessionOwnerReceipt{}, err
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.RoleDomain, gisowner.RoleApplyRPC)
 	}
 	return roleReceipt(response.GetReceipt(), owner.RequestHash, request.GetVoiceRoomId())
 }
