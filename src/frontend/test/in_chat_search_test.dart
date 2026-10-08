@@ -1,10 +1,15 @@
+import 'dart:io';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -13,9 +18,17 @@ import 'package:voice_frontend/backend/realtime_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/create_group_friends_provider.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/shell_providers.dart';
+import 'package:voice_frontend/settings/voice_input_settings.dart';
+import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
+import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/chat/create_group_sheet.dart';
+import 'package:voice_frontend/ui/shell/side_panel.dart';
 import 'package:voice_frontend/ui/search/in_chat_search.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -23,6 +36,10 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 const _e2eChatId = 'e2e-chat-1';
+const _captureDirectoryKey = 'VOICE_CHAT_INFO_SEARCH_CAPTURE_DIR';
+const _captureBoundaryKey = Key('chat_info_search_capture');
+
+var _captureFontsLoaded = false;
 
 class _E2eChatListController extends ChatListController {
   _E2eChatListController(super.ref) : super() {
@@ -35,8 +52,10 @@ class _E2eChatListController extends ChatListController {
             creatorProfileId: 'peer-1',
             e2eEnabled: true,
           ),
+          dmPeerProfileId: 'peer-1',
         ),
       ],
+      profileId: 'prof-test',
     );
   }
 
@@ -59,8 +78,12 @@ class _E2eChatRoomController extends ChatRoomController {
           isE2e: true,
         ),
       ],
+      historyProfileId: 'prof-test',
     );
   }
+
+  @override
+  Future<void> loadInitial() async {}
 }
 
 class _FakeRealtimeHub extends RealtimeHub {
@@ -79,13 +102,16 @@ class _FakeRealtimeHub extends RealtimeHub {
 Widget e2eInChatSearchTestApp({
   required http.Client client,
   required String chatId,
+  Widget? home,
+  ShellSidePanel sidePanel = ShellSidePanel.none,
+  void Function(ProviderContainer)? onContainer,
+  ThemeData? theme,
+  List<String> groupFriends = const [],
 }) {
   return ProviderScope(
     overrides: [
       ...voiceThemeTestOverrides(),
-      profileAccentStorageProvider.overrideWithValue(
-        testProfileAccentStorage,
-      ),
+      profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
       authSessionStorageProvider.overrideWithValue(
         InMemoryAuthSessionStorage(),
       ),
@@ -95,21 +121,108 @@ Widget e2eInChatSearchTestApp({
       ),
       httpClientProvider.overrideWithValue(client),
       chatListControllerProvider.overrideWith(_E2eChatListController.new),
-      realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
-      chatRoomControllerProvider(chatId).overrideWith(
-        (ref) => _E2eChatRoomController(ref, chatId),
+      createGroupFriendsProvider.overrideWith((ref) async => groupFriends),
+      voiceInputSettingsProvider.overrideWith(
+        TestVoiceInputSettingsNotifier.new,
       ),
+      realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
+      selectedChatIdProvider.overrideWith((ref) => chatId),
+      shellSidePanelProvider.overrideWith((ref) => sidePanel),
+      chatRoomControllerProvider(
+        chatId,
+      ).overrideWith((ref) => _E2eChatRoomController(ref, chatId)),
     ],
-    child: MaterialApp(
-      theme: voiceTestTheme(),
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: InChatSearch(chatId: chatId),
+    child: RepaintBoundary(
+      key: _captureBoundaryKey,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: theme ?? voiceTestTheme(),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) {
+            onContainer?.call(ProviderScope.containerOf(context));
+            return home ?? Scaffold(body: InChatSearch(chatId: chatId));
+          },
+        ),
       ),
     ),
   );
+}
+
+Future<ThemeData?> _loadCaptureTheme(WidgetTester tester) async {
+  final directory = Platform.environment[_captureDirectoryKey];
+  if (directory == null || directory.isEmpty) return null;
+
+  if (!_captureFontsLoaded) {
+    final loaded = await tester.runAsync(() async {
+      final noto = FontLoader(VoiceTheme.fontFamily)
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Medium.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf'));
+      await noto.load();
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+      if (flutterRoot == null || flutterRoot.isEmpty) {
+        throw StateError('FLUTTER_ROOT is required to load Material Icons');
+      }
+      final iconFont = File(
+        [
+          flutterRoot,
+          'bin',
+          'cache',
+          'artifacts',
+          'material_fonts',
+          'MaterialIcons-Regular.otf',
+        ].join(Platform.pathSeparator),
+      );
+      final iconData = ByteData.sublistView(
+        Uint8List.fromList(await iconFont.readAsBytes()),
+      );
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(Future<ByteData>.value(iconData))).load();
+      return true;
+    });
+    if (loaded != true) throw StateError('Production font loading failed');
+    _captureFontsLoaded = true;
+  }
+
+  final theme = await tester.runAsync(() async {
+    final catalog = await VoiceTokenCatalog.load();
+    return VoiceTheme.build(
+      catalog: catalog,
+      mode: VoiceThemeMode.dark,
+      profileAccent: catalog.profileAccentAt(0),
+    );
+  });
+  if (theme == null) throw StateError('Production tokens did not load');
+  return theme;
+}
+
+Future<void> _captureSearchState(WidgetTester tester, String filename) async {
+  final directory = Platform.environment[_captureDirectoryKey];
+  if (directory == null || directory.isEmpty) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(_captureBoundaryKey),
+  );
+  final captured = await tester.runAsync(() async {
+    final image = await boundary.toImage(
+      pixelRatio: tester.view.devicePixelRatio,
+    );
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) throw StateError('PNG encoding returned null');
+      final output = File('$directory${Platform.pathSeparator}$filename');
+      await output.parent.create(recursive: true);
+      await output.writeAsBytes(bytes.buffer.asUint8List(), flush: true);
+      return true;
+    } finally {
+      image.dispose();
+    }
+  });
+  if (captured != true) throw StateError('Chat search capture failed');
 }
 
 void main() {
@@ -137,14 +250,14 @@ void main() {
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: InChatSearch(chatId: chatId),
-        ),
+        home: Scaffold(body: InChatSearch(chatId: chatId)),
       ),
     );
   }
 
-  testWidgets('InChatSearch shows field and navigation controls', (tester) async {
+  testWidgets('InChatSearch shows field and navigation controls', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       inChatSearchTestApp(
         chatId: 'chat-1',
@@ -320,26 +433,374 @@ void main() {
 
     expect(serverSearchCalls, 0);
     expect(find.textContaining('loaded local secret needle'), findsOneWidget);
-    expect(find.byKey(InChatSearch.activeHitKey('msg-local-1')), findsOneWidget);
+    expect(
+      find.byKey(InChatSearch.activeHitKey('msg-local-1')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('in-chat search expands inline in header instead of bottom sheet', (
+  testWidgets(
+    'in-chat search expands inline in header instead of bottom sheet',
+    (tester) async {
+      await tester.pumpWidget(
+        chatRoomInChatSearchTestApp(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(ChatRoomPanel.inChatSearchKey));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        find.byKey(const Key('in_chat_search_inline_header')),
+        findsOneWidget,
+      );
+      expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('Chat Info opens existing search and closing returns to room', (
     tester,
   ) async {
+    final captureTheme = await _loadCaptureTheme(tester);
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
-      chatRoomInChatSearchTestApp(
-        client: MockClient((_) async => http.Response('{}', 200)),
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        theme: captureTheme,
+        sidePanel: ShellSidePanel.chatInfo,
+        groupFriends: const ['friend-a'],
+        client: MockClient((_) async => http.Response('not found', 404)),
+        home: LayoutBuilder(
+          builder: (context, constraints) => Scaffold(
+            body: Row(
+              children: [
+                const Expanded(child: ChatRoomPanel(chatId: _e2eChatId)),
+                if (constraints.maxWidth >= 600)
+                  SizedBox(width: 320, child: SidePanelHost()),
+              ],
+            ),
+          ),
+        ),
       ),
     );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Search messages'), findsOneWidget);
+    expect(find.byKey(const Key('chat_info_create_group')), findsOneWidget);
+    await tester.tap(find.byKey(ChatInfoPanel.createGroupKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byKey(CreateGroupSheet.memberTileKey('peer-1')),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Plans');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await _captureSearchState(tester, 'chat-info-create-group-h.png');
+    Navigator.of(tester.element(find.byKey(CreateGroupSheet.sheetKey))).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final semantics = tester.ensureSemantics();
+    expect(find.bySemanticsLabel('Search messages'), findsOneWidget);
+    await tester.tap(find.text('Search messages'));
     await tester.pumpAndSettle();
+
+    expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
+    await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('loaded local secret needle'), findsOneWidget);
+    expect(
+      find.byKey(InChatSearch.activeHitKey('msg-local-1')),
+      findsOneWidget,
+    );
+    await _captureSearchState(tester, 'chat-info-search-h.png');
 
     await tester.tap(find.byKey(ChatRoomPanel.inChatSearchKey));
     await tester.pumpAndSettle();
 
-    expect(find.byType(BottomSheet), findsNothing);
-    expect(find.byKey(const Key('in_chat_search_inline_header')), findsOneWidget);
+    expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(ChatRoomPanel.inChatSearchKey))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
     expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
+    semantics.dispose();
   });
+
+  testWidgets('portrait Chat Info sheet hands off to existing search', (
+    tester,
+  ) async {
+    final captureTheme = await _loadCaptureTheme(tester);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        theme: captureTheme,
+        groupFriends: const ['friend-a'],
+        client: MockClient((_) async => http.Response('not found', 404)),
+        home: const Scaffold(body: ChatRoomPanel(chatId: _e2eChatId)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    await tester.tap(find.byKey(ChatRoomPanel.chatInfoKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byKey(ChatInfoPanel.createGroupKey), findsOneWidget);
+    await tester.tap(find.byKey(ChatInfoPanel.createGroupKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byKey(CreateGroupSheet.memberTileKey('peer-1')),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Plans');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await _captureSearchState(tester, 'chat-info-create-group-v.png');
+    Navigator.of(tester.element(find.byKey(CreateGroupSheet.sheetKey))).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(ChatInfoPanel.panelKey), findsOneWidget);
+    expect(find.text('Search messages'), findsOneWidget);
+
+    await tester.tap(find.text('Search messages'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
+    await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('loaded local secret needle'), findsOneWidget);
+    await _captureSearchState(tester, 'chat-info-search-v.png');
+  });
+
+  testWidgets(
+    'consumed Chat Info handoff is ignored when profile changes before frame',
+    (tester) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        e2eInChatSearchTestApp(
+          chatId: _e2eChatId,
+          onContainer: (value) => container = value,
+          client: MockClient((_) async => http.Response('not found', 404)),
+          home: const Scaffold(body: ChatRoomPanel(chatId: _e2eChatId)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final current = container.read(authControllerProvider);
+      final currentSession = current.session!;
+
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: currentSession.activeProfileId,
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      container.read(authControllerProvider.notifier).state = current.copyWith(
+        session: AuthSession(
+          accessToken: currentSession.accessToken,
+          refreshToken: currentSession.refreshToken,
+          accountId: currentSession.accountId,
+          activeProfileId: 'profile-after-handoff',
+          expiresInSeconds: currentSession.expiresInSeconds,
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+
+      final changedProfile = container.read(authControllerProvider);
+      final changedSession = changedProfile.session!;
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: changedSession.activeProfileId,
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      container.read(authControllerProvider.notifier).state = changedProfile
+          .copyWith(
+            session: AuthSession(
+              accessToken: changedSession.accessToken,
+              refreshToken: changedSession.refreshToken,
+              accountId: changedSession.accountId,
+              activeProfileId: 'newer-handoff-profile',
+              expiresInSeconds: changedSession.expiresInSeconds,
+            ),
+          );
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: 'newer-handoff-profile',
+      );
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(InChatSearch.searchFieldKey), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(InChatSearch.searchFieldKey))
+            .focusNode!
+            .hasFocus,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('Chat Info search ignores stale chat and profile requests', (
+    tester,
+  ) async {
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      e2eInChatSearchTestApp(
+        chatId: _e2eChatId,
+        sidePanel: ShellSidePanel.chatInfo,
+        onContainer: (value) => container = value,
+        client: MockClient((_) async => http.Response('not found', 404)),
+        home: Scaffold(
+          body: Row(
+            children: [
+              const Expanded(child: ChatRoomPanel(chatId: _e2eChatId)),
+              SizedBox(width: 320, child: SidePanelHost()),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final viewerProfileId = container
+        .read(authControllerProvider)
+        .activeProfileId!;
+    container.read(selectedChatIdProvider.notifier).state = 'another-chat';
+    container
+        .read(chatInfoSearchRequestProvider.notifier)
+        .state = ChatInfoSearchRequest(
+      chatId: _e2eChatId,
+      viewerProfileId: viewerProfileId,
+    );
+    await tester.pump();
+
+    expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+    expect(container.read(chatInfoSearchRequestProvider), isNull);
+
+    container.read(selectedChatIdProvider.notifier).state = _e2eChatId;
+    container
+        .read(chatInfoSearchRequestProvider.notifier)
+        .state = ChatInfoSearchRequest(
+      chatId: _e2eChatId,
+      viewerProfileId: 'different-profile',
+    );
+    await tester.pump();
+
+    expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+    expect(container.read(chatInfoSearchRequestProvider), isNull);
+  });
+
+  testWidgets(
+    'unconsumed Chat Info search request expires with room disposal',
+    (tester) async {
+      late ProviderContainer container;
+      var showRoom = true;
+      late StateSetter updateHome;
+      Widget roomAndInfo() => Scaffold(
+        body: Row(
+          children: [
+            const Expanded(child: ChatRoomPanel(chatId: _e2eChatId)),
+            SizedBox(width: 320, child: SidePanelHost()),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(
+        e2eInChatSearchTestApp(
+          chatId: _e2eChatId,
+          sidePanel: ShellSidePanel.chatInfo,
+          onContainer: (value) => container = value,
+          client: MockClient((_) async => http.Response('not found', 404)),
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              updateHome = setState;
+              return showRoom ? roomAndInfo() : const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      updateHome(() => showRoom = false);
+      await tester.pump();
+      final viewerProfileId = container
+          .read(authControllerProvider)
+          .activeProfileId!;
+      container
+          .read(chatInfoSearchRequestProvider.notifier)
+          .state = ChatInfoSearchRequest(
+        chatId: _e2eChatId,
+        viewerProfileId: viewerProfileId,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(container.read(chatInfoSearchRequestProvider), isNull);
+      updateHome(() => showRoom = true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(InChatSearch.searchFieldKey), findsNothing);
+    },
+  );
 
   testWidgets('in-chat search shows error when API fails', (tester) async {
     await tester.pumpWidget(
@@ -347,13 +808,18 @@ void main() {
         client: MockClient((req) async {
           if (req.url.path == '/api/v1/search/in-chat') {
             return http.Response(
-              jsonEncode({'error_code': 'internal', 'message': 'search failed'}),
+              jsonEncode({
+                'error_code': 'internal',
+                'message': 'search failed',
+              }),
               500,
             );
           }
           if (req.url.path == '/api/v1/messages') {
             return http.Response(
-              jsonEncode({'message_list': {'messages': []}}),
+              jsonEncode({
+                'message_list': {'messages': []},
+              }),
               200,
             );
           }
@@ -382,9 +848,7 @@ Widget chatRoomInChatSearchTestApp({required http.Client client}) {
   return ProviderScope(
     overrides: [
       ...voiceThemeTestOverrides(),
-      profileAccentStorageProvider.overrideWithValue(
-        testProfileAccentStorage,
-      ),
+      profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
       authSessionStorageProvider.overrideWithValue(
         InMemoryAuthSessionStorage(),
       ),
@@ -394,7 +858,9 @@ Widget chatRoomInChatSearchTestApp({required http.Client client}) {
       ),
       httpClientProvider.overrideWithValue(client),
       realtimeHubProvider.overrideWith(_FakeRealtimeHub.new),
-      chatListControllerProvider.overrideWith(_ChatRoomSearchListController.new),
+      chatListControllerProvider.overrideWith(
+        _ChatRoomSearchListController.new,
+      ),
       chatRoomControllerProvider('chat-search').overrideWith(
         (ref) => _ChatRoomSearchRoomController(ref, 'chat-search'),
       ),

@@ -25,6 +25,7 @@ import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'channel_settings_panel.dart';
 import 'pinned_messages_panel.dart';
+import 'create_group_sheet.dart';
 import '../settings/notification_settings_screen.dart';
 import '../settings/chat_themes_settings_screen.dart';
 import '../api_error_messages.dart';
@@ -50,6 +51,7 @@ class ChatInfoPanel extends ConsumerStatefulWidget {
   static const Key e2eVideoTileKey = Key('chat_info_e2e_video_tile');
   static const Key pinnedMessagesKey = Key('chat_info_pinned_messages');
   static const Key chatThemesKey = Key('chat_info_chat_themes');
+  static const Key createGroupKey = Key('chat_info_create_group');
 
   final String chatId;
   final String? groupName;
@@ -98,9 +100,27 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     final roomExists = ref.exists(roomProvider);
     final auth = ref.watch(authControllerProvider);
     final authorization = ref.watch(authorizationHeaderProvider);
+    final chatList = ref.watch(chatListControllerProvider);
     final pinsKey = (widget.chatId, auth.activeProfileId, authorization);
     PendingPinnedMessageJump? pendingPinnedJump;
     final roomState = roomExists ? ref.watch(roomProvider) : null;
+    final viewerProfileId = auth.activeProfileId;
+    final listBelongsToViewer =
+        viewerProfileId != null && chatList.profileId == viewerProfileId;
+    final roomBelongsToViewer =
+        viewerProfileId != null &&
+        roomState?.historyProfileId == viewerProfileId;
+    final dmPeerProfileId = widget.isGroup
+        ? null
+        : viewerProfileId == null
+        ? null
+        : resolveDmPeerForChatId(
+            chatId: widget.chatId,
+            knownPeers: const {},
+            listItems: listBelongsToViewer ? chatList.items : const [],
+            activeProfileId: viewerProfileId,
+            messages: roomBelongsToViewer ? roomState!.messages : const [],
+          );
     final pinnedMessages = roomExists
         ? roomState!.pinnedMessages
         : _standaloneMessagesFor(pinsKey);
@@ -174,6 +194,31 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
                 ref.read(shellNavigationProvider).closeSidePanel();
                 if (context.mounted) Navigator.of(context).maybePop();
               },
+            ),
+          ),
+        ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(l10n.inChatSearchOpen),
+          onTap: () {
+            ref
+                .read(chatInfoSearchRequestProvider.notifier)
+                .state = ChatInfoSearchRequest(
+              chatId: widget.chatId,
+              viewerProfileId: ref.read(authControllerProvider).activeProfileId,
+            );
+            ref.read(shellNavigationProvider).closeSidePanel();
+            if (context.mounted) Navigator.of(context).maybePop();
+          },
+        ),
+        if (dmPeerProfileId != null && dmPeerProfileId.isNotEmpty)
+          ListTile(
+            key: ChatInfoPanel.createGroupKey,
+            leading: const Icon(Icons.group_add_outlined),
+            title: Text(l10n.chatCreateGroupTitle),
+            onTap: () => CreateGroupSheet.show(
+              context,
+              requiredMemberProfileId: dmPeerProfileId,
+              expectedViewerProfileId: viewerProfileId!,
             ),
           ),
         if ((roomExists &&
