@@ -214,7 +214,7 @@ func TestPostgresAdmissionRoomFullRecoveryCleansCommittedUnprojectedRow(t *testi
 	rows, err := admissions.RecoveryRows(ctx, 20)
 	require.NoError(t, err)
 	require.Empty(t, rows, "the cleanup effect committed despite the lost acknowledgement")
-	item, err := admissions.ClaimOutbox(ctx, time.Second)
+	item, err = admissions.ClaimOutbox(ctx, time.Second)
 	require.NoError(t, err)
 	require.Nil(t, item, "the cap-rejected operation remains unclaimable after committed cleanup")
 	var failedFenceCount int

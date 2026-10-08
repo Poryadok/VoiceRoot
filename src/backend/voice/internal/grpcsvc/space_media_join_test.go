@@ -354,7 +354,7 @@ func TestJoinVoiceRoom_SpaceMediaAdmissionReturnsConfirmedSpaceSession(t *testin
 	require.Equal(t, call.RoomID, prepared.RoomID)
 	require.True(t, prepared.CreatedRoom)
 	require.Len(t, prepared.Events, 2)
-	require.Equal([]string{"voice.call_started", "voice.member_joined"}, []string{
+	require.Equal(t, []string{"voice.call_started", "voice.member_joined"}, []string{
 		prepared.Events[0].Subject, prepared.Events[1].Subject,
 	})
 	require.NotEqual(t, uuid.Nil, prepared.Events[0].ID)
