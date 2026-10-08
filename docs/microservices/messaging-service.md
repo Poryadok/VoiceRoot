@@ -20,7 +20,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
 - Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
-- Лимит 4000 символов
+- Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
 ### Durable message-event publication (BE-188 A1)
@@ -418,7 +418,7 @@ messages
 ├── sender_profile_id (всегда реальный автор-профиль)
 ├── posted_as_chat (bool, default false)
 ├── display_chat_id (nullable, chats.id; обязателен при posted_as_chat=true)
-├── content (text, 4000 chars)
+├── content (text, максимум 4000 кодовых точек Unicode)
 ├── type (regular | system | forward)
 ├── thread_parent_id (nullable, logical ref → messages.id)
 ├── forward_from_id (nullable, logical ref → messages.id)
