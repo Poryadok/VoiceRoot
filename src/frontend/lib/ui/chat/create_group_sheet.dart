@@ -8,13 +8,15 @@ import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/create_group_friends_provider.dart';
 import '../../state/social_providers.dart';
+import '../../theme/voice_layout.dart';
 import '../api_error_messages.dart';
-import '../core/voice_bottom_sheet.dart';
+import '../a11y/focus_trap.dart';
+import '../a11y/voice_focus_return.dart';
 
 /// Minimum invitees besides the creator (3 people total per text-chat.md).
 const int kMinGroupInvitees = 2;
 
-/// Bottom sheet: group name + multi-select friends → POST /api/v1/chats + members.
+/// Responsive group-name and multi-select flow → POST /api/v1/chats + members.
 class CreateGroupSheet extends ConsumerStatefulWidget {
   const CreateGroupSheet({
     super.key,
@@ -29,6 +31,8 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
   static const Key nameFieldKey = Key('create_group_name');
   static const Key searchFieldKey = Key('create_group_friend_search');
   static const Key submitKey = Key('create_group_submit');
+  static const Key closeKey = Key('create_group_close');
+  static const Key cancelKey = Key('create_group_cancel');
 
   static Key memberTileKey(String profileId) =>
       Key('create_group_member_$profileId');
@@ -37,19 +41,49 @@ class CreateGroupSheet extends ConsumerStatefulWidget {
     BuildContext context, {
     String? requiredMemberProfileId,
     String? expectedViewerProfileId,
-  }) {
+  }) async {
     final container = ProviderScope.containerOf(context);
-    return showVoiceBottomSheet<void>(
-      context: context,
-      scrollable: false,
-      child: UncontrolledProviderScope(
-        container: container,
-        child: CreateGroupSheet(
-          requiredMemberProfileId: requiredMemberProfileId,
-          expectedViewerProfileId: expectedViewerProfileId,
-        ),
+    final focusReturn = VoiceFocusReturn.capture();
+    final content = UncontrolledProviderScope(
+      container: container,
+      child: CreateGroupSheet(
+        requiredMemberProfileId: requiredMemberProfileId,
+        expectedViewerProfileId: expectedViewerProfileId,
       ),
     );
+    void dismiss(BuildContext routeContext) {
+      Navigator.of(routeContext).pop();
+      focusReturn.restore();
+    }
+
+    if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (routeContext) => VoiceFocusTrap(
+          onEscape: () => dismiss(routeContext),
+          child: LayoutBuilder(
+            builder: (context, constraints) =>
+                SizedBox(height: constraints.maxHeight, child: content),
+          ),
+        ),
+      );
+    } else {
+      final height = MediaQuery.sizeOf(context).height;
+      final dialogHeight = height * .8 < 680 ? height * .8 : 680.0;
+      await showDialog<void>(
+        context: context,
+        builder: (routeContext) => VoiceFocusTrap(
+          onEscape: () => dismiss(routeContext),
+          child: Dialog(
+            constraints: BoxConstraints(maxWidth: 460, maxHeight: height * .9),
+            child: SizedBox(height: dialogHeight, child: content),
+          ),
+        ),
+      );
+    }
+    focusReturn.restore();
   }
 
   @override
@@ -243,10 +277,26 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     final l10n = AppLocalizations.of(context)!;
     final friendsAsync = ref.watch(createGroupFriendsProvider);
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
     final viewerMatches =
         widget.expectedViewerProfileId == null ||
         activeProfileId == widget.expectedViewerProfileId;
     final theme = Theme.of(context);
+    final submitButton = FilledButton(
+      key: CreateGroupSheet.submitKey,
+      onPressed: _canSubmit && viewerMatches ? _submit : null,
+      child: _submitting
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Text(
+              _inviteRetryChatId == null
+                  ? l10n.chatCreateGroupSubmit
+                  : l10n.commonRetry,
+            ),
+    );
 
     return SafeArea(
       key: CreateGroupSheet.sheetKey,
@@ -255,7 +305,22 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.chatCreateGroupTitle, style: theme.textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.chatCreateGroupTitle,
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  key: CreateGroupSheet.closeKey,
+                  tooltip: l10n.commonCancel,
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             TextField(
               key: CreateGroupSheet.nameFieldKey,
@@ -422,21 +487,21 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
                   ),
                 ),
               ),
-            FilledButton(
-              key: CreateGroupSheet.submitKey,
-              onPressed: _canSubmit && viewerMatches ? _submit : null,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _inviteRetryChatId == null
-                          ? l10n.chatCreateGroupSubmit
-                          : l10n.commonRetry,
-                    ),
-            ),
+            if (narrow)
+              SizedBox(width: double.infinity, child: submitButton)
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    key: CreateGroupSheet.cancelKey,
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(l10n.commonCancel),
+                  ),
+                  const SizedBox(width: 8),
+                  submitButton,
+                ],
+              ),
           ],
         ),
       ),
