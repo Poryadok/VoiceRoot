@@ -117,7 +117,7 @@ printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow-test'
   || fail "CI script test target does not run source acquisition fixtures"
 printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
   || fail "diagnostic job gate is too broad"
-printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 8' || fail "job timeout missing"
+printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 15' || fail "job timeout missing"
 printf '%s\n' "$probe" | grep -Fq 'kctl() { kubectl --request-timeout=8s "$@"; }' || fail "kubectl timeout wrapper missing"
 if printf '%s\n' "$probe" | grep -Eq 'kubectl (get|create|delete|logs) '; then fail "unbounded direct Kubernetes request"; fi
 for required in \
