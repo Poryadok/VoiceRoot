@@ -120,18 +120,20 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 		mediaID = &parsed
 	}
 	visibility, visAudienceJSON := visibilityFromRequest(strings.TrimSpace(req.GetVisibility()), req.GetVisibilityEnum())
+	if s.Privacy == nil {
+		return nil, status.Error(codes.Unavailable, "story privacy unavailable")
+	}
 	if visibility == "" {
-		if s.Privacy != nil {
-			aud, privErr := s.Privacy.ShowStoriesAudience(ctx, profileID)
-			if privErr == nil {
-				visibility, visAudienceJSON = audienceToStoryVisibility(aud)
-			}
+		aud, privErr := s.Privacy.ShowStoriesAudience(ctx, profileID)
+		if privErr != nil {
+			return nil, status.Error(codes.Unavailable, "story privacy unavailable")
 		}
-		if visibility == "" {
-			visibility = "friends"
-		}
+		visibility, visAudienceJSON = audienceToStoryVisibility(aud)
 	} else {
-		visibility, visAudienceJSON = s.capCreateStoryVisibility(ctx, profileID, visibility, visAudienceJSON)
+		visibility, visAudienceJSON, err = s.capCreateStoryVisibility(ctx, profileID, visibility, visAudienceJSON)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if mediaID != nil {
 		if s.Files == nil {
@@ -263,7 +265,7 @@ func (s *StoryGRPC) GetStoryFeed(ctx context.Context, req *storyv1.GetStoryFeedR
 	}
 	var visible []*storyv1.Story
 	for i := range page.Rows {
-		if s.canViewStory(ctx, viewerID, &page.Rows[i]) {
+		if s.canViewActiveStory(ctx, viewerID, &page.Rows[i]) {
 			visible = append(visible, rowToProtoForViewer(&page.Rows[i], viewerID))
 		}
 	}
@@ -293,7 +295,7 @@ func (s *StoryGRPC) GetProfileStories(ctx context.Context, req *storyv1.GetProfi
 	}
 	var visible []*storyv1.Story
 	for i := range rows {
-		if s.canViewStory(ctx, viewerID, &rows[i]) {
+		if s.canViewActiveStory(ctx, viewerID, &rows[i]) {
 			visible = append(visible, rowToProtoForViewer(&rows[i], viewerID))
 		}
 	}
@@ -686,7 +688,10 @@ func (s *StoryGRPC) CreateLookingForParty(ctx context.Context, req *storyv1.Crea
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	floor := s.storyPrivacyFloor(ctx, profileID)
+	floor, err := s.storyPrivacyFloor(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
 	if visibilityRestrictiveness(lfpVisibility) > visibilityRestrictiveness(floor) {
 		return nil, status.Error(codes.InvalidArgument, "lfp visibility cannot be narrower than story privacy")
 	}
@@ -751,39 +756,64 @@ func (s *StoryGRPC) canViewStory(ctx context.Context, viewerID uuid.UUID, row *s
 	if row.HiddenFromFeedAt != nil {
 		return false
 	}
-	storyAudience := audienceFromStoryRow(row.Visibility, row.VisibilityAudienceJSON)
-	if s.Privacy != nil {
-		floor, err := s.Privacy.ShowStoriesAudience(ctx, row.AuthorProfileID)
-		if err == nil {
-			if floor.IsNobody() {
-				return false
-			}
-			matcher := s.privacyMatcher()
-			ok, matchErr := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, floor, guestguard.IsGuest(ctx))
-			if matchErr != nil || !ok {
-				return false
+	active, err := s.Store.IsStoryActive(ctx, row.ID)
+	if err != nil {
+		return false
+	}
+	if !active {
+		highlights, err := s.Store.ListHighlightsForStory(ctx, row.ID)
+		if err != nil {
+			return false
+		}
+		for i := range highlights {
+			if s.canViewHighlight(ctx, viewerID, &highlights[i]) {
+				return true
 			}
 		}
+		return false
+	}
+	return s.canViewActiveStory(ctx, viewerID, row)
+}
+
+// canViewActiveStory applies current User privacy to a Story already selected from an active list.
+func (s *StoryGRPC) canViewActiveStory(ctx context.Context, viewerID uuid.UUID, row *store.StoryRow) bool {
+	if row == nil {
+		return false
+	}
+	if viewerID == row.AuthorProfileID {
+		return true
+	}
+	if row.HiddenFromFeedAt != nil || s.Privacy == nil {
+		return false
+	}
+	storyAudience := audienceFromStoryRow(row.Visibility, row.VisibilityAudienceJSON)
+	floor, err := s.Privacy.ShowStoriesAudience(ctx, row.AuthorProfileID)
+	if err != nil || floor.IsNobody() {
+		return false
 	}
 	matcher := s.privacyMatcher()
-	ok, err := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, storyAudience, guestguard.IsGuest(ctx))
+	ok, err := matcher.Allowed(ctx, row.AuthorProfileID, viewerID, floor, guestguard.IsGuest(ctx))
+	if err != nil || !ok {
+		return false
+	}
+	ok, err = matcher.Allowed(ctx, row.AuthorProfileID, viewerID, storyAudience, guestguard.IsGuest(ctx))
 	return err == nil && ok
 }
 
 // capCreateStoryVisibility restricts an explicit CreateStory visibility to the author's show_stories floor.
-func (s *StoryGRPC) capCreateStoryVisibility(ctx context.Context, profileID uuid.UUID, visibility string, audienceJSON *string) (string, *string) {
+func (s *StoryGRPC) capCreateStoryVisibility(ctx context.Context, profileID uuid.UUID, visibility string, audienceJSON *string) (string, *string, error) {
 	if s.Privacy == nil {
-		return visibility, audienceJSON
+		return "", nil, status.Error(codes.Unavailable, "story privacy unavailable")
 	}
 	floorAud, err := s.Privacy.ShowStoriesAudience(ctx, profileID)
 	if err != nil {
-		return visibility, audienceJSON
+		return "", nil, status.Error(codes.Unavailable, "story privacy unavailable")
 	}
 	floorVis, floorJSON := audienceToStoryVisibility(floorAud)
 	if floorAud.IsNobody() || visibilityRestrictiveness(visibility) < visibilityRestrictiveness(floorVis) {
-		return floorVis, floorJSON
+		return floorVis, floorJSON, nil
 	}
-	return visibility, audienceJSON
+	return visibility, audienceJSON, nil
 }
 
 func isInternalRequest(ctx context.Context) bool {
@@ -830,14 +860,15 @@ func (s *StoryGRPC) canViewHighlight(ctx context.Context, viewerID uuid.UUID, ro
 	return err == nil && ok
 }
 
-func (s *StoryGRPC) storyPrivacyFloor(ctx context.Context, profileID uuid.UUID) string {
-	if s.Privacy != nil {
-		audience, err := s.Privacy.ShowStoriesAudience(ctx, profileID)
-		if err == nil {
-			return audienceFloorVisibility(audience)
-		}
+func (s *StoryGRPC) storyPrivacyFloor(ctx context.Context, profileID uuid.UUID) (string, error) {
+	if s.Privacy == nil {
+		return "", status.Error(codes.Unavailable, "story privacy unavailable")
 	}
-	return audienceFloorVisibility(privacy.FriendsAndFoF())
+	audience, err := s.Privacy.ShowStoriesAudience(ctx, profileID)
+	if err != nil {
+		return "", status.Error(codes.Unavailable, "story privacy unavailable")
+	}
+	return audienceFloorVisibility(audience), nil
 }
 
 func rowToProtoForViewer(row *store.StoryRow, viewerID uuid.UUID) *storyv1.Story {

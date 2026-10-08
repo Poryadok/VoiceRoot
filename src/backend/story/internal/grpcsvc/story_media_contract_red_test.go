@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/privacy"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
 	"voice/backend/story/internal/storyevents"
@@ -124,6 +125,7 @@ func startStoryMediaRED(t *testing.T, validators ...grpcsvc.FileMediaValidator) 
 	require.NoError(t, err)
 	events := &storyMediaEvents{}
 	svc := grpcsvc.NewStoryGRPC(&store.StoryStore{Pool: pool})
+	svc.Privacy = mockStoryPrivacy{audience: privacy.EveryoneWithGuests()}
 	if len(validators) > 0 {
 		svc.Files = validators[0]
 	}
