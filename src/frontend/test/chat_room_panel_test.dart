@@ -456,6 +456,7 @@ void main() {
     tester,
   ) async {
     var sendCalls = 0;
+    final sentBodies = <String>[];
     late _EmptyRoomController room;
     await tester.pumpWidget(
       ProviderScope(
@@ -475,6 +476,7 @@ void main() {
             MockClient((req) async {
               if (req.url.path == '/api/v1/messages/send') {
                 sendCalls++;
+                sentBodies.add(utf8.decode(req.bodyBytes));
                 return http.Response(
                   jsonEncode({
                     'error_code': 'permission_denied',
@@ -547,6 +549,70 @@ void main() {
     expect(room.state.messages, isEmpty);
     expect(find.byType(ChatMessageBubbleTile), findsNothing);
     expect(find.byKey(ChatRoomPanel.messagesKey), findsNothing);
+    expect(sendCalls, 1, reason: 'a failed send must not retry automatically');
+    expect(find.byKey(ChatRoomPanel.sendFailureBannerKey), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.sendFailureBannerKey),
+        matching: find.text('Retry'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sendCalls, 2, reason: 'Retry sends exactly one new request');
+    expect(sentBodies, hasLength(2));
+    expect(sentBodies[1], sentBodies[0]);
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(ChatRoomPanel.inputKey),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller
+          ?.text,
+      'Draft stays here',
+    );
+
+    room.state = ChatRoomState(
+      messages: [
+        VoiceMessage(
+          id: 'chat-abc-existing',
+          chatId: 'chat-abc',
+          senderProfileId: 'peer-1',
+          content: 'Existing history',
+          createdAt: DateTime.utc(2026, 9, 20),
+        ),
+      ],
+      historyProfileId: 'prof-test',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+    await tester.pumpAndSettle();
+
+    expect(sendCalls, 3);
+    expect(find.byKey(ChatRoomPanel.messagesKey), findsOneWidget);
+    expect(find.byKey(ChatRoomPanel.sendFailureBannerKey), findsOneWidget);
+    expect(room.state.messages.single.content, 'Existing history');
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(ChatRoomPanel.sendFailureBannerKey),
+        matching: find.text('Retry'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sendCalls, 4);
+    expect(sentBodies, hasLength(4));
+    expect(sentBodies[2], sentBodies[3]);
+    expect(room.state.messages.single.content, 'Existing history');
+    expect(
+      find.text('cannot send messages between blocked accounts'),
+      findsNothing,
+    );
   });
 }
 

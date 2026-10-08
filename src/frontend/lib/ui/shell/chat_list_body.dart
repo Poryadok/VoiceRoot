@@ -730,6 +730,14 @@ Future<void> _showChatRowActions(
           next[item.chatId] = until;
           return next;
         });
+      } else if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(AppLocalizations.of(context)!),
+            ),
+          ),
+        );
       }
     case 'unmute':
       final err = await controller.muteChat(item.chatId);
@@ -739,6 +747,14 @@ Future<void> _showChatRowActions(
           next.remove(item.chatId);
           return next;
         });
+      } else if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(AppLocalizations.of(context)!),
+            ),
+          ),
+        );
       }
     case 'archive':
       final err = await controller.archiveChat(
