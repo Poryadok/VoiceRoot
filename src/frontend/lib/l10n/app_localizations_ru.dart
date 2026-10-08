@@ -546,6 +546,41 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatListLoadMore => 'Загрузить ещё чаты';
 
   @override
+  String get chatScheduleMessage => 'Запланировать сообщение';
+
+  @override
+  String get chatSendWhenOnline => 'Отправить, когда будет в сети';
+
+  @override
+  String get chatSchedulePickerTitle => 'Запланировать сообщение';
+
+  @override
+  String get chatSchedulePending => 'Ожидает отправки';
+
+  @override
+  String get chatScheduleEdit => 'Изменить запланированное сообщение';
+
+  @override
+  String get chatScheduleCancel => 'Отменить запланированное сообщение';
+
+  @override
+  String get chatScheduleSendNow => 'Отправить сейчас';
+
+  @override
+  String get chatScheduleRetry => 'Повторить';
+
+  @override
+  String get chatScheduleDateInvalid =>
+      'Выберите время в пределах следующих 365 дней';
+
+  @override
+  String get chatScheduleFailure =>
+      'Не удалось выполнить запрос для запланированного сообщения. Попробуйте ещё раз.';
+
+  @override
+  String get chatScheduleLoadMore => 'Загрузить ещё запланированные сообщения';
+
+  @override
   String chatListUnreadCount(int count) {
     return 'Непрочитанных: $count';
   }
