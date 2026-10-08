@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	rolev1 "voice.app/voice/role/v1"
+	"voice/backend/pkg/gisowner"
 	"voice/backend/pkg/principal"
 	"voice/backend/role/internal/store"
 )
@@ -123,9 +124,27 @@ func (s *RoleGRPC) ApplyGameSessionGrants(ctx context.Context, request *rolev1.A
 		ProfileIDs: profiles, RequestSHA256: requestHash,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrGameSessionGrantConflict) {
+			return nil, annotateGameGrantOwnerRejection(gameSessionGrantStoreError(err), request, gisowner.CategoryOperationConflict)
+		}
+		if errors.Is(err, store.ErrGameSessionGrantRevoked) {
+			return nil, annotateGameGrantOwnerRejection(gameSessionGrantStoreError(err), request, gisowner.CategoryTerminalRevoked)
+		}
 		return nil, gameSessionGrantStoreError(err)
 	}
 	return &rolev1.ApplyGameSessionGrantsResponse{Receipt: gameSessionGrantReceiptToProto(receipt)}, nil
+}
+
+func annotateGameGrantOwnerRejection(err error, request proto.Message, category string) error {
+	apply, ok := request.(*rolev1.ApplyGameSessionGrantsRequest)
+	if !ok {
+		return err
+	}
+	hash, hashErr := principal.RequestHash(request)
+	if hashErr != nil {
+		return err
+	}
+	return gisowner.Annotate(err, gisowner.RoleDomain, gisowner.RoleApplyRPC, category, apply.GetOperationId(), hash)
 }
 
 func (s *RoleGRPC) RevokeGameSessionGrants(ctx context.Context, request *rolev1.RevokeGameSessionGrantsRequest) (*rolev1.RevokeGameSessionGrantsResponse, error) {

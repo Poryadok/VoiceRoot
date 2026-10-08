@@ -214,7 +214,7 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 	if content == "" && attachmentCount == 0 {
 		return nil, status.Error(codes.InvalidArgument, "content or attachments is required")
 	}
-	if len(content) > 4000 {
+	if !messageTextWithinLimit(content) {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
 	var ghostOnly bool
@@ -706,7 +706,7 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 	if content == "" {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
 	}
-	if len(content) > 4000 {
+	if !messageTextWithinLimit(content) {
 		return nil, status.Error(codes.InvalidArgument, "content exceeds 4000 characters")
 	}
 	row, err := s.Messages.GetMessageByID(ctx, msgID)
@@ -1677,7 +1677,7 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 
 	commentary := strings.TrimSpace(req.GetCommentary())
 	if commentary != "" {
-		if len(commentary) > 4000 {
+		if !messageTextWithinLimit(commentary) {
 			return nil, status.Error(codes.InvalidArgument, "commentary exceeds 4000 characters")
 		}
 		if err := s.insertForwardCommentary(ctx, targetChatID, profileID, chatType, commentary, ghostOnly); err != nil {

@@ -1016,12 +1016,14 @@ class CreateChatRequest extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? name,
     $core.String? topic,
+    $core.String? requestId,
   }) {
     final result = create();
     if (type != null) result.type = type;
     if (spaceId != null) result.spaceId = spaceId;
     if (name != null) result.name = name;
     if (topic != null) result.topic = topic;
+    if (requestId != null) result.requestId = requestId;
     return result;
   }
 
@@ -1043,6 +1045,7 @@ class CreateChatRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'spaceId')
     ..aOS(3, _omitFieldNames ? '' : 'name')
     ..aOS(4, _omitFieldNames ? '' : 'topic')
+    ..aOS(5, _omitFieldNames ? '' : 'requestId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1099,6 +1102,16 @@ class CreateChatRequest extends $pb.GeneratedMessage {
   $core.bool hasTopic() => $_has(3);
   @$pb.TagNumber(4)
   void clearTopic() => $_clearField(4);
+
+  /// Stable UUID reused for retries of one logical create. Empty preserves legacy behavior.
+  @$pb.TagNumber(5)
+  $core.String get requestId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set requestId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRequestId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRequestId() => $_clearField(5);
 }
 
 class UpdateChatRequest extends $pb.GeneratedMessage {

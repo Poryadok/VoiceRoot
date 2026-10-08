@@ -45,13 +45,16 @@ void main() {
   Future<void> pumpSheet(
     WidgetTester tester, {
     required Future<List<SpaceRole>> Function(Ref ref) roles,
+    Future<SpaceRole?> Function(Ref ref)? defaultJoinRole,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...voiceThemeTestOverrides(),
           spaceRolesProvider('space-1').overrideWith(roles),
-          defaultJoinRoleProvider('space-1').overrideWith((ref) async => null),
+          defaultJoinRoleProvider(
+            'space-1',
+          ).overrideWith(defaultJoinRole ?? (ref) async => null),
           spacePermissionProvider.overrideWith((ref, query) async => false),
         ],
         child: MaterialApp(
@@ -104,6 +107,39 @@ void main() {
 
     expect(find.text('Could not load roles'), findsNWidgets(2));
     expect(find.text('Exception: sensitive backend payload'), findsNothing);
+  });
+
+  testWidgets('default join role failure is safe and retryable', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await pumpSheet(
+      tester,
+      roles: (_) async => const [
+        SpaceRole(id: 'r1', spaceId: 'space-1', name: 'Raid Leader'),
+      ],
+      defaultJoinRole: (_) async {
+        attempts++;
+        if (attempts == 1) {
+          throw Exception('private default role diagnostic');
+        }
+        return const SpaceRole(id: 'r2', spaceId: 'space-1', name: 'Member');
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(attempts, 1);
+    expect(find.text('Could not load roles'), findsOneWidget);
+    expect(find.text('private default role diagnostic'), findsNothing);
+    expect(find.text('Raid Leader'), findsOneWidget);
+    expect(find.byKey(const Key('retry_default_join_role')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('retry_default_join_role')));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(find.textContaining('Member'), findsOneWidget);
+    expect(find.text('Raid Leader'), findsOneWidget);
   });
 
   testWidgets('SpaceRolesSheet lists roles and create button when allowed', (

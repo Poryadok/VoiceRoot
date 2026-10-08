@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -84,10 +85,18 @@ func (f *fakeSpaceClient) AddBotMember(_ context.Context, _ *spacev1.AddBotMembe
 
 type fakeChatClient struct {
 	chatv1.UnimplementedChatServiceServer
-	addMembersCalls int
-	createChatCalls int
-	createErr       error
-	listErr         error
+	mu                    sync.Mutex
+	addMembersCalls       int
+	createChatCalls       int
+	createRequestIDs      []string
+	createErr             error
+	createErrAfterPersist bool
+	createErrs            []error
+	createGates           []<-chan struct{}
+	createdChats          map[string]*chatv1.Chat
+	listErr               error
+	createStarted         chan struct{}
+	allowCreate           <-chan struct{}
 }
 
 func (f *fakeChatClient) ListMembers(context.Context, *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
@@ -103,26 +112,86 @@ func (f *fakeChatClient) AddMembers(_ context.Context, req *chatv1.AddMembersReq
 }
 
 func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatRequest) (*chatv1.CreateChatResponse, error) {
+	f.mu.Lock()
 	f.createChatCalls++
-	if f.createErr != nil {
-		return nil, f.createErr
+	callIndex := f.createChatCalls - 1
+	f.createRequestIDs = append(f.createRequestIDs, req.GetRequestId())
+	if req.GetRequestId() != "" && f.createdChats != nil {
+		if saved := f.createdChats[req.GetRequestId()]; saved != nil {
+			chat := *saved
+			f.mu.Unlock()
+			return &chatv1.CreateChatResponse{Chat: &chat}, nil
+		}
+	}
+	createErr, createErrAfterPersist := f.createErr, f.createErrAfterPersist
+	var createGate <-chan struct{}
+	if callIndex < len(f.createErrs) {
+		createErr = f.createErrs[callIndex]
+		createErrAfterPersist = false
+	}
+	if callIndex < len(f.createGates) {
+		createGate = f.createGates[callIndex]
+	}
+	f.mu.Unlock()
+	if f.createStarted != nil {
+		f.createStarted <- struct{}{}
+	}
+	if createGate != nil {
+		<-createGate
+	} else if f.allowCreate != nil {
+		<-f.allowCreate
+	}
+	if createErr != nil && !createErrAfterPersist {
+		return nil, createErr
 	}
 	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
 	if req.GetType() == chatv1.ChatType_CHAT_TYPE_GROUP {
 		chatType = chatv1.ChatType_CHAT_TYPE_GROUP
 	}
-	return &chatv1.CreateChatResponse{
-		Chat: &chatv1.Chat{Id: uuid.NewString(), Type: chatType},
-	}, nil
+	chatID := uuid.NewString()
+	if requestID, err := uuid.Parse(req.GetRequestId()); err == nil && requestID != uuid.Nil {
+		chatID = uuid.NewSHA1(uuid.NameSpaceOID, requestID[:]).String()
+	}
+	chat := &chatv1.Chat{Id: chatID, Type: chatType}
+	if req.GetRequestId() != "" {
+		f.mu.Lock()
+		if f.createdChats == nil {
+			f.createdChats = make(map[string]*chatv1.Chat)
+		}
+		if saved := f.createdChats[req.GetRequestId()]; saved != nil {
+			copy := *saved
+			chat = &copy
+		} else {
+			copy := *chat
+			f.createdChats[req.GetRequestId()] = &copy
+		}
+		f.mu.Unlock()
+	}
+	if createErr != nil {
+		return nil, createErr
+	}
+	return &chatv1.CreateChatResponse{Chat: chat}, nil
+}
+
+func (f *fakeChatClient) createCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.createChatCalls
+}
+
+func (f *fakeChatClient) createIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.createRequestIDs...)
 }
 
 type botCDeps struct {
-	user              *fakeUserClient
-	msg               messagingv1.MessagingServiceServer
-	chat              *fakeChatClient
-	role              rolev1.RoleServiceServer
-	space             *fakeSpaceClient
-	noChatClient       bool
+	user         *fakeUserClient
+	msg          messagingv1.MessagingServiceServer
+	chat         *fakeChatClient
+	role         rolev1.RoleServiceServer
+	space        *fakeSpaceClient
+	noChatClient bool
 }
 
 func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceClient, *store.BotStore, *dispatch.Hub, func()) {
