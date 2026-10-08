@@ -76,34 +76,64 @@ void main() {
     () {
       late _ResumeReconnectHarness harness;
       fakeAsync((clock) {
-        harness = _ResumeReconnectHarness();
+        final timeline = <String>[];
+        void record(String event) =>
+            timeline.add('t=${clock.elapsed.inMilliseconds}ms $event');
+        void snapshot(String label) => record(
+          '$label connections=${harness.transport.connections.length} '
+          'status=${harness.container.read(realtimeLinkStatusProvider)}',
+        );
+
+        harness = _ResumeReconnectHarness(trace: record);
         try {
           unawaited(harness.hub.ensureConnected());
           clock.flushMicrotasks();
+          snapshot('initial');
           expect(harness.transport.connections, hasLength(1));
 
           const delays = [1, 2, 4, 8, 16, 30, 30];
           var elapsedSeconds = 0;
           for (var attempt = 0; attempt < delays.length; attempt++) {
+            harness
+                .connection(attempt)
+                .events
+                .listen(
+                  (_) {},
+                  onDone: () => record('observer onDone connection=$attempt'),
+                );
+            record('request close connection=$attempt');
             unawaited(harness.connection(attempt).closeFrames());
             clock.flushMicrotasks();
+            snapshot('after close connection=$attempt');
 
             final delay = delays[attempt];
+            record(
+              'expected pending timer attempt=${attempt + 1} '
+              'deadline=${clock.elapsed.inMilliseconds + delay * 1000}ms',
+            );
             clock.elapse(Duration(seconds: delay - 1));
             clock.flushMicrotasks();
+            snapshot(
+              'before retry deadline connection=$attempt delay=${delay}s',
+            );
             expect(
               harness.transport.connections,
               hasLength(attempt + 1),
-              reason: 'attempt ${attempt + 1} must wait ${delay}s',
+              reason:
+                  'attempt ${attempt + 1} must wait ${delay}s; '
+                  'timeline: ${timeline.join(' | ')}',
             );
 
             clock.elapse(const Duration(seconds: 1));
             clock.flushMicrotasks();
             elapsedSeconds += delay;
+            snapshot('at retry deadline expectedAttempt=${attempt + 1}');
             expect(
               harness.transport.connections,
               hasLength(attempt + 2),
-              reason: 'attempt ${attempt + 2} starts at t=$elapsedSeconds',
+              reason:
+                  'attempt ${attempt + 2} starts at t=$elapsedSeconds; '
+                  'timeline: ${timeline.join(' | ')}',
             );
           }
 
@@ -220,7 +250,10 @@ const _rotatedSession = AuthSession(
 );
 
 class _ResumeReconnectHarness {
-  _ResumeReconnectHarness({bool autoConnect = false}) {
+  _ResumeReconnectHarness({
+    bool autoConnect = false,
+    void Function(String event)? trace,
+  }) : transport = _ResumeTransportFactory(trace) {
     final client = MockClient((_) async => http.Response('{}', 404));
     auth = AuthController(
       authClient: VoiceAuthClient(gateway: gatewayHttpForTest(client)),
@@ -240,7 +273,7 @@ class _ResumeReconnectHarness {
     hub = container.read(realtimeHubProvider);
   }
 
-  final transport = _ResumeTransportFactory();
+  final _ResumeTransportFactory transport;
   late final AuthController auth;
   late final ProviderContainer container;
   late final RealtimeHub hub;
@@ -266,6 +299,9 @@ class _ResumeReconnectHarness {
 }
 
 class _ResumeTransportFactory implements RealtimeTransportFactory {
+  _ResumeTransportFactory(this._trace);
+
+  final void Function(String event)? _trace;
   final connections = <_ResumeConnection>[];
   final sessions = <AuthSession>[];
 
@@ -274,8 +310,12 @@ class _ResumeTransportFactory implements RealtimeTransportFactory {
     required Uri uri,
     required AuthSession session,
   }) async {
+    _trace?.call(
+      'transport open attempt=${connections.length} '
+      'session=${session.accountId}/${session.activeProfileId}',
+    );
     sessions.add(session);
-    final connection = _ResumeConnection(connections.length);
+    final connection = _ResumeConnection(connections.length, _trace);
     connections.add(connection);
     return connection;
   }
@@ -295,10 +335,11 @@ class _ResumeTransportFactory implements RealtimeTransportFactory {
 }
 
 class _ResumeConnection extends VoiceRealtimeConnection {
-  _ResumeConnection(this.attempt)
+  _ResumeConnection(this.attempt, this._trace)
     : super(uri: Uri.parse('ws://transport.test/ws'), headers: const {});
 
   final int attempt;
+  final void Function(String event)? _trace;
   final connectStarted = Completer<void>();
   final _frames = StreamController<RealtimeFrame>.broadcast(sync: true);
   final resumeLastSequences = <int>[];
@@ -308,11 +349,15 @@ class _ResumeConnection extends VoiceRealtimeConnection {
 
   @override
   Future<void> connect() async {
+    _trace?.call('connect start attempt=$attempt');
     if (!connectStarted.isCompleted) connectStarted.complete();
+    _trace?.call('connect complete attempt=$attempt');
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    _trace?.call('dispose attempt=$attempt');
+  }
 
   // Expected RealtimeTransport contract: resume data comes from the retired
   // connection and is supplied explicitly to this fresh transport.
@@ -321,11 +366,18 @@ class _ResumeConnection extends VoiceRealtimeConnection {
     resumeLastSequences.add(lastSequence);
   }
 
-  void addHello() => _frames.add(const RealtimeFrame(op: 'hello', sequence: 1));
+  void addHello() {
+    _trace?.call('hello attempt=$attempt');
+    _frames.add(const RealtimeFrame(op: 'hello', sequence: 1));
+  }
 
   void addFrame(RealtimeFrame frame) => _frames.add(frame);
 
   Future<void> closeFrames() async {
-    if (!_frames.isClosed) await _frames.close();
+    if (!_frames.isClosed) {
+      _trace?.call('stream close start attempt=$attempt');
+      await _frames.close();
+      _trace?.call('stream close complete attempt=$attempt');
+    }
   }
 }
