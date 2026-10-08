@@ -214,10 +214,15 @@ func rateLimitRetryAfterSeconds(group string) int {
 }
 
 func (g *gateway) rateLimitKey(r *http.Request, claims tokenClaims, publicRoute bool) string {
-	if token := botBearerToken(r); token != "" {
-		return "bot:" + token
+	if publicRoute {
+		return "ip:" + g.clientIP(r)
 	}
-	if publicRoute || claims.UserID == "" {
+	if isBotTokenRESTRoute(r.URL.Path) {
+		if token := botBearerToken(r); token != "" {
+			return "bot:" + token
+		}
+	}
+	if claims.UserID == "" {
 		return "ip:" + g.clientIP(r)
 	}
 	return "user:" + claims.UserID

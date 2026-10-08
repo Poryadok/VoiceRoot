@@ -35,7 +35,7 @@
 
 В реализации Gateway группа **File upload** также покрывает `POST /api/v1/users/me/avatar/presigned-upload` (выдача presigned PUT для статичного аватара — [user-profile.md](../features/user-profile.md); см. ниже).
 
-Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых маршрутов ключ строится по `user_id`.
+Реализация: Redis sliding window counter. Для публичных маршрутов ключ строится по IP независимо от содержимого `Authorization`; `X-Forwarded-For` учитывается только от доверенных proxy из `GATEWAY_TRUSTED_PROXY_CIDRS`. Для защищённых пользовательских маршрутов ключ строится по проверенному `user_id`. Ключ Bot применяется только на защищённых Bot-token маршрутах `/api/v1/bots/me/**`; посторонний Bot header не меняет identity защищённого пользовательского запроса.
 
 ## Маршрутизация
 
