@@ -197,7 +197,7 @@ func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(
 	senderID, firstRecipientID, secondRecipientID := uuid.New(), uuid.New(), uuid.New()
 	recorder := &recordingMessageFCM{}
 	policyErr := errors.New("recipient policy unavailable")
-	policy := &failOnceMessagePolicy{err: policyErr}
+	policy := &failOnMessagePolicyCall{failAt: 2, err: policyErr}
 	pusher := &dispatch.MessagePusher{
 		Tokens: messageTokenRepo{byProfile: map[uuid.UUID][]store.DeviceToken{
 			firstRecipientID:  {{Token: "first-token", PushService: "fcm"}},
@@ -217,10 +217,12 @@ func TestRouteMessageNotificationPolicyFailureRetriesAllRecipientsBeforeSending(
 
 	err := routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
 	require.ErrorIs(t, err, policyErr, "a transient recipient policy error must fail the durable attempt")
+	require.EqualValues(t, 2, policy.calls.Load(), "the second recipient's policy must fail after the first recipient was prepared")
 	require.Empty(t, recorder.sentTo, "resolve every recipient before dispatch so retry cannot duplicate an earlier recipient")
 
 	err = routeMessageNotification(context.Background(), handler, members, pusher, pushenrich.NoopResolver{}, event)
 	require.NoError(t, err)
+	require.EqualValues(t, 4, policy.calls.Load(), "retry should preflight both recipients")
 	require.ElementsMatch(t, []uuid.UUID{firstRecipientID, secondRecipientID}, recorder.sentTo)
 }
 
