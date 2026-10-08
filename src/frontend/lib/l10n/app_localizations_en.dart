@@ -3561,4 +3561,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Manage encrypted key backup';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Not in contacts · messages may be unsafe';
 }

@@ -3588,4 +3588,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Управление резервной копией ключей';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Не в контактах · сообщения могут быть небезопасны';
 }
