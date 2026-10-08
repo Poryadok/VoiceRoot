@@ -3,6 +3,11 @@ name: Staging deploy
 on:
   workflow_call:
     inputs:
+      cold_backup_operation:
+        description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
+        required: false
+        type: string
+        default: ""
       rollback_operation:
         description: Latest successful images-only operation to roll back with a fresh cut
         required: false
@@ -47,6 +52,11 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      cold_backup_operation:
+        description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
+        required: false
+        type: string
+        default: ""
       rollback_operation:
         description: Latest successful images-only operation to roll back with a fresh cut
         required: false
@@ -249,6 +259,7 @@ jobs:
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ""
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
+          ROLLOUT_COLD_BACKUP_OPERATION: ${{ inputs.cold_backup_operation }}
           VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
           VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
@@ -306,10 +317,17 @@ jobs:
           if entry not in manifest:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           if action=='--bridge-prepare':
               prior=os.environ.get('ROLLOUT_ROLLBACK_OPERATION','')
+              cold=os.environ.get('ROLLOUT_COLD_BACKUP_OPERATION','')
               mode=os.environ['DEPLOY_MODE']
               changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
+              if cold:
+                  if (cold!='3340764a7d24' or prior or mode!='images-only' or changed!={'story'}
+                      or os.environ['VOICE_IMAGE_TAG']!=os.environ.get('GITHUB_SHA')):
+                      raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
               if mode=='app-only' and os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')=='false' and changed and changed<={'web','admin','developer-portal'}:mode='images-only'
-              arguments=['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']]
+              arguments=(['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
+                  ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
+                  ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
           elif action=='--bridge-authorize':arguments=['authorize',op,os.environ['ROLLOUT_ARTIFACT_ID']]
           elif action=='--bridge-finish':arguments=['finish',op,os.environ['ROLLOUT_CLAIM_RV']]
           elif action=='--bridge-status':arguments=['status',op]

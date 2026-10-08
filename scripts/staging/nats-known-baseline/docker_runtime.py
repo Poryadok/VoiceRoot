@@ -4,6 +4,8 @@ Inputs and executables must already be captured by the root controller. This
 adapter accepts no arbitrary image, address, Docker endpoint, or container.
 """
 import json
+import copy
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -29,6 +31,7 @@ class DockerRuntime:
         self.run = run or self._run
         self.owned = {}
         self.new_stores = set()
+        self.selected_stores = {}
 
     def allow_new_store(self, path):
         path=Path(path)
@@ -55,7 +58,7 @@ class DockerRuntime:
         if self.run([*args,'--filter','label='+LABEL+'='+self.operation,'--format','{{.ID}}']):
             raise Blocked('operation_container_writer_present')
 
-    def allow_bound_store(self, path, claim, pv, verify_closed):
+    def allow_bound_store(self, path, claim, pv, verify_closed, *, descriptor=None):
         """Enroll one already-verified selected PV, never an arbitrary mount.
 
         The rollout caller must have verified original native records/census
@@ -67,13 +70,43 @@ class DockerRuntime:
         path=Path(path)
         if path.resolve(strict=True)!=path:raise Blocked('selected_store_path_changed')
         if path.is_relative_to(self.base):return # private owned proof/fixture store
-        from stage_runtime import pv_storage_path
+        from stage_runtime import pv_storage_path, verify_selected_store_leaf
         if pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],pv['metadata']['uid'])!=str(path):
             raise Blocked('selected_store_binding_changed')
-        row=path.lstat()
-        if not stat.S_ISDIR(row.st_mode) or row.st_uid!=65532 or stat.S_IMODE(row.st_mode)!=0o700:
+        if (not isinstance(descriptor,dict) or descriptor.get('path')!=str(path)
+            or descriptor.get('claim_uid')!=claim['metadata']['uid'] or descriptor.get('pv_uid')!=pv['metadata']['uid']):
             raise Blocked('selected_store_custody_invalid')
+        verify_selected_store_leaf(path.lstat(),descriptor)
         self.new_stores.add(str(path))
+        if not hasattr(self,'selected_stores'):self.selected_stores={}
+        self.selected_stores[str(path)]=copy.deepcopy(descriptor)
+
+    @staticmethod
+    def selected_config_bytes(path,gid):
+        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        try:
+            row=os.fstat(fd)
+            if (not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_gid!=gid
+                or stat.S_IMODE(row.st_mode)!=0o440 or row.st_nlink!=1 or not 0<row.st_size<=1<<20):
+                raise Blocked('selected_broker_config_custody_invalid')
+            raw=os.read(fd,row.st_size+1);after=os.fstat(fd)
+            if len(raw)!=row.st_size or (row.st_dev,row.st_ino,row.st_size,row.st_mtime_ns,row.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns):
+                raise Blocked('selected_broker_config_changed')
+            return raw
+        finally:os.close(fd)
+
+    def selected_broker_config(self):
+        # Copy only the already-captured configuration. Never widen the
+        # credential tree or change the selected store's permissions.
+        original=self.base/'server.conf';raw=self.selected_config_bytes(original,65532)
+        folder=Path(tempfile.mkdtemp(prefix='selected-config-',dir=self.base));folder.chmod(0o700)
+        target=folder/'server.conf'
+        fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'wb') as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        os.chown(target,0,10000);target.chmod(0o440)
+        if self.selected_config_bytes(original,65532)!=raw or self.selected_config_bytes(target,10000)!=raw:
+            raise Blocked('selected_broker_config_changed')
+        return target,hashlib.sha256(raw).hexdigest()
 
     @staticmethod
     def _run(args, timeout=60, limit=1<<20):
@@ -112,7 +145,7 @@ class DockerRuntime:
                 config['Labels'].get(LABEL) != self.operation or
                 config['Image'] != expected['image'] or
                 row['Image'] != expected['image_id'] or
-                config['User'] != '65532:65532' or
+                config['User'] != expected.get('user','65532:65532') or host.get('GroupAdd') or
                 host['NetworkMode'] != expected['network'] or
                 host['Privileged'] or not host['ReadonlyRootfs'] or
                 host.get('CapAdd') or host.get('CapDrop') != ['ALL'] or
@@ -122,22 +155,40 @@ class DockerRuntime:
         mounts = {(m['Source'], m['Destination'], bool(m['RW'])) for m in row['Mounts'] if m['Type'] == 'bind'}
         if mounts != expected['mounts'] or any(m['Type'] not in ('bind', 'tmpfs') for m in row['Mounts']):
             raise Blocked('container_mount_invalid')
+        if expected.get('selected') is not None:
+            selected=expected['selected']
+            if self.selected_stores.get(selected['path'])!=selected['descriptor']:
+                raise Blocked('selected_broker_descriptor_changed')
+            for path,gid in ((self.base/'server.conf',65532),(Path(selected['config']),10000)):
+                if hashlib.sha256(self.selected_config_bytes(path,gid)).hexdigest()!=selected['config_sha256']:
+                    raise Blocked('selected_broker_config_changed')
         return row
 
-    def create(self, suffix, image, mounts, command, broker=None):
+    def create(self, suffix, image, mounts, command, broker=None,*,selected=None):
         if image not in (NATS_IMAGE, BOX_IMAGE) or not re.fullmatch(r'[a-z0-9-]{1,32}', suffix):
             raise Blocked('container_spec_invalid')
+        if selected is None and any(str(path) in self.selected_stores for path,_,_ in mounts):
+            raise Blocked('selected_broker_route_required')
         image_rows = json.loads(self.run(['image', 'inspect', image]))
         if len(image_rows) != 1 or image.split('@')[1] not in [d.split('@')[-1] for d in image_rows[0]['RepoDigests']]:
             raise Blocked('image_digest_invalid')
         name = 'voice-known-' + self.operation + '-' + suffix
         network = 'none'
+        user='65532:65532'
+        if selected is not None:
+            if (broker is not None or image!=NATS_IMAGE or command!=['/usr/local/bin/nats-server','-c','/server.conf']
+                or self.selected_stores.get(selected['path'])!=selected['descriptor']
+                or {(str(p),t,w) for p,t,w in mounts}!={(selected['path'],'/data',True),(selected['config'],'/server.conf',False)}):
+                raise Blocked('selected_broker_spec_invalid')
+            from stage_runtime import verify_selected_store_leaf
+            verify_selected_store_leaf(Path(selected['path']).lstat(),selected['descriptor'])
+            user='10000:10000'
         if broker is not None:
             if not self.inspect(broker)['State']['Running']:
                 raise Blocked('broker_not_running')
             network = 'container:' + self.owned[broker]['id']
         args = ['create', '--name', name, '--label', LABEL+'='+self.operation,
-                '--network', network, '--user', '65532:65532', '--read-only',
+                '--network', network, '--user', user, '--read-only',
                 '--env', 'HOME=/tmp', '--env', 'XDG_CACHE_HOME=/tmp/cache', '--workdir', '/tmp',
                 '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
                 '--memory', '256m', '--pids-limit', '64', '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m']
@@ -152,14 +203,19 @@ class DockerRuntime:
         cid = self.run(args)
         if not re.fullmatch(r'[a-f0-9]{64}', cid):
             raise Blocked('container_identity_invalid')
-        self.owned[name] = {'id': cid, 'image': image, 'image_id': image_rows[0]['Id'], 'network': network, 'mounts': expected_mounts}
+        self.owned[name] = {'id': cid, 'image': image, 'image_id': image_rows[0]['Id'], 'network': network, 'mounts': expected_mounts,'user':user,'selected':copy.deepcopy(selected)}
         self.inspect(name)
         return name
 
     def start_broker(self, suffix, store):
-        name = self.create(suffix, NATS_IMAGE,
-            [(store, '/data', True), (self.base/'server.conf', '/server.conf', False)],
-            ['/usr/local/bin/nats-server', '-c', '/server.conf'])
+        selected=None;config=self.base/'server.conf'
+        descriptor=getattr(self,'selected_stores',{}).get(str(store))
+        if descriptor is not None:
+            config,sha=self.selected_broker_config()
+            selected={'path':str(store),'descriptor':copy.deepcopy(descriptor),'config':str(config),'config_sha256':sha}
+        arguments=(suffix,NATS_IMAGE,[(store,'/data',True),(config,'/server.conf',False)],
+                   ['/usr/local/bin/nats-server','-c','/server.conf'])
+        name=self.create(*arguments) if selected is None else self.create(*arguments,selected=selected)
         self.run(['start', name]); self.inspect(name)
         return name
 

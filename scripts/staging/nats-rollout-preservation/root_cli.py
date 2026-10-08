@@ -124,7 +124,8 @@ def main_unlocked(args,code):
     previous=None
     if len(args)==2 and args[0]=='--prepare-rollback':
         prior=operation_path(args[1]);previous=private_json(prior/'checkpoint.json')
-        if previous.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
+        import paused_recovery
+        paused_recovery.verify_adopted_binding(prior,previous,binding)
         if previous.get('renderer_authority') is not None:raise Blocked('renderer_rollback_protected_bridge_required')
         value=transaction.rollback_package(previous)
         expected=previous['context']['expected'];kube=Kube()
@@ -140,7 +141,8 @@ def main_unlocked(args,code):
     if len(args)>=2 and args[0] in ('--authorize','--finish','--rollback','--status'):
         base=operation_path(args[1]);state=private_json(base/'checkpoint.json')
         if state.get('operation')!=base.name[len('rollout-'):]:raise Blocked('rollout_checkpoint_identity_invalid')
-        if state.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
+        import paused_recovery
+        paused_recovery.verify_adopted_binding(base,state,binding)
         if args[0]=='--status' and len(args)==2:
             print(json.dumps({k:state[k] for k in ('schema','operation','phase','status','fence_status','error','restart','preservation') if k in state},sort_keys=True));return
         if args[0]=='--authorize' and len(args)==4:

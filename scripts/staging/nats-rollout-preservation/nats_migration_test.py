@@ -17,6 +17,11 @@ class SelectedStoreTests(unittest.TestCase):
         return path,claim,pv
     def test_external_legacy_selected_store_is_bound_before_actual_mount_validation(self):
         path,claim,pv=self.binding();calls=[]
+        from selected_store_test import SelectedStoreCustodyTests
+        from stage_runtime import selected_store_descriptor
+        hub,_,_=SelectedStoreCustodyTests().binding()
+        hub['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName']=claim['metadata']['name']
+        descriptor=selected_store_descriptor(hub,claim,pv)
         def run(args,**kwargs):
             calls.append(args)
             if args[:2]==['image','inspect']:return json.dumps([{'Id':'sha256:fixture','RepoDigests':[module.NATS_IMAGE]}])
@@ -26,11 +31,12 @@ class SelectedStoreTests(unittest.TestCase):
             runtime=module.DockerRuntime(Path(td),'123456abcdef',run);verify=Mock()
             real_resolve=Path.resolve
             def resolved(p,*args,**kwargs):return p if p==path else real_resolve(p,*args,**kwargs)
-            with patch.object(Path,'resolve',resolved),patch.object(Path,'lstat',return_value=type('Stat',(),{'st_mode':0o40700,'st_uid':65532})()),patch.object(runtime,'inspect',return_value={}):
-                runtime.allow_bound_store(path,claim,pv,verify)
-                runtime.create('migration',module.NATS_IMAGE,[(path,'/data',True)],['/usr/local/bin/nats-server'])
+            with patch.object(Path,'resolve',resolved),patch.object(Path,'lstat',return_value=type('Stat',(),{'st_mode':0o42770,'st_uid':65532,'st_gid':10000})()),patch.object(runtime,'inspect',return_value={}):
+                runtime.allow_bound_store(path,claim,pv,verify,descriptor=descriptor)
+                with self.assertRaisesRegex(Blocked,'selected_broker_route_required'):
+                    runtime.create('migration',module.NATS_IMAGE,[(path,'/data',True)],['/usr/local/bin/nats-server'])
             verify.assert_called_once();self.assertIn(str(path),runtime.new_stores)
-            self.assertTrue(any(args[0]=='create' and 'type=bind,source='+str(path)+',target=/data' in args for args in calls))
+            self.assertFalse(any(args[0]=='create' for args in calls))
     def test_unbound_external_path_or_fence_failure_never_enrolls_mount(self):
         path,claim,pv=self.binding()
         with tempfile.TemporaryDirectory() as td:

@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 import stat
 import guard
-from stage_runtime import Staging, HUB, MARKER, LEAVES, pv_storage_path
+from stage_runtime import Staging, HUB, MARKER, LEAVES, pv_storage_path, selected_store_descriptor, verify_selected_store_leaf
 from controller import Blocked
 from apply import digest
 
@@ -253,6 +253,7 @@ class RolloutStage(Staging):
             raise Blocked('rollout_selected_storage_identity_changed')
         # Every ancestor of the exact UID-bound source is a trusted directory;
         # never follow a provisioner path through an untrusted symlink.
+        descriptor=self.selected_store_descriptor()
         fd=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
         try:
             parts=self.final_path.parts[1:]
@@ -260,8 +261,16 @@ class RolloutStage(Staging):
                 child=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=fd)
                 os.close(fd);fd=child;s=os.fstat(fd)
                 if index==len(parts)-1:
-                    if s.st_uid!=65532 or stat.S_IMODE(s.st_mode)!=0o700:
-                        raise Blocked('rollout_selected_store_custody_invalid')
+                    try:verify_selected_store_leaf(s,descriptor)
+                    except Blocked:raise Blocked('rollout_selected_store_custody_invalid') from None
                 elif s.st_uid!=0 or s.st_mode&0o022:
                     raise Blocked('rollout_selected_store_parent_untrusted')
         finally:os.close(fd)
+
+    def selected_store_descriptor(self):
+        captured=self.snapshots[HUB];current=self.kube.get('deployment',HUB)
+        if (current['metadata']['uid']!=captured['metadata']['uid']
+            or current['metadata'].get('namespace')!=captured['metadata'].get('namespace')
+            or current['spec']!=captured['spec']):
+            raise Blocked('selected_store_hub_authority_changed')
+        return selected_store_descriptor(captured,self.final_claim,self.final_pv)
