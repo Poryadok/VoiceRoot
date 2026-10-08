@@ -1540,5 +1540,6 @@
   "e2eBackupDeleteConfirm": "This deletes the encrypted backup from this account. Your keys on this device will stay intact.",
   "e2eBackupDelete": "Delete backup",
   "e2eBackupRestoreCta": "Restore encrypted history",
-  "e2eKeyBackupManage": "Manage encrypted key backup"
+  "e2eKeyBackupManage": "Manage encrypted key backup",
+  "profileNotInContactsWarning": "Not in contacts · messages may be unsafe"
 }

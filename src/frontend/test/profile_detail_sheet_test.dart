@@ -21,6 +21,7 @@ import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
+import 'package:voice_frontend/ui/core/verified_badge.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -28,6 +29,194 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets(
+    'profile detail renders its personal system verification badge and visible status',
+    (tester) async {
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-target',
+          client: _profilePresentationClient(
+            verificationType: 'personal',
+            visibleCustomStatus: 'Available for testing',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byKey(ProfileDetailSheet.sheetKey));
+      final l10n = AppLocalizations.of(context)!;
+      expect(find.byKey(VerifiedBadge.personalKey), findsOneWidget);
+      expect(find.bySemanticsLabel(l10n.verifiedBadgePersonal), findsOneWidget);
+      expect(find.text('Available for testing'), findsOneWidget);
+      expect(
+        find.byKey(const Key('profile_not_in_contacts_warning')),
+        findsOneWidget,
+      );
+      expect(find.text(l10n.profileNotInContactsWarning), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'profile detail uses organization badge and does not expose profile status fallback',
+    (tester) async {
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-target',
+          client: _profilePresentationClient(
+            verificationType: 'organization',
+            profileCustomStatus: 'Unfiltered profile status',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byKey(ProfileDetailSheet.sheetKey));
+      final l10n = AppLocalizations.of(context)!;
+      expect(find.byKey(VerifiedBadge.organizationKey), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(l10n.verifiedBadgeOrganization),
+        findsOneWidget,
+      );
+      expect(find.text('Unfiltered profile status'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'profile detail does not render a verification badge when absent',
+    (tester) async {
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-target',
+          client: _profilePresentationClient(verificationType: 'none'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(VerifiedBadge.personalKey), findsNothing);
+      expect(find.byKey(VerifiedBadge.organizationKey), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('profile detail hides outsider warning for a contact and self', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-target',
+        client: _profilePresentationClient(
+          verificationType: 'none',
+          contactProfileIds: const ['p-target'],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('profile_not_in_contacts_warning')),
+      findsNothing,
+    );
+
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'prof-test',
+        key: const ValueKey('self-profile-warning-case'),
+        client: _profilePresentationClient(
+          profileId: 'prof-test',
+          verificationType: 'none',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('profile_not_in_contacts_warning')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'profile detail hides outsider warning while contact state is unknown or failing',
+    (tester) async {
+      final contactList = Completer<http.Response>();
+      await tester.pumpWidget(
+        _profileDetailTestApp(
+          profileId: 'p-target',
+          client: _profilePresentationClient(
+            verificationType: 'none',
+            contactListResponse: contactList.future,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const Key('profile_not_in_contacts_warning')),
+        findsNothing,
+      );
+
+      contactList.complete(
+        http.Response(
+          jsonEncode({
+            'contact_list': {'contacts': <Object?>[]},
+          }),
+          503,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('profile_not_in_contacts_warning')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('profile detail resolves contacts beyond the first page', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-target',
+        client: _profilePresentationClient(
+          verificationType: 'none',
+          contactPages: const {
+            '': {'contacts': <Object?>[], 'next_cursor': 'contacts-page-2'},
+            'contacts-page-2': {
+              'contacts': [
+                {'profile_id': 'p-target', 'source': 'manual'},
+              ],
+            },
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('profile_not_in_contacts_warning')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('profile detail hides outsider warning during profile switch', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _profileDetailTestApp(
+        profileId: 'p-target',
+        isProfileSwitching: true,
+        client: _profilePresentationClient(verificationType: 'none'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('profile_not_in_contacts_warning')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('contact profile hides message when DM permission is denied', (
     tester,
   ) async {
@@ -1033,11 +1222,93 @@ void main() {
   });
 }
 
+MockClient _profilePresentationClient({
+  required String verificationType,
+  String profileId = 'p-target',
+  String? profileCustomStatus,
+  String? visibleCustomStatus,
+  List<String> contactProfileIds = const [],
+  String? nextContactCursor,
+  Map<String, Map<String, dynamic>> contactPages = const {},
+  Future<http.Response>? contactListResponse,
+}) {
+  return MockClient((request) async {
+    if (request.url.path == '/api/v1/users/profiles/$profileId') {
+      return http.Response(
+        jsonEncode({
+          'profile': {
+            'id': profileId,
+            'account_id': 'a-target',
+            'username': 'target',
+            'discriminator': '0001',
+            'display_name': 'Target',
+            'locale': 'en',
+            'theme': 'dark',
+            'is_primary': true,
+            'verification_type': verificationType,
+            if (profileCustomStatus != null)
+              'custom_status': profileCustomStatus,
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/users/profiles/$profileId/presence') {
+      return http.Response(
+        jsonEncode({
+          'presenceStatus': {
+            'profileId': profileId,
+            'status': 'online',
+            if (visibleCustomStatus != null)
+              'customStatus': visibleCustomStatus,
+          },
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/chats/dm-permission/$profileId') {
+      return http.Response(jsonEncode({'allowed': false}), 200);
+    }
+    if (request.url.path == '/api/v1/friends/requests') {
+      return http.Response(
+        jsonEncode({
+          'friend_request_list': {'incoming': [], 'outgoing': []},
+        }),
+        200,
+      );
+    }
+    if (request.url.path == '/api/v1/friends/contacts') {
+      if (contactListResponse != null) return contactListResponse;
+      final cursor = request.url.queryParameters['cursor'] ?? '';
+      final page =
+          contactPages[cursor] ??
+          {
+            'contacts': [
+              for (final contactProfileId in contactProfileIds)
+                {'profile_id': contactProfileId, 'source': 'manual'},
+            ],
+            if (nextContactCursor != null) 'next_cursor': nextContactCursor,
+          };
+      return http.Response(jsonEncode({'contact_list': page}), 200);
+    }
+    if (request.url.path == '/api/v1/friends') {
+      return http.Response(
+        jsonEncode({
+          'friend_list': {'profile_ids': <String>[]},
+        }),
+        200,
+      );
+    }
+    return http.Response('{}', 200);
+  });
+}
+
 Widget _profileDetailTestApp({
   required String profileId,
   required MockClient client,
   Key? key,
   ThemeData? theme,
+  bool isProfileSwitching = false,
   void Function(AuthController controller)? onAuthController,
 }) {
   AuthController createAuthController(Ref ref) {
@@ -1055,6 +1326,7 @@ Widget _profileDetailTestApp({
         InMemoryAuthSessionStorage(),
       ),
       authControllerProvider.overrideWith(createAuthController),
+      profileSwitchInProgressProvider.overrideWith((ref) => isProfileSwitching),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
       ),

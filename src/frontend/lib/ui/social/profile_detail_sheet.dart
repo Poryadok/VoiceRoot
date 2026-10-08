@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/api_errors.dart';
+import '../../backend/friends_client.dart';
 import '../../backend/matchmaking_client.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
@@ -14,6 +15,7 @@ import '../../state/social_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../routing/deep_link_urls.dart';
 import '../api_error_messages.dart';
+import '../core/chat_author_label.dart';
 import '../core/voice_share_link.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
@@ -22,6 +24,56 @@ import '../stories/highlights_section.dart';
 import '../stories/story_ring_avatar.dart';
 import '../../routing/stories_routes.dart';
 import 'presence_indicator.dart';
+
+/// Resolves contact membership across every page, scoped to the current session.
+/// A partial list or a session switch is never interpreted as "not a contact".
+final profileContactMembershipProvider = FutureProvider.autoDispose
+    .family<bool?, String>((ref, targetProfileId) async {
+      var disposed = false;
+      ref.onDispose(() => disposed = true);
+      final session = ref.watch(
+        authControllerProvider.select((state) => state.session),
+      );
+      if (session == null || ref.watch(profileSwitchInProgressProvider)) {
+        return null;
+      }
+
+      final client = ref.watch(voiceFriendsClientProvider);
+      final seenCursors = <String>{};
+      String? cursor;
+      while (true) {
+        final result = await client.listContacts(
+          authorization: session.authorizationHeader,
+          cursor: cursor,
+        );
+        if (disposed || ref.read(profileSwitchInProgressProvider)) return null;
+
+        final currentSession = ref.read(authControllerProvider).session;
+        if (currentSession?.accountId != session.accountId ||
+            currentSession?.activeProfileId != session.activeProfileId ||
+            currentSession?.authorizationHeader !=
+                session.authorizationHeader) {
+          return null;
+        }
+
+        switch (result) {
+          case FriendsApiOk(:final data):
+            if (data.contacts.any(
+              (contact) => contact.profileId == targetProfileId,
+            )) {
+              return false;
+            }
+            final nextCursor = data.nextCursor;
+            if (nextCursor == null || nextCursor.isEmpty) return true;
+            if (nextCursor == cursor || !seenCursors.add(nextCursor)) {
+              throw StateError('profile_contacts_cursor_did_not_advance');
+            }
+            cursor = nextCursor;
+          case FriendsApiFailure():
+            throw StateError('profile_contacts_unavailable');
+        }
+      }
+    });
 
 String _mmEntryLabel(
   AsyncValue<GameListData> catalogAsync,
@@ -69,10 +121,15 @@ class ProfileDetailSheet extends ConsumerWidget {
     final presence = ref.watch(presenceProvider(profileId));
     final requestsAsync = ref.watch(friendRequestsProvider);
     final auth = ref.watch(authControllerProvider);
+    final isProfileSwitching = ref.watch(profileSwitchInProgressProvider);
     final activeId = auth.activeProfileId;
     final isGuest = auth.isGuest;
     final isSelf = activeId == profileId;
     final session = auth.session;
+    final contactMembershipAsync =
+        !isGuest && !isSelf && activeId != null && session != null
+        ? ref.watch(profileContactMembershipProvider(profileId))
+        : null;
     final dmPermissionRequest = session == null || activeId == null
         ? null
         : (
@@ -92,6 +149,19 @@ class ProfileDetailSheet extends ConsumerWidget {
     );
     final pendingIncoming = incoming.contains(profileId);
     final isFriend = ref.watch(isFriendProvider(profileId));
+    final showNotInContactsWarning =
+        !isGuest &&
+        !auth.isRestoring &&
+        !isProfileSwitching &&
+        session != null &&
+        activeId != null &&
+        !isSelf &&
+        contactMembershipAsync != null &&
+        contactMembershipAsync.valueOrNull == true &&
+        !contactMembershipAsync.isLoading &&
+        !contactMembershipAsync.isRefreshing &&
+        !contactMembershipAsync.isReloading &&
+        !contactMembershipAsync.hasError;
     final activeAuthors = ref.watch(activeStoryAuthorIdsProvider);
     final hasActiveStory = activeAuthors.contains(profileId);
     final profileStoriesAsync = ref.watch(profileStoriesProvider(profileId));
@@ -154,9 +224,17 @@ class ProfileDetailSheet extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              profile.displayName,
+                            ChatAuthorLabel(
+                              displayName: profile.displayName,
+                              verificationType: profile.verificationType,
                               style: Theme.of(context).textTheme.titleLarge,
+                              verifiedBadgeSemanticLabel:
+                                  switch (profile.verificationType) {
+                                    'personal' => l10n.verifiedBadgePersonal,
+                                    'organization' =>
+                                      l10n.verifiedBadgeOrganization,
+                                    _ => null,
+                                  },
                             ),
                             Text(profile.handle),
                             const SizedBox(height: 4),
@@ -170,6 +248,16 @@ class ProfileDetailSheet extends ConsumerWidget {
                                 Text(_presenceLabel(context, l10n, presence)),
                               ],
                             ),
+                            if (presence?.customStatus case final status?
+                                when status.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                status,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
                             mmRatingAsync.when(
                               loading: () => const SizedBox.shrink(),
                               error: (error, stackTrace) =>
@@ -200,6 +288,33 @@ class ProfileDetailSheet extends ConsumerWidget {
                         ),
                     ],
                   ),
+                  if (showNotInContactsWarning) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      key: const Key('profile_not_in_contacts_warning'),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Theme.of(context).colorScheme.onSurface,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(l10n.profileNotInContactsWarning),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (profile.bio != null && profile.bio!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(profile.bio!),

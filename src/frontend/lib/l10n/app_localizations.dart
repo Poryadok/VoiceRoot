@@ -6511,6 +6511,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage encrypted key backup'**
   String get e2eKeyBackupManage;
+
+  /// No description provided for @profileNotInContactsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in contacts · messages may be unsafe'**
+  String get profileNotInContactsWarning;
 }
 
 class _AppLocalizationsDelegate
