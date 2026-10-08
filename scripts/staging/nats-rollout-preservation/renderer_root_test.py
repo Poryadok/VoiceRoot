@@ -26,11 +26,17 @@ class RendererLiveTests(unittest.TestCase):
             return original_get(kind,name)
         kube.get.side_effect=get;authority['input_binding']={'fixed':'private'}
         stage.marker=copy.deepcopy(marker)
-        with patch.object(runtime_stage,'pv_storage_path',return_value='/selected'),patch.object(runtime_stage.os,'open',return_value=7),patch.object(runtime_stage.os,'close'),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_mode=stat.S_IFDIR|0o700)),patch.object(renderer_root,'inputs',return_value=({},authority['input_binding'])),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
+        with patch.object(runtime_stage,'pv_storage_path',return_value='/selected'),patch('stage_runtime.pv_storage_path',return_value='/selected'),patch.object(runtime_stage.os,'open',return_value=7),patch.object(runtime_stage.os,'close'),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_gid=10000,st_mode=stat.S_IFDIR|0o2770)),patch.object(renderer_root,'inputs',return_value=({},authority['input_binding'])),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
             renderer_root.revalidate(kube,stage,authority)
             with self.assertRaises(Blocked):stage.verify_final_storage()
             marker['data']['phase']='rollout-verified';marker['data']['knownRolloutOperation']='a'*12
             self.assertTrue(renderer_root.verify_live(stage,authority)['verified'])
+            for gid,mode in ((65532,0o2770),(10000,0o2777)):
+                with self.subTest(gid=gid,mode=mode),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_gid=gid,st_mode=stat.S_IFDIR|mode)):
+                    with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
+            stage.final_claim['metadata']['uid']='changed'
+            with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
+            stage.final_claim['metadata']['uid']='pvc'
             marker['data']['generation']='changed'
             with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
 
@@ -41,7 +47,8 @@ class RendererLiveTests(unittest.TestCase):
         hub={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':HUB,'namespace':'voice-staging','uid':'hub','resourceVersion':'1'},
             'spec':{'replicas':1,'template':{'metadata':{'labels':{'app':HUB}},'spec':{
                 'initContainers':[{'name':'nats-config-renderer','image':repo+':old'}],
-                'containers':[{'name':'nats','image':broker}],
+                'securityContext':{'fsGroup':10000,'fsGroupChangePolicy':'OnRootMismatch'},
+                'containers':[{'name':'nats','image':broker,'securityContext':{'runAsUser':10000,'runAsGroup':10000,'runAsNonRoot':True},'volumeMounts':[{'name':'jsdata','mountPath':'/data'}]}],
                 'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':storage['pvc_name']}}]}}}}
         descriptor=renderer_transition.plan(hub,old,target,'e'*40,storage)
         hub['spec']['template']=descriptor['target_template'];hub['metadata']['resourceVersion']='3'
