@@ -16,7 +16,7 @@ def request(args,environment):
     action=args[0] if args else ''
     if action=='prepare' and len(args)==5:
         row={'action':action,'mode':args[1],'changed_services':[s for s in args[2].split(',') if s],'source_sha':args[3],'run_id':int(args[4]),'token':environment['GITHUB_TOKEN']}
-    elif action=='prepare-rollback' and len(args)==3:
+    elif action in ('prepare-rollback','resume-cold-backup') and len(args)==3:
         row={'action':action,'operation':args[1],'run_id':int(args[2]),'token':environment['GITHUB_TOKEN']}
     elif action=='authorize' and len(args)==3:
         row={'action':action,'operation':args[1],'artifact_id':int(args[2]),'token':environment['GITHUB_TOKEN']}

@@ -13,7 +13,101 @@ No bootstrap Job runs against the retained store. NATS ConfigMaps, Secrets,
 credentials, streams and consumers are retained. A failed proof retains the
 owned fence and reports BLOCKED; it does not restart clients or overwrite data.
 
-## V3 upgrade and explicit existing-actor enrollment
+## V4 full-master safeguards and compatible backend proof
+
+V4 delivery uses the separate absent-only directory
+`/home/pmd/voice-nats-rollout-v4`. The reviewed captured launcher runs
+`--install --upgrade-v4` against the exact installed V3 binding. It preserves
+the original code as `installed/code-v3-preserved`, existing enrollment,
+policy, recovery material and units. It does not issue or renew service actors.
+The sole known failed prebuild request can receive a root-owned disposition
+under the operation lock only when its exact request/response, active marker,
+source directory and absent build/operation match the reviewed predecessor.
+Its original STARTED journal remains unchanged; every other unfinished request
+or identity drift vetoes the upgrade. Published V3 assets remain immutable.
+
+Full deployment validates selected existing mounted actor identities, signed
+effective permissions and actual isolated server authentication. This grant
+compatibility evidence does not claim exercised business publication, ACK or
+delivery. Captured generation, role credential key/path/container, source ACL
+and Secret identities are rechecked before fencing and after custody.
+Unsupported authority is a prerequisite veto, never a silent grant renewal.
+
+Crossing Space migration16 requires one coherent MVCC snapshot containing
+version and pre-counts, a restored dump proof, and full encrypted off-node byte
+readback before migration. The snapshot closes before ALTER; version, count and
+default postconditions gate restart. Already-applied16 does not repeat its
+backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
+(including empty strings) are rechecked under the writer fence before any
+native contract mutation or database Job; conflicting data is not rewritten.
+
+The hub renderer is a separately bound root-only init image transition; the
+runner cannot apply arbitrary hub changes. Exact captured inputs and private
+old/new output equality precede startup. Actual completed init identity,
+generated configuration and unchanged broker are checked after hub readiness
+and before applications resume. Failure refences; native migration/CAS still
+require closed writers. Renderer retry validates the recorded completed DB
+state rather than rerunning migrations or assuming the original version.
+
+The first compatible populated backend witness is the reviewed Story image
+pair, whose four schema UP files are identical and whose old binary has passed
+the documented text-write probe on current clean4. Root independently binds
+the actual mounted Story actor, application DSN, PostgreSQL authority, clean4
+and exact image/source witness; the disposable probe is not a live receipt.
+Unknown old Story content and unproved backend rollback selections, including
+historical Bot/Search, fail closed. Ordinary frontend rollback remains separate.
+
+A rebuilt current Story component requires its own actual-binary/current4
+witness even when its source has not changed. Compatibility admission must bind
+the exact child manifest, config, application binary, component build source,
+four migration hashes, actual fixture receipt and successful publisher evidence.
+Historical caller/schema fixture inputs remain separate from the new image's
+build source. Current source CI approval remains a separate deployment gate.
+
+The V6 root-only witness promotion pins reviewed immutable evidence bytes;
+the runner cannot register a witness or supply a compatibility boolean. Both
+captured Story preflight and fresh rollback use the same selected root authority.
+Missing, revoked, corrupt or drifted authority vetoes before mutation. The
+captured witness digest is rechecked after custody and before authorization;
+schema, PostgreSQL, mounted actor and target-contract checks remain mandatory.
+The root-private registry retains at most 128 approved child/config pairs, so a
+new current pair does not erase the prior compatible rollback pair. Every
+selection binds the complete monotonic registry revision. Any registry change
+during an operation vetoes revalidation; revocation cannot silently re-enable
+the same record. Conflicting evidence for an existing pair is rejected.
+
+Delivery has two phases. First review, merge, publish and install the generic
+V6 helper using its exact immutable assets and fixed V5 predecessor. After the
+final master image is published, run and review the actual image/current4
+fixture and its publisher/component/schema evidence, then publish that evidence
+as separately pinned public data. This evidence contains no credentials and is
+not compiled into the helper. An explicit human-root command promotes the
+reviewed file; neither pmd nor the workflow can approve it:
+
+```sh
+/usr/bin/python3 -I -S /var/lib/voice-nats-preservation/installed/code/nats-rollout-preservation/story_witness.py --promote /root/reviewed-story-witness.json REVIEWED_WITNESS_SHA256
+```
+
+The supplied file must be root-owned, private, regular, single-link and read
+through trusted ancestors. Root promotion takes the existing global operation
+lock, checks installed code and idle operations, and rereads the unchanged
+active marker before its atomic selector write. Use `--revoke` with the same
+record path/hash for explicit revocation. Code upgrades preserve every registry
+and immutable record byte; unknown partial files or corruption veto the upgrade.
+The V5 operator has no intake, so newly rebuilt content remains blocked until
+V6 and the separately reviewed evidence are installed. Promotion is scoped
+binary/schema compatibility authority, not current CI or live rollout proof.
+
+Acceptance order is populated Story transition, an ordinary postrelease record,
+fresh latest-operation rollback preserving that record and all dynamic native
+consumer/ACK state, current Story re-upgrade, then the entire current-master
+catalog (22 apps and renderer) with migrations, readiness and smoke evidence.
+Final state must be current master. Keep automatic deployment disabled until
+that full state and preservation proof pass. An incompatible failed full apply
+stays fenced for separately authorized forward repair; no SQL DOWN, previous
+DB archive or earlier native cut is a recovery shortcut.
+
+## Historical V3 upgrade and explicit existing-actor enrollment
 
 V3 uses a separate absent-only delivery directory,
 `/home/pmd/voice-nats-rollout-v3`. Preserve the published V2 assets and its
@@ -59,7 +153,7 @@ receipt advance only after the complete proof, without replaying bootstrap Jobs.
 
 Increasing the social duplicate window does not establish retroactive 24-hour
 deduplication history. Fresh rollback captures current post-release records and
-retains additive configuration. User is the first backend acceptance target;
+retains additive configuration. User was the initial backend acceptance target;
 future Realtime/Space/Social releases still require their actual existing actor
 rights and, for Social, the documented DB/outbox compatibility prerequisites.
 Keep automatic deployment disabled until the populated backend transition and
@@ -313,3 +407,47 @@ the active-release chain are required; a failed attempt is not a PASS receipt.
 A frontend-only proof establishes that concrete version transition. It does not
 close a remaining durable/ACL migration prerequisite or establish
 acceptance of backend releases that the pre-fence compatibility gate rejects.
+
+Selected Kubernetes store custody retains the root-safe ancestor and exact
+PVC/PV/path checks. Its live leaf is UID65532, GID10000, mode2770, bound to the
+captured HUB fsGroup10000/OnRootMismatch and broker UID/GID10000. Both stage and
+native migration registration consume the same closed descriptor. This reflects
+Kubernetes group ownership; the operator never chmods/chowns the live store.
+Private proof stores and reset-baseline custody remain separate. A failed fenced
+operation is not an ordinary upgrade or retry authority: continuation requires
+an explicitly reviewed exact-operation adoption and preserved original evidence.
+
+Native migration on that selected store runs as the descriptor-bound HUB broker
+UID/GID10000, with no supplementary groups and all capabilities dropped. This
+permits access to legitimate owner-only descendants created by the live HUB;
+leaf ownership alone does not establish descendant access. The original private
+server configuration stays root:G65532/0440. Root creates an exact-byte copy
+inside an owned0700 directory, root:G10000/0440, for the selected broker mount.
+Create and inspect bind its identity, configuration bytes and exact mounts to
+the registered descriptor; generic selected-store launches are rejected.
+Restored proof brokers, clients and reset stores retain their65532 isolation.
+
+V7 adopts only paused operation `3340764a7d24`, its exact V6 checkpoint and
+STARTED journal, captured marker/PVC/PV and named selected-custody failure.
+Installation preserves original checkpoint bytes, V6 code, keys, policy and
+all witness registry records. Unknown unfinished operations, partial backup
+outputs and changed originals veto adoption; installation does not release the
+fence or replay the old request.
+
+The separately journaled `resume-cold-backup` workflow action uses a fresh full
+execution nonce and approved current V7 helper source. The preserved Story
+target remains historical approved source `73ca52699ddf6a9182e3407d5bbdedbc29c06dee`.
+Root reconstructs its retained canonical Git files and exact successful CI
+stack-lock artifact, recompiles retained parameters and compares compiled,
+image-only and server-normalized targets with the original checkpoint. Current
+helper approval does not replace historical target approval.
+
+Before accepting a cut, a pinned isolated broker restores the closed native
+archive; one actual account monitoring snapshot feeds both census and contract
+compilation. Original plan, binding and selected scripts must match, and root
+rechecks actor/credential, PostgreSQL, non-NATS, kernel, target and current
+execution authority. Rejected startup or proof removes only its owned copy;
+unverified cleanup cannot return an accepted cut. Interrupted capture or partial
+outputs cannot be replayed. Completed encrypted output recovery requires the
+same fresh execution nonce/run/head and operation binding. Ordinary encrypted
+off-node readback, paused authorization, apply and release guards remain required.

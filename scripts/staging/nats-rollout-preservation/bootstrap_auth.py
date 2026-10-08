@@ -18,7 +18,7 @@ def prove(credentials,operator,unchanged):
     unchanged()
     with tempfile.TemporaryDirectory(prefix='bootstrap-auth-',dir=guard.ROOT) as td:
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
-        inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532)
+        inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532);inputs.chmod(0o750)
         for name,value in [('bootstrap.creds',credentials)]:
             p=inputs/name;p.write_bytes(value);p.chmod(0o440);os.chown(p,0,65532)
         tokens={key:secret_bytes(operator,key).decode().strip() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}

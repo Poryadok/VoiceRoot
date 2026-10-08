@@ -29,11 +29,25 @@ def monitor(kube):
     if kube.get('deployment',HUB)!=hub:fail()
     return tree
 def preflight(kube,source,enrollment,contract,decoder):
+    return _from_tree(kube,source,enrollment,contract,decoder,monitor(kube))
+
+def closed_copy_preflight(kube,source,enrollment,contract,decoder,runtime,broker,tree):
+    """Root recovery callback: actual owned restored broker snapshot only."""
+    owned=runtime.inspect(broker)
+    if (owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none'
+        or runtime.owned[broker]['id']!=owned['Id']):fail()
+    generation=enrollment['binding']['generation']
+    account=secret_bytes(kube.get('secret','voice-nats-operator-'+generation),'account.public').decode().strip()
+    if runtime.account_id()!=account:fail()
+    result=_from_tree(kube,source,enrollment,contract,decoder,tree)
+    if runtime.inspect(broker)['Id']!=owned['Id']:fail()
+    return result
+
+def _from_tree(kube,source,enrollment,contract,decoder,tree):
     generation=enrollment['binding']['generation'];select(kube,enrollment,generation)
     for role,wanted in TARGET_FILES.items():
         path=Path(source)/('deploy/templates/nats-'+role+'-bootstrap.yaml')
         if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest()!=wanted:fail()
-    tree=monitor(kube)
     account=secret_bytes(kube.get('secret','voice-nats-operator-'+generation),'account.public').decode().strip()
     class Runtime:
         def monitor_jsz(self,broker):return tree
