@@ -979,6 +979,8 @@
   "premiumBadgeLabel": "Премиум",
   "settingsSecurity": "Безопасность и доверие",
   "securitySettingsTitle": "Безопасность",
+  "securityChangePasswordAction": "Изменить пароль",
+  "securityChangePasswordSuccess": "Пароль изменён. Войдите с новым паролем.",
   "appealSettingsTitle": "Апелляция на санкцию",
   "appealTitle": "Подать апелляцию",
   "appealDescription": "Апелляцию можно подать один раз в течение 7 дней. Укажите ID санкции из уведомления и объясните, почему решение ошибочно.",

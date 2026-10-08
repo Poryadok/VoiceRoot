@@ -2,11 +2,13 @@ package voice.backend.auth.config;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.events.AuthEventPublisher;
 import voice.backend.auth.repository.AccountRepository;
 import voice.backend.auth.repository.BackupCodeRepository;
@@ -125,7 +127,8 @@ public class AuthBeans {
       voice.backend.auth.service.AccountDeletionOperationStarter deletionStarter,
       voice.backend.auth.service.AccountDeletionPendingFloorWorker deletionFloorWorker,
       voice.backend.auth.service.AccountDeletionPendingEventWorker deletionEventWorker,
-      ObjectProvider<RegistrationSessionEpochPreparer> registrationSessionEpochPreparer) {
+      ObjectProvider<RegistrationSessionEpochPreparer> registrationSessionEpochPreparer,
+      @Qualifier("authSecurityTransactionTemplate") ObjectProvider<TransactionTemplate> authSecurityTransactions) {
     AuthService service = new AuthService(
         accounts,
         refreshTokens,
@@ -153,6 +156,10 @@ public class AuthBeans {
     RegistrationSessionEpochPreparer registrationPreparer = registrationSessionEpochPreparer.getIfAvailable();
     if (registrationPreparer != null) {
       service.configureRegistrationSessionEpochPreparer(registrationPreparer);
+    }
+    TransactionTemplate securityTransactions = authSecurityTransactions.getIfAvailable();
+    if (securityTransactions != null) {
+      service.configureSecurityTransactions(securityTransactions);
     }
     return service;
   }

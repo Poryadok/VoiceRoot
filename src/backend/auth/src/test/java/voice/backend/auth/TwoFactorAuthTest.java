@@ -211,6 +211,105 @@ class TwoFactorAuthTest {
   }
 
   @Test
+  void changePasswordRequiresSecondFactorAndConsumesBackupCodeOnlyOnSuccess() throws Exception {
+    String email = "2fa-change-password@voice-qa.test";
+    String password = "Correct horse battery staple";
+    String replacement = "Another longer password";
+    JsonNode initial = register(email, password);
+    String initialAccess = initial.get("access_token").asText();
+    String initialRefresh = initial.get("refresh_token").asText();
+    MvcResult enrollment = mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + initialAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk())
+        .andReturn();
+    String backup = objectMapper.readTree(enrollment.getResponse().getContentAsString())
+        .get("backup_codes").get(0).asText();
+    JsonNode enabled = session(mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + initialAccess)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk()).andReturn());
+    JsonNode second = session(mockMvc.perform(post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + password
+                + "\",\"totp_code\":\"000000\",\"device_info_json\":\"{}\"}"))
+        .andExpect(status().isOk()).andReturn());
+
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + enabled.get("access_token").asText())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"current_password\":\"wrong\",\"new_password\":\"" + replacement
+                + "\",\"totp_code\":\"" + backup + "\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("invalid_credentials"));
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + enabled.get("access_token").asText())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"current_password\":\"" + password + "\",\"new_password\":\"" + replacement
+                + "\",\"totp_code\":\"invalid\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("invalid_totp"));
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + enabled.get("access_token").asText())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"current_password\":\"" + password + "\",\"new_password\":\"" + replacement
+                + "\",\"totp_code\":\"" + backup + "\"}"))
+        .andExpect(status().isNoContent());
+
+    for (String access : new String[] {initialAccess, enabled.get("access_token").asText(),
+        second.get("access_token").asText()}) {
+      mockMvc.perform(post("/api/v1/auth/validate").header("Authorization", "Bearer " + access))
+          .andExpect(status().isUnauthorized());
+    }
+    for (String refresh : new String[] {initialRefresh, enabled.get("refresh_token").asText(),
+        second.get("refresh_token").asText()}) {
+      mockMvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+              .content("{\"refresh_token\":\"" + refresh + "\"}"))
+          .andExpect(status().isUnauthorized());
+    }
+    mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + replacement + "\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("totp_required"));
+    mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"" + replacement
+                + "\",\"totp_code\":\"" + backup + "\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.error").value("invalid_totp"));
+  }
+
+  @Test
+  void changePasswordAcceptsTotpWhenEnabled() throws Exception {
+    String email = "2fa-change-password-totp@voice-qa.test";
+    String password = "Correct horse battery staple";
+    JsonNode registered = register(email, password);
+    String access = registered.get("access_token").asText();
+    mockMvc.perform(post("/api/v1/auth/2fa/enable")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":\"" + password + "\"}"))
+        .andExpect(status().isOk());
+    JsonNode enabled = session(mockMvc.perform(post("/api/v1/auth/2fa/verify")
+            .header("Authorization", "Bearer " + access)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk()).andReturn());
+
+    mockMvc.perform(post("/api/v1/auth/password/change")
+            .header("Authorization", "Bearer " + enabled.get("access_token").asText())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"current_password\":\"" + password
+                + "\",\"new_password\":\"A replacement password\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isNoContent());
+    mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"" + email
+                + "\",\"password\":\"A replacement password\",\"totp_code\":\"000000\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   void disable2FARejectsGuestAccounts() throws Exception {
     MvcResult registration = mockMvc.perform(post("/api/v1/auth/register")
             .contentType(MediaType.APPLICATION_JSON)
@@ -235,5 +334,9 @@ class TwoFactorAuthTest {
         .andReturn();
     JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
     return root.get("session");
+  }
+
+  private JsonNode session(MvcResult result) throws Exception {
+    return objectMapper.readTree(result.getResponse().getContentAsString()).get("session");
   }
 }

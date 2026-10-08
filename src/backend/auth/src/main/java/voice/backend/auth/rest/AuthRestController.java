@@ -121,6 +121,15 @@ public class AuthRestController {
     return ResponseEntity.noContent().build();
   }
 
+  @PostMapping("/password/change")
+  public ResponseEntity<Void> changePassword(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @Valid @RequestBody ChangePasswordRequest request) {
+    authService.changePassword(
+        authorization, request.currentPassword(), request.newPassword(), request.totpCode());
+    return ResponseEntity.noContent().build();
+  }
+
   @PostMapping("/refresh")
   public SessionEnvelope refresh(@Valid @RequestBody RefreshRequest request) {
     return SessionEnvelope.from(authService.refresh(new RefreshCommand(request.refreshToken(), request.deviceInfoJson())));
@@ -407,6 +416,11 @@ public class AuthRestController {
 
   public record Disable2FARequest(
       @NotBlank String password, @JsonProperty("totp_code") @NotBlank String totpCode) {}
+
+  public record ChangePasswordRequest(
+      @JsonProperty("current_password") @NotBlank String currentPassword,
+      @JsonProperty("new_password") @NotBlank String newPassword,
+      @JsonProperty("totp_code") String totpCode) {}
 
   public record RefreshRequest(
       @JsonProperty("refresh_token") @NotBlank String refreshToken,

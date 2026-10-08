@@ -11,8 +11,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,7 +34,11 @@ import org.testcontainers.utility.DockerImageName;
 import voice.backend.auth.events.NoopAuthEventPublisher;
 import voice.backend.auth.mail.NoopMailSender;
 import voice.backend.auth.repository.JdbcAccountRepository;
+import voice.backend.auth.repository.BackupCodeRepository;
+import voice.backend.auth.repository.JdbcBackupCodeRepository;
 import voice.backend.auth.repository.JdbcRefreshTokenRepository;
+import voice.backend.auth.repository.RefreshTokenRecord;
+import voice.backend.auth.repository.RefreshTokenRepository;
 import voice.backend.auth.security.BCryptPasswordHasher;
 import voice.backend.auth.security.InMemoryTokenBlacklist;
 import voice.backend.auth.security.JwtService;
@@ -48,6 +57,7 @@ import voice.backend.auth.sessionepoch.SessionEpochFloorStore;
 import voice.backend.auth.sessionepoch.SessionEpochFloorUnavailableException;
 import voice.backend.auth.sessionepoch.SessionEpochIssuanceGate;
 import voice.backend.auth.userdb.NoOpProfileSwitchValidator;
+import voice.backend.auth.userdb.ProfileSwitchValidator;
 import voice.backend.auth.userdb.PhoneHashResolver;
 import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 
@@ -56,6 +66,8 @@ import voice.backend.auth.userdb.PrimaryProfileProvisioner;
 class RegistrationSessionEpochJdbcIntegrationTest {
   private static final Clock CLOCK =
       Clock.fixed(Instant.parse("2026-09-06T09:00:00Z"), ZoneOffset.UTC);
+  private static final JwtService JWT_SERVICE =
+      JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
 
   @Container
   static final PostgreSQLContainer<?> POSTGRES =
@@ -78,6 +90,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
 
   @AfterEach
   void clear() {
+    jdbc().getJdbcTemplate().update("DELETE FROM backup_codes");
     jdbc().getJdbcTemplate().update("DELETE FROM refresh_tokens");
     jdbc().getJdbcTemplate().update("DELETE FROM accounts");
   }
@@ -138,29 +151,264 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     assertThat(profiles.calls).isEqualTo(1);
   }
 
-  private AuthService service(SessionEpochFloorStore floors, RecordingProfiles profiles) {
-    DriverManagerDataSource dataSource =
-        new DriverManagerDataSource(
-            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  @Test
+  void refreshObservedBeforePasswordChangeCannotIssueFromItsStaleRow() throws Exception {
+    DriverManagerDataSource dataSource = dataSource();
     NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
     JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    SwitchableFloors floors = new SwitchableFloors();
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService issuingService = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var initial = issuingService.register(command("refresh-race@example.test", false));
+
+    CountDownLatch observedBeforeLock = new CountDownLatch(1);
+    CountDownLatch continueRefresh = new CountDownLatch(1);
+    AtomicBoolean firstLookup = new AtomicBoolean(true);
+    RefreshTokenRepository gated = new DelegatingRefreshTokens(tokens) {
+      @Override
+      public Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+        Optional<RefreshTokenRecord> record = super.findByHash(tokenHash);
+        if (firstLookup.compareAndSet(true, false)) {
+          observedBeforeLock.countDown();
+          await(continueRefresh);
+        }
+        return record;
+      }
+    };
+    AuthService refreshService = service(dataSource, jdbc, accounts, gated, floors, profiles);
+    var delayedRefresh = java.util.concurrent.CompletableFuture.supplyAsync(
+        () -> refreshService.refresh(new voice.backend.auth.service.RefreshCommand(initial.refreshToken(), "{}")));
+    assertThat(observedBeforeLock.await(5, TimeUnit.SECONDS)).isTrue();
+
+    AuthService passwordService = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    passwordService.changePassword(initial.accessToken(), "Correct horse battery staple", "New safer password", null);
+    continueRefresh.countDown();
+    assertThatThrownBy(() -> delayedRefresh.get(5, TimeUnit.SECONDS))
+        .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+        .hasMessageContaining("token_revoked");
+
+    assertThatThrownBy(() -> passwordService.validate(initial.accessToken()))
+        .isInstanceOf(voice.backend.auth.service.AuthException.class);
+    assertThatThrownBy(() -> passwordService.login(new voice.backend.auth.service.LoginCommand(
+        "refresh-race@example.test", null, "Correct horse battery staple", null, "{}")))
+        .isInstanceOf(voice.backend.auth.service.AuthException.class);
+    assertThat(passwordService.login(new voice.backend.auth.service.LoginCommand(
+        "refresh-race@example.test", null, "New safer password", null, "{}")).accessToken()).isNotBlank();
+    assertThat(activeRefreshTokenCount()).isEqualTo(1);
+  }
+
+  @Test
+  void concurrentRefreshesAcrossAuthServicesConsumeOneJdbcRowOnlyOnce() throws Exception {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    SwitchableFloors floors = new SwitchableFloors();
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService setup = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var initial = setup.register(command("concurrent-refresh@example.test", false));
+
+    CountDownLatch bothObservedActive = new CountDownLatch(2);
+    CountDownLatch release = new CountDownLatch(1);
+    RefreshTokenRepository firstReadGate = refreshReadBarrier(tokens, bothObservedActive, release);
+    RefreshTokenRepository secondReadGate = refreshReadBarrier(tokens, bothObservedActive, release);
+    AuthService first = service(dataSource, jdbc, accounts, firstReadGate, floors, profiles);
+    AuthService second = service(dataSource, jdbc, accounts, secondReadGate, floors, profiles);
+    var workers = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var firstRefresh = workers.submit(() -> refreshSucceeds(first, initial.refreshToken()));
+      var secondRefresh = workers.submit(() -> refreshSucceeds(second, initial.refreshToken()));
+      assertThat(bothObservedActive.await(5, TimeUnit.SECONDS)).isTrue();
+      release.countDown();
+
+      assertThat(List.of(firstRefresh.get(5, TimeUnit.SECONDS), secondRefresh.get(5, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder(true, false);
+      assertThat(tokens.findByHash(new RefreshTokenCodec().hash(initial.refreshToken())))
+          .get()
+          .extracting(RefreshTokenRecord::revoked)
+          .isEqualTo(true);
+      assertThat(activeRefreshTokenCount()).isEqualTo(1);
+    } finally {
+      release.countDown();
+      workers.shutdownNow();
+    }
+  }
+
+  private static RefreshTokenRepository refreshReadBarrier(
+      RefreshTokenRepository delegate, CountDownLatch observed, CountDownLatch release) {
+    return new DelegatingRefreshTokens(delegate) {
+      private final AtomicBoolean firstRead = new AtomicBoolean(true);
+
+      @Override
+      public Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+        Optional<RefreshTokenRecord> record = super.findByHash(tokenHash);
+        if (firstRead.compareAndSet(true, false)) {
+          observed.countDown();
+          await(release);
+        }
+        return record;
+      }
+    };
+  }
+
+  private static boolean refreshSucceeds(AuthService service, String refreshToken) {
+    try {
+      service.refresh(new voice.backend.auth.service.RefreshCommand(refreshToken, "{}"));
+      return true;
+    } catch (voice.backend.auth.service.AuthException expected) {
+      if ("token_revoked".equals(expected.getMessage())) return false;
+      throw expected;
+    }
+  }
+
+  @Test
+  void profileSwitchPausedBeforeAccountLockCannotIssueAfterPasswordChange() throws Exception {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    JdbcBackupCodeRepository backupCodes = new JdbcBackupCodeRepository(jdbc);
+    SwitchableFloors floors = new SwitchableFloors();
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    AuthService setup = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var initial = setup.register(command("profile-switch-race@example.test", false));
+
+    CountDownLatch validationStarted = new CountDownLatch(1);
+    CountDownLatch continueSwitch = new CountDownLatch(1);
+    ProfileSwitchValidator gated = new ProfileSwitchValidator() {
+      @Override
+      public void validateOwnedSwitchable(UUID accountId, UUID profileId) {
+        validationStarted.countDown();
+        await(continueSwitch);
+      }
+    };
+    AuthService switchService = service(
+        dataSource, jdbc, accounts, tokens, backupCodes, floors, profiles, gated);
+    var delayedSwitch = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+        switchService.switchActiveProfile(initial.accessToken(), UUID.randomUUID().toString(), "{}"));
+    assertThat(validationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+    AuthService passwordService = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    passwordService.changePassword(initial.accessToken(), "Correct horse battery staple", "New safer password", null);
+    continueSwitch.countDown();
+    assertThatThrownBy(() -> delayedSwitch.get(5, TimeUnit.SECONDS))
+        .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+        .hasMessageContaining("token_revoked");
+    assertThat(activeRefreshTokenCount()).isZero();
+  }
+
+  @Test
+  void failedEpochFloorRollsBackPasswordRefreshRowsAndBackupCodeConsumption() {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    JdbcRefreshTokenRepository tokens = new JdbcRefreshTokenRepository(jdbc);
+    JdbcBackupCodeRepository backupCodes = new JdbcBackupCodeRepository(jdbc);
+    SwitchableFloors floors = new SwitchableFloors();
+    AuthService service = service(dataSource, jdbc, accounts, tokens, backupCodes, floors,
+        new RecordingProfiles(false));
+    var initial = service.register(command("password-floor@example.test", false));
+    UUID accountId = UUID.fromString(initial.accountId());
+    TotpService totp = new TotpService(jdbcTotpProperties());
+    accounts.saveTotpSecret(accountId, totp.encryptSecret("synthetic-test-secret"), true);
+    String backup = new BackupCodeService(backupCodes).generateAndStore(accountId).getFirst();
+    long epochBefore = epochForEmail("password-floor@example.test");
+    long refreshesBefore = countRefreshTokens();
+    floors.fail = true;
+
+    assertThatThrownBy(() -> service.changePassword(
+        initial.accessToken(), "Correct horse battery staple", "New safer password", backup))
+        .isInstanceOf(SessionEpochFloorUnavailableException.class);
+
+    assertThat(epochForEmail("password-floor@example.test")).isEqualTo(epochBefore);
+    assertThat(countRefreshTokens()).isEqualTo(refreshesBefore);
+    assertThat(service.validate(initial.accessToken()).userId()).isEqualTo(initial.accountId());
+    floors.fail = false;
+    assertThat(service.login(new voice.backend.auth.service.LoginCommand(
+        "password-floor@example.test", null, "Correct horse battery staple", backup, "{}")).accessToken())
+        .isNotBlank();
+  }
+
+  private AuthService service(SessionEpochFloorStore floors, RecordingProfiles profiles) {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    return service(dataSource, jdbc, accounts, new JdbcRefreshTokenRepository(jdbc),
+        new JdbcBackupCodeRepository(jdbc), floors, profiles);
+  }
+
+  private AuthService service(DriverManagerDataSource dataSource, NamedParameterJdbcTemplate jdbc,
+      JdbcAccountRepository accounts, RefreshTokenRepository refreshTokens,
+      SessionEpochFloorStore floors, RecordingProfiles profiles) {
+    return service(dataSource, jdbc, accounts, refreshTokens,
+        new JdbcBackupCodeRepository(jdbc), floors, profiles);
+  }
+
+  private AuthService service(DriverManagerDataSource dataSource, NamedParameterJdbcTemplate jdbc,
+      JdbcAccountRepository accounts, RefreshTokenRepository refreshTokens,
+      BackupCodeRepository backupCodes, SessionEpochFloorStore floors, RecordingProfiles profiles) {
+    return service(dataSource, jdbc, accounts, refreshTokens, backupCodes, floors, profiles,
+        new NoOpProfileSwitchValidator());
+  }
+
+  private AuthService service(DriverManagerDataSource dataSource, NamedParameterJdbcTemplate jdbc,
+      JdbcAccountRepository accounts, RefreshTokenRepository refreshTokens,
+      BackupCodeRepository backupCodes, SessionEpochFloorStore floors, RecordingProfiles profiles,
+      ProfileSwitchValidator profileSwitchValidator) {
     AuthService service =
         new AuthService(
-            accounts, new JdbcRefreshTokenRepository(jdbc), new RefreshTokenCodec(),
+            accounts, refreshTokens, new RefreshTokenCodec(),
             new BCryptPasswordHasher(),
-            JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK),
+            JWT_SERVICE,
             new InMemoryTokenBlacklist(CLOCK), new TotpService(jdbcTotpProperties()),
-            new BackupCodeService(new InMemoryBackupCodeRepository()), CLOCK, Duration.ofDays(30),
+            new BackupCodeService(backupCodes), CLOCK, Duration.ofDays(30),
             profiles, (PhoneHashResolver) hashes -> Map.of(), new InMemorySubscriptionTierStore(),
-            new NoOpProfileSwitchValidator(), new InMemoryE2EKeyBackupRepository(),
+            profileSwitchValidator, new InMemoryE2EKeyBackupRepository(),
             new NoopAuthEventPublisher(), new SimpleMeterRegistry(), new InMemoryAccountRestoreTokenStore(),
             new NoopMailSender(), floors);
+    TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+    service.configureSecurityTransactions(transactions);
     service.configureRegistrationSessionEpochPreparer(
         new RegistrationSessionEpochPreparer(
-            new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
-            accounts,
+            transactions, accounts,
             new SessionEpochIssuanceGate(accounts, floors)));
     return service;
+  }
+
+  private static DriverManagerDataSource dataSource() {
+    return new DriverManagerDataSource(
+        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  }
+
+  private long activeRefreshTokenCount() {
+    return jdbc().getJdbcTemplate().queryForObject(
+        "SELECT count(*) FROM refresh_tokens WHERE revoked_at IS NULL", Long.class);
+  }
+
+  private static void await(CountDownLatch latch) {
+    try {
+      if (!latch.await(5, TimeUnit.SECONDS)) throw new AssertionError("test barrier timed out");
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("test barrier interrupted", interrupted);
+    }
+  }
+
+  private static class DelegatingRefreshTokens implements RefreshTokenRepository {
+    private final RefreshTokenRepository delegate;
+    DelegatingRefreshTokens(RefreshTokenRepository delegate) { this.delegate = delegate; }
+    @Override public RefreshTokenRecord create(UUID accountId, UUID profileId, String tokenHash,
+        String deviceInfoJson, String accessJti, Instant expiresAt, Instant now) {
+      return delegate.create(accountId, profileId, tokenHash, deviceInfoJson, accessJti, expiresAt, now);
+    }
+    @Override public Optional<RefreshTokenRecord> findByHash(String tokenHash) { return delegate.findByHash(tokenHash); }
+    @Override public Optional<RefreshTokenRecord> findById(UUID id) { return delegate.findById(id); }
+    @Override public List<RefreshTokenRecord> listActiveByAccount(UUID id) { return delegate.listActiveByAccount(id); }
+    @Override public RefreshTokenRecord revoke(String tokenHash, Instant now) { return delegate.revoke(tokenHash, now); }
+    @Override public boolean revokeIfActive(String tokenHash, Instant now) { return delegate.revokeIfActive(tokenHash, now); }
+    @Override public RefreshTokenRecord revokeById(UUID id, Instant now) { return delegate.revokeById(id, now); }
+    @Override public void revokeAllForAccount(UUID id, Instant now) { delegate.revokeAllForAccount(id, now); }
   }
 
   private static RegisterCommand command(String email, boolean guest) {
@@ -224,6 +472,20 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     @Override
     public long requireFloor(UUID id) {
       throw new AssertionError();
+    }
+  }
+
+  private static final class SwitchableFloors implements SessionEpochFloorStore {
+    boolean fail;
+    long floor;
+    @Override public synchronized long recordAtLeast(UUID id, long epoch) {
+      if (fail) throw new SessionEpochFloorUnavailableException("floor unavailable");
+      floor = Math.max(floor, epoch);
+      return floor;
+    }
+    @Override public synchronized long requireFloor(UUID id) {
+      if (floor <= 0) throw new SessionEpochFloorUnavailableException("floor unavailable");
+      return floor;
     }
   }
 

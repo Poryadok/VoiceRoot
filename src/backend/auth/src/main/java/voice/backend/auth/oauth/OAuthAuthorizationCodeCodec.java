@@ -15,12 +15,13 @@ public class OAuthAuthorizationCodeCodec {
         code.redirectUri(),
         code.codeChallenge(),
         code.codeChallengeMethod(),
-        code.expiresAt().toString());
+        code.expiresAt().toString(),
+        Long.toString(code.originSessionEpoch()));
   }
 
   public OAuthAuthorizationCode decode(String raw) {
     String[] parts = raw.split(String.valueOf(SEP), -1);
-    if (parts.length != 8) {
+    if (parts.length != 8 && parts.length != 9) {
       throw new IllegalArgumentException("invalid oauth code payload");
     }
     return new OAuthAuthorizationCode(
@@ -31,6 +32,16 @@ public class OAuthAuthorizationCodeCodec {
         parts[4],
         parts[5],
         parts[6],
-        Instant.parse(parts[7]));
+        Instant.parse(parts[7]),
+        parts.length == 9 ? parseEpoch(parts[8]) : 0);
+  }
+
+  private static long parseEpoch(String value) {
+    try {
+      long epoch = Long.parseLong(value);
+      return epoch > 0 ? epoch : 0;
+    } catch (NumberFormatException invalid) {
+      return 0;
+    }
   }
 }
