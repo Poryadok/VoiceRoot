@@ -1270,8 +1270,8 @@ func main() {
 }
 EOF
 git -C "${f13_activation_fixture}" add src/backend/voice/main.go
-git -C "${f13_activation_fixture}" commit -qm 'F13 activation fixture base'
-f13_activation_base="$(git -C "${f13_activation_fixture}" rev-parse HEAD)"
+git -C "${f13_activation_fixture}" commit -qm 'F13 activation fixture source base'
+f13_activation_source_base="$(git -C "${f13_activation_fixture}" rev-parse HEAD)"
 git -C "${f13_activation_fixture}" checkout -qb f13-activation-source
 python3 - "${f13_activation_fixture}/src/backend/voice/main.go" <<'PY'
 from pathlib import Path
@@ -1282,7 +1282,7 @@ path.write_text(path.read_text().replace('label := "base"', 'label := "source be
 PY
 git -C "${f13_activation_fixture}" add src/backend/voice/main.go
 git -C "${f13_activation_fixture}" commit -qm 'F13 source benign edit preserves activation'
-git -C "${f13_activation_fixture}" checkout -qb f13-activation-integration "${f13_activation_base}"
+git -C "${f13_activation_fixture}" checkout -qb f13-activation-integration "${f13_activation_source_base}"
 python3 - "${f13_activation_fixture}/src/backend/voice/main.go" <<'PY'
 from pathlib import Path
 import sys
@@ -1293,6 +1293,7 @@ path.write_text(source)
 PY
 git -C "${f13_activation_fixture}" add src/backend/voice/main.go
 git -C "${f13_activation_fixture}" commit -qm 'F13 first parent removes activation'
+f13_activation_base="$(git -C "${f13_activation_fixture}" rev-parse HEAD)"
 if git -C "${f13_activation_fixture}" merge --no-ff -m 'F13 activation conflict merge' f13-activation-source >/dev/null 2>&1; then
   printf '%s\n' 'F13 oracle bug: activation fixture unexpectedly merged without conflict' >&2
   exit 2
