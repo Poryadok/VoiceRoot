@@ -1891,6 +1891,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTooltip => 'Settings';
 
   @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
   String get settingsTheme => 'Theme';
 
   @override

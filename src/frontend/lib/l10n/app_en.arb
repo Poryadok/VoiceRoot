@@ -930,6 +930,7 @@
   "chatGroupTransferOwnershipConfirm": "Transfer",
   "settingsTitle": "Settings",
   "settingsTooltip": "Settings",
+  "settingsAppearance": "Appearance",
   "settingsTheme": "Theme",
   "settingsThemeSystem": "System",
   "settingsThemeLight": "Light",
