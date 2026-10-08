@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -166,44 +167,103 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	if s.Chat == nil {
 		return nil, status.Error(codes.FailedPrecondition, "chat client not configured")
 	}
-	current, err := s.Store.DailyChatCreateCount(ctx, botRow.ID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if current >= 10 {
-		return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
-	}
 	spaceID := strings.TrimSpace(req.GetSpaceId())
 	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name required")
 	}
 	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
+	chatTypeName := "group"
 	if strings.EqualFold(strings.TrimSpace(req.GetChatType()), "channel") {
 		chatType = chatv1.ChatType_CHAT_TYPE_CHANNEL
+		chatTypeName = "channel"
 	}
 	chatCtx := s.botActorCtx(ctx, botRow)
-	createResp, err := s.Chat.CreateChat(chatCtx, &chatv1.CreateChatRequest{
-		Type:    chatType,
-		SpaceId: &spaceID,
-		Name:    &name,
-	})
+	requestID, err := parseBotChatRequestID(req.GetRequestId())
 	if err != nil {
 		return nil, err
 	}
+	if requestID != nil && spaceID != "" {
+		parsedSpaceID, parseErr := uuid.Parse(spaceID)
+		if parseErr != nil || parsedSpaceID == uuid.Nil {
+			return nil, status.Error(codes.InvalidArgument, "space_id must be a valid UUID")
+		}
+		spaceID = parsedSpaceID.String()
+	}
+	var reservationDay time.Time
+	if requestID == nil {
+		var reserved bool
+		reservationDay, reserved, err = s.Store.ReserveDailyChatCreate(ctx, botRow.ID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !reserved {
+			return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
+		}
+	} else {
+		hash, hashErr := botChatCreateRequestHash(botRow.ActorProfileID, spaceID, name, chatTypeName)
+		if hashErr != nil {
+			return nil, status.Error(codes.Internal, hashErr.Error())
+		}
+		var admitted, replayed bool
+		reservationDay, admitted, replayed, err = s.Store.ReserveDailyChatCreateForRequest(ctx, botRow.ID, *requestID, hash)
+		if errors.Is(err, store.ErrBotChatCreateRequestConflict) {
+			return nil, status.Error(codes.AlreadyExists, "request_id already used for a different bot chat create")
+		}
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !admitted && !replayed {
+			return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
+		}
+	}
+	createResp, err := s.Chat.CreateChat(chatCtx, &chatv1.CreateChatRequest{
+		Type:      chatType,
+		SpaceId:   &spaceID,
+		Name:      &name,
+		RequestId: req.GetRequestId(),
+	})
+	if err != nil {
+		if requestID == nil {
+			if chatCreateRejectedBeforePersistence(err) {
+				if releaseErr := s.Store.ReleaseDailyChatCreate(ctx, botRow.ID, reservationDay); releaseErr != nil {
+					return nil, status.Error(codes.Internal, releaseErr.Error())
+				}
+			}
+		} else {
+			outcome := store.BotChatCreateAttemptUncertain
+			if chatCreateRejectedBeforePersistence(err) {
+				outcome = store.BotChatCreateAttemptRejected
+			}
+			if _, finishErr := s.Store.FinishDailyChatCreateRequestAttempt(ctx, botRow.ID, *requestID, outcome); finishErr != nil {
+				return nil, status.Error(codes.Internal, finishErr.Error())
+			}
+		}
+		return nil, err
+	}
 	chat := createResp.GetChat()
+	if requestID != nil {
+		if _, err := s.Store.FinishDailyChatCreateRequestAttempt(ctx, botRow.ID, *requestID, store.BotChatCreateAttemptSucceeded); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 	if chat == nil {
 		return nil, status.Error(codes.Internal, "empty chat response")
 	}
-	count, err := s.Store.IncrementDailyChatCreates(ctx, botRow.ID)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if count > 10 {
-		return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
-	}
 	ref := &chatv1.ChatRef{Id: chat.GetId(), Type: &chatType}
 	return &botv1.CreateBotChatResponse{Chat: ref}, nil
+}
+
+// Chat validates these conditions before reaching its create transaction. Other
+// statuses can be returned after persistence or after losing the response, so the
+// reservation stays held to avoid admitting more than the daily limit.
+func chatCreateRejectedBeforePersistence(err error) bool {
+	switch status.Code(err) {
+	case codes.InvalidArgument, codes.Unauthenticated, codes.PermissionDenied, codes.FailedPrecondition:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *BotGRPC) GetChatMessagesForBot(ctx context.Context, req *botv1.GetChatMessagesForBotRequest) (*botv1.GetChatMessagesForBotResponse, error) {

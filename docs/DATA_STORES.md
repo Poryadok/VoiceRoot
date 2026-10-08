@@ -116,6 +116,7 @@ proof receipts. Runtime configuration is documented in
 | Таблица | Примечание |
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
+| `chat_create_requests` | Migration `000021`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
@@ -123,6 +124,13 @@ proof receipts. Runtime configuration is documented in
 | `profile_installed_packs` | Per-profile install + composer rail `sort_order` |
 
 Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging_db`** (`messages.content_type`). Do not duplicate catalog DDL outside Chat Service docs.
+
+### `bot_db` (Bot Service)
+
+| Таблица | Примечание |
+|---------|------------|
+| `bot_daily_chat_creates` | Per-bot daily count; admission is an atomic conditional reservation capped at ten |
+| `bot_chat_create_requests` | Migration `000006`; stable `(bot_id, request_id)` hash tombstone, original/current quota day, active-attempt count, reserved flag and sticky retention fence; same-hash re-admission after definite rejection preserves key binding |
 
 ---
 

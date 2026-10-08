@@ -50,7 +50,36 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 
 	var row *store.ChatRow
 	var err error
-	if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+	replayed := false
+	requestID, err := parseCreateRequestID(req.GetRequestId())
+	if err != nil {
+		return nil, err
+	}
+	if requestID != nil {
+		kind := "group"
+		if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
+			kind = "channel"
+		}
+		var spaceID *uuid.UUID
+		if spaceIDRaw != "" {
+			parsed, parseErr := parseUUIDField("space_id", spaceIDRaw)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			spaceID = &parsed
+		}
+		row, replayed, err = s.DM.CreateChatWithRequestID(ctx, store.ChatCreateRequest{
+			CreatorProfileID: caller,
+			RequestID:        *requestID,
+			Type:             kind,
+			SpaceID:          spaceID,
+			Name:             name,
+			Topic:            topic,
+		})
+		if errors.Is(err, store.ErrChatCreateRequestConflict) {
+			return nil, status.Error(codes.AlreadyExists, "request_id already used for a different chat create")
+		}
+	} else if chatType == chatv1.ChatType_CHAT_TYPE_CHANNEL {
 		if spaceIDRaw == "" {
 			row, err = s.DM.CreateChannelChat(ctx, caller, name, topic)
 		} else {
@@ -72,7 +101,7 @@ func (s *ChatGRPC) CreateChat(ctx context.Context, req *chatv1.CreateChatRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if s.ChatEvents != nil {
+	if s.ChatEvents != nil && !replayed {
 		eventType := "group"
 		if row.Type == "channel" {
 			eventType = "channel"

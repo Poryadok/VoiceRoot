@@ -20,6 +20,14 @@
 
 ## API (gRPC)
 
+`CreateChatRequest.request_id` необязателен для совместимости существующих
+клиентов. Канонический UUID связывается с аутентифицированным
+`creator_profile_id`; в той же транзакции Chat сохраняет хэш нормализованных
+полей create и созданный `chat_id`. Тот же ключ и те же поля возвращают тот же
+чат без повторного insert или повторной публикации `chat.created`; тот же ключ
+с другими полями возвращает `AlreadyExists`. При timeout клиент сверяет исход
+повтором с тем же ключом. Запросы без ключа используют прежний путь создания.
+
 Источник истины: [protos/voice/chat/v1/chat.proto](../../protos/voice/chat/v1/chat.proto). Ниже — инвентарь с **статусом реализации** (handler в `src/backend/chat/internal/grpcsvc/`).
 
 ```protobuf
@@ -275,9 +283,14 @@ CREATE TABLE quick_access_chats (
 CREATE INDEX quick_access_profile_order_idx ON quick_access_chats (profile_id, sort_order);
 ```
 
-### Deployed schema (migrations `000001`–`000011`) vs full spec
+### Deployed schema (migrations `000001`–`000021`) vs full spec
 
 **Shipped today** (`chat_db` migrations): DM + group + channel types; `chat_members.inbox_bucket`; `threads_enabled` / `allow_user_main_feed`; `e2e_enabled`; slow mode; chat-level `allow_guests` (`000007`, default hardened to `false` and legacy standalone group/channel rows backfilled by `000012`); `folders` + `folder_chats`; `quick_access_chats`; per-profile `deleted_for_self` (`000011`). Standalone group/channel owners and existing admins configure future guest admission through `UpdateChat`; admission is checked against User's guest marker fail-closed, and disabling it preserves current memberships. Folder membership/pin, `ListChats.folder_id` and `UpdateFolder`/`DeleteFolder` are implemented. Incoming message activity keeps archived chats in the archive and only updates their unread badge.
+
+Migration `000021` adds `chat_create_requests`, which stores the authenticated
+creator, request UUID, canonical request hash and original create-result snapshot
+in the same transaction as a keyed `CreateChat`. Rows currently have no expiry;
+the repository has no documented retry-retention window or cleanup policy.
 
 ### Guest admission
 
