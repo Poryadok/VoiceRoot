@@ -16,6 +16,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.flywaydb.core.Flyway;
@@ -330,12 +332,107 @@ class RegistrationSessionEpochJdbcIntegrationTest {
         .isNotBlank();
   }
 
+  @Test
+  void refreshDependencyFailureDoesNotIssueReplacement() {
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    SwitchableFloors floors = new SwitchableFloors();
+    AuthService registrationService = service(floors, profiles);
+    var session = registrationService.register(command("refresh-failure@example.test", false));
+    RefreshTokenRepository failingConsume = new DelegatingRefreshTokens(new JdbcRefreshTokenRepository(jdbc())) {
+      @Override
+      public boolean revokeIfActive(String tokenHash, Instant now) {
+        throw new IllegalStateException("refresh store unavailable");
+      }
+    };
+    AuthService refreshService = service(floors, profiles, failingConsume);
+
+    assertThatThrownBy(() -> refreshService.refresh(
+        new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("refresh store unavailable");
+    assertThat(countRefreshTokens()).isEqualTo(1);
+    assertThat(activeRefreshTokenCount()).isEqualTo(1);
+  }
+
+  @Test
+  void concurrentLogoutAfterRefreshReadPreventsReplacementIssuance() throws Exception {
+    RecordingProfiles profiles = new RecordingProfiles(false);
+    SwitchableFloors floors = new SwitchableFloors();
+    AuthService registrationService = service(floors, profiles);
+    var session = registrationService.register(command("refresh-logout-race@example.test", false));
+    CountDownLatch refreshReadCompleted = new CountDownLatch(1);
+    CountDownLatch allowRefreshContinue = new CountDownLatch(1);
+    RefreshTokenRepository pausedRefreshTokens = new PausingRefreshTokenRepository(
+        new JdbcRefreshTokenRepository(jdbc()), refreshReadCompleted, allowRefreshContinue);
+    AuthService refreshService = service(floors, profiles, pausedRefreshTokens);
+    AuthService logoutService = service(floors, profiles);
+
+    var worker = Executors.newSingleThreadExecutor();
+    try {
+      var refresh = worker.submit(
+          () -> refreshService.refresh(new voice.backend.auth.service.RefreshCommand(session.refreshToken(), "{}")));
+      assertThat(refreshReadCompleted.await(5, TimeUnit.SECONDS)).isTrue();
+
+      logoutService.logout(new voice.backend.auth.service.LogoutCommand(session.accessToken(), session.refreshToken()));
+      allowRefreshContinue.countDown();
+
+      assertThatThrownBy(() -> refresh.get(10, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .hasCauseInstanceOf(voice.backend.auth.service.AuthException.class)
+          .hasRootCauseMessage("token_revoked");
+      assertThat(countRefreshTokens()).isEqualTo(1);
+      assertThat(activeRefreshTokenCount()).isZero();
+    } finally {
+      allowRefreshContinue.countDown();
+      worker.shutdownNow();
+    }
+  }
+
+  private static final class PausingRefreshTokenRepository extends DelegatingRefreshTokens {
+    private final CountDownLatch readCompleted;
+    private final CountDownLatch allowContinue;
+    private boolean firstRead = true;
+
+    PausingRefreshTokenRepository(
+        RefreshTokenRepository delegate, CountDownLatch readCompleted, CountDownLatch allowContinue) {
+      super(delegate);
+      this.readCompleted = readCompleted;
+      this.allowContinue = allowContinue;
+    }
+
+    @Override
+    public synchronized Optional<RefreshTokenRecord> findByHash(String tokenHash) {
+      Optional<RefreshTokenRecord> found = super.findByHash(tokenHash);
+      if (firstRead) {
+        firstRead = false;
+        readCompleted.countDown();
+        try {
+          if (!allowContinue.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("refresh logout barrier timed out");
+          }
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException("refresh logout barrier interrupted", ex);
+        }
+      }
+      return found;
+    }
+  }
+
   private AuthService service(SessionEpochFloorStore floors, RecordingProfiles profiles) {
     DriverManagerDataSource dataSource = dataSource();
     NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
     JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
     return service(dataSource, jdbc, accounts, new JdbcRefreshTokenRepository(jdbc),
         new JdbcBackupCodeRepository(jdbc), floors, profiles);
+  }
+
+  private AuthService service(
+      SessionEpochFloorStore floors, RecordingProfiles profiles, RefreshTokenRepository refreshTokens) {
+    DriverManagerDataSource dataSource = dataSource();
+    NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(dataSource);
+    JdbcAccountRepository accounts = new JdbcAccountRepository(jdbc);
+    return service(dataSource, jdbc, accounts, refreshTokens, floors, profiles);
   }
 
   private AuthService service(DriverManagerDataSource dataSource, NamedParameterJdbcTemplate jdbc,
