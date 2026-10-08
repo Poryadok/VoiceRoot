@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/google/uuid"
@@ -595,13 +596,13 @@ func (o *SessionOrchestrator) coalesceOperation(ctx context.Context, op, session
 }
 
 func validateCreate(in CreateSessionInput) error {
-	if in.OperationID == uuid.Nil || in.RosterRevision <= 0 || !in.RosterComplete || in.Members == nil {
+	if in.OperationID == uuid.Nil || in.RosterRevision <= 0 || in.RosterRevision > 9007199254740991 || !in.RosterComplete || in.Members == nil {
 		return errors.New("invalid session request")
 	}
 	if in.Kind != "party" && in.Kind != "match" && in.Kind != "fleet" {
 		return errors.New("invalid session kind")
 	}
-	if in.ExternalKey == "" || len(in.ExternalKey) > 255 {
+	if in.ExternalKey == "" || len(in.ExternalKey) > 255 || !utf8.ValidString(in.ExternalKey) {
 		return errors.New("invalid external key")
 	}
 	if in.Kind == "party" && in.ParentPartyKey != "" {
@@ -610,7 +611,7 @@ func validateCreate(in CreateSessionInput) error {
 	if in.ParentPartyKey != "" && in.DisplayName != "" {
 		return errors.New("parented child cannot set display_name")
 	}
-	if in.ParentPartyKey == "" && strings.TrimSpace(in.DisplayName) == "" {
+	if in.ParentPartyKey == "" && (strings.TrimSpace(in.DisplayName) == "" || !utf8.ValidString(in.DisplayName) || utf8.RuneCountInString(in.DisplayName) > 128) {
 		return errors.New("display_name required")
 	}
 	for i, id := range in.Members {
@@ -633,6 +634,9 @@ type sessionHashEnvelope struct {
 }
 
 func sessionRequestHash(p SessionPrincipal, in CreateSessionInput) ([]byte, error) {
+	if err := validateCreate(in); err != nil {
+		return nil, err
+	}
 	var value sessionHashEnvelope
 	value.APIVersion = "v1"
 	value.Scope.ApplicationID = p.ApplicationID.String()
