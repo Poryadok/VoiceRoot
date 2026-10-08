@@ -2,9 +2,13 @@ package grpcsvc
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -297,6 +301,162 @@ func TestSpaceTree_OwnerCanRemoveTextNode(t *testing.T) {
 	tree, err := client.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID})
 	require.NoError(t, err)
 	require.Empty(t, tree.GetNodes())
+}
+
+func TestSpaceTree_AuditWritesAreAtomicAndVisible(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	owner, _, ownerCtx := profileFixture(t)
+	_, _, otherCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	applySpaceAuditLedgerMigration(t, ctx, pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Tree audit"})
+	require.NoError(t, err)
+	spaceID := uuid.MustParse(created.GetSpace().GetId())
+	category, err := client.CreateCategory(ownerCtx, &spacev1.CreateCategoryRequest{
+		SpaceId: spaceID.String(), Name: "General", SortOrder: 0,
+	})
+	require.NoError(t, err)
+	categoryID := category.GetCategory().GetId()
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	chatA, chatB := uuid.New(), uuid.New()
+
+	first, err := client.UpsertTreeNode(ownerCtx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID.String(), Kind: "text_chat", CategoryId: ptr(categoryID),
+		LinkedChat: &chatv1.ChatRef{Id: chatA.String(), Type: &chatType}, SortOrder: ptrInt32(4),
+	})
+	require.NoError(t, err)
+	firstID := uuid.MustParse(first.GetSpaceTreeNode().GetId())
+	requireTreeAuditEntry(t, ctx, pool, spaceID, owner, "tree_node_upserted", "tree_node", firstID,
+		map[string]any{"kind": "text_chat", "chat_id": chatA.String(), "category_id": categoryID,
+			"sort_order": float64(4), "is_pinned": false})
+
+	var upsertCountBefore, outboxCountBefore int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_node_upserted'`, spaceID).Scan(&upsertCountBefore))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, spaceID).Scan(&outboxCountBefore))
+	_, err = client.UpsertTreeNode(ownerCtx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID.String(), NodeId: ptr(firstID.String()), Kind: "text_chat",
+		CategoryId: ptr(categoryID), LinkedChat: &chatv1.ChatRef{Id: chatA.String(), Type: &chatType}, SortOrder: ptrInt32(4),
+	})
+	require.NoError(t, err)
+	var upsertCountAfter, outboxCountAfter int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_node_upserted'`, spaceID).Scan(&upsertCountAfter))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, spaceID).Scan(&outboxCountAfter))
+	require.Equal(t, upsertCountBefore, upsertCountAfter, "same business values must not create another audit effect")
+	require.Equal(t, outboxCountBefore, outboxCountAfter)
+
+	second, err := client.UpsertTreeNode(ownerCtx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID.String(), Kind: "text_chat", CategoryId: ptr(categoryID),
+		LinkedChat: &chatv1.ChatRef{Id: chatB.String(), Type: &chatType}, SortOrder: ptrInt32(5),
+	})
+	require.NoError(t, err)
+	secondID := uuid.MustParse(second.GetSpaceTreeNode().GetId())
+	_, err = client.ReorderSpaceTree(ownerCtx, &spacev1.ReorderSpaceTreeRequest{
+		SpaceId: spaceID.String(), OrderedNodeIds: []string{secondID.String(), firstID.String()},
+	})
+	require.NoError(t, err)
+	requireTreeAuditEntry(t, ctx, pool, spaceID, owner, "tree_reordered", "space", spaceID,
+		map[string]any{"count": float64(2)})
+
+	var reorderCountBefore int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_reordered'`, spaceID).Scan(&reorderCountBefore))
+	_, err = client.ReorderSpaceTree(ownerCtx, &spacev1.ReorderSpaceTreeRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err, "empty reorder remains an accepted no-op")
+	_, err = client.RemoveTreeNode(ownerCtx, &spacev1.RemoveTreeNodeRequest{SpaceId: spaceID.String(), NodeId: uuid.NewString()})
+	require.Equal(t, codes.NotFound, status.Code(err), "missing-node removal stays rejected")
+	_, err = client.UpsertTreeNode(otherCtx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID.String(), Kind: "text_chat", LinkedChat: &chatv1.ChatRef{Id: uuid.NewString(), Type: &chatType},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "tree audit must not bypass existing authorization")
+	var reorderCountAfter, allAuditCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='tree_reordered'`, spaceID).Scan(&reorderCountAfter))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action LIKE 'tree_%'`, spaceID).Scan(&allAuditCount))
+	require.Equal(t, reorderCountBefore, reorderCountAfter)
+	require.Equal(t, 3, allAuditCount, "two node creates and one reorder; no-op/rejected requests add no effects")
+
+	_, err = client.RemoveTreeNode(ownerCtx, &spacev1.RemoveTreeNodeRequest{SpaceId: spaceID.String(), NodeId: firstID.String()})
+	require.NoError(t, err)
+	requireTreeAuditEntry(t, ctx, pool, spaceID, owner, "tree_node_removed", "tree_node", firstID, map[string]any{})
+
+	page, err := client.GetAuditLog(ownerCtx, &spacev1.GetAuditLogRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err)
+	seen := map[string]bool{}
+	for _, entry := range page.GetAuditLogList().GetEntries() {
+		seen[entry.GetAction()] = true
+	}
+	require.True(t, seen["tree_node_upserted"])
+	require.True(t, seen["tree_node_removed"])
+	require.True(t, seen["tree_reordered"])
+}
+
+func TestSpaceTree_AuditInsertFailureRollsBackUpsert(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	_, _, ownerCtx := profileFixture(t)
+	ctx := context.Background()
+	pool := startSpacePostgresForTest(t, ctx)
+	applySpaceMigration(t, ctx, pool)
+	applySpaceAuditLedgerMigration(t, ctx, pool)
+	client, cleanup := startSpaceGRPCTestServer(t, pool)
+	t.Cleanup(cleanup)
+	created, err := client.CreateSpace(ownerCtx, &spacev1.CreateSpaceRequest{Name: "Audit rollback"})
+	require.NoError(t, err)
+	spaceID := uuid.MustParse(created.GetSpace().GetId())
+
+	_, err = pool.Exec(ctx, `CREATE FUNCTION fail_tree_audit_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action LIKE 'tree_%' THEN RAISE EXCEPTION 'injected tree audit failure'; END IF; RETURN NEW; END $$;
+CREATE TRIGGER fail_tree_audit_insert BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_tree_audit_insert()`)
+	require.NoError(t, err)
+	chatType := chatv1.ChatType_CHAT_TYPE_CHANNEL
+	_, err = client.UpsertTreeNode(ownerCtx, &spacev1.UpsertTreeNodeRequest{
+		SpaceId: spaceID.String(), Kind: "text_chat", LinkedChat: &chatv1.ChatRef{Id: uuid.NewString(), Type: &chatType},
+	})
+	require.Error(t, err, "audit insertion failure must fail the tree mutation")
+
+	tree, err := client.ListSpaceTree(ownerCtx, &spacev1.ListSpaceTreeRequest{SpaceId: spaceID.String()})
+	require.NoError(t, err)
+	require.Empty(t, tree.GetNodes(), "tree mutation must roll back with its audit failure")
+	var audits, outbox int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action LIKE 'tree_%'`, spaceID).Scan(&audits))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE space_id=$1`, spaceID).Scan(&outbox))
+	require.Zero(t, audits)
+	require.Zero(t, outbox)
+}
+
+func applySpaceAuditLedgerMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	auditMigration, err := os.ReadFile(filepath.Join(repoRoot(t), "src", "backend", "migrations", "space_db", "000015_audit_ledger.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(auditMigration))
+	require.NoError(t, err)
+}
+
+func requireTreeAuditEntry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, spaceID, actorID uuid.UUID, action, targetType string, targetID uuid.UUID, wantDetails map[string]any) {
+	t.Helper()
+	var auditID, gotSpaceID, gotActorID, gotTargetID uuid.UUID
+	var gotAction, gotTargetType, rawDetails string
+	err := pool.QueryRow(ctx, `SELECT id,space_id,actor_profile_id,action,target_type,target_id,details::text
+FROM audit_log WHERE space_id=$1 AND action=$2 AND target_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1`,
+		spaceID, action, targetID).Scan(&auditID, &gotSpaceID, &gotActorID, &gotAction, &gotTargetType, &gotTargetID, &rawDetails)
+	require.NoError(t, err)
+	require.Equal(t, spaceID, gotSpaceID)
+	require.Equal(t, actorID, gotActorID)
+	require.Equal(t, action, gotAction)
+	require.Equal(t, targetType, gotTargetType)
+	require.Equal(t, targetID, gotTargetID)
+	var gotDetails map[string]any
+	require.NoError(t, json.Unmarshal([]byte(rawDetails), &gotDetails))
+	require.Equal(t, wantDetails, gotDetails)
+	var outboxID, outboxSpaceID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT audit_event_id,space_id FROM audit_outbox WHERE audit_event_id=$1`, auditID).Scan(&outboxID, &outboxSpaceID))
+	require.Equal(t, auditID, outboxID)
+	require.Equal(t, spaceID, outboxSpaceID)
 }
 
 func ptr(s string) *string { return &s }
