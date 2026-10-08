@@ -19,6 +19,8 @@ import (
 	socialv1 "voice.app/voice/social/v1"
 )
 
+const maxProfilePairBlockBatch = 500
+
 const (
 	blocksDefaultPage = 20
 	blocksMaxPage     = 50
@@ -288,4 +290,86 @@ func (s *SocialGRPC) IsProfilePairBlocked(ctx context.Context, req *socialv1.IsP
 		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
 	}
 	return &socialv1.IsProfilePairBlockedResponse{Blocked: blocked}, nil
+}
+
+// IsProfilePairsBlocked evaluates a bounded set of directional profile pairs.
+// Social keeps account ownership private and batches both User resolution and
+// the ordered block-store lookup.
+func (s *SocialGRPC) IsProfilePairsBlocked(ctx context.Context, req *socialv1.IsProfilePairsBlockedRequest) (*socialv1.IsProfilePairsBlockedResponse, error) {
+	viewerProfileID, err := parseUUIDField("viewer_profile_id", req.GetViewerProfileId())
+	if err != nil {
+		return nil, err
+	}
+	if len(req.GetOtherProfileIds()) > maxProfilePairBlockBatch {
+		return nil, status.Error(codes.InvalidArgument, "profile pair batch too large")
+	}
+	otherProfileIDs := make([]uuid.UUID, len(req.GetOtherProfileIds()))
+	uniqueProfileIDs := make([]uuid.UUID, 0, len(otherProfileIDs))
+	seenProfiles := make(map[uuid.UUID]struct{}, len(otherProfileIDs))
+	for i, raw := range req.GetOtherProfileIds() {
+		profileID, err := parseUUIDField("other_profile_id", raw)
+		if err != nil {
+			return nil, err
+		}
+		otherProfileIDs[i] = profileID
+		if profileID == viewerProfileID {
+			continue
+		}
+		if _, ok := seenProfiles[profileID]; !ok {
+			seenProfiles[profileID] = struct{}{}
+			uniqueProfileIDs = append(uniqueProfileIDs, profileID)
+		}
+	}
+	if len(otherProfileIDs) == 0 {
+		return &socialv1.IsProfilePairsBlockedResponse{}, nil
+	}
+	if s == nil || s.Blocks == nil || s.ProfileAccounts == nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	viewerAccountID, err := s.ProfileAccounts.AccountIDByProfileID(ctx, viewerProfileID)
+	if err != nil || viewerAccountID == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	resolver, ok := s.ProfileAccounts.(ProfileAccountsBatchResolver)
+	if !ok {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	accountsByProfile, err := resolver.AccountIDsByProfileIDs(ctx, uniqueProfileIDs)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+	}
+	accountsToCheck := make([]uuid.UUID, 0, len(uniqueProfileIDs))
+	profileByAccount := make(map[uuid.UUID][]uuid.UUID, len(uniqueProfileIDs))
+	for _, profileID := range uniqueProfileIDs {
+		accountID, ok := accountsByProfile[profileID]
+		if !ok || accountID == uuid.Nil {
+			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+		if accountID == viewerAccountID {
+			continue
+		}
+		if _, ok := profileByAccount[accountID]; !ok {
+			accountsToCheck = append(accountsToCheck, accountID)
+		}
+		profileByAccount[accountID] = append(profileByAccount[accountID], profileID)
+	}
+	blockedAccounts := map[uuid.UUID]struct{}{}
+	if len(accountsToCheck) > 0 {
+		blockedAccounts, err = s.Blocks.DirectedBlocksExist(ctx, viewerAccountID, accountsToCheck)
+		if err != nil {
+			return nil, status.Error(codes.Unavailable, "message visibility policy unavailable")
+		}
+	}
+	blockedProfiles := make(map[uuid.UUID]bool, len(uniqueProfileIDs))
+	for accountID, profileIDs := range profileByAccount {
+		_, blocked := blockedAccounts[accountID]
+		for _, profileID := range profileIDs {
+			blockedProfiles[profileID] = blocked
+		}
+	}
+	results := make([]*socialv1.ProfilePairBlockResult, len(otherProfileIDs))
+	for i, profileID := range otherProfileIDs {
+		results[i] = &socialv1.ProfilePairBlockResult{OtherProfileId: profileID.String(), Blocked: blockedProfiles[profileID]}
+	}
+	return &socialv1.IsProfilePairsBlockedResponse{Results: results}, nil
 }

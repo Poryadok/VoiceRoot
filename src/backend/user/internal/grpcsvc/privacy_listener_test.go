@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -65,4 +66,31 @@ func TestRegisterNotificationPresenceServerExposesOnlyRoutingRPC(t *testing.T) {
 	require.Len(t, registrar.desc.Methods, 1)
 	require.Equal(t, "GetNotificationRoutingPresence", registrar.desc.Methods[0].MethodName)
 	require.Empty(t, registrar.desc.Streams)
+}
+
+func TestProtectedSocialGetProfilesIsRequestBoundAndCapped(t *testing.T) {
+	svc := &SocialPrivacyGRPC{User: &UserGRPC{}}
+	emptyRequest := &userv1.GetProfilesRequest{}
+	_, err := svc.GetProfiles(context.Background(), emptyRequest)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	hash, err := principal.RequestHash(emptyRequest)
+	require.NoError(t, err)
+	identity := principal.Principal{
+		Kind: "service", Issuer: "social", Subject: "service:social",
+		Audience: "user", RPC: socialprincipal.Method("user"), RequestHash: hash,
+	}
+	resp, err := svc.GetProfiles(principal.WithVerified(context.Background(), identity), emptyRequest)
+	require.NoError(t, err, "a correctly request-bound Social principal can use the existing batch profile lookup")
+	require.Empty(t, resp.GetProfileList().GetProfiles())
+
+	tooMany := &userv1.GetProfilesRequest{ProfileIds: make([]string, socialGetProfilesMaxProfiles+1)}
+	for i := range tooMany.ProfileIds {
+		tooMany.ProfileIds[i] = uuid.NewString()
+	}
+	hash, err = principal.RequestHash(tooMany)
+	require.NoError(t, err)
+	identity.RequestHash = hash
+	_, err = svc.GetProfiles(principal.WithVerified(context.Background(), identity), tooMany)
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "the protected batch is bounded before User store access")
 }
