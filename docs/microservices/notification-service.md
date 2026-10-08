@@ -174,7 +174,8 @@ Event (NATS) ──► Notification Service
 
 ### Presence routing
 
-Нормативное правило (`DecideRouting` + User `GetBulkPresence` enrichment):
+Нормативное правило (`DecideRouting` + authenticated User
+`GetNotificationRoutingPresence` enrichment):
 
 | Recipient `GetPresence` | In-app | Push |
 |-------------------------|--------|------|
@@ -185,6 +186,13 @@ Event (NATS) ──► Notification Service
 `call_info_json` — ортогональные metadata звонка: без live status они не делают
 сессию активной. Явные `offline` / `invisible` всегда имеют приоритет над
 устаревшими call metadata.
+
+Notification calls User's dedicated `:9095` principal listener with a
+request-bound `service:notification` credential. The method returns only a
+boolean session signal; it does not expose the public viewer-filtered presence
+projection, status text, last-seen, or call metadata. An unavailable or
+misconfigured authority fails the message attempt so JetStream can retry; it
+must never become an offline decision.
 
 **Exceptions — skip presence check** (always evaluate push policy):
 

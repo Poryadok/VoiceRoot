@@ -3054,6 +3054,95 @@ func (x *GetBulkPresenceResponse) GetByProfileId() map[string]*PresenceStatus {
 	return nil
 }
 
+type GetNotificationRoutingPresenceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProfileId     string                 `protobuf:"bytes,1,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetNotificationRoutingPresenceRequest) Reset() {
+	*x = GetNotificationRoutingPresenceRequest{}
+	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNotificationRoutingPresenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNotificationRoutingPresenceRequest) ProtoMessage() {}
+
+func (x *GetNotificationRoutingPresenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNotificationRoutingPresenceRequest.ProtoReflect.Descriptor instead.
+func (*GetNotificationRoutingPresenceRequest) Descriptor() ([]byte, []int) {
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *GetNotificationRoutingPresenceRequest) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+// This intentionally exposes no presence status, last-seen, or call metadata.
+type GetNotificationRoutingPresenceResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	HasActiveSession bool                   `protobuf:"varint,1,opt,name=has_active_session,json=hasActiveSession,proto3" json:"has_active_session,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetNotificationRoutingPresenceResponse) Reset() {
+	*x = GetNotificationRoutingPresenceResponse{}
+	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNotificationRoutingPresenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNotificationRoutingPresenceResponse) ProtoMessage() {}
+
+func (x *GetNotificationRoutingPresenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNotificationRoutingPresenceResponse.ProtoReflect.Descriptor instead.
+func (*GetNotificationRoutingPresenceResponse) Descriptor() ([]byte, []int) {
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *GetNotificationRoutingPresenceResponse) GetHasActiveSession() bool {
+	if x != nil {
+		return x.HasActiveSession
+	}
+	return false
+}
+
 type GetSettingsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserSettings  *UserSettings          `protobuf:"bytes,1,opt,name=user_settings,json=userSettings,proto3" json:"user_settings,omitempty"`
@@ -3063,7 +3152,7 @@ type GetSettingsResponse struct {
 
 func (x *GetSettingsResponse) Reset() {
 	*x = GetSettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	mi := &file_voice_user_v1_user_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3075,7 +3164,7 @@ func (x *GetSettingsResponse) String() string {
 func (*GetSettingsResponse) ProtoMessage() {}
 
 func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[50]
+	mi := &file_voice_user_v1_user_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3088,7 +3177,7 @@ func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{50}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GetSettingsResponse) GetUserSettings() *UserSettings {
@@ -3107,7 +3196,7 @@ type UpdateSettingsResponse struct {
 
 func (x *UpdateSettingsResponse) Reset() {
 	*x = UpdateSettingsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	mi := &file_voice_user_v1_user_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3119,7 +3208,7 @@ func (x *UpdateSettingsResponse) String() string {
 func (*UpdateSettingsResponse) ProtoMessage() {}
 
 func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[51]
+	mi := &file_voice_user_v1_user_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3132,7 +3221,7 @@ func (x *UpdateSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{51}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *UpdateSettingsResponse) GetUserSettings() *UserSettings {
@@ -3151,7 +3240,7 @@ type GetOnboardingStateResponse struct {
 
 func (x *GetOnboardingStateResponse) Reset() {
 	*x = GetOnboardingStateResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[52]
+	mi := &file_voice_user_v1_user_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3163,7 +3252,7 @@ func (x *GetOnboardingStateResponse) String() string {
 func (*GetOnboardingStateResponse) ProtoMessage() {}
 
 func (x *GetOnboardingStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[52]
+	mi := &file_voice_user_v1_user_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3176,7 +3265,7 @@ func (x *GetOnboardingStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOnboardingStateResponse.ProtoReflect.Descriptor instead.
 func (*GetOnboardingStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{52}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetOnboardingStateResponse) GetOnboardingState() *OnboardingState {
@@ -3195,7 +3284,7 @@ type CompleteOnboardingStepResponse struct {
 
 func (x *CompleteOnboardingStepResponse) Reset() {
 	*x = CompleteOnboardingStepResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[53]
+	mi := &file_voice_user_v1_user_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3207,7 +3296,7 @@ func (x *CompleteOnboardingStepResponse) String() string {
 func (*CompleteOnboardingStepResponse) ProtoMessage() {}
 
 func (x *CompleteOnboardingStepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[53]
+	mi := &file_voice_user_v1_user_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3220,7 +3309,7 @@ func (x *CompleteOnboardingStepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOnboardingStepResponse.ProtoReflect.Descriptor instead.
 func (*CompleteOnboardingStepResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{53}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CompleteOnboardingStepResponse) GetOnboardingState() *OnboardingState {
@@ -3239,7 +3328,7 @@ type GetVerificationStatusResponse struct {
 
 func (x *GetVerificationStatusResponse) Reset() {
 	*x = GetVerificationStatusResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[54]
+	mi := &file_voice_user_v1_user_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3251,7 +3340,7 @@ func (x *GetVerificationStatusResponse) String() string {
 func (*GetVerificationStatusResponse) ProtoMessage() {}
 
 func (x *GetVerificationStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[54]
+	mi := &file_voice_user_v1_user_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3264,7 +3353,7 @@ func (x *GetVerificationStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVerificationStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetVerificationStatusResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{54}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetVerificationStatusResponse) GetVerificationStatus() *VerificationStatus {
@@ -3285,7 +3374,7 @@ type SetVerificationRequest struct {
 
 func (x *SetVerificationRequest) Reset() {
 	*x = SetVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[55]
+	mi := &file_voice_user_v1_user_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3297,7 +3386,7 @@ func (x *SetVerificationRequest) String() string {
 func (*SetVerificationRequest) ProtoMessage() {}
 
 func (x *SetVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[55]
+	mi := &file_voice_user_v1_user_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3310,7 +3399,7 @@ func (x *SetVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVerificationRequest.ProtoReflect.Descriptor instead.
 func (*SetVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{55}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *SetVerificationRequest) GetProfileId() string {
@@ -3343,7 +3432,7 @@ type SetVerificationResponse struct {
 
 func (x *SetVerificationResponse) Reset() {
 	*x = SetVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[56]
+	mi := &file_voice_user_v1_user_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3355,7 +3444,7 @@ func (x *SetVerificationResponse) String() string {
 func (*SetVerificationResponse) ProtoMessage() {}
 
 func (x *SetVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[56]
+	mi := &file_voice_user_v1_user_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3368,7 +3457,7 @@ func (x *SetVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVerificationResponse.ProtoReflect.Descriptor instead.
 func (*SetVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{56}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *SetVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -3387,7 +3476,7 @@ type ClearVerificationRequest struct {
 
 func (x *ClearVerificationRequest) Reset() {
 	*x = ClearVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[57]
+	mi := &file_voice_user_v1_user_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3399,7 +3488,7 @@ func (x *ClearVerificationRequest) String() string {
 func (*ClearVerificationRequest) ProtoMessage() {}
 
 func (x *ClearVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[57]
+	mi := &file_voice_user_v1_user_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3412,7 +3501,7 @@ func (x *ClearVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVerificationRequest.ProtoReflect.Descriptor instead.
 func (*ClearVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{57}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ClearVerificationRequest) GetProfileId() string {
@@ -3431,7 +3520,7 @@ type ClearVerificationResponse struct {
 
 func (x *ClearVerificationResponse) Reset() {
 	*x = ClearVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[58]
+	mi := &file_voice_user_v1_user_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3443,7 +3532,7 @@ func (x *ClearVerificationResponse) String() string {
 func (*ClearVerificationResponse) ProtoMessage() {}
 
 func (x *ClearVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[58]
+	mi := &file_voice_user_v1_user_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3456,7 +3545,7 @@ func (x *ClearVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearVerificationResponse.ProtoReflect.Descriptor instead.
 func (*ClearVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{58}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ClearVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -3479,7 +3568,7 @@ type ApplyVerificationSourceStateRequest struct {
 
 func (x *ApplyVerificationSourceStateRequest) Reset() {
 	*x = ApplyVerificationSourceStateRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[59]
+	mi := &file_voice_user_v1_user_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3491,7 +3580,7 @@ func (x *ApplyVerificationSourceStateRequest) String() string {
 func (*ApplyVerificationSourceStateRequest) ProtoMessage() {}
 
 func (x *ApplyVerificationSourceStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[59]
+	mi := &file_voice_user_v1_user_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3504,7 +3593,7 @@ func (x *ApplyVerificationSourceStateRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ApplyVerificationSourceStateRequest.ProtoReflect.Descriptor instead.
 func (*ApplyVerificationSourceStateRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{59}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ApplyVerificationSourceStateRequest) GetProfileId() string {
@@ -3552,7 +3641,7 @@ type ApplyVerificationSourceStateResponse struct {
 
 func (x *ApplyVerificationSourceStateResponse) Reset() {
 	*x = ApplyVerificationSourceStateResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[60]
+	mi := &file_voice_user_v1_user_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3564,7 +3653,7 @@ func (x *ApplyVerificationSourceStateResponse) String() string {
 func (*ApplyVerificationSourceStateResponse) ProtoMessage() {}
 
 func (x *ApplyVerificationSourceStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[60]
+	mi := &file_voice_user_v1_user_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3577,7 +3666,7 @@ func (x *ApplyVerificationSourceStateResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ApplyVerificationSourceStateResponse.ProtoReflect.Descriptor instead.
 func (*ApplyVerificationSourceStateResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{60}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ApplyVerificationSourceStateResponse) GetVerificationStatus() *VerificationStatus {
@@ -3604,7 +3693,7 @@ type StartOrganizationVerificationRequest struct {
 
 func (x *StartOrganizationVerificationRequest) Reset() {
 	*x = StartOrganizationVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[61]
+	mi := &file_voice_user_v1_user_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3616,7 +3705,7 @@ func (x *StartOrganizationVerificationRequest) String() string {
 func (*StartOrganizationVerificationRequest) ProtoMessage() {}
 
 func (x *StartOrganizationVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[61]
+	mi := &file_voice_user_v1_user_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3629,7 +3718,7 @@ func (x *StartOrganizationVerificationRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use StartOrganizationVerificationRequest.ProtoReflect.Descriptor instead.
 func (*StartOrganizationVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{61}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *StartOrganizationVerificationRequest) GetProfileId() string {
@@ -3656,7 +3745,7 @@ type StartOrganizationVerificationResponse struct {
 
 func (x *StartOrganizationVerificationResponse) Reset() {
 	*x = StartOrganizationVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[62]
+	mi := &file_voice_user_v1_user_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3668,7 +3757,7 @@ func (x *StartOrganizationVerificationResponse) String() string {
 func (*StartOrganizationVerificationResponse) ProtoMessage() {}
 
 func (x *StartOrganizationVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[62]
+	mi := &file_voice_user_v1_user_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3681,7 +3770,7 @@ func (x *StartOrganizationVerificationResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use StartOrganizationVerificationResponse.ProtoReflect.Descriptor instead.
 func (*StartOrganizationVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{62}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *StartOrganizationVerificationResponse) GetDomain() string {
@@ -3707,7 +3796,7 @@ type CheckOrganizationVerificationRequest struct {
 
 func (x *CheckOrganizationVerificationRequest) Reset() {
 	*x = CheckOrganizationVerificationRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[63]
+	mi := &file_voice_user_v1_user_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3719,7 +3808,7 @@ func (x *CheckOrganizationVerificationRequest) String() string {
 func (*CheckOrganizationVerificationRequest) ProtoMessage() {}
 
 func (x *CheckOrganizationVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[63]
+	mi := &file_voice_user_v1_user_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3732,7 +3821,7 @@ func (x *CheckOrganizationVerificationRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use CheckOrganizationVerificationRequest.ProtoReflect.Descriptor instead.
 func (*CheckOrganizationVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{63}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *CheckOrganizationVerificationRequest) GetProfileId() string {
@@ -3751,7 +3840,7 @@ type CheckOrganizationVerificationResponse struct {
 
 func (x *CheckOrganizationVerificationResponse) Reset() {
 	*x = CheckOrganizationVerificationResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[64]
+	mi := &file_voice_user_v1_user_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3763,7 +3852,7 @@ func (x *CheckOrganizationVerificationResponse) String() string {
 func (*CheckOrganizationVerificationResponse) ProtoMessage() {}
 
 func (x *CheckOrganizationVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[64]
+	mi := &file_voice_user_v1_user_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3776,7 +3865,7 @@ func (x *CheckOrganizationVerificationResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use CheckOrganizationVerificationResponse.ProtoReflect.Descriptor instead.
 func (*CheckOrganizationVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{64}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *CheckOrganizationVerificationResponse) GetVerificationStatus() *VerificationStatus {
@@ -3796,7 +3885,7 @@ type ApplyDowngradeProfilesRequest struct {
 
 func (x *ApplyDowngradeProfilesRequest) Reset() {
 	*x = ApplyDowngradeProfilesRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[65]
+	mi := &file_voice_user_v1_user_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3808,7 +3897,7 @@ func (x *ApplyDowngradeProfilesRequest) String() string {
 func (*ApplyDowngradeProfilesRequest) ProtoMessage() {}
 
 func (x *ApplyDowngradeProfilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[65]
+	mi := &file_voice_user_v1_user_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3821,7 +3910,7 @@ func (x *ApplyDowngradeProfilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyDowngradeProfilesRequest.ProtoReflect.Descriptor instead.
 func (*ApplyDowngradeProfilesRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{65}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ApplyDowngradeProfilesRequest) GetAccountId() string {
@@ -3847,7 +3936,7 @@ type ApplyDowngradeProfilesResponse struct {
 
 func (x *ApplyDowngradeProfilesResponse) Reset() {
 	*x = ApplyDowngradeProfilesResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[66]
+	mi := &file_voice_user_v1_user_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3859,7 +3948,7 @@ func (x *ApplyDowngradeProfilesResponse) String() string {
 func (*ApplyDowngradeProfilesResponse) ProtoMessage() {}
 
 func (x *ApplyDowngradeProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[66]
+	mi := &file_voice_user_v1_user_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3872,7 +3961,7 @@ func (x *ApplyDowngradeProfilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyDowngradeProfilesResponse.ProtoReflect.Descriptor instead.
 func (*ApplyDowngradeProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{66}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ApplyDowngradeProfilesResponse) GetKeptProfileIds() []string {
@@ -3891,7 +3980,7 @@ type ResolvePrimaryProfileIDsRequest struct {
 
 func (x *ResolvePrimaryProfileIDsRequest) Reset() {
 	*x = ResolvePrimaryProfileIDsRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[67]
+	mi := &file_voice_user_v1_user_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3903,7 +3992,7 @@ func (x *ResolvePrimaryProfileIDsRequest) String() string {
 func (*ResolvePrimaryProfileIDsRequest) ProtoMessage() {}
 
 func (x *ResolvePrimaryProfileIDsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[67]
+	mi := &file_voice_user_v1_user_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3916,7 +4005,7 @@ func (x *ResolvePrimaryProfileIDsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvePrimaryProfileIDsRequest.ProtoReflect.Descriptor instead.
 func (*ResolvePrimaryProfileIDsRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{67}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ResolvePrimaryProfileIDsRequest) GetAccountIds() []string {
@@ -3936,7 +4025,7 @@ type ResolvePrimaryProfileIDsResponse struct {
 
 func (x *ResolvePrimaryProfileIDsResponse) Reset() {
 	*x = ResolvePrimaryProfileIDsResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[68]
+	mi := &file_voice_user_v1_user_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3948,7 +4037,7 @@ func (x *ResolvePrimaryProfileIDsResponse) String() string {
 func (*ResolvePrimaryProfileIDsResponse) ProtoMessage() {}
 
 func (x *ResolvePrimaryProfileIDsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[68]
+	mi := &file_voice_user_v1_user_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3961,7 +4050,7 @@ func (x *ResolvePrimaryProfileIDsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvePrimaryProfileIDsResponse.ProtoReflect.Descriptor instead.
 func (*ResolvePrimaryProfileIDsResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{68}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *ResolvePrimaryProfileIDsResponse) GetPrimaryProfileIds() map[string]string {
@@ -3980,7 +4069,7 @@ type MarkAccountRegularRequest struct {
 
 func (x *MarkAccountRegularRequest) Reset() {
 	*x = MarkAccountRegularRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[69]
+	mi := &file_voice_user_v1_user_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3992,7 +4081,7 @@ func (x *MarkAccountRegularRequest) String() string {
 func (*MarkAccountRegularRequest) ProtoMessage() {}
 
 func (x *MarkAccountRegularRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[69]
+	mi := &file_voice_user_v1_user_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4005,7 +4094,7 @@ func (x *MarkAccountRegularRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkAccountRegularRequest.ProtoReflect.Descriptor instead.
 func (*MarkAccountRegularRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{69}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *MarkAccountRegularRequest) GetAccountId() string {
@@ -4023,7 +4112,7 @@ type MarkAccountRegularResponse struct {
 
 func (x *MarkAccountRegularResponse) Reset() {
 	*x = MarkAccountRegularResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[70]
+	mi := &file_voice_user_v1_user_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4035,7 +4124,7 @@ func (x *MarkAccountRegularResponse) String() string {
 func (*MarkAccountRegularResponse) ProtoMessage() {}
 
 func (x *MarkAccountRegularResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[70]
+	mi := &file_voice_user_v1_user_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4048,7 +4137,7 @@ func (x *MarkAccountRegularResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkAccountRegularResponse.ProtoReflect.Descriptor instead.
 func (*MarkAccountRegularResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{70}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{72}
 }
 
 type GetSdkProfileEligibilityRequest struct {
@@ -4061,7 +4150,7 @@ type GetSdkProfileEligibilityRequest struct {
 
 func (x *GetSdkProfileEligibilityRequest) Reset() {
 	*x = GetSdkProfileEligibilityRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[71]
+	mi := &file_voice_user_v1_user_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4073,7 +4162,7 @@ func (x *GetSdkProfileEligibilityRequest) String() string {
 func (*GetSdkProfileEligibilityRequest) ProtoMessage() {}
 
 func (x *GetSdkProfileEligibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[71]
+	mi := &file_voice_user_v1_user_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4086,7 +4175,7 @@ func (x *GetSdkProfileEligibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSdkProfileEligibilityRequest.ProtoReflect.Descriptor instead.
 func (*GetSdkProfileEligibilityRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{71}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GetSdkProfileEligibilityRequest) GetAccountId() string {
@@ -4116,7 +4205,7 @@ type GetSdkProfileEligibilityResponse struct {
 
 func (x *GetSdkProfileEligibilityResponse) Reset() {
 	*x = GetSdkProfileEligibilityResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[72]
+	mi := &file_voice_user_v1_user_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4128,7 +4217,7 @@ func (x *GetSdkProfileEligibilityResponse) String() string {
 func (*GetSdkProfileEligibilityResponse) ProtoMessage() {}
 
 func (x *GetSdkProfileEligibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[72]
+	mi := &file_voice_user_v1_user_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4141,7 +4230,7 @@ func (x *GetSdkProfileEligibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSdkProfileEligibilityResponse.ProtoReflect.Descriptor instead.
 func (*GetSdkProfileEligibilityResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{72}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *GetSdkProfileEligibilityResponse) GetAccountId() string {
@@ -4198,7 +4287,7 @@ type RecordSdkAuthorTombstoneRequest struct {
 
 func (x *RecordSdkAuthorTombstoneRequest) Reset() {
 	*x = RecordSdkAuthorTombstoneRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[73]
+	mi := &file_voice_user_v1_user_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4210,7 +4299,7 @@ func (x *RecordSdkAuthorTombstoneRequest) String() string {
 func (*RecordSdkAuthorTombstoneRequest) ProtoMessage() {}
 
 func (x *RecordSdkAuthorTombstoneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[73]
+	mi := &file_voice_user_v1_user_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4223,7 +4312,7 @@ func (x *RecordSdkAuthorTombstoneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSdkAuthorTombstoneRequest.ProtoReflect.Descriptor instead.
 func (*RecordSdkAuthorTombstoneRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{73}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *RecordSdkAuthorTombstoneRequest) GetVersion() uint32 {
@@ -4325,7 +4414,7 @@ type RecordSdkAuthorTombstoneResponse struct {
 
 func (x *RecordSdkAuthorTombstoneResponse) Reset() {
 	*x = RecordSdkAuthorTombstoneResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[74]
+	mi := &file_voice_user_v1_user_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4337,7 +4426,7 @@ func (x *RecordSdkAuthorTombstoneResponse) String() string {
 func (*RecordSdkAuthorTombstoneResponse) ProtoMessage() {}
 
 func (x *RecordSdkAuthorTombstoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[74]
+	mi := &file_voice_user_v1_user_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4350,7 +4439,7 @@ func (x *RecordSdkAuthorTombstoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSdkAuthorTombstoneResponse.ProtoReflect.Descriptor instead.
 func (*RecordSdkAuthorTombstoneResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{74}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *RecordSdkAuthorTombstoneResponse) GetVersion() uint32 {
@@ -4470,7 +4559,7 @@ type SearchProfileProjectionEvent struct {
 
 func (x *SearchProfileProjectionEvent) Reset() {
 	*x = SearchProfileProjectionEvent{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[75]
+	mi := &file_voice_user_v1_user_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4482,7 +4571,7 @@ func (x *SearchProfileProjectionEvent) String() string {
 func (*SearchProfileProjectionEvent) ProtoMessage() {}
 
 func (x *SearchProfileProjectionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[75]
+	mi := &file_voice_user_v1_user_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4495,7 +4584,7 @@ func (x *SearchProfileProjectionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchProfileProjectionEvent.ProtoReflect.Descriptor instead.
 func (*SearchProfileProjectionEvent) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{75}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *SearchProfileProjectionEvent) GetProtocolVersion() uint32 {
@@ -4597,7 +4686,7 @@ type SearchProfileUpsert struct {
 
 func (x *SearchProfileUpsert) Reset() {
 	*x = SearchProfileUpsert{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[76]
+	mi := &file_voice_user_v1_user_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4609,7 +4698,7 @@ func (x *SearchProfileUpsert) String() string {
 func (*SearchProfileUpsert) ProtoMessage() {}
 
 func (x *SearchProfileUpsert) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[76]
+	mi := &file_voice_user_v1_user_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4622,7 +4711,7 @@ func (x *SearchProfileUpsert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchProfileUpsert.ProtoReflect.Descriptor instead.
 func (*SearchProfileUpsert) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{76}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *SearchProfileUpsert) GetAccountId() string {
@@ -4689,7 +4778,7 @@ type SearchProfileDelete struct {
 
 func (x *SearchProfileDelete) Reset() {
 	*x = SearchProfileDelete{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[77]
+	mi := &file_voice_user_v1_user_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4701,7 +4790,7 @@ func (x *SearchProfileDelete) String() string {
 func (*SearchProfileDelete) ProtoMessage() {}
 
 func (x *SearchProfileDelete) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[77]
+	mi := &file_voice_user_v1_user_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4714,7 +4803,7 @@ func (x *SearchProfileDelete) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchProfileDelete.ProtoReflect.Descriptor instead.
 func (*SearchProfileDelete) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{77}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{79}
 }
 
 type BeginSearchProfileSnapshotRequest struct {
@@ -4725,7 +4814,7 @@ type BeginSearchProfileSnapshotRequest struct {
 
 func (x *BeginSearchProfileSnapshotRequest) Reset() {
 	*x = BeginSearchProfileSnapshotRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[78]
+	mi := &file_voice_user_v1_user_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4737,7 +4826,7 @@ func (x *BeginSearchProfileSnapshotRequest) String() string {
 func (*BeginSearchProfileSnapshotRequest) ProtoMessage() {}
 
 func (x *BeginSearchProfileSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[78]
+	mi := &file_voice_user_v1_user_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4750,7 +4839,7 @@ func (x *BeginSearchProfileSnapshotRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BeginSearchProfileSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*BeginSearchProfileSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{78}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{80}
 }
 
 type BeginSearchProfileSnapshotResponse struct {
@@ -4762,7 +4851,7 @@ type BeginSearchProfileSnapshotResponse struct {
 
 func (x *BeginSearchProfileSnapshotResponse) Reset() {
 	*x = BeginSearchProfileSnapshotResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[79]
+	mi := &file_voice_user_v1_user_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4774,7 +4863,7 @@ func (x *BeginSearchProfileSnapshotResponse) String() string {
 func (*BeginSearchProfileSnapshotResponse) ProtoMessage() {}
 
 func (x *BeginSearchProfileSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[79]
+	mi := &file_voice_user_v1_user_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4787,7 +4876,7 @@ func (x *BeginSearchProfileSnapshotResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use BeginSearchProfileSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*BeginSearchProfileSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{79}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *BeginSearchProfileSnapshotResponse) GetHighWatermark() uint64 {
@@ -4808,7 +4897,7 @@ type ListSearchProfileSnapshotRequest struct {
 
 func (x *ListSearchProfileSnapshotRequest) Reset() {
 	*x = ListSearchProfileSnapshotRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[80]
+	mi := &file_voice_user_v1_user_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4820,7 +4909,7 @@ func (x *ListSearchProfileSnapshotRequest) String() string {
 func (*ListSearchProfileSnapshotRequest) ProtoMessage() {}
 
 func (x *ListSearchProfileSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[80]
+	mi := &file_voice_user_v1_user_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4833,7 +4922,7 @@ func (x *ListSearchProfileSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSearchProfileSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*ListSearchProfileSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{80}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ListSearchProfileSnapshotRequest) GetHighWatermark() uint64 {
@@ -4867,7 +4956,7 @@ type ListSearchProfileSnapshotResponse struct {
 
 func (x *ListSearchProfileSnapshotResponse) Reset() {
 	*x = ListSearchProfileSnapshotResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[81]
+	mi := &file_voice_user_v1_user_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4879,7 +4968,7 @@ func (x *ListSearchProfileSnapshotResponse) String() string {
 func (*ListSearchProfileSnapshotResponse) ProtoMessage() {}
 
 func (x *ListSearchProfileSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[81]
+	mi := &file_voice_user_v1_user_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4892,7 +4981,7 @@ func (x *ListSearchProfileSnapshotResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ListSearchProfileSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*ListSearchProfileSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{81}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *ListSearchProfileSnapshotResponse) GetEvents() []*SearchProfileProjectionEvent {
@@ -4919,7 +5008,7 @@ type ListSearchProfileJournalRequest struct {
 
 func (x *ListSearchProfileJournalRequest) Reset() {
 	*x = ListSearchProfileJournalRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[82]
+	mi := &file_voice_user_v1_user_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4931,7 +5020,7 @@ func (x *ListSearchProfileJournalRequest) String() string {
 func (*ListSearchProfileJournalRequest) ProtoMessage() {}
 
 func (x *ListSearchProfileJournalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[82]
+	mi := &file_voice_user_v1_user_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4944,7 +5033,7 @@ func (x *ListSearchProfileJournalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSearchProfileJournalRequest.ProtoReflect.Descriptor instead.
 func (*ListSearchProfileJournalRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{82}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ListSearchProfileJournalRequest) GetAfterOffset() uint64 {
@@ -4971,7 +5060,7 @@ type ListSearchProfileJournalResponse struct {
 
 func (x *ListSearchProfileJournalResponse) Reset() {
 	*x = ListSearchProfileJournalResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[83]
+	mi := &file_voice_user_v1_user_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4983,7 +5072,7 @@ func (x *ListSearchProfileJournalResponse) String() string {
 func (*ListSearchProfileJournalResponse) ProtoMessage() {}
 
 func (x *ListSearchProfileJournalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[83]
+	mi := &file_voice_user_v1_user_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4996,7 +5085,7 @@ func (x *ListSearchProfileJournalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSearchProfileJournalResponse.ProtoReflect.Descriptor instead.
 func (*ListSearchProfileJournalResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{83}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ListSearchProfileJournalResponse) GetEvents() []*SearchProfileProjectionEvent {
@@ -5021,7 +5110,7 @@ type GetSearchProfileCheckpointRequest struct {
 
 func (x *GetSearchProfileCheckpointRequest) Reset() {
 	*x = GetSearchProfileCheckpointRequest{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[84]
+	mi := &file_voice_user_v1_user_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5033,7 +5122,7 @@ func (x *GetSearchProfileCheckpointRequest) String() string {
 func (*GetSearchProfileCheckpointRequest) ProtoMessage() {}
 
 func (x *GetSearchProfileCheckpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[84]
+	mi := &file_voice_user_v1_user_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5046,7 +5135,7 @@ func (x *GetSearchProfileCheckpointRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetSearchProfileCheckpointRequest.ProtoReflect.Descriptor instead.
 func (*GetSearchProfileCheckpointRequest) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{84}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{86}
 }
 
 type GetSearchProfileCheckpointResponse struct {
@@ -5058,7 +5147,7 @@ type GetSearchProfileCheckpointResponse struct {
 
 func (x *GetSearchProfileCheckpointResponse) Reset() {
 	*x = GetSearchProfileCheckpointResponse{}
-	mi := &file_voice_user_v1_user_proto_msgTypes[85]
+	mi := &file_voice_user_v1_user_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5070,7 +5159,7 @@ func (x *GetSearchProfileCheckpointResponse) String() string {
 func (*GetSearchProfileCheckpointResponse) ProtoMessage() {}
 
 func (x *GetSearchProfileCheckpointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_voice_user_v1_user_proto_msgTypes[85]
+	mi := &file_voice_user_v1_user_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5083,7 +5172,7 @@ func (x *GetSearchProfileCheckpointResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetSearchProfileCheckpointResponse.ProtoReflect.Descriptor instead.
 func (*GetSearchProfileCheckpointResponse) Descriptor() ([]byte, []int) {
-	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{85}
+	return file_voice_user_v1_user_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *GetSearchProfileCheckpointResponse) GetHighWatermark() uint64 {
@@ -5597,7 +5686,17 @@ var file_voice_user_v1_user_proto_rawDesc = string([]byte{
 	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x33, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65,
 	0x72, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x53, 0x74, 0x61,
-	0x74, 0x75, 0x73, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x57,
+	0x74, 0x75, 0x73, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x46,
+	0x0a, 0x25, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x70, 0x72, 0x6f, 0x66, 0x69,
+	0x6c, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x72, 0x6f,
+	0x66, 0x69, 0x6c, 0x65, 0x49, 0x64, 0x22, 0x56, 0x0a, 0x26, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x74,
+	0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67,
+	0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x2c, 0x0a, 0x12, 0x68, 0x61, 0x73, 0x5f, 0x61, 0x63, 0x74, 0x69, 0x76, 0x65, 0x5f, 0x73,
+	0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x10, 0x68, 0x61,
+	0x73, 0x41, 0x63, 0x74, 0x69, 0x76, 0x65, 0x53, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x22, 0x57,
 	0x0a, 0x13, 0x47, 0x65, 0x74, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x52, 0x65, 0x73,
 	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x40, 0x0a, 0x0d, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x73, 0x65,
 	0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x76,
@@ -5942,7 +6041,7 @@ var file_voice_user_v1_user_proto_rawDesc = string([]byte{
 	0x52, 0x53, 0x4f, 0x4e, 0x41, 0x4c, 0x10, 0x01, 0x12, 0x19, 0x0a, 0x15, 0x50, 0x52, 0x49, 0x56,
 	0x41, 0x43, 0x59, 0x5f, 0x50, 0x52, 0x45, 0x53, 0x45, 0x54, 0x5f, 0x47, 0x41, 0x4d, 0x49, 0x4e,
 	0x47, 0x10, 0x02, 0x12, 0x17, 0x0a, 0x13, 0x50, 0x52, 0x49, 0x56, 0x41, 0x43, 0x59, 0x5f, 0x50,
-	0x52, 0x45, 0x53, 0x45, 0x54, 0x5f, 0x57, 0x4f, 0x52, 0x4b, 0x10, 0x03, 0x32, 0x9e, 0x20, 0x0a,
+	0x52, 0x45, 0x53, 0x45, 0x54, 0x5f, 0x57, 0x4f, 0x52, 0x4b, 0x10, 0x03, 0x32, 0xae, 0x21, 0x0a,
 	0x0b, 0x55, 0x73, 0x65, 0x72, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x6f, 0x0a, 0x14,
 	0x45, 0x6e, 0x73, 0x75, 0x72, 0x65, 0x50, 0x72, 0x69, 0x6d, 0x61, 0x72, 0x79, 0x50, 0x72, 0x6f,
 	0x66, 0x69, 0x6c, 0x65, 0x12, 0x2a, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65,
@@ -6081,6 +6180,15 @@ var file_voice_user_v1_user_proto_rawDesc = string([]byte{
 	0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e, 0x76, 0x6f, 0x69, 0x63,
 	0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x42, 0x75, 0x6c,
 	0x6b, 0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x8d, 0x01, 0x0a, 0x1e, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x50, 0x72, 0x65, 0x73,
+	0x65, 0x6e, 0x63, 0x65, 0x12, 0x34, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65,
+	0x72, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e, 0x67, 0x50, 0x72, 0x65, 0x73, 0x65,
+	0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x35, 0x2e, 0x76, 0x6f, 0x69,
+	0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4e, 0x6f,
+	0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x6f, 0x75, 0x74, 0x69, 0x6e,
+	0x67, 0x50, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
 	0x65, 0x12, 0x54, 0x0a, 0x0b, 0x47, 0x65, 0x74, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73,
 	0x12, 0x21, 0x2e, 0x76, 0x6f, 0x69, 0x63, 0x65, 0x2e, 0x75, 0x73, 0x65, 0x72, 0x2e, 0x76, 0x31,
 	0x2e, 0x47, 0x65, 0x74, 0x53, 0x65, 0x74, 0x74, 0x69, 0x6e, 0x67, 0x73, 0x52, 0x65, 0x71, 0x75,
@@ -6220,113 +6328,115 @@ func file_voice_user_v1_user_proto_rawDescGZIP() []byte {
 }
 
 var file_voice_user_v1_user_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_voice_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 89)
+var file_voice_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
 var file_voice_user_v1_user_proto_goTypes = []any{
-	(PresenceOnlineStatus)(0),                     // 0: voice.user.v1.PresenceOnlineStatus
-	(PrivacyPreset)(0),                            // 1: voice.user.v1.PrivacyPreset
-	(*EnsurePrimaryProfileRequest)(nil),           // 2: voice.user.v1.EnsurePrimaryProfileRequest
-	(*EnsurePrimaryProfileResponse)(nil),          // 3: voice.user.v1.EnsurePrimaryProfileResponse
-	(*ListProfileIDsForAccountRequest)(nil),       // 4: voice.user.v1.ListProfileIDsForAccountRequest
-	(*ListProfileIDsForAccountResponse)(nil),      // 5: voice.user.v1.ListProfileIDsForAccountResponse
-	(*ResolveAccountIDForProfileRequest)(nil),     // 6: voice.user.v1.ResolveAccountIDForProfileRequest
-	(*ResolveAccountIDForProfileResponse)(nil),    // 7: voice.user.v1.ResolveAccountIDForProfileResponse
-	(*GetDMPeerDisplayNamesRequest)(nil),          // 8: voice.user.v1.GetDMPeerDisplayNamesRequest
-	(*DMPeerDisplayName)(nil),                     // 9: voice.user.v1.DMPeerDisplayName
-	(*GetDMPeerDisplayNamesResponse)(nil),         // 10: voice.user.v1.GetDMPeerDisplayNamesResponse
-	(*GetProfileRequest)(nil),                     // 11: voice.user.v1.GetProfileRequest
-	(*GetProfilesRequest)(nil),                    // 12: voice.user.v1.GetProfilesRequest
-	(*ProfileList)(nil),                           // 13: voice.user.v1.ProfileList
-	(*Profile)(nil),                               // 14: voice.user.v1.Profile
-	(*UpdateProfileRequest)(nil),                  // 15: voice.user.v1.UpdateProfileRequest
-	(*CreateProfileRequest)(nil),                  // 16: voice.user.v1.CreateProfileRequest
-	(*DeleteProfileRequest)(nil),                  // 17: voice.user.v1.DeleteProfileRequest
-	(*SwitchProfileRequest)(nil),                  // 18: voice.user.v1.SwitchProfileRequest
-	(*ListMyProfilesRequest)(nil),                 // 19: voice.user.v1.ListMyProfilesRequest
-	(*SearchProfilesRequest)(nil),                 // 20: voice.user.v1.SearchProfilesRequest
-	(*SearchProfilesResponse)(nil),                // 21: voice.user.v1.SearchProfilesResponse
-	(*GetPrivacySettingsRequest)(nil),             // 22: voice.user.v1.GetPrivacySettingsRequest
-	(*UpdatePrivacySettingsRequest)(nil),          // 23: voice.user.v1.UpdatePrivacySettingsRequest
-	(*PrivacyAudience)(nil),                       // 24: voice.user.v1.PrivacyAudience
-	(*PrivacySettings)(nil),                       // 25: voice.user.v1.PrivacySettings
-	(*UpdatePresenceRequest)(nil),                 // 26: voice.user.v1.UpdatePresenceRequest
-	(*GetPresenceRequest)(nil),                    // 27: voice.user.v1.GetPresenceRequest
-	(*PresenceStatus)(nil),                        // 28: voice.user.v1.PresenceStatus
-	(*GetBulkPresenceRequest)(nil),                // 29: voice.user.v1.GetBulkPresenceRequest
-	(*GetSettingsRequest)(nil),                    // 30: voice.user.v1.GetSettingsRequest
-	(*UpdateSettingsRequest)(nil),                 // 31: voice.user.v1.UpdateSettingsRequest
-	(*UserSettings)(nil),                          // 32: voice.user.v1.UserSettings
-	(*GetOnboardingStateRequest)(nil),             // 33: voice.user.v1.GetOnboardingStateRequest
-	(*CompleteOnboardingStepRequest)(nil),         // 34: voice.user.v1.CompleteOnboardingStepRequest
-	(*OnboardingState)(nil),                       // 35: voice.user.v1.OnboardingState
-	(*CreateAvatarPresignedUploadRequest)(nil),    // 36: voice.user.v1.CreateAvatarPresignedUploadRequest
-	(*CreateAvatarPresignedUploadResponse)(nil),   // 37: voice.user.v1.CreateAvatarPresignedUploadResponse
-	(*GetVerificationStatusRequest)(nil),          // 38: voice.user.v1.GetVerificationStatusRequest
-	(*VerificationStatus)(nil),                    // 39: voice.user.v1.VerificationStatus
-	(*GetProfileResponse)(nil),                    // 40: voice.user.v1.GetProfileResponse
-	(*GetProfilesResponse)(nil),                   // 41: voice.user.v1.GetProfilesResponse
-	(*UpdateProfileResponse)(nil),                 // 42: voice.user.v1.UpdateProfileResponse
-	(*CreateProfileResponse)(nil),                 // 43: voice.user.v1.CreateProfileResponse
-	(*DeleteProfileResponse)(nil),                 // 44: voice.user.v1.DeleteProfileResponse
-	(*SwitchProfileResponse)(nil),                 // 45: voice.user.v1.SwitchProfileResponse
-	(*ListMyProfilesResponse)(nil),                // 46: voice.user.v1.ListMyProfilesResponse
-	(*GetPrivacySettingsResponse)(nil),            // 47: voice.user.v1.GetPrivacySettingsResponse
-	(*UpdatePrivacySettingsResponse)(nil),         // 48: voice.user.v1.UpdatePrivacySettingsResponse
-	(*UpdatePresenceResponse)(nil),                // 49: voice.user.v1.UpdatePresenceResponse
-	(*GetPresenceResponse)(nil),                   // 50: voice.user.v1.GetPresenceResponse
-	(*GetBulkPresenceResponse)(nil),               // 51: voice.user.v1.GetBulkPresenceResponse
-	(*GetSettingsResponse)(nil),                   // 52: voice.user.v1.GetSettingsResponse
-	(*UpdateSettingsResponse)(nil),                // 53: voice.user.v1.UpdateSettingsResponse
-	(*GetOnboardingStateResponse)(nil),            // 54: voice.user.v1.GetOnboardingStateResponse
-	(*CompleteOnboardingStepResponse)(nil),        // 55: voice.user.v1.CompleteOnboardingStepResponse
-	(*GetVerificationStatusResponse)(nil),         // 56: voice.user.v1.GetVerificationStatusResponse
-	(*SetVerificationRequest)(nil),                // 57: voice.user.v1.SetVerificationRequest
-	(*SetVerificationResponse)(nil),               // 58: voice.user.v1.SetVerificationResponse
-	(*ClearVerificationRequest)(nil),              // 59: voice.user.v1.ClearVerificationRequest
-	(*ClearVerificationResponse)(nil),             // 60: voice.user.v1.ClearVerificationResponse
-	(*ApplyVerificationSourceStateRequest)(nil),   // 61: voice.user.v1.ApplyVerificationSourceStateRequest
-	(*ApplyVerificationSourceStateResponse)(nil),  // 62: voice.user.v1.ApplyVerificationSourceStateResponse
-	(*StartOrganizationVerificationRequest)(nil),  // 63: voice.user.v1.StartOrganizationVerificationRequest
-	(*StartOrganizationVerificationResponse)(nil), // 64: voice.user.v1.StartOrganizationVerificationResponse
-	(*CheckOrganizationVerificationRequest)(nil),  // 65: voice.user.v1.CheckOrganizationVerificationRequest
-	(*CheckOrganizationVerificationResponse)(nil), // 66: voice.user.v1.CheckOrganizationVerificationResponse
-	(*ApplyDowngradeProfilesRequest)(nil),         // 67: voice.user.v1.ApplyDowngradeProfilesRequest
-	(*ApplyDowngradeProfilesResponse)(nil),        // 68: voice.user.v1.ApplyDowngradeProfilesResponse
-	(*ResolvePrimaryProfileIDsRequest)(nil),       // 69: voice.user.v1.ResolvePrimaryProfileIDsRequest
-	(*ResolvePrimaryProfileIDsResponse)(nil),      // 70: voice.user.v1.ResolvePrimaryProfileIDsResponse
-	(*MarkAccountRegularRequest)(nil),             // 71: voice.user.v1.MarkAccountRegularRequest
-	(*MarkAccountRegularResponse)(nil),            // 72: voice.user.v1.MarkAccountRegularResponse
-	(*GetSdkProfileEligibilityRequest)(nil),       // 73: voice.user.v1.GetSdkProfileEligibilityRequest
-	(*GetSdkProfileEligibilityResponse)(nil),      // 74: voice.user.v1.GetSdkProfileEligibilityResponse
-	(*RecordSdkAuthorTombstoneRequest)(nil),       // 75: voice.user.v1.RecordSdkAuthorTombstoneRequest
-	(*RecordSdkAuthorTombstoneResponse)(nil),      // 76: voice.user.v1.RecordSdkAuthorTombstoneResponse
-	(*SearchProfileProjectionEvent)(nil),          // 77: voice.user.v1.SearchProfileProjectionEvent
-	(*SearchProfileUpsert)(nil),                   // 78: voice.user.v1.SearchProfileUpsert
-	(*SearchProfileDelete)(nil),                   // 79: voice.user.v1.SearchProfileDelete
-	(*BeginSearchProfileSnapshotRequest)(nil),     // 80: voice.user.v1.BeginSearchProfileSnapshotRequest
-	(*BeginSearchProfileSnapshotResponse)(nil),    // 81: voice.user.v1.BeginSearchProfileSnapshotResponse
-	(*ListSearchProfileSnapshotRequest)(nil),      // 82: voice.user.v1.ListSearchProfileSnapshotRequest
-	(*ListSearchProfileSnapshotResponse)(nil),     // 83: voice.user.v1.ListSearchProfileSnapshotResponse
-	(*ListSearchProfileJournalRequest)(nil),       // 84: voice.user.v1.ListSearchProfileJournalRequest
-	(*ListSearchProfileJournalResponse)(nil),      // 85: voice.user.v1.ListSearchProfileJournalResponse
-	(*GetSearchProfileCheckpointRequest)(nil),     // 86: voice.user.v1.GetSearchProfileCheckpointRequest
-	(*GetSearchProfileCheckpointResponse)(nil),    // 87: voice.user.v1.GetSearchProfileCheckpointResponse
-	nil,                           // 88: voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
-	nil,                           // 89: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
-	nil,                           // 90: voice.user.v1.ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry
-	(*timestamppb.Timestamp)(nil), // 91: google.protobuf.Timestamp
-	(*v1.CursorPageRequest)(nil),  // 92: voice.common.v1.CursorPageRequest
-	(*v1.CursorPageResponse)(nil), // 93: voice.common.v1.CursorPageResponse
+	(PresenceOnlineStatus)(0),                      // 0: voice.user.v1.PresenceOnlineStatus
+	(PrivacyPreset)(0),                             // 1: voice.user.v1.PrivacyPreset
+	(*EnsurePrimaryProfileRequest)(nil),            // 2: voice.user.v1.EnsurePrimaryProfileRequest
+	(*EnsurePrimaryProfileResponse)(nil),           // 3: voice.user.v1.EnsurePrimaryProfileResponse
+	(*ListProfileIDsForAccountRequest)(nil),        // 4: voice.user.v1.ListProfileIDsForAccountRequest
+	(*ListProfileIDsForAccountResponse)(nil),       // 5: voice.user.v1.ListProfileIDsForAccountResponse
+	(*ResolveAccountIDForProfileRequest)(nil),      // 6: voice.user.v1.ResolveAccountIDForProfileRequest
+	(*ResolveAccountIDForProfileResponse)(nil),     // 7: voice.user.v1.ResolveAccountIDForProfileResponse
+	(*GetDMPeerDisplayNamesRequest)(nil),           // 8: voice.user.v1.GetDMPeerDisplayNamesRequest
+	(*DMPeerDisplayName)(nil),                      // 9: voice.user.v1.DMPeerDisplayName
+	(*GetDMPeerDisplayNamesResponse)(nil),          // 10: voice.user.v1.GetDMPeerDisplayNamesResponse
+	(*GetProfileRequest)(nil),                      // 11: voice.user.v1.GetProfileRequest
+	(*GetProfilesRequest)(nil),                     // 12: voice.user.v1.GetProfilesRequest
+	(*ProfileList)(nil),                            // 13: voice.user.v1.ProfileList
+	(*Profile)(nil),                                // 14: voice.user.v1.Profile
+	(*UpdateProfileRequest)(nil),                   // 15: voice.user.v1.UpdateProfileRequest
+	(*CreateProfileRequest)(nil),                   // 16: voice.user.v1.CreateProfileRequest
+	(*DeleteProfileRequest)(nil),                   // 17: voice.user.v1.DeleteProfileRequest
+	(*SwitchProfileRequest)(nil),                   // 18: voice.user.v1.SwitchProfileRequest
+	(*ListMyProfilesRequest)(nil),                  // 19: voice.user.v1.ListMyProfilesRequest
+	(*SearchProfilesRequest)(nil),                  // 20: voice.user.v1.SearchProfilesRequest
+	(*SearchProfilesResponse)(nil),                 // 21: voice.user.v1.SearchProfilesResponse
+	(*GetPrivacySettingsRequest)(nil),              // 22: voice.user.v1.GetPrivacySettingsRequest
+	(*UpdatePrivacySettingsRequest)(nil),           // 23: voice.user.v1.UpdatePrivacySettingsRequest
+	(*PrivacyAudience)(nil),                        // 24: voice.user.v1.PrivacyAudience
+	(*PrivacySettings)(nil),                        // 25: voice.user.v1.PrivacySettings
+	(*UpdatePresenceRequest)(nil),                  // 26: voice.user.v1.UpdatePresenceRequest
+	(*GetPresenceRequest)(nil),                     // 27: voice.user.v1.GetPresenceRequest
+	(*PresenceStatus)(nil),                         // 28: voice.user.v1.PresenceStatus
+	(*GetBulkPresenceRequest)(nil),                 // 29: voice.user.v1.GetBulkPresenceRequest
+	(*GetSettingsRequest)(nil),                     // 30: voice.user.v1.GetSettingsRequest
+	(*UpdateSettingsRequest)(nil),                  // 31: voice.user.v1.UpdateSettingsRequest
+	(*UserSettings)(nil),                           // 32: voice.user.v1.UserSettings
+	(*GetOnboardingStateRequest)(nil),              // 33: voice.user.v1.GetOnboardingStateRequest
+	(*CompleteOnboardingStepRequest)(nil),          // 34: voice.user.v1.CompleteOnboardingStepRequest
+	(*OnboardingState)(nil),                        // 35: voice.user.v1.OnboardingState
+	(*CreateAvatarPresignedUploadRequest)(nil),     // 36: voice.user.v1.CreateAvatarPresignedUploadRequest
+	(*CreateAvatarPresignedUploadResponse)(nil),    // 37: voice.user.v1.CreateAvatarPresignedUploadResponse
+	(*GetVerificationStatusRequest)(nil),           // 38: voice.user.v1.GetVerificationStatusRequest
+	(*VerificationStatus)(nil),                     // 39: voice.user.v1.VerificationStatus
+	(*GetProfileResponse)(nil),                     // 40: voice.user.v1.GetProfileResponse
+	(*GetProfilesResponse)(nil),                    // 41: voice.user.v1.GetProfilesResponse
+	(*UpdateProfileResponse)(nil),                  // 42: voice.user.v1.UpdateProfileResponse
+	(*CreateProfileResponse)(nil),                  // 43: voice.user.v1.CreateProfileResponse
+	(*DeleteProfileResponse)(nil),                  // 44: voice.user.v1.DeleteProfileResponse
+	(*SwitchProfileResponse)(nil),                  // 45: voice.user.v1.SwitchProfileResponse
+	(*ListMyProfilesResponse)(nil),                 // 46: voice.user.v1.ListMyProfilesResponse
+	(*GetPrivacySettingsResponse)(nil),             // 47: voice.user.v1.GetPrivacySettingsResponse
+	(*UpdatePrivacySettingsResponse)(nil),          // 48: voice.user.v1.UpdatePrivacySettingsResponse
+	(*UpdatePresenceResponse)(nil),                 // 49: voice.user.v1.UpdatePresenceResponse
+	(*GetPresenceResponse)(nil),                    // 50: voice.user.v1.GetPresenceResponse
+	(*GetBulkPresenceResponse)(nil),                // 51: voice.user.v1.GetBulkPresenceResponse
+	(*GetNotificationRoutingPresenceRequest)(nil),  // 52: voice.user.v1.GetNotificationRoutingPresenceRequest
+	(*GetNotificationRoutingPresenceResponse)(nil), // 53: voice.user.v1.GetNotificationRoutingPresenceResponse
+	(*GetSettingsResponse)(nil),                    // 54: voice.user.v1.GetSettingsResponse
+	(*UpdateSettingsResponse)(nil),                 // 55: voice.user.v1.UpdateSettingsResponse
+	(*GetOnboardingStateResponse)(nil),             // 56: voice.user.v1.GetOnboardingStateResponse
+	(*CompleteOnboardingStepResponse)(nil),         // 57: voice.user.v1.CompleteOnboardingStepResponse
+	(*GetVerificationStatusResponse)(nil),          // 58: voice.user.v1.GetVerificationStatusResponse
+	(*SetVerificationRequest)(nil),                 // 59: voice.user.v1.SetVerificationRequest
+	(*SetVerificationResponse)(nil),                // 60: voice.user.v1.SetVerificationResponse
+	(*ClearVerificationRequest)(nil),               // 61: voice.user.v1.ClearVerificationRequest
+	(*ClearVerificationResponse)(nil),              // 62: voice.user.v1.ClearVerificationResponse
+	(*ApplyVerificationSourceStateRequest)(nil),    // 63: voice.user.v1.ApplyVerificationSourceStateRequest
+	(*ApplyVerificationSourceStateResponse)(nil),   // 64: voice.user.v1.ApplyVerificationSourceStateResponse
+	(*StartOrganizationVerificationRequest)(nil),   // 65: voice.user.v1.StartOrganizationVerificationRequest
+	(*StartOrganizationVerificationResponse)(nil),  // 66: voice.user.v1.StartOrganizationVerificationResponse
+	(*CheckOrganizationVerificationRequest)(nil),   // 67: voice.user.v1.CheckOrganizationVerificationRequest
+	(*CheckOrganizationVerificationResponse)(nil),  // 68: voice.user.v1.CheckOrganizationVerificationResponse
+	(*ApplyDowngradeProfilesRequest)(nil),          // 69: voice.user.v1.ApplyDowngradeProfilesRequest
+	(*ApplyDowngradeProfilesResponse)(nil),         // 70: voice.user.v1.ApplyDowngradeProfilesResponse
+	(*ResolvePrimaryProfileIDsRequest)(nil),        // 71: voice.user.v1.ResolvePrimaryProfileIDsRequest
+	(*ResolvePrimaryProfileIDsResponse)(nil),       // 72: voice.user.v1.ResolvePrimaryProfileIDsResponse
+	(*MarkAccountRegularRequest)(nil),              // 73: voice.user.v1.MarkAccountRegularRequest
+	(*MarkAccountRegularResponse)(nil),             // 74: voice.user.v1.MarkAccountRegularResponse
+	(*GetSdkProfileEligibilityRequest)(nil),        // 75: voice.user.v1.GetSdkProfileEligibilityRequest
+	(*GetSdkProfileEligibilityResponse)(nil),       // 76: voice.user.v1.GetSdkProfileEligibilityResponse
+	(*RecordSdkAuthorTombstoneRequest)(nil),        // 77: voice.user.v1.RecordSdkAuthorTombstoneRequest
+	(*RecordSdkAuthorTombstoneResponse)(nil),       // 78: voice.user.v1.RecordSdkAuthorTombstoneResponse
+	(*SearchProfileProjectionEvent)(nil),           // 79: voice.user.v1.SearchProfileProjectionEvent
+	(*SearchProfileUpsert)(nil),                    // 80: voice.user.v1.SearchProfileUpsert
+	(*SearchProfileDelete)(nil),                    // 81: voice.user.v1.SearchProfileDelete
+	(*BeginSearchProfileSnapshotRequest)(nil),      // 82: voice.user.v1.BeginSearchProfileSnapshotRequest
+	(*BeginSearchProfileSnapshotResponse)(nil),     // 83: voice.user.v1.BeginSearchProfileSnapshotResponse
+	(*ListSearchProfileSnapshotRequest)(nil),       // 84: voice.user.v1.ListSearchProfileSnapshotRequest
+	(*ListSearchProfileSnapshotResponse)(nil),      // 85: voice.user.v1.ListSearchProfileSnapshotResponse
+	(*ListSearchProfileJournalRequest)(nil),        // 86: voice.user.v1.ListSearchProfileJournalRequest
+	(*ListSearchProfileJournalResponse)(nil),       // 87: voice.user.v1.ListSearchProfileJournalResponse
+	(*GetSearchProfileCheckpointRequest)(nil),      // 88: voice.user.v1.GetSearchProfileCheckpointRequest
+	(*GetSearchProfileCheckpointResponse)(nil),     // 89: voice.user.v1.GetSearchProfileCheckpointResponse
+	nil,                           // 90: voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
+	nil,                           // 91: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
+	nil,                           // 92: voice.user.v1.ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry
+	(*timestamppb.Timestamp)(nil), // 93: google.protobuf.Timestamp
+	(*v1.CursorPageRequest)(nil),  // 94: voice.common.v1.CursorPageRequest
+	(*v1.CursorPageResponse)(nil), // 95: voice.common.v1.CursorPageResponse
 }
 var file_voice_user_v1_user_proto_depIdxs = []int32{
 	14, // 0: voice.user.v1.EnsurePrimaryProfileResponse.profile:type_name -> voice.user.v1.Profile
 	9,  // 1: voice.user.v1.GetDMPeerDisplayNamesResponse.display_names:type_name -> voice.user.v1.DMPeerDisplayName
 	14, // 2: voice.user.v1.ProfileList.profiles:type_name -> voice.user.v1.Profile
-	91, // 3: voice.user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
-	91, // 4: voice.user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
-	91, // 5: voice.user.v1.Profile.frozen_at:type_name -> google.protobuf.Timestamp
-	92, // 6: voice.user.v1.SearchProfilesRequest.page:type_name -> voice.common.v1.CursorPageRequest
+	93, // 3: voice.user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	93, // 4: voice.user.v1.Profile.updated_at:type_name -> google.protobuf.Timestamp
+	93, // 5: voice.user.v1.Profile.frozen_at:type_name -> google.protobuf.Timestamp
+	94, // 6: voice.user.v1.SearchProfilesRequest.page:type_name -> voice.common.v1.CursorPageRequest
 	13, // 7: voice.user.v1.SearchProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
-	93, // 8: voice.user.v1.SearchProfilesResponse.page:type_name -> voice.common.v1.CursorPageResponse
+	95, // 8: voice.user.v1.SearchProfilesResponse.page:type_name -> voice.common.v1.CursorPageResponse
 	25, // 9: voice.user.v1.UpdatePrivacySettingsRequest.settings:type_name -> voice.user.v1.PrivacySettings
 	24, // 10: voice.user.v1.PrivacySettings.show_online:type_name -> voice.user.v1.PrivacyAudience
 	24, // 11: voice.user.v1.PrivacySettings.show_game_status:type_name -> voice.user.v1.PrivacyAudience
@@ -6335,7 +6445,7 @@ var file_voice_user_v1_user_proto_depIdxs = []int32{
 	24, // 14: voice.user.v1.PrivacySettings.show_stories:type_name -> voice.user.v1.PrivacyAudience
 	24, // 15: voice.user.v1.PrivacySettings.allow_dm:type_name -> voice.user.v1.PrivacyAudience
 	24, // 16: voice.user.v1.PrivacySettings.allow_friend_requests:type_name -> voice.user.v1.PrivacyAudience
-	91, // 17: voice.user.v1.PrivacySettings.updated_at:type_name -> google.protobuf.Timestamp
+	93, // 17: voice.user.v1.PrivacySettings.updated_at:type_name -> google.protobuf.Timestamp
 	1,  // 18: voice.user.v1.PrivacySettings.preset_enum:type_name -> voice.user.v1.PrivacyPreset
 	24, // 19: voice.user.v1.PrivacySettings.allow_phone_search:type_name -> voice.user.v1.PrivacyAudience
 	24, // 20: voice.user.v1.PrivacySettings.allow_calls:type_name -> voice.user.v1.PrivacyAudience
@@ -6344,12 +6454,12 @@ var file_voice_user_v1_user_proto_depIdxs = []int32{
 	24, // 23: voice.user.v1.PrivacySettings.allow_voice_messages:type_name -> voice.user.v1.PrivacyAudience
 	24, // 24: voice.user.v1.PrivacySettings.show_last_seen:type_name -> voice.user.v1.PrivacyAudience
 	0,  // 25: voice.user.v1.UpdatePresenceRequest.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
-	91, // 26: voice.user.v1.PresenceStatus.last_seen:type_name -> google.protobuf.Timestamp
+	93, // 26: voice.user.v1.PresenceStatus.last_seen:type_name -> google.protobuf.Timestamp
 	0,  // 27: voice.user.v1.PresenceStatus.status_enum:type_name -> voice.user.v1.PresenceOnlineStatus
 	32, // 28: voice.user.v1.UpdateSettingsRequest.settings:type_name -> voice.user.v1.UserSettings
-	91, // 29: voice.user.v1.OnboardingState.completed_at:type_name -> google.protobuf.Timestamp
-	88, // 30: voice.user.v1.CreateAvatarPresignedUploadResponse.required_headers:type_name -> voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
-	91, // 31: voice.user.v1.CreateAvatarPresignedUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	93, // 29: voice.user.v1.OnboardingState.completed_at:type_name -> google.protobuf.Timestamp
+	90, // 30: voice.user.v1.CreateAvatarPresignedUploadResponse.required_headers:type_name -> voice.user.v1.CreateAvatarPresignedUploadResponse.RequiredHeadersEntry
+	93, // 31: voice.user.v1.CreateAvatarPresignedUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
 	14, // 32: voice.user.v1.GetProfileResponse.profile:type_name -> voice.user.v1.Profile
 	13, // 33: voice.user.v1.GetProfilesResponse.profile_list:type_name -> voice.user.v1.ProfileList
 	14, // 34: voice.user.v1.UpdateProfileResponse.profile:type_name -> voice.user.v1.Profile
@@ -6359,7 +6469,7 @@ var file_voice_user_v1_user_proto_depIdxs = []int32{
 	25, // 38: voice.user.v1.GetPrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
 	25, // 39: voice.user.v1.UpdatePrivacySettingsResponse.privacy_settings:type_name -> voice.user.v1.PrivacySettings
 	28, // 40: voice.user.v1.GetPresenceResponse.presence_status:type_name -> voice.user.v1.PresenceStatus
-	89, // 41: voice.user.v1.GetBulkPresenceResponse.by_profile_id:type_name -> voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
+	91, // 41: voice.user.v1.GetBulkPresenceResponse.by_profile_id:type_name -> voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry
 	32, // 42: voice.user.v1.GetSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
 	32, // 43: voice.user.v1.UpdateSettingsResponse.user_settings:type_name -> voice.user.v1.UserSettings
 	35, // 44: voice.user.v1.GetOnboardingStateResponse.onboarding_state:type_name -> voice.user.v1.OnboardingState
@@ -6369,22 +6479,22 @@ var file_voice_user_v1_user_proto_depIdxs = []int32{
 	39, // 48: voice.user.v1.ClearVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
 	39, // 49: voice.user.v1.ApplyVerificationSourceStateResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
 	39, // 50: voice.user.v1.CheckOrganizationVerificationResponse.verification_status:type_name -> voice.user.v1.VerificationStatus
-	90, // 51: voice.user.v1.ResolvePrimaryProfileIDsResponse.primary_profile_ids:type_name -> voice.user.v1.ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry
-	91, // 52: voice.user.v1.RecordSdkAuthorTombstoneResponse.committed_at:type_name -> google.protobuf.Timestamp
-	91, // 53: voice.user.v1.SearchProfileProjectionEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	78, // 54: voice.user.v1.SearchProfileProjectionEvent.upsert:type_name -> voice.user.v1.SearchProfileUpsert
-	79, // 55: voice.user.v1.SearchProfileProjectionEvent.delete:type_name -> voice.user.v1.SearchProfileDelete
-	77, // 56: voice.user.v1.ListSearchProfileSnapshotResponse.events:type_name -> voice.user.v1.SearchProfileProjectionEvent
-	77, // 57: voice.user.v1.ListSearchProfileJournalResponse.events:type_name -> voice.user.v1.SearchProfileProjectionEvent
+	92, // 51: voice.user.v1.ResolvePrimaryProfileIDsResponse.primary_profile_ids:type_name -> voice.user.v1.ResolvePrimaryProfileIDsResponse.PrimaryProfileIdsEntry
+	93, // 52: voice.user.v1.RecordSdkAuthorTombstoneResponse.committed_at:type_name -> google.protobuf.Timestamp
+	93, // 53: voice.user.v1.SearchProfileProjectionEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	80, // 54: voice.user.v1.SearchProfileProjectionEvent.upsert:type_name -> voice.user.v1.SearchProfileUpsert
+	81, // 55: voice.user.v1.SearchProfileProjectionEvent.delete:type_name -> voice.user.v1.SearchProfileDelete
+	79, // 56: voice.user.v1.ListSearchProfileSnapshotResponse.events:type_name -> voice.user.v1.SearchProfileProjectionEvent
+	79, // 57: voice.user.v1.ListSearchProfileJournalResponse.events:type_name -> voice.user.v1.SearchProfileProjectionEvent
 	28, // 58: voice.user.v1.GetBulkPresenceResponse.ByProfileIdEntry.value:type_name -> voice.user.v1.PresenceStatus
 	2,  // 59: voice.user.v1.UserService.EnsurePrimaryProfile:input_type -> voice.user.v1.EnsurePrimaryProfileRequest
 	4,  // 60: voice.user.v1.UserService.ListProfileIDsForAccount:input_type -> voice.user.v1.ListProfileIDsForAccountRequest
 	6,  // 61: voice.user.v1.UserService.ResolveAccountIDForProfile:input_type -> voice.user.v1.ResolveAccountIDForProfileRequest
 	8,  // 62: voice.user.v1.UserService.GetDMPeerDisplayNames:input_type -> voice.user.v1.GetDMPeerDisplayNamesRequest
-	69, // 63: voice.user.v1.UserService.ResolvePrimaryProfileIDs:input_type -> voice.user.v1.ResolvePrimaryProfileIDsRequest
-	71, // 64: voice.user.v1.UserService.MarkAccountRegular:input_type -> voice.user.v1.MarkAccountRegularRequest
-	73, // 65: voice.user.v1.UserService.GetSdkProfileEligibility:input_type -> voice.user.v1.GetSdkProfileEligibilityRequest
-	75, // 66: voice.user.v1.UserService.RecordSdkAuthorTombstone:input_type -> voice.user.v1.RecordSdkAuthorTombstoneRequest
+	71, // 63: voice.user.v1.UserService.ResolvePrimaryProfileIDs:input_type -> voice.user.v1.ResolvePrimaryProfileIDsRequest
+	73, // 64: voice.user.v1.UserService.MarkAccountRegular:input_type -> voice.user.v1.MarkAccountRegularRequest
+	75, // 65: voice.user.v1.UserService.GetSdkProfileEligibility:input_type -> voice.user.v1.GetSdkProfileEligibilityRequest
+	77, // 66: voice.user.v1.UserService.RecordSdkAuthorTombstone:input_type -> voice.user.v1.RecordSdkAuthorTombstoneRequest
 	11, // 67: voice.user.v1.UserService.GetProfile:input_type -> voice.user.v1.GetProfileRequest
 	12, // 68: voice.user.v1.UserService.GetProfiles:input_type -> voice.user.v1.GetProfilesRequest
 	15, // 69: voice.user.v1.UserService.UpdateProfile:input_type -> voice.user.v1.UpdateProfileRequest
@@ -6398,61 +6508,63 @@ var file_voice_user_v1_user_proto_depIdxs = []int32{
 	26, // 77: voice.user.v1.UserService.UpdatePresence:input_type -> voice.user.v1.UpdatePresenceRequest
 	27, // 78: voice.user.v1.UserService.GetPresence:input_type -> voice.user.v1.GetPresenceRequest
 	29, // 79: voice.user.v1.UserService.GetBulkPresence:input_type -> voice.user.v1.GetBulkPresenceRequest
-	30, // 80: voice.user.v1.UserService.GetSettings:input_type -> voice.user.v1.GetSettingsRequest
-	31, // 81: voice.user.v1.UserService.UpdateSettings:input_type -> voice.user.v1.UpdateSettingsRequest
-	33, // 82: voice.user.v1.UserService.GetOnboardingState:input_type -> voice.user.v1.GetOnboardingStateRequest
-	34, // 83: voice.user.v1.UserService.CompleteOnboardingStep:input_type -> voice.user.v1.CompleteOnboardingStepRequest
-	38, // 84: voice.user.v1.UserService.GetVerificationStatus:input_type -> voice.user.v1.GetVerificationStatusRequest
-	57, // 85: voice.user.v1.UserService.SetVerification:input_type -> voice.user.v1.SetVerificationRequest
-	59, // 86: voice.user.v1.UserService.ClearVerification:input_type -> voice.user.v1.ClearVerificationRequest
-	61, // 87: voice.user.v1.UserService.ApplyVerificationSourceState:input_type -> voice.user.v1.ApplyVerificationSourceStateRequest
-	63, // 88: voice.user.v1.UserService.StartOrganizationVerification:input_type -> voice.user.v1.StartOrganizationVerificationRequest
-	65, // 89: voice.user.v1.UserService.CheckOrganizationVerification:input_type -> voice.user.v1.CheckOrganizationVerificationRequest
-	67, // 90: voice.user.v1.UserService.ApplyDowngradeProfiles:input_type -> voice.user.v1.ApplyDowngradeProfilesRequest
-	36, // 91: voice.user.v1.UserService.CreateAvatarPresignedUpload:input_type -> voice.user.v1.CreateAvatarPresignedUploadRequest
-	80, // 92: voice.user.v1.UserService.BeginSearchProfileSnapshot:input_type -> voice.user.v1.BeginSearchProfileSnapshotRequest
-	82, // 93: voice.user.v1.UserService.ListSearchProfileSnapshot:input_type -> voice.user.v1.ListSearchProfileSnapshotRequest
-	84, // 94: voice.user.v1.UserService.ListSearchProfileJournal:input_type -> voice.user.v1.ListSearchProfileJournalRequest
-	86, // 95: voice.user.v1.UserService.GetSearchProfileCheckpoint:input_type -> voice.user.v1.GetSearchProfileCheckpointRequest
-	3,  // 96: voice.user.v1.UserService.EnsurePrimaryProfile:output_type -> voice.user.v1.EnsurePrimaryProfileResponse
-	5,  // 97: voice.user.v1.UserService.ListProfileIDsForAccount:output_type -> voice.user.v1.ListProfileIDsForAccountResponse
-	7,  // 98: voice.user.v1.UserService.ResolveAccountIDForProfile:output_type -> voice.user.v1.ResolveAccountIDForProfileResponse
-	10, // 99: voice.user.v1.UserService.GetDMPeerDisplayNames:output_type -> voice.user.v1.GetDMPeerDisplayNamesResponse
-	70, // 100: voice.user.v1.UserService.ResolvePrimaryProfileIDs:output_type -> voice.user.v1.ResolvePrimaryProfileIDsResponse
-	72, // 101: voice.user.v1.UserService.MarkAccountRegular:output_type -> voice.user.v1.MarkAccountRegularResponse
-	74, // 102: voice.user.v1.UserService.GetSdkProfileEligibility:output_type -> voice.user.v1.GetSdkProfileEligibilityResponse
-	76, // 103: voice.user.v1.UserService.RecordSdkAuthorTombstone:output_type -> voice.user.v1.RecordSdkAuthorTombstoneResponse
-	40, // 104: voice.user.v1.UserService.GetProfile:output_type -> voice.user.v1.GetProfileResponse
-	41, // 105: voice.user.v1.UserService.GetProfiles:output_type -> voice.user.v1.GetProfilesResponse
-	42, // 106: voice.user.v1.UserService.UpdateProfile:output_type -> voice.user.v1.UpdateProfileResponse
-	43, // 107: voice.user.v1.UserService.CreateProfile:output_type -> voice.user.v1.CreateProfileResponse
-	44, // 108: voice.user.v1.UserService.DeleteProfile:output_type -> voice.user.v1.DeleteProfileResponse
-	45, // 109: voice.user.v1.UserService.SwitchProfile:output_type -> voice.user.v1.SwitchProfileResponse
-	46, // 110: voice.user.v1.UserService.ListMyProfiles:output_type -> voice.user.v1.ListMyProfilesResponse
-	21, // 111: voice.user.v1.UserService.SearchProfiles:output_type -> voice.user.v1.SearchProfilesResponse
-	47, // 112: voice.user.v1.UserService.GetPrivacySettings:output_type -> voice.user.v1.GetPrivacySettingsResponse
-	48, // 113: voice.user.v1.UserService.UpdatePrivacySettings:output_type -> voice.user.v1.UpdatePrivacySettingsResponse
-	49, // 114: voice.user.v1.UserService.UpdatePresence:output_type -> voice.user.v1.UpdatePresenceResponse
-	50, // 115: voice.user.v1.UserService.GetPresence:output_type -> voice.user.v1.GetPresenceResponse
-	51, // 116: voice.user.v1.UserService.GetBulkPresence:output_type -> voice.user.v1.GetBulkPresenceResponse
-	52, // 117: voice.user.v1.UserService.GetSettings:output_type -> voice.user.v1.GetSettingsResponse
-	53, // 118: voice.user.v1.UserService.UpdateSettings:output_type -> voice.user.v1.UpdateSettingsResponse
-	54, // 119: voice.user.v1.UserService.GetOnboardingState:output_type -> voice.user.v1.GetOnboardingStateResponse
-	55, // 120: voice.user.v1.UserService.CompleteOnboardingStep:output_type -> voice.user.v1.CompleteOnboardingStepResponse
-	56, // 121: voice.user.v1.UserService.GetVerificationStatus:output_type -> voice.user.v1.GetVerificationStatusResponse
-	58, // 122: voice.user.v1.UserService.SetVerification:output_type -> voice.user.v1.SetVerificationResponse
-	60, // 123: voice.user.v1.UserService.ClearVerification:output_type -> voice.user.v1.ClearVerificationResponse
-	62, // 124: voice.user.v1.UserService.ApplyVerificationSourceState:output_type -> voice.user.v1.ApplyVerificationSourceStateResponse
-	64, // 125: voice.user.v1.UserService.StartOrganizationVerification:output_type -> voice.user.v1.StartOrganizationVerificationResponse
-	66, // 126: voice.user.v1.UserService.CheckOrganizationVerification:output_type -> voice.user.v1.CheckOrganizationVerificationResponse
-	68, // 127: voice.user.v1.UserService.ApplyDowngradeProfiles:output_type -> voice.user.v1.ApplyDowngradeProfilesResponse
-	37, // 128: voice.user.v1.UserService.CreateAvatarPresignedUpload:output_type -> voice.user.v1.CreateAvatarPresignedUploadResponse
-	81, // 129: voice.user.v1.UserService.BeginSearchProfileSnapshot:output_type -> voice.user.v1.BeginSearchProfileSnapshotResponse
-	83, // 130: voice.user.v1.UserService.ListSearchProfileSnapshot:output_type -> voice.user.v1.ListSearchProfileSnapshotResponse
-	85, // 131: voice.user.v1.UserService.ListSearchProfileJournal:output_type -> voice.user.v1.ListSearchProfileJournalResponse
-	87, // 132: voice.user.v1.UserService.GetSearchProfileCheckpoint:output_type -> voice.user.v1.GetSearchProfileCheckpointResponse
-	96, // [96:133] is the sub-list for method output_type
-	59, // [59:96] is the sub-list for method input_type
+	52, // 80: voice.user.v1.UserService.GetNotificationRoutingPresence:input_type -> voice.user.v1.GetNotificationRoutingPresenceRequest
+	30, // 81: voice.user.v1.UserService.GetSettings:input_type -> voice.user.v1.GetSettingsRequest
+	31, // 82: voice.user.v1.UserService.UpdateSettings:input_type -> voice.user.v1.UpdateSettingsRequest
+	33, // 83: voice.user.v1.UserService.GetOnboardingState:input_type -> voice.user.v1.GetOnboardingStateRequest
+	34, // 84: voice.user.v1.UserService.CompleteOnboardingStep:input_type -> voice.user.v1.CompleteOnboardingStepRequest
+	38, // 85: voice.user.v1.UserService.GetVerificationStatus:input_type -> voice.user.v1.GetVerificationStatusRequest
+	59, // 86: voice.user.v1.UserService.SetVerification:input_type -> voice.user.v1.SetVerificationRequest
+	61, // 87: voice.user.v1.UserService.ClearVerification:input_type -> voice.user.v1.ClearVerificationRequest
+	63, // 88: voice.user.v1.UserService.ApplyVerificationSourceState:input_type -> voice.user.v1.ApplyVerificationSourceStateRequest
+	65, // 89: voice.user.v1.UserService.StartOrganizationVerification:input_type -> voice.user.v1.StartOrganizationVerificationRequest
+	67, // 90: voice.user.v1.UserService.CheckOrganizationVerification:input_type -> voice.user.v1.CheckOrganizationVerificationRequest
+	69, // 91: voice.user.v1.UserService.ApplyDowngradeProfiles:input_type -> voice.user.v1.ApplyDowngradeProfilesRequest
+	36, // 92: voice.user.v1.UserService.CreateAvatarPresignedUpload:input_type -> voice.user.v1.CreateAvatarPresignedUploadRequest
+	82, // 93: voice.user.v1.UserService.BeginSearchProfileSnapshot:input_type -> voice.user.v1.BeginSearchProfileSnapshotRequest
+	84, // 94: voice.user.v1.UserService.ListSearchProfileSnapshot:input_type -> voice.user.v1.ListSearchProfileSnapshotRequest
+	86, // 95: voice.user.v1.UserService.ListSearchProfileJournal:input_type -> voice.user.v1.ListSearchProfileJournalRequest
+	88, // 96: voice.user.v1.UserService.GetSearchProfileCheckpoint:input_type -> voice.user.v1.GetSearchProfileCheckpointRequest
+	3,  // 97: voice.user.v1.UserService.EnsurePrimaryProfile:output_type -> voice.user.v1.EnsurePrimaryProfileResponse
+	5,  // 98: voice.user.v1.UserService.ListProfileIDsForAccount:output_type -> voice.user.v1.ListProfileIDsForAccountResponse
+	7,  // 99: voice.user.v1.UserService.ResolveAccountIDForProfile:output_type -> voice.user.v1.ResolveAccountIDForProfileResponse
+	10, // 100: voice.user.v1.UserService.GetDMPeerDisplayNames:output_type -> voice.user.v1.GetDMPeerDisplayNamesResponse
+	72, // 101: voice.user.v1.UserService.ResolvePrimaryProfileIDs:output_type -> voice.user.v1.ResolvePrimaryProfileIDsResponse
+	74, // 102: voice.user.v1.UserService.MarkAccountRegular:output_type -> voice.user.v1.MarkAccountRegularResponse
+	76, // 103: voice.user.v1.UserService.GetSdkProfileEligibility:output_type -> voice.user.v1.GetSdkProfileEligibilityResponse
+	78, // 104: voice.user.v1.UserService.RecordSdkAuthorTombstone:output_type -> voice.user.v1.RecordSdkAuthorTombstoneResponse
+	40, // 105: voice.user.v1.UserService.GetProfile:output_type -> voice.user.v1.GetProfileResponse
+	41, // 106: voice.user.v1.UserService.GetProfiles:output_type -> voice.user.v1.GetProfilesResponse
+	42, // 107: voice.user.v1.UserService.UpdateProfile:output_type -> voice.user.v1.UpdateProfileResponse
+	43, // 108: voice.user.v1.UserService.CreateProfile:output_type -> voice.user.v1.CreateProfileResponse
+	44, // 109: voice.user.v1.UserService.DeleteProfile:output_type -> voice.user.v1.DeleteProfileResponse
+	45, // 110: voice.user.v1.UserService.SwitchProfile:output_type -> voice.user.v1.SwitchProfileResponse
+	46, // 111: voice.user.v1.UserService.ListMyProfiles:output_type -> voice.user.v1.ListMyProfilesResponse
+	21, // 112: voice.user.v1.UserService.SearchProfiles:output_type -> voice.user.v1.SearchProfilesResponse
+	47, // 113: voice.user.v1.UserService.GetPrivacySettings:output_type -> voice.user.v1.GetPrivacySettingsResponse
+	48, // 114: voice.user.v1.UserService.UpdatePrivacySettings:output_type -> voice.user.v1.UpdatePrivacySettingsResponse
+	49, // 115: voice.user.v1.UserService.UpdatePresence:output_type -> voice.user.v1.UpdatePresenceResponse
+	50, // 116: voice.user.v1.UserService.GetPresence:output_type -> voice.user.v1.GetPresenceResponse
+	51, // 117: voice.user.v1.UserService.GetBulkPresence:output_type -> voice.user.v1.GetBulkPresenceResponse
+	53, // 118: voice.user.v1.UserService.GetNotificationRoutingPresence:output_type -> voice.user.v1.GetNotificationRoutingPresenceResponse
+	54, // 119: voice.user.v1.UserService.GetSettings:output_type -> voice.user.v1.GetSettingsResponse
+	55, // 120: voice.user.v1.UserService.UpdateSettings:output_type -> voice.user.v1.UpdateSettingsResponse
+	56, // 121: voice.user.v1.UserService.GetOnboardingState:output_type -> voice.user.v1.GetOnboardingStateResponse
+	57, // 122: voice.user.v1.UserService.CompleteOnboardingStep:output_type -> voice.user.v1.CompleteOnboardingStepResponse
+	58, // 123: voice.user.v1.UserService.GetVerificationStatus:output_type -> voice.user.v1.GetVerificationStatusResponse
+	60, // 124: voice.user.v1.UserService.SetVerification:output_type -> voice.user.v1.SetVerificationResponse
+	62, // 125: voice.user.v1.UserService.ClearVerification:output_type -> voice.user.v1.ClearVerificationResponse
+	64, // 126: voice.user.v1.UserService.ApplyVerificationSourceState:output_type -> voice.user.v1.ApplyVerificationSourceStateResponse
+	66, // 127: voice.user.v1.UserService.StartOrganizationVerification:output_type -> voice.user.v1.StartOrganizationVerificationResponse
+	68, // 128: voice.user.v1.UserService.CheckOrganizationVerification:output_type -> voice.user.v1.CheckOrganizationVerificationResponse
+	70, // 129: voice.user.v1.UserService.ApplyDowngradeProfiles:output_type -> voice.user.v1.ApplyDowngradeProfilesResponse
+	37, // 130: voice.user.v1.UserService.CreateAvatarPresignedUpload:output_type -> voice.user.v1.CreateAvatarPresignedUploadResponse
+	83, // 131: voice.user.v1.UserService.BeginSearchProfileSnapshot:output_type -> voice.user.v1.BeginSearchProfileSnapshotResponse
+	85, // 132: voice.user.v1.UserService.ListSearchProfileSnapshot:output_type -> voice.user.v1.ListSearchProfileSnapshotResponse
+	87, // 133: voice.user.v1.UserService.ListSearchProfileJournal:output_type -> voice.user.v1.ListSearchProfileJournalResponse
+	89, // 134: voice.user.v1.UserService.GetSearchProfileCheckpoint:output_type -> voice.user.v1.GetSearchProfileCheckpointResponse
+	97, // [97:135] is the sub-list for method output_type
+	59, // [59:97] is the sub-list for method input_type
 	59, // [59:59] is the sub-list for extension type_name
 	59, // [59:59] is the sub-list for extension extendee
 	0,  // [0:59] is the sub-list for field type_name
@@ -6476,9 +6588,9 @@ func file_voice_user_v1_user_proto_init() {
 	file_voice_user_v1_user_proto_msgTypes[26].OneofWrappers = []any{}
 	file_voice_user_v1_user_proto_msgTypes[33].OneofWrappers = []any{}
 	file_voice_user_v1_user_proto_msgTypes[37].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[55].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[59].OneofWrappers = []any{}
-	file_voice_user_v1_user_proto_msgTypes[75].OneofWrappers = []any{
+	file_voice_user_v1_user_proto_msgTypes[57].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[61].OneofWrappers = []any{}
+	file_voice_user_v1_user_proto_msgTypes[77].OneofWrappers = []any{
 		(*SearchProfileProjectionEvent_Upsert)(nil),
 		(*SearchProfileProjectionEvent_Delete)(nil),
 	}
@@ -6488,7 +6600,7 @@ func file_voice_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voice_user_v1_user_proto_rawDesc), len(file_voice_user_v1_user_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   89,
+			NumMessages:   91,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
