@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"voice/backend/pkg/integrationtest"
+	"voice/backend/pkg/privacy"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
 	"voice/backend/story/internal/store"
 	"voice/backend/story/internal/storyevents"
@@ -51,6 +52,7 @@ func startStoryGRPCWithClients(t *testing.T) (storyv1.StoryServiceClient, func()
 
 	st := &store.StoryStore{Pool: pool}
 	svc := grpcsvc.NewStoryGRPC(st)
+	svc.Privacy = mockStoryPrivacy{audience: privacy.EveryoneWithGuests()}
 	checker := mockFriendChecker{}
 	svc.Friends = checker
 	svc.Audience = checker
