@@ -626,17 +626,35 @@ void main() {
         tester.element(find.byType(ChatRoomPanel)),
         listen: false,
       );
+      final chatListBeforeLongPress = chatRoomProviderContainer.read(
+        chatListProvider,
+      );
+      final chatListDataBeforeLongPress =
+          chatListBeforeLongPress.valueOrNull;
       final dmReadyBeforeLongPress =
-          chatRoomProviderContainer
-              .read(chatListProvider)
-              .valueOrNull
-              ?.items
-              .any(
-                (item) =>
-                    item.chatId == 'chat-abc' &&
-                    item.chat.type == 'CHAT_TYPE_DM',
-              ) ??
+          chatListDataBeforeLongPress?.items.any(
+            (item) =>
+                item.chatId == 'chat-abc' &&
+                item.chat.type == 'CHAT_TYPE_DM',
+          ) ??
           false;
+      final dmPhaseBeforeLongPress = chatListBeforeLongPress.hasError
+          ? 'error'
+          : chatListBeforeLongPress.isLoading
+          ? 'loading'
+          : chatListBeforeLongPress.hasValue
+          ? dmReadyBeforeLongPress
+                ? 'dataMatch'
+                : 'dataNoMatch'
+          : 'unavailable';
+      if (!dmReadyBeforeLongPress) {
+        debugPrint(
+          'scheduled-send pre-menu phase=$dmPhaseBeforeLongPress; '
+          'hasValue=${chatListBeforeLongPress.hasValue}; '
+          'isLoading=${chatListBeforeLongPress.isLoading}; '
+          'hasError=${chatListBeforeLongPress.hasError}; dmReady=false',
+        );
+      }
       expect(
         dmReadyBeforeLongPress,
         isTrue,
