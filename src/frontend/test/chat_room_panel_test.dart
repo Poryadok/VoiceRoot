@@ -624,6 +624,22 @@ void main() {
       await tester.enterText(composer, 'Keep this scheduled draft');
       await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      final selectedChatIsDm =
+          ProviderScope.containerOf(
+                tester.element(find.byType(ChatRoomPanel)),
+                listen: false,
+              )
+              .read(chatListProvider)
+              .valueOrNull
+              ?.items
+              .any(
+                (item) =>
+                    item.chatId == 'chat-abc' &&
+                    item.chat.type == 'CHAT_TYPE_DM',
+              ) ??
+          false;
+      expect(selectedChatIsDm, isTrue);
       await tester.tap(find.text('Send when online'));
       await tester.pumpAndSettle();
 
