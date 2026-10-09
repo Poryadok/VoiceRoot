@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 
@@ -1174,9 +1175,9 @@ func TestCreateBotChat_stableRequestIDReusesReservationAndRejectsChangedPayload(
 	require.Equal(t, first.GetChat().GetId(), second.GetChat().GetId(), "Chat owns stable-key result replay")
 	require.Equal(t, []string{requestID, requestID}, chatFake.createIDs(), "Bot must forward the same key on every attempt")
 
-	changed := *request
+	changed := proto.Clone(request).(*botv1.CreateBotChatRequest)
 	changed.Name = "different payload"
-	_, err = client.CreateBotChat(botCtx, &changed)
+	_, err = client.CreateBotChat(botCtx, changed)
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 	require.Equal(t, 2, chatFake.createCalls(), "changed request must fail before a second Chat call")
 
@@ -1287,9 +1288,9 @@ func TestCreateBotChat_definiteRejectionKeepsHashTombstone(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count, "definite rejection releases its quota count")
 
-	changed := *request
+	changed := proto.Clone(request).(*botv1.CreateBotChatRequest)
 	changed.Name = "changed after rejection"
-	_, err = client.CreateBotChat(botCtx, &changed)
+	_, err = client.CreateBotChat(botCtx, changed)
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
 	require.Equal(t, 1, chatFake.createCalls(), "changed payload must fail before Chat even after a released reservation")
 
