@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/friends_client.dart';
@@ -91,6 +93,80 @@ void main() {
       find.widgetWithText(TextField, 'Search by name or @username'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('desktop CreateGroup is a dialog with close and cancel actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final triggerFocus = FocusNode();
+    addTearDown(triggerFocus.dispose);
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            focusNode: triggerFocus,
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((request) async => http.Response('{}', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    triggerFocus.requestFocus();
+    await tester.pump();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byKey(CreateGroupSheet.closeKey), findsOneWidget);
+    expect(find.byKey(CreateGroupSheet.cancelKey), findsOneWidget);
+
+    await tester.tap(find.byKey(CreateGroupSheet.cancelKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    expect(triggerFocus.hasFocus, isTrue);
+  });
+
+  testWidgets('mobile CreateGroup fills the viewport and exposes close', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => CreateGroupSheet.show(context),
+            child: const Text('open'),
+          ),
+        ),
+        client: MockClient((request) async => http.Response('{}', 404)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.getSize(find.byType(BottomSheet)).height, greaterThan(800));
+    expect(find.byKey(CreateGroupSheet.closeKey), findsOneWidget);
+    expect(find.byKey(CreateGroupSheet.cancelKey), findsNothing);
+
+    await tester.tap(find.byKey(CreateGroupSheet.closeKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
   });
 
   testWidgets(
@@ -670,6 +746,404 @@ void main() {
 
     expect(calls, contains('POST /api/v1/chats'));
     expect(calls, contains('POST /api/v1/chats/group-new/members'));
+    expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+  });
+
+  testWidgets(
+    'replays an ambiguous create with the same request id and rotates it for a new form attempt',
+    (tester) async {
+      final createBodies = <Map<String, dynamic>>[];
+      final createdGroups = <String, String>{};
+      var createAttempts = 0;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            ),
+          ),
+          client: MockClient((request) async {
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              createBodies.add(body);
+              final requestId = body['request_id'] as String;
+              final chatId = createdGroups.putIfAbsent(
+                requestId,
+                () => 'group-${createdGroups.length + 1}',
+              );
+              createAttempts++;
+              if (createAttempts <= 3) {
+                // The server may have committed, but the client lost its response.
+                return http.Response(jsonEncode({'error': 'unavailable'}), 503);
+              }
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': chatId,
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': body['name'],
+                    'creator_profile_id': 'profile-me',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-2/members') {
+              return http.Response('', 204);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Squad',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+      final firstRequestId = createBodies.single['request_id'];
+      expect(firstRequestId, isA<String>());
+      expect(firstRequestId, isNotEmpty);
+
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      // Editing the form creates a new logical request; retrying that attempt
+      // must keep its key and exact CreateChat body.
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Updated squad',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-c')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(createBodies, hasLength(4));
+      expect(createBodies[0], createBodies[1]);
+      expect(
+        createBodies[1]['request_id'],
+        isNot(createBodies[2]['request_id']),
+      );
+      expect(createBodies[2], createBodies[3]);
+      expect(createdGroups, hasLength(2));
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'keeps the CreateChat request id across same-session 401 token refresh',
+    (tester) async {
+      final createBodies = <Map<String, dynamic>>[];
+      final createAuthorizations = <String?>[];
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) {
+              container = ProviderScope.containerOf(context);
+              return TextButton(
+                onPressed: () => CreateGroupSheet.show(context),
+                child: const Text('open'),
+              );
+            },
+          ),
+          client: MockClient((request) async {
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              createBodies.add(
+                jsonDecode(request.body) as Map<String, dynamic>,
+              );
+              createAuthorizations.add(request.headers['authorization']);
+              if (createBodies.length == 1) {
+                return http.Response(
+                  jsonEncode({'error': 'invalid_token'}),
+                  401,
+                );
+              }
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'group-after-refresh',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Refresh-safe group',
+                    'creator_profile_id': 'prof-test',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/auth/refresh') {
+              expect(
+                (jsonDecode(request.body)
+                    as Map<String, dynamic>)['refresh_token'],
+                'test-refresh',
+              );
+              return http.Response(
+                jsonEncode({
+                  'session': {
+                    'access_token': 'test-access-renewed',
+                    'refresh_token': 'test-refresh-renewed',
+                    'expires_in_seconds': 900,
+                    'account_id': 'acc-test',
+                    'profile_id': 'prof-test',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path ==
+                    '/api/v1/chats/group-after-refresh/members') {
+              expect(
+                request.headers['authorization'],
+                'Bearer test-access-renewed',
+              );
+              return http.Response('', 204);
+            }
+            return http.Response('{}', 404);
+          }),
+          extraOverrides: [
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Refresh-safe group',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+
+      final authController = container.read(authControllerProvider.notifier);
+      final originalIdentity = authController.gatewayRequestIdentity!;
+      final originalInstallGeneration = authController.sessionInstallGeneration;
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(createBodies, hasLength(2));
+      expect(createBodies[1], createBodies[0]);
+      expect(createBodies[0]['request_id'], isNotEmpty);
+      expect(createAuthorizations, [
+        'Bearer test-access',
+        'Bearer test-access-renewed',
+      ]);
+      expect(authController.gatewayRequestIdentity, originalIdentity);
+      expect(
+        authController.sessionInstallGeneration,
+        originalInstallGeneration,
+      );
+      expect(container.read(selectedChatIdProvider), 'group-after-refresh');
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'does not replay a CreateChat after identity replacement during 401 refresh',
+    (tester) async {
+      final createBodies = <Map<String, dynamic>>[];
+      final refreshStarted = Completer<void>();
+      final finishRefresh = Completer<http.Response>();
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) {
+              container = ProviderScope.containerOf(context);
+              return TextButton(
+                onPressed: () => CreateGroupSheet.show(context),
+                child: const Text('open'),
+              );
+            },
+          ),
+          client: MockClient((request) async {
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              createBodies.add(
+                jsonDecode(request.body) as Map<String, dynamic>,
+              );
+              return http.Response(jsonEncode({'error': 'invalid_token'}), 401);
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/auth/refresh') {
+              refreshStarted.complete();
+              return finishRefresh.future;
+            }
+            return http.Response('{}', 404);
+          }),
+          extraOverrides: [
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Identity-bound group',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+
+      final authController = container.read(authControllerProvider.notifier);
+      final originalIdentity = authController.gatewayRequestIdentity!;
+      final originalInstallGeneration = authController.sessionInstallGeneration;
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pump();
+      await refreshStarted.future;
+      await container
+          .read(authControllerProvider.notifier)
+          .applySession(
+            const AuthSession(
+              accessToken: 'replacement-access',
+              refreshToken: 'replacement-refresh',
+              accountId: 'acc-test',
+              activeProfileId: 'profile-b',
+              expiresInSeconds: 900,
+            ),
+          );
+      expect(
+        authController.gatewayRequestIdentity!.generation,
+        isNot(originalIdentity.generation),
+      );
+      expect(
+        authController.sessionInstallGeneration,
+        greaterThan(originalInstallGeneration),
+      );
+      finishRefresh.complete(
+        http.Response(
+          jsonEncode({
+            'session': {
+              'access_token': 'stale-refreshed-access',
+              'refresh_token': 'stale-refreshed-refresh',
+              'expires_in_seconds': 900,
+              'account_id': 'acc-test',
+              'profile_id': 'prof-test',
+            },
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(createBodies, hasLength(1));
+      expect(createBodies.single['request_id'], isA<String>());
+      expect(
+        container.read(authControllerProvider).activeProfileId,
+        'profile-b',
+      );
+      expect(
+        container.read(selectedChatIdProvider),
+        isNot('group-after-refresh'),
+      );
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('does not reuse a create request id after profile changes', (
+    tester,
+  ) async {
+    final createBodies = <Map<String, dynamic>>[];
+    var createAttempts = 0;
+    late ProviderContainer container;
+    await tester.pumpWidget(
+      testApp(
+        home: Builder(
+          builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return TextButton(
+              onPressed: () => CreateGroupSheet.show(context),
+              child: const Text('open'),
+            );
+          },
+        ),
+        client: MockClient((request) async {
+          if (request.method == 'POST' && request.url.path == '/api/v1/chats') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            createBodies.add(body);
+            createAttempts++;
+            if (createAttempts == 1) {
+              return http.Response(jsonEncode({'error': 'unavailable'}), 503);
+            }
+            return http.Response(
+              jsonEncode({
+                'chat': {
+                  'id': 'group-profile-b',
+                  'type': 'CHAT_TYPE_GROUP',
+                  'name': body['name'],
+                  'creator_profile_id': 'profile-b',
+                },
+              }),
+              200,
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/api/v1/chats/group-profile-b/members') {
+            return http.Response('', 204);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    container.read(authControllerProvider.notifier).state = const AuthState(
+      session: AuthSession(
+        accessToken: 'profile-b-token',
+        refreshToken: 'profile-b-refresh',
+        accountId: 'acc-test',
+        activeProfileId: 'profile-b',
+        expiresInSeconds: 900,
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+    await tester.pumpAndSettle();
+
+    expect(createBodies, hasLength(2));
+    expect(createBodies[0]['request_id'], isNot(createBodies[1]['request_id']));
     expect(find.byKey(CreateGroupSheet.sheetKey), findsNothing);
   });
 

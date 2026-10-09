@@ -864,6 +864,9 @@
   "chatGroupLeave": "Выйти из группы",
   "chatGroupLeaveConfirmTitle": "Выйти из группы?",
   "chatGroupLeaveConfirmMessage": "Вы больше не будете получать сообщения из этой группы.",
+  "chatChannelLeave": "Выйти из канала",
+  "chatChannelLeaveConfirmTitle": "Выйти из канала?",
+  "chatChannelLeaveConfirmMessage": "Вы больше не будете получать сообщения из этого канала.",
   "chatGroupOwnerLeaveHint": "Передайте владение другому участнику перед выходом.",
   "chatGroupTransferOwnershipTo": "Передать владение: {name}",
   "@chatGroupTransferOwnershipTo": {
@@ -1438,5 +1441,6 @@
   "e2eBackupDeleteConfirm": "Зашифрованная копия будет удалена из аккаунта. Ключи на этом устройстве останутся без изменений.",
   "e2eBackupDelete": "Удалить копию",
   "e2eBackupRestoreCta": "Восстановить зашифрованную историю",
-  "e2eKeyBackupManage": "Управление резервной копией ключей"
+  "e2eKeyBackupManage": "Управление резервной копией ключей",
+  "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны"
 }

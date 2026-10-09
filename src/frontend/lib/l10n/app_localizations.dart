@@ -3458,6 +3458,24 @@ abstract class AppLocalizations {
   /// **'You will no longer receive messages from this group.'**
   String get chatGroupLeaveConfirmMessage;
 
+  /// No description provided for @chatChannelLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel'**
+  String get chatChannelLeave;
+
+  /// No description provided for @chatChannelLeaveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave channel?'**
+  String get chatChannelLeaveConfirmTitle;
+
+  /// No description provided for @chatChannelLeaveConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You will no longer receive messages from this channel.'**
+  String get chatChannelLeaveConfirmMessage;
+
   /// No description provided for @chatGroupOwnerLeaveHint.
   ///
   /// In en, this message translates to:
@@ -6493,6 +6511,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage encrypted key backup'**
   String get e2eKeyBackupManage;
+
+  /// No description provided for @profileNotInContactsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in contacts · messages may be unsafe'**
+  String get profileNotInContactsWarning;
 }
 
 class _AppLocalizationsDelegate

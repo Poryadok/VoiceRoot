@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:path/path.dart' as p;
 import 'package:voice_frontend/backend/e2e_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
@@ -305,16 +306,26 @@ void main() {
       final path = _keyBackupGoldenPath('h');
       final goldenUri = goldenFileComparator.getTestUri(Uri.parse(path), null);
 
-      var matches = false;
-      try {
-        matches = await goldenFileComparator.compare(
-          png!.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
-          goldenUri,
-        );
-      } on FlutterError {
-        // LocalFileComparator reports a pixel mismatch as FlutterError. A
-        // missing fixture raises TestFailure and still fails this test.
-      }
+      final matches = await tester.runAsync(() async {
+        try {
+          return await goldenFileComparator.compare(
+            png!.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+            goldenUri,
+          );
+        } on FlutterError catch (error) {
+          final failureDir = p.join(
+            (goldenFileComparator as LocalFileComparator).basedir.path,
+            'failures',
+          );
+          final expectedPixelMismatch = RegExp(
+            '^Golden "${RegExp.escape(goldenUri.toString())}": '
+            r'Pixel test failed, \d+\.\d{2}%, \d+px diff detected\.'
+            '\nFailure feedback can be found at ${RegExp.escape(failureDir)}\$',
+          );
+          if (!expectedPixelMismatch.hasMatch(error.message)) rethrow;
+          return false;
+        }
+      });
       expect(matches, isFalse);
     });
 

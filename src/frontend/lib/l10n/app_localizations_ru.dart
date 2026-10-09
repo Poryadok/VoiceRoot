@@ -1911,6 +1911,16 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы больше не будете получать сообщения из этой группы.';
 
   @override
+  String get chatChannelLeave => 'Выйти из канала';
+
+  @override
+  String get chatChannelLeaveConfirmTitle => 'Выйти из канала?';
+
+  @override
+  String get chatChannelLeaveConfirmMessage =>
+      'Вы больше не будете получать сообщения из этого канала.';
+
+  @override
   String get chatGroupOwnerLeaveHint =>
       'Передайте владение другому участнику перед выходом.';
 
@@ -3578,4 +3588,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get e2eKeyBackupManage => 'Управление резервной копией ключей';
+
+  @override
+  String get profileNotInContactsWarning =>
+      'Не в контактах · сообщения могут быть небезопасны';
 }
