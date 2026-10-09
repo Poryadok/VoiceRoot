@@ -151,7 +151,7 @@ func loadClientCAs(path string) (*x509.CertPool, error) {
 	}
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("Messaging principal client CA unavailable")
+		return nil, errors.New("messaging principal client CA unavailable")
 	}
 	pool := x509.NewCertPool()
 	remaining := pemBytes

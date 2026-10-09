@@ -140,7 +140,7 @@ func listenerTLSConfig(cfg Config, cert tls.Certificate) (*tls.Config, error) {
 		return serverTLS, nil
 	}
 	if cfg.ClientCAs == nil {
-		return nil, errors.New("Messaging principal client CA required")
+		return nil, errors.New("messaging principal client CA required")
 	}
 	serverTLS.ClientAuth = tls.RequireAndVerifyClientCert
 	serverTLS.ClientCAs = cfg.ClientCAs
@@ -153,7 +153,7 @@ func jwksHTTPClientTLSConfig(cfg Config, roots *x509.CertPool) (*tls.Config, err
 		return clientTLS, nil
 	}
 	if cfg.JWKSClientCertFile == "" || cfg.JWKSClientKeyFile == "" {
-		return nil, errors.New("Messaging principal JWKS client certificate/key required")
+		return nil, errors.New("messaging principal JWKS client certificate/key required")
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
 	if err != nil {
