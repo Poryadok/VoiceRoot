@@ -37,8 +37,11 @@ func TestRuntimeUserPrivacyListenerUsesFiniteAllowlist(t *testing.T) {
 	runtime := &Runtime{target: "user", credentials: credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}), verifier: &Verifier{Target: "user", Issuers: map[string]bool{"social": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}}
 	lis := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(runtime.ServerOptions()...)
+	var getProfilesCalls atomic.Int32
+	var getBulkPresenceCalls atomic.Int32
 	server.RegisterService(&grpc.ServiceDesc{ServiceName: "voice.user.v1.UserService", HandlerType: (*interface{})(nil), Methods: []grpc.MethodDesc{
-		allowlistMethod("GetPrivacySettings"), allowlistMethod("GetProfile"), allowlistMethod("ListProfileIDsForAccount"), allowlistMethod("GetProfiles"),
+		allowlistMethod("GetPrivacySettings"), allowlistMethod("GetProfile"), allowlistMethod("ListProfileIDsForAccount"),
+		allowlistMethodWithCalls("GetProfiles", &getProfilesCalls), allowlistMethodWithCalls("GetBulkPresence", &getBulkPresenceCalls),
 	}}, new(struct{}))
 	go func() { _ = server.Serve(lis) }()
 	t.Cleanup(server.Stop)
@@ -50,8 +53,15 @@ func TestRuntimeUserPrivacyListenerUsesFiniteAllowlist(t *testing.T) {
 		fullMethod := "/voice.user.v1.UserService/" + method
 		require.NoError(t, invokeSignedUserMethod(conn, key, fullMethod))
 	}
-	err = invokeSignedUserMethod(conn, key, "/voice.user.v1.UserService/GetProfiles")
+	getProfilesMethod := "/voice.user.v1.UserService/GetProfiles"
+	err = invokeSignedUserMethod(conn, key, getProfilesMethod)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, getProfilesCalls.Load(), "the signed GetProfiles request reaches the allowed handler")
+
+	getBulkPresenceMethod := "/voice.user.v1.UserService/GetBulkPresence"
+	err = invokeSignedUserMethod(conn, key, getBulkPresenceMethod)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Zero(t, getBulkPresenceCalls.Load(), "the unlisted GetBulkPresence handler is not called")
 }
 
 func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
