@@ -170,6 +170,61 @@ void main() {
   });
 
   testWidgets(
+    'DM CreateGroup stays usable in a constrained viewport with keyboard insets',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 600);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => CreateGroupSheet.show(
+                context,
+                requiredMemberProfileId: 'dm-peer',
+                expectedViewerProfileId: 'prof-test',
+              ),
+              child: const Text('open'),
+            ),
+          ),
+          client: MockClient((request) async => http.Response('{}', 404)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+      expect(
+        tester.widget<CheckboxListTile>(
+          find.byKey(CreateGroupSheet.memberTileKey('dm-peer')),
+        ),
+        isA<CheckboxListTile>()
+            .having((tile) => tile.value, 'required peer selected', isTrue)
+            .having((tile) => tile.onChanged, 'required peer locked', isNull),
+      );
+      await tester.ensureVisible(find.byKey(CreateGroupSheet.nameFieldKey));
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Weekend plans',
+      );
+      await tester.pump();
+
+      expect(find.byKey(CreateGroupSheet.submitKey), findsOneWidget);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason:
+            'The required peer and form controls must remain usable above the keyboard.',
+      );
+    },
+  );
+
+  testWidgets(
     'DM group creation keeps the original peer and invites a friend',
     (tester) async {
       final requests = <http.Request>[];
@@ -580,6 +635,11 @@ void main() {
   testWidgets(
     'later friend page failure hides partial results and retry restarts paging',
     (tester) async {
+      tester.view.physicalSize = const Size(412, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final requests = <http.Request>[];
       var pageTwoAvailable = false;
       await tester.pumpWidget(
@@ -644,23 +704,40 @@ void main() {
             .toList(),
         [null, 'page-2'],
       );
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'The constrained friend-load error state must not overflow.',
+      );
 
       pageTwoAvailable = true;
-      await tester.tap(find.text('Try again'));
+      final retryButton = find.text('Try again');
+      final retryScroll = find
+          .ancestor(of: retryButton, matching: find.byType(Scrollable))
+          .first;
+      await tester.scrollUntilVisible(retryButton, 24, scrollable: retryScroll);
+      await tester.tap(retryButton);
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(CreateGroupSheet.memberTileKey('friend-a')),
-        findsOneWidget,
+        tester.takeException(),
+        isNull,
+        reason: 'Retry must restore the paged list without a layout exception.',
       );
-      expect(
-        find.byKey(CreateGroupSheet.memberTileKey('friend-b')),
-        findsOneWidget,
+
+      final friendListScrollable = find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
       );
-      expect(
-        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
-        findsOneWidget,
-      );
+      for (final profileId in ['friend-a', 'friend-b', 'friend-c']) {
+        final friend = find.byKey(CreateGroupSheet.memberTileKey(profileId));
+        await tester.scrollUntilVisible(
+          friend,
+          80,
+          scrollable: friendListScrollable,
+        );
+        expect(friend, findsOneWidget);
+      }
       expect(
         requests
             .where((request) => request.url.path == '/api/v1/friends')
@@ -828,6 +905,14 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
       await tester.pump();
+      await tester.scrollUntilVisible(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        80,
+        scrollable: find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-c')));
       await tester.pump();
       await tester.tap(find.byKey(CreateGroupSheet.submitKey));
