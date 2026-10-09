@@ -1252,6 +1252,133 @@ void main() {
     },
   );
 
+  testWidgets(
+    'does not retry a created group invite after the acting account changes',
+    (tester) async {
+      final requests = <http.Request>[];
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        testApp(
+          home: Builder(
+            builder: (context) {
+              container = ProviderScope.containerOf(context);
+              return TextButton(
+                onPressed: () => CreateGroupSheet.show(context),
+                child: const Text('open'),
+              );
+            },
+          ),
+          client: MockClient((request) async {
+            requests.add(request);
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats') {
+              return http.Response(
+                jsonEncode({
+                  'chat': {
+                    'id': 'group-account-a',
+                    'type': 'CHAT_TYPE_GROUP',
+                    'name': 'Squad',
+                    'creator_profile_id': 'prof-test',
+                  },
+                }),
+                200,
+              );
+            }
+            if (request.method == 'POST' &&
+                request.url.path == '/api/v1/chats/group-account-a/members') {
+              return http.Response(
+                jsonEncode({'message': 'private_member_diagnostic'}),
+                503,
+              );
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CreateGroupSheet.nameFieldKey),
+        'Squad',
+      );
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      final originalGeneration = container
+          .read(authControllerProvider.notifier)
+          .gatewayRequestIdentity!
+          .generation;
+      expect(
+        requests.where((request) => request.url.path == '/api/v1/chats'),
+        hasLength(1),
+      );
+      expect(
+        requests.where(
+          (request) =>
+              request.url.path == '/api/v1/chats/group-account-a/members',
+        ),
+        hasLength(1),
+      );
+
+      await container
+          .read(authControllerProvider.notifier)
+          .applySession(
+            const AuthSession(
+              accessToken: 'account-b-access',
+              refreshToken: 'account-b-refresh',
+              accountId: 'account-b',
+              activeProfileId: 'profile-b',
+              expiresInSeconds: 900,
+            ),
+          );
+      expect(
+        container
+            .read(authControllerProvider.notifier)
+            .gatewayRequestIdentity!
+            .generation,
+        isNot(originalGeneration),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byKey(CreateGroupSheet.submitKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        requests.where((request) => request.url.path == '/api/v1/chats'),
+        hasLength(1),
+      );
+      expect(
+        requests.where(
+          (request) =>
+              request.url.path == '/api/v1/chats/group-account-a/members',
+        ),
+        hasLength(1),
+      );
+      expect(
+        requests.where(
+          (request) =>
+              request.url.path == '/api/v1/chats/group-account-a/members' &&
+              request.headers['authorization'] == 'Bearer account-b-access',
+        ),
+        isEmpty,
+      );
+      expect(find.byKey(CreateGroupSheet.sheetKey), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(CreateGroupSheet.submitKey))
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('private_member_diagnostic'), findsNothing);
+    },
+  );
+
   testWidgets('CreateGroupSheet hides upstream failure details', (
     tester,
   ) async {
