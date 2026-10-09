@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -12,6 +13,7 @@ import (
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
+	spacev1 "voice.app/space/v1"
 	callsv1 "voice.app/voice/calls/v1"
 )
 
@@ -134,38 +136,170 @@ func TestVoiceGRPC_StartScreenShare_VoiceRoomRoleCheck(t *testing.T) {
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+type screenShareLeaveAdmission struct {
+	readySpaceMediaAdmission
+	beginOperations  []uuid.UUID
+	beginGenerations []string
+	completed        []voicestore.SpaceMediaAdmission
+}
+
+func (a *screenShareLeaveAdmission) BeginRoomLeave(_ context.Context, operationID uuid.UUID, generation string) error {
+	a.beginOperations = append(a.beginOperations, operationID)
+	a.beginGenerations = append(a.beginGenerations, generation)
+	return nil
+}
+
+func (a *screenShareLeaveAdmission) CompleteRoomLeave(_ context.Context, admission voicestore.SpaceMediaAdmission) error {
+	a.completed = append(a.completed, admission)
+	return nil
+}
+
+type screenShareLeaveRevocationStore interface {
+	voicestore.CallStore
+	BeginSpaceMediaRevocation(context.Context, string, string, string, string) (voicestore.Call, bool, error)
+	CompleteSpaceMediaRevocation(context.Context, string, string, string, string) (voicestore.Call, bool, error)
+}
+
+type screenShareLeaveMedia struct {
+	roomName            string
+	identity            string
+	roomID              string
+	spaceID             string
+	voiceRoomID         string
+	participant         voicestore.SpaceMediaParticipant
+	calls               screenShareLeaveRevocationStore
+	admissions          *screenShareLeaveAdmission
+	participantRevoking bool
+	removedIdentities   []string
+}
+
+func (m *screenShareLeaveMedia) RemoveParticipant(ctx context.Context, roomName, identity string) error {
+	if roomName != m.roomName || identity != m.identity || len(m.admissions.beginOperations) != 1 || len(m.admissions.completed) != 0 {
+		return status.Error(codes.FailedPrecondition, "test media removal requires the exact room identity")
+	}
+	currentCall, err := m.calls.GetCall(ctx, m.roomID)
+	if err != nil {
+		return err
+	}
+	current, ok := currentCall.SpaceMedia[m.participant.ProfileID]
+	if currentCall.SpaceID != m.spaceID || currentCall.VoiceRoomID != m.voiceRoomID || !ok ||
+		current.ProfileID != m.participant.ProfileID || current.AccountID != m.participant.AccountID ||
+		current.Identity != m.participant.Identity || current.AdmissionOperationID != m.participant.AdmissionOperationID ||
+		current.RoomGeneration != m.participant.RoomGeneration || current.Generation != m.participant.Generation || !current.Revoking {
+		return status.Error(codes.FailedPrecondition, "test media removal requires the exact revoking participant")
+	}
+	m.participantRevoking = true
+	m.removedIdentities = append(m.removedIdentities, identity)
+	return nil
+}
+
+type screenShareLeaveRevoker struct {
+	calls           screenShareLeaveRevocationStore
+	media           *screenShareLeaveMedia
+	spaceID         string
+	voiceRoomID     string
+	profileID       string
+	removedProfiles []string
+}
+
+func (r *screenShareLeaveRevoker) RevokeSpaceMediaParticipant(ctx context.Context, call voicestore.Call, participant voicestore.SpaceMediaParticipant) (voicestore.Call, bool, error) {
+	current, ok := call.SpaceMedia[r.profileID]
+	if call.SpaceID != r.spaceID || call.VoiceRoomID != r.voiceRoomID || participant.ProfileID != r.profileID || !ok ||
+		current.ProfileID != participant.ProfileID || current.AccountID != participant.AccountID ||
+		current.Identity != participant.Identity || current.AdmissionOperationID != participant.AdmissionOperationID || current.RoomGeneration != participant.RoomGeneration ||
+		current.Generation != participant.Generation || participant.AccountID == "" || participant.AdmissionOperationID == "" ||
+		participant.Identity == "" || participant.RoomGeneration == 0 || participant.Generation == "" {
+		return voicestore.Call{}, false, status.Error(codes.FailedPrecondition, "test revoker requires the exact confirmed admission")
+	}
+	_, matched, err := r.calls.BeginSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
+	if err != nil {
+		return call, false, err
+	}
+	if !matched {
+		return call, false, status.Error(codes.FailedPrecondition, "test revoker requires the matching current media participant")
+	}
+	if err := r.media.RemoveParticipant(ctx, call.LivekitRoomName, participant.Identity); err != nil {
+		return call, false, err
+	}
+	updated, completed, err := r.calls.CompleteSpaceMediaRevocation(ctx, call.RoomID, participant.ProfileID, participant.Identity, participant.Generation)
+	if err != nil {
+		return updated, false, err
+	}
+	if !completed {
+		return updated, false, status.Error(codes.FailedPrecondition, "test revoker could not complete the matching media participant")
+	}
+	r.removedProfiles = append(r.removedProfiles, participant.ProfileID)
+	return updated, true, nil
+}
+
 func TestVoiceGRPC_LeaveVoiceRoom_ClearsScreenShare(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1700000000, 0).UTC()
 	events := &recordingEvents{}
-	svc := &VoiceGRPC{
-		Calls:  voicestore.NewMemoryCallStore(),
-		Tokens: livekit.NewHS256TokenIssuer("k", "s", "ws://lk", time.Hour),
-		Events: events,
-		Now:    func() time.Time { return now },
-		Roles:  &mapRolePermissions{allowed: map[string]map[string]bool{"space-1": {"profile-a": true}}},
-		SpaceMembers: &mapSpaceMembers{members: map[string]map[string]bool{
-			"space-1": {"profile-a": true},
-		}},
+	spaceID, voiceRoomID, profileID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	svc := newTestVoiceService(now, events)
+	configureReadySpaceMediaFixture(svc, &canonicalAccessResolver{result: CanonicalVoiceRoomAccess{
+		SpaceID: spaceID, Member: true, Active: true, AccessEpoch: 11,
+	}})
+	var prepared []voicestore.SpaceMediaAdmission
+	admissions := &screenShareLeaveAdmission{readySpaceMediaAdmission: readySpaceMediaAdmission{preparedAdmissions: &prepared}}
+	svc.SpaceMediaAdmissions = admissions
+	calls := svc.Calls.(*voicestore.MemoryCallStore)
+	revoker := &screenShareLeaveRevoker{
+		calls: calls, spaceID: spaceID, voiceRoomID: voiceRoomID, profileID: profileID,
 	}
-	store := svc.Calls.(*voicestore.MemoryCallStore)
-	_, err := store.CreateCall(context.Background(), voicestore.Call{
-		RoomID:             "room-leave",
-		LivekitRoomName:    "voice-room-leave",
-		VoiceRoomID:        "vr-leave",
-		SpaceID:            "space-1",
-		SessionKind:        callsv1.VoiceSessionKind_VOICE_SESSION_KIND_VOICE_ROOM,
-		InitiatorProfileID: "profile-a",
-		MediaKind:          callsv1.CallMediaKind_CALL_MEDIA_KIND_AUDIO,
-		Status:             callsv1.CallStatus_CALL_STATUS_ACTIVE,
-		StartedAt:          now,
-	})
+	revoker.media = &screenShareLeaveMedia{
+		calls: calls, spaceID: spaceID, voiceRoomID: voiceRoomID, admissions: admissions,
+	}
+	svc.SpaceMediaRevoker = revoker
+	svc.Roles = &canonicalRolePermissions{}
+	join := &callsv1.JoinVoiceRoomRequest{VoiceRoomId: voiceRoomID, Space: &spacev1.SpaceRef{Id: spaceID}}
+	joined, err := joinSpaceVoiceUser(t, svc, profileID, join)
+	require.NoError(t, err)
+	roomID := joined.GetVoiceSession().GetRoomId()
+
+	_, err = svc.StartScreenShare(voiceTestCtx(profileID), &callsv1.StartScreenShareRequest{RoomId: roomID})
+	require.NoError(t, err)
+	callBeforeLeave, err := svc.Calls.GetCall(context.Background(), roomID)
+	require.NoError(t, err)
+	participant, admitted := callBeforeLeave.SpaceMedia[profileID]
+	require.True(t, admitted)
+	require.Len(t, prepared, 1)
+	confirmed := prepared[0]
+	require.Equal(t, confirmed.OperationID.String(), participant.AdmissionOperationID)
+	require.Equal(t, confirmed.Generation, participant.Generation)
+	require.Equal(t, confirmed.RoomGeneration, participant.RoomGeneration)
+	require.Equal(t, confirmed.AccountID.String(), participant.AccountID)
+	require.Equal(t, confirmed.ProfileID.String(), participant.ProfileID)
+	require.Equal(t, confirmed.SpaceID.String(), callBeforeLeave.SpaceID)
+	require.Equal(t, confirmed.RoomID, callBeforeLeave.RoomID)
+	require.Equal(t, confirmed.VoiceRoomID, callBeforeLeave.VoiceRoomID)
+	revoker.media.roomName = callBeforeLeave.LivekitRoomName
+	revoker.media.identity = participant.Identity
+	revoker.media.roomID = callBeforeLeave.RoomID
+	revoker.media.participant = participant
+	operationID, err := uuid.Parse(participant.AdmissionOperationID)
 	require.NoError(t, err)
 
-	_, err = svc.StartScreenShare(voiceTestCtx("profile-a"), &callsv1.StartScreenShareRequest{RoomId: "room-leave"})
-	require.NoError(t, err)
-
-	_, err = svc.LeaveVoiceRoom(voiceTestCtx("profile-a"), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: "vr-leave"})
+	_, err = svc.LeaveVoiceRoom(voiceTestCtx(profileID), &callsv1.LeaveVoiceRoomRequest{VoiceRoomId: voiceRoomID})
 	require.NoError(t, err)
 	require.Len(t, events.stopped, 1)
+	require.Equal(t, []string{profileID}, revoker.removedProfiles)
+	require.Equal(t, []uuid.UUID{operationID}, admissions.beginOperations)
+	require.Equal(t, []string{participant.Generation}, admissions.beginGenerations)
+	require.Len(t, admissions.completed, 1)
+	completed := admissions.completed[0]
+	require.Equal(t, confirmed.OperationID, completed.OperationID)
+	require.Equal(t, confirmed.Generation, completed.Generation)
+	require.Equal(t, confirmed.AccountID, completed.AccountID)
+	require.Equal(t, confirmed.ProfileID, completed.ProfileID)
+	require.Equal(t, confirmed.SpaceID, completed.SpaceID)
+	require.Equal(t, confirmed.RoomID, completed.RoomID)
+	require.True(t, revoker.media.participantRevoking)
+	require.Equal(t, []string{participant.Identity}, revoker.media.removedIdentities)
+	callAfterLeave, err := svc.Calls.GetCall(context.Background(), roomID)
+	require.NoError(t, err)
+	require.NotContains(t, callAfterLeave.ProfileIDs(), profileID)
+	require.NotContains(t, callAfterLeave.SpaceMedia, profileID)
+	require.Empty(t, callAfterLeave.ScreenShares)
 }
