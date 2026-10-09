@@ -43,9 +43,10 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
   final renderFlexNode = diagnostics
       .where((node) => node.name == 'The specific RenderFlex in question is')
       .firstOrNull;
-  final renderFlex = renderFlexNode is DiagnosticsProperty<Object>
+  final renderFlexValue = renderFlexNode is DiagnosticableTreeNode
       ? renderFlexNode.value
       : null;
+  final renderFlex = renderFlexValue is RenderFlex ? renderFlexValue : null;
   final creatorNode = diagnostics
       .whereType<DiagnosticsDebugCreator>()
       .firstOrNull;
@@ -60,7 +61,19 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
       ? 'unavailable'
       : '${appFrame.group(1)}:${appFrame.group(2)}';
   return 'layout overflow; render=${renderFlex?.runtimeType ?? 'unavailable'}; '
+      'geometry=${_renderFlexGeometry(renderFlex)}; '
       'creator=$creatorType; appFrame=$location';
+}
+
+String _renderFlexGeometry(RenderFlex? renderFlex) {
+  if (renderFlex == null) return 'unavailable';
+  String dimension(double value) => value.isFinite
+      ? value.clamp(0.0, 100000.0).toStringAsFixed(1)
+      : 'unbounded';
+  final size = renderFlex.size;
+  final constraints = renderFlex.constraints;
+  return 'size=${dimension(size.width)}x${dimension(size.height)}; '
+      'max=${dimension(constraints.maxWidth)}x${dimension(constraints.maxHeight)}';
 }
 
 void main() {
