@@ -125,10 +125,10 @@ func (c Config) validate() error {
 		return errors.New("principal Redis and TLS certificate/key required")
 	}
 	if c.Capability == "messaging" && (strings.TrimSpace(c.ClientCAFile) == "" || c.ClientCAs == nil) {
-		return errors.New("Messaging principal client CA required")
+		return errors.New("messaging principal client CA required")
 	}
 	if c.Capability == "messaging" && (strings.TrimSpace(c.JWKSClientCertFile) == "" || strings.TrimSpace(c.JWKSClientKeyFile) == "") {
-		return errors.New("Messaging principal JWKS client certificate/key required")
+		return errors.New("messaging principal JWKS client certificate/key required")
 	}
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
@@ -147,7 +147,7 @@ func (c Config) validate() error {
 
 func loadClientCAs(path string) (*x509.CertPool, error) {
 	if strings.TrimSpace(path) == "" {
-		return nil, errors.New("Messaging principal client CA required")
+		return nil, errors.New("messaging principal client CA required")
 	}
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
