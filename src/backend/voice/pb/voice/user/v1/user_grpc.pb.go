@@ -104,7 +104,7 @@ type UserServiceClient interface {
 	// Internal Notification routing signal. This method is exposed only on the
 	// dedicated authenticated Notification principal listener.
 	GetNotificationRoutingPresence(ctx context.Context, in *GetNotificationRoutingPresenceRequest, opts ...grpc.CallOption) (*GetNotificationRoutingPresenceResponse, error)
-	// Internal Messaging decision for an owned scheduled DM dispatch.
+	// Internal Messaging decision for an owned scheduled dispatch.
 	// Exposed only on the dedicated authenticated Messaging principal listener.
 	GetScheduledMessageDispatchPresence(ctx context.Context, in *GetScheduledMessageDispatchPresenceRequest, opts ...grpc.CallOption) (*GetScheduledMessageDispatchPresenceResponse, error)
 	GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error)
@@ -573,7 +573,7 @@ type UserServiceServer interface {
 	// Internal Notification routing signal. This method is exposed only on the
 	// dedicated authenticated Notification principal listener.
 	GetNotificationRoutingPresence(context.Context, *GetNotificationRoutingPresenceRequest) (*GetNotificationRoutingPresenceResponse, error)
-	// Internal Messaging decision for an owned scheduled DM dispatch.
+	// Internal Messaging decision for an owned scheduled dispatch.
 	// Exposed only on the dedicated authenticated Messaging principal listener.
 	GetScheduledMessageDispatchPresence(context.Context, *GetScheduledMessageDispatchPresenceRequest) (*GetScheduledMessageDispatchPresenceResponse, error)
 	GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error)
