@@ -1335,6 +1335,7 @@ git -C "${f13_fixture_repo}" commit -qm 'F13 fixture first repeated guarded path
 git -C "${f13_fixture_repo}" checkout -qb f13-repeat-integration "${f13_fixture_base}"
 git -C "${f13_fixture_repo}" merge --no-ff -qm 'F13 fixture first repeated merge' f13-repeat-source-one
 git -C "${f13_fixture_repo}" checkout -qb f13-repeat-source-two "${f13_fixture_base}"
+mkdir -p "${f13_fixture_repo}/src/backend/voice"
 printf '%s\n' 'package voice' >"${f13_fixture_repo}/src/backend/voice/repeated.go"
 git -C "${f13_fixture_repo}" add src/backend/voice/repeated.go
 git -C "${f13_fixture_repo}" commit -qm 'F13 fixture second repeated guarded path'
