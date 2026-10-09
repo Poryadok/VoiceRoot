@@ -523,6 +523,14 @@ void main() {
 
       await tester.enterText(search, '');
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
+        80,
+        scrollable: find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(
         tester
             .widget<CheckboxListTile>(
@@ -815,7 +823,10 @@ void main() {
     await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
     await tester.pump();
-    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+    await tester.ensureVisible(friendB);
+    await tester.pump();
+    await tester.tap(friendB);
     await tester.pump();
 
     await tester.tap(find.byKey(CreateGroupSheet.submitKey));
@@ -885,7 +896,10 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
       await tester.pump();
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
 
       await tester.tap(find.byKey(CreateGroupSheet.submitKey));
@@ -903,7 +917,10 @@ void main() {
         find.byKey(CreateGroupSheet.nameFieldKey),
         'Updated squad',
       );
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
       await tester.scrollUntilVisible(
         find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
@@ -1023,7 +1040,10 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
       await tester.pump();
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
 
       final authController = container.read(authControllerProvider.notifier);
@@ -1099,7 +1119,10 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
       await tester.pump();
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
 
       final authController = container.read(authControllerProvider.notifier);
@@ -1209,7 +1232,10 @@ void main() {
     await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
     await tester.pump();
-    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+    await tester.ensureVisible(friendB);
+    await tester.pump();
+    await tester.tap(friendB);
     await tester.pump();
     await tester.tap(find.byKey(CreateGroupSheet.submitKey));
     await tester.pumpAndSettle();
@@ -1290,7 +1316,10 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
       await tester.pump();
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
       await tester.tap(find.byKey(CreateGroupSheet.submitKey));
       await tester.pumpAndSettle();
@@ -1390,7 +1419,10 @@ void main() {
       );
       await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
       await tester.pump();
-      await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+      await tester.ensureVisible(friendB);
+      await tester.pump();
+      await tester.tap(friendB);
       await tester.pump();
       await tester.tap(find.byKey(CreateGroupSheet.submitKey));
       await tester.pumpAndSettle();
@@ -1503,7 +1535,10 @@ void main() {
     await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
     await tester.pump();
-    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+    await tester.ensureVisible(friendB);
+    await tester.pump();
+    await tester.tap(friendB);
     await tester.pump();
     expect(
       find.byKey(CreateGroupSheet.submitKey).hitTestable(),
@@ -1545,7 +1580,10 @@ void main() {
     await tester.enterText(find.byKey(CreateGroupSheet.nameFieldKey), 'Squad');
     await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-a')));
     await tester.pump();
-    await tester.tap(find.byKey(CreateGroupSheet.memberTileKey('friend-b')));
+    final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
+    await tester.ensureVisible(friendB);
+    await tester.pump();
+    await tester.tap(friendB);
     await tester.pump();
     await tester.tap(find.byKey(CreateGroupSheet.submitKey));
     await tester.pumpAndSettle();
