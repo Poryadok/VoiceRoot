@@ -157,7 +157,7 @@ func jwksHTTPClientTLSConfig(cfg Config, roots *x509.CertPool) (*tls.Config, err
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.JWKSClientCertFile, cfg.JWKSClientKeyFile)
 	if err != nil {
-		return nil, errors.New("Messaging principal JWKS client identity unavailable")
+		return nil, errors.New("messaging principal JWKS client identity unavailable")
 	}
 	clientTLS.Certificates = []tls.Certificate{cert}
 	return clientTLS, nil
