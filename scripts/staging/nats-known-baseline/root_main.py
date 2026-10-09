@@ -128,7 +128,7 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
         from bootstrap_selection import select
         selected['bootstrap']=select(kube,bootstrap_enrollment,generation)
     secrets={role:kube.get('secret',name) for role,name in selected.items()}
-    inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532)
+    inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532); inputs.chmod(0o750)
     provenance={}
     tls='voice-nats-hub-tls-'+generation
     metadata=kube.secret_meta(tls)
