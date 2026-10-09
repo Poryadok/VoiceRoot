@@ -187,11 +187,11 @@ func loadNotificationSigningKeys(dir string) (map[string]*rsa.PrivateKey, error)
 		}
 		relative, err := filepath.Rel(canonical, path)
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return nil, errors.New("Notification principal key escapes configured directory")
+			return nil, errors.New("notification principal key escapes configured directory")
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
-			return nil, errors.New("Notification principal key is not a regular file")
+			return nil, errors.New("notification principal key is not a regular file")
 		}
 		contents, err := os.ReadFile(path)
 		if err != nil {
@@ -199,7 +199,7 @@ func loadNotificationSigningKeys(dir string) (map[string]*rsa.PrivateKey, error)
 		}
 		block, rest := pem.Decode(contents)
 		if block == nil || block.Type != "PRIVATE KEY" || strings.TrimSpace(string(rest)) != "" {
-			return nil, errors.New("Notification principal key must be one PKCS#8 PEM block")
+			return nil, errors.New("notification principal key must be one PKCS#8 PEM block")
 		}
 		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		key, ok := parsed.(*rsa.PrivateKey)
