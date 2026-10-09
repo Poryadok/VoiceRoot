@@ -106,7 +106,7 @@ void main() {
                 'id': chatId,
                 'type': 'CHAT_TYPE_CHANNEL',
                 'creator_profile_id': 'profile-owner',
-                if (spaceId != null) 'space_id': spaceId,
+                'space_id': ?spaceId,
               },
             },
           ],

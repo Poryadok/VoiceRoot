@@ -2219,7 +2219,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           scheduledMessagesNextCursor: nextCursor,
           clearScheduledMessagesNextCursor: nextCursor == null,
           hasMoreScheduledMessages:
-              page?.hasMore == true &&
+              page.hasMore &&
               nextCursor != null &&
               nextCursor.isNotEmpty,
           clearScheduledMessagesError: true,

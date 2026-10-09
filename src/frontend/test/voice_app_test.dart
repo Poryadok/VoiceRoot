@@ -148,7 +148,7 @@ void main() {
       );
       expect(retryButton, findsOneWidget);
       expect(
-        tester.getSemantics(retryButton).hasFlag(SemanticsFlag.isButton),
+        tester.getSemantics(retryButton).flagsCollection.isButton,
         isTrue,
       );
       bool retryOwnsPrimaryFocus() {
