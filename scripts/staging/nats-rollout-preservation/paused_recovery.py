@@ -166,6 +166,71 @@ def reconstruct_source(token,base,state,binding):
         'lock_sha256':hashlib.sha256(lock).hexdigest(),'image_provenance':'independently resolved trusted CI tag',
         'verified':True,'paused_operation':OPERATION}
 
+class PausedOriginalProducer:
+    """Canonical desired inputs for this exact already-owned fenced operation.
+
+    Only file/user signing descriptors need their original desired replicas.
+    Fresh live metadata is retained; all other reads and dry-runs remain live.
+    """
+    NAMES=('voice-file','voice-user')
+
+    def __init__(self,stage,state):
+        import nonnats_plan
+        self.stage=stage;self.state=state;self.plan=nonnats_plan
+        if (state.get('operation')!=OPERATION or state.get('repair_adoption') is None
+            or state.get('target',{}).get('tag')!=SOURCE
+            or state['target'].get('mode')!='images-only'
+            or state['target'].get('changed_services')!=['story']):
+            raise Blocked('paused_recovery_original_producer_boundary_invalid')
+        self.verify()
+
+    def _project(self,name):
+        try:
+            matches=[d for d in self.state['nonnats_binding']['objects']
+                if d.get('kind')=='Deployment' and d.get('name')==name]
+            if len(matches)!=1:raise ValueError()
+            descriptor=matches[0];owned=self.stage.snapshots[name]
+            original=self.stage.original_snapshots[name]
+            current=self.stage.kube.get('Deployment',name)
+            for row in (original,owned,current):
+                if (row.get('kind')!='Deployment' or row['metadata']['name']!=name
+                    or row['metadata'].get('namespace')!='voice-staging'
+                    or not isinstance(row.get('spec'),dict)):
+                    raise ValueError()
+            if (descriptor.get('namespace')!='voice-staging'
+                or descriptor.get('disposition')!='preserve'
+                or any(row['metadata']['uid']!=descriptor['uid'] for row in (original,owned,current))
+                or current['metadata']['resourceVersion']!=owned['metadata']['resourceVersion']
+                or self.plan.semantic(current)!=self.plan.semantic(owned)
+                or self.plan.semantic(original)!=descriptor['desired']
+                or original['spec'].get('replicas',1)!=1
+                or owned['spec'].get('replicas',1)!=0):
+                raise ValueError()
+            scaled=self.plan.semantic(original);scaled['spec']['replicas']=0
+            if self.plan.semantic(owned)!=scaled:raise ValueError()
+            # Server dry-run needs the CURRENT RV. Restore only desired spec;
+            # source semantics exclude controller status and runtime metadata.
+            projected=copy.deepcopy(current);projected['spec']=copy.deepcopy(original['spec'])
+            return projected
+        except (KeyError,TypeError,ValueError):
+            raise Blocked('paused_recovery_owned_desired_changed') from None
+
+    def verify(self):
+        for name in self.NAMES:self._project(name)
+
+    def get(self,kind,name):
+        self.verify()
+        if kind=='Deployment' and name in self.NAMES:return self._project(name)
+        return self.stage.kube.get(kind,name)
+
+    def run(self,args,body=None,timeout=30):
+        self.verify()
+        return self.stage.kube.run(args,body=body,timeout=timeout)
+
+    def secret_meta(self,name):
+        self.verify();return self.stage.kube.secret_meta(name)
+
+
 def recompile_target(base,state,stage,approved):
     """Rebuild only retained canonical target inputs; compare all three forms."""
     import compiler
@@ -184,9 +249,10 @@ def recompile_target(base,state,stage,approved):
         or retained.get('target')!=state['input_target'] or retained.get('contract')!=state['contract']
         or retained.get('migrations')!=state['migrations'] or retained.get('nonnats')!=state['nonnats']):
         raise Blocked('paused_recovery_retained_target_changed')
+    producer=PausedOriginalProducer(stage,state)
     with tempfile.TemporaryDirectory(prefix='recompile-',dir=base) as temporary:
         output=Path(temporary)/('target-'+SOURCE+'.json')
-        compiler.main([str(workspace),str(build/'parameters.json'),str(output)])
+        compiler.main([str(workspace),str(build/'parameters.json'),str(output)],producer=producer)
         output.chmod(0o600);compiled=decode(private_bytes(output,2<<20))
     if compiled!=retained:raise Blocked('paused_recovery_compiled_target_changed')
     original_stage=copy.copy(stage);original_stage.snapshots=copy.deepcopy(stage.original_snapshots)
@@ -199,7 +265,7 @@ def recompile_target(base,state,stage,approved):
     if normalized!=state['target']:raise Blocked('paused_recovery_normalized_target_changed')
     if decode(private_bytes(build/'parameters.json',2<<20))!=parameters:
         raise Blocked('paused_recovery_retained_target_changed')
-    stage.verify_final_storage()
+    producer.verify();stage.verify_final_storage()
     return {'parameters_sha256':digest(parameters),'compiled_sha256':digest(compiled),
             'apply_sha256':hashlib.sha256(actual_manifest).hexdigest(),'normalized_sha256':digest(normalized)}
 
@@ -323,11 +389,16 @@ def verify_adopted_binding(base,state,binding):
     raw=private_bytes(base/'recovery-original-checkpoint.json');original=decode(raw)
     journal_raw=private_bytes(guard.ROOT/'installed'/'journal'/(NONCE+'.json'),65536)
     boundary=initial_checkpoint(original,decode(journal_raw))
-    record=decode(private_bytes(base/'recovery-adoption.json',65536))
+    adoption_raw=private_bytes(base/'recovery-adoption.json',65536)
+    record=decode(adoption_raw)
+    predecessor=binding
+    if state.get('repair_revision') is not None:
+        import v8_upgrade
+        predecessor=v8_upgrade.verify_revision(base,state,binding,adoption_raw)
     wanted={'schema':'voice-paused-cold-backup-adoption-v1',**boundary,
             'original_checkpoint_sha256':hashlib.sha256(raw).hexdigest(),
             'original_journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
-            'replacement_code_sha256':digest(binding)}
+            'replacement_code_sha256':digest(predecessor)}
     if record!=wanted or state['repair_adoption']!=digest(record) or state.get('code_capture')!=binding:
         raise Blocked('paused_recovery_adoption_binding_changed')
     original_target_unchanged(state,original)
@@ -372,7 +443,7 @@ def verify_existing_prebuild(root,path):
     directory(root/'installed'/'sources'/nonce[:12])
     v3.absent(root/('rollout-'+nonce[:12]));v3.absent(root/'installed'/'sources'/(nonce[:12]+'-build'))
 
-def install_repair(code,installed,kube):
+def install_repair(code,installed,kube,version='v7'):
     """Close ingress for the entire exact adoption, including final rereads."""
     installed=Path(installed)
     for path in (installed,installed/'inbox',installed/'processing',installed/'journal',
@@ -382,7 +453,12 @@ def install_repair(code,installed,kube):
             or path.name!='inbox' and row.st_mode&0o020):
             raise Blocked('bridge_upgrade_directory_untrusted')
     inbox=installed/'inbox';inbox.chmod(0o700)
-    try:return _install_repair_closed(code,installed,kube)
+    try:
+        if version=='v8':
+            import v8_upgrade
+            return v8_upgrade.install(code,installed,kube)
+        if version!='v7':raise Blocked('bridge_upgrade_version_invalid')
+        return _install_repair_closed(code,installed,kube)
     finally:inbox.chmod(0o1730)
 
 def _install_repair_closed(code,installed,kube):
