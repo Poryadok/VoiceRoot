@@ -830,8 +830,7 @@ func (o *SessionOrchestrator) advanceNoOwner(ctx context.Context, key SessionOpe
 	if err = tx.Commit(ctx); err != nil {
 		return SessionOperation{}, err
 	}
-	var p SessionPrincipal
-	p = SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}
+	p := SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}
 	return o.Store.getOperation(ctx, p, key.OperationID)
 }
 
