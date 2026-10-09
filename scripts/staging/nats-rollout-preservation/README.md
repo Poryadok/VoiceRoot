@@ -468,6 +468,11 @@ after AWAITING_OFF_NODE cannot authorize a new capture or refresh the saved cut.
 
 ## Preserved ciphertext upload recovery
 
+Captured NATS client inputs use a root:65532 directory with explicit mode0750,
+including under the bridge service umask0077. Credential files remain
+root:65532/0440. This applies to future captures; it does not repair or resume
+an existing fenced operation or change its stored authority and deadlines.
+
 V9 provides a closed continuation for operation3340764a7d24 in its recorded
 WAITING/AWAITING_OFF_NODE/VERIFIED state. The advanced-state installer preserves
 checkpoint bytes and inode, the original V8 code, keys, policy, witness records,

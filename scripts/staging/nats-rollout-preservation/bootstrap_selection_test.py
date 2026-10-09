@@ -30,6 +30,26 @@ def fixture():
     return Kube(),receipt,rows,sha
 
 class Tests(unittest.TestCase):
+    def test_captured_inputs_keep_group_access_under_service_umask(self):
+        for mask in (0o022,0o077):
+            with self.subTest(umask=oct(mask)),tempfile.TemporaryDirectory() as td:
+                kube,receipt,rows,sha=fixture();base=Path(td)
+                previous=os.umask(mask)
+                try:
+                    with patch.object(selection,'ACCOUNT_SHA',sha),patch.object(root_main.os,'chown') as owner:
+                        provenance=root_main.capture_inputs(kube,base,{'scripts':[]},GENERATION,bootstrap_enrollment=receipt)
+                    inputs=base/'inputs'
+                    self.assertEqual(inputs.stat().st_mode&0o777,0o750)
+                    owner.assert_any_call(inputs,0,65532)
+                    for name,expected in (('bootstrap.creds',b'renewed-private-creds'),('social.creds',b'same-social'),('realtime.creds',b'same-realtime')):
+                        path=inputs/name
+                        self.assertEqual(path.stat().st_mode&0o777,0o440)
+                        self.assertEqual(path.read_bytes(),expected)
+                        owner.assert_any_call(path,0,65532)
+                        self.assertEqual(provenance[name]['sha256'],hashlib.sha256(expected).hexdigest())
+                    self.assertEqual((base/'server.conf').stat().st_mode&0o777,0o440)
+                finally:os.umask(previous)
+
     def capture(self,kube,receipt,sha):
         with tempfile.TemporaryDirectory() as td,patch.object(selection,'ACCOUNT_SHA',sha),patch.object(root_main.os,'chown',create=True):
             provenance=root_main.capture_inputs(kube,Path(td),{'scripts':[]},GENERATION,bootstrap_enrollment=receipt)
