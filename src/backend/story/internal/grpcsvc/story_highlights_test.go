@@ -341,7 +341,7 @@ func TestGetStory_expiredDirectIDRequiresCurrentHighlightVisibility(t *testing.T
 	_, err = client.DeleteStory(ctxAuthor, &storyv1.DeleteStoryRequest{StoryId: deletedStory.GetId()})
 	require.NoError(t, err)
 
-	_, err := client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: activeStory.GetId()})
+	_, err = client.GetStory(ctxStranger, &storyv1.GetStoryRequest{StoryId: activeStory.GetId()})
 	require.NoError(t, err, "active Story ID remains available under its current audience")
 	activeID, err := uuid.Parse(activeStory.GetId())
 	require.NoError(t, err)
