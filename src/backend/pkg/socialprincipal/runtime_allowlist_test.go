@@ -69,8 +69,12 @@ func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
 	runtime := &Runtime{target: "user", capability: "messaging", credentials: credentials.NewTLS(serverTLS), verifier: &Verifier{Target: "user", Capability: "messaging", Issuers: map[string]bool{"messaging": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}}
 	lis := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(runtime.ServerOptions()...)
+	var forbiddenProfileCalls atomic.Int32
 	server.RegisterService(&grpc.ServiceDesc{ServiceName: "voice.user.v1.UserService", HandlerType: (*interface{})(nil), Methods: []grpc.MethodDesc{
-		allowlistMethod("GetScheduledMessageDispatchPresence"), allowlistMethod("GetBulkPresence"), allowlistMethod("GetNotificationRoutingPresence"),
+		allowlistMethod("GetScheduledMessageDispatchPresence"),
+		allowlistMethod("GetBulkPresence"),
+		allowlistMethod("GetNotificationRoutingPresence"),
+		allowlistMethodWithCalls("GetProfile", &forbiddenProfileCalls),
 	}}, new(struct{}))
 	go func() { _ = server.Serve(lis) }()
 	t.Cleanup(server.Stop)
@@ -84,6 +88,7 @@ func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
 		err := invokeSignedUserMethodWithIssuer(conn, key, "messaging", "/voice.user.v1.UserService/"+denied)
 		require.Equal(t, codes.PermissionDenied, status.Code(err), denied)
 	}
+	require.Zero(t, forbiddenProfileCalls.Load(), "the protected listener must reject GetProfile before dispatch")
 }
 
 func TestRuntimeUserMessagingListenerRequiresTrustedClientCertificate(t *testing.T) {
