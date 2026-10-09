@@ -28,14 +28,16 @@ func TestValidateScheduledPresenceRequestRequiresCanonicalBoundIDsGenerationAndM
 	require.Equal(t, uint64(3), got.ScheduleGeneration)
 	require.Equal(t, valid.GetMode(), got.Mode)
 	require.Equal(t, chatv1.ChatType_CHAT_TYPE_DM, got.ChatType)
+	nilRecipient := uuid.Nil.String()
 
 	for name, mutate := range map[string]func(*userv1.GetScheduledMessageDispatchPresenceRequest){
 		"nil":                 nil,
 		"missing schedule id": func(r *userv1.GetScheduledMessageDispatchPresenceRequest) { r.ScheduledMessageId = "" },
 		"noncanonical id":     func(r *userv1.GetScheduledMessageDispatchPresenceRequest) { r.ChatId = " " + r.ChatId },
-		"nil recipient":       func(r *userv1.GetScheduledMessageDispatchPresenceRequest) { r.RecipientProfileId = uuid.Nil.String() },
+		"nil recipient":       func(r *userv1.GetScheduledMessageDispatchPresenceRequest) { r.RecipientProfileId = &nilRecipient },
 		"same sender recipient": func(r *userv1.GetScheduledMessageDispatchPresenceRequest) {
-			r.RecipientProfileId = r.SenderProfileId
+			recipient := r.SenderProfileId
+			r.RecipientProfileId = &recipient
 		},
 		"zero generation": func(r *userv1.GetScheduledMessageDispatchPresenceRequest) { r.ScheduleGeneration = 0 },
 		"unspecified mode": func(r *userv1.GetScheduledMessageDispatchPresenceRequest) {
