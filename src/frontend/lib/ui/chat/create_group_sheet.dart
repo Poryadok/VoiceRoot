@@ -334,211 +334,226 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
             ),
     );
 
+    final titleRow = Row(
+      children: [
+        Expanded(
+          child: Text(
+            l10n.chatCreateGroupTitle,
+            style: theme.textTheme.titleLarge,
+          ),
+        ),
+        IconButton(
+          key: CreateGroupSheet.closeKey,
+          tooltip: l10n.commonCancel,
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    );
+    final formFields = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: CreateGroupSheet.nameFieldKey,
+          controller: _nameController,
+          decoration: InputDecoration(
+            labelText: l10n.chatCreateGroupNameLabel,
+            hintText: l10n.chatCreateGroupNameHint,
+          ),
+          textCapitalization: TextCapitalization.sentences,
+          enabled: !_submitting && _inviteRetryChatId == null,
+          onChanged: (_) => setState(() => _createAttempt = null),
+        ),
+        const SizedBox(height: 16),
+        Text(l10n.chatCreateGroupMembers, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(l10n.chatCreateGroupMembersHint, style: theme.textTheme.bodySmall),
+        if (widget.requiredMemberProfileId case final requiredId?)
+          _requiredMemberTile(requiredId),
+        const SizedBox(height: 8),
+        TextField(
+          key: CreateGroupSheet.searchFieldKey,
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: l10n.socialSearchHint,
+            prefixIcon: const Icon(Icons.search),
+          ),
+          textInputAction: TextInputAction.search,
+          enabled: !_submitting && _inviteRetryChatId == null,
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+    );
+    final friendsList = friendsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, st) => _createGroupStatePanel(
+        context,
+        title: socialListErrorMessage(l10n, e),
+        icon: Icons.cloud_off_outlined,
+        actionLabel: l10n.commonRetry,
+        onAction: () => ref.invalidate(createGroupFriendsProvider),
+      ),
+      data: (ids) {
+        final availableIds = widget.requiredMemberProfileId == null
+            ? ids
+            : ids
+                  .where((id) => id != widget.requiredMemberProfileId)
+                  .toList(growable: false);
+        if (availableIds.isEmpty) {
+          return _createGroupStatePanel(
+            context,
+            title: l10n.socialFriendsEmpty,
+            message: l10n.chatCreateGroupFriendsEmptyHint,
+            icon: Icons.people_outline,
+          );
+        }
+        final query = _searchController.text.trim().toLowerCase();
+        final searchQuery = query.startsWith('@') ? query.substring(1) : query;
+        var visibleIds = availableIds;
+        if (searchQuery.isNotEmpty) {
+          final profiles = {
+            for (final profileId in availableIds)
+              profileId: ref.watch(profileProvider(profileId)),
+          };
+          final failedProfileIds = profiles.entries
+              .where((entry) => entry.value.hasError)
+              .map((entry) => entry.key)
+              .toList(growable: false);
+          if (failedProfileIds.isNotEmpty) {
+            final error = profiles[failedProfileIds.first]!.error!;
+            return _createGroupStatePanel(
+              context,
+              title: socialListErrorMessage(l10n, error),
+              icon: Icons.cloud_off_outlined,
+              actionLabel: l10n.commonRetry,
+              onAction: () {
+                for (final profileId in failedProfileIds) {
+                  ref.invalidate(profileProvider(profileId));
+                }
+              },
+            );
+          }
+          if (profiles.values.any(
+            (profile) => profile.isLoading && !profile.hasValue,
+          )) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          visibleIds = availableIds
+              .where((profileId) {
+                final profile = profiles[profileId]?.valueOrNull;
+                final displayName = profile?.displayName.toLowerCase();
+                final handle = profile?.handle
+                    .replaceFirst(RegExp(r'^@'), '')
+                    .toLowerCase();
+                return (displayName?.contains(searchQuery) ?? false) ||
+                    (handle?.contains(searchQuery) ?? false);
+              })
+              .toList(growable: false);
+          if (visibleIds.isEmpty) {
+            return _createGroupStatePanel(
+              context,
+              title: l10n.socialSearchEmpty,
+              message: l10n.socialSearchEmptyHint,
+              icon: Icons.search_off,
+            );
+          }
+        }
+        return ListView.builder(
+          itemCount: visibleIds.length,
+          itemBuilder: (context, index) {
+            final profileId = visibleIds[index];
+            final profileAsync = ref.watch(profileProvider(profileId));
+            final profile = profileAsync.valueOrNull;
+            final label = profile?.displayName ?? profile?.handle ?? profileId;
+            final selected = _selected.contains(profileId);
+            return CheckboxListTile(
+              key: CreateGroupSheet.memberTileKey(profileId),
+              value: selected,
+              onChanged: _submitting || _inviteRetryChatId != null
+                  ? null
+                  : (next) {
+                      setState(() {
+                        _createAttempt = null;
+                        if (next ?? false) {
+                          _selected.add(profileId);
+                        } else {
+                          _selected.remove(profileId);
+                        }
+                      });
+                    },
+              title: Text(label),
+              subtitle: profile != null ? Text(profile.handle) : null,
+              secondary: CircleAvatar(
+                child: Text(label.isNotEmpty ? label[0].toUpperCase() : '?'),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+            );
+          },
+        );
+      },
+    );
+    final footer = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_selected.length < kMinGroupInvitees)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              l10n.chatCreateGroupMinMembers,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+        if (narrow)
+          SizedBox(width: double.infinity, child: submitButton)
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                key: CreateGroupSheet.cancelKey,
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.commonCancel),
+              ),
+              const SizedBox(width: 8),
+              submitButton,
+            ],
+          ),
+      ],
+    );
+
     return SafeArea(
       key: CreateGroupSheet.sheetKey,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final constrainedHeight = constraints.maxHeight < 560;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Text(
-                    l10n.chatCreateGroupTitle,
-                    style: theme.textTheme.titleLarge,
+                titleRow,
+                const SizedBox(height: 12),
+                if (constrainedHeight) ...[
+                  Expanded(
+                    flex: 2,
+                    child: SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      child: formFields,
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: CreateGroupSheet.closeKey,
-                  tooltip: l10n.commonCancel,
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              key: CreateGroupSheet.nameFieldKey,
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: l10n.chatCreateGroupNameLabel,
-                hintText: l10n.chatCreateGroupNameHint,
-              ),
-              textCapitalization: TextCapitalization.sentences,
-              enabled: !_submitting && _inviteRetryChatId == null,
-              onChanged: (_) => setState(() => _createAttempt = null),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              l10n.chatCreateGroupMembers,
-              style: theme.textTheme.titleSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.chatCreateGroupMembersHint,
-              style: theme.textTheme.bodySmall,
-            ),
-            if (widget.requiredMemberProfileId case final requiredId?)
-              _requiredMemberTile(requiredId),
-            const SizedBox(height: 8),
-            TextField(
-              key: CreateGroupSheet.searchFieldKey,
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: l10n.socialSearchHint,
-                prefixIcon: const Icon(Icons.search),
-              ),
-              textInputAction: TextInputAction.search,
-              enabled: !_submitting && _inviteRetryChatId == null,
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: friendsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => _createGroupStatePanel(
-                  context,
-                  title: socialListErrorMessage(l10n, e),
-                  icon: Icons.cloud_off_outlined,
-                  actionLabel: l10n.commonRetry,
-                  onAction: () => ref.invalidate(createGroupFriendsProvider),
-                ),
-                data: (ids) {
-                  final availableIds = widget.requiredMemberProfileId == null
-                      ? ids
-                      : ids
-                            .where((id) => id != widget.requiredMemberProfileId)
-                            .toList(growable: false);
-                  if (availableIds.isEmpty) {
-                    return _createGroupStatePanel(
-                      context,
-                      title: l10n.socialFriendsEmpty,
-                      message: l10n.chatCreateGroupFriendsEmptyHint,
-                      icon: Icons.people_outline,
-                    );
-                  }
-                  final query = _searchController.text.trim().toLowerCase();
-                  final searchQuery = query.startsWith('@')
-                      ? query.substring(1)
-                      : query;
-                  var visibleIds = availableIds;
-                  if (searchQuery.isNotEmpty) {
-                    final profiles = {
-                      for (final profileId in availableIds)
-                        profileId: ref.watch(profileProvider(profileId)),
-                    };
-                    final failedProfileIds = profiles.entries
-                        .where((entry) => entry.value.hasError)
-                        .map((entry) => entry.key)
-                        .toList(growable: false);
-                    if (failedProfileIds.isNotEmpty) {
-                      final error = profiles[failedProfileIds.first]!.error!;
-                      return _createGroupStatePanel(
-                        context,
-                        title: socialListErrorMessage(l10n, error),
-                        icon: Icons.cloud_off_outlined,
-                        actionLabel: l10n.commonRetry,
-                        onAction: () {
-                          for (final profileId in failedProfileIds) {
-                            ref.invalidate(profileProvider(profileId));
-                          }
-                        },
-                      );
-                    }
-                    if (profiles.values.any(
-                      (profile) => profile.isLoading && !profile.hasValue,
-                    )) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    visibleIds = availableIds
-                        .where((profileId) {
-                          final profile = profiles[profileId]?.valueOrNull;
-                          final displayName = profile?.displayName
-                              .toLowerCase();
-                          final handle = profile?.handle
-                              .replaceFirst(RegExp(r'^@'), '')
-                              .toLowerCase();
-                          return (displayName?.contains(searchQuery) ??
-                                  false) ||
-                              (handle?.contains(searchQuery) ?? false);
-                        })
-                        .toList(growable: false);
-                    if (visibleIds.isEmpty) {
-                      return _createGroupStatePanel(
-                        context,
-                        title: l10n.socialSearchEmpty,
-                        message: l10n.socialSearchEmptyHint,
-                        icon: Icons.search_off,
-                      );
-                    }
-                  }
-                  return ListView.builder(
-                    itemCount: visibleIds.length,
-                    itemBuilder: (context, index) {
-                      final profileId = visibleIds[index];
-                      final profileAsync = ref.watch(
-                        profileProvider(profileId),
-                      );
-                      final profile = profileAsync.valueOrNull;
-                      final label =
-                          profile?.displayName ?? profile?.handle ?? profileId;
-                      final selected = _selected.contains(profileId);
-                      return CheckboxListTile(
-                        key: CreateGroupSheet.memberTileKey(profileId),
-                        value: selected,
-                        onChanged: _submitting || _inviteRetryChatId != null
-                            ? null
-                            : (next) {
-                                setState(() {
-                                  _createAttempt = null;
-                                  if (next ?? false) {
-                                    _selected.add(profileId);
-                                  } else {
-                                    _selected.remove(profileId);
-                                  }
-                                });
-                              },
-                        title: Text(label),
-                        subtitle: profile != null ? Text(profile.handle) : null,
-                        secondary: CircleAvatar(
-                          child: Text(
-                            label.isNotEmpty ? label[0].toUpperCase() : '?',
-                          ),
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            if (_selected.length < kMinGroupInvitees)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  l10n.chatCreateGroupMinMembers,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-            if (narrow)
-              SizedBox(width: double.infinity, child: submitButton)
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    key: CreateGroupSheet.cancelKey,
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(l10n.commonCancel),
-                  ),
-                  const SizedBox(width: 8),
-                  submitButton,
+                  Expanded(flex: 1, child: friendsList),
+                ] else ...[
+                  formFields,
+                  Expanded(child: friendsList),
                 ],
-              ),
-          ],
+                footer,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -618,36 +633,50 @@ Widget _createGroupStatePanel(
   return Semantics(
     container: true,
     label: title,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
-              const SizedBox(height: 4),
-            ],
-            ExcludeSemantics(
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleSmall,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final minHeight = constraints.maxHeight > 16
+            ? constraints.maxHeight - 16
+            : 0.0;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(8),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  ExcludeSemantics(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                  if (message != null && message.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (actionLabel != null && onAction != null)
+                    TextButton(onPressed: onAction, child: Text(actionLabel)),
+                ],
               ),
             ),
-            if (message != null && message.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-            if (actionLabel != null && onAction != null)
-              TextButton(onPressed: onAction, child: Text(actionLabel)),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     ),
   );
 }

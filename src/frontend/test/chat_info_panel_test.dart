@@ -153,6 +153,11 @@ void main() {
       find.byKey(CreateGroupSheet.memberTileKey('dm-peer')),
       findsOneWidget,
     );
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Opening CreateGroup from Chat Info must fit its modal layout.',
+    );
   });
 
   testWidgets('DM Chat Info ignores a peer remembered for another session', (
@@ -199,6 +204,10 @@ void main() {
                 jsonEncode(channelListResponse(chatId)),
                 200,
               );
+            }
+            if (request.method == 'GET' &&
+                request.url.path == '/api/v1/chats/$chatId/pinned-messages') {
+              return http.Response('{}', 200);
             }
             if (request.url.path == '/api/v1/chats/$chatId/leave') {
               leaveCalls++;
@@ -248,6 +257,10 @@ void main() {
         client: MockClient((request) async {
           if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
             return http.Response(jsonEncode(channelListResponse(chatId)), 200);
+          }
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/chats/$chatId/pinned-messages') {
+            return http.Response('{}', 200);
           }
           if (request.url.path == '/api/v1/chats/$chatId/leave') {
             leaveCalls++;
