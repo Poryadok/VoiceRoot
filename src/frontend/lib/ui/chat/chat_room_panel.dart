@@ -2210,8 +2210,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         !_isCurrentChat(chatId)) {
       return;
     }
-    final payload =
-        item.payload.deepCopy() as messaging_pb.ScheduledMessagePayload;
+    final payload = item.payload.deepCopy();
     payload.content = edit.$1;
     await _runScheduledRowAction(
       item.id,

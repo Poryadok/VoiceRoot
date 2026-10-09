@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -1246,8 +1245,7 @@ MockClient _profilePresentationClient({
             'theme': 'dark',
             'is_primary': true,
             'verification_type': verificationType,
-            if (profileCustomStatus != null)
-              'custom_status': profileCustomStatus,
+            'custom_status': ?profileCustomStatus,
           },
         }),
         200,
@@ -1259,8 +1257,7 @@ MockClient _profilePresentationClient({
           'presenceStatus': {
             'profileId': profileId,
             'status': 'online',
-            if (visibleCustomStatus != null)
-              'customStatus': visibleCustomStatus,
+            'customStatus': ?visibleCustomStatus,
           },
         }),
         200,
@@ -1287,7 +1284,7 @@ MockClient _profilePresentationClient({
               for (final contactProfileId in contactProfileIds)
                 {'profile_id': contactProfileId, 'source': 'manual'},
             ],
-            if (nextContactCursor != null) 'next_cursor': nextContactCursor,
+            'next_cursor': ?nextContactCursor,
           };
       return http.Response(jsonEncode({'contact_list': page}), 200);
     }

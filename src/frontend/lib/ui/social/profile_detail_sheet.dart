@@ -263,8 +263,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                               error: (error, stackTrace) =>
                                   const SizedBox.shrink(),
                               data: (rating) {
-                                if (rating == null)
+                                if (rating == null) {
                                   return const SizedBox.shrink();
+                                }
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
@@ -324,8 +325,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                     loading: () => const SizedBox.shrink(),
                     error: (error, stackTrace) => const SizedBox.shrink(),
                     data: (mmProfile) {
-                      if (mmProfile.entries.isEmpty)
+                      if (mmProfile.entries.isEmpty) {
                         return const SizedBox.shrink();
+                      }
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [

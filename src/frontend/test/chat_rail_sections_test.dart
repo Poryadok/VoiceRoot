@@ -6,7 +6,6 @@ import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
-import 'package:voice_frontend/state/folder_pin_providers.dart';
 import 'package:voice_frontend/ui/shell/chat_rail_sections.dart';
 
 import 'support/fake_voice_api_clients.dart';
