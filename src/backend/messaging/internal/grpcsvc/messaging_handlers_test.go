@@ -62,7 +62,7 @@ func TestGetChatListMetadataRejectsOversizedChatRefBatchBeforeLookups(t *testing
 	for i := range refs {
 		refs[i] = &chatv1.ChatRef{Id: chatID, Type: &groupType}
 	}
-	resp, err := svc.GetChatListMetadata(withProfileCtx(context.Background(), uuid.New(), uuid.New()), &messagingv1.GetChatListMetadataRequest{Chats: refs})
+	resp, err := svc.GetChatListMetadata(incomingProfileCtx(context.Background(), uuid.New(), uuid.New()), &messagingv1.GetChatListMetadataRequest{Chats: refs})
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.Nil(t, resp, "over-budget requests cannot return partial metadata")
 	require.Zero(t, guard.memberCalls, "the cap is checked before per-chat membership/type/store work")
