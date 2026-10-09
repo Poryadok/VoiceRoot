@@ -13,7 +13,7 @@ import (
 	"voice/backend/voice/internal/livekit"
 	voicestore "voice/backend/voice/internal/store"
 
-	spacev1 "voice.app/space/v1"
+	spacev1 "voice.app/voice/space/v1"
 	callsv1 "voice.app/voice/calls/v1"
 )
 
