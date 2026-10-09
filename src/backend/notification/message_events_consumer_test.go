@@ -56,11 +56,6 @@ func (r *recordingMessageFCM) Send(_ context.Context, recipient uuid.UUID, _ sto
 	return nil
 }
 
-type failOnceMessagePolicy struct {
-	calls atomic.Int32
-	err   error
-}
-
 type failOnMessagePolicyCall struct {
 	calls  atomic.Int32
 	failAt int32
@@ -77,13 +72,6 @@ func (p *failOnceMessagePresence) IsOnline(context.Context, uuid.UUID) (bool, er
 		return false, p.err
 	}
 	return false, nil
-}
-
-func (p *failOnceMessagePolicy) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
-	if p.calls.Add(1) == 1 {
-		return delivery.SettingsSnapshot{}, delivery.QuietHoursSnapshot{}, p.err
-	}
-	return delivery.PermissivePolicyLoader{}.LoadPolicy(ctx, profileID, chatID, typ, at)
 }
 
 func (p *failOnMessagePolicyCall) LoadPolicy(ctx context.Context, profileID uuid.UUID, chatID string, typ delivery.NotificationType, at time.Time) (delivery.SettingsSnapshot, delivery.QuietHoursSnapshot, error) {
