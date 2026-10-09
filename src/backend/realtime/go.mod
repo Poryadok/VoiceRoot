@@ -47,6 +47,7 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	voice.app/voice/gameintegration v0.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
@@ -59,6 +60,8 @@ replace voice.app/voice/common => ../user/pb/voice/common
 replace voice.app/voice/events => ../messaging/pb/voice/events
 
 replace voice.app/voice/messaging => ../messaging/pb/voice/messaging
+
+replace voice.app/voice/gameintegration => ../user/pb/voice/gameintegration
 
 replace voice.app/voice/social => ../user/pb/voice/social
 
