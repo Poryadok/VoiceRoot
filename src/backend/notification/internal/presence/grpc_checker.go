@@ -44,7 +44,7 @@ type GRPCChecker struct {
 type UnavailableChecker struct{}
 
 func (UnavailableChecker) IsOnline(context.Context, uuid.UUID) (bool, error) {
-	return false, errors.New("Notification routing presence authority is not configured")
+	return false, errors.New("notification routing presence authority is not configured")
 }
 
 func (c *GRPCChecker) Close() error {
@@ -163,7 +163,7 @@ func loadNotificationSigningKeys(dir string) (map[string]*rsa.PrivateKey, error)
 	}
 	info, err := os.Stat(canonical)
 	if err != nil || !info.IsDir() {
-		return nil, errors.New("Notification principal key directory is invalid")
+		return nil, errors.New("notification principal key directory is invalid")
 	}
 	entries, err := os.ReadDir(canonical)
 	if err != nil {
@@ -175,7 +175,7 @@ func loadNotificationSigningKeys(dir string) (map[string]*rsa.PrivateKey, error)
 			continue
 		}
 		if filepath.Ext(entry.Name()) != ".pem" {
-			return nil, errors.New("Notification principal key files must use .pem extension")
+			return nil, errors.New("notification principal key files must use .pem extension")
 		}
 		kid := strings.TrimSuffix(entry.Name(), ".pem")
 		if !notificationKIDPattern.MatchString(kid) {
