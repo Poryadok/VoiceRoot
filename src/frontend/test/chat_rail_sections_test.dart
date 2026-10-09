@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -30,7 +31,12 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [quickAccessListProvider.overrideWith((_) async => qaData)],
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          quickAccessListProvider.overrideWith((_) async => qaData),
+        ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
+import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
@@ -70,6 +71,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
           chatFoldersProvider.overrideWith(
             (_) async => const FolderListData(folders: []),
           ),
