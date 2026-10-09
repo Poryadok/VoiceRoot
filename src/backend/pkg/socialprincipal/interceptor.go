@@ -46,6 +46,7 @@ func AllowsMethod(target, method string) bool {
 		switch method {
 		case "/voice.user.v1.UserService/GetPrivacySettings",
 			"/voice.user.v1.UserService/GetProfile",
+			"/voice.user.v1.UserService/GetProfiles",
 			"/voice.user.v1.UserService/ListProfileIDsForAccount":
 			return true
 		}

@@ -122,7 +122,7 @@ func TestProtectedSocialGetProfilesIsRequestBoundAndCapped(t *testing.T) {
 	require.NoError(t, err)
 	identity := principal.Principal{
 		Kind: "service", Issuer: "social", Subject: "service:social",
-		Audience: "user", RPC: socialprincipal.Method("user"), RequestHash: hash,
+		Audience: "user", RPC: userv1.UserService_GetProfiles_FullMethodName, RequestHash: hash,
 	}
 	resp, err := svc.GetProfiles(principal.WithVerified(context.Background(), identity), emptyRequest)
 	require.NoError(t, err, "a correctly request-bound Social principal can use the existing batch profile lookup")
