@@ -382,6 +382,10 @@ def verify_adopted_binding(base,state,binding):
     import root_cli
     import guard
     base=Path(base)
+    if state.get('code_capture')!=binding and (base/'recovery-v9-revision.json').exists():
+        import preserved_upload
+        predecessor,_=preserved_upload.verify_helper_continuity(base,state,binding)
+        return verify_adopted_binding(base,state,predecessor)
     if state.get('repair_adoption') is None:
         if state.get('code_capture')!=binding:raise Blocked('rollout_operation_code_changed')
         return
@@ -454,6 +458,9 @@ def install_repair(code,installed,kube,version='v7'):
             raise Blocked('bridge_upgrade_directory_untrusted')
     inbox=installed/'inbox';inbox.chmod(0o700)
     try:
+        if version=='v9':
+            import preserved_upload
+            return preserved_upload.install_helper(code,installed,kube)
         if version=='v8':
             import v8_upgrade
             return v8_upgrade.install(code,installed,kube)

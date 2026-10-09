@@ -209,7 +209,16 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         save(base/'checkpoint.json',state);raise
 
 
-def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract):
+def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None):
+    def current_deadline():
+        if authorization_deadline is None:return
+        now=dt.datetime.now(dt.timezone.utc)
+        if (not isinstance(authorization_deadline,dt.datetime) or authorization_deadline.tzinfo is None
+            or not now<authorization_deadline<=now+dt.timedelta(seconds=600)
+            or 'nats_contract_expires_at' not in state
+            or authorization_deadline>dt.datetime.fromisoformat(state['nats_contract_expires_at'])):
+            raise Blocked('preserved_upload_authorization_expired')
+    current_deadline()
     migration_recovery=(state['phase']=='NATS_CONTRACT_MIGRATION' and state['status']=='BLOCKED'
         and state.get('custody',{}).get('verified') is True and 'nats_contract' in state
         and state['target']['mode']=='images-only'
@@ -251,6 +260,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         expected=state.get('migration_completed_metadata') if renderer_recovery else state['migration_secret_metadata']
         if expected is None or migrations.preflight(kube,state['migrations'],state['target']['mode'])!=expected:
             raise Blocked('rollout_database_secret_changed')
+    current_deadline()
     state['phase']='DATABASE_MIGRATIONS';save(Path(base)/'checkpoint.json',state)
     try:
         if renderer_recovery:
@@ -286,7 +296,28 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             state['phase']='RENDERER_TEMPLATE';save(Path(base)/'checkpoint.json',state)
             renderer_root.apply_paused(stage,state['renderer_authority'])
             state['renderer_applied']=True;save(Path(base)/'checkpoint.json',state)
+        current_deadline()
         stage.prepared()
+        row=stage.marker;claim=stage.final_claim;pv=stage.final_pv
+        receipt={'schema':'nats-rollout-preservation-v1','operation':state['operation'],
+            'namespace_uid':stage.expected['namespace_uid'],
+            'marker':{'uid':row['metadata']['uid'],'resourceVersion':row['metadata']['resourceVersion'],
+                      **{k:row['data'][k] for k in ('generation','previousGeneration','dataPVC')}},
+            'pvc':{'name':claim['metadata']['name'],'uid':claim['metadata']['uid'],'pv_name':claim['spec']['volumeName']},
+            'pv':{'uid':pv['metadata']['uid'],'kind':next(k for k in ('local','hostPath') if k in pv['spec']),
+                  'path':str(stage.final_path),'node':'pmdebook'},
+            'target':state['target'],
+            'backup':{'archive_sha256':manifest['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
+                      'census_sha256':cut['census_sha256'],'off_node_verified':True},
+            'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()}
+        if authorization_deadline is not None:
+            current_deadline()
+            receipt['expires_at']=min(authorization_deadline,dt.datetime.fromisoformat(state['nats_contract_expires_at'])).isoformat()
+        save(Path(base)/'apply-authorization.json',receipt)
+        state['authorization']=copy.deepcopy(receipt)
+        state['context']=context(stage);state['phase']='PAUSED_APPLY';state['status']='WAITING'
+        save(Path(base)/'checkpoint.json',state)
+        return receipt
     except Exception as error:
         state['status']='BLOCKED';state['fence_status']='UNKNOWN'
         state['error']=safe_error(error)
@@ -294,23 +325,6 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             if stage.refence().get('verified') is True:state['fence_status']='VERIFIED'
         except Exception:pass
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
-    row=stage.marker;claim=stage.final_claim;pv=stage.final_pv
-    receipt={'schema':'nats-rollout-preservation-v1','operation':state['operation'],
-        'namespace_uid':stage.expected['namespace_uid'],
-        'marker':{'uid':row['metadata']['uid'],'resourceVersion':row['metadata']['resourceVersion'],
-                  **{k:row['data'][k] for k in ('generation','previousGeneration','dataPVC')}},
-        'pvc':{'name':claim['metadata']['name'],'uid':claim['metadata']['uid'],'pv_name':claim['spec']['volumeName']},
-        'pv':{'uid':pv['metadata']['uid'],'kind':next(k for k in ('local','hostPath') if k in pv['spec']),
-              'path':str(stage.final_path),'node':'pmdebook'},
-        'target':state['target'],
-        'backup':{'archive_sha256':manifest['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-                  'census_sha256':cut['census_sha256'],'off_node_verified':True},
-        'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()}
-    save(Path(base)/'apply-authorization.json',receipt)
-    state['authorization']=copy.deepcopy(receipt)
-    state['context']=context(stage);state['phase']='PAUSED_APPLY';state['status']='WAITING'
-    save(Path(base)/'checkpoint.json',state)
-    return receipt
 
 
 def finish(kube,base,state,receipt,claim_rv,contract):

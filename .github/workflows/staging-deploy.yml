@@ -3,6 +3,11 @@ name: Staging deploy
 on:
   workflow_call:
     inputs:
+      cipher_upload_operation:
+        description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
+        required: false
+        type: string
+        default: ""
       cold_backup_operation:
         description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
         required: false
@@ -52,6 +57,11 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      cipher_upload_operation:
+        description: Exact reviewed awaiting-off-node operation; mutually exclusive with cold backup and rollback
+        required: false
+        type: string
+        default: ""
       cold_backup_operation:
         description: Exact reviewed paused cold-backup operation; mutually exclusive with rollback
         required: false
@@ -254,12 +264,22 @@ jobs:
 
       - uses: azure/setup-kubectl@v5
 
+      - name: Acquire preserved historical target as data before opening the upload window
+        if: inputs.cipher_upload_operation != '' || inputs.cold_backup_operation != ''
+        env:
+          STAGING_SOURCE_SHA: 73ca52699ddf6a9182e3407d5bbdedbc29c06dee
+        shell: bash
+        # Helper execution uses the separately admitted installed root code.
+        # The existing bounded downloader supplies only guard-validated target data.
+        run: *download_staging_source
+
       - name: Prepare cold backup and isolated proof using installed root bridge
         id: preservation
         env:
           VOICE_NATS_ROLLOUT_OPERATION: ""
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
           ROLLOUT_COLD_BACKUP_OPERATION: ${{ inputs.cold_backup_operation }}
+          ROLLOUT_CIPHER_UPLOAD_OPERATION: ${{ inputs.cipher_upload_operation }}
           VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot
           VOICE_IMAGE_TAG: ${{ inputs.image_tag }}
           DEPLOY_MODE: ${{ inputs.deploy_mode }}
@@ -318,17 +338,22 @@ jobs:
           if action=='--bridge-prepare':
               prior=os.environ.get('ROLLOUT_ROLLBACK_OPERATION','')
               cold=os.environ.get('ROLLOUT_COLD_BACKUP_OPERATION','')
+              upload=os.environ.get('ROLLOUT_CIPHER_UPLOAD_OPERATION','')
               mode=os.environ['DEPLOY_MODE']
               changed=set(filter(None,os.environ['CHANGED_SERVICES'].split(',')))
-              if cold:
-                  if (cold!='3340764a7d24' or prior or mode!='images-only' or changed!={'story'}
+              if cold or upload:
+                  if ((cold or upload)!='3340764a7d24' or prior or (cold and upload) or mode!='images-only' or changed!={'story'}
                       or os.environ['VOICE_IMAGE_TAG']!=os.environ.get('GITHUB_SHA')):
                       raise SystemExit('NATS_ROLLOUT=RECOVERY_INPUT_INVALID')
               if mode=='app-only' and os.environ.get('ROLLOUT_NEEDS_FULL_ROLLOUT')=='false' and changed and changed<={'web','admin','developer-portal'}:mode='images-only'
-              arguments=(['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
+              arguments=(['resume-cipher-upload',upload,os.environ['GITHUB_RUN_ID']] if upload else
+                  ['resume-cold-backup',cold,os.environ['GITHUB_RUN_ID']] if cold else
                   ['prepare-rollback',prior,os.environ['GITHUB_RUN_ID']] if prior else
                   ['prepare',mode,os.environ['CHANGED_SERVICES'],os.environ['VOICE_IMAGE_TAG'],os.environ['GITHUB_RUN_ID']])
-          elif action=='--bridge-authorize':arguments=['authorize',op,os.environ['ROLLOUT_ARTIFACT_ID']]
+          elif action=='--bridge-authorize':
+              upload_nonce=os.environ.get('ROLLOUT_UPLOAD_NONCE','')
+              arguments=(['authorize-preserved-upload',op,os.environ['ROLLOUT_ARTIFACT_ID'],upload_nonce,os.environ['GITHUB_RUN_ID']]
+                  if upload_nonce else ['authorize',op,os.environ['ROLLOUT_ARTIFACT_ID']])
           elif action=='--bridge-finish':arguments=['finish',op,os.environ['ROLLOUT_CLAIM_RV']]
           elif action=='--bridge-status':arguments=['status',op]
           elif bridge_action:raise SystemExit('NATS_ROLLOUT=ACTION_INVALID')
@@ -349,6 +374,7 @@ jobs:
 
       - name: Verify complete off-node ciphertext readback and authorize paused apply
         env:
+          ROLLOUT_UPLOAD_NONCE: ${{ steps.preservation.outputs.upload_nonce }}
           VOICE_NATS_ROLLOUT_OPERATION: ${{ steps.preservation.outputs.operation }}
           ROLLOUT_ROLLBACK_OPERATION: ${{ inputs.rollback_operation }}
           VOICE_IMAGE_REGISTRY: ghcr.io/poryadok/voiceroot

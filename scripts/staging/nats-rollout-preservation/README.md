@@ -460,3 +460,51 @@ unverified cleanup cannot return an accepted cut. Interrupted capture or partial
 outputs cannot be replayed. Completed encrypted output recovery requires the
 same fresh execution nonce/run/head and operation binding. Ordinary encrypted
 off-node readback, paused authorization, apply and release guards remain required.
+
+The ciphertext-only export directory is explicitly root:pmd/0750 after creation,
+including under the bridge service umask0077. Its ciphertext remains root:pmd/0440;
+private plaintext, keys and checkpoint modes are not broadened. Upload failure
+after AWAITING_OFF_NODE cannot authorize a new capture or refresh the saved cut.
+
+## Preserved ciphertext upload recovery
+
+V9 provides a closed continuation for operation3340764a7d24 in its recorded
+WAITING/AWAITING_OFF_NODE/VERIFIED state. The advanced-state installer preserves
+checkpoint bytes and inode, the original V8 code, keys, policy, witness records,
+ciphertext, cut and all original journals/responses. It cannot reset progressed
+state or admit an unknown unfinished operation. Installation does not repair the
+export directory or authorize deployment.
+
+The `cipher_upload_operation` workflow input is separate from cold-backup and
+rollback. Current helper source is admitted first. The historical73ca target
+workspace is acquired as bounded data before starting the fresh upload window;
+it is never substituted for current helper code or executed as an old helper.
+`resume-cipher-upload` binds a fresh actual workflow run/attempt/head/nonce to
+the immutable original ciphertext/run37900273078/cut. Under the global lock,
+root verifies original checkpoint/journal/response and ciphertext custody,
+repairs only the owned export directory through its verified FD to0750, and
+creates an exclusive immutable upload record. It performs no capture, encryption,
+target recompilation or checkpoint rewrite.
+
+`authorize-preserved-upload` requires that explicit upload nonce and fresh
+dispatcher authority. Actual GitHub artifact identity and the entire downloaded
+ZIP ciphertext are compared with the original private ciphertext. The dedicated
+route cannot fall back to ordinary artifact verification. It rechecks source,
+actor and state authority after readback. Its deadline is the minimum of the
+fresh600-second window and the original four-hour proof expiry; no timestamp or
+original proof is renewed. Checks occur before authorization mutation, before
+prepared state and before receipt creation; the resulting receipt is clamped
+to that deadline. Ordinary authorization retains its existing deadline policy.
+Before transaction mutation, rejection preserves the original checkpoint. After
+mutation begins, failures retain truthful progressed BLOCKED/refenced state.
+Expired original proof leaves the stage fenced and requires a separately reviewed
+invariant-bound fresh-proof disposition, never a blind retry or recapture.
+
+Scoped verification covers actualUID1000 ciphertext access under umask0077,
+root-isolated immutable record/replay and full ZIP comparison, actual client to
+Actions/dispatcher composition with explicit external adapters, workflow/guard
+historical-data ordering, ordinary transaction controls and pre/post-mutation
+deadline rejection. The captured V8-to-V9 installer fixture verifies preservation,
+partial rename retry, unknown journal and original execution/cipher drift vetoes.
+Synthetic data, mocked Kubernetes/API boundaries and fixture capabilities do not
+establish live backup, apply, rollback or full staging acceptance.
