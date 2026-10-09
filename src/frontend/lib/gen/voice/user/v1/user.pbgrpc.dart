@@ -215,7 +215,7 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
-  /// Internal Messaging decision for an owned scheduled DM dispatch.
+  /// Internal Messaging decision for an owned scheduled dispatch.
   /// Exposed only on the dedicated authenticated Messaging principal listener.
   $grpc.ResponseFuture<$0.GetScheduledMessageDispatchPresenceResponse>
       getScheduledMessageDispatchPresence(
