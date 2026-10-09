@@ -622,14 +622,31 @@ void main() {
         matching: find.byType(TextField),
       );
       await tester.enterText(composer, 'Keep this scheduled draft');
+      final chatRoomProviderContainer = ProviderScope.containerOf(
+        tester.element(find.byType(ChatRoomPanel)),
+        listen: false,
+      );
+      final dmReadyBeforeLongPress =
+          chatRoomProviderContainer
+              .read(chatListProvider)
+              .valueOrNull
+              ?.items
+              .any(
+                (item) =>
+                    item.chatId == 'chat-abc' &&
+                    item.chat.type == 'CHAT_TYPE_DM',
+              ) ??
+          false;
+      expect(
+        dmReadyBeforeLongPress,
+        isTrue,
+        reason: 'DM chat state is ready before scheduled-send menu trigger',
+      );
       await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);
       final selectedChatIsDm =
-          ProviderScope.containerOf(
-                tester.element(find.byType(ChatRoomPanel)),
-                listen: false,
-              )
+          chatRoomProviderContainer
               .read(chatListProvider)
               .valueOrNull
               ?.items
