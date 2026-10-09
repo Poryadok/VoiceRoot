@@ -54,6 +54,13 @@ class Actions:
         operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback') else request.get('operation')
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
+        if request['action']=='resume-cipher-upload':
+            import preserved_upload
+            _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
+            record,_,_=preserved_upload.load(base,request['nonce'],state,continuity)
+            if record['upload_execution']['dispatcher_run_id']!=request['run_id']:
+                raise Blocked('preserved_upload_replay_run_changed')
+            return preserved_upload.result(base,state,record)
         if request['action']=='finish' and state.get('status')=='PASS':
             self._active_release(state)
             return summary(state)
@@ -222,7 +229,8 @@ class Actions:
             'run_id':execution['dispatcher_run_id'],'head_sha':execution['head_sha'],'created_at':dt.datetime.now(dt.timezone.utc).isoformat()}
         gid=grp.getgrnam('pmd').gr_gid;export=base/'export';export.mkdir(mode=0o750)
         shutil.copyfile(base/'rollout-backup.cms',export/'rollout-backup.cms')
-        os.chown(export,0,gid);os.chown(export/'rollout-backup.cms',0,gid);(export/'rollout-backup.cms').chmod(0o440)
+        os.chown(export,0,gid);export.chmod(0o750)
+        os.chown(export/'rollout-backup.cms',0,gid);(export/'rollout-backup.cms').chmod(0o440)
         os.chown(base,0,gid);base.chmod(0o750)
         save(base/'checkpoint.json',state)
         return self.copy_result(base,state)
@@ -257,9 +265,45 @@ class Actions:
         verify_execution()
         return self._encrypt(base,state,execution)
 
+    def _resume_cipher_upload(self,request):
+        import preserved_upload
+        if request['operation']!=preserved_upload.OPERATION:raise Blocked('preserved_upload_operation_invalid')
+        base,state=self.state(request['operation'])
+        _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
+        rows=list(guard.ROOT.glob('rollout-*'))
+        if len(rows)>1000:raise Blocked('bridge_operation_inventory_bound')
+        for path in rows:
+            if path==base or root_cli.rollout_directory_kind(path)=='capture':continue
+            if private_json(path/'checkpoint.json').get('status') not in ('PASS','ROLLED_BACK'):
+                raise Blocked('preserved_upload_other_operation_active')
+        source_run,execution=self._dispatcher(request);execution['nonce']=request['nonce']
+        workspace=INSTALLED/'sources'/('upload-'+request['nonce']);workspace.mkdir(mode=0o700)
+        current=source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace)
+        for relative,wanted in self.binding.items():
+            if Path(relative).name in ('kernel','bootstrap-renewer'):continue
+            if current['source_files'].get('scripts/staging/'+relative)!=wanted:
+                raise Blocked('preserved_upload_current_helper_source_changed')
+        source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
+        stage=transaction.reconstruct(Kube(),state,lambda event:None)
+        stage.owned_marker();stage.verify_final_storage()
+        marker=Kube().get('configmap','voice-nats-generation')
+        if marker['data'].get('phase')!='rollout-capturing' or marker['metadata']['resourceVersion']!='3073024':
+            raise Blocked('preserved_upload_fence_changed')
+        checkpoint_before=preserved_upload.private_read(base/'checkpoint.json')
+        record=preserved_upload.prepare(base,state,execution,INSTALLED,continuity,
+            {k:v for k,v in current.items() if k!='source_files'})
+        stage.owned_marker();stage.verify_final_storage()
+        source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
+        if (preserved_upload.private_read(base/'checkpoint.json')!=checkpoint_before
+            or Kube().get('configmap','voice-nats-generation')!=marker):
+            raise Blocked('preserved_upload_final_integrity_changed')
+        preserved_upload.verify_deadline(record,dt.datetime.now(dt.timezone.utc))
+        return preserved_upload.result(base,state,record)
+
     def execute(self,request):
         if request['action']=='prepare':return self._prepare(request)
         if request['action']=='resume-cold-backup':return self._resume_cold_backup(request)
+        if request['action']=='resume-cipher-upload':return self._resume_cipher_upload(request)
         if request['action']=='prepare-rollback':
             base,previous=self.state(request['operation'])
             active=private_json(INSTALLED/'active-release.json')
@@ -269,13 +313,34 @@ class Actions:
             return self._prepare({**request,'mode':'images-only','changed_services':changed},previous)
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
-        if request['action']=='authorize':
-            receipt=github_custody.verify_artifact(request['token'],state['cipher_binding'],base/'rollout-backup.cms',request['artifact_id'])
-            state['custody']=receipt;save(base/'checkpoint.json',state)
+        if request['action'] in ('authorize','authorize-preserved-upload'):
+            upload_record=None
+            if request['action']=='authorize-preserved-upload':
+                import preserved_upload
+                _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
+                _,execution=self._dispatcher(request);execution['nonce']=request['upload_nonce']
+                source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
+                receipt=preserved_upload.verify_artifact(request['token'],base,state,continuity,
+                    request['upload_nonce'],execution,request['artifact_id'])
+                upload_record,_,_=preserved_upload.load(base,request['upload_nonce'],state,continuity,execution=execution)
+            else:
+                # A revised helper cannot route preserved output through the old binding.
+                if (base/'cipher-upload').exists():raise Blocked('preserved_upload_explicit_authorization_required')
+                receipt=github_custody.verify_artifact(request['token'],state['cipher_binding'],base/'rollout-backup.cms',request['artifact_id'])
+            # Dedicated readback/actor/deadline rejection leaves the captured
+            # checkpoint byte-for-byte intact, so a failed proof is not custody.
+            if upload_record is None:
+                state['custody']=receipt;save(base/'checkpoint.json',state)
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
                 transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
-            transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'])
+            if upload_record is not None:
+                preserved_upload.verify_deadline(upload_record,dt.datetime.now(dt.timezone.utc))
+                state['custody']=receipt
+                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'],
+                    authorization_deadline=dt.datetime.fromisoformat(upload_record['deadline']))
+            else:
+                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'])
             gid=grp.getgrnam('pmd').gr_gid
             for name in ('apply-authorization.json','apply-manifests.json'):os.chown(base/name,0,gid);(base/name).chmod(0o440)
             return summary(state)|{'authorization':str(base/'apply-authorization.json')}

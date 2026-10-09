@@ -14,6 +14,8 @@ FIELDS={
     'prepare':{'source_sha','run_id','mode','changed_services','token'},
     'prepare-rollback':{'operation','run_id','token'},
     'resume-cold-backup':{'operation','run_id','token'},
+    'resume-cipher-upload':{'operation','run_id','token'},
+    'authorize-preserved-upload':{'operation','artifact_id','upload_nonce','run_id','token'},
     'authorize':{'operation','artifact_id','token'},
     'finish':{'operation','claim_rv'},
     'status':{'operation'},
@@ -37,6 +39,8 @@ def validate(row):
     if not isinstance(row['nonce'],str) or not re.fullmatch('[a-f0-9]{64}',row['nonce']):raise BridgeError('bridge_nonce_invalid')
     for key,pattern in (('operation','[a-f0-9]{12}'),('source_sha','[a-f0-9]{40}'),('claim_rv','[0-9]{1,20}')):
         if key in row and (not isinstance(row[key],str) or not re.fullmatch(pattern,row[key])):raise BridgeError('bridge_identity_invalid')
+    if 'upload_nonce' in row and (not isinstance(row['upload_nonce'],str) or not re.fullmatch('[a-f0-9]{64}',row['upload_nonce'])):
+        raise BridgeError('bridge_upload_nonce_invalid')
     for key in ('run_id','artifact_id'):
         if key in row and (type(row[key]) is not int or not 0<row[key]<2**63):raise BridgeError('bridge_identity_invalid')
     if 'token' in row and (not isinstance(row['token'],str) or not 1<=len(row['token'])<=4096 or any(ord(c)<33 or ord(c)>126 for c in row['token'])):raise BridgeError('bridge_token_invalid')
