@@ -700,8 +700,9 @@ func TestMessagingDerivedReadsRespectViewerVisibility(t *testing.T) {
 	blockedSiblingID := send(blockedSibling, neutralAccount, "blocked sibling https://sibling.example", nil)
 	_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(ghostID))
 	require.NoError(t, err)
+	deleteScope := messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME
 	_, err = client.DeleteMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.DeleteMessageRequest{
-		MessageId: hiddenID, Scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME,
+		MessageId: hiddenID, Scope: &deleteScope,
 	})
 	require.NoError(t, err)
 
@@ -793,8 +794,9 @@ func TestMessagingGetChatListMetadataRespectsViewerVisibility(t *testing.T) {
 	blockedSiblingID := send(blockedSibling, neutralAccount, "blocked sibling preview")
 	_, err = pool.Exec(ctx, `UPDATE messages SET ghost_only = true WHERE id = $1`, uuid.MustParse(ghostID))
 	require.NoError(t, err)
+	deleteScope := messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME
 	_, err = client.DeleteMessage(withProfileCtx(ctx, viewerAccount, viewer), &messagingv1.DeleteMessageRequest{
-		MessageId: hiddenID, Scope: messagingv1.DeleteScope_DELETE_SCOPE_FOR_ME,
+		MessageId: hiddenID, Scope: &deleteScope,
 	})
 	require.NoError(t, err)
 	for _, id := range []string{blockedID, blockedSiblingID} {

@@ -58,8 +58,9 @@ func TestGetChatListMetadataRejectsOversizedChatRefBatchBeforeLookups(t *testing
 	svc := &MessagingGRPC{Messages: &store.MessagesStore{}, ChatGuard: guard}
 	chatID := uuid.NewString()
 	refs := make([]*chatv1.ChatRef, metadataChatRefBudget+1)
+	groupType := chatv1.ChatType_CHAT_TYPE_GROUP
 	for i := range refs {
-		refs[i] = &chatv1.ChatRef{Id: chatID, Type: chatv1.ChatType_CHAT_TYPE_GROUP}
+		refs[i] = &chatv1.ChatRef{Id: chatID, Type: &groupType}
 	}
 	resp, err := svc.GetChatListMetadata(withProfileCtx(context.Background(), uuid.New(), uuid.New()), &messagingv1.GetChatListMetadataRequest{Chats: refs})
 	require.Equal(t, codes.Unavailable, status.Code(err))
