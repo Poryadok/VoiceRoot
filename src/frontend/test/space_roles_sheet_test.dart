@@ -134,7 +134,13 @@ void main() {
     expect(find.text('Raid Leader'), findsOneWidget);
     expect(find.byKey(const Key('retry_default_join_role')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('retry_default_join_role')));
+    final retryButton = find.descendant(
+      of: find.byKey(const Key('retry_default_join_role')),
+      matching: find.byType(OutlinedButton),
+    );
+    expect(retryButton, findsOneWidget);
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
     await tester.pumpAndSettle();
 
     expect(attempts, 2);
