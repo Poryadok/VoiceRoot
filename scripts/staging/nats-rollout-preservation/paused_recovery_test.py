@@ -157,7 +157,10 @@ class ContinuationTests(unittest.TestCase):
             # planning is isolated. Compiler/render/bootstrap and both target
             # transformations below execute their production implementations.
             import source_plan
-            with patch.object(compiler,'decode_yaml',side_effect=json.loads),patch.object(source_plan,'compile_plan',return_value={'checks':[],'actions':[]}):
+            # This fixture covers rendering/normalization only. The real owned
+            # producer and canonical source plan are covered by paused_recompile_plan_test.
+            with patch.object(module,'PausedOriginalProducer',return_value=SimpleNamespace(verify=lambda:None)),\
+                 patch.object(compiler,'decode_yaml',side_effect=json.loads),patch.object(source_plan,'compile_plan',return_value={'checks':[],'actions':[]}):
                 compiler.main([str(workspace),str(build/'parameters.json'),str(output)])
                 compiled=json.loads(output.read_bytes())
                 class Kube:
@@ -200,12 +203,15 @@ class ContinuationTests(unittest.TestCase):
             root_main.save(base/'apply-manifests.json',rows)
             self.assertEqual((base/'apply-manifests.json').read_bytes(),raw)
             stage=Mock();stage.original_snapshots={};stage.kube=Mock()
-            def compile_again(args):root_main.save(Path(args[2]),compiled)
+            def compile_again(args,*,producer=None):
+                self.assertIsNotNone(producer)
+                root_main.save(Path(args[2]),compiled)
             def normalize_again(kube,actual,documents,target):
                 self.assertEqual(target['manifest_sha256'],sha)
                 return target
             with patch.object(guard,'ROOT',root),patch.object(module,'private_bytes',side_effect=lambda p,*a:Path(p).read_bytes()),\
                  patch.object(module,'owned_bytes',side_effect=lambda p,*a,**kw:Path(p).read_bytes()),\
+                 patch.object(module,'PausedOriginalProducer',return_value=SimpleNamespace(verify=lambda:None)),\
                  patch.object(compiler,'main',side_effect=compile_again),\
                  patch.object(normalize,'image_only_documents',side_effect=lambda *args:(copy.deepcopy(rows),{'manifest_sha256':module.digest(rows)})),\
                  patch.object(normalize,'normalize_target',side_effect=normalize_again):

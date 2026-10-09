@@ -442,6 +442,15 @@ stack-lock artifact, recompiles retained parameters and compares compiled,
 image-only and server-normalized targets with the original checkpoint. Current
 helper approval does not replace historical target approval.
 
+Paused canonical recompilation retains the original desired file/user signing
+endpoint objects. The recovery-only producer first requires the exact owned
+Deployment UID/resourceVersion and semantics, plus an original-to-owned change
+limited to the recorded replica count1→0. It projects only the original desired
+spec onto fresh current metadata for server dry-run; ordinary compiler reads
+remain live. Exact compiled/image-only/normalized target equality is retained,
+and the producer rechecks custody after compilation. Saved targets, snapshots
+and live replicas are never refreshed or rewritten to make recompilation pass.
+
 Before accepting a cut, a pinned isolated broker restores the closed native
 archive; one actual account monitoring snapshot feeds both census and contract
 compilation. Original plan, binding and selected scripts must match, and root

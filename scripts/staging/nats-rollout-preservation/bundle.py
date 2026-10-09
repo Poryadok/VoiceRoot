@@ -15,7 +15,7 @@ ROLLOUT+=('actor_auth.py','actor_root.py','actor_verification.py','actor_permiss
 ROLLOUT+=('renderer_transition.py','renderer_execution.py','renderer_root.py','bot_migration.py')
 ROLLOUT+=('prebuild_v5_disposition.py',)
 ROLLOUT+=('story_witness.py',)
-ROLLOUT+=('paused_recovery.py',)
+ROLLOUT+=('paused_recovery.py','v8_upgrade.py')
 
 def build(kernel,output,renewer):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

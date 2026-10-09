@@ -82,7 +82,7 @@ class ProducerKube:
         values=self.run(['get','secret',name,'-o',"jsonpath-as-json={.metadata['uid','resourceVersion']}"])
         return dict(zip(('uid','resourceVersion'),values))
 
-def main(args):
+def main(args,*,producer=None):
     if len(args)!=3:raise Blocked('rollout_compile_arguments_invalid')
     source=Path(args[0]).resolve(strict=True);parameter_path=Path(args[1]);output=Path(args[2])
     if parameter_path.is_symlink() or not parameter_path.is_file() or not 1<=parameter_path.stat().st_size<=65536:
@@ -98,7 +98,7 @@ def main(args):
         raise Blocked('rollout_compile_version_invalid')
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
-    producer=ProducerKube()
+    producer=ProducerKube() if producer is None else producer
     if frontend_only:
         bootstrap_paths=[]
         rows=[producer.get('Deployment','voice-'+name) for name in sorted(set(p['changed_services']))]
