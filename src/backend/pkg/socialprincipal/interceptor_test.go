@@ -14,8 +14,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"voice/backend/pkg/principal"
+	userv1 "voice/backend/user/pb/voice/user/v1"
 )
 
 func TestProtectedBoundary(t *testing.T) {
@@ -160,21 +162,22 @@ func TestOrdinaryRejectsSocialOnlyOnPrivacy(t *testing.T) {
 func TestCredentialTemporalAndMethodScope(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	req := wrapperspb.String("profile")
-	hash, err := principal.RequestHash(req)
-	require.NoError(t, err)
 	for _, tc := range []struct {
 		name, method string
+		request      proto.Message
 		offset       time.Duration
 		want         codes.Code
 		called       bool
 	}{
-		{"expired", Method("user"), -time.Minute, codes.Unauthenticated, false},
-		{"future", Method("user"), time.Minute, codes.Unauthenticated, false},
-		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", 0, codes.OK, true},
-		{"valid forbidden method", "/voice.user.v1.UserService/GetProfiles", 0, codes.PermissionDenied, false},
+		{"expired", Method("user"), wrapperspb.String("profile"), -time.Minute, codes.Unauthenticated, false},
+		{"future", Method("user"), wrapperspb.String("profile"), time.Minute, codes.Unauthenticated, false},
+		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: "profile"}}, 0, codes.OK, true},
+		{"valid request-bound GetProfiles", userv1.UserService_GetProfiles_FullMethodName, &userv1.GetProfilesRequest{ProfileIds: []string{"00000000-0000-4000-8000-000000000001"}}, 0, codes.OK, true},
+		{"unlisted method denied", "/voice.user.v1.UserService/GetBulkPresence", wrapperspb.String("profile"), 0, codes.PermissionDenied, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			hash, err := principal.RequestHash(tc.request)
+			require.NoError(t, err)
 			issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "social", KeyID: "current", PrivateKey: key, Clock: func() time.Time { return time.Now().Add(tc.offset) }})
 			require.NoError(t, err)
 			token, err := issuer.IssueService(principal.ServiceInput{Audience: "user", RPC: tc.method, RequestID: "request", RequestHash: hash})
@@ -182,7 +185,7 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 			verifier := &Verifier{Target: "user", Issuers: map[string]bool{"social": true}, Resolve: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }}
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "request"))
 			called := false
-			_, err = StrictUnaryInterceptor(verifier)(ctx, req, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return req, nil })
+			_, err = StrictUnaryInterceptor(verifier)(ctx, tc.request, &grpc.UnaryServerInfo{FullMethod: tc.method}, func(context.Context, any) (any, error) { called = true; return tc.request, nil })
 			require.Equal(t, tc.want, status.Code(err))
 			require.Equal(t, tc.called, called)
 		})

@@ -156,7 +156,7 @@ func TestNotificationJWKSPublishesOnlyPublicKeyMaterial(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(document, &decoded))
 	require.Len(t, decoded.Keys, 1)
-	require.JSONEq(t, `{"alg":"RS256","e":"AQAB","kid":"current","kty":"RSA","n":"`+base64.RawURLEncoding.EncodeToString(key.N.Bytes())+`","use":"sig"}`, string(document))
+	require.JSONEq(t, `{"keys":[{"alg":"RS256","e":"AQAB","kid":"current","kty":"RSA","n":"`+base64.RawURLEncoding.EncodeToString(key.N.Bytes())+`","use":"sig"}]}`, string(document))
 	for _, privateField := range []string{"d", "p", "q", "dp", "dq", "qi"} {
 		_, exists := decoded.Keys[0][privateField]
 		require.False(t, exists, "JWKS must never publish private RSA key field %q", privateField)
