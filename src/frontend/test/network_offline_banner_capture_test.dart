@@ -29,6 +29,40 @@ const _captureDirectoryVariable = 'VOICE_NETWORK_OFFLINE_CAPTURE_DIR';
 const _captureBoundaryKey = Key('network_offline_app_capture');
 const _captureChatId = 'network-offline-capture-chat';
 
+String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
+  if (details == null || details.exception is! FlutterError) {
+    return 'layout diagnostic unavailable';
+  }
+  final summary = (details.exception as FlutterError).toString();
+  if (!summary.startsWith('A RenderFlex overflowed by')) {
+    return 'layout diagnostic unavailable';
+  }
+
+  final diagnostics =
+      details.informationCollector?.call() ?? const <DiagnosticsNode>[];
+  final renderFlexNode = diagnostics
+      .where((node) => node.name == 'The specific RenderFlex in question is')
+      .firstOrNull;
+  final renderFlex = renderFlexNode is DiagnosticsProperty<Object>
+      ? renderFlexNode.value
+      : null;
+  final creatorNode = diagnostics
+      .whereType<DiagnosticsDebugCreator>()
+      .firstOrNull;
+  final creator = creatorNode?.value;
+  final creatorType = creator is DebugCreator
+      ? creator.element.widget.runtimeType.toString()
+      : 'unavailable';
+  final appFrame = RegExp(
+    r'(src/frontend/lib/[A-Za-z0-9_./-]+\.dart):(\d+)',
+  ).firstMatch(details.stack?.toString() ?? '');
+  final location = appFrame == null
+      ? 'unavailable'
+      : '${appFrame.group(1)}:${appFrame.group(2)}';
+  return 'layout overflow; render=${renderFlex?.runtimeType ?? 'unavailable'}; '
+      'creator=$creatorType; appFrame=$location';
+}
+
 void main() {
   testWidgets('keeps one reconnect banner in the visible network context', (
     tester,
@@ -175,14 +209,45 @@ void main() {
         isNull,
         reason: 'selected-room fixture must lay out before reconnect begins',
       );
-      container.read(realtimeLinkStatusProvider.notifier).state =
-          RealtimeLinkStatus.reconnecting;
-      await tester.pump(reconnectBannerShowDelay);
+      String? reconnectOverflowEvidence;
+      final previousFlutterErrorHandler = FlutterError.onError;
+      if (viewport.name == 'v') {
+        if (previousFlutterErrorHandler == null) {
+          throw StateError('Flutter test error handler is unavailable');
+        }
+        FlutterError.onError = (details) {
+          try {
+            if (reconnectOverflowEvidence == null &&
+                details.exception is FlutterError &&
+                (details.exception as FlutterError).toString().startsWith(
+                  'A RenderFlex overflowed by',
+                )) {
+              try {
+                reconnectOverflowEvidence = _renderFlexFailureEvidence(details);
+              } catch (_) {
+                reconnectOverflowEvidence = 'layout diagnostic unavailable';
+              }
+            }
+          } finally {
+            previousFlutterErrorHandler(details);
+          }
+        };
+      }
+      try {
+        container.read(realtimeLinkStatusProvider.notifier).state =
+            RealtimeLinkStatus.reconnecting;
+        await tester.pump(reconnectBannerShowDelay);
+      } finally {
+        if (viewport.name == 'v') {
+          FlutterError.onError = previousFlutterErrorHandler;
+        }
+      }
       expect(
         tester.takeException(),
         isNull,
         reason:
-            'reconnect state must lay out without overflowing (${viewport.name})',
+            'reconnect state must lay out without overflowing (${viewport.name}); '
+            '${reconnectOverflowEvidence ?? 'layout diagnostic unavailable'}',
       );
 
       final navigationOwnsBanner =
