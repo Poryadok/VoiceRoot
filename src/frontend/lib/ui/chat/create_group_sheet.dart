@@ -98,6 +98,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
   _CreateGroupCreateAttempt? _createAttempt;
   String? _inviteRetryChatId;
   List<String>? _inviteRetryProfileIds;
+  _CreateGroupInviteRetryIdentity? _inviteRetryIdentity;
 
   @override
   void initState() {
@@ -146,6 +147,28 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
     try {
       final pendingChatId = _inviteRetryChatId;
       final pendingProfileIds = _inviteRetryProfileIds;
+      if (pendingChatId != null || pendingProfileIds != null) {
+        final retryIdentity = _inviteRetryIdentity;
+        if (pendingChatId == null ||
+            pendingProfileIds == null ||
+            retryIdentity == null ||
+            !retryIdentity.matches(
+              accountId: accountId,
+              profileId: activeProfileId,
+              profileGeneration: profileGeneration,
+              sessionInstallGeneration: sessionInstallGeneration,
+            )) {
+          setState(() {
+            _submitting = false;
+            _inviteRetryChatId = null;
+            _inviteRetryProfileIds = null;
+            _inviteRetryIdentity = null;
+            _selected.clear();
+          });
+          _showSafeError(l10n, kChatActionStaleContext);
+          return;
+        }
+      }
       late final String chatId;
       late final List<String> profileIds;
       if (pendingChatId == null || pendingProfileIds == null) {
@@ -199,6 +222,12 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
               _createAttempt = null;
               _inviteRetryChatId = chatId;
               _inviteRetryProfileIds = profileIds;
+              _inviteRetryIdentity = _CreateGroupInviteRetryIdentity(
+                accountId: accountId,
+                profileId: activeProfileId,
+                profileGeneration: profileGeneration,
+                sessionInstallGeneration: sessionInstallGeneration,
+              );
             });
         }
       } else {
@@ -206,8 +235,13 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
         profileIds = pendingProfileIds;
       }
 
+      final inviteAuthorization = ref.read(authorizationHeaderProvider);
+      if (inviteAuthorization == null) {
+        _finishWithError(l10n, 'not_authenticated');
+        return;
+      }
       final inviteResult = await client.addGroupMembers(
-        authorization: ref.read(authorizationHeaderProvider),
+        authorization: inviteAuthorization,
         chatId: chatId,
         profileIds: profileIds,
       );
@@ -222,6 +256,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
           _submitting = false;
           _inviteRetryChatId = null;
           _inviteRetryProfileIds = null;
+          _inviteRetryIdentity = null;
         });
         _showSafeError(l10n, kChatActionStaleContext);
         return;
@@ -232,6 +267,7 @@ class _CreateGroupSheetState extends ConsumerState<CreateGroupSheet> {
           return;
         case ChatsApiOk():
           ref.read(chatActionsProvider).selectChat(chatId);
+          _inviteRetryIdentity = null;
           Navigator.of(context).pop();
       }
     } catch (_) {
@@ -543,6 +579,31 @@ class _CreateGroupCreateAttempt {
       this.sessionInstallGeneration == sessionInstallGeneration &&
       this.selectedProfileIds.length == selectedProfileIds.length &&
       this.selectedProfileIds.containsAll(selectedProfileIds);
+}
+
+class _CreateGroupInviteRetryIdentity {
+  const _CreateGroupInviteRetryIdentity({
+    required this.accountId,
+    required this.profileId,
+    required this.profileGeneration,
+    required this.sessionInstallGeneration,
+  });
+
+  final String accountId;
+  final String profileId;
+  final int profileGeneration;
+  final int sessionInstallGeneration;
+
+  bool matches({
+    required String accountId,
+    required String profileId,
+    required int profileGeneration,
+    required int sessionInstallGeneration,
+  }) =>
+      this.accountId == accountId &&
+      this.profileId == profileId &&
+      this.profileGeneration == profileGeneration &&
+      this.sessionInstallGeneration == sessionInstallGeneration;
 }
 
 Widget _createGroupStatePanel(
