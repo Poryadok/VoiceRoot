@@ -1727,13 +1727,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final authorization = ref.read(authorizationHeaderProvider);
     final profileId = ref.read(authControllerProvider).activeProfileId;
     if (authorization == null || profileId == null) return;
-    final chatType = ref
-        .read(chatListProvider)
-        .valueOrNull
-        ?.items
-        .where((item) => item.chatId == chatId)
-        .map((item) => item.chat.type)
-        .firstOrNull;
+    final chatListState = ref.read(chatListControllerProvider);
+    final chatType = chatListState.profileId == profileId
+        ? chatListState.items
+              .where((item) => item.chatId == chatId)
+              .map((item) => item.chat.type)
+              .firstOrNull
+        : null;
     final isDm = chatType == 'CHAT_TYPE_DM';
     final mode = await showModalBottomSheet<String>(
       context: context,

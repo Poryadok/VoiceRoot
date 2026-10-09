@@ -21,6 +21,7 @@ import 'package:voice_frontend/theme/voice_theme.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/core/voice_compact_banner.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
@@ -56,6 +57,11 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
   final owner = creator is DebugCreator
       ? _knownLayoutOwner(creator.element)
       : 'unavailable';
+  final flexAxis = renderFlex.direction == Axis.horizontal
+      ? 'horizontal'
+      : renderFlex.direction == Axis.vertical
+      ? 'vertical'
+      : 'unavailable';
   final appFrame = RegExp(
     r'(src/frontend/lib/[A-Za-z0-9_./-]+\.dart):(\d+)',
   ).firstMatch(details.stack?.toString() ?? '');
@@ -64,28 +70,33 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
       : '${appFrame.group(1)}:${appFrame.group(2)}';
   return 'layout overflow; render=RenderFlex; '
       'geometry=${_renderFlexGeometry(renderFlex)}; '
-      'creator=$owner; appFrame=$location';
+      'flexAxis=$flexAxis; creator=$owner; appFrame=$location';
 }
 
 String _knownLayoutOwner(Element element) {
   var owner = 'unavailable';
+  final currentOwner = _fixedLayoutOwner(element.widget);
+  if (currentOwner != null) return currentOwner;
   element.visitAncestorElements((ancestor) {
-    final widget = ancestor.widget;
-    if (widget is ChatRoomPanel) {
-      owner = 'ChatRoomPanel';
-      return false;
-    }
-    if (widget is ChatListBody) {
-      owner = 'ChatListBody';
-      return false;
-    }
-    if (widget is VoiceApp) {
-      owner = 'VoiceApp';
+    final ancestorOwner = _fixedLayoutOwner(ancestor.widget);
+    if (ancestorOwner != null) {
+      owner = ancestorOwner;
       return false;
     }
     return true;
   });
   return owner;
+}
+
+String? _fixedLayoutOwner(Widget widget) {
+  if (widget is VoiceCompactBanner) return 'VoiceCompactBanner';
+  if (widget is Row) return 'Row';
+  if (widget is Column) return 'Column';
+  if (widget is Wrap) return 'Wrap';
+  if (widget is ChatRoomPanel) return 'ChatRoomPanel';
+  if (widget is ChatListBody) return 'ChatListBody';
+  if (widget is VoiceApp) return 'VoiceApp';
+  return null;
 }
 
 String _renderFlexGeometry(RenderFlex? renderFlex) {

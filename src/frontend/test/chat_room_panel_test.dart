@@ -557,6 +557,7 @@ void main() {
     'Send when online retries the same draft and id without an immediate send',
     (tester) async {
       final firstAttemptResult = Completer<String?>();
+      final coldChatList = Completer<ChatListData>();
       var immediateSendRequests = 0;
       late _ScheduledRoomController room;
       await tester.pumpWidget(
@@ -584,20 +585,7 @@ void main() {
             realtimeHubProvider.overrideWith((ref) => _NoopRealtimeHub(ref)),
             selectedChatIdProvider.overrideWith((ref) => 'chat-abc'),
             chatListControllerProvider.overrideWith(_DmChatListController.new),
-            chatListProvider.overrideWith(
-              (ref) async => const ChatListData(
-                items: [
-                  ChatListItem(
-                    chat: VoiceChat(
-                      id: 'chat-abc',
-                      type: 'CHAT_TYPE_DM',
-                      creatorProfileId: 'prof-test',
-                    ),
-                    dmPeerProfileId: 'peer-1',
-                  ),
-                ],
-              ),
-            ),
+            chatListProvider.overrideWith((ref) => coldChatList.future),
             chatRoomControllerProvider('chat-abc').overrideWith((ref) {
               return room = _ScheduledRoomController(
                 ref,
@@ -626,54 +614,91 @@ void main() {
         tester.element(find.byType(ChatRoomPanel)),
         listen: false,
       );
-      final chatListBeforeLongPress = chatRoomProviderContainer.read(
+      final asyncChatListBeforeLongPress = chatRoomProviderContainer.read(
         chatListProvider,
       );
-      final chatListDataBeforeLongPress =
-          chatListBeforeLongPress.valueOrNull;
+      expect(asyncChatListBeforeLongPress.isLoading, isTrue);
+      final chatListBeforeLongPress = chatRoomProviderContainer.read(
+        chatListControllerProvider,
+      );
+      final activeProfileBeforeLongPress = chatRoomProviderContainer
+          .read(authControllerProvider)
+          .activeProfileId;
       final dmReadyBeforeLongPress =
-          chatListDataBeforeLongPress?.items.any(
+          chatListBeforeLongPress.profileId == activeProfileBeforeLongPress &&
+          chatListBeforeLongPress.items.any(
             (item) =>
                 item.chatId == 'chat-abc' &&
                 item.chat.type == 'CHAT_TYPE_DM',
-          ) ??
-          false;
-      final dmPhaseBeforeLongPress = chatListBeforeLongPress.hasError
-          ? 'error'
-          : chatListBeforeLongPress.isLoading
-          ? 'loading'
-          : chatListBeforeLongPress.hasValue
-          ? dmReadyBeforeLongPress
-                ? 'dataMatch'
-                : 'dataNoMatch'
-          : 'unavailable';
-      if (!dmReadyBeforeLongPress) {
-        debugPrint(
-          'scheduled-send pre-menu phase=$dmPhaseBeforeLongPress; '
-          'hasValue=${chatListBeforeLongPress.hasValue}; '
-          'isLoading=${chatListBeforeLongPress.isLoading}; '
-          'hasError=${chatListBeforeLongPress.hasError}; dmReady=false',
-        );
-      }
+          );
       expect(
         dmReadyBeforeLongPress,
         isTrue,
         reason: 'DM chat state is ready before scheduled-send menu trigger',
       );
+      final chatListController = chatRoomProviderContainer.read(
+        chatListControllerProvider.notifier,
+      );
+      final dmItem = chatListBeforeLongPress.items.single;
+      final invalidMenuStates = <ChatListState>[
+        const ChatListState(profileId: null),
+        const ChatListState(profileId: 'other-profile', items: [
+          ChatListItem(
+            chat: VoiceChat(
+              id: 'chat-abc',
+              type: 'CHAT_TYPE_DM',
+              creatorProfileId: 'prof-test',
+            ),
+            dmPeerProfileId: 'peer-1',
+          ),
+        ]),
+        const ChatListState(profileId: 'prof-test'),
+        const ChatListState(profileId: 'prof-test', items: [
+          ChatListItem(
+            chat: VoiceChat(
+              id: 'chat-abc',
+              type: 'CHAT_TYPE_GROUP',
+              creatorProfileId: 'prof-test',
+            ),
+          ),
+        ]),
+        const ChatListState(profileId: 'prof-test', items: [
+          ChatListItem(
+            chat: VoiceChat(
+              id: 'chat-abc',
+              type: 'CHAT_TYPE_CHANNEL',
+              creatorProfileId: 'prof-test',
+            ),
+          ),
+        ]),
+      ];
+      for (final invalidState in invalidMenuStates) {
+        chatListController.state = invalidState;
+        await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsOneWidget);
+        expect(find.text('Schedule message'), findsOneWidget);
+        expect(find.text('Send when online'), findsNothing);
+        Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+        await tester.pumpAndSettle();
+      }
+      chatListController.state = ChatListState(
+        profileId: 'prof-test',
+        items: [dmItem],
+      );
       await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);
+      final menuListAfterLongPress = chatRoomProviderContainer.read(
+        chatListControllerProvider,
+      );
       final selectedChatIsDm =
-          chatRoomProviderContainer
-              .read(chatListProvider)
-              .valueOrNull
-              ?.items
-              .any(
-                (item) =>
-                    item.chatId == 'chat-abc' &&
-                    item.chat.type == 'CHAT_TYPE_DM',
-              ) ??
-          false;
+          menuListAfterLongPress.profileId == activeProfileBeforeLongPress &&
+          menuListAfterLongPress.items.any(
+            (item) =>
+                item.chatId == 'chat-abc' &&
+                item.chat.type == 'CHAT_TYPE_DM',
+          );
       expect(selectedChatIsDm, isTrue);
       await tester.tap(find.text('Send when online'));
       await tester.pumpAndSettle();
