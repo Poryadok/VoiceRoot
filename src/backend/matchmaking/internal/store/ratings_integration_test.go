@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestRatingStore_UpsertPlayerRatingAggregatesStars(t *testing.T) {
 
 	for _, stars := range []int{5, 3} {
 		err := ratings.RecordMatchRating(ctx, InsertMatchRatingParams{
-			MatchID: insertRatingMatch(t, ctx, pool, list.Games[0].ID),
+			MatchID:        insertRatingMatch(t, ctx, pool, list.Games[0].ID),
 			RaterProfileID: uuid.New(), RatedProfileID: profileID, Stars: stars,
 		})
 		require.NoError(t, err)
@@ -91,7 +92,7 @@ func TestRatingStore_GetPlayerRatingReturnsStoredAggregate(t *testing.T) {
 	profileID := uuid.New()
 	ratings := &RatingStore{Pool: pool}
 	err = ratings.RecordMatchRating(ctx, InsertMatchRatingParams{
-		MatchID: insertRatingMatch(t, ctx, pool, list.Games[0].ID),
+		MatchID:        insertRatingMatch(t, ctx, pool, list.Games[0].ID),
 		RaterProfileID: uuid.New(), RatedProfileID: profileID, Stars: 4,
 	})
 	require.NoError(t, err)
@@ -213,7 +214,7 @@ func TestRatingStore_RecordMatchRatingSerializesDistinctConcurrentVotes(t *testi
 	params := make([]InsertMatchRatingParams, count)
 	for i, score := range stars {
 		params[i] = InsertMatchRatingParams{
-			MatchID: insertRatingMatch(t, ctx, pool, list.Games[0].ID),
+			MatchID:        insertRatingMatch(t, ctx, pool, list.Games[0].ID),
 			RaterProfileID: uuid.New(),
 			RatedProfileID: rated,
 			Stars:          score,
