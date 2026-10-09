@@ -145,7 +145,7 @@ func (p *MessagePusher) sendPush(
 			resolved[profileID] = decision
 		}
 	}
-	for profileID, decision := range resolved {
+	for profileID := range resolved {
 		recipient, _ := uuid.Parse(profileID)
 		out := payload
 		groupingPreview := previewBody
