@@ -74,49 +74,54 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-    var attempts = 0;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          quickAccessListProvider.overrideWith((_) async {
-            attempts++;
-            if (attempts == 1) throw Exception('private quick access detail');
-            return const QuickAccessListData(
-              items: [VoiceQuickAccessItem(chatId: 'chat-qa-1')],
-            );
-          }),
-        ],
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(
-            body: SizedBox(width: 56, child: ChatRailQuickAccessSection()),
+    try {
+      var attempts = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            quickAccessListProvider.overrideWith((_) async {
+              attempts++;
+              if (attempts == 1) {
+                throw Exception('private quick access detail');
+              }
+              return const QuickAccessListData(
+                items: [VoiceQuickAccessItem(chatId: 'chat-qa-1')],
+              );
+            }),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(
+              body: SizedBox(width: 56, child: ChatRailQuickAccessSection()),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(ChatRailQuickAccessSection)),
-    )!;
-    expect(attempts, 1);
-    expect(
-      find.byKey(const Key('chat_rail_quick_access_retry')),
-      findsOneWidget,
-    );
-    expect(find.bySemanticsLabel(l10n.chatListLoadError), findsOneWidget);
-    expect(find.text('private quick access detail'), findsNothing);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ChatRailQuickAccessSection)),
+      )!;
+      expect(attempts, 1);
+      expect(
+        find.byKey(const Key('chat_rail_quick_access_retry')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(l10n.chatListLoadError), findsOneWidget);
+      expect(find.text('private quick access detail'), findsNothing);
 
-    await tester.tap(find.byKey(const Key('chat_rail_quick_access_retry')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chat_rail_quick_access_retry')));
+      await tester.pumpAndSettle();
 
-    expect(attempts, 2);
-    expect(
-      find.byKey(ChatRailQuickAccessSection.itemKey('chat-qa-1')),
-      findsOneWidget,
-    );
+      expect(attempts, 2);
+      expect(
+        find.byKey(ChatRailQuickAccessSection.itemKey('chat-qa-1')),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets(
