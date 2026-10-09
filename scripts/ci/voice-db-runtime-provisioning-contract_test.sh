@@ -1096,47 +1096,97 @@ f13_cross_scope_path_allowed() {
 # Build an exact per-contribution map for an aggregate develop push. For merge
 # commits, only source-base-to-source-head paths belong to the contribution;
 # verify the merge tree retained each source path's full tree entry.
+f13_collect_failure() {
+  local diagnostic_file="$1" category="$2"
+  if [[ -n "${diagnostic_file}" ]]; then
+    printf '%s\n' "${category}" >"${diagnostic_file}" 2>/dev/null || true
+  fi
+  return 1
+}
+
 f13_collect_develop_contributions() {
-  local repo="$1" base="$2" target="$3" output="$4"
+  local repo="$1" base="$2" target="$3" output="$4" diagnostic_file="${5:-}"
   local commit parent_count first_parent source_head source_base delta
   local path source_entry result_entry target_entry blob trigger
   local -a commit_line
   local -A owners=()
   : >"${output}"
-  git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || return 1
-  git -C "${repo}" rev-parse --verify "${target}^{commit}" >/dev/null 2>&1 || return 1
-  git -C "${repo}" merge-base --is-ancestor "${base}" "${target}" || return 1
-  git -C "${repo}" rev-list --first-parent "${target}" | grep -Fxq -- "${base}" || return 1
+  git -C "${repo}" rev-parse --verify "${base}^{commit}" >/dev/null 2>&1 || {
+    f13_collect_failure "${diagnostic_file}" base_object
+    return 1
+  }
+  git -C "${repo}" rev-parse --verify "${target}^{commit}" >/dev/null 2>&1 || {
+    f13_collect_failure "${diagnostic_file}" target_object
+    return 1
+  }
+  git -C "${repo}" merge-base --is-ancestor "${base}" "${target}" 2>/dev/null || {
+    f13_collect_failure "${diagnostic_file}" base_ancestry
+    return 1
+  }
+  git -C "${repo}" rev-list --first-parent "${target}" 2>/dev/null | grep -Fxq -- "${base}" || {
+    f13_collect_failure "${diagnostic_file}" first_parent_range
+    return 1
+  }
 
   while IFS= read -r commit; do
     [[ -n "${commit}" ]] || continue
-    read -r -a commit_line <<<"$(git -C "${repo}" rev-list --parents -n 1 "${commit}")"
+    read -r -a commit_line <<<"$(git -C "${repo}" rev-list --parents -n 1 "${commit}" 2>/dev/null)"
     parent_count=$((${#commit_line[@]} - 1))
-    ((parent_count == 1 || parent_count == 2)) || return 1
+    ((parent_count == 1 || parent_count == 2)) || {
+      f13_collect_failure "${diagnostic_file}" parent_count
+      return 1
+    }
     first_parent="${commit_line[1]}"
     if ((parent_count == 2)); then
       source_head="${commit_line[2]}"
-      source_base="$(git -C "${repo}" merge-base "${first_parent}" "${source_head}")" || return 1
-      [[ -n "${source_base}" ]] || return 1
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-source-delta" || return 1
+      source_base="$(git -C "${repo}" merge-base "${first_parent}" "${source_head}" 2>/dev/null)" || {
+        f13_collect_failure "${diagnostic_file}" source_base
+        return 1
+      }
+      [[ -n "${source_base}" ]] || {
+        f13_collect_failure "${diagnostic_file}" source_base
+        return 1
+      }
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta" || {
+        f13_collect_failure "${diagnostic_file}" source_delta
+        return 1
+      }
     else
       source_head="${commit}"
       source_base="${first_parent}"
-      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" >"${TMP_DIR}/f13-source-delta" || return 1
+      git -C "${repo}" diff --name-only "${source_base}" "${source_head}" 2>/dev/null >"${TMP_DIR}/f13-source-delta" || {
+        f13_collect_failure "${diagnostic_file}" source_delta
+        return 1
+      }
     fi
     delta="${TMP_DIR}/f13-source-delta"
 
     : >"${TMP_DIR}/f13-unapproved-delta"
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
-      source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}")" || return 1
+      source_entry="$(git -C "${repo}" ls-tree "${source_head}" -- "${path}" 2>/dev/null)" || {
+        f13_collect_failure "${diagnostic_file}" source_tree_entry
+        return 1
+      }
       if ((parent_count == 2)); then
-        result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}")" || return 1
-        [[ "${source_entry}" == "${result_entry}" ]] || return 1
+        result_entry="$(git -C "${repo}" ls-tree "${commit}" -- "${path}" 2>/dev/null)" || {
+          f13_collect_failure "${diagnostic_file}" merge_tree_entry
+          return 1
+        }
+        [[ "${source_entry}" == "${result_entry}" ]] || {
+          f13_collect_failure "${diagnostic_file}" merge_tree_mismatch
+          return 1
+        }
       fi
       if f13_path_is_guarded "${path}"; then
-        target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}")" || return 1
-        [[ "${source_entry}" == "${target_entry}" ]] || return 1
+        target_entry="$(git -C "${repo}" ls-tree "${target}" -- "${path}" 2>/dev/null)" || {
+          f13_collect_failure "${diagnostic_file}" target_tree_entry
+          return 1
+        }
+        [[ "${source_entry}" == "${target_entry}" ]] || {
+          f13_collect_failure "${diagnostic_file}" guarded_target_mismatch
+          return 1
+        }
       fi
       blob="$(awk '{print $3}' <<<"${source_entry}")"
       if game_checkpoint_path_authorized_in_delta "${path}" "${delta}" "${blob}" || \
@@ -1153,13 +1203,22 @@ f13_collect_develop_contributions() {
     while IFS= read -r path; do
       [[ -n "${path}" ]] || continue
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
+        f13_collect_failure "${diagnostic_file}" duplicate_guarded_owner
         return 1
       fi
       owners["${path}"]="${commit}"
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${source_base}" "${source_head}" >>"${output}"
     done <"${delta}"
-  done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}")
+  done < <(git -C "${repo}" rev-list --first-parent --reverse "${base}..${target}" 2>/dev/null)
+}
+
+f13_base_origin_class() {
+  if [[ -n "${VOICE_R22_BASE_SHA:-}" ]]; then
+    printf '%s\n' push-before
+  else
+    printf '%s\n' fallback
+  fi
 }
 
 f13_fixture_repo="${TMP_DIR}/f13-contribution-fixture"
@@ -1362,9 +1421,34 @@ if f13_collect_develop_contributions \
 fi
 
 if f13_collect_develop_contributions \
-  "${f13_fixture_repo}" '0000000000000000000000000000000000000000' HEAD "${TMP_DIR}/f13-invalid-map"; then
+  "${f13_fixture_repo}" '0000000000000000000000000000000000000000' HEAD \
+  "${TMP_DIR}/f13-invalid-map" "${TMP_DIR}/f13-invalid-category"; then
   printf '%s\n' 'F13 oracle bug: missing aggregate baseline was accepted' >&2
   exit 2
+fi
+[[ "$(<"${TMP_DIR}/f13-invalid-category")" == base_object ]] || {
+  printf '%s\n' 'F13 oracle bug: invalid baseline did not produce its fixed failure category' >&2
+  exit 2
+}
+f13_saved_base_was_set=false
+f13_saved_base_value="${VOICE_R22_BASE_SHA:-}"
+if [[ "${VOICE_R22_BASE_SHA+x}" == x ]]; then
+  f13_saved_base_was_set=true
+fi
+unset VOICE_R22_BASE_SHA
+[[ "$(f13_base_origin_class)" == fallback ]] || {
+  printf '%s\n' 'F13 oracle bug: absent baseline did not classify as fallback' >&2
+  exit 2
+}
+VOICE_R22_BASE_SHA='fixture-value-never-emitted'
+[[ "$(f13_base_origin_class)" == push-before ]] || {
+  printf '%s\n' 'F13 oracle bug: supplied baseline did not classify as push-before' >&2
+  exit 2
+}
+if [[ "${f13_saved_base_was_set}" == true ]]; then
+  VOICE_R22_BASE_SHA="${f13_saved_base_value}"
+else
+  unset VOICE_R22_BASE_SHA
 fi
 if f13_develop_aggregate_enabled push refs/heads/feature/example || \
   f13_develop_aggregate_enabled push refs/heads/master || \
@@ -1378,7 +1462,19 @@ f13_develop_aggregate_enabled push refs/heads/develop || {
 }
 
 if f13_develop_aggregate_enabled "${GITHUB_EVENT_NAME:-${VOICE_CI_EVENT_NAME:-}}" "${GITHUB_REF:-}"; then
-  if ! f13_collect_develop_contributions "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions"; then
+  if ! f13_collect_develop_contributions \
+    "${ROOT}" "${base_sha}" HEAD "${TMP_DIR}/f13-contributions" "${TMP_DIR}/f13-failure-category"; then
+    f13_failure_category=unknown
+    if [[ -s "${TMP_DIR}/f13-failure-category" ]]; then
+      case "$(<"${TMP_DIR}/f13-failure-category")" in
+        base_object|target_object|base_ancestry|first_parent_range|parent_count|source_base|source_delta|\
+        source_tree_entry|merge_tree_entry|merge_tree_mismatch|target_tree_entry|guarded_target_mismatch|\
+        duplicate_guarded_owner)
+          f13_failure_category="$(<"${TMP_DIR}/f13-failure-category")" ;;
+      esac
+    fi
+    printf 'F13 collector failure: category=%s base_origin=%s\n' \
+      "${f13_failure_category}" "$(f13_base_origin_class)" >&2
     printf '%s\n' 'F13: develop contribution provenance is missing or ambiguous' >&2
     exit 1
   fi
