@@ -181,7 +181,6 @@ func (o *SessionOrchestrator) CloseSession(ctx context.Context, p SessionPrincip
 		}
 		stage := "voice_close_pending"
 		sessionStatus := "closing"
-		operationStatus := "pending"
 		reconcileCreateStage := ""
 		// A live/expired lease means an owner call may still be in flight. A
 		// retry marker means the last call's outcome was uncertain. In either
@@ -203,7 +202,7 @@ func (o *SessionOrchestrator) CloseSession(ctx context.Context, p SessionPrincip
 		if reconcileCreateStage != "" {
 			stage = "create_reconcile_pending:" + reconcileCreateStage
 		} else if voiceRoomID == nil {
-			stage, sessionStatus, operationStatus = "closed", "closed", "succeeded"
+			stage, sessionStatus = "closed", "closed"
 		}
 		_, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_operation_id=$2,terminalization_kind='close',terminalization_stage=$3,session_status=$4,stage=$3,updated_at=now() WHERE id=$1`, sessionID, operationID, stage, sessionStatus)
 		if err != nil {
@@ -367,8 +366,8 @@ func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOper
 	if key.ApplicationID == uuid.Nil || key.EnvironmentID == uuid.Nil || key.OperationID == uuid.Nil {
 		return SessionOperation{}, errors.New("invalid session operation key")
 	}
-	principal := SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}
-	current, err := o.Store.getOperation(ctx, principal, key.OperationID)
+	scopePrincipal := SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}
+	current, err := o.Store.getOperation(ctx, scopePrincipal, key.OperationID)
 	if err != nil {
 		return SessionOperation{}, err
 	}
