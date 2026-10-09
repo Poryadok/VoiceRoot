@@ -215,6 +215,8 @@
               <protoSourceRoot>${project.basedir}/../../../protos</protoSourceRoot>
               <includes>
                 <include>voice/common/v1/common.proto</include>
+                <include>voice/common/v1/space_lifecycle.proto</include>
+                <include>voice/chat/v1/chat.proto</include>
                 <include>voice/user/v1/user.proto</include>
                 <include>voice/authority/v1/authority.proto</include>
               </includes>
