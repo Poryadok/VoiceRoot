@@ -434,7 +434,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(StandaloneChannelSettingsEntry.entryKey), findsOneWidget);
-    await tester.tap(find.byKey(StandaloneChannelSettingsEntry.entryKey));
+    final settingsEntry = find.byKey(StandaloneChannelSettingsEntry.entryKey);
+    await tester.ensureVisible(settingsEntry);
+    await tester.tap(settingsEntry);
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChannelSettingsPanel.closeKey), findsOneWidget);
