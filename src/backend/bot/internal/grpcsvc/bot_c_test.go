@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"voice/backend/bot/internal/dispatch"
@@ -118,9 +119,9 @@ func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatReq
 	f.createRequestIDs = append(f.createRequestIDs, req.GetRequestId())
 	if req.GetRequestId() != "" && f.createdChats != nil {
 		if saved := f.createdChats[req.GetRequestId()]; saved != nil {
-			chat := *saved
+			chat := proto.Clone(saved).(*chatv1.Chat)
 			f.mu.Unlock()
-			return &chatv1.CreateChatResponse{Chat: &chat}, nil
+			return &chatv1.CreateChatResponse{Chat: chat}, nil
 		}
 	}
 	createErr, createErrAfterPersist := f.createErr, f.createErrAfterPersist
@@ -159,11 +160,9 @@ func (f *fakeChatClient) CreateChat(_ context.Context, req *chatv1.CreateChatReq
 			f.createdChats = make(map[string]*chatv1.Chat)
 		}
 		if saved := f.createdChats[req.GetRequestId()]; saved != nil {
-			copy := *saved
-			chat = &copy
+			chat = proto.Clone(saved).(*chatv1.Chat)
 		} else {
-			copy := *chat
-			f.createdChats[req.GetRequestId()] = &copy
+			f.createdChats[req.GetRequestId()] = proto.Clone(chat).(*chatv1.Chat)
 		}
 		f.mu.Unlock()
 	}
