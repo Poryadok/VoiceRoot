@@ -38,7 +38,6 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
   if (!summary.startsWith('A RenderFlex overflowed by')) {
     return 'layout diagnostic unavailable';
   }
-
   final diagnostics =
       details.informationCollector?.call() ?? const <DiagnosticsNode>[];
   final renderFlexNode = diagnostics
@@ -48,12 +47,14 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
       ? renderFlexNode.value
       : null;
   final renderFlex = renderFlexValue is RenderFlex ? renderFlexValue : null;
+  if (renderFlex == null) return 'layout diagnostic unavailable';
+
   final creatorNode = diagnostics
       .whereType<DiagnosticsDebugCreator>()
       .firstOrNull;
   final creator = creatorNode?.value;
-  final creatorType = creator is DebugCreator
-      ? creator.element.widget.runtimeType.toString()
+  final owner = creator is DebugCreator
+      ? _knownLayoutOwner(creator.element)
       : 'unavailable';
   final appFrame = RegExp(
     r'(src/frontend/lib/[A-Za-z0-9_./-]+\.dart):(\d+)',
@@ -61,9 +62,30 @@ String _renderFlexFailureEvidence(FlutterErrorDetails? details) {
   final location = appFrame == null
       ? 'unavailable'
       : '${appFrame.group(1)}:${appFrame.group(2)}';
-  return 'layout overflow; render=${renderFlex?.runtimeType ?? 'unavailable'}; '
+  return 'layout overflow; render=RenderFlex; '
       'geometry=${_renderFlexGeometry(renderFlex)}; '
-      'creator=$creatorType; appFrame=$location';
+      'creator=$owner; appFrame=$location';
+}
+
+String _knownLayoutOwner(Element element) {
+  var owner = 'unavailable';
+  element.visitAncestorElements((ancestor) {
+    final widget = ancestor.widget;
+    if (widget is ChatRoomPanel) {
+      owner = 'ChatRoomPanel';
+      return false;
+    }
+    if (widget is ChatListBody) {
+      owner = 'ChatListBody';
+      return false;
+    }
+    if (widget is VoiceApp) {
+      owner = 'VoiceApp';
+      return false;
+    }
+    return true;
+  });
+  return owner;
 }
 
 String _renderFlexGeometry(RenderFlex? renderFlex) {
@@ -237,7 +259,10 @@ void main() {
                   'A RenderFlex overflowed by',
                 )) {
               try {
-                reconnectOverflowEvidence = _renderFlexFailureEvidence(details);
+                final evidence = _renderFlexFailureEvidence(details);
+                if (evidence != 'layout diagnostic unavailable') {
+                  reconnectOverflowEvidence = evidence;
+                }
               } catch (_) {
                 reconnectOverflowEvidence = 'layout diagnostic unavailable';
               }
