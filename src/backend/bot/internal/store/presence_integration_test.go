@@ -247,7 +247,7 @@ func TestFinishDailyChatCreateRequestAttempt_releasesOnlyAfterAllDefiniteRejecti
 	_, admitted, _, err = st.ReserveDailyChatCreateForRequest(ctx, row.ID, secondID, hash)
 	require.NoError(t, err)
 	require.True(t, admitted)
-	_, err = otherRepository.ReserveDailyChatCreateForRequest(ctx, row.ID, secondID, hash)
+	_, _, _, err = otherRepository.ReserveDailyChatCreateForRequest(ctx, row.ID, secondID, hash)
 	require.NoError(t, err)
 	_, err = st.FinishDailyChatCreateRequestAttempt(ctx, row.ID, secondID, store.BotChatCreateAttemptSucceeded)
 	require.NoError(t, err)
