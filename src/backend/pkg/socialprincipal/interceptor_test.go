@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"voice/backend/pkg/principal"
-	userv1 "voice/backend/user/pb/voice/user/v1"
 )
 
 func TestProtectedBoundary(t *testing.T) {
@@ -171,8 +170,8 @@ func TestCredentialTemporalAndMethodScope(t *testing.T) {
 	}{
 		{"expired", Method("user"), wrapperspb.String("profile"), -time.Minute, codes.Unauthenticated, false},
 		{"future", Method("user"), wrapperspb.String("profile"), time.Minute, codes.Unauthenticated, false},
-		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", &userv1.GetProfileRequest{By: &userv1.GetProfileRequest_ProfileId{ProfileId: "profile"}}, 0, codes.OK, true},
-		{"valid request-bound GetProfiles", userv1.UserService_GetProfiles_FullMethodName, &userv1.GetProfilesRequest{ProfileIds: []string{"00000000-0000-4000-8000-000000000001"}}, 0, codes.OK, true},
+		{"valid profile lookup", "/voice.user.v1.UserService/GetProfile", wrapperspb.String("profile"), 0, codes.OK, true},
+		{"valid request-bound GetProfiles", "/voice.user.v1.UserService/GetProfiles", wrapperspb.String("00000000-0000-4000-8000-000000000001"), 0, codes.OK, true},
 		{"unlisted method denied", "/voice.user.v1.UserService/GetBulkPresence", wrapperspb.String("profile"), 0, codes.PermissionDenied, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
