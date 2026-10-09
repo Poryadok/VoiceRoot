@@ -917,10 +917,12 @@ void main() {
         find.byKey(CreateGroupSheet.nameFieldKey),
         'Updated squad',
       );
-      final friendB = find.byKey(CreateGroupSheet.memberTileKey('friend-b'));
-      await tester.ensureVisible(friendB);
+      final friendBForNewAttempt = find.byKey(
+        CreateGroupSheet.memberTileKey('friend-b'),
+      );
+      await tester.ensureVisible(friendBForNewAttempt);
       await tester.pump();
-      await tester.tap(friendB);
+      await tester.tap(friendBForNewAttempt);
       await tester.pump();
       await tester.scrollUntilVisible(
         find.byKey(CreateGroupSheet.memberTileKey('friend-c')),
