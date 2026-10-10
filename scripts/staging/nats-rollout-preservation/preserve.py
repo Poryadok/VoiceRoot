@@ -9,6 +9,8 @@ import hashlib
 import copy
 import datetime as dt
 import json
+import os
+import stat
 from pathlib import Path
 import tempfile
 import tarfile
@@ -112,6 +114,51 @@ def verify_catalog(catalog,row):
         raise Blocked('rollout_restored_native_inventory_changed')
 
 
+def decode_current_consumer(raw):
+    """Pure decoder from THIS authenticated capture, never historical runtime."""
+    import root_cli
+    from commands import capture
+    from controller import identity
+    code=Path(__file__).resolve().parents[1]
+    binding=root_cli.code_binding(code);relative='nats-known-baseline/kernel'
+    wanted=binding.get(relative)
+    if wanted is None:raise Blocked('rollout_current_decoder_missing')
+    directory=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    fd=None
+    try:
+        for depth,part in enumerate((code/'nats-known-baseline').parts[1:],1):
+            child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=directory)
+            os.close(directory);directory=child
+            if depth>=len(code.parts)-1:
+                directory_stat=os.fstat(directory)
+                if directory_stat.st_uid!=0 or directory_stat.st_mode&0o022:
+                    raise Blocked('rollout_current_decoder_custody_invalid')
+        fd=os.open('kernel',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=directory)
+        before=os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid!=0 or before.st_nlink!=1
+            or before.st_mode&0o022 or not before.st_mode&0o111 or not 0<before.st_size<=32<<20):
+            raise Blocked('rollout_current_decoder_custody_invalid')
+        def verify():
+            os.lseek(fd,0,os.SEEK_SET);hashed=hashlib.sha256();total=0
+            while True:
+                block=os.read(fd,65536)
+                if not block:break
+                total+=len(block)
+                if total>32<<20:raise Blocked('rollout_current_decoder_changed')
+                hashed.update(block)
+            if (total!=before.st_size or hashed.hexdigest()!=wanted
+                or identity(os.fstat(fd))!=identity(before)
+                or identity(os.stat('kernel',dir_fd=directory,follow_symlinks=False))!=identity(before)):
+                raise Blocked('rollout_current_decoder_changed')
+        verify()
+        result=capture(['/proc/self/fd/'+str(fd),'--consumer-state'],body=raw,
+            timeout=10,limit=2<<20,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},pass_fds=(fd,))
+        verify();return result
+    finally:
+        if fd is not None:os.close(fd)
+        os.close(directory)
+
+
 def closed_native_states(runtime,archive,manifest,row,authority):
     """Decode every CLOSED consumer file, including complete pending maps.
 
@@ -120,7 +167,6 @@ def closed_native_states(runtime,archive,manifest,row,authority):
     """
     from closed_archive import Archive
     from closed_durable import state_shape
-    from commands import capture
     expected={'jetstream/'+row['account']+'/streams/'+c['stream']+'/obs/'+c['name']+'/o.dat'
         for c in row['consumers']}
     actual={f['path'] for f in manifest['files'] if f['path'].endswith('/o.dat')}
@@ -144,8 +190,7 @@ def closed_native_states(runtime,archive,manifest,row,authority):
     raw_states=_native_members(runtime,archive,manifest,expected,authority);decoded={}
     for path in sorted(expected):
         authority();raw=raw_states[path]
-        result=capture([str(Path(runtime.base)/'kernel'),'--consumer-state'],body=raw,
-            timeout=10,limit=2<<20,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'})
+        result=decode_current_consumer(raw)
         def pairs(items):
             value={}
             for key,item in items:

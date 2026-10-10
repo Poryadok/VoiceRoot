@@ -541,8 +541,8 @@ class Actions:
         return summary(state)|{'status':'WAITING','operation_status':state['status'],
             'operation_error':state.get('error'),'upload_nonce':execution['nonce'],
             'original_cipher_path':paths['original'],'observation_cipher_path':paths['observation'],
-            'original_artifact_name':'voice-finish-original-'+state['operation']+'-'+record['artifact_bindings']['original']['challenge'],
-            'observation_artifact_name':'voice-finish-observation-'+state['operation']+'-'+record['artifact_bindings']['observation']['challenge'],
+            'original_artifact_name':'voice-nats-rollout-'+state['operation']+'-'+record['artifact_bindings']['original']['challenge'],
+            'observation_artifact_name':'voice-nats-rollout-'+state['operation']+'-'+record['artifact_bindings']['observation']['challenge'],
             'source_sha':state['target']['tag']}
 
     def _authorize_expired_finish(self,request):
@@ -599,7 +599,8 @@ class Actions:
         def immutable(name,row):
             preserved_upload.exclusive(slot/name,json.dumps(row,sort_keys=True,separators=(',',':')).encode())
         immutable('admission.json',admission)
-        repair=expired_recovery.repair_inputs(base,admission['input_hashes'],preserved_upload.digest(admission))
+        repair=expired_recovery.repair_inputs(base,admission['input_hashes'],
+            expired_recovery.repair_admission_digest(base,admission))
         immutable('repair.json',repair)
         immutable('source.json',{'schema':'voice-expired-source-admission-v1',
             'current_helper':{key:value for key,value in current.items() if key!='source_files'},
@@ -653,8 +654,8 @@ class Actions:
         return {'operation':state['operation'],'phase':'EXPIRED_NATIVE_OBSERVATION',
             'status':'WAITING','fence_status':state['fence_status'],'upload_nonce':execution['nonce'],
             'original_cipher_path':paths['original'],'observation_cipher_path':paths['observation'],
-            'original_artifact_name':'voice-expired-original-'+state['operation']+'-'+record['artifact_bindings']['original']['challenge'],
-            'observation_artifact_name':'voice-expired-observation-'+state['operation']+'-'+record['artifact_bindings']['observation']['challenge'],
+            'original_artifact_name':'voice-nats-rollout-'+state['operation']+'-'+record['artifact_bindings']['original']['challenge'],
+            'observation_artifact_name':'voice-nats-rollout-'+state['operation']+'-'+record['artifact_bindings']['observation']['challenge'],
             'deploy_mode':state['target']['mode'],'changed_services':','.join(state['target']['changed_services']),
             'source_sha':state['target']['tag']}
 

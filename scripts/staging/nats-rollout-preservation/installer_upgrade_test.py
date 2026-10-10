@@ -88,6 +88,12 @@ class Tests(unittest.TestCase):
 
 class ActualUpgradeDispatchTests(unittest.TestCase):
     def test_actual_v13_upgrade_reaches_expired_helper_and_restores_ingress(self):
+        self.exercise_upgrade('v13')
+
+    def test_actual_v14_upgrade_reaches_expired_helper_and_restores_ingress(self):
+        self.exercise_upgrade('v14')
+
+    def exercise_upgrade(self,version):
         import contextlib,expired_recovery
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); installed=root/'installed'; installed.mkdir()
@@ -101,8 +107,8 @@ class ActualUpgradeDispatchTests(unittest.TestCase):
                 patch.object(installer,'operation_lock',return_value=contextlib.nullcontext()), \
                 patch.object(installer,'Kube',return_value=kube), \
                 patch.object(expired_recovery,'install_helper',autospec=True) as helper:
-                installer.upgrade(code,version='v13')
-            helper.assert_called_once_with(code,installed,kube,'v13')
+                installer.upgrade(code,version=version)
+            helper.assert_called_once_with(code,installed,kube,version)
             self.assertEqual((installed/'inbox').stat().st_mode & 0o7777,0o1730)
 
     def test_actual_v13_helper_refusal_restores_ingress(self):

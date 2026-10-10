@@ -114,12 +114,15 @@ assert "inputs.mail_only != true" in source, "mail-only dispatch must skip other
 assert "\n  mail-only:\n" in source, "mail-only job missing"
 mail_job = source.split("\n  mail-only:\n", 1)[1]
 assert "github.event_name == 'workflow_dispatch' && inputs.mail_only == true" in mail_job
-assert "environment: staging" in mail_job
+assert "runs-on: ubuntu-latest" in mail_job
+assert "environment:" not in mail_job
 assert "uses: actions/checkout@" not in mail_job
-assert "STAGING_SOURCE_SHA: ${{ github.sha }}" in mail_job
-assert "run: *download_staging_source" in mail_job
-assert "STAGING_APP_SECRETS_YAML_B64: ${{ secrets.STAGING_APP_SECRETS_YAML }}" in mail_job
-assert "bash scripts/staging/mail-only-resend.sh" in mail_job
+assert "download_staging_source" not in mail_job
+assert "secrets." not in mail_job
+assert "kubectl" not in mail_job
+assert "mail-only-resend.sh" not in mail_job
+assert "mail_only is disabled" in mail_job and "exit 1" in mail_job
+assert "deploy_mode=full or app-only" in mail_job and "mail_only=false" in mail_job
 assert "set -x" not in mail_job
 assert "render-and-apply.sh" not in mail_job
 assert "ensure-minio-credentials.sh" not in mail_job

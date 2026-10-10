@@ -103,6 +103,14 @@ V9_BINDING='23a055aca7f2fca8e068810fd5c98ccc6c08b51dfd5d287d6344e2c2787a9b11'
 V10_BINDING='317486fa04b6ed2c39dbad7708431537f1ec8bc24050fe5a6217f6ca6e56182b'
 V11_BINDING='57058302ff72ed8880ff04e86c5db744bdc41b608261d47c19fc46572ea9b7ba'
 V12_BINDING='731ac6444f604ee26ce7ab4e3fe193144f9d803e97864527585ee6121ad35f31'
+V13_BINDING='d81ddbb34b13da1a94fea99d675091109984c6cbf708031d3c9c2483660350d4'
+FAILED_DECODER_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
+    'run_id':38081665757,'nonce':'7aab66b7075868b65da687ffb4711f0745fee64a46fbc73a7b1d4431f396d486'}
+FAILED_DECODER_FILES={
+    'admission.json':'f140a269e1ae9f843d70d431bc93b77018b93c62d8cf81bb5250700d9b5737ce',
+    'repair.json':'5f13cc2e914ec643f37f316939e081a9ddc885caecb2da0a949ad0f0996b257c',
+    'source.json':'1abac29b6bc5336397ee2a53642296c823741374fb3e56eb58fd18112bd53411',
+    'rollout-before.tar':'d72f56a984cdcaf6e6ae99f4d8936f5b3f460df71db19d4c7029c6670c9c1f69'}
 FAILED_TRANSPORT_REQUEST={'action':'prepare-expired-native','operation':upload.OPERATION,
     'run_id':38073186174,
     'nonce':'9bf6fa6e6ef7ab87ee1aba41edc7bd519436e657ce5dcd51e93e2df4a40c6f18'}
@@ -205,6 +213,48 @@ def failed_transport_execution(journal_raw,response_raw):
         'response_sha256':hashlib.sha256(response_raw).hexdigest(),'disposition':'FROZEN_FAILED_PRE_SOURCE_NO_REPLAY'}
 
 
+def verify_failed_decoder_slot(base):
+    """Authenticate the exact partial slot; it is NOT restoration authority."""
+    import root_cli
+    base=Path(base)
+    if upload.digest(root_cli.code_binding(base/'code-v13-preserved'))!=V13_BINDING:
+        reject('decoder_predecessor_changed')
+    slot=base/'expired-recovery-proofs'/FAILED_DECODER_REQUEST['nonce']
+    raw={name:upload.private_read(slot/name,2<<20) for name in FAILED_DECODER_FILES}
+    if any(hashlib.sha256(raw[name]).hexdigest()!=wanted for name,wanted in FAILED_DECODER_FILES.items()):
+        reject('decoder_failed_slot_changed')
+    admission=json.loads(raw['admission.json'],object_pairs_hook=upload.pairs)
+    if admission.get('helper_binding_sha256')!=V13_BINDING:reject('decoder_admission_changed')
+    return admission
+
+
+def repair_admission_digest(base,admission):
+    """Retain the old receipt; only authenticated helper provenance may change."""
+    base=Path(base)
+    if not (base/'expired-recovery-input-repair.json').exists():return upload.digest(admission)
+    prior=verify_failed_decoder_slot(base)
+    compared=copy.deepcopy(prior);compared['helper_binding_sha256']=admission['helper_binding_sha256']
+    receipt=upload.private_json(base/'expired-recovery-input-repair.json',65536)
+    if compared!=admission or receipt.get('admission_sha256')!=upload.digest(prior):
+        reject('input_repair_admission_lineage_changed')
+    return upload.digest(prior)
+
+
+def failed_decoder_execution(journal_raw,response_raw):
+    journal=json.loads(journal_raw,object_pairs_hook=upload.pairs)
+    response=json.loads(response_raw,object_pairs_hook=upload.pairs)
+    expected={'schema':'voice-nats-bridge-request-v1','request':FAILED_DECODER_REQUEST,
+        'request_sha256':upload.digest(FAILED_DECODER_REQUEST),'phase':'STARTED','prepare_error':'guard_rejected'}
+    if (journal!=expected or response!={'status':'BLOCKED','error':'command_failed'}
+        or hashlib.sha256(journal_raw).hexdigest()!='c09304be2e05e93598487e3a211ad60da35f92576812f5d0003c3ef8bcd9ed70'
+        or hashlib.sha256(response_raw).hexdigest()!='f823049f6a38c4b7c31cf64a19a65e4a611f4c8905df890e2e9291241c335d92'):
+        reject('failed_decoder_execution_changed')
+    return {'schema':'voice-expired-native-decoder-failure-disposition-v1','operation':upload.OPERATION,
+        'request_sha256':upload.digest(FAILED_DECODER_REQUEST),'journal_sha256':hashlib.sha256(journal_raw).hexdigest(),
+        'response_sha256':hashlib.sha256(response_raw).hexdigest(),'files':copy.deepcopy(FAILED_DECODER_FILES),
+        'disposition':'FROZEN_PARTIAL_PRE_PROOF_NO_REPLAY_NO_AUTHORITY'}
+
+
 def verify_adopted_binding(base,state,binding):
     """Both existing state readers enter through paused_recovery, then here.
 
@@ -237,9 +287,16 @@ def verify_adopted_binding(base,state,binding):
                 latest=root_cli.code_binding(base/'code-v12-preserved')
                 if (upload.digest(latest)!=V12_BINDING
                     or next_upgrade!={'schema':'voice-nats-code-upgrade-v12','from':V11_BINDING,'to':V12_BINDING}
-                    or upload.private_json(base/'upgrade-v13.json',65536)!=
-                        {'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':upload.digest(binding)}):
+                    ):
                     reject('adoption_upgrade_changed')
+                final_upgrade=upload.private_json(base/'upgrade-v13.json',65536)
+                if final_upgrade!={'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':upload.digest(binding)}:
+                    final=root_cli.code_binding(base/'code-v13-preserved')
+                    if (upload.digest(final)!=V13_BINDING
+                        or final_upgrade!={'schema':'voice-nats-code-upgrade-v13','from':V12_BINDING,'to':V13_BINDING}
+                        or upload.private_json(base/'upgrade-v14.json',65536)!=
+                            {'schema':'voice-nats-code-upgrade-v14','from':V13_BINDING,'to':upload.digest(binding)}):
+                        reject('adoption_upgrade_changed')
     if record!=adoption_record(raw,V9_BINDING,adopted_binding):reject('adoption_record_changed')
     for key in ('operation','code_capture','cipher_binding','cut','execution_authority',
                 'source_authority','nats_contract_expires_at','repair_adoption','repair_revision'):
@@ -271,7 +328,7 @@ def install_helper(code,installed,kube,version):
     import paused_recovery
     import story_witness
     from docker_runtime import DockerRuntime
-    if version not in ('v10','v11','v12','v13'):
+    if version not in ('v10','v11','v12','v13','v14'):
         reject('helper_version_invalid')
     installed=Path(installed);base=root_cli.operation_path(str(guard.ROOT/('rollout-'+upload.OPERATION)))
     checkpoint=base/'checkpoint.json';snapshot=base/'expired-recovery-adopted-checkpoint.json'
@@ -287,14 +344,14 @@ def install_helper(code,installed,kube,version):
     awaiting=upload.private_json(base/'recovery-v8-awaiting-checkpoint.json',128<<20)
     install_history(state,awaiting)
     new_binding=root_cli.code_binding(Path(code));record=adoption_record(raw,V9_BINDING,new_binding)
-    if version in ('v11','v12','v13'):
+    if version in ('v11','v12','v13','v14'):
         prior=root_cli.code_binding(base/('code-v10-preserved' if (base/'code-v10-preserved').exists() else 'code'))
         if upload.digest(prior)!=V10_BINDING:reject('helper_v10_predecessor_changed')
         if upload.private_json(record_path,65536)!=adoption_record(raw,V9_BINDING,prior):reject('helper_revision_conflict')
-        if version in ('v12','v13'):
-            previous='v11' if version=='v12' else 'v12'
+        if version in ('v12','v13','v14'):
+            previous={'v12':'v11','v13':'v12','v14':'v13'}[version]
             installed_prior=root_cli.code_binding(base/('code-'+previous+'-preserved' if (base/('code-'+previous+'-preserved')).exists() else 'code'))
-            if upload.digest(installed_prior)!=(V11_BINDING if version=='v12' else V12_BINDING):reject('helper_installed_predecessor_changed')
+            if upload.digest(installed_prior)!={'v12':V11_BINDING,'v13':V12_BINDING,'v14':V13_BINDING}[version]:reject('helper_installed_predecessor_changed')
             verify_adopted_binding(base,state,installed_prior)
     elif record_path.exists() and upload.private_json(record_path,65536)!=record:reject('helper_revision_conflict')
     stage=transaction.reconstruct(kube,state,lambda event:None);stage.verify_final_storage()
@@ -317,24 +374,38 @@ def install_helper(code,installed,kube,version):
     disposition=failed_execution(journals[failed_name],responses[failed_name])
     native_name=FAILED_NATIVE_REQUEST['nonce']+'.json'
     native_disposition=None
-    if version in ('v11','v12','v13'):
+    if version in ('v11','v12','v13','v14'):
         native_disposition=failed_native_execution(journals[native_name],responses[native_name])
         if (base/'expired-recovery-proofs'/FAILED_NATIVE_REQUEST['nonce']).exists():reject('helper_failed_native_proof_present')
     reader_name=FAILED_READER_REQUEST['nonce']+'.json';reader_disposition=None
-    if version in ('v12','v13'):
+    if version in ('v12','v13','v14'):
         reader_disposition=failed_reader_execution(journals[reader_name],responses[reader_name])
         if (base/'expired-recovery-proofs'/FAILED_READER_REQUEST['nonce']).exists():reject('helper_failed_reader_proof_present')
     transport_name=FAILED_TRANSPORT_REQUEST['nonce']+'.json';transport_disposition=None
-    if version=='v13':
+    if version in ('v13','v14'):
         transport_disposition=failed_transport_execution(journals[transport_name],responses[transport_name])
         if ((base/'expired-recovery-proofs'/FAILED_TRANSPORT_REQUEST['nonce']).exists()
             or (installed/'sources'/('expired-'+FAILED_TRANSPORT_REQUEST['nonce'])).exists()):
             reject('helper_failed_transport_outputs_present')
+    decoder_name=FAILED_DECODER_REQUEST['nonce']+'.json';decoder_disposition=None
+    if version=='v14':
+        decoder_disposition=failed_decoder_execution(journals[decoder_name],responses[decoder_name])
+        # Before the swap, authenticate the installed predecessor directly.
+        if upload.digest(installed_prior)!=V13_BINDING:
+            reject('helper_decoder_predecessor_changed')
+        slot=base/'expired-recovery-proofs'/FAILED_DECODER_REQUEST['nonce']
+        if {p.name for p in slot.iterdir()}!=set(FAILED_DECODER_FILES):reject('helper_decoder_slot_inventory_changed')
+        raw_slot={name:upload.private_read(slot/name,2<<20) for name in FAILED_DECODER_FILES}
+        if any(hashlib.sha256(raw_slot[name]).hexdigest()!=wanted for name,wanted in FAILED_DECODER_FILES.items()):
+            reject('helper_decoder_slot_changed')
+        if upload.private_read(base/'expired-recovery-input-repair.json',65536)!=raw_slot['repair.json']:
+            reject('helper_decoder_repair_changed')
     for name,value in journals.items():
         if name==failed_name:continue
-        if version in ('v11','v12','v13') and name==native_name:continue
-        if version in ('v12','v13') and name==reader_name:continue
-        if version=='v13' and name==transport_name:continue
+        if version in ('v11','v12','v13','v14') and name==native_name:continue
+        if version in ('v12','v13','v14') and name==reader_name:continue
+        if version in ('v13','v14') and name==transport_name:continue
+        if version=='v14' and name==decoder_name:continue
         if name==paused_recovery.NONCE+'.json':continue
         if name==__import__('v8_upgrade').FAILED_NONCE+'.json':
             __import__('v8_upgrade').failed_execution(value,responses[name]);continue
@@ -372,7 +443,12 @@ def install_helper(code,installed,kube,version):
         if transport_path.exists():
             if upload.private_json(transport_path,65536)!=transport_disposition:reject('helper_failed_transport_disposition_changed')
         else:upload.exclusive(transport_path,json.dumps(transport_disposition,sort_keys=True,separators=(',',':')).encode())
-    predecessor,previous={'v10':(V9_BINDING,'v9'),'v11':(V10_BINDING,'v10'),'v12':(V11_BINDING,'v11'),'v13':(V12_BINDING,'v12')}[version]
+    if decoder_disposition is not None:
+        decoder_path=base/'expired-recovery-decoder-failed-execution.json'
+        if decoder_path.exists():
+            if upload.private_json(decoder_path,65536)!=decoder_disposition:reject('helper_failed_decoder_disposition_changed')
+        else:upload.exclusive(decoder_path,json.dumps(decoder_disposition,sort_keys=True,separators=(',',':')).encode())
+    predecessor,previous={'v10':(V9_BINDING,'v9'),'v11':(V10_BINDING,'v10'),'v12':(V11_BINDING,'v11'),'v13':(V12_BINDING,'v12'),'v14':(V13_BINDING,'v13')}[version]
     installer._upgrade_code(code,installed,1000,predecessor,version,previous)
     installer._upgrade_code(code,base,1000,predecessor,version,previous)
     if (upload.private_read(checkpoint)!=current_raw or upload.private_read(snapshot)!=raw
